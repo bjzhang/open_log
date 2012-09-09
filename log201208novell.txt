@@ -1,0 +1,3032 @@
+
+16:50 2012-08-01
+GTD
+0, 14:10-18:20
+
+1, today
+1), review libvirt libxl migration lock. prepare patch. see"16:53 2012-08-01"
+2), work report. see"18:16 2012-08-01"
+
+16:53 2012-08-01
+virtualization, libvirt, migration, libxl(xenlight), lock, cont17, prepare send patch to upstream, debug, cont4
+1, after many times test.
+I realize that the version on 0731 I though it was passed. but actually it is not.
+try to re-write my patch through 0628 version. It should be done with hg repo. it is very important. i do not want to loss my process again. 
+
+18:16 2012-08-01
+work report - week 30
+1, [devel-server] work report - week 30
+[green]
+1, hackweek: run opensuse arm on my mele A1000. I thought I am the first one run opensuse on it. I want to share my image, but i arm not sure where to put it. 
+1), X11 and xfce is ok. 
+2), compile with usb audio, usb bluetooth, usb ethernet for convineience. 
+
+2, reply, 
+1), "Stefan Behlert <behlert@suse.com>"
+Why not simply have it in a opensuse buildservice project? And pointing to
+it in blogs/mailinglists?
+Am I missing something obvious?
+2), reply to him
+Hi, Stefan
+
+thanks. 
+I intended to upload the entire disk image. but it looks like more convenience to upload the kernel(the A1000 kernel is not in the upstream) and x11 lib to build service. I will try it. 
+
+bamvor
+
+10:32 2012-08-02
+GTD
+0, 10:20-11:50 12:50-(40' supper)-21:14
+
+1, today
+1), 20' 14:31-21:14 review libvirt libxl migration lock. prepare patch. see"10:33 2012-08-02". 
+2), send lock patch to Jim. see"10:33 2012-08-02"7. 
+
+10:33 2012-08-02
+virtualization, libvirt, migration, libxl(xenlight), lock, cont18, prepare send patch to upstream, debug, cont5
+1, plan
+1), create hg from chunyan'patch. 
+2), rewrite migration and lock patch from 0628 version. 
+
+2, hg
+
+3, add version
+1), modify cmdVersion in tools/virsh.c  
+vshPrint(ctl, _("Compiled time: %s, %s\n"), __DATE__, __TIME__);
+
+linux-vm5:/etc/xen/vm # virsh version
+Compiled time: Aug  2 2012, 16:19:53
+Compiled against library: libvir 0.9.12
+Using library: libvir 0.9.12
+Using API: xenlight 0.9.12
+Running hypervisor: xenlight 4.1.0
+2), and build.sh
+
+
+4, test 0628 20times pass. 
+
+5, add endjob
+1), fail on 11 times migrate. 
+bamvor@linux-vm5:~/work/source/virtualization/libvirt/libvirt-0.9.12> hg parent
+*** failed to import extension hgext.imerge: No module named imerge
+changeset:   8:780e5880b57a
+tag:         tip
+user:        Bamvor Jian Zhang <bjzhang@suse.com>
+date:        Thu Aug 02 17:44:53 2012 +0800
+summary:     add enbjob in Migrate.*3, fail on 10times
+(1), libvirt log
+2012-08-02 09:44:42.642+0000: 20037: error : libxlVmStart:975 : internal error libxenlight failed to restore domain 'sles11_hvm_10_2'
+2012-08-02 09:44:42.642+0000: 20037: error : doMigrateReceive:4313 : internal error Failed to restore domain with libxenlight
+Caught Segmentation violation dumping internal log buffer:
+(2), libxl log
+libxl: error: libxl_create.c:317:libxl__domain_make domain creation fail
+libxl: error: libxl.c:711:libxl_domain_destroy non-existant domain -1
+2), retest version 7(0628) fail on 25times, src log: 
+2012-08-02 10:20:33.450+0000: 28898: error : virNetSocketReadWire:999 : End of file while reading data: Input/output error
+2012-08-02 10:21:18.030+0000: 28903: error : virDomainAbortJob:16551 : this function is not supported by the connection driver: virDomainAbortJob
+2012-08-02 10:21:18.494+0000: 28898: error : virNetSocketReadWire:999 : End of file while reading data: Input/output error
+2012-08-02 10:21:27.991+0000: 28899: error : doMigrateSend:4371 : internal error Failed to save domain '35' with libxenlight
+3), retest version 7(0628), fail on 24times. 
+error: internal error Failed to save domain '45' with libxenlight
+error: Reconnected to the hypervisor                             
+
+error: Failed to reconnect to the hypervisor
+error: failed to get domain 'sles11_hvm_10_2'
+error: invalid connection pointer in virDomainLookupByName
+error: Failed to reconnect to the hypervisor
+
+it is like 2). both failed because of save domain fail. So, maybe it is because the libxl bug. Just ignore it temperary.
+
+6, add cleanup_resume(version 9). 
+1), resume the vm on doMigrateSend while suspend failed or check message failed. in Chunyan's patch, after suspend failed, she just go to normal cleanup and exit but not resume the vm. So, the vm will not run after suspend failed.  
+2), test: failed on 17times. 
+after error encounter, the dst libvirtd is dead. this should not happened. 
+\TODO: improve error handle. 
+test 20times failed. hang on doMigrateSend/doMigrateReceive. there is no error in the libvirtd and libxl
+3), wrong log in libxl(src)
+xc: debug: Use new firmware ioport from the checkpoint
+xc: detail: Writing 6029 bytes of QEMU data
+xc: detail: Restore exit with rc=0
+libxl: debug: libxl_dom.c:360:libxl__domain_suspend_common_callback issuing PVHVM suspend request via event channel
+4), right log
+xc: debug: Use new firmware ioport from the checkpoint
+xc: detail: Writing 6029 bytes of QEMU data
+xc: detail: Restore exit with rc=0
+libxl: debug: libxl_dom.c:360:libxl__domain_suspend_common_callback issuing PVHVM suspend request via event channel
+xc: debug: outbuf_write: 4194304 > 90092@16687124
+xc: debug: outbuf_write: 4194304 > 4169716@12607500
+....
+xc: debug: outbuf_write: 4194304 > 4169716@12607500
+xc: debug: outbuf_write: 4194304 > 4169716@12607500
+xc: detail: type fail: page 0 mfn 000f2000
+xc: detail: type fail: page 1 mfn 000f2001
+xc: detail: type fail: page 2 mfn 000f2002
+xc: detail: delta 12644ms, dom0 74%, target 0%, sent 339Mb/s, dirtied 0Mb/s 71 pages
+xc: detail: Total pages sent= 131072 (0.13x)
+xc: detail: (of which 0 were fixups)
+xc: detail: All memory is saved
+xc: detail: Save exit rc=0
+3), in the wrong log. outbuf_write is not started. 
+
+7, send patch to Jim
+
+here is my lock patch forl libvirt libxl driver.
+In my patch, there are two types of job, one is normal job, the other is async job. 
+1), The asynchronization job is the long-running job.
+(1), it includes migration, save, restore and dump in libxl. save and migration call the same api(ref my notes at the end of this mail).
+(2), I add restore as async job compare with qemu driver because the restore is also a long-running job compare with create, list and other operation. 
+(3), The nested async job on the same domain is not allowed in my patch.
+(4), in order to tracking the async job. I assign async job type for each async job. 
+     LIBXL_ASYNC_JOB_MIGRATION_OUT,
+     LIBXL_ASYNC_JOB_MIGRATION_IN,
+     LIBXL_ASYNC_JOB_SAVE,
+     LIBXL_ASYNC_JOB_RESTORE,
+     LIBXL_ASYNC_JOB_DUMP,
+
+2), The normal job is very quick compare with async job. I add such type for allowing the normal while the async job is in process. 
+(1), whether the normal job is allowed or not while async job is doing depend on the normal job type. 
+usually, only destroy, abort and query is allowed. but for migration async job, migration is not allowed too(nested migration is not allowed).  
+
+     LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
+     LIBXL_JOB_MODIFY,        /* May change state */
+     LIBXL_JOB_ABORT,         /* Abort current async job */
+     LIBXL_JOB_MIGRATION_OP,  /* Operation influencing outgoing migration */
+     LIBXL_JOB_ASYNC,         /* Asynchronous job */
+
+3), because the abort job is created for async job. mainly for migration. 
+I will improve abort job after finish my migration patch. 
+
+notes: compare the job core api with libxl and qemu. 
+        libxl                      qemu
+suspend  libxl_domain_pause         stop
+migrate  libxl_domain_suspend       migrate
+save     libxl_domain_suspend       migrate to file
+dump     libxl_domain_core_dump     migrate to file
+
+11:35 2012-08-02
+virtualization, xen, Xen Submit
+0, Aug 27-28
+http://xen.org/xensummit/xs12na_talks/agenda.html
+
+1, Xen on ARM Cortex A15
+http://xen.org/xensummit/xs12na_talks/T3.html 
+During the last few months of 2011 the Xen Community started an effort to port Xen to ARMv7 with virtualization extensions, using the Cortex A15 processor as reference platform.The new Xen port is exploiting this set of hardware capabilities to run guest VMs in the most efficient way possible while keeping the ARM specific changes to the hypervisor and the Linux kernel to a minimum.
+
+Developing the new port we took the chance to remove legacy concepts like PV or HVM guests and only support a single kind of guests that is comparable to "PV on HVM" in the Xen X86 world.
+
+This talk will explain the reason behind this and other design choices that we made during the early development process and it will go through the main technical challenges that we had to solve in order to accomplish our goal.
+Notable examples are the way Linux guests issue hypercalls and receive event channels notifications from Xen.
+
+14:06 2012-08-02
+arm, mali, Cortex-A15, Cortex-A7, Mali T604, Mali T658
+Midgard architecture for Embedded GPUs (Mali-T604 / Mali T658) 
+Read more: http://www.cnx-software.com/2011/11/22/midgard-architecture-for-embedded-gpus-mali-t604-mali-t658/#ixzz22Mlyry8n
+
+http://www.cnx-software.com/2011/11/22/midgard-architecture-for-embedded-gpus-mali-t604-mali-t658/
+He then introduces the 1st midgard GPU: Mali-T604 that enables GPU computing, has great performance, flexibility and graphics. It includes a hardware job manager and implement different techniques to reduce bandwidth such as texture compression. This GPU is available now and is currently used by ARM partners.
+
+The new Mali-T658 is an evolution of the Mali-T604 and supports up to 8 cores (vs. 4 for T604) and 4 arithmetic pipelines (vs. 2 for T604).  Its graphics performance is 10 times greater than Mali-400MP and its compute performance 4 times greater than Mali-T604.
+
+Read more: http://www.cnx-software.com/2011/11/22/midgard-architecture-for-embedded-gpus-mali-t604-mali-t658/#ixzz22Mlq279H
+
+The next generation “heterogeneous” processors will use Cortex A15 (big CPU) and Cortex A7 (LITTLE CPU) with Mali-T600 Series GPU and CoreLink CCI-400.
+
+Read more: http://www.cnx-software.com/2011/11/22/midgard-architecture-for-embedded-gpus-mali-t604-mali-t658/#ixzz22MlgtOfZ
+
+15:19 2012-08-02
+cross platform, kivy
+kivy.org/
+Kivy is running on Linux, Windows, MacOSX, Android and IOS. You can run the same code on all supported platforms. 
+
+18:02 2012-08-02
+software, skill, put your file in to w3.suse.de server
+1, create directory Export in your home. 
+put file input Export dir. your file will be displayed on w3.suse.de/~login_name
+e.g. w3.suse.de/~bjzhang
+
+8:02 2012-8-3
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting
+1, hackweek. 
+
+2, Bo Yang. 
+1), software lock up is fixed. 
+2), macvtype. 
+Lin Ma: it is a sort of network bridge things. for improve the network bandwidth. 
+3), bruce. check scsi bug. fixed. but customer need ptf. 
+
+3, Lin Ma
+1), KVM and sea bios.
+2), Kirk. 774200. 
+https://bugzilla.novell.com/show_bug.cgi?id=774200
+Bug 774200 - "windows error recovery" After reboot a DomU Win2008r2sp1 running after 60 days
+
+4, bamvor
+it is base on 0628 version I send you. It split lock patch from migration patch. split into two patch. 
+
+5, visit
+on the first week of November. Jason and Jim. 
+
+09:20 2012-08-03
+GTD
+0, 8:00-8:30 9:21-11:33 12:52-19:04
+
+1, today
+1), 8:00-8:30 sync meeting. see"8:02 2012-8-3". 
+2), check the mail. follow the status of arm port in kvm and xen. see"10:10 2012-08-03"
+3), 10:31-11:33 16:15- review libvirt libxl migration lock. prepare patch. see"10:30 2012-08-03". 
+4), 13:10-16:07 team regular meeting. 
+
+10:10 2012-08-03
+virtualization, xen, kvm, arm port
+1, KVM arm
+http://systems.cs.columbia.edu/archive/pub/2010/07/kvm-for-arm/
+
+2, xen arm
+a good overview in Chinese. 
+http://nthusslab.blogspot.com/2011/10/xen-arm.html
+save to work/documents/virtualization/xen/Xen_Arm_Overview_Cn.pdf 
+
+10:30 2012-08-03
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont6
+1, retest last patch(9:1ac104c3bebf, improve. test 12times pass. I though I fix one bug on Perform3(doMigrateSend) in Chunyan's migraiton patch)
+fail on 35times. 
+currently, test 20times pass is thought as passed. So, move on.
+1), log
+(1), src libvirtd is alive, "virsh list" is ok. 
+((1)), console log
+error: internal error Failed to save domain '18' with libxenlight
+error: Reconnected to the hypervisor                             
+
+error: End of file while reading data: : Input/output error
+((2)), libvirtd
+2012-08-03 02:42:00.404+0000: 3651: info : doMigrateSend:4357 : enter
+2012-08-03 02:42:07.637+0000: 3651: error : doMigrateSend:4384 : internal error Failed to save domain '18' with libxenlight
+2012-08-03 02:42:07.637+0000: 3651: info : doMigrateSend:4415 : exit
+2012-08-03 02:42:07.646+0000: 3651: info : libxlDomainMigratePerform3:4647 : exit
+2012-08-03 02:43:14.801+0000: 3650: error : virNetSocketReadWire:999 : End of file while reading data: Input/output error
+2012-08-03 02:43:49.159+0000: 3650: info : libxlEventHandler:732 : Unhandled shutdown_reason 2
+2012-08-03 02:50:43.133+0000: 3655: error : virDomainAbortJob:16551 : this function is not supported by the connection driver: virDomainAbortJob
+((3)), libxl
+xc: detail: Restore exit with rc=0
+libxl: debug: libxl_dom.c:382:libxl__domain_suspend_common_callback issuing PVHVM suspend request via XenBus control node
+libxl: debug: libxl_dom.c:387:libxl__domain_suspend_common_callback wait for the guest to acknowledge suspend request
+libxl: debug: libxl_dom.c:432:libxl__domain_suspend_common_callback guest acknowledged suspend request
+libxl: debug: libxl_dom.c:436:libxl__domain_suspend_common_callback wait for the guest to suspend
+libxl: error: libxl_dom.c:456:libxl__domain_suspend_common_callback guest did not suspend
+xc: error: Suspend request failed: Internal error
+xc: error: Domain appears not to have suspended: Internal error
+xc: detail: Save exit rc=1
+libxl: error: libxl_dom.c:506:libxl__domain_suspend_common saving domain: domain responded to suspend request: Success
+libxl: debug: libxl.c:228:libxl_domain_resume Called domain_resume on non-cooperative hvm domain 18
+(2), on dst
+((1)), libvirtd
+2012-08-03 02:42:15.055+0000: 10819: info : doMigrateReceive:4296 : enter
+2012-08-03 02:42:22.300+0000: 10819: error : libxlVmStart:975 : internal error l
+ibxenlight failed to restore domain 'sles11_hvm_10_2'
+2012-08-03 02:42:22.300+0000: 10819: error : doMigrateReceive:4322 : internal er
+ror Failed to restore domain with libxenlight
+2012-08-03 02:42:22.300+0000: 10819: info : doMigrateReceive:4345 : exit
+2012-08-03 02:42:22.301+0000: 3948: info : libxlDomainMigrateFinish3:4673 : star
+t
+Caught Segmentation violation dumping internal log buffer:
+((2)), libxl
+xc: detail: Save exit rc=0
+libxl: debug: libxl_dom.c:532:libxl__domain_save_device_model Saving device model state to /var/lib/xen/qemu-save.17
+libxl: debug: libxl_dom.c:544:libxl__domain_save_device_model Qemu state is 6029 bytes
+libxl: debug: libxl.c:228:libxl_domain_resume Called domain_resume on non-cooperative hvm domain 17
+libxl: debug: libxl_dm.c:773:libxl__destroy_device_model Device Model signaled
+xc: debug: hypercall buffer: total allocations:2719 total releases:2719
+xc: debug: hypercall buffer: current allocations:0 maximum allocations:4
+xc: debug: hypercall buffer: cache current size:2
+xc: debug: hypercall buffer: cache hits:1566 misses:2 toobig:1151
+xc: error: 0-length read: Internal error
+xc: error: read_exact_timed failed (read rc: 0, errno: 0): Internal error
+xc: error: read: p2m_size (0 = Success): Internal error
+xc: detail: Restore exit with rc=1
+libxl: error: libxl_dom.c:308:libxl__domain_restore_common restoring domain: Success
+libxl: error: libxl.c:711:libxl_domain_destroy non-existant domain 18
+
+2, hg version 11: 
+remove nested check in libxlDomainObjBeginJobInternal.
+remove the different job mask between MIGRATION_IN and MIGRATION_OUT in libxlMigrationJobStart.
+1), fail on 6times. 
+2), only delete the nested modify which is not affect the code i think.
+fail on 32times. 
+3), retest, 40times pass. reboot the vmware vm and test it again. 
+
+16:11 2012-08-03
+(21:06 2012-08-22)
+opensuse, arm, mele A1000, status after hackweek
+try opensuse arm on Allwinner A10
+mele A1000 is a hackable STB, including 1.2G cortex-A8 and 500MHz mali MP. ref: http://liliputing.com/2012/03/mele-a1000-is-a-70-hackable-linux-friendly-arm-based-pc.html
+1, I compile X11 driver(mali) for it and run xfce succeesfully.
+2, and add a usb audio adapter and usb bluetooth. Because Mele A1000 does not support bluetooth and mic. 
+3, So, my A1000 can act as a wireless earphone. it is very useful for me. i can hear my TV or my computer while i am in that room. 
+
+bamvor: point 3 is not finish right now. 
+
+17:32 2012-08-03
+opensuse, arm
+1, there is no hci device under sys bluetooth.
+after enable hci usb in kernel, it appears:
+1), kernel
+ │ Symbol: BT_HCIBTUSB [=m]                                                │
+ │ Type  : tristate                                                        │
+ │ Prompt: HCI USB driver                                                  │
+ │   Defined at drivers/bluetooth/Kconfig:5                                │
+ │   Depends on: NET [=y] && BT [=y] && USB [=y]                           │
+ │   Location:                                                             │
+ │     -> Networking support (NET [=y])                                    │
+ │       -> Bluetooth subsystem support (BT [=y])                          │
+ │         -> Bluetooth device drivers 
+2), log
+linux:/sys/class/bluetooth/hci0 # cat features
+0xffff8ffe9bff7983
+linux:/sys/class/bluetooth/hci0 # cat class
+0x400100
+linux:/sys/class/bluetooth/hci0 # cat manufacturer
+15
+linux:/sys/bus/usb/devices/2-1.1.4.3:1.0 # ls
+bAlternateSetting   bInterfaceSubClass  ep_02     power
+bInterfaceClass     bNumEndpoints       ep_81     subsystem
+bInterfaceNumber    bluetooth           ep_82     supports_autosuspend
+bInterfaceProtocol  driver              modalias  uevent
+
+2, add .asoundrc, still not work. 
+ref: http://linux.seindal.dk/2009/02/11/bluetooth-audio-headset/
+1), linux:~ # cat ~/.asoundrc
+pcm.bluetooth {
+    type bluetooth
+    device 6C:5D:63:00:A3:B9
+}
+2), before add
+# gst-launch-0.10 alsasrc device=hw:1 ! decodebin ! audioconvert ! audioresample ! alsasink device=bluetooth           
+Setting pipeline to PAUSED ...
+ERROR: Pipeline doesn't want to pause.
+ERROR: from element /GstPipeline:pipeline0/GstAlsaSink:alsasink0: Could not open audio device for playback.
+Additional debug info:
+gstalsasink.c(694): gst_alsasink_open (): /GstPipeline:pipeline0/GstAlsaSink:alsasink0:
+Playback open error on device 'bluetooth': No such file or directory
+Setting pipeline to NULL ...
+Freeing pipeline ...
+3), after add:
+# gst-launch-0.10 alsasrc device=hw:1 ! decodebin ! audioconvert ! audioresample ! alsasink device=bluetooth
+Setting pipeline to PAUSED ...
+bt_audio_service_open: connect() failed: Connection refused (111)
+ERROR: Pipeline doesn't want to pause.
+ERROR: from element /GstPipeline:pipeline0/GstAlsaSink:alsasink0: Could not open audio device for playback.
+Additional debug info:
+gstalsasink.c(694): gst_alsasink_open (): /GstPipeline:pipeline0/GstAlsaSink:alsasink0:
+Playback open error on device 'bluetooth': Connection refused
+Setting pipeline to NULL ...
+Freeing pipeline ...
+
+3, aplay also failed
+linux:/usr/src/packages/SOURCES/bluez-4.99/test # aplay agent.c -D bluetooth
+bt_audio_service_open: connect() failed: Connection refused (111)
+aplay: main:696: audio open error: Connection refused
+
+4, add hidp in kernel bluetooth. (no tested yet)
+
+
+20:55 2012-8-6
+build enviorment in windows
+1, download mingW from 
+http://download.csdn.net/detail/abeldeng/4475427
+http://download.csdn.net/detail/suncschdn007/4470567
+the second link include tar and patch program.
+
+16:12 2012-08-14
+virtualization, xen, arm, secure xen arm, slide 2007
+CAUTION: THIS MATERIAL IS VERY OLD.
+1, use page table lock down for xen hypervisor.
+xen located from 0xff000000 to 0xffffffff.
+2, io virtualization
+mixed device driver architecture
+1), front end and back end. ethernet, storage, audio(?).
+2), coordinate native device driver. exclusively for one domain. hid, lcd, touch panel.
+3, sensitive instructions:
+x86: approx. 57.
+armv5: 18.
+
+22:59 2012-08-15
+1, mail
+hi, jason, jim
+maybe i could not go to company next week(Aug 6 to Aug 10). 
+Yestoday, my daughter was into convulstion once. The symptom of her is similar to epilepsy. 
+my family is worry about her. So, we decide to take her go to the nestest proper hospital(Hunan province children hospital). Before this situation, my daughter live with her grandpa and grandma in Hunan province which is more than 1000 kilometers far away from Beijing. 
+We are going to stay in Hunan province until the doctor allow her go to Beijing. I wonder it will take me one week before i go back to beijing. 
+So, I ask for leave from Aug 6 to Aug 10.
+I am sorry for the delay of my work. I will try to check my email once per two days. 
+thanks for your understand.
+Bamvor
+
+2, Jason
+On Aug 5, 2012, at 9:49, "Bamvor Jian Zhang" <bjzhang@suse.com> wrote:
+> hi, jason, jim
+> 
+> maybe i could not go to company next week(Aug 6 to Aug 10). 
+> Yestoday, my daughter was into convulstion once. The symptom of her is similar to epilepsy. 
+I'm so sorry to hear about your daughter. Seeing your children suffer is one of the toughest things for a parent to go through. Our thoughts and prayers are with you and your family. 
+> my family is worry about her. So, we decide to take her go to the nestest proper hospital(Hunan province children hospital). Before this situation, my daughter live with her grandpa and grandma in Hunan province which is more than 1000 kilometers far away from Beijing. 
+> We are going to stay in Hunan province until the doctor allow her go to Beijing. I wonder it will take me one week before i go back to beijing. 
+> So, I ask for leave from Aug 6 to Aug 10.
+> I am sorry for the delay of my work. I will try to check my email once per two days. 
+Please don't worry about missing the days of work, or delaying your assignments. All of it is less important than your family. 
+Please keep us updated on your daughter's condition. I hope the doctors can help her and that she can fully recover. 
+Jason 
+
+3, Jim
+Jason Douglas wrote:
+> On Aug 5, 2012, at 9:49, "Bamvor Jian Zhang" <bjzhang@suse.com> wrote:
+>
+>   
+>> hi, jason, jim
+>>
+>> maybe i could not go to company next week(Aug 6 to Aug 10). 
+>> Yestoday, my daughter was into convulstion once. The symptom of her is similar to epilepsy. 
+>>     
+>
+> I'm so sorry to hear about your daughter. Seeing your children suffer is one of the toughest things for a parent to go through. Our thoughts and prayers are with you and your family. 
+>
+>   
+>> my family is worry about her. So, we decide to take her go to the nestest proper hospital(Hunan province children hospital). Before this situation, my daughter live with her grandpa and grandma in Hunan province which is more than 1000 kilometers far away from Beijing. 
+>> We are going to stay in Hunan province until the doctor allow her go to Beijing. I wonder it will take me one week before i go back to beijing. 
+>> So, I ask for leave from Aug 6 to Aug 10.
+>> I am sorry for the delay of my work. I will try to check my email once per two days. 
+>>     
+>
+> Please don't worry about missing the days of work, or delaying your assignments. All of it is less important than your family. 
+>   
+Yes, no need to worry about patches and work assignments when your
+daughter is sick.  I hope she gets better soon.  Let us know how she is
+doing.
+Jim
+
+4, reply
+Hi, jason, jim
+
+Thanks your understanding. 
+My daughter is ok in these days. there is no new convulstion right now. 
+The video electroencephalogram and CT for my daughter is not abnormal. But the doctor said it does not means that it is not the electroencephalogram. We need to take care of her and observation at home. At the same time, doctor give my daughter some medicine which is good for her nerse system. And doctor suggest we go back to Beijing by train instead of by plane. 
+
+My daughter has end her check in Hunan children hospital yestoday. So, we will get on the tranin on tomorow night and go back to Beijing on 17 July noon. 
+So, maybe I cannot join the regular meeting of our team. 
+
+I will go back to work from next week. 
+
+best wishes
+
+bamvor
+
+12:10 2012-08-20
+GTD
+0, 10:30-12:34 -19:31
+
+1, today
+1), 30' work with LiXia about how to rpmbuild drbd. 
+2), ask for leave. send to Jiaju and Claudia Ping, cc to Stephanie Tian
+
+18:18 2012-08-20
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont7, change to libvirt upstream
+1, changes from 0.9.12 to upstream
+old: 0.9.12
+new: upstream
+1), report error
+(1), old
+libxlError(VIR_ERR_INTERNAL_ERROR,
+                   _("libxl_get_physinfo_info failed"));
+(2), new
+virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+               _("libxl_get_physinfo_info failed"));
+
+2), ignore value
+(1), old
+ ignore_value(virDomainObjUnref(vm));
+(2), new
+ virObjectUnref(vm);
+
+3), objref
+(1), old
+virDomainObjRef(vm);
+(2), new
+virObjectRef(vm);
+
+2, todo
+seperate lock definition and calling. 
+
+09:22 2012-08-21
+mailing list, virtualization, xen, xen-arm
+1, xen
+1), "First Xen Test Day, August 14th"
+http://lists.xen.org/archives/html/xen-arm/2012-08/msg00006.html
+Hi, 
+
+After the success of Xen Document Days and with Xen 4.2 being close to release, we decided to trial Xen test Days. The first Xen Test Day will be on Tuesday, August 14th, on IRC freenode channel *#xentest.* The plan is to test Xen 4.2 RC2, whic h should be released shortly. You can find more information about Xen Test Days on: 
+* http://wiki.xen.org/wiki/Xen_Test_Days
+* http://wiki.xen.org/wiki/Xen_4.2_RC2_test_instructions
+
+What is a Xen Test Day?
+======================= 
+
+Xen test days are all day IRC events, facilitated by members of the Xen community. The purpose of Xen Test Days is to
+
+ * Provide focus in testing Xen Release Candidates
+ * Primary focus will be on ensuring that Xen RCs work with distros and
+   with your hardware and in your environment
+ * For Xen 4.2, we will also focus on testing the new XL tools
+
+How Does it Work?
+=================
+
+The pattern is the same as for Xen Document Days:
+
+ * Join us on IRC: freenode channel *#xentest*
+ * Tell people what you intend to test
+ * Make sure that a Xen release candidate works for you
+ * Help others, get help!
+ * And above all: have fun!  
+
+It is also OK, do to some testing before and jon the Test Day, if you get stuck and need some help. Looking forward to see you on IRC!
+
+Best Regards
+Lars
+
+2), [Xen-devel] Xen 4.3 release planning proposal
+http://lists.xen.org/archives/html/xen-devel/2012-08/msg01588.html
+(1), task list
+* Event channel scalability
+  owner: attilio@citrix
+  Increase limit on event channels (currently 1024 for 32-bit guests,
+  4096 for 64-bit guests) 
+* NUMA scheduler affinity
+  owner: dario@citrix 
+* NUMA Memory migration
+  owner: dario@citrix 
+* PVH mode, domU (w/ Linux)
+  owner: mukesh@oracle 
+* PVH mode, dom0 (w/ Linux)
+  owner: mukesh@oracle
+* ARM server port
+  owner: @citrix
+* blktap3
+  owner: @citrix
+* Default to QEMU upstream
+ - qemu-based stubdom (Linux or BSD libc)
+    owner: anthony@citrix
+    qemu-upstream needs a more fully-featured libc than exists in
+    minios.  Either work on a minimalist linux-based stubdom with
+    glibc, or port one of the BSD libcs to minios.
+ - pci pass-thru
+    owner: anthony@citrix
+* Persistent grants
+  owner: @citrix
+* Multi-page blk rings
+ - blkback in kernel (@intel)
+ - qemu blkback
+* Multi-page net protocol
+  owner: ?
+  expand the network ring protocol to allow multiple pages for
+  increased throughput
+* xl vm-{export,import}
+  owner: ?
+  Allow xl to import and export VMs to other formats; particularly
+  ovf, perhaps the XenServer format, or more.
+* xl USB pass-through for PV guests
+  owner: ?
+  Port the xend PV pass-through functionality to xl.
+* openvswitch toostack integration
+  owner: roger@citrix
+* Rationalized backend scripts (incl. driver domains)
+  owner: roger@citrix
+* Full-VM snapshotting
+  owner: ?
+  Have a way of coordinating the taking and restoring of VM memory and
+  disk snapshots.  This would involve some investigation into the best
+  way to accomplish this.
+* VM Cloning
+  owner: ?
+  Again, a way of coordinating the memory and disk aspects.  Research
+  into the best way to do this would probably go along with the
+  snapshotting feature.
+* Make storage migration possible
+  owner: ?
+  There needs to be a way, either via command-line or via some hooks,
+  that someone can build a "storage migration" feature on top of libxl
+  or xl.
+* PV audio (audio for stubdom qemu)
+  owner: stefano.panella@citrix
+* Memory: Replace PoD with paging mechanism
+  owner: george@citrix
+* Managed domains?
+
+(2), More wishlist items:
+http://lists.xen.org/archives/html/xen-devel/2012-08/msg01590.html
+* Nested hardware virtualization. Important for easier testing and development 
+of Xen (Xen-on-Xen),
+  and for running other hypervisors in Xen VMs. Interesting for labs, POCs, etc.
+* VGA/GPU passthru support for AMD/NVIDIA; lots of patches on xen-devel 
+archives, 
+  but noone has yet stepped up to clean up and get them merged. 
+  Currently Intel gfx passthru patches are merged to Xen, but primary 
+ATI/NVIDIA require extra patches.
+  This is actually something that a LOT of users ask often, it's discussed 
+almost every day on ##xen on IRC.
+  I wonder if XenClient folks could help here? 
+* Dom0 Keyboard/mouse sharing to HVM guests; mainly needed by VGA/GPU passthru 
+users.
+  Fujitsu guys posted some patches for this in 2010, and XenClient guys in 2009 
+(iirc),
+  but nothing got further developed and merged to upstream Xen.
+* QXL virtual GPU support for SPICE. Someone was already developing this, 
+  and posted patches earlier during 4.2 development cycle to xen-devel. 
+  Upstream Qemu includes QXL support.
+* PVSCSI support in XL. James Harper was (semi) interested in working with this,
+  because he has a PVSCSI frontend driver in Windows GPLPV drivers, and he's 
+using PVSCSI for tape backups himself.
+* libvirt libxl driver improvements; support more Xen features. 
+  Allows better using the Ubuntu/Debian/Fedora/RHEL/CentOS "default" 
+virtualization GUI also with Xen.
+
+(3), some interesting things: 
+((1)), libvirt works. it is what i need to do. 
+* libvirt libxl driver improvements; support more Xen features. 
+((2)), snapshot and migration. It is my area. full snapshot seems good for me to implement snapshot in libvirt. 
+* Full-VM snapshotting
+* VM Cloning
+* Make storage migration possible
+((3)), xen arm support, it is arranged to citrix guys. I could keep an eye on it.  Maybe it is a good opportunity to join xen arm development. 
+* ARM server port
+  owner: @citrix
+((4)), Nested hardware virtualization. it is very useful for me. 
+Nested hardware virtualization. Important for easier testing and development of Xen (Xen-on-Xen),
+
+3), xen4.2 release feature 
+http://wiki.xen.org/wiki/Xen_4.2_Limits
+http://wiki.xen.org/wiki/Xen_Release_Features
+
+2, xen-arm
+1), The difference between paravirt_ops and nested paging
+Re: [XenARM] Xen-ARM and paravirt_ops?
+http://lists.xen.org/archives/html/xen-arm/2012-08/msg00015.html
+paravirt_ops is a framework within the Linux kernel to replace the
+implementation of some arch specific functions with an alternative
+implementation.
+It is only available on x86 and it is mainly used to provide Xen-aware
+functions to read and write pagetables (pagetable pages need to be
+read-only on Xen). Give a look at arch/x86/xen/mmu.c to get a better
+idea on what they are for.
+If we rely on nested paging in hardware we don't need pagetable access
+paravirt_ops any more because the guest can modify its own pagetables the
+same way it would do on native hardware.
+2), xen-arm patch
+http://lists.xen.org/archives/html/xen-devel/2012-08/msg01329.html
+this patch series implements Xen support for ARMv7 with virtualization
+extensions.  It allows a Linux guest to boot as dom0 and
+as domU on Xen on ARM. PV console, disk and network frontends and
+backends are all working correctly.
+It has been tested on a Versatile Express Cortex A15 emulator
+(kernel is) A branch based on 3.5-rc7 
+
+10:10 2012-08-21
+GTD
+0, 9:05-18:30
+
+1, today
+1), 1h read mailing list. see"09:22 2012-08-21"
+2), Ralf: all hands meeting, suse business update. see"10:33 2012-08-21"
+3), 14:39-18:30 prepare for lock and migration in libvirt upstream. see"14:39 2012-08-21"
+sleep 1h
+
+10:33 2012-08-21
+suse, all hands meeting
+1, achievement
+SLEPOS: for cash machine. 
+SLE for SAP: all the data store in memory, more than 1TiB memory. 
+Crowbar: deploy framework develop by DELL, suse, .....
+SLE12: started.
+apply patch while kernel is running. 
+
+2, business update
+1), great FY12 finish
+upgraded VPP bonus payout to 101%. 
+
+3, we adapt, you succeed.
+listining customer need and adapting.
+ 
+14:39 2012-08-21
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont8, compile and make patch
+1, compile on libvirt upstream
+1), run ./autogen.sh fail at bootstrap, cannot get the specific gnulib version. get gnulib by myself: 
+git clone git://git.sv.gnu.org/gnulib.git
+2), link gnulib to libvirt/.gnulib, ./autogen.sh fail again: 
+configure.ac:2922: required file `gnulib/lib/Makefile.in' not found
+configure.ac:2922: required file `gnulib/tests/Makefile.in' not found
+3), bamvor: i should using "export GNULIB_SRCDIR=/path/to/gnulib" instead
+export GNULIB_SRCDIR=/home/bamvor/work/source/gnulib/gnulib
+4), touch empty Makefile.in
+bamvor@linux-bjrd:gnulib> pwd
+/home/bamvor/work/source/gnulib
+bamvor@linux-bjrd:gnulib> touch gnulib/lib/Makefile.in
+bamvor@linux-bjrd:gnulib> touch gnulib/lib/Makefile.in
+fail, try another dir
+> pwd
+/home/bamvor/work/source/virtualization/libvirt/libvirt
+> touch gnulib/lib/Makefile.in
+> touch gnulib/lib/Makefile.in
+> touch gnulib/tests/Makefile.in
+5), fail at make gnulib
+Making all in gnulib/lib
+make[2]: Entering directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt/gnulib/lib'
+make[2]: *** No rule to make target `all'.  Stop.
+make[2]: Leaving directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt/gnulib/lib'
+
+17:00 2012-08-21
+arm, board, Allwinner, A10, Onda Vi10, try opensuse; how to write udev rules 1-2)
+1, using adb in linux host
+1), plug in Vi10, dmesg: 
+[1732695.617298] usb 1-1.4: new high-speed USB device number 9 using ehci_hcd
+[1732695.725944] usb 1-1.4: New USB device found, idVendor=18d1, idProduct=0003
+[1732695.725949] usb 1-1.4: New USB device strings: Mfr=2, Product=3, SerialNumber=4
+[1732695.725952] usb 1-1.4: Product: Android
+[1732695.725954] usb 1-1.4: Manufacturer: USB Developer
+[1732695.725956] usb 1-1.4: SerialNumber: 20080411
+2), add rules. 
+ref: http://developer.android.com/tools/device.html
+http://www.reactivated.net/writing_udev_rules.html
+# cat /etc/udev/rules.d/51-android.rules
+SUBSYSTEM=="usb", ATTR{idVendor}=="18d1", MODE="0666", GROUP="plugdev"
+3), then dmesg get more: 
+[1732700.735128] scsi14 : usb-storage 1-1.4:1.0
+[1732701.732379] scsi 14:0:0:0: Direct-Access     ONDA MID USB 2.0 Driver   0100 PQ: 0 ANSI: 2
+[1732701.732593] sd 14:0:0:0: Attached scsi generic sg3 type 0
+[1732701.733982] scsi 14:0:0:1: Direct-Access     ONDA MID USB 2.0 Driver   0100 PQ: 0 ANSI: 2
+[1732701.734094] sd 14:0:0:1: Attached scsi generic sg4 type 0
+[1732701.737342] sd 14:0:0:0: [sdc] Attached SCSI removable disk
+[1732701.738626] sd 14:0:0:1: [sdd] Attached SCSI removable disk
+
+2, get hardware configuration from android nand flash
+1), download android sdk from http://developer.android.com/sdk/index.html
+2), adb will be downloaded at android-sdk-linux/platform-tools 
+
+17:17 2012-08-21
+opensuse, Board; Peter Linnell, Manu Gupta 
+1, "Alan Clark" <aclark@suse.com>""_email_"[opensuse-project] Board Appointment Announcement"_20120820_1809
+Within the past few weeks, board member Peter Linnell accepted a position with SUSE.  Peter will continue to participate in the the openSUSE community but to maintain compliance with the openSUSE project election rules, Peter recognized that he needed to resign from the openSUSE Board.  The rules state that "In the event that individuals affiliated with a company or organization hold more than 40 per cent of the electable seats, affiliates from that corporation will be required to resign until fewer than 40 per cent of electable seats are controlled by that company or organization."
+
+With Peter's resignation, the Board has opted, in accordance to the election rules, to appoint a new member to fill the vacancy until the election is completed later this year. Having reviewed the results from last years elections and discussed the opportunity with the top vote recipients, the openSUSE board members would like to announce and welcome Manu Gupta to the board.
+
+Welcome Manu!  
+Manu, we look forward to working with you.
+
+Regards, 
+openSUSE Board 
+
+2, bamvor: 
+there is a rules about opensuse Board. 一个公司在Board所占比例不能超过40%. 
+
+14:49 2012-08-22
+GTD
+0, 14:30-22:16
+
+1, today
+1), 15:47-17:10 19:10-22:05 prepare for lock and migration in libvirt upstream. see"15:47 2012-08-22"
+
+15:47 2012-08-22
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont9, compile and make patch
+1, replace upstream gnulib with gnulib from libvirt-0.9.13 release package. 
+/bin/sh ../libtool --tag=CC   --mode=compile gcc -std=gnu99 -DHAVE_CONFIG_H -I. -I.. -I../gnulib/lib -I../gnulib/lib -I../include -I../include -I../src/util -DIN_LIBVIRT       -export-dynamic -I/usr/include/libxml2   -Wall -W -Wformat-y2k -Wformat-security -Winit-self -Wmissing-include-dirs -Wunused -Wunknown-pragmas -Wstrict-aliasing -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wwrite-strings -Wlogical-op -Wstrict-prototypes -Wold-style-definition -Wmissing-noreturn -Wmissing-format-attribute -Wredundant-decls -Wnested-externs -Winline -Winvalid-pch -Wvolatile-register-var -Wdisabled-optimization -Wattributes -Wcoverage-mismatch -Wdeprecated-declarations -Wdiv-by-zero -Wendif-labels -Wextra -Wformat-contains-nul -Wformat-extra-args -Wformat-zero-length -Wformat=2 -Wmultichar -Wnormalized=nfc -Woverflow -Wpointer-to-int-cast -Wpragmas -Wno-missing-field-initializers -Wno-sign-compare -Wno-format-nonliteral -fstack-protector-all --param=ssp-buffer-size=4 -fexceptions -fasynchronous-unwind-tables -fdiagnostics-show-option -funit-at-a-time -fipa-pure-const -Werror      -I/usr/include/dbus-1.0 -I/usr/lib64/dbus-1.0/include    -g -O2 -MT libvirt_util_la-virnetdev.lo -MD -MP -MF .deps/libvirt_util_la-virnetdev.Tpo -c -o libvirt_util_la-virnetdev.lo `test -f 'util/virnetdev.c' || echo './'`util/virnetdev.c
+libtool: compile:  gcc -std=gnu99 -DHAVE_CONFIG_H -I. -I.. -I../gnulib/lib -I../gnulib/lib -I../include -I../include -I../src/util -DIN_LIBVIRT -export-dynamic -I/usr/include/libxml2 -Wall -W -Wformat-y2k -Wformat-security -Winit-self -Wmissing-include-dirs -Wunused -Wunknown-pragmas -Wstrict-aliasing -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wwrite-strings -Wlogical-op -Wstrict-prototypes -Wold-style-definition -Wmissing-noreturn -Wmissing-format-attribute -Wredundant-decls -Wnested-externs -Winline -Winvalid-pch -Wvolatile-register-var -Wdisabled-optimization -Wattributes -Wcoverage-mismatch -Wdeprecated-declarations -Wdiv-by-zero -Wendif-labels -Wextra -Wformat-contains-nul -Wformat-extra-args -Wformat-zero-length -Wformat=2 -Wmultichar -Wnormalized=nfc -Woverflow -Wpointer-to-int-cast -Wpragmas -Wno-missing-field-initializers -Wno-sign-compare -Wno-format-nonliteral -fstack-protector-all --param=ssp-buffer-size=4 -fexceptions -fasynchronous-unwind-tables -fdiagnostics-show-option -funit-at-a-time -fipa-pure-const -Werror -I/usr/include/dbus-1.0 -I/usr/lib64/dbus-1.0/include -g -O2 -MT libvirt_util_la-virnetdev.lo -MD -MP -MF .deps/libvirt_util_la-virnetdev.Tpo -c util/virnetdev.c  -fPIC -DPIC -o .libs/libvirt_util_la-virnetdev.o
+cc1: warnings being treated as errors
+/usr/include/netlink/object.h:58: error: inline function 'nl_object_priv' declared but never defined
+make[3]: *** [libvirt_util_la-virnetdev.lo] Error 1
+make[3]: Leaving directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt/src'
+
+remove all the "-Werror" with the command: 
+for f in `find . -name Makefile`; do sed "s/\-Werror//" $f -i ; done
+
+2, missing, stat-time.h 
+cp .gnulib/lib/stat-time.h gnulib/lib/ -p
+
+3, undefined reference to `libvirt_gl_base64_encode_alloc'
+bamvor: remove libtool: link: gcc -std=gnu99 -Wall -W -Wformat-y2k -Wformat-security -Winit-self -Wmissing-include-dirs -Wunused -Wunknown-pragmas -Wstrict-aliasing -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wwrite-strings -Wlogical-op -Wstrict-prototypes -Wold-style-definition -Wmissing-noreturn -Wmissing-format-attribute -Wredundant-decls -Wnested-externs -Winline -Winvalid-pch -Wvolatile-register-var -Wdisabled-optimization -Wattributes -Wcoverage-mismatch -Wdeprecated-declarations -Wdiv-by-zero -Wendif-labels -Wextra -Wformat-contains-nul -Wformat-extra-args -Wformat-zero-length -Wformat=2 -Wmultichar -Wnormalized=nfc -Woverflow -Wpointer-to-int-cast -Wpragmas -Wno-missing-field-initializers -Wno-sign-compare -Wno-format-nonliteral -fstack-protector-all --param=ssp-buffer-size=4 -fexceptions -fasynchronous-unwind-tables -fdiagnostics-show-option -funit-at-a-time -fipa-pure-const -I/usr/include/libxml2 -DUSE_READLINE -g -O2 -Wall -W -Wformat-y2k -Wformat-security -Winit-self -Wmissing-include-dirs -Wunused -Wunknown-pragmas -Wstrict-aliasing -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wwrite-strings -Wlogical-op -Wstrict-prototypes -Wold-style-definition -Wmissing-noreturn -Wmissing-format-attribute -Wredundant-decls -Wnested-externs -Winline -Winvalid-pch -Wvolatile-register-var -Wdisabled-optimization -Wattributes -Wcoverage-mismatch -Wdeprecated-declarations -Wdiv-by-zero -Wendif-labels -Wextra -Wformat-contains-nul -Wformat-extra-args -Wformat-zero-length -Wformat=2 -Wmultichar -Wnormalized=nfc -Woverflow -Wpointer-to-int-cast -Wpragmas -Wno-missing-field-initializers -Wno-sign-compare -Wno-format-nonliteral -fstack-protector-all --param=ssp-buffer-size=4 -fexceptions -fasynchronous-unwind-tables -fdiagnostics-show-option -funit-at-a-time -fipa-pure-const -o .libs/virsh virsh-console.o virsh-virsh.o virsh-virsh-domain.o virsh-virsh-domain-monitor.o virsh-virsh-host.o virsh-virsh-interface.o virsh-virsh-network.o virsh-virsh-nodedev.o virsh-virsh-nwfilter.o virsh-virsh-pool.o virsh-virsh-secret.o virsh-virsh-snapshot.o virsh-virsh-volume.o -Wall -W -Wformat-y2k -Wformat-security -Winit-self -Wmissing-include-dirs -Wunused -Wunknown-pragmas -Wstrict-aliasing -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wwrite-strings -Wlogical-op -Wstrict-prototypes -Wold-style-definition -Wmissing-noreturn -Wmissing-format-attribute -Wredundant-decls -Wnested-externs -Winline -Winvalid-pch -Wvolatile-register-var -Wdisabled-optimization -Wattributes -Wcoverage-mismatch -Wdeprecated-declarations -Wdiv-by-zero -Wendif-labels -Wextra -Wformat-contains-nul -Wformat-extra-args -Wformat-zero-length -Wformat=2 -Wmultichar -Wnormalized=nfc -Woverflow -Wpointer-to-int-cast -Wpragmas -Wno-missing-field-initializers -Wno-sign-compare -Wno-format-nonliteral -fstack-protector-all --param=ssp-buffer-size=4 -fexceptions -fasynchronous-unwind-tables -fdiagnostics-show-option -funit-at-a-time -fipa-pure-const  ../src/.libs/libvirt.so -L/lib64 ../src/.libs/libvirt-qemu.so /home/bamvor/work/source/virtualization/libvirt/libvirt/src/.libs/libvirt.so -lcap-ng -lyajl -lnl -laudit -ldevmapper -lrt -lnuma /usr/lib64/libavahi-client.so /usr/lib64/libavahi-common.so -lpolkit-dbus -lpolkit -ldbus-1 -lgnutls -lgcrypt /usr/lib64/libsasl2.so -lresolv -lcurl -lselinux -lapparmor ../gnulib/lib/.libs/libgnu.a -lpthread -lutil /usr/lib64/libxml2.so -lz -lm -lreadline -ldl -pthread
+virsh-virsh-secret.o: In function `cmdSecretGetValue':
+/home/bamvor/work/source/virtualization/libvirt/libvirt/tools/virsh-secret.c:250: undefined reference to `libvirt_gl_base64_encode_alloc'
+collect2: ld returned 1 exit status
+make[3]: *** [virsh] Error 1
+make[3]: Leaving directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt/tools'
+
+bamvor: comment the following line in config.h
+//#define base64_encode_alloc libvirt_gl_base64_encode_alloc
+
+4, compile pass, but load libxl fail
+2012-08-22 12:35:55.239+0000: 4012: info : libvirt version: 0.9.13 20:12:15
+2012-08-22 12:35:55.239+0000: 4012: error : virDriverLoadModule:78 : failed to load module /usr/lib64/libvirt/connection-driver/libvirt_driver_libxl.so /usr/lib64/libvirt/connection-driver/libvirt_driver_libxl.so: undefined symbol: virNetSocketFree
+1), virNetSocketFree rename as virNetSocketDispose which is set as virObjectDisposeCallback in virClassNew.
+So, only "virObjectUnref(sock);" is needed for original virNetSocketFree. 
+2), compare qemu_migration.c
+"qemuMigrationJobContinue(vm) == 0" to "!qemuMigrationJobContinue(vm))"
+"qemuMigrationJobFinish(driver, vm) == 0)" to "!qemuMigrationJobFinish(driver, vm)"
+"virNetSocketFree(sock)" to "virObjectUnref(sock)"
+"if (st) virUnrefStream(st);" to "virObjectUnref": becasue virObjectUnref add null check. 
+"virUnrefDomain(ddomain);" to "virObjectUnref(ddomain);"
+"virDomainObjRef(vm);" and "virDomainObjUnref(vm);" to "virObjectRef(vm);" and "virObjectUnref(vm);" 
+return value of qemuMigrationJobFinish: change from int to bool. 
+3), compare qemu_driver.c, 
+"virDomainObjUnref(wdEvent->vm) > 0)" to "virObjectUnref(wdEvent->vm)"
+4), compare qemu_domain.c, 
+(1), check qemuDomainObjEndAsyncJob for the return value of qemuMigrationJobFinish. the return changed because virDomainObjUnref is replace by virObjectUnref.
+(2), "ignore_value(virDomainObjUnref(obj));" to "virObjectUnref(obj);"
+5), after modify code. "virsh -c xen://" is work. but default hypervisor is qemu. this is not convenience for user I guess. \TODO: try to modify it. 
+
+5, but migration fail
+the same error as the libvirt-0.9.12: fail with unkown error. 
+1), src
+(1), 
+linux-vm5:/etc/xen/vm # virsh -c xen:// migrate sles11_hvm_10_2 xen+ssh://linux-vm8
+error: An error occurred, but the cause is unknown
+libvirtd log: 
+2012-08-22 14:11:39.505+0000: 3922: error : libxlDomainMigrateConfirm3:5065 : internal error migration failed, try to resume on our end
+both side xen vm is running. 
+(2), 
+try again
+linux-vm5:/etc/xen/vm # virsh -c xen:// migrate sles11_hvm_10_2 xen+ssh://linux-vm8
+error: Timed out during operation: cannot acquire state change lock
+libvirtd log: 
+2012-08-22 14:12:59.000+0000: 3922: warning : libxlDomainObjBeginJobInternal:301 : Cannot start job (none, migration out) for domain sles11_hvm_10_2; current job is (none, migration out) owned by (0, 3924)
+2012-08-22 14:12:59.000+0000: 3922: error : libxlDomainObjBeginJobInternal:305 : Timed out during operation: cannot acquire state change lock
+2), dst: no log. 
+
+15:07 2012-08-23
+GTD
+0, 15:00-23:20
+
+1, today
+1), 15:11-23:20 prepare for lock and migration in libvirt upstream. see"15:11 2012-08-23"
+sleep 1h. reset 2h. 
+
+15:11 2012-08-23
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont10, fix error
+1, try migration on native xen virtual machine. 
+fail with the same error. 0628 version also failed. 
+
+2, log
+1), src
+2012-08-23 12:10:42.708+0000: 4278: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-23 12:11:02.871+0000: 4277: info : libxlDomainMigrateBegin3:4276 : start
+2012-08-23 12:11:02.910+0000: 4277: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-23 12:11:02.910+0000: 4277: info : libxlDomainMigrateBegin3:4317 : end
+2012-08-23 12:11:02.917+0000: 4279: info : libxlDomainMigratePerform3:4630 : start
+2012-08-23 12:11:02.918+0000: 4279: info : doMigrateSend:4397 : start
+2012-08-23 12:11:02.918+0000: 4279: info : libxlCheckMessageBanner:4211 : successful
+2012-08-23 12:11:49.093+0000: 4279: info : libxlCheckMessageBanner:4211 : successful
+2012-08-23 12:11:49.093+0000: 4279: info : doMigrateSend:4449 : end
+2012-08-23 12:11:49.094+0000: 4279: info : libxlDomainMigratePerform3:4675 : end
+2012-08-23 12:11:49.318+0000: 4275: info : libxlDomainMigrateConfirm3:4783 : start
+2012-08-23 12:11:49.318+0000: 4275: error : libxlDomainMigrateConfirm3:4797 : internal error migration failed, try to resume on our end
+2012-08-23 12:11:49.318+0000: 4275: info : libxlDomainMigrateConfirm3:4812 : goto cleanup
+2012-08-23 12:11:49.318+0000: 4275: info : libxlDomainMigrateConfirm3:4844 : end
+2), dst
+2012-08-23 12:10:50.148+0000: 4733: info : libxlDomainMigratePrepare3:4479 : start
+2012-08-23 12:10:50.149+0000: 4733: info : libxlDomainMigratePrepare3:4602 : end
+2012-08-23 12:10:50.149+0000: 4864: info : doMigrateReceive:4334 : start
+2012-08-23 12:10:50.152+0000: 4864: info : doMigrateReceive:4355 : vm start
+2012-08-23 12:11:36.327+0000: 4864: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-23 12:11:36.327+0000: 4864: info : doMigrateReceive:4357 : vm start end
+2012-08-23 12:11:36.327+0000: 4864: info : doMigrateReceive:4385 : end
+2012-08-23 12:11:36.328+0000: 4730: info : libxlDomainMigrateFinish3:4702 : start
+2012-08-23 12:11:36.426+0000: 4730: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-23 12:11:36.550+0000: 4730: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-23 12:11:36.550+0000: 4730: info : libxlDomainMigrateFinish3:4764 : end
+
+3, check return value. 
+libxlMigrateFinish3 return NULL. it means domain can not get from dst. 
+1), 
+
+2012-08-23 13:48:49.680+0000: 4978: info : doParseURI:4220 : uri: linux-bjrd.bjz:49512; hostname: (null); port: 0
+2), from log, it looks like fail at libxl_domain_unpause. \TODO: continue checking it. 
+
+4, talk with Jim(seperate from conversation history: log/novell/im/NM2012823_Jim_Fehlig__my_work__using_git_to_gen_patch.txt
+1), patch and coding doc: 
+http://libvirt.org/hacking.html
+2), you should have 2 branches, one for locking (with 2 patches in it), and one for migration. with different branches, you can work on the patches separately
+3), git command
+(1), so something like:
+git checkout master
+git pull
+git branch libxl-lock
+git checkout libxl-lock
+work on lock impl
+git add <changed files>
+git commit
+git format-patch ...
+(2), when sending to libvirt ml directly, you can use 'git send-email ...'
+git send-email takes most of the option that git format-patch does
+
+5, 1, send new version lock patch to Jim. 
+"log/novell/hypervisor_and_tools/migrate/201208/0823__based_on_upstream__compile_pass"
+
+09:32 2012-08-24
+GTD
+0, 9:08-18:50
+
+1, today
+1), 9:08 17:23-18:47 prepare for lock and migration in libvirt upstream. see"09:33 2012-08-24". 
+sleep 20' 
+
+09:33 2012-08-24
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont11, debug migration
+1, after add missing parenthesis. migration from linux-work to linux-bjrd is successful, but migation from linux-bjrd to linux-work failed. 
+1), code update: 
+commit a374b364ebebb7cead6839399615869cfedafe2e
+Author: bamvor jian zhang <bamvor@linux-bjrd.bjz>
+Date:   Fri Aug 24 10:47:44 2012 +0800
+
+    missing a parenthesis after virDomainSaveStatus in libxlMigrateFinish3
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 822a82d..501498b 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -4736,12 +4735,12 @@ libxlDomainMigrateFinish3(virConnectPtr dconn,
+             }
+ 
+             virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED);
+-            if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
++            if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0) {
+                 VIR_WARN("Failed to save status on vm %s", vm->def->name);
+                 goto error;
++            }
+         }
+ 
+-        VIR_INFO(" ");
+         dom = virGetDomain(dconn, vm->def->name, vm->def->uuid);
+         VIR_INFO("goto cleanup with dom=%lx", (unsigned long)dom);
+         goto cleanup;
+2), right log(1st migration. from linux-work to linux-bjrd): 
+(1), src(linux-work)
+2012-08-24 03:02:58.858+0000: 4059: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:02:58.858+0000: 4059: info : virGetDomain:178 : conn: 6a05c0; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/ -g
+2012-08-24 03:04:18.502+0000: 4059: info : virGetDomain:178 : conn: 69d510; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/ -g
+2012-08-24 03:04:18.504+0000: 4064: info : virGetDomain:178 : conn: 69d510; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/ -g
+2012-08-24 03:04:54.871+0000: 4058: info : virGetDomain:178 : conn: 69d510; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:04:54.871+0000: 4058: info : libxlDomainMigrateBegin3:4278 : start
+2012-08-24 03:04:54.910+0000: 4058: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:04:54.910+0000: 4058: info : libxlDomainMigrateBegin3:4319 : end. ret=6a6010
+2012-08-24 03:04:54.911+0000: 4059: info : virGetDomain:178 : conn: 69d510; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:04:54.917+0000: 4060: info : virGetDomain:178 : conn: 69d510; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:04:54.917+0000: 4060: info : libxlDomainMigratePerform3:4632 : start
+2012-08-24 03:04:54.917+0000: 4060: info : doParseURI:4220 : uri: linux-bjrd.bjz:49512; hostname: (null); port: 0
+2012-08-24 03:04:54.917+0000: 4060: info : doParseURI:4257 : uri: linux-bjrd.bjz:49512; hostname: linux-bjrd.bjz; port: 49512
+2012-08-24 03:04:54.918+0000: 4060: info : doMigrateSend:4399 : start
+2012-08-24 03:04:54.918+0000: 4060: info : libxlCheckMessageBanner:4211 : successful
+2012-08-24 03:05:41.123+0000: 4060: info : libxlCheckMessageBanner:4211 : successful
+2012-08-24 03:05:41.123+0000: 4060: info : doMigrateSend:4451 : end. ret=0
+2012-08-24 03:05:41.123+0000: 4060: info : libxlDomainMigratePerform3:4677 : end. ret=0
+2012-08-24 03:05:41.183+0000: 4057: info : virGetDomain:178 : conn: 69d510; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:05:41.183+0000: 4057: info : libxlDomainMigrateConfirm3:4798 : start
+2012-08-24 03:05:41.404+0000: 4057: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:05:41.404+0000: 4057: info : libxlDomainMigrateConfirm3:4859 : end. ret=0
+(2), dst(linux-bjrd)
+2012-08-24 03:04:36.822+0000: 4754: info : libxlDomainMigratePrepare3:4481 : start
+2012-08-24 03:04:36.823+0000: 4754: info : libxlDomainMigratePrepare3:4604 : end. ret=0
+2012-08-24 03:04:36.823+0000: 4883: info : doMigrateReceive:4336 : start
+2012-08-24 03:04:36.827+0000: 4883: info : doMigrateReceive:4357 : vm start
+2012-08-24 03:05:23.030+0000: 4883: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:05:23.030+0000: 4883: info : doMigrateReceive:4359 : vm start end. ret=0
+2012-08-24 03:05:23.030+0000: 4883: info : doMigrateReceive:4387 : end
+2012-08-24 03:05:23.032+0000: 4750: info : libxlDomainMigrateFinish3:4704 : start
+2012-08-24 03:05:23.032+0000: 4750: info : doParseURI:4220 : uri: linux-bjrd.bjz:49512; hostname: (null); port: 0
+2012-08-24 03:05:23.032+0000: 4750: info : doParseURI:4257 : uri: linux-bjrd.bjz:49512; hostname: linux-bjrd.bjz; port: 49512
+2012-08-24 03:05:23.032+0000: 4750: info : libxlDomainMigrateFinish3:4725 : not cancelled
+2012-08-24 03:05:23.032+0000: 4750: info : libxlDomainMigrateFinish3:4728 : libxl_domain_unpause ctx: 6dbb60, id: 1
+2012-08-24 03:05:23.063+0000: 4750: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:05:23.063+0000: 4750: info : virGetDomain:178 : conn: 6d9f40; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:05:23.064+0000: 4750: info : libxlDomainMigrateFinish3:4745 : goto cleanup with dom=6dc1a0
+2012-08-24 03:05:23.064+0000: 4750: info : libxlDomainMigrateFinish3:4762 : cleanup handling
+2012-08-24 03:05:23.089+0000: 4750: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:05:23.089+0000: 4750: info : libxlDomainMigrateFinish3:4772 : free hostname
+2012-08-24 03:05:23.089+0000: 4750: info : libxlDomainMigrateFinish3:4779 : end. ret=6dc1a0
+3), wrong log1(2nd: from linux-bjrd to linux-work). 
+no error after virsh command, but migration failed. 
+linux-bjrd:/home/bamvor # virxen migrate sles11_hvm_10 xen+ssh://linux-work
+Password:                                                                  
+(1), src: linux-bjrd
+2012-08-24 03:06:02.779+0000: 4750: info : virGetDomain:178 : conn: 6d9f40; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:06:02.781+0000: 4751: info : virGetDomain:178 : conn: 6d9f40; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:06:15.634+0000: 4759: info : virGetDomain:178 : conn: 7f93600060f0; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:06:15.635+0000: 4752: info : virGetDomain:178 : conn: 7f93600060f0; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:06:17.408+0000: 4750: info : virGetDomain:178 : conn: 7f93600060f0; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:06:17.408+0000: 4750: info : libxlDomainMigrateBegin3:4278 : start
+2012-08-24 03:06:17.448+0000: 4750: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:06:17.448+0000: 4750: info : libxlDomainMigrateBegin3:4319 : end. ret=6e2bf0
+2012-08-24 03:06:17.449+0000: 4751: info : virGetDomain:178 : conn: 7f93600060f0; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:06:17.455+0000: 4752: info : virGetDomain:178 : conn: 7f93600060f0; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:06:17.455+0000: 4752: info : libxlDomainMigratePerform3:4632 : start
+2012-08-24 03:06:17.455+0000: 4752: info : doParseURI:4220 : uri: linux-work:49512; hostname: (null); port: 0
+2012-08-24 03:06:17.455+0000: 4752: info : doParseURI:4257 : uri: linux-work:49512; hostname: linux-work; port: 49512
+2012-08-24 03:06:17.455+0000: 4752: info : doMigrateSend:4399 : start
+2012-08-24 03:06:17.456+0000: 4752: info : libxlCheckMessageBanner:4211 : successful
+2012-08-24 03:07:02.040+0000: 4749: error : virNetSocketReadWire:1184 : End of file while reading data: Input/output error
+2012-08-24 03:07:04.116+0000: 4752: info : libxlCheckMessageBanner:4207 : failed
+2012-08-24 03:07:04.116+0000: 4752: info : doMigrateSend:4451 : end. ret=0
+2012-08-24 03:07:04.116+0000: 4752: info : libxlDomainMigratePerform3:4677 : end. ret=0
+(2), dst(linux-work)
+2012-08-24 03:06:35.545+0000: 4056: info : libxlDomainMigratePrepare3:4481 : start
+2012-08-24 03:06:35.546+0000: 4056: info : libxlDomainMigratePrepare3:4604 : end. ret=0
+2012-08-24 03:06:35.546+0000: 4273: info : doMigrateReceive:4336 : start
+2012-08-24 03:06:35.549+0000: 4273: info : doMigrateReceive:4357 : vm start
+2012-08-24 03:07:05.574+0000: 4055: warning : virKeepAliveTimerInternal:156 : No response from client 0x6a1d70 after 5 keepalive messages in 30 seconds
+2012-08-24 03:07:22.210+0000: 4273: error : libxlVmStart:980 : internal error libxenlight failed to restore domain 'sles11_hvm_10'
+2012-08-24 03:07:22.210+0000: 4273: info : doMigrateReceive:4359 : vm start end. ret=-1
+2012-08-24 03:07:22.210+0000: 4273: error : doMigrateReceive:4364 : internal error Failed to restore domain with libxenlight
+2012-08-24 03:07:22.210+0000: 4273: info : doMigrateReceive:4387 : end
+4), wrong log2(3rd. from linux-bjrd to linux-work. try again after fail).
+linux-bjrd:/home/bamvor # virxen migrate sles11_hvm_10 xen+ssh://linux-work
+Password:
+error: Timed out during operation: cannot acquire state change lock
+(1), linux-bjrd
+2012-08-24 03:07:06.214+0000: 4756: info : virGetDomain:178 : conn: 7f9360004010; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:07:06.215+0000: 4752: info : virGetDomain:178 : conn: 7f9360004010; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:07:52.298+0000: 4757: info : virGetDomain:178 : conn: 7f9360004010; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:07:52.300+0000: 4753: info : virGetDomain:178 : conn: 7f9360004010; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/×f
+2012-08-24 03:07:54.551+0000: 4751: info : virGetDomain:178 : conn: 7f9360004010; name: sles11_hvm_10; uuid: £åmÂ¯KøoåQ)/
+2012-08-24 03:07:54.551+0000: 4751: info : libxlDomainMigrateBegin3:4278 : start
+2012-08-24 03:08:24.000+0000: 4751: warning : libxlDomainObjBeginJobInternal:292 : Cannot start job (none, migration out) for domain sles11_hvm_10; current job is (none, migration out) owned by (0, 4750)
+2012-08-24 03:08:24.000+0000: 4751: error : libxlDomainObjBeginJobInternal:296 : Timed out during operation: cannot acquire state change lock
+2012-08-24 03:08:24.044+0000: 4751: info : virDomainSaveStatus:13500 : exit with 0
+2012-08-24 03:08:24.044+0000: 4751: info : libxlDomainMigrateBegin3:4319 : end. ret=0
+5), \TODO debug migration fail handling in 0741555a3d829dda35449dbe900f74f093b2c89f and a374b364ebebb7cead6839399615869cfedafe2e. 
+
+2, continue to debug migration fail. 
+1), test on vmware player. 
+(1), 14times successful, hang at 15th test.  
+(2), test again, fail at 35th test: 
+error: internal error Failed to save domain '17' with libxenlight
+treat this result as test pass(more than 20 times). 
+(3), test again: 40times successful. but re-run test is failed at 1st test. 
+2), add lock and test again. 
+(1), fix defined but not used [-Wunused-function]
+error becasue "-Werror" is defined. 
+   4    117  src/internal.h <<ATTRIBUTE_UNUSED>>
+             #define ATTRIBUTE_UNUSED __attribute__((__unused__))
+ref: http://my.oschina.net/u/196111/blog/68031
+(2), test 40times pass on commit: 04bb001138c035e32bbd231eaa718648880ebc86
+(3), test 40times pass on commit: 7e4d6f1b017acc21b7df6f15ec7f3f42c40fba0f: remove nested async job
+(4), test 40times pass. continuing
+commit 8e1d5b5afb7e6eb5c3b4f8bc0e21f69ecba83aff add lock use patch
+
+13:36 2012-08-24
+embeded, arm, SOC, compare, Allwinner A10/A13, rockchip RK2918, Amlogic 8726; GC800, Mali400
+http://www.slatedroid.com/topic/31293-allwinnerboxchip-a10-vs-rk2918-what-you-should-buy/
+http://blog.slate4sure.com/tablet-cpu-comparison-amlogic-aml8726-rockchip-rk2918-allwinner-a10/
+
+14:27 2012-08-24
+arm, board, Allwinner, A10, mele A1000; unfinished summary, doc, notes
+1, "Ciaran Farrell <cfarrell@suse.de>"_email_"[opensuse-arm] Kernel for Gooseberry (Allwinner)"_20120818_2236
+Looks like somebody got Ubuntu working on the Gooseberry. Details and an 
+apparently working image are here: 
+https://www.miniand.com/forums/forums/2/topics/82
+
+I'm currently downloading the image. The kernel is available here:
+http://dl.miniand.com/toby_corkindale/kernel_3.0.36_hf.tar.gz
+
+So I guess I could try to use an openSUSE rootfs with that for starters.
+
+Ciaran
+
+-- 
+Ciaran Farrell, Attorney
+SUSE Linux Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, DE
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG
+Nürnberg)
+2, reply
+hi, ciaran
+
+i have tried opensuse on allwinner a10(mele a1000) and put current staus to suse hackweek8 forum. i got xfce ruuning on my a1000 with the kernel compiled by myself. 
+u can got all the allwinner a10 material from http://rhombus-tech.net/allwinner_a10/, including u-boot, kernel and tools from github. 
+
+bamvor
+3, Ciaran reply to me
+That certainly sounds interesting. Up to now I've only soldered a UART 
+connection and looked at what happens on boot. I tried using various 
+images from http://linux-sunxi.org/Main_Page (going on the assumption 
+that the Gooseberry is, in fact the LY-F1 A721 
+(http://linux-sunxi.org/Gooseberry). U-Boot manages to start the kernel 
+from the SD-Card but it quickly panics or goes into a crazy reboot loop.
+
+I'm documenting my attempts here: http://is.gd/jw4uWV (Google Docs)
+
+ From your Hackweek project page I could only discern that you have got 
+something working. Which image did you use - or did you compile your own 
+kernel? Which rootfs? If possible, I'd like to document it somewhere 
+(the wiki is probably the right place).
+
+Ciaran
+4, reply
+> I'm documenting my attempts here: http://is.gd/jw4uWV (Google Docs)
+I encounter some crash which is caused by the following reason
+1), arm overclock. from internet, it is said that it is stable under 1.2G. I fix my arm to 1GHz.
+2), kernel configuration. 
+(1), framebuffer console is not work for A10. enable fbcon will lead to crash. 
+(2), display driver must compile into kernel if you get the kernel from git hub. 
+3), unknown reason. besides those, I got some kernel crash while boot opensuse. But boot android is always ok. I guess it because the different memory parameter or voltage for dcdc. 
+
+> From your Hackweek project page I could only discern that you have got 
+>something working. Which image did you use - or did you compile your own 
+>kernel? Which rootfs? If possible, I'd like to document it somewhere 
+>(the wiki is probably the right place).
+1), kernel git://github.com/amery/linux-allwinner.git, branch: allwinner-v3.0-android-v2
+2), rootfs: download from opensuse: http://download.opensuse.org/repositories/openSUSE:/Factory:/ARM/images/LimeJeOS-openSUSE-12.2-ARM-rootfs.armv7l-1.12.1-Build17.1-tbz.tar.bz2
+username: root; passwd: linux. 
+this is a dummy product. I install the package through zypper install 
+ref: http://lizards.opensuse.org/2012/01/21/opensuse-arm-image/
+3), x11
+(1), comile X11 driver for A10. 
+http://rhombus-tech.net/allwinner_a10/Compile_X11_driver_for_A10/
+(1), zypper in patterns-openSUSE-xfce
+4), about usb network
+(1),fix "<3>smsc95xx 2-1.2:1.0: eth1: kevent 2 may have been dropped"
+echo 16384 > /proc/sys/vm/min_free_kbytes
+vm.min_free_kbytes = 16384
+ref: https://bugs.launchpad.net/linux-linaro/+bug/664477
+http://randomsamples.info/blog/phil/ubuntu-1010-and-kevent-2-may-have-been-dropped-errors-beagleboard-xm
+
+11:24 2012-08-27
+embedded, arm, SOC
+1, Samsung Exynos 5 5250
+http://arstechnica.com/gadgets/2012/08/new-samsung-cortex-a15-based-chip-opens-door-to-retina-android-tablets/
+http://www.expreview.com/20720.html
+http://www.expreview.com/18911.html
+http://www.laoyaoba.com/forums/viewthread.php?tid=1915471
+1), Cortex-A15: dual-core, 1.7GHz 
+2), Mali-T604
+3), USB3.0
+2, qual core
+http://www.slatedroid.com/topic/31887-latest-dual-cortex-a9-chips-coming-out-soon/
+
+15:59 2012-08-27
+work report - week 34
+1, [devel-server] work report - week 34
+[green]
+1, libvirt libxl driver. 
+1), discuss with Jim about my work. 
+2), send libxl lock patch to Jim. I will improve my patch according to his suggestion. 
+3), debug libvirt migration. after update libvirt to upstream, migration is not worked. 
+
+16:40 2012-08-27
+GTD
+0, 9:30
+
+1, today
+1), work report. see"15:59 2012-08-27". 
+2), prepare for lock and migration in libvirt upstream. see"16:42 2012-08-27".
+
+16:42 2012-08-27
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont12, recreate patch
+1, recreate patch: 
+1), add lock patch at first. 
+2), add migration patch base on lock patch. with seperate branch. 
+
+18:02 2012-08-27
+company, printer, install; 如何把身份证两面到一张纸上
+1, install
+1), Install iPrint Client at http://iprint.bej.apac.novell.com/ipp 
+2), install BEJ-FXAP-450i at http://iprint.bej.apac.novell.com/ipp
+3), cups management webtool: 
+http://localhost:631/
+4), maybe, i do the following things. 
+If you couldn't add printers, just untar this to /etc/cups!
+http://147.2.207.240/packages/cups.tgz
+2, 如何把身份证两面到一张纸上
+复印->作业编辑->格式叠图(无->有)
+
+09:58 2012-08-28
+GTD
+0, 09:30
+
+1, today
+1), 10' check the mail. 
+2), 请Claudia帮忙盖章: 需要快递过去盖章，大约1-2天.
+3), 10:21 libxl: Jim reply to me. see"09:59 2012-08-28"
+
+09:59 2012-08-28
+(14:31 2012-08-29)
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont13, Jim reply to me
+1, Jim_email_"Re: about my libxl driver work"_20120828_0652
+Bamvor Jian Zhang wrote:
+>
+>> I have re-modify the patch as your mentioned. and the patch based on the
+>> upstream 6d96fab9cf4fb85de4b923b787b99d20d2dd2539.
+
+Hi Bamvor,
+
+Finally getting a little bit of time to review your lock patches.
+
+01_patch.lock.implementation
+
+> diff -urp libvirt.orig/src/libxl//libxl_conf.h
+> libvirt.lock.implementation/src/libxl//libxl_conf.h
+> --- libvirt.orig/src/libxl//libxl_conf.h    2012-08-20
+> 19:12:52.000000000 +0800
+> +++ libvirt.lock.implementation/src/libxl//libxl_conf.h    2012-08-20
+> 19:09:46.000000000 +0800
+> @@ -52,6 +52,7 @@ typedef struct _libxlDriverPrivate libxl
+>  typedef libxlDriverPrivate *libxlDriverPrivatePtr;
+>  struct _libxlDriverPrivate {
+>      virMutex lock;
+> +    int max_queued;
+
+I'm not sure this is needed.  In the qemu driver, this is a
+user-configurable setting in qemu.conf.  I think we could drop this for
+now and add it later if there is a need.  That is what happened on the
+qemu side - see commit 3005cacb.
+
+>      virCapsPtr caps;
+>      unsigned int version;
+>  
+> @@ -73,6 +74,63 @@ struct _libxlDriverPrivate {
+>      char *saveDir;
+>  };
+>  
+> +# define JOB_MASK(job)                  (1 << (job - 1))
+> +# define DEFAULT_JOB_MASK                \
+> +    (JOB_MASK(LIBXL_JOB_DESTROY) |       \
+> +     JOB_MASK(LIBXL_JOB_ABORT))
+> +
+> +/* Jobs which have to be tracked in domain state XML. */
+> +# define LIBXL_DOMAIN_TRACK_JOBS         \
+> +    (JOB_MASK(LIBXL_JOB_DESTROY) |       \
+> +     JOB_MASK(LIBXL_JOB_ASYNC))
+> +
+> +/* Only 1 job is allowed at any time
+> + * A job includes *all* libxl.so api, even those just querying
+> + * information, not merely actions */
+> +enum libxlDomainJob {
+> +    LIBXL_JOB_NONE = 0,      /* Always set to 0 for easy if
+> (jobActive) conditions */
+> +    LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked
+> out) */
+> +    LIBXL_JOB_MODIFY,        /* May change state */
+> +    LIBXL_JOB_ABORT,         /* Abort current async job */
+> +    LIBXL_JOB_MIGRATION_OP,  /* Operation influencing outgoing
+> migration */
+> +
+> +    /* The following two items must always be the last items before
+> JOB_LAST */
+> +    LIBXL_JOB_ASYNC,         /* Asynchronous job */
+> +
+> +    LIBXL_JOB_LAST
+> +};
+> +VIR_ENUM_DECL(libxlDomainJob)
+> +
+> +/* Async job consists of a series of jobs that may change state.
+> Independent
+> + * jobs that do not change state (and possibly others if explicitly
+> allowed by
+> + * current async job) are allowed to be run even if async job is active.
+> + */
+> +enum libxlDomainAsyncJob {
+> +    LIBXL_ASYNC_JOB_NONE = 0,
+> +    LIBXL_ASYNC_JOB_MIGRATION_OUT,
+> +    LIBXL_ASYNC_JOB_MIGRATION_IN,
+> +    LIBXL_ASYNC_JOB_SAVE,
+> +    LIBXL_ASYNC_JOB_RESTORE,
+> +    LIBXL_ASYNC_JOB_DUMP,
+> +
+> +    LIBXL_ASYNC_JOB_LAST
+> +};
+> +VIR_ENUM_DECL(libxlDomainAsyncJob)
+> +
+> +struct libxlDomainJobObj {
+> +    virCond cond;                       /* Use to coordinate jobs */
+> +    enum libxlDomainJob active;          /* Currently running job */
+> +    int owner;                          /* Thread which set current
+> job */
+> +
+> +    virCond asyncCond;                  /* Use to coordinate with
+> async jobs */
+> +    enum libxlDomainAsyncJob asyncJob;   /* Currently active async job */
+> +    int asyncOwner;                     /* Thread which set current
+> async job */
+> +    int phase;                          /* Job phase (mainly for
+> migrations) */
+> +    unsigned long long mask;            /* Jobs allowed during async
+> job */
+> +    unsigned long long start;           /* When the async job started */
+> +    virDomainJobInfo info;              /* Async job progress data */
+
+Align the comments here.  A couple of them have extra spaces.
+
+> +};
+> +
+>  typedef struct _libxlDomainObjPrivate libxlDomainObjPrivate;
+>  typedef libxlDomainObjPrivate *libxlDomainObjPrivatePtr;
+>  struct _libxlDomainObjPrivate {
+> @@ -81,6 +139,9 @@ struct _libxlDomainObjPrivate {
+>      libxl_waiter *dWaiter;
+>      int waiterFD;
+>      int eventHdl;
+> +
+> +    struct libxlDomainJobObj job;   //qemuDomainJobObj
+
+Remove the trailing comment.
+
+> +    int jobs_queued; //\TODO it looks like not implicitly init.
+
+This can be removed too.  No need for it if max_queued is removed.
+
+>  };
+>  
+>  # define LIBXL_SAVE_MAGIC "libvirt-xml\n \0 \r"
+> diff -urp libvirt.orig/src/libxl//libxl_driver.c
+> libvirt.lock.implementation/src/libxl//libxl_driver.c
+> --- libvirt.orig/src/libxl//libxl_driver.c    2012-08-21
+> 14:56:24.000000000 +0800
+> +++ libvirt.lock.implementation/src/libxl//libxl_driver.c  
+>  2012-08-23 22:59:56.000000000 +0800
+> @@ -30,6 +30,12 @@
+>  #include <math.h>
+>  #include <libxl.h>
+>  #include <fcntl.h>
+> +#include <stdlib.h>
+> +#include <string.h>
+> +#include <sys/types.h>
+> +#include <sys/socket.h>
+> +#include <arpa/inet.h>
+> +#include <netdb.h>
+
+Are all of those headers needed for the code introduced by this patch?
+
+>  
+>  #include "internal.h"
+>  #include "logging.h"
+> @@ -45,6 +51,8 @@
+>  #include "xen_xm.h"
+>  #include "virtypedparam.h"
+>  #include "viruri.h"
+> +#include "virtime.h"
+> +#include "rpc/virnetsocket.h"
+>  
+>  #define VIR_FROM_THIS VIR_FROM_LIBXL
+>  
+> @@ -84,6 +92,354 @@ libxlDriverUnlock(libxlDriverPrivatePtr
+>      virMutexUnlock(&driver->lock);
+>  }
+>  
+> +/* job */
+> +VIR_ENUM_IMPL(libxlDomainJob, LIBXL_JOB_LAST,
+> +              "none",
+> +              "destroy",
+> +              "modify",
+> +              "abort",
+> +              "migration operation",
+> +              "none",   /* async job is never stored in job.active */
+> +);
+> +
+> +VIR_ENUM_IMPL(libxlDomainAsyncJob, LIBXL_ASYNC_JOB_LAST,
+> +              "none",
+> +              "migration out",
+> +              "migration in",
+> +              "save",
+> +              "restore",
+> +              "dump",
+> +);
+> +
+> +static int
+> +libxlDomainObjInitJob(libxlDomainObjPrivatePtr priv)
+> +{
+> +    memset(&priv->job, 0, sizeof(priv->job));
+> +
+> +    if (virCondInit(&priv->job.cond) < 0)
+> +        return -1;
+> +
+> +    if (virCondInit(&priv->job.asyncCond) < 0) {
+> +        ignore_value(virCondDestroy(&priv->job.cond));
+> +        return -1;
+> +    }
+> +
+> +    return 0;
+> +}
+> +
+> +static void
+> +libxlDomainObjResetJob(libxlDomainObjPrivatePtr priv)
+> +{
+> +    struct libxlDomainJobObj *job = &priv->job;
+> +
+> +    job->active = LIBXL_JOB_NONE;
+> +    job->owner = 0;
+> +}
+> +
+> +static void
+> +libxlDomainObjResetAsyncJob(libxlDomainObjPrivatePtr priv)
+> +{
+> +    struct libxlDomainJobObj *job = &priv->job;
+> +
+> +    job->asyncJob = LIBXL_ASYNC_JOB_NONE;
+> +    job->asyncOwner = 0;
+> +    job->phase = 0;
+> +    job->mask = DEFAULT_JOB_MASK;
+> +    job->start = 0;
+> +    memset(&job->info, 0, sizeof(job->info));
+> +}
+> +
+> +static void
+> +libxlDomainObjFreeJob(libxlDomainObjPrivatePtr priv)
+> +{
+> +    ignore_value(virCondDestroy(&priv->job.cond));
+> +    ignore_value(virCondDestroy(&priv->job.asyncCond));
+> +}
+> +
+> +static bool
+> +libxlDomainTrackJob(enum libxlDomainJob job)
+> +{
+> +    return (LIBXL_DOMAIN_TRACK_JOBS & JOB_MASK(job)) != 0;
+> +}
+> +
+> +static void
+> +libxlDomainObjSaveJob(libxlDriverPrivatePtr driver, virDomainObjPtr obj)
+> +{
+> +    if (!virDomainObjIsActive(obj)) {
+> +        /* don't write the state file yet, it will be written once
+> the domain
+> +         * gets activated */
+> +        return;
+> +    }
+> +
+> +    if (virDomainSaveStatus(driver->caps, driver->stateDir, obj) < 0)
+> +        VIR_WARN("Failed to save status on vm %s", obj->def->name);
+> +}
+> +
+> +static bool
+> +libxlDomainNestedJobAllowed(libxlDomainObjPrivatePtr priv, enum
+> libxlDomainJob job)
+> +{
+> +    return !priv->job.asyncJob || (priv->job.mask & JOB_MASK(job)) != 0;
+> +}
+> +
+> +static void
+> +libxlDomainObjSetAsyncJobMask(virDomainObjPtr obj,
+> +                             unsigned long long allowedJobs)
+
+Whitespace issues in the parameter alignment.
+
+> +{
+> +    libxlDomainObjPrivatePtr priv = obj->privateData;
+> +
+> +    if (!priv->job.asyncJob)
+> +        return;
+> +
+> +    priv->job.mask = allowedJobs | JOB_MASK(LIBXL_JOB_DESTROY);
+> +}
+> +
+> +/* Give up waiting for mutex after 30 seconds */
+> +#define LIBXL_JOB_WAIT_TIME (1000ull * 30)
+> +
+> +/*
+> + * obj must be locked before calling; driver_locked says if
+> libxlDriverPrivatePtr
+> + * is locked or not.
+> + */
+> +static int ATTRIBUTE_NONNULL(1)
+> +libxlDomainObjBeginJobInternal(libxlDriverPrivatePtr driver,
+> +                              bool driver_locked,
+> +                              virDomainObjPtr obj,
+> +                              enum libxlDomainJob job,
+> +                              enum libxlDomainAsyncJob asyncJob)
+
+Whitespace issues in the parameter alignment.
+
+> +{
+> +    libxlDomainObjPrivatePtr priv = obj->privateData;
+> +    unsigned long long now;
+> +    unsigned long long then;
+> +
+> +    priv->jobs_queued++;
+
+Can be removed if max_queued is dropped.
+
+> +
+> +    if (virTimeMillisNow(&now) < 0)
+> +        return -1;
+> +    then = now + LIBXL_JOB_WAIT_TIME;
+> +
+> +    virObjectRef(obj);
+> +    if (driver_locked) {
+> +        libxlDriverUnlock(driver);
+> +    }
+> +
+> +retry:
+> +    if (driver->max_queued &&
+> +        priv->jobs_queued > driver->max_queued) {
+> +        goto error;
+> +    }
+
+Can be removed if max_queued is dropped.
+
+> +
+> +    while (!libxlDomainNestedJobAllowed(priv, job)) {
+> +        VIR_INFO("Wait async job condition for starting job: %s
+> (async=%s)",
+> +                   libxlDomainJobTypeToString(job),
+> +                   libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+> +        if (virCondWaitUntil(&priv->job.asyncCond, &obj->lock, then) < 0)
+> +            goto error;
+> +    }
+> +
+> +    while (priv->job.active) {
+> +        VIR_INFO("Wait normal job condition for starting job: %s
+> (async=%s)",
+> +                   libxlDomainJobTypeToString(job),
+> +                   libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+> +        if (virCondWaitUntil(&priv->job.cond, &obj->lock, then) < 0)
+> +            goto error;
+> +    }
+> +
+> +    /* No job is active but a new async job could have been started
+> while obj
+> +     * was unlocked, so we need to recheck it. */
+> +    if (!libxlDomainNestedJobAllowed(priv, job))
+> +        goto retry;
+> +
+> +    libxlDomainObjResetJob(priv);
+> +
+> +    if (job != LIBXL_JOB_ASYNC) {
+> +        VIR_DEBUG("Starting job: %s (async=%s)",
+> +                   libxlDomainJobTypeToString(job),
+> +                   libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+> +        priv->job.active = job;
+> +        priv->job.owner = virThreadSelfID();
+> +    } else {
+> +        VIR_DEBUG("Starting async job: %s",
+> +                  libxlDomainAsyncJobTypeToString(asyncJob));
+> +        libxlDomainObjResetAsyncJob(priv);
+> +        priv->job.asyncJob = asyncJob;
+> +        priv->job.asyncOwner = virThreadSelfID();
+> +        priv->job.start = now;
+> +    }
+> +
+> +    if (driver_locked) {
+> +        virDomainObjUnlock(obj);
+> +        libxlDriverLock(driver);
+> +        virDomainObjLock(obj);
+> +    }
+> +
+> +    if (libxlDomainTrackJob(job))
+> +        libxlDomainObjSaveJob(driver, obj);
+> +
+> +    return 0;
+> +
+> +error:
+> +    VIR_WARN("Cannot start job (%s, %s) for domain %s;"
+> +             " current job is (%s, %s) owned by (%d, %d)",
+> +             libxlDomainJobTypeToString(job),
+> +             libxlDomainAsyncJobTypeToString(asyncJob),
+> +             obj->def->name,
+> +             libxlDomainJobTypeToString(priv->job.active),
+> +             libxlDomainAsyncJobTypeToString(priv->job.asyncJob),
+> +             priv->job.owner, priv->job.asyncOwner);
+> +
+> +    if (errno == ETIMEDOUT)
+> +        virReportError(VIR_ERR_OPERATION_TIMEOUT,
+> +                        "%s", _("cannot acquire state change lock"));
+> +    else if (driver->max_queued &&
+> +             priv->jobs_queued > driver->max_queued)
+> +        virReportError(VIR_ERR_OPERATION_FAILED,
+> +                        "%s", _("cannot acquire state change lock "
+> +                                "due to max_queued limit"));
+
+Can be removed if max_queued is dropped.
+
+> +    else
+> +        virReportSystemError(errno,
+> +                             "%s", _("cannot acquire job mutex"));
+> +    priv->jobs_queued--;
+
+Can be removed if max_queued is dropped.
+
+> +    if (driver_locked) {
+> +        virDomainObjUnlock(obj);
+> +        libxlDriverLock(driver);
+> +        virDomainObjLock(obj);
+> +    }
+> +    virObjectUnref(obj);
+> +    return -1;
+> +}
+> +
+> +/*
+> + * obj must be locked before calling, libxlDriverPrivatePtr must NOT
+> be locked
+> + *
+> + * This must be called by anything that will change the VM state
+> + * in any way, or anything that will use the LIBXL monitor.
+
+I think the "or anything that will use the LIBXL monitor" can be
+removed.  Isn't libxl thread safe?  Regardless, "LIBXL monitor" is not
+correct, libxl doesn't have a monitor :).  If it needs to be there, I
+think "or anything that uses libxl" is sufficient.
+
+> + *
+> + * Upon successful return, the object will have its ref count increased,
+> + * successful calls must be followed by EndJob eventually
+> + */
+> +static int
+> +libxlDomainObjBeginJob(libxlDriverPrivatePtr driver,
+> +                          virDomainObjPtr obj,
+> +                          enum libxlDomainJob job)
+
+Whitespace issues in the parameter alignment.
+
+> +{
+> +    return libxlDomainObjBeginJobInternal(driver, false, obj, job,
+> +                                         LIBXL_ASYNC_JOB_NONE);
+> +}
+> +
+> +static int
+> +libxlDomainObjBeginAsyncJob(libxlDriverPrivatePtr driver,
+> +                               virDomainObjPtr obj,
+> +                               enum libxlDomainAsyncJob asyncJob)
+> +{
+> +    return libxlDomainObjBeginJobInternal(driver, false, obj,
+> LIBXL_JOB_ASYNC,
+> +                                         asyncJob);
+
+Parameter alignment in these 3 lines as well.
+
+> +}
+> +
+> +/*
+> + * obj must be locked before calling. If libxlDriverPrivatePtr is
+> passed, it
+> + * MUST be locked; otherwise it MUST NOT be locked.
+> + *
+> + * This must be called by anything that will change the VM state
+> + * in any way, or anything that will use the LIBXL monitor.
+
+My comment about LIBXL monitor above applies here too.
+
+> + *
+> + * Upon successful return, the object will have its ref count increased,
+> + * successful calls must be followed by EndJob eventually
+> + */
+> +static int
+> +libxlDomainObjBeginJobWithDriver(libxlDriverPrivatePtr driver,
+> +                                    virDomainObjPtr obj,
+> +                                    enum libxlDomainJob job)
+> +{
+> +    if (job <= LIBXL_JOB_NONE || job >= LIBXL_JOB_ASYNC) {
+> +        virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+> +                        _("Attempt to start invalid job"));
+> +        return -1;
+> +    }
+> +
+> +    return libxlDomainObjBeginJobInternal(driver, true, obj, job,
+> +                                         LIBXL_ASYNC_JOB_NONE);
+> +}
+> +
+> +static int
+> +libxlDomainObjBeginAsyncJobWithDriver(libxlDriverPrivatePtr driver,
+> +                                         virDomainObjPtr obj,
+> +                                         enum libxlDomainAsyncJob
+> asyncJob)
+> +{
+> +    return libxlDomainObjBeginJobInternal(driver, true, obj,
+> LIBXL_JOB_ASYNC,
+> +                                         asyncJob);
+
+More whitespace issues with parameter alignment.
+
+> +}
+> +
+> +/*
+> + * obj must be locked before calling, libxlDriverPrivatePtr does not
+> matter
+> + *
+> + * To be called after completing the work associated with the
+> + * earlier libxlDomainBeginJob() call
+> + *
+> + * Returns remaining refcount on 'obj', maybe 0 to indicated it
+> + * was deleted
+> + */
+> +static bool
+> +libxlDomainObjEndJob(libxlDriverPrivatePtr driver, virDomainObjPtr obj)
+> +{
+> +    libxlDomainObjPrivatePtr priv = obj->privateData;
+> +    enum libxlDomainJob job = priv->job.active;
+> +
+> +    priv->jobs_queued--;
+
+Can be removed if max_queued is dropped.
+
+> +
+> +    VIR_DEBUG("Stopping job: %s (async=%s)",
+> +              libxlDomainJobTypeToString(job),
+> +              libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+> +
+> +    libxlDomainObjResetJob(priv);
+> +    if (libxlDomainTrackJob(job))
+> +        libxlDomainObjSaveJob(driver, obj);
+> +    virCondSignal(&priv->job.cond);
+> +
+> +    return virObjectUnref(obj);
+> +}
+> +
+> +static bool
+> +libxlDomainObjEndAsyncJob(libxlDriverPrivatePtr driver,
+> virDomainObjPtr obj)
+> +{
+> +    libxlDomainObjPrivatePtr priv = obj->privateData;
+> +
+> +    priv->jobs_queued--;
+
+Can be removed if max_queued is dropped.
+
+> +
+> +    VIR_DEBUG("Stopping async job: %s",
+> +              libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+> +
+> +    libxlDomainObjResetAsyncJob(priv);
+> +    libxlDomainObjSaveJob(driver, obj);
+> +    virCondBroadcast(&priv->job.asyncCond);
+> +
+> +    return virObjectUnref(obj);
+> +}
+> +
+> +static int
+> +libxlMigrationJobStart(libxlDriverPrivatePtr driver,
+> +                      virDomainObjPtr vm,
+> +                      enum libxlDomainAsyncJob job)
+
+Whitespace issues with parameter alignment.
+
+> +{
+> +    libxlDomainObjPrivatePtr priv = vm->privateData;
+> +
+> +    if (libxlDomainObjBeginAsyncJobWithDriver(driver, vm, job) < 0)
+> +        return -1;
+> +
+> +    libxlDomainObjSetAsyncJobMask(vm, DEFAULT_JOB_MASK |
+> +                                 JOB_MASK(LIBXL_JOB_MIGRATION_OP));
+> +
+> +    priv->job.info.type = VIR_DOMAIN_JOB_UNBOUNDED;
+> +
+> +    return 0;
+> +}
+> +
+> +static bool
+> +libxlMigrationJobFinish(libxlDriverPrivatePtr driver, virDomainObjPtr vm)
+> +{
+> +    return libxlDomainObjEndAsyncJob(driver, vm);
+> +}
+> +/* job function finish */
+> +
+>  static void *
+>  libxlDomainObjPrivateAlloc(void)
+>  {
+> @@ -92,11 +448,18 @@ libxlDomainObjPrivateAlloc(void)
+>      if (VIR_ALLOC(priv) < 0)
+>          return NULL;
+>  
+> +    if (libxlDomainObjInitJob(priv) < 0)
+> +        goto error;
+> +
+>      libxl_ctx_init(&priv->ctx, LIBXL_VERSION, libxl_driver->logger);
+>      priv->waiterFD = -1;
+>      priv->eventHdl = -1;
+>  
+>      return priv;
+> +
+> +error:
+> +    VIR_FREE(priv);
+> +    return NULL;
+>  }
+>  
+>  static void
+> @@ -114,6 +477,7 @@ libxlDomainObjPrivateFree(void *data)
+>      }
+>  
+>      libxl_ctx_free(&priv->ctx);
+> +    libxlDomainObjFreeJob(priv);
+>      VIR_FREE(priv);
+>  }
+>  
+> @@ -1025,6 +1389,8 @@ libxlReload(void)
+>      virHashForEach(libxl_driver->domains.objs, libxlAutostartDomain,
+>                     libxl_driver);
+>  
+> +    libxl_driver->max_queued = 0;
+> +
+
+Can be removed if max_queued is dropped.
+
+>      libxlDriverUnlock(libxl_driver);
+>  
+>      return 0;
+> @@ -3819,6 +4185,119 @@ cleanup:
+>  }
+>  
+>  static int
+> +libxlDomainGetJobInfo(virDomainPtr dom,
+> +                      virDomainJobInfoPtr info)
+> +{
+> +    libxlDriverPrivatePtr driver = dom->conn->privateData;
+> +    virDomainObjPtr vm;
+> +    int ret = -1;
+> +    libxlDomainObjPrivatePtr priv;
+> +
+> +    libxlDriverLock(driver);
+> +    vm = virDomainFindByUUID(&driver->domains, dom->uuid);
+> +    libxlDriverUnlock(driver);
+> +    if (!vm) {
+> +        char uuidstr[VIR_UUID_STRING_BUFLEN];
+> +        virUUIDFormat(dom->uuid, uuidstr);
+> +        virReportError(VIR_ERR_NO_DOMAIN, "%s",
+> +                        _("no domain with matching uuid '%s'"), uuidstr);
+> +        goto cleanup;
+> +    }
+> +
+> +    priv = vm->privateData;
+> +
+> +    if (virDomainObjIsActive(vm)) {
+> +        if (priv->job.asyncJob) {
+> +            memcpy(info, &priv->job.info, sizeof(*info));
+> +
+> +            /* Refresh elapsed time again just to ensure it
+> +             * is fully updated. This is primarily for benefit
+> +             * of incoming migration which we don't currently
+> +             * monitor actively in the background thread
+> +             */
+> +            if (virTimeMillisNow(&info->timeElapsed) < 0)
+> +                goto cleanup;
+> +            info->timeElapsed -= priv->job.start;
+> +        } else {
+> +            memset(info, 0, sizeof(*info));
+> +            info->type = VIR_DOMAIN_JOB_NONE;
+> +        }
+> +    } else {
+> +        virReportError(VIR_ERR_OPERATION_INVALID,
+> +                        "%s", _("domain is not running"));
+> +        goto cleanup;
+> +    }
+> +
+> +    ret = 0;
+> +
+> +cleanup:
+> +    if (vm)
+> +        virDomainObjUnlock(vm);
+> +    return ret;
+> +}
+> +
+> +
+> +static int
+> +libxlDomainAbortJob(virDomainPtr dom)
+> +{
+> +    libxlDriverPrivatePtr driver = dom->conn->privateData;
+> +    virDomainObjPtr vm;
+> +    int ret = -1;
+> +    libxlDomainObjPrivatePtr priv;
+> +
+> +    libxlDriverLock(driver);
+> +    vm = virDomainFindByUUID(&driver->domains, dom->uuid);
+> +    libxlDriverUnlock(driver);
+> +    if (!vm) {
+> +        char uuidstr[VIR_UUID_STRING_BUFLEN];
+> +        virUUIDFormat(dom->uuid, uuidstr);
+> +        virReportError(VIR_ERR_NO_DOMAIN, "%s",
+> +                        _("no domain with matching uuid '%s'"), uuidstr);
+> +        goto cleanup;
+> +    }
+> +
+> +    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_ABORT) < 0)
+> +        goto cleanup;
+> +
+> +    if (!virDomainObjIsActive(vm)) {
+> +        virReportError(VIR_ERR_OPERATION_INVALID,
+> +                        "%s", _("domain is not running"));
+> +        goto endjob;
+> +    }
+> +
+> +    priv = vm->privateData;
+> +
+> +    if (!priv->job.asyncJob) {
+> +        virReportError(VIR_ERR_OPERATION_INVALID,
+> +                        "%s", _("no job is active on the domain"));
+> +        goto endjob;
+> +    } else if (priv->job.asyncJob == LIBXL_ASYNC_JOB_MIGRATION_IN) {
+> +        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+> +                        _("cannot abort incoming migration;"
+> +                          " use virDomainDestroy instead"));
+> +        goto endjob;
+> +    } else if (priv->job.asyncJob == LIBXL_ASYNC_JOB_DUMP) {
+> +        virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+> +                        _("cannot abort core dump;"
+> +                          " use virDomainDestroy instead"));
+> +        goto endjob;
+> +    }
+> +
+> +    VIR_DEBUG("Cancelling job at client request");
+> +    // \TODO
+
+What is the TODO item here?
+
+> +
+> +endjob:
+> +    if (libxlDomainObjEndJob(driver, vm) == 0)
+> +        vm = NULL;
+> +
+> +cleanup:
+> +    if (vm)
+> +        virDomainObjUnlock(vm);
+> +    return ret;
+> +}
+> +
+> +
+> +static int
+>  libxlDomainEventRegisterAny(virConnectPtr conn, virDomainPtr dom, int
+> eventID,
+>                              virConnectDomainEventGenericCallback
+> callback,
+>                              void *opaque, virFreeCallback freecb)
+> @@ -3877,13 +4356,12 @@ libxlListAllDomains(virConnectPtr conn,
+>      return ret;
+>  }
+>  
+> -
+> -
+>  static virDriver libxlDriver = {
+>      .no = VIR_DRV_LIBXL,
+>      .name = "xenlight",
+>      .open = libxlOpen, /* 0.9.0 */
+>      .close = libxlClose, /* 0.9.0 */
+> +    .supports_feature = libxlSupportsFeature, /* 0.9.11 */
+
+This function isn't defined in this patch.
+
+>      .type = libxlGetType, /* 0.9.0 */
+>      .version = libxlGetVersion, /* 0.9.0 */
+>      .getHostname = virGetHostname, /* 0.9.0 */
+> @@ -3952,6 +4430,8 @@ static virDriver libxlDriver = {
+>      .domainIsActive = libxlDomainIsActive, /* 0.9.0 */
+>      .domainIsPersistent = libxlDomainIsPersistent, /* 0.9.0 */
+>      .domainIsUpdated = libxlDomainIsUpdated, /* 0.9.0 */
+> +//    .domainGetJobInfo = libxlDomainGetJobInfo, /* 0.9.11 */
+> +//    .domainAbortJob = libxlDomainAbortJob, /* 0.9.11 */
+
+Why are these commented?  They will need to be changed to 0.10.1 (or
+whatever next libvirt version will be following 0.10.0).
+
+>      .domainEventRegisterAny = libxlDomainEventRegisterAny, /* 0.9.0 */
+>      .domainEventDeregisterAny = libxlDomainEventDeregisterAny, /*
+> 0.9.0 */
+>      .isAlive = libxlIsAlive, /* 0.9.8 */
+
+
+02_patch.lock.use:
+
+> diff -urp libvirt.lock.implementation/src/libxl//libxl_driver.c
+> libvirt.lock.use/src/libxl//libxl_driver.c
+> --- libvirt.lock.implementation/src/libxl//libxl_driver.c  
+>  2012-08-23 22:59:56.000000000 +0800
+> +++ libvirt.lock.use/src/libxl//libxl_driver.c    2012-08-23
+> 22:58:38.000000000 +0800
+> @@ -325,7 +325,7 @@ libxlDomainObjBeginJob(libxlDriverPrivat
+>      return libxlDomainObjBeginJobInternal(driver, false, obj, job,
+>                                           LIBXL_ASYNC_JOB_NONE);
+>  }
+> -
+> +/*
+>  static int
+>  libxlDomainObjBeginAsyncJob(libxlDriverPrivatePtr driver,
+>                                 virDomainObjPtr obj,
+> @@ -334,6 +334,7 @@ libxlDomainObjBeginAsyncJob(libxlDriverP
+>      return libxlDomainObjBeginJobInternal(driver, false, obj,
+> LIBXL_JOB_ASYNC,
+>                                           asyncJob);
+>  }
+> +*/
+
+Why is this code commented?
+
+>  
+>  /*
+>   * obj must be locked before calling. If libxlDriverPrivatePtr is
+> passed, it
+> @@ -980,6 +981,7 @@ libxlVmStart(libxlDriverPrivatePtr drive
+>      pid_t child_console_pid = -1;
+>      libxlDomainObjPrivatePtr priv = vm->privateData;
+>  
+> +
+>      /* If there is a managed saved state restore it instead of starting
+>       * from scratch. The old state is removed once the restoring
+> succeeded. */
+>      if (restore_fd < 0) {
+> @@ -1561,9 +1563,13 @@ libxlDomainCreateXML(virConnectPtr conn,
+>          goto cleanup;
+>      def = NULL;
+>  
+> +    if (libxlDomainObjBeginJobWithDriver(driver, vm,
+> LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (libxlVmStart(driver, vm, (flags & VIR_DOMAIN_START_PAUSED) != 0,
+>                       -1) < 0) {
+> -        virDomainRemoveInactive(&driver->domains, vm);
+> +        if (libxlDomainObjEndJob(driver, vm))
+> +            virDomainRemoveInactive(&driver->domains, vm);
+>          vm = NULL;
+>          goto cleanup;
+>      }
+> @@ -1572,6 +1578,8 @@ libxlDomainCreateXML(virConnectPtr conn,
+>      if (dom)
+>          dom->id = vm->def->id;
+>  
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+>  cleanup:
+>      virDomainDefFree(def);
+>      if (vm)
+> @@ -1678,9 +1686,13 @@ libxlDomainSuspend(virDomainPtr dom)
+>                         _("No domain with matching uuid '%s'"), uuidstr);
+>          goto cleanup;
+>      }
+> +
+> +    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID, "%s", _("Domain is
+> not running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+> @@ -1690,7 +1702,7 @@ libxlDomainSuspend(virDomainPtr dom)
+>              virReportError(VIR_ERR_INTERNAL_ERROR,
+>                             _("Failed to suspend domain '%d' with
+> libxenlight"),
+>                             dom->id);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>  
+>          virDomainObjSetState(vm, VIR_DOMAIN_PAUSED,
+> VIR_DOMAIN_PAUSED_USER);
+> @@ -1700,10 +1712,14 @@ libxlDomainSuspend(virDomainPtr dom)
+>      }
+>  
+>      if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
+> -        goto cleanup;
+> +        goto endjob;
+>  
+>      ret = 0;
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -1715,7 +1731,6 @@ cleanup:
+>      return ret;
+>  }
+>  
+> -
+
+Even though there is an extra line here, upstream generally frowns on
+spurious whitespace changes in a patch.
+
+>  static int
+>  libxlDomainResume(virDomainPtr dom)
+>  {
+> @@ -1737,9 +1752,12 @@ libxlDomainResume(virDomainPtr dom)
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID, "%s", _("Domain is
+> not running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+> @@ -1749,7 +1767,7 @@ libxlDomainResume(virDomainPtr dom)
+>              virReportError(VIR_ERR_INTERNAL_ERROR,
+>                             _("Failed to resume domain '%d' with
+> libxenlight"),
+>                             dom->id);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>  
+>          virDomainObjSetState(vm, VIR_DOMAIN_RUNNING,
+> @@ -1760,10 +1778,14 @@ libxlDomainResume(virDomainPtr dom)
+>      }
+>  
+>      if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
+> -        goto cleanup;
+> +        goto endjob;
+>  
+>      ret = 0;
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -1795,10 +1817,13 @@ libxlDomainShutdownFlags(virDomainPtr do
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJobWithDriver(driver, vm,
+> LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID,
+>                         "%s", _("Domain is not running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+> @@ -1806,7 +1831,7 @@ libxlDomainShutdownFlags(virDomainPtr do
+>          virReportError(VIR_ERR_INTERNAL_ERROR,
+>                         _("Failed to shutdown domain '%d' with
+> libxenlight"),
+>                         dom->id);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      /* vm is marked shutoff (or removed from domains list if not
+> persistent)
+> @@ -1814,6 +1839,10 @@ libxlDomainShutdownFlags(virDomainPtr do
+>       */
+>      ret = 0;
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -1848,10 +1877,13 @@ libxlDomainReboot(virDomainPtr dom, unsi
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJobWithDriver(driver, vm,
+> LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID,
+>                         "%s", _("Domain is not running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+> @@ -1859,10 +1891,14 @@ libxlDomainReboot(virDomainPtr dom, unsi
+>          virReportError(VIR_ERR_INTERNAL_ERROR,
+>                         _("Failed to reboot domain '%d' with
+> libxenlight"),
+>                         dom->id);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>      ret = 0;
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -1891,10 +1927,13 @@ libxlDomainDestroyFlags(virDomainPtr dom
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJobWithDriver(driver, vm,
+> LIBXL_JOB_DESTROY) < 0)
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID,
+>                         "%s", _("Domain is not running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      event = virDomainEventNewFromObj(vm,VIR_DOMAIN_EVENT_STOPPED,
+> @@ -1903,16 +1942,21 @@ libxlDomainDestroyFlags(virDomainPtr dom
+>      if (libxlVmReap(driver, vm, 1, VIR_DOMAIN_SHUTOFF_DESTROYED) != 0) {
+>          virReportError(VIR_ERR_INTERNAL_ERROR,
+>                         _("Failed to destroy domain '%d'"), dom->id);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if (!vm->persistent) {
+> -        virDomainRemoveInactive(&driver->domains, vm);
+> +        if (libxlDomainObjEndJob(driver, vm))
+> +            virDomainRemoveInactive(&driver->domains, vm);
+>          vm = NULL;
+>      }
+>  
+>      ret = 0;
+>  
+> +endjob:
+> +    if ( vm && !libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -2002,6 +2046,9 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      isActive = virDomainObjIsActive(vm);
+>  
+>      if (flags == VIR_DOMAIN_MEM_CURRENT) {
+> @@ -2020,17 +2067,17 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>      if (!isActive && (flags & VIR_DOMAIN_MEM_LIVE)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+>                         _("cannot set memory on an inactive domain"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if (flags & VIR_DOMAIN_MEM_CONFIG) {
+>          if (!vm->persistent) {
+>              virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+>                             _("cannot change persistent config of a
+> transient domain"));
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>          if (!(persistentDef =
+> virDomainObjGetPersistentDef(driver->caps, vm)))
+> -            goto cleanup;
+> +            goto endjob;
+>      }
+>  
+>      if (flags & VIR_DOMAIN_MEM_MAXIMUM) {
+> @@ -2042,7 +2089,7 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>                  virReportError(VIR_ERR_INTERNAL_ERROR,
+>                                 _("Failed to set maximum memory for
+> domain '%d'"
+>                                   " with libxenlight"), dom->id);
+> -                goto cleanup;
+> +                goto endjob;
+>              }
+>          }
+>  
+> @@ -2053,7 +2100,7 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>              if (persistentDef->mem.cur_balloon > newmem)
+>                  persistentDef->mem.cur_balloon = newmem;
+>              ret = virDomainSaveConfig(driver->configDir, persistentDef);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>  
+>      } else {
+> @@ -2062,7 +2109,7 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>          if (newmem > vm->def->mem.max_balloon) {
+>              virReportError(VIR_ERR_INVALID_ARG, "%s",
+>                             _("cannot set memory higher than max
+> memory"));
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>  
+>          if (flags & VIR_DOMAIN_MEM_LIVE) {
+> @@ -2072,7 +2119,7 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>                  virReportError(VIR_ERR_INTERNAL_ERROR,
+>                                 _("Failed to set memory for domain '%d'"
+>                                   " with libxenlight"), dom->id);
+> -                goto cleanup;
+> +                goto endjob;
+>              }
+>          }
+>  
+> @@ -2080,11 +2127,14 @@ libxlDomainSetMemoryFlags(virDomainPtr d
+>              sa_assert(persistentDef);
+>              persistentDef->mem.cur_balloon = newmem;
+>              ret = virDomainSaveConfig(driver->configDir, persistentDef);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>      }
+>  
+>      ret = 0;
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+>  
+>  cleanup:
+>      if (vm)
+> @@ -2192,22 +2242,26 @@ libxlDoDomainSave(libxlDriverPrivatePtr
+>      int fd;
+>      int ret = -1;
+>  
+> +    if (libxlDomainObjBeginAsyncJobWithDriver(driver, vm,
+> +                                             LIBXL_ASYNC_JOB_SAVE) < 0)
+> +        goto cleanup;
+> +
+>      if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
+>          virReportError(VIR_ERR_OPERATION_INVALID,
+>                         _("Domain '%d' has to be running because
+> libxenlight will"
+>                           " suspend it"), vm->def->id);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if ((fd = virFileOpenAs(to, O_CREAT|O_TRUNC|O_WRONLY,
+> S_IRUSR|S_IWUSR,
+>                              -1, -1, 0)) < 0) {
+>          virReportSystemError(-fd,
+>                               _("Failed to create domain save file
+> '%s'"), to);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if ((xml = virDomainDefFormat(vm->def, 0)) == NULL)
+> -        goto cleanup;
+> +        goto endjob;
+>      xml_len = strlen(xml) + 1;
+>  
+>      memset(&hdr, 0, sizeof(hdr));
+> @@ -2218,20 +2272,26 @@ libxlDoDomainSave(libxlDriverPrivatePtr
+>      if (safewrite(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) {
+>          virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+>                         _("Failed to write save file header"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if (safewrite(fd, xml, xml_len) != xml_len) {
+>          virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+>                         _("Failed to write xml description"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+> -    if (libxl_domain_suspend(&priv->ctx, NULL, vm->def->id, fd) != 0) {
+> +    virDomainObjUnlock(vm);
+> +    libxlDriverUnlock(driver);
+> +    ret = libxl_domain_suspend(&priv->ctx, NULL, vm->def->id, fd);
+> +    libxlDriverLock(driver);
+> +    virDomainObjLock(vm);
+> +
+> +    if (ret != 0) {
+>          virReportError(VIR_ERR_INTERNAL_ERROR,
+>                         _("Failed to save domain '%d' with libxenlight"),
+>                         vm->def->id);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+> @@ -2240,18 +2300,23 @@ libxlDoDomainSave(libxlDriverPrivatePtr
+>      if (libxlVmReap(driver, vm, 1, VIR_DOMAIN_SHUTOFF_SAVED) != 0) {
+>          virReportError(VIR_ERR_INTERNAL_ERROR,
+>                         _("Failed to destroy domain '%d'"), vm->def->id);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      vm->hasManagedSave = true;
+>  
+>      if (!vm->persistent) {
+> -        virDomainRemoveInactive(&driver->domains, vm);
+> +        if (libxlDomainObjEndAsyncJob(driver, vm))
+> +            virDomainRemoveInactive(&driver->domains, vm);
+>          vm = NULL;
+>      }
+>  
+>      ret = 0;
+>  
+> +endjob:
+> +    if ( vm && !libxlDomainObjEndAsyncJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      VIR_FREE(xml);
+>      if (VIR_CLOSE(fd) < 0)
+> @@ -2339,12 +2404,18 @@ libxlDomainRestoreFlags(virConnectPtr co
+>  
+>      def = NULL;
+>  
+> +    if (libxlDomainObjBeginAsyncJobWithDriver(driver, vm,
+> LIBXL_ASYNC_JOB_RESTORE) < 0)
+> +        goto cleanup;
+> +
+>      if ((ret = libxlVmStart(driver, vm, false, fd)) < 0 &&
+>          !vm->persistent) {
+> -        virDomainRemoveInactive(&driver->domains, vm);
+> +        if (libxlDomainObjEndAsyncJob(driver, vm))
+> +            virDomainRemoveInactive(&driver->domains, vm);
+>          vm = NULL;
+>      }
+>  
+> +    if (vm && !libxlDomainObjEndAsyncJob(driver, vm))
+> +        vm = NULL;
+>  cleanup:
+>      if (VIR_CLOSE(fd) < 0)
+>          virReportSystemError(errno, "%s", _("cannot close file"));
+> @@ -2385,9 +2456,13 @@ libxlDomainCoreDump(virDomainPtr dom, co
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginAsyncJobWithDriver(driver, vm,
+> +                                             LIBXL_ASYNC_JOB_DUMP) < 0)
+
+Whitespace issues in parameter alignment.
+
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID, "%s", _("Domain is
+> not running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+> @@ -2399,7 +2474,7 @@ libxlDomainCoreDump(virDomainPtr dom, co
+>                             _("Before dumping core, failed to suspend
+> domain '%d'"
+>                               " with libxenlight"),
+>                             dom->id);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>          virDomainObjSetState(vm, VIR_DOMAIN_PAUSED,
+> VIR_DOMAIN_PAUSED_DUMP);
+>          paused = true;
+> @@ -2409,7 +2484,7 @@ libxlDomainCoreDump(virDomainPtr dom, co
+>          virReportError(VIR_ERR_INTERNAL_ERROR,
+>                         _("Failed to dump core of domain '%d' with
+> libxenlight"),
+>                         dom->id);
+> -        goto cleanup_unpause;
+> +        goto endjob_unpause;
+>      }
+>  
+>      libxlDriverLock(driver);
+> @@ -2417,7 +2492,7 @@ libxlDomainCoreDump(virDomainPtr dom, co
+>          if (libxlVmReap(driver, vm, 1, VIR_DOMAIN_SHUTOFF_CRASHED) !=
+> 0) {
+>              virReportError(VIR_ERR_INTERNAL_ERROR,
+>                             _("Failed to destroy domain '%d'"), dom->id);
+> -            goto cleanup_unlock;
+> +            goto endjob_unlock;
+>          }
+>  
+>          event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+> @@ -2425,15 +2500,16 @@ libxlDomainCoreDump(virDomainPtr dom, co
+>      }
+>  
+>      if ((flags & VIR_DUMP_CRASH) && !vm->persistent) {
+> -        virDomainRemoveInactive(&driver->domains, vm);
+> +        if (libxlDomainObjEndAsyncJob(driver, vm))
+> +            virDomainRemoveInactive(&driver->domains, vm);
+>          vm = NULL;
+>      }
+>  
+>      ret = 0;
+>  
+> -cleanup_unlock:
+> +endjob_unlock:
+>      libxlDriverUnlock(driver);
+> -cleanup_unpause:
+> +endjob_unpause:
+>      if (virDomainObjIsActive(vm) && paused) {
+>          if (libxl_domain_unpause(&priv->ctx, dom->id) != 0) {
+>              virReportError(VIR_ERR_INTERNAL_ERROR,
+> @@ -2444,6 +2520,9 @@ cleanup_unpause:
+>                                   VIR_DOMAIN_RUNNING_UNPAUSED);
+>          }
+>      }
+> +endjob:
+> +    if (vm && !libxlDomainObjEndAsyncJob(driver, vm))
+> +        vm = NULL;
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -2628,22 +2707,25 @@ libxlDomainSetVcpusFlags(virDomainPtr do
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (!virDomainObjIsActive(vm) && (flags & VIR_DOMAIN_VCPU_LIVE)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+>                         _("cannot set vcpus on an inactive domain"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if (!vm->persistent && (flags & VIR_DOMAIN_VCPU_CONFIG)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID, "%s",
+>                         _("cannot change persistent config of a
+> transient domain"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if ((max = libxlGetMaxVcpus(dom->conn, NULL)) < 0) {
+>          virReportError(VIR_ERR_INTERNAL_ERROR, "%s",
+>                         _("could not determine max vcpus for the
+> domain"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      if (!(flags & VIR_DOMAIN_VCPU_MAXIMUM) && vm->def->maxvcpus < max) {
+> @@ -2654,18 +2736,18 @@ libxlDomainSetVcpusFlags(virDomainPtr do
+>          virReportError(VIR_ERR_INVALID_ARG,
+>                         _("requested vcpus is greater than max allowable"
+>                           " vcpus for the domain: %d > %d"), nvcpus, max);
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+>  
+>      if (!(def = virDomainObjGetPersistentDef(driver->caps, vm)))
+> -        goto cleanup;
+> +        goto endjob;
+>  
+>      maplen = VIR_CPU_MAPLEN(nvcpus);
+>      if (VIR_ALLOC_N(bitmask, maplen) < 0) {
+>          virReportOOMError();
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      for (i = 0; i < nvcpus; ++i) {
+> @@ -2692,7 +2774,7 @@ libxlDomainSetVcpusFlags(virDomainPtr do
+>              virReportError(VIR_ERR_INTERNAL_ERROR,
+>                             _("Failed to set vcpus for domain '%d'"
+>                               " with libxenlight"), dom->id);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>          break;
+>  
+> @@ -2701,7 +2783,7 @@ libxlDomainSetVcpusFlags(virDomainPtr do
+>              virReportError(VIR_ERR_INTERNAL_ERROR,
+>                             _("Failed to set vcpus for domain '%d'"
+>                               " with libxenlight"), dom->id);
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>          def->vcpus = nvcpus;
+>          break;
+> @@ -2712,6 +2794,9 @@ libxlDomainSetVcpusFlags(virDomainPtr do
+>      if (flags & VIR_DOMAIN_VCPU_CONFIG)
+>          ret = virDomainSaveConfig(driver->configDir, def);
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+>  cleanup:
+>      VIR_FREE(bitmask);
+>       if (vm)
+> @@ -3069,14 +3154,21 @@ libxlDomainCreateWithFlags(virDomainPtr
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJobWithDriver(driver, vm,
+> LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (virDomainObjIsActive(vm)) {
+>          virReportError(VIR_ERR_OPERATION_INVALID,
+>                         "%s", _("Domain is already running"));
+> -        goto cleanup;
+> +        goto endjob;
+>      }
+>  
+>      ret = libxlVmStart(driver, vm, (flags & VIR_DOMAIN_START_PAUSED)
+> != 0, -1);
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      if (vm)
+>          virDomainObjUnlock(vm);
+> @@ -3605,6 +3697,9 @@ libxlDomainModifyDeviceFlags(virDomainPt
+>          goto cleanup;
+>      }
+>  
+> +    if (libxlDomainObjBeginJobWithDriver(driver, vm,
+> LIBXL_JOB_MODIFY) < 0)
+> +        goto cleanup;
+> +
+>      if (virDomainObjIsActive(vm)) {
+>          if (flags == VIR_DOMAIN_DEVICE_MODIFY_CURRENT)
+>              flags |= VIR_DOMAIN_DEVICE_MODIFY_LIVE;
+> @@ -3615,14 +3710,14 @@ libxlDomainModifyDeviceFlags(virDomainPt
+>          if (flags & VIR_DOMAIN_DEVICE_MODIFY_LIVE) {
+>              virReportError(VIR_ERR_OPERATION_INVALID,
+>                             "%s", _("Domain is not running"));
+> -            goto cleanup;
+> +            goto endjob;
+>          }
+>      }
+>  
+>      if ((flags & VIR_DOMAIN_DEVICE_MODIFY_CONFIG) && !vm->persistent) {
+>           virReportError(VIR_ERR_OPERATION_INVALID,
+>                          "%s", _("cannot modify device on transient
+> domain"));
+> -         goto cleanup;
+> +         goto endjob;
+>      }
+>  
+>      priv = vm->privateData;
+> @@ -3630,11 +3725,11 @@ libxlDomainModifyDeviceFlags(virDomainPt
+>      if (flags & VIR_DOMAIN_DEVICE_MODIFY_CONFIG) {
+>          if (!(dev = virDomainDeviceDefParse(driver->caps, vm->def, xml,
+>                                              VIR_DOMAIN_XML_INACTIVE)))
+> -            goto cleanup;
+> +            goto endjob;
+>  
+>          /* Make a copy for updated domain. */
+>          if (!(vmdef = virDomainObjCopyPersistentDef(driver->caps, vm)))
+> -            goto cleanup;
+> +            goto endjob;
+>  
+>          switch (action) {
+>              case LIBXL_DEVICE_ATTACH:
+> @@ -3658,7 +3753,7 @@ libxlDomainModifyDeviceFlags(virDomainPt
+>          virDomainDeviceDefFree(dev);
+>          if (!(dev = virDomainDeviceDefParse(driver->caps, vm->def, xml,
+>                                              VIR_DOMAIN_XML_INACTIVE)))
+> -            goto cleanup;
+> +            goto endjob;
+>  
+>          switch (action) {
+>              case LIBXL_DEVICE_ATTACH:
+> @@ -3691,6 +3786,10 @@ libxlDomainModifyDeviceFlags(virDomainPt
+>          }
+>      }
+>  
+> +endjob:
+> +    if (!libxlDomainObjEndJob(driver, vm))
+> +        vm = NULL;
+> +
+>  cleanup:
+>      virDomainDefFree(vmdef);
+>      virDomainDeviceDefFree(dev);
+> @@ -4199,7 +4298,7 @@ libxlDomainGetJobInfo(virDomainPtr dom,
+>      if (!vm) {
+>          char uuidstr[VIR_UUID_STRING_BUFLEN];
+>          virUUIDFormat(dom->uuid, uuidstr);
+> -        virReportError(VIR_ERR_NO_DOMAIN, "%s",
+> +        virReportError(VIR_ERR_NO_DOMAIN,
+>                          _("no domain with matching uuid '%s'"), uuidstr);
+>          goto cleanup;
+>      }
+> @@ -4251,7 +4350,7 @@ libxlDomainAbortJob(virDomainPtr dom)
+>      if (!vm) {
+>          char uuidstr[VIR_UUID_STRING_BUFLEN];
+>          virUUIDFormat(dom->uuid, uuidstr);
+> -        virReportError(VIR_ERR_NO_DOMAIN, "%s",
+> +        virReportError(VIR_ERR_NO_DOMAIN,
+>                          _("no domain with matching uuid '%s'"), uuidstr);
+>          goto cleanup;
+>      }
+> @@ -4284,10 +4383,10 @@ libxlDomainAbortJob(virDomainPtr dom)
+>      }
+>  
+>      VIR_DEBUG("Cancelling job at client request");
+> -    // \TODO
+> +    // will improve it while adding migration
+>  
+>  endjob:
+> -    if (libxlDomainObjEndJob(driver, vm) == 0)
+> +    if (!libxlDomainObjEndJob(driver, vm))
+>          vm = NULL;
+>  
+>  cleanup:
+> @@ -4430,8 +4529,8 @@ static virDriver libxlDriver = {
+>      .domainIsActive = libxlDomainIsActive, /* 0.9.0 */
+>      .domainIsPersistent = libxlDomainIsPersistent, /* 0.9.0 */
+>      .domainIsUpdated = libxlDomainIsUpdated, /* 0.9.0 */
+> -//    .domainGetJobInfo = libxlDomainGetJobInfo, /* 0.9.11 */
+> -//    .domainAbortJob = libxlDomainAbortJob, /* 0.9.11 */
+> +    .domainGetJobInfo = libxlDomainGetJobInfo, /* 0.9.11 */
+> +    .domainAbortJob = libxlDomainAbortJob, /* 0.9.11 */
+
+Ah, looks like you uncommented these in the second patch.  Can't they be
+included in the first patch?
+>      .domainEventRegisterAny = libxlDomainEventRegisterAny, /* 0.9.0 */
+>      .domainEventDeregisterAny = libxlDomainEventDeregisterAny, /*
+> 0.9.0 */
+>      .isAlive = libxlIsAlive, /* 0.9.8 */
+
+Have to go now.  I haven't actually tested this code, just a visual
+review.  I did run 'make syntax-check' and saw some failures to do
+trailing whitespace.
+
+I'll try testing your patches after you spin a new version.
+
+2, notes for Jim reply: 01_lock.implementation
+1), max_queued and jobs_queued should be added in future. 
+>I'm not sure this is needed.  In the qemu driver, this is a
+>user-configurable setting in qemu.conf.  I think we could drop this for
+>now and add it later if there is a need.  That is what happened on the
+>qemu side - see commit 3005cacb.
+>> +    int jobs_queued; //\TODO it looks like not implicitly init.
+>This can be removed too.  No need for it if max_queued is removed.
+ref: git diff 3005cacb 597fe3ce 
+2), malform
+(1), > Align the comments here.  A couple of them have extra spaces.
+(2), > Whitespace issues with parameter alignment.
+3), I do not remove the comment for debugging. 
+> Remove the trailing comment.
+4), confirm the included header in src/libxl/libxl_driver.c
+> Are all of those headers needed for the code introduced by this patch?
+5), update the comment for libxlDomainObjBeginJob and libxlDomainObjBeginJobWithDriver: remove "anything that will use the LIBXL monitor"
+>I think the "or anything that will use the LIBXL monitor" can be
+>removed.  Isn't libxl thread safe?  Regardless, "LIBXL monitor" is not
+>correct, libxl doesn't have a monitor :).  If it needs to be there, I
+>think "or anything that uses libxl" is sufficient.
+5), about \todo
+>> +libxlDomainAbortJob(virDomainPtr dom)
+>What is the TODO item here?
+6), remove supports_feature
+> +    .supports_feature = libxlSupportsFeature, /* 0.9.11 */
+This function isn't defined in this patch.
+7), should I add domainGetJobInfo and domainAbortJob? 
+> +//    .domainGetJobInfo = libxlDomainGetJobInfo, /* 0.9.11 */
+> +//    .domainAbortJob = libxlDomainAbortJob, /* 0.9.11 */
+Why are these commented?  They will need to be changed to 0.10.1 (or
+whatever next libvirt version will be following 0.10.0).
+
+3, 02_lock.use
+1), add attribute before libxlDomainObjBeginAsyncJob
+> Why is this code commented?
+2), do not remove the extra line which is not relative to my current patch. 
+> Even though there is an extra line here, upstream generally frowns on
+> spurious whitespace changes in a patch.
+3), see""2-7). 
+> Ah, looks like you uncommented these in the second patch.  Can't they be
+> included in the first patch?
+4), do make syntax-check while writing the patch. 
+> Have to go now.  I haven't actually tested this code, just a visual
+> review.  I did run 'make syntax-check' and saw some failures to do
+> trailing whitespace.
+
+11:02 2012-08-28
+software, skills, vim, viminfo, error, E576
+1, error message while execute vim after force close vimdiff
+bamvor@linux-bjrd:~> vim
+E576: viminfo: Missing '>' in line: libvirt/libvirt/daemon/test_libvirtd.aug.in
+E576: viminfo: Missing '>' in line: ^I"^I49^I0
+Press ENTER or type command to continue
+2, ref
+En: http://www.linuxquestions.org/questions/linux-newbie-8/e576-viminfo-missing-in-line-691158/
+Zh: http://bbs.chinaunix.net/thread-2131799-1-1.html
+all these suggestion is "deleting ~/.viminfo". But i do not want to . because i do not want to lose vim history and others. from "http://vimdoc.sourceforge.net/htmldoc/starting.html#viminfo", I know that viminfo file is used to store:
+- The command line history.
+- The search string history.
+- The input-line history.
+- Contents of non-empty registers.
+- Marks for several files.
+- File marks, pointing to locations in files.
+- Last search/substitute pattern (for 'n' and '&').
+- The buffer list.
+- Global variables.
+3, solution
+edit ~/.viminfo, and search "libvirt/libvirt/daemon/test_libvirtd.aug.in", I got 
+libvirt/libvirt/daemon/test_libvirtd.aug.in
+    "   49  0
+
+> /tmp/.diff_uDFNsW
+    "   1   0
+
+So, it is obvious that ">" is missing in libvirt... line. change it to: 
+> libvirt/libvirt/daemon/test_libvirtd.aug.in
+
+vi work good after this. 
+
+14:26 2012-08-29
+GTD
+0, 9:30-11:30 14:26-
+
+1, today
+1), 14:29-15:25 libxl: Jim reply to me. see"09:59 2012-08-28". 
+2), update libxl driver. see"15:25 2012-08-29"
+
+15:25 2012-08-29
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont14, re-write new patch; local vim configuration, ""1-2)
+1, read  http://libvirt.org/hacking.html
+1), there are lots of testsuite. but lack of xen's
+  make check
+  make syntax-check
+  make -C tests valgrind
+2), vim configuation with local vim script: http://www.vim.org/scripts/script.php?script_id=1408
+  set nocompatible
+  filetype on
+  set autoindent
+  set smartindent
+  set cindent
+  set tabstop=8
+  set shiftwidth=4
+  set expandtab
+  set cinoptions=(0,:0,l1,t0
+  filetype plugin indent on
+  au FileType make setlocal noexpandtab
+  au BufRead,BufNewFile *.am setlocal noexpandtab
+  match ErrorMsg /\s\+$\| \+\ze\t/
+3), Jim suggestion
+git checkout master
+git pull
+git branch libxl-lock
+git checkout libxl-lock
+work on lock impl
+git add <changed files>
+git commit
+git format-patch ...
+
+2, create patch for lock implementation
+1), create branch with --track. 
+bamvor@linux-bjrd:libvirt> git checkout -b libxl_lock_implementation --track
+D       gnulib/lib/Makefile.am
+D       gnulib/local/m4/ssize_t.m4.diff
+D       gnulib/tests/Makefile.am
+Branch libxl_lock_implementation set up to track local branch refs/heads/master.
+Switched to a new branch "libxl_lock_implementation"
+bamvor@linux-bjrd:libvirt> git pull
+From .
+ * branch            master     -> FETCH_HEAD
+Already up-to-date.
+
+3, (11:12 2012-08-30)
+
+
+11:09 2012-08-30
+virtualization, libvirt, qemu, xen
+1, "Ralf Müller<ralf@bj-ig.de>"_email_"[opensuse-virtual] virt-manager unable to connect to libvirt after update"_20120829_1736
+2, bamvor: this is because libvirt default connect to qemu before try to connect to xen in libvirt 0.9.13
+
+11:11 2012-08-30
+GTD
+0, 10:30
+
+1, today
+1), 20' check the mail. 
+2), 11:12-11:30 13:44- update libxl driver. see"15:25 2012-08-29"3. 
+
+09:30 2012-08-31
+GTD
+0, 9:30
+
+1, today
+1), 2h opensuse arm on A10. see"09:31 2012-08-31"
+2), 2h Learning and Lunch. 
+3), 3h update wirehshark to 1.4.15. see"17:13 2012-08-31"
+
+2, next
+1), finish libxl driver patch and send to Jim
+2), continue to fix 4 wireshark bugs. ref"17:13 2012-08-31"
+
+2, next
+1), update po/zh_CN.po for lock and migration. 
+
+2, next
+1), opensuse arm
+(1), try bluetooth and finish wrap up. ref"16:11 2012-08-03"
+(2), try flash on MK802. 
+(3), image and rpm. put kernel and X11 display adatper library to obs. put imgae to google code. put the opensuse image link to A1000 forum. 
+(4), prepare opensuse arm presentation(for bj rd).
+2), check wireshark bug. do i need involve. 
+
+3, next week
+2), create git hub account. clone xen-arm to it. start to coding. ref"10:45 2012-07-13"
+1), libvirt libxl driver
+(1), continue reviewing the job.
+(2), job abort will add in the migration patch. job about is useful for long-running job. 
+
+3, next next
+1), keep an eye on XenSummit. ref"11:35 2012-08-02"
+1), check the mailing list. 
+2), libvirt libxl driver(migration and lock):
+(1), solve the todo in "10:41 2012-07-10"3
+1), build opensuse arm kernel. ref"11:37 2012-07-09"4-3). 
+2), coding exercises. pthread wait.
+1), read libvirt and xen mailing list. 
+2), openSUSE arm. ref TODO in "9:17 2012-6-15"3-1). 
+
+2, next day
+3), libvirt qemu migration study. 
+3), check the "follow up" in mail. 
+
+2, \TODO
+read SLES12 plan, ref"11:34 2012-05-31".
+read SUSE cloud doc. ref"15:40 2012-06-02"
+
+2, Monday 3), try markdown. ref "17:31 2012-05-22"
+4), write the script, search anything in each section(maybe add a ignore keyword line option?).
+test pattern: "build.*service|osc"
+5), check out opensuse-topic, see"17:38 2012-05-22"
+
+3, next, next
+0), working hour exceed 44 hours(8 x 3 + 10 x 2) except lunch and supper. 
+2), summary about buildservice and gdb debug. 
+
+4, next of next
+(2), android python script for work log search.
+(3), omap3530 pv port or other work. 
+
+09:31 2012-08-31
+hackweek, opensuse, arm, Allwinner, A10
+1, 思路整理
+1), show xfce
+2), 手机, 平板上跑的系统越来越多. 
+open source on universal hardware. 
+3),大概按为什么选择, 我做了哪些工作说说. 
+
+17:13 2012-08-31
+maintenance, wireshark, update from 1.4.13 to 1.4.15
+1, submit request
+bamvor@linux-bjrd:wireshark.SUSE_SLE-10-SP3_Update_Test> osc sr -m "update wireshark to 1.4.15 for fixing bnc#776038(CVE-2012-4285, CVE-2012-4288, CVE-2012-4289, CVE-2012-4296, CVE-2012-4291, CVE-2012-4292, CVE-2012-4293, CVE-2012-4290), bnc#772738(CVE-2012-4048, CVE-2012-4049)(fixed upstream)"
+created request id 21599
+
+bamvor@linux-bjrd:wireshark.SUSE_SLE-11_Update_Test> osc sr -m "update wireshark to 1.4.15 for fixing bnc#776038(CVE-2012-4285, CVE-2012-4288, CVE-2012-4289, CVE-2012-4296, CVE-2012-4291, CVE-2012-4292, CVE-2012-4293, CVE-2012-4290), bnc#772738(CVE-2012-4048, CVE-2012-4049)(fixed upstream)"
+created request id 21600
+
+2, fix these bugs on sle9: prepare
+(1), rpm fail
++ echo 'Patch #5 (wireshark-1.0.16-CVE-2011-4102.patch):'                         
+Patch #5 (wireshark-1.0.16-CVE-2011-4102.patch):                                  
++ patch -p1 --fuzz=0 -s                                                           
+1 out of 2 hunks FAILED -- saving rejects to file wiretap/erf.c.rej
+(2), manaul patch
+bamvor@linux-bjrd:wireshark-1.0.16> patch -p1 < ../../wireshark-1.0.16-CVE-2011-4102.patch
+patching file wiretap/erf.c
+Hunk #1 succeeded at 323 (offset -41 lines).
+Hunk #2 succeeded at 412 with fuzz 2 (offset -64 lines).
+
+3, sle9: bnc#772738
+1), http://www.wireshark.org/security/wnpa-sec-2012-12.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7436
+fixed in http://anonsvn.wireshark.org/viewvc?view=revision&revision=43576
+2), http://www.wireshark.org/security/wnpa-sec-2012-11.html
+http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=680056
+not affect the wireshark low than 1.8 according to the comment above. 
+
+4, sle9: bnc#776083
+1), http://www.wireshark.org/security/wnpa-sec-2012-13.html
+wireshark bnc7566
+2), http://www.wireshark.org/security/wnpa-sec-2012-15.html
+not affect. 
+3), http://www.wireshark.org/security/wnpa-sec-2012-17.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7603
+http://anonsvn.wireshark.org/viewvc/trunk/epan/dissectors/packet-afp.c?r1=44317&r2=44316&pathrev=44317
+bamvor: add pinfo. \TODO
+4), http://www.wireshark.org/security/wnpa-sec-2012-18.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7568
+not affect
+5), http://www.wireshark.org/security/wnpa-sec-2012-18.html
+6), http://www.wireshark.org/security/wnpa-sec-2012-20.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7570
+no permisstion. \TODO
+7), http://www.wireshark.org/security/wnpa-sec-2012-21.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7569
+http://anonsvn.wireshark.org/viewvc/trunk/epan/emem.c?r1=44380&r2=44379&pathrev=44380
+8), http://www.wireshark.org/security/wnpa-sec-2012-22.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7562
+http://anonsvn.wireshark.org/viewvc/trunk/plugins/ethercat/packet-ecatmb.c?r1=43149&r2=43148&pathrev=43149
+not sure. \TODO
+9), http://www.wireshark.org/security/wnpa-sec-2012-23.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7573
+no permisstion. \TODO
+
+5, apply patch except 17, 20, 22, 23. 
+build succeed. 
+
+6, try on vmware vm.
+

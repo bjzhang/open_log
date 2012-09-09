@@ -1,0 +1,1618 @@
+.LOG
+23:52 2012-01-11
+android, auto test(自动测试), 控制输入设备
+参考: android 使用SL4A实现对设备控制，实现按坐标点击
+http://my.oschina.net/zhangqingcai/blog/36272
+
+利用hexdump抓取数据. 开始总是长按. 后来发现是没有加最后三句. 应该是表示手离开触摸屏. 
+sendevent /dev/input/event3 3 48 1
+sendevent /dev/input/event3 3 53 34
+sendevent /dev/input/event3 3 54 423
+sendevent /dev/input/event3 0 2 0
+sendevent /dev/input/event3 0 0 0
+sendevent /dev/input/event3 3 48 1
+sendevent /dev/input/event3 0 2 0
+sendevent /dev/input/event3 0 0 0
+
+之前不知道有sendeven这个工具就是向input设备写入数据, 以模拟用户输入的, 还自己写了hexwrite. 
+
+下一步考虑用脚本处理hexdump抓到的数据, 根据去抖坐标和时间戳还原用户真实按键过程. 
+
+6:06 2012-1-21
+shell脚本和正则表达式入门
+上次用perl处理hexdump结果时已经用到了正则表达式。今天用Android pad shell 直接处理hexdump结果，这样省去了在pc上执行脚本和复制到pad的流程。
+为了简单起见，咱们只是分析第一个脚本，上次这个脚本是这样的：
+#!/usr/bin/perl 
+while(<>) {
+    chomp;
+    #0000000 043c 0000 830e 0007 0003 0030 0001 0000
+    #serial second     usecond   type code value
+    if (/^[0-9a-f]+\ ([0-9a-f]+)\ ([0-9a-f]+)\ ([0-9a-f]+)\ ([0-9a-f]+)\ ([0-9a-f]+)\ ([0-9a-f]+)\ ([0-9a-f]+)\ ([0-9a-f]+)/ ) {
+        print "sendevent /dev/input/event3 $type  $code $value\n";
+}
+
+这里面核心就是if这句话。
+
+1, 正则表达式是个什么东东？
+正则表达式简单说就是增强的通配符。一般用在搜索和替换中。
+通配符这个东西平时咱们也用过。比如
+ls kernel*
+是列出所有以kernel开头的文件。
+还有印象吧，原来为了取保存的日志咱们曾经这样看过有哪些kernel的log.
+adb shell ls /system/kernel*
+后来把所有日志都放在一个目录里面，就不需要看文件名再adb pull了。
+PS: adb shell下ls每次都有乱码，这些乱码其实是显示颜色的控制字符。可以用"ls --color=never"不显示颜色，这样就没有乱码了。
+alias ls="ls --color=never", 所有ls命令都会变成"ls --color=never". 
+\todo 举例。
+
+2, 最简单的正则表达式
+ls log20[0-9][0-9].txt
+列出log20开头的后面是两位数字的后缀是txt的文本文件。
+例如log2009.txt, log2010.txt, log2011.txt
+如果是通配符是个什么结果呢？
+ls log20*.txt
+基本会列出所有文件。
+再举例，只想保存特定的log.
+
+常用的正则表达式元字符：
+. + * [] () {}
+.
+任意一个字符，不包括换行。
++
+一个或多个，所以".+"表示一个或多个任意字符。"0+"表示一个或多个0.
+*
+零个或多个，所以".+"表示零个或多个任意字符。"0+"表示零个或多个0.
+[]
+匹配其中任意一个字符。例如[01]表示匹配0或1. [0-9]匹配0123456789中任意一个数字。所以[0-9a-z]+匹配一个或多个十六进制数。呵呵这个比较有用啊。
+之前测试休眠唤醒时，经常会有很多log。我自己查这些log时，就可以用正则表达式匹配
+
+
+3, 从hexdump里面得到的数据中提取所需数据。
+
+12:20 2012-01-29
+linux, emule
+http://mldonkey.sourceforge.net/Main_Page
+下载了编译好的版本(mldonkey-3.1.0.static.i386-Linux_glibc-2.11.2.tar.bz2), 直接运行mlnet, 通过"http://localhost:4080"web方式访问. 
+
+14:21 2012-01-29
+sotware, windows7, office2010; msdn
+1, windows7
+1), http://ifeiyang.cn/archives/836.html
+2), http://www.iplaysoft.com/windows7-with-sp1-msdn-iso.html
+Windows 7 with sp1 x86 msdn简体中文旗舰版：
+SHA1：A94623A6B572541157B63FFD9C0495ED47BE792A
+Windows 7 with sp1 x64 msdn简体中文旗舰版：
+SHA1：1FF1C323F49F76179837ACCB5D33FA0B1DFAA201
+Windows 7 with sp1 x86 msdn英文旗舰版：
+SHA1：92C1ADA4FF09C76EC2F1974940624CAB7F822F62
+Windows 7 with sp1 x64 msdn英文旗舰版：
+SHA1：1693B6CB50B90D96FC3C04E4329604FEBA88CD51
+3), http://ifeiyang.cn/archives/1025.html
+Windows 7 Ultimate 神Key
+•J783Y-JKQWR-677Q8-KCXTF-BHWGC 
+2, (17:16 2012-02-06)
+这个网站上面有所有msdn提供的下载链接，包括microsoft各种软件。序列号可以在taobao上找到。
+http://msdn.itellyou.cn/?lang=zh-cn
+
+18:24 2012-01-29
+软件技巧, excel, excel编程接口, c, c++, c#, delphi
+http://www.libxl.com/home.html
+这个是收费软件, 免费版会有banner. 
+
+16:11 2012-01-30
+软件技巧, software, skill, vim, move around; vim help; vim options
+1, ":help usr_03.txt"介绍如何在vim中移动. 
+1), hjkl: 按一行或一列移动. 
+2), w, b, e, ge: 按word移动. 其中wbe支持大写, 和小写的word定义不同. 
+3), 0, ^, $: 移动到行首, 行首(不含空白), 行尾.
+4), Ft, Tt: 移动到移动字符位置, 指定字母之前的位置. 
+5), %: 在成对括号间切换. 这个在看代码时很有用, 可以快速找到匹配的(), []. {}.
+6), Ctrl+g: 显示文件名和当前行号. 
+7), '': 回到上次"G"跳转的行号. 
+8), Ctrl+o, Ctrl+i: 跳转到上一个或下一个位置. 
+
+2, (19:12 2012-01-30)
+":options"可以显示所有options. 我自己在"~/.vimrc"的设置是:
+"vim global setting for bjzhang
+"c indent
+set cindent
+"incremental search
+set incsearch
+"highlight all search result
+set hlsearch
+
+14:45 2012-01-31
+软件技巧, office, word无法打开, 删除Normal.dot即可
+自新浪微博, 阿花的伊萨卡岛
+请教大家一个问题，我的WORD忽然不能启动，一直提示我说遇到问题需要关闭，然后又提示我只能用安全模式启动，因为正打算工作，所以很着急，这到底应该怎么办呢？
+长歌皓月：办法1：删除Normal.dot模板文件,WORD 2003就会自动重新创建一个好的模板文件。Normal.dot文件路径：C:\Documents and Settings\Administrator(或者你自己的用户名)\Application Data\Microsoft\Templates (1月1日 18:24)
+长歌皓月：办法2:关掉Word,双击[我的电脑]，将以下地址粘贴到地址栏，回车： %appdata%\microsoft\templates 删除Normal.dot。 (1月1日 18:24)
+
+15:01 2012-02-01
+网站, 网址, 经济, 社会, 思想
+1, 金融家http://www.jrjia.com/
+2, 南方周末http://www.infzm.com/
+
+17:04 2012-02-01
+薪金, 计算公式, 个人所得税, 速算扣除数; 五险缴纳比例
+1, 个人所得税, 速算扣除数
+起征点3500
+http://www.tax518.com/
+2011年9月1日起调整后的7级超额累进个人所得税税率表 级数 	全月应纳税所得额 	税率(%) 	速算扣除数
+1 	不超过1,500元 	3 	0
+2 	超过1,500元至4,500元的部分 	10 	105
+3 	超过4,500元至9,000元的部分 	20 	555
+4 	超过9,000元至35,000元的部分 	25 	1,005
+5 	超过35,000元至55,000元的部分 	30 	2,755
+6 	超过55,000元至80,000元的部分 	35 	5,505
+7 	超过80,000元的部分 	45 	13,505
+
+2, 五险缴费比例
+目前北京养老保险缴费比例：单位20％(其中17％划入统筹基金，3％划入个人帐户 )，个人8％（全部划入个人帐户）；医疗保险缴费比例：单位10％，个人2％+3元； 失业保险缴费比例：单位1.5％，个人0.5％；工伤保险根据单位被划分的行业范围 来确定它的工伤费率；生育保险缴费比例：单位0.8％，个人不交钱。 
+
+18:18 2012-02-02
+software, web browser, lynx, text-based
+http://lynx.browser.org/
+
+09:52 2012-02-06
+体感温度, 'feels like' temperature, Felt Air Temperature
+今天早晨感觉很冷阿，查查如何计算体感温度：
+体感温度对照表格
+http://zhidao.baidu.com/question/2601950
+0级 0KM/H 环境空气温度-1° 体感温度-1° 
+2级 8KM/H 环境空气温度-1° 体感温度-3° 
+3级 16KM/H 环境空气温度-1° 体感温度-9° 
+4级 23KM/H 环境空气温度-1° 体感温度-12° 
+5级 32KM/H 环境空气温度-1° 体感温度-16° 
+6级 40KM/H 环境空气温度-1° 体感温度-18° 
+7级 56KM/H 环境空气温度-1° 体感温度-20° 
+8级 64KM/H 环境空气温度-1° 体感温度-20° 
+
+0级 0KM/H 环境空气温度-7° 体感温度-7° 
+2级 8KM/H 环境空气温度-7° 体感温度-9° 
+3级 16KM/H 环境空气温度-7° 体感温度-17° 
+4级 23KM/H 环境空气温度-7° 体感温度-28° 
+5级 32KM/H 环境空气温度-7° 体感温度-23° 
+6级 40KM/H 环境空气温度-7° 体感温度-26° 
+7级 56KM/H 环境空气温度-7° 体感温度-28° 
+8级 64KM/H 环境空气温度-7° 体感温度-30° 
+按照这个对照表, 考虑今天早晨温度大约是-4度(参见http://www.haotq.com/h_beijing.html), 体感温度大约是20度左右. 
+
+bbc体感温度计算公式: 
+How to calculate 'feels like' temperatures 
+http://news.bbc.co.uk/weather/hi/news/newsid_8506000/8506818.stm
+And here is the formula to work out your own Feels Like data
+T(wc) = 13.12 + 0.6215T - 11.37V**0.16 + 0.3965TV**0.16
+(Where T(wc) is the wind chill index based on the Celsius scale, T is the air temperature in °C, and V is the air speed in km/h measured at 10 m (33 ft, standard anemometer height).
+ Story Tools
+注: "**"就是^(乘幂). 根据风速47公里/小时, 温度-4度, 体感温度大约是
+13.12+0.6215*(-4)-11.37*47^0.16+0.3965*(-4)*47^0.16=-13.35
+
+10:44 2012-02-07
+微博, software, unlocker, 安装卸载优盘, 删除无法删除的文件
+http://baike.baidu.com/view/879138.htm
+下载地址: 
+http://www.emptyloop.com/unlocker/#download
+
+13:04 2012-02-07
+远程主机, vps, ramhost.us
+1, 网上说ramhost是一个性价比比较高的vps.
+最便宜的是一个月4.99$(季付)
+http://www.ramhost.us/?page=vps/kvm-los-angeles-west
+搜集了几个ramhost入门网页
+http://www.5558.biz/a/jianzhanjishu/tuwenjiaocheng/730.html
+http://jolestar.com/move-blog-to-ramhost
+http://www.vpser.net/usa-vps/ramhost-us-openvz-vps.html
+
+11:00 2012-02-08
+software, 软件技巧, logAssistant, perl, find_keywork.pl, 搜索checkout命令; perl regular expression
+1, 例如我希望查找libvirt或xen的checkout命令，但是忘了用的是哪种代码管理工具, 可以用如下命令搜索, svn, hg, git的命令, 
+perl logAssistant/perl/find_keyword.pl -f "log2012*novell.txt" -k . -c "\b(git|hg|svn)\b.*(libvirt|xen)" > result.txt
+注: "。"是为了强制find_keyword.pl脚本把输出作为utf8处理。如果搜索的关键字里面没有中文或中文字符，输出结果的中文是乱码。
+2, "\b"表示查找单词分界. 
+
+16:55 2012-02-10
+software, zypper, install repo by commandline
+from: http://origin-download.mono-project.com/download-stable/
+zypper addrepo http://origin-download.mono-project.com/download-stable/openSUSE_12.1 mono-stable
+zypper refresh --repo mono-stable
+zypper dist-upgrade --repo mono-stable
+
+10:25 2012-02-13
+software, skill, mount, FAT codepages for different languages, 内核中VFAT文件系统codepage和iocharset设置
+1, FAT codepages for different languages
+http://old.nabble.com/FAT-codepages-for-different-languages.-td19464532.html
+2, 内核中VFAT文件系>统codepage和iocharset设置
+http://blog.chinaunix.net/space.php?uid=21756505&do=blog&id=2234997
+3, 所以如果希望mount我的优盘/sd卡, 可以用如下设置显示中文.
+mount /dev/sdb1 /mnt/temp -o codepage=936,iocharset=utf8,rw,nosuid,nodev,uid=1000
+
+17:42 2012-02-15
+Linux, man, section, 今天终于知道了man里面各个section的含义
+自: "man man"
+0   Header files (usually found in /usr/include)
+1   Executable programs or shell commands
+2   System calls (functions provided by the kernel)
+3   Library calls (functions within program libraries)
+4   Special files (usually found in /dev)
+5   File formats and conventions eg /etc/passwd
+6   Games
+7   Miscellaneous (including macro packages and  conventions),  e.g. man(7), groff(7)
+8   System administration commands (usually only for root)
+9   Kernel routines [Non standard]
+
+17:56 2012-02-16
+VMware Workstation 8  	期限: Mar 17, 2012  	JM6C5-18K87-H8YY2-AC1KH-C19KN
+
+10:41 2012-02-17
+simulator, virtualization, skyeye, qemu; 计划中提到性能超过qemu; 考虑用virt io改善性能; \todo 有空实验一下skeyeye现在的性能
+1, SkyEye开源项目寻找项目开发者
+http://forum.linuxfans.org/thread-194270-1-1.html?tid=194270&extra=page%3D1&page=1
+SkyEye是一个开源的异构虚拟机项目，项目主页为：  www.skyeye.org
+中文用户论坛为：http://www.linuxfans.org/bbs/forum-58-4.html
+
+1、目前可以模拟arm, blackfin, x86 , mips , powerpc , coldfire, sparc等体系结构的 40多种处理器, 包括S3c6410, S3C2440, MPC8641D, MPC8672等，请看处理器列表https://sourceforge.net/apps/trac/skyeye/wiki/ProcessorList
+
+2、可以模拟多种外设，如NorFlash, NandFlash, Lcd, Netcard, Touchscreen等。运行多个操作系统，如linux, Vxworks等。
+
+3、支持gdb remote debugger，支持代码覆盖率分析等 profiling手段。
+
+目前正在开发的几个方向为：使用动态优化的方法做高性能的指令模拟；使用virt io技术提高外设模拟性能； 对android系统的支持；对路由器等软件的支持；
+
+开发团队主要在北京活动，如果对虚拟化，模拟器，嵌入式，程序优化等技术领域感兴趣，又有时间和兴趣参加开源软件项目，欢迎加入。我们会在北京组织一些线下的技术讨论和交流，请站内回信。
+
+2, SkyEye项目的2011年开发计划的规划
+http://forum.linuxfans.org/thread-194270-1-1.html?tid=194270&extra=page%3D1&page=1
+总体目标：聚焦于ARM, PowerPC, MIPS, x86四个主流的体系结构。在功能和性能上全面超越Qemu模拟器。
+
+总体规划：
+1、2011.1 到2011.6，完成arm的动态二进制编译框架，预计 arm处理器模拟的MIPS可以达到400M左右。完成一个arm多核的模拟。争取可以更快的运行android。目前由jeffdo.du开发。
+2、2011.1到2011.6，完成PowerPC的动态二进制编译框架，预计 PowerPC处理器模拟的MIPS可以达到400M左右，并且模拟的网络争取达到100K BPS。可以运行一些路由器软件，目前zhijie.li  在开发。
+3、2011.6到2011.12，开发X86的动态二进制编译框架，支持x86多核，还没有人开发。
+4、2011.6到2011.12，开发MIPS的动态二进制编译框架，支持MIPS多核，还没有人开发。
+5、2011.1，完成物理多核模拟虚拟多核的框架，由ksh负责，目前基本已经完成了70%。
+6、2011.1到 2011.6，完成一个python写的图形界面，目前由yzheng在负责，完成了 10％。
+7、2011.6到2011.8，快照功能和逆向执行功能，目前还没有人做。
+8、2011.1到2011.3，虚拟HUB功能，mhao在开发中。
+9、2011.8到2011.12，一些复杂外设的开发，如USB和PCI等的模拟。
+
+我们会坚持的开发下去，希望得到大家的支持和参与。
+
+14:52 2012-02-17
+许知远和他的单向街图书馆
+http://www.onewaystreet.cn/%28hda3eh55viirumqaaglzczau%29/newweb/default.aspx
+http://www.mindmeters.com/blogind.asp?id=16
+
+17:41 2012-02-20
+Microsoft® Office 家庭和学生版 2010 Trial
+https://www7.buyoffice.microsoft.com/chn/downloader.aspx?local=true&cache=-150965653&receipt_id=440489225&culture=zh-CN
+60 天试用版许可证 - 简体中文
+产品密钥 (FPP)：
+D78HG-2R4MD-G8CC2-DJ3F6-HRMH3
+
+15:02 2012-02-21
+snack in Beijing(北京小吃), 
+0, 豆汁儿
+有DouZhi和Fermented bean drink两种说法. 
+
+1, Douzhi
+http://en.wikipedia.org/wiki/Douzhi
+From Wikipedia, the free encyclopedia
+Jump to: navigation, search
+Bowl of douzhi with breakfast items
+
+Douzhi (Chinese: 豆汁; pinyin: dòuzhī ;Beijing dialect: Douzhir; also called mung bean milk) is a dish from Beijing cuisine. It is similar to soy milk, but made from mung beans. It is a by-product of cellophane noodle production. It is generally slightly sour, with an egg-like smell.
+mung: 绿豆. 
+soy: 大豆
+
+2, nutrition: 营养. 
+snack: 快餐, 小吃, 点心. 
+Fermented: 发酵
+
+3, 豆汁店
+http://www.etown.cn/beijing/laociqikoudouzhidian/
+老磁器口豆汁店是多年前锦馨豆汁店改制后，部分人员另起炉灶开了这家店，并且迅速发展了多家分店，目前每家分店平均每天卖出近千碗豆汁，店内除了豆汁外，还有螺丝转、墩饽饽、焦圈、糖火烧等各种老北京传统小吃。
+地址：北京市崇文区天坛路15号
+
+4, DouZhi'er
+http://lllllll.cn/beijing-life/douzhier-%E8%B1%86%E6%B1%81%E5%84%BF
+DouZhi’er (豆汁儿)
+In Beijing Flavor (北京风味), Beijing life (北京生活), Tagged Beijing,culture,douzhi,food,jiaoquan,snack,xiancai
+Douzhi is kind of street snack from Beijing cuisine. It is similar to soy milk, but made from mung beans. It is a by-product of cellophane noodle production. It is generally slightly sour, with an egg-like smell. Most of Chinese people think it’s terrible while old Beijingers enjoy it very much. Usually they drink hot DouZhi with JiaoQuan (taste like fried chips) and pickled vegetables. It’s especially popular in cold winter days, and is considered as a good help to stimulate the appetite and cure the cold.
+豆汁是一种北京特色风味小吃，绿豆下脚料发酵熬制而成。本身有股酸溜溜的味儿，一般外地人轻易不敢沾口。可老北京都喜欢喝，特别是寒冷的冬天里，配上碟儿焦圈，细咸菜丝儿。两碗下肚儿，热汗淋漓，既治感冒又开胃，别有风味。
+It’s said that Douzhi was Bannermen’s food, originally from Liao, and already has a history over 1,000 years. The royal family began to drink it since Qing dynasty. The Empress was said came from a poor family near Beijing Xinjiekou. In her early age she could not afford to eat vegetables, so ate Douzhi instead. Later she made it become an imperial drink. Before liberation there’re small vendors selling Douzhi on streets. They used a blue cloth with white characters on it as a trademark. They offen cried out for customers like this: “Zhi’er, Kai Guo!” However, time chages. Nowdays this kind of street scene cannot be found any more.
+相传豆汁最早是辽国的民间食品，至今已有1000多年的历史。而豆汁入宫，始自清代的乾隆年间。据说慈禧幼年时住北京新街口，因家境贫寒就常以豆汁代替蔬菜，到后来更让豆汁成为了清宫御膳的一种饮料。解放前，专有以卖豆汁为生意的小摊贩，或挑担走街串巷，或在集市上摆摊，前沿儿围着块蓝布，上边有白布做的字号商标，叫卖时只吆喝：“汁儿，开锅！”不过，这种情景现在再也感受不到了。
+Actually I tried Douzhi once with a Bannerman classmate’s accompany. It smells and tastes strange. I don’t like it at all. But it’s no doubt the iconic street food that represents old Beijing folk culture. If you really want to try it, I think this store near Temple of Heaven can be considered.
+
+17:42 2012-02-23
+OS(operation system), 开源windows, reactor
+http://www.reactos.org/
+
+13:20 2012-02-24
+law, 法律, <十二怒汉: 大审判>
+1, 马小婧婧： 本座经推荐已验片，greater than great。主题是关于正常人（不是虚拟人也不是变态人）的，题材是俄某谋杀案陪审团讨论过程。分享俄罗斯影片《十二怒汉：大审叛.中字》http://t.cn/SXkmsh
+2, 我和情人有个约会：你推荐的肯定要看啊。 上网一搜发现题材很经典，美国日本各拍了两次。 最近因为吴同学的事情，正对法律感兴趣呢。 (2月17日 14:47)
+马小婧婧：回复@我和情人有个约会:关乎人性的，法律只是个载体在这片里，我觉得还很不错今天打算回去看看剧透再挖挖。 (2月17日 15:49)
+3, 我和情人有个约会：回复@马小婧婧:还刚看了一多半。开始的时候很紧张，只有一个人因为不想太仓促决定一个人的生死投了反对票。 想起另一句话，晚几分钟做决定，天不会塌下来。 我平时性格很慢，有时又突然很急，总希望自己能平稳一点…… (2月22日 21:36)
+马小婧婧：回复@我和情人有个约会:静心为君，事缓则圆。 (2月22日 23:01)
+4, 我和情人有个约会：看到最后发现影片没有了，找了个中文配音的继续看，配音不够给力...
+从有罪到无罪的逆转最后，有人提议判有罪然后进一步帮助少年，“我们总是讨论这讨论那，真正需要行动的时候却没人站出来了。”。如你所说，这个片子更关乎人性。
+PS: 烏瑪舞蹈我喜欢。
+
+08:51 2012-03-03
+Software, skill, Linux, mount, usb disk/flash memory mount parameter
+/dev/sdb1 on /media/M8 type vfat (rw,nosuid,nodev,shortname=lower,flush,utf8,uid=1000)
+/dev/sdc on /media/disk type vfat (rw,nosuid,nodev,shortname=lower,flush,utf8,uid=1000)
+
+13:27 2012-03-06
+embedded, news, MTK, 展讯
+1, 后MTK时代，山寨智能机即将爆发
+http://www.eet-china.com/ART_8800661647_617693_NT_38e2871b_2.HTM
+山寨智能机市场并不像人们想象的那样冷，中国市场不会只有四大金刚和金立，OPPO，小米，亿通等品牌，电子工程专辑记者前线调查，为您揭开一个暗流涌动、即将爆发的山寨智能机大市场。
+最新发布的MTK6575平台基于单核Cortex A9，1GHz主频，支持720P高清播放，不仅在性能上远远超过采用ARM11的6573，也超过了高通的新一代低端机CPU。据知情人士透露，联想采用该平台的新机A750最早有望在2月21日抢先发布，售价为999元。
+而据消息人士报料，MTK继MT6575 1GHz平台发布后，又秘密研发新一代智能平台MTK8320，其主频将达到1.5GHz双核。同高通高端8系列一样，MTK联发科也将这一平台起名为8系列，欲与高通一争高下。 当然，2012年值得期待的并非MTK一家，展讯1G智能GSM方案6820也将在第二季度推出，竞争MTK6575和高通7227A 。该平台采用Cortex A5核，1G内存，40nm工艺，屏幕最大支持FWVGA(854x480)500万象素摄像。
+2, 奄奄一息的深圳小企业主的自白（转载）
+http://forum.eet-cn.com/BLOG_ARTICLE_10480.HTM
+
+16:32 2012-03-06
+google+
+Happy holiday for my colleague in Mumbai and Delhi.
+Holi (होली), is a religious spring festival celebrated by Hindus. Holi is also known as festival of Colours. The main day, Holi, also known as Dhuli in Sanskrit, also Dhulheti, Dhulandi or Dhulendi, is celebrated by people throwing scented powder and perfume at each other.
+ref: http://en.wikipedia.org/wiki/Holi
+http://ido.3mt.com.cn/Article/200903/show1344284c26p1.html
+
+12:44 2012-03-12
+(11:38 2012-03-19)
+android, 物理键盘, 蓝牙键盘
+1, 蓝牙键盘
+bluepiano: 支持ssp蓝牙键盘. 
+http://www.appinn.com/android-%E6%89%8B%E6%9C%BA%E8%BF%9E%E6%8E%A5%E8%93%9D%E7%89%99%E9%94%AE%E7%9B%98/
+http://www.eagleland.cn/EL_html/yufengfeiyang/live/2011/0210/491.html
+
+2, 使用技巧
+1), 支持外部键盘的输入法: 搜狗输入法, 百度输入法.
+其它的输入法象触宝输入法只接收触摸屏按键. 外部键盘输入就是英文.
+百度输入法更好些: 收起软键盘后, 拼音输入法的候选字还有数字提示, 搜狗就没有(只能自己数个数, 或者用左右键选择). 
+2), 快捷键
+(1), http://blog.csdn.net/fangxiao_jun/article/details/6145828
+MENU: F1
+BACK: ESC
+HOME: home
+
+19:33 2012-03-13
+software, skill, android, share with pc, ssh, samba
+1, ssh 
+ConnectBot
+
+2, samba
+lots of explorer support this function. My choice is ES explorer(estongs). You can easily slide the different explorer(say local file, samba, ftp and so on).
+samba configuration guide: log201112vimicro.txt:"+1449"
+
+19:34 2012-03-13
+software, skills, libreoffice, convert document type
+libreoffice --convert-to ppt xxx.odp --headless
+bamvor@linux-bjzhang-2:log> libreoffice --help  | grep invisible
+--invisible    no startup screen, no default document and no UI.
+--headless     like invisible but no userinteraction at all.
+
+19:42 2012-03-13
+synonym, 同义词
+1, software skill
+软件, 技巧
+软件技巧
+software, skill
+software skill
+2, replace
+replacement
+替换
+
+20:37 2012-03-13
+suse, software, image, viewer, editor, gimp
+zypper in gimp
+
+18:43 2012-03-14
+software, skill, wget, configuration script
+1,在 Ubuntu 上源码安装 Xen
+http://www.vpsee.com/2010/04/install-xen-on-ubuntu-from-source/
+$ vi .wgetrc
+http_proxy = http://proxy.vpsee.com:3128/
+use_proxy = on
+
+16:28 2012-03-16
+suse, wine, internet explorer, IE6
+1, another IE install link: 
+http://wine-reviews.net/wine-reviews/microsoft/internet-explorer-8-on-linux-with-wine.html 
+http://www.tatanka.com.br/ies4linux/page/Main_Page 
+
+2, install wine
+1), get repo: http://download.opensuse.org/repositories/Emulators:/Wine/SLE-11/
+from http://en.opensuse.org/Wine#Repositories 
+2), install
+zypper in libgsm1
+zypper in wine, select 2 for force install wine, do not care libgsm problem.
+3, install IE
+1), winetricks
+Winetricks a small shell program which is included in the above packages. Just start winetricks. It will open a dialog offering to automatically download and install various common programs like Win32 Firefox, Apple QuickTime / iTunes, multimedia codecs, various truetype fonts, and also helper runtime dlls like the Visual C runtimes.
+The snapshot packages always contain the latest winetricks, a description can be found here. 
+
+Internet Explorer on Wine
+As a frequently asked question, how to install Internet Explorer on Wine ...
+Run:
+winetricks ie6
+or
+winetricks ie7
+(In former times there was a tool called "ies4linux", but this script is not maintained nor working anymore with current Wine.) 
+
+3, install IE6
+winetricks ie6
+
+19:49 2012-03-19
+linux, console, escape character
+bamvor@linux-bjzhang-2:~> virsh console 5
+Connected to domain sles11_pv_3
+Escape character is ^]
+
+that means I can press "Ctrl + ]" to exit. 
+
+escape character: 
+http://hi.baidu.com/lgh_boffin/blog/item/fcac2a3e51156eff828b13ff.html
+
+18:45 2012-03-20
+web, website, technology, linux, open source
+1, http://www.h-online.com
+RSS: http://www.h-online.com/newsfeeds/
+The Whole H - front page feed
+RSS 2.0 http://www.h-online.com/grand-atom.xml
+All The H news and features
+The H news feed
+Atom 1.0 http://www.h-online.com/news/atom.xml
+Just The H news
+The H open feed
+RSS 2.0 http://www.h-online.com/open/atom.xml
+All The H open news and features
+The H security feed
+RSS 2.0 http://www.h-online.com/security/atom.xml
+All The H security news and features
+
+11:46 2012-3-25
+software, windows, android, share, windows share with android pad
+1, android pad access windows by samba
+2, windows access android pad by ftp
+using total commander as ftp client
+using 网络数据线 or 神器数据线 as ftp server
+
+11:48 2012-3-25
+vmware, serial, named pipe, putty
+
+11:59 2012-3-27
+software, skill, total commander, Total Commander之添加两边同时进行文件夹切换操作
+http://www.uralhan.com/filemanager/totalcommander/total-commander%E4%B9%8B%E6%B7%BB%E5%8A%A0%E4%B8%A4%E8%BE%B9%E5%90%8C%E6%97%B6%E8%BF%9B%E8%A1%8C%E6%96%87%E4%BB%B6%E5%A4%B9%E5%88%87%E6%8D%A2%E6%93%8D%E4%BD%9C/
+
+在工具栏新建一个按钮，然后选择按钮的“命令”为“cm_SyncChangeDir”
+
+14:32 2012-3-28
+software, skill, network, wireless, Dlink DWL G122
+1, download linux drvier
+1), http://mcuos.com/thread-2631-1-1.html
+DWL-G122 H/W Ver: C1采用Ralink的rt73 (rt2571W)芯片组。
+ 驱动程序从The rt2x00 Open Source Project网站上下载，如下所示：
+ # wget http://rt2x00.serialmonkey.com/rt73-cvs-daily.tar.gz
+2), according to "http://rt2x00.serialmonkey.com/wiki/index.php/Downloads".
+Rt2x00 drivers are part of the mainline kernel tree.
+bamvor: search "Rt2x" in kernel menuconfig. 
+
+16:58 2012-03-31
+software, skill, network, proxy, use ccproxy for proxy, linux global proxy setting
+1, use "yast2 proxy" to set the global proxy settings. 
+or set proxy in each software. 
+my setting: http://147.2.207.254:808
+where 147.2.207.254 is choose in ccprocy. The port number is assigned by ccprocy(modifiable). 
+
+14:19 2012-04-05
+software, skill, network, ssh, connection timeout
+1, ssh connection failed. "connection timeout".
+finally, I found that firewall is enable. ssh connection is ok after disable firewall in ssh server.
+2, speed up ssh login time
+1), search
+http://www.netadmintools.com/art605.html
+http://www.walkernews.net/2009/04/06/how-to-fix-scp-and-ssh-login-prompt-is-very-slow-in-linux/
+these article said that add the following line in "/etc/ssh/sshd_config":
+UseDNA no
+GSSAPIAuthentication no
+my test pass. 
+2), But maybe it is not a good idea.
+another article say that add host name and ip address to "/etc/hosts". 
+my test pass too. 
+
+12:18 2012-04-06
+software, skill, network, DHCP, windows DHCP server
+1, http://sourceforge.net/projects/dhcp-dns-server/
+after install, MUST edit the configuration.
+after edit, run "RunStandAlone.bat". 
+2, the modification of DualServer.ini
+/home/bamvor/log/novell/misc/network_dhcp_windows/DualServer.ini
+
+[SERVICES]
+DHCP
+[LISTEN_ON]
+147.2.207.254
+#DHCP own range set
+[RANGE_SET]
+DHCPRange=147.2.207.1-147.2.207.254
+
+10:09 2012-4-7
+software, skill, network, route table, windowsXP, windows internet server(windows上网服务器, 通过网络安装向导设置)
+1, route table without subnet cable
+C:\Documents and Settings\Administrator>ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter 无线网络连接:
+
+        Connection-specific DNS Suffix  . :
+        IP Address. . . . . . . . . . . . : 192.168.1.102
+        Subnet Mask . . . . . . . . . . . : 255.255.255.0
+        Default Gateway . . . . . . . . . : 192.168.1.1
+
+Ethernet adapter 网络桥 (网络桥) 7:
+
+        Media State . . . . . . . . . . . : Media disconnected
+
+C:\Documents and Settings\Administrator>route print
+===========================================================================
+Interface List
+0x1 ........................... MS TCP Loopback interface
+0x2 ...00 12 f0 2b 52 96 ...... Intel(R) PRO/Wireless 2200BG Network Connection
+- 数据包计划程序微型端口
+0x10004 ...02 0f 1f b2 7c bc ...... MAC 桥微型端口 - 数据包计划程序微型端口
+===========================================================================
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0      192.168.1.1   192.168.1.102       25
+        127.0.0.0        255.0.0.0        127.0.0.1       127.0.0.1       1
+      192.168.1.0    255.255.255.0    192.168.1.102   192.168.1.102       25
+    192.168.1.102  255.255.255.255        127.0.0.1       127.0.0.1       25
+    192.168.1.255  255.255.255.255    192.168.1.102   192.168.1.102       25
+        224.0.0.0        240.0.0.0    192.168.1.102   192.168.1.102       25
+  255.255.255.255  255.255.255.255    192.168.1.102   192.168.1.102       1
+  255.255.255.255  255.255.255.255    192.168.1.102           10004       1
+Default Gateway:       192.168.1.1
+===========================================================================
+Persistent Routes:
+  None
+
+2, route table after insert network cable
+C:\Documents and Settings\Administrator>ipconfig
+
+Windows IP Configuration
+
+
+Ethernet adapter 无线网络连接:
+
+        Connection-specific DNS Suffix  . :
+        IP Address. . . . . . . . . . . . : 192.168.1.102
+        Subnet Mask . . . . . . . . . . . : 255.255.255.0
+        Default Gateway . . . . . . . . . : 192.168.1.1
+
+Ethernet adapter 网络桥 (网络桥) 7:
+
+        Connection-specific DNS Suffix  . :
+        IP Address. . . . . . . . . . . . : 147.2.207.254
+        Subnet Mask . . . . . . . . . . . : 255.255.255.0
+        Default Gateway . . . . . . . . . :
+
+C:\Documents and Settings\Administrator>route print
+===========================================================================
+Interface List
+0x1 ........................... MS TCP Loopback interface
+0x2 ...00 12 f0 2b 52 96 ...... Intel(R) PRO/Wireless 2200BG Network Connection
+- 数据包计划程序微型端口
+0x10004 ...02 0f 1f b2 7c bc ...... MAC 桥微型端口 - 数据包计划程序微型端口
+===========================================================================
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0      192.168.1.1   192.168.1.102       25
+        127.0.0.0        255.0.0.0        127.0.0.1       127.0.0.1       1
+      147.2.207.0    255.255.255.0    147.2.207.254   147.2.207.254       30
+    147.2.207.254  255.255.255.255        127.0.0.1       127.0.0.1       30
+    147.2.255.255  255.255.255.255    147.2.207.254   147.2.207.254       30
+      192.168.1.0    255.255.255.0    192.168.1.102   192.168.1.102       25
+    192.168.1.102  255.255.255.255        127.0.0.1       127.0.0.1       25
+    192.168.1.255  255.255.255.255    192.168.1.102   192.168.1.102       25
+        224.0.0.0        240.0.0.0    147.2.207.254   147.2.207.254       30
+        224.0.0.0        240.0.0.0    192.168.1.102   192.168.1.102       25
+  255.255.255.255  255.255.255.255    147.2.207.254   147.2.207.254       1
+  255.255.255.255  255.255.255.255    192.168.1.102   192.168.1.102       1
+Default Gateway:       192.168.1.1
+===========================================================================
+Persistent Routes:
+  None
+
+18:04 2012-4-7
+software, skill, vim, syntax highlight; ruler
+1, install the following package on openSUSE
+bamvor@localhost:~> zypper se vim | grep "^i"
+i | gvim                      | A GUI for Vi                                                        | package
+i | vim                       | Vi IMproved                                                         | package
+i | vim-base                  | Vi IMproved                                                         | package
+i | vim-data                  | Vi IMproved                                                         | package
+i | vim-enhanced              | A version of the VIM editor which includes recent enhancements      | package
+i | vim-plugin-colorschemes   | Vim color schemes selection                                         | package
+i | vim-plugin-colorsel       | A RGB/HSV color selector                                            | package
+i | vim-plugin-diffchanges    | Show changes since the last save                                    | package
+2, vimrc
+syntax on
+3, (17:30 2012-05-23)
+ruler
+" show cursor line and column in the status line
+set ruler 
+
+13:58 2012-04-09
+software, skill, directory browser, file manager, mc; totalcommander replacement 
+1, 据说totalcommander是学的mc. 
+ 
+2, GNU   Midnight  Commander  is  a  directory  browser/file  manager  for Unix-like operating systems.
+
+3, mc getting started
+http://tldp.org/LDP/LG/issue23/wkndmech_dec97/mc_article.html
+1), mc ftp
+(1), cd /#ftp:bamvor@147.2.215.235:8000/external_sd/log
+input password while prompt. 
+2), sync? \todo
+
+11:57 2012-04-10
+bluetooth, audio
+1, bluetooth audio protocal
+ref: http://tieba.baidu.com/f?kz=610239827
+Handset Profile 协议免提应用服务，也称BT headset。
+Handfree Profile 协议和耳机装置服务，也称BT hand-free。
+A2DP 协议  立体声音频传输服务  也称BT stereo headset 
+2, bluetooth chip
+1), discuss about BCM2046
+http://www.spinics.net/lists/linux-usb/msg46736.html
+3, bluez
+http://www.bluez.org/
+bluez user howto
+http://www.hanscees.com/bluezhowto.html
+4, review and benchmark. 
+http://www.360doc.com/content/11/0425/00/5032677_112089962.shtml
+5, driver source code
+http://www.pudn.com/downloads118/sourcecode/unix_linux/detail503495.html
+6, (11:34 2012-04-11)
+1), protocol
+http://en.wikipedia.org/wiki/Bluetooth_profile
+(1), Serial Port Profile (SPP) 
+This profile is based on ETSI 07,10 and the RFCOMM protocol. It emulates a serial cable to provide a simple substitute for existing RS-232, including the familiar control signals. It is the basis for DUN, FAX, HSP and AVRCP.
+(2), Headset Profile (HSP) 
+This is the most commonly used profile, providing support for the popular Bluetooth Headsets to be used with mobile phones. It relies on SCO for audio encoded in 64 kbit/s CVSD or PCM and a subset of AT commands from GSM 07.07 for minimal controls including the ability to ring, answer a call, hang up and adjust the volume.
+2), ssp bluetooth module is very cheap on taobao. 
+1), ref: http://item.taobao.com/item.htm?id=14027944181&ref=http%3A%2F%2Fsearch8.taobao.com%2Fsearch%3Fq%3D%25B4%25AE%25BF%25DA%2B%25C0%25B6%25D1%25C0%26pid%3Dmm_14507416_2297358_8935934%26unid%3D0%26mode%3D63%26initiative_id%3Dstaobaoz_20120411&ali_trackid=2:mm_14507416_2297358_8935934,0:1334114889_4z1_663599474
+蓝牙串口模块 工业级 蓝牙模块 主从一体 BC04, 28RMB
+BLK-MD-BC04-B是目前市面上功能最为强大的串口蓝牙模块，其采用Blue2.0、支持主从模式、支持软/硬件设置主从模式、支持多达29条AT命令及9条自动反馈指令、支持波特率1200 到 1382400。
+29条AT下行控制命令+9条上行指令为您打造功能最强大蓝牙串口解决方案！！
+2), according to the protocol mentioned above, maybe i could implement hsp over spp.
+the bandwidth is about 100kbyte/s(1382400 / 9 / 1024 = 150). 
+3), PCM rate
+http://www.360doc.com/content/09/0213/10/72158_2530988.shtml
+例如，数字激光唱盘(CD－DA，红皮书标准)的标准采样频率为44.lkHz，采样数位为16位，立体声(2声道)，可以几乎无失真地播出频率高达22kHz的声音，这也是人类所能听到的最高频率声音。激光唱盘一分钟音乐需要的存储量为：　　　　　
+　　　　　(44.1*1000*l6*2)*60/8=10，584，000(字节)=10.584MBytes
+bamvor: 1 seconds: 10.584MBytes / 60 = 176kBytes, more than the bandwidth. if i compressed while tranfer, maybe the delay is not acceptable. 
+4), http://item.taobao.com/item.htm?id=13492736208
+不建议用在超过115200的波特率，信号的干扰会使系统不稳定。
+设置超过115200后用电脑无法使用，要用单片机编程于高于115200才能使用此波特率和重新发AT命令设低波特率
+用AT命令设好波特率后，下次上电使用不需再设，可以掉电保存波特率。
+
+18:27 2012-04-10
+(18:06 2012-04-11)
+software, skill, Linux, sync; terminal, font
+1, using csync2 or rsync.
+1), rsync
+2), android sshd
+SSHDroid
+berserker.android.apps.sshdroid
+2, tmux
+http://wiki.freebsdchina.org/software/t/tmux
+http://linuxtoy.org/archives/tmux.html
+http://roylez.heroku.com/2010/08/07/tmux-review.html
+http://tmux.sourceforge.net/
+http://wiki.freebsdchina.org/software/t/tmux
+3, set wenquanyi font in console and gvim.
+
+16:58 2012-04-11
+opensuse, forums, software
+1, chinese software
+http://forums.opensuse.org/ae-ae-chinese/ae/c-aoe-ae-ae-ze-e/461927-c-e-opensuse_zh-ae-e-zae-eu-ae-opensusecs-ae-ae.html
+
+17:16 2012-04-11
+software, skill, gnome-terminal, configuration, font
+<?xml version="1.0"?>
+<gconf>
+	<entry name="font" mtime="1334135725" type="string">
+		<stringvalue>WenQuanYi Micro Hei Mono 13</stringvalue>
+	</entry>
+	<entry name="use_system_font" mtime="1334135672" type="bool" value="false"/>
+	<entry name="visible_name" mtime="1334135243" type="string">
+		<stringvalue>Default</stringvalue>
+	</entry>
+	<entry name="palette" mtime="1334135243" type="string">
+		<stringvalue>#2E2E34343636:#CCCC00000000:#4E4E9A9A0606:#C4C4A0A00000:#34346565A4A4:#757550507B7B:#060698209A9A:#D3D3D7D7CFCF:#555557575353:#EFEF29292929:#8A8AE2E23434:#FCFCE9E94F4F:#72729F9FCFCF:#ADAD7F7FA8A8:#3434E2E2E2E2:#EEEEEEEEECEC</stringvalue>
+	</entry>
+	<entry name="background_color" mtime="1334135243" type="string">
+		<stringvalue>#FFFFFFFFDDDD</stringvalue>
+	</entry>
+	<entry name="foreground_color" mtime="1334135243" type="string">
+		<stringvalue>#000000000000</stringvalue>
+	</entry>
+</gconf>
+
+15:37 2012-04-13
+bluetooth, audio. bcm204x(bcm2046, bcm2045)
+1, test bluetooth under linux
+1), 水木行BT559 博通芯片USB蓝牙适配器 Broadcom芯片+Widcomm软件
+it is ok in opensuse12.1
+kernel driver is supported through bcm203.ko i guess. 
+Bus 001 Device 008: ID 0a5c:4500 Broadcom Corp. BCM2046B1 USB 2.0 Hub (part of BCM2046 Bluetooth)
+Bus 001 Device 009: ID 0a5c:4502 Broadcom Corp. Keyboard (Boot Interface Subclass)
+Bus 001 Device 010: ID 0a5c:4503 Broadcom Corp. Mouse (Boot Interface Subclass)
+2), but CSR chip is not work in opensuse12.1. usb device is probed, but kernel does not support this bluetooth dongle. 
+2, other chip bcm bluetooth dongle:
+1), bcm2046
+http://item.taobao.com/item.htm?id=9715487596
+2), bcm2045(bluetooth2.0)
+【冲钻】V2.0 EDR高速USB蓝牙适配器 美国BCM2045芯片 比双芯快
+http://item.taobao.com/item.htm?id=236303661&ref=http%3A%2F%2Fsearch8.taobao.com%2Fsearch%3Fq%3Dusb%2Bbcm%2B%25C0%25B6%25D1%25C0%26initiative_id%3Dstaobaoz_20120413%26unid%3D0%26mode%3D63%26pid%3Dmm_14507416_2297358_8935934%26p4p_str%3Dfp_midtop%253D10%2526firstpage_pushleft%253D0%2526lo1%253D0%2526lo2%253D0%2526nt%253D1%26olu%3Dyes%26isprepay%3D1%26sort%3Dprice-asc&ali_trackid=2:mm_14507416_2297358_8935934,0:1334302266_4z4_1952159558
+ES-388蓝牙适配器 蓝牙模块 V2.0版 BCM芯片 免驱动 USB 支持Win7
+http://item.taobao.com/item.htm?id=10472764230&ref=http%3A%2F%2Fsearch8.taobao.com%2Fsearch%3Fq%3Dusb%2Bbcm%2B%25C0%25B6%25D1%25C0%26pid%3Dmm_14507416_2297358_8935934%26unid%3D0%26mode%3D63%26initiative_id%3Dstaobaoz_20120413&ali_trackid=2:mm_14507416_2297358_8935934,0:1334302096_4z2_1885759760
+
+
+16:51 2012-4-14
+0, ref
+http://hi.baidu.com/ppcst/blog/item/c3f88b1589635473ca80c4e8.html
+
+1, using pkg_config while building, take glib compile as example: 
+1), add PKG_CONFIG_PATH path
+root@ema3530:/usr/local/bluez/bluez-4.99# export PKG_CONFIG_PATH=$PKG_CONFIG_PATH:/usr/local/bluez/install/lib/pkgconfig
+root@ema3530:/usr/local/bluez/bluez-4.99# pkg-config --exists --print-errors "dbus-1 >= 1.0"
+2), GLib library version 2.16 or later is required
+root@ema3530:/usr/local/bluez/bluez-4.99# ./configure --host=arm-none-linux-gnueabi --prefix=/usr/local/bluez/install 2>&1 | tee log_configure_3
+...
+checking for DBUS... yes
+checking for dbus_watch_get_unix_fd in -ldbus-1... yes
+checking for dbus_connection_can_send_type in -ldbus-1... yes
+checking for GLIB... no
+configure: error: GLib library version 2.16 or later is required
+
+2, glib
+1), glib does not support --host os --build parameter in configure
+pass CC to make, but another error occur while linking:
+gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map -O3 -fPIC -D_LARGEFILE64_SOURCE=1 -O3 -D_LARGEFILE64_SOURCE=1 -o libz.so.1.2.5 adler32.lo compress.lo crc32.lo deflate.lo gzclose.lo gzlib.lo gzread.lo gzwrite.lo infback.lo inffast.lo inflate.lo inftrees.lo trees.lo uncompr.lo zutil.lo  -lc -L. libz.a
+/usr/bin/ld: adler32.lo: Relocations in generic ELF (EM: 40)
+/usr/bin/ld: adler32.lo: Relocations in generic ELF (EM: 40)
+adler32.lo: could not read symbols: File in wrong format
+collect2: ld returned 1 exit status
+make: *** [libz.so.1.2.5] Error 1
+2), modify Makefile update linker: 
+root@ema3530:/usr/local/bluez/glib/zlib/zlib-1.2.5_git201105272030# diff Makefile.orig Makefile
+30,31c30,31
+< LDSHARED=gcc -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+< CPP=gcc -E
+---
+> LDSHARED=${CC} -shared -Wl,-soname,libz.so.1,--version-script,zlib.map
+> CPP=${CC} -E
+3), compile pass.
+root@ema3530:/usr/local/bluez/glib/zlib/zlib-1.2.5_git201105272030# make CC=$CC 2>&1 | tee log_make_6
+
+3, about gettext for glib
+configure:8646: checking for msgfmt
+configure:8676: result: no
+configure:8952: error:
+*** You must have either have gettext support in your C library, or use the
+*** GNU gettext library. (http://www.gnu.org/software/gettext/gettext.html
+
+add msgfmt path:
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# PATH=$PATH:/usr/local/bluez/install/bin
+
+4, some check can not finished while cross compiling
+ref: http://hi.baidu.com/ppcst/blog/item/c3f88b1589635473ca80c4e8.html
+1), 
+checking for growing stack pointer... configure: error: in `/usr/local/bluez/glib/glib-2.32.1':
+configure: error: cannot run test program while cross compiling
+See `config.log' for more details
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# PATH=$PATH:/usr/local/bluez/install/bin
+
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# echo glib_cv_stack_grows=no>>arm-none-linux-gnueabi.cache
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# cat arm-none-linux-gnueabi.cache
+glib_cv_stack_grows=no
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# ./configure  --prefix=/usr/local/bluez/install --host=arm-none-linux-gnueabi --cache-file=arm-none-linux-gnueabi.cache 2>&1 | tee log_configure_6
+
+2), similar error
+glib_cv_uscore=no
+ac_cv_func_posix_getpwuid_r=yes
+ac_cv_func_posix_getgrgid_r=yes
+
+3), TODO
+maybe i should test it on qemu or board in order to know weather it is support in my environment. 
+
+5, local glib
+1), install libglib2.0-dev
+ref: http://hi.baidu.com/ppcst/blog/item/c3f88b1589635473ca80c4e8.html
+
+./configure  --prefix=/usr/local/bluez/install --host=arm-none-linux-gnueabi --cache-file=arm-none-linux-gnueabi.cache 
+...
+checking for glib-genmarshal... no
+configure: error: Could not find a glib-genmarshal in your PATH
+
+apt-get install libglib2.0-dev
+
+2), compile glib-compile-schemas on x86
+(1), ref: http://grade008.blog.163.com/blog/static/173538110201121612016848/
+(2), error message
+checking for glib-compile-schemas... no
+configure: error: Could not find a glib-compile-schemas in your PATH
+(3), glib-compile-schemas is contain in the glib2-tools in opensuse12.1, but it not found in the SBC3530 ubuntu system. 
+Compile glib in Ubuntu.
+(4), after compile change PATH and PKG_CONFIG_PATH
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# PATH=/usr/local/bluez/glib/x86/install/bin:/usr/local/bluez/install/bin:$PATH
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# PKG_CONFIG_PATH=/usr/local/bluez/install/lib/pkgconfig/
+(5), msgfmt
+change arm-none-linux-gnueabi.cache and PATH or change PATH and reconfig, 这次用第一种方法试试。 
+((1)), 
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# diff arm-none-linux-gnueabi.cache.orig arm-none-linux-gnueabi.cache
+239c239
+< ac_cv_path_GMSGFMT=${ac_cv_path_GMSGFMT=/usr/local/bluez/install/bin/msgfmt}
+---
+> ac_cv_path_GMSGFMT=${ac_cv_path_GMSGFMT=/usr/bin/msgfmt}
+241c241
+< ac_cv_path_MSGFMT=${ac_cv_path_MSGFMT=/usr/local/bluez/install/bin/msgfmt}
+---
+> ac_cv_path_MSGFMT=${ac_cv_path_MSGFMT=/usr//bin/msgfmt}
+((2)), 
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# echo $PATH
+/usr/local/bluez/glib/x86/install/bin:/usr/local/bluez/install/bin:/usr/local/bluez/glib/x86/install:/usr/local/bluez/install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/arm/arm-2009q1/bin
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# PATH=/usr/local/bluez/glib/x86/install/bin:/usr/local/bluez/glib/x86/install:/usr/local/bluez/install/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/arm/arm-2009q1/bin
+((3)), 不行，还是修改PATH后reconfig。
+root@ema3530:/usr/local/bluez/glib/glib-2.32.1# PATH=/usr/local/bluez/glib/x86/install/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/arm/arm-2009q1/bin
+
+6, libusb for bluez
+(1), bluez want libusb not libusb-1.0, so modify the libusb-1.0.pc to libusb.pc
+root@ema3530:/usr/local/bluez/install/lib/pkgconfig# diff libusb.pc libusb-1.0.pc
+6c6
+< Name: libusb
+---
+> Name: libusb-1.0
+(2), it is not worked. 
+try libusb-1.0 compat
+
+7, still got errors, try it next time.
+(1), 
+CC     audio/telephony-ofono.o
+In file included from audio/telephony-ofono.c:40:
+./src/glib-compat.h:25: error: static declaration of 'g_slist_free_full' follows non-static declaration
+/usr/local/bluez/install/include/glib-2.0/glib/gslist.h:52: error: previous declaration of 'g_slist_free_full' was here
+./src/glib-compat.h:33: error: static declaration of 'g_list_free_full' follows non-static declaration
+/usr/local/bluez/install/include/glib-2.0/glib/glist.h:53: error: previous declaration of 'g_list_free_full' was here
+make[1]: *** [audio/telephony-ofono.o] Error 1
+make: *** [all] Error 2
+(2), configure check error, manaul fix it: 
+root@ema3530:/usr/local/bluez/bluez-4.99# echo ac_cv_lib_glib_2_0_g_slist_free_full=yes >> arm-none-linux-gnueabi.cache
+root@ema3530:/usr/local/bluez/bluez-4.99# echo ac_cv_lib_glib_2_0_g_list_free_full=yes >> arm-none-linux-gnueabi.cache
+
+8,
+(1), void mainloop_init(void)
+        epoll_fd = epoll_create1(EPOLL_CLOEXEC);
+to
+	epoll_fd = epoll_create(EPOLL_CLOEXEC);
+(2), monitor/mainloop.c
+#include <linux/eventpoll.h>
+EPOLL_CLOEXEC
+(3), 
+  CC     monitor/mainloop.o
+In file included from monitor/mainloop.c:38:
+/usr/local/arm/arm-2009q1/bin/../arm-none-linux-gnueabi/libc/usr/include/linux/eventpoll.h:47: error: redefinition of 'struct epoll_event'
+monitor/mainloop.c: In function 'mainloop_run':
+monitor/mainloop.c:121: error: 'SFD_NONBLOCK' undeclared (first use in this function)
+(4), it looks like the compile is oo old to compile the lastest bluez. 
+update compiler and recompile all the package. 
+
+9, "WARNING" message in configure log should be checked. 
+
+10, (21:52 2012-04-15)
+
+11, summary
+1), final dependency:
+bluez-4.99 <- dbus-1.4.20 <- expat-2.1.0
+           <- glib-2.32.1 <- zlib-1.2.5_git201105272030_opensuse12_1_patched
+                          <- libffi-3.0.11
+                          <- gettext-0.18.1.1(x86 executable)
+                          <- glib-genmarshal glib-compile-schemas(x86 executable)
+           <- libusb-compat-0.1.3
+           <- bison -y 2.3(x86 executable)
+           <- flex 2.5.34(x86 executable)
+notes: 
+zlib from opensuse12.1 while compile under opensuse12.1 64bit
+2), download url
+http://www.kernel.org/pub/linux/bluetooth/bluez-4.99.tar.gz
+http://dbus.freedesktop.org/releases/dbus/dbus-1.4.20.tar.gz
+http://downloads.sourceforge.net/project/expat/expat/2.1.0/expat-2.1.0.tar.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fexpat%2Ffiles%2Fexpat%2F2.1.0%2F&ts=1334498254&use_mirror=cdnetworks-kr-2
+ftp://sourceware.org/pub/libffi/libffi-3.0.11.tar.gz
+
+
+16:18 2012-4-15
+software, skill, open source, vnc, ultravnc
+http://www.uvnc.com/component/jdownloads/summary/4/45.html
+
+21:19 2012-4-17
+android, sl4a, python
+1, python for android, module
+http://code.google.com/p/python-for-android/wiki/Modules
+2, python bluetooth
+http://code.google.com/p/pybluez/
+我是否可以考用在android下用python实现之前想做的3.5音频转蓝牙？
+
+10:34 2012-04-18
+software, skill, Linux, directory stack, pushd, popd
+1 , pushd and popd 
+ref: http://en.wikipedia.org/wiki/Pushd_and_popd
+In computing, pushd and popd are commands in various Unix, DOS and Microsoft Windows command line interpreters (shells) such as Bash, cmd.exe, 4DOS/4NT and Windows PowerShell. Both commands are used to work with the command line directory stack.
+2, ref "man bash"
+1), dirs: Without options,  displays  the  list  of  currently  remembered directories. 
+linux-bhi8:/var/lib/qemu/images # dirs
+/var/lib/qemu/images
+2), push "/etc/qemu/vm" on the top of the directory stack, and cd to this directory. there are two directory in the stack after performing this command. 
+linux-bhi8:/var/lib/qemu/images # pushd /etc/qemu/vm/
+/etc/qemu/vm /var/lib/qemu/images
+linux-bhi8:/etc/qemu/vm # 
+3), add "/var/log/libvirt/qemu"
+linux-bhi8:/etc/qemu/vm # pushd /var/log/libvirt/qemu
+/var/log/libvirt/qemu /etc/qemu/vm /var/lib/qemu/images
+check stack through "dirs" command:
+linux-bhi8:/var/log/libvirt/qemu # dirs
+/var/log/libvirt/qemu /etc/qemu/vm /var/lib/qemu/images
+4), change directory to the "/etc/qemu/vm". "+N" means:
+Rotates the stack so that the nth directory (counting from the left of the list shown by dirs, starting with zero) is at the top.
+e.g. "+0" means "/var/log/libvirt/qemu", "+1" means "/etc/qemu/vm", "+2" means "/var/lib/qemu/images". 
+linux-bhi8:/var/log/libvirt/qemu # dirs
+/var/log/libvirt/qemu /etc/qemu/vm /var/lib/qemu/images
+linux-bhi8:/var/log/libvirt/qemu # pushd +1
+/etc/qemu/vm /var/lib/qemu/images /var/log/libvirt/qemu
+linux-bhi8:/etc/qemu/vm # 
+"-N" like "+N" but count from the right. 
+or "+N" means clockwise, "-N" means counter clockwise. 
+5), popd: Removes  entries  from  the directory stack.
+linux-bhi8:/home/bamvor/log # dirs
+/home/bamvor/log /var/log/libvirt/qemu /home/bamvor /etc/qemu/vm
+linux-bhi8:/home/bamvor/log # popd -1
+/home/bamvor/log /var/log/libvirt/qemu /etc/qemu/vm
+linux-bhi8:/home/bamvor/log # popd
+/var/log/libvirt/qemu /etc/qemu/vm
+linux-bhi8:/var/log/libvirt/qemu # 
+
+17:21 2012-04-19
+software, skill, Linux, shell, bash, foreground and backgroud switch
+1, example
+linux-bhi8:~> vncviewer :5904
+Ctrl+z
+linux-bhi8:~> jobs
+[1]+  Stopped           vncviewer :5904
+linux-bhi8:~> bg
+[1]+ vncviewer :5904 &
+//after vncview exit
+[1]+  Done              vncviewer :5904
+
+17:47 2012-04-19
+software, skill, Linux, debug file launch by other process
+1, rename xenconsole to xenconsole.orig
+2, add bash script in order to launching gdb
+linux-bvirt:/usr/lib64/xen/bin # cat xenconsole
+#!/bin/bash
+
+gdbtui --args /usr/lib64/xen/bin/xenconsole.orig $*
+
+17:51 2012-04-19
+software, skill, Linux, search, grep
+1, search string "exec", exclude the following file: binary file, cscope.out, Makefile, Makefile.*
+grep exec * -I --exclude=cscope.out --exclude=Makefile --exclude=Makefile.*
+
+notes: 
+-I                     equivalent to --binary-files=without-match
+--exclude=FILE_PATTERN skip files and directories matching FILE_PATTERN
+--exclude-from=FILE    skip files matching any file pattern from FILE
+--exclude-dir=PATTERN  directories that match PATTERN will be skipped.
+
+10:52 2012-04-20
+android, development board, Cortex-A8
+1, Samsung S5PV210
+1), http://item.taobao.com/item.htm?id=15397428757
+RMB799, support AV input. 
+2), core board
+http://item.taobao.com/item.htm?id=13954143589
+RMB499.
+2, TI OMAP4
+1), pandaboard, china
+http://www.chipsee.com/pandaboardes.html
+1980RMB
+if buy it directly from avnet, if need (182$ + 53.99$) * 6.3 = 1486.73. 
+http://avnetexpress.avnet.com/store/em/EMController?langId=-1&storeId=500201&catalogId=500201&term=4460%2BPANDABOARD%2BES&N=0&Ne=100000&action=products
+if somebody can buy it from U.S directly, it only need 1146.6
+
+11:44 2012-04-20
+software, skill, text editor, vim, search and replace, line editing
+1, ref: http://superuser.com/questions/391052/paste-format-string-or-paste-with-replace
+
+it's not completely clear to me what you want, but in Vim you could do something like this:
+
+:for i in range(line('$')) | call append(i+i, printf("this is line %d:", i+1)) | endfor
+The reason I use "i+i" is that, as lines are inserted into the buffer the line numbers change, and this corrects for that. (If you have a different "starting point" in your range, your correction algorithm will have to be more complicated.)
+
+Or if you want to modify the existing lines in the buffer instead:
+
+:for i in range(1, line('$')) | call setline(i, printf("this is line %2d: %s", i, getline(i))) | endfor
+Of course, if you don't want to change the buffer, but just print to the screen, use "echo" instead of "call" and remove the append() / setline() chunks from around the printf().
+
+See:
+
+:help :for
+:help :call
+:help :echo
+:help range()
+:help line()
+:help append()
+:help setline()
+:help getline()
+:help printf()
+
+12:40 2012-4-22
+virtualization, opensuse, install xen on opensuse12.1 KDE
+1, install xen hypervisor through yast.
+2, launch virt-manager error:
+1), bamvor@localhost:~> virt-manager --debug
+WARNING: no socket to connect to
+2012-04-22 12:38:40,788 (cli:71): virt-manager startup
+2012-04-22 12:38:40,789 (virt-manager:292): Launched as: /usr/share/virt-manager/virt-manager.py --debug
+2012-04-22 12:38:40,790 (virt-manager:293): GTK version: (2, 24, 7)
+2012-04-22 12:38:40,790 (virt-manager:294): virtManager import: <module 'virtManager' from '/usr/share/virt-manager/virtManager/__init__.pyc'>
+2012-04-22 12:38:40,972 (virt-manager:390): No module named gconf
+Traceback (most recent call last):
+  File "/usr/share/virt-manager/virt-manager.py", line 383, in <module>
+    main()
+  File "/usr/share/virt-manager/virt-manager.py", line 313, in main
+    import virtManager.config
+  File "/usr/share/virt-manager/virtManager/config.py", line 24, in <module>
+    import gconf
+ImportError: No module named gconf
+2), So, it is a python script, install gconf support for python. 
+
+16:37 2012-04-22
+software, skill, vim, replace, How to replace a character for a newline in Vim?
+1, http://stackoverflow.com/questions/71323/how-to-replace-a-character-for-a-newline-in-vim
+Q: I'm trying
+:%s/,/\n/g 
+but it inserts what looks like a ^@ instead of an actual newline. The file is not in DOS mode or anything.
+What should I do?
+EDIT: If you are curious, like me, check the question Why is \r a newline for Vim? as well.
+A1: Use \r instead of \n.
+A2: Here's the trick: First, set your vi(m) session to allow pattern matching with special characters (ie: newline). It's probably worth putting this line in your .vimrc or .exrc file.
+:set magic
+Next, do:
+:s/,/,^M/g
+To get the ^M character, type ctrl-v and hit enter. Under Windows, do ctrl-q enter. The only way I can remember these is by remembering how little sense they make:
+"What would be the worst control-character to use to represent a newline?"
+"Either 'q' ( because it usually means "Quit") or 'v' because it would be so easy to type ctrl-c by mistake and kill the editor."
+"Make it so."
+2, The answer A1 is work for me. But it looks like A2 is better. \TODO try it later. 
+
+9:29 2012-4-23
+software, script, sl4a, python, GUI, web
+1, sl4a
+1), 豆瓣
+http://www.douban.com/group/SL4A/
+examples
+http://www.douban.com/group/topic/18315357/
+2), tutorials
+http://code.google.com/p/android-scripting/wiki/Tutorials
+3), GUI
+http://code.google.com/p/android-scripting/issues/detail?can=2&q=507&colspec=ID%20Type%20Status%20Priority%20Milestone%20Owner%20Summary%20Stars&id=507
+2, python
+1), python getting started: 
+http://www.douban.com/group/topic/20741721/
+2), GUI
+http://groups.google.com/group/android-scripting/browse_thread/thread/f86812549d2686e2/f828f916411d7a95
+http://code.google.com/p/android-scripting/wiki/UsingWebView
+3, book
+http://code.google.com/p/android-scripting/issues/detail?can=2&q=507&colspec=ID%20Type%20Status%20Priority%20Milestone%20Owner%20Summary%20Stars&id=507
+
+9:18 2012-4-27
+OpenFlow, Software defined network
+1, OpenFlow
+http://baike.baidu.com/view/5084532.htm?tp=1_01
+http://network.51cto.com/art/201105/264181.htm
+2, Software-Defined Networking
+http://www.technologyreview.com/web/22120/
+
+9:27 2012-4-27
+website, technologyreview
+en: http://www.technologyreview.com
+ch: http://www.mittrchinese.com/
+我已经订阅了数字版: 
+http://digital.technologyreview.com
+MT948250
+
+9:43 2012-4-27
+software, android, 开发人员和设计师应该安装的10个Android应用
+http://www.eoeandroid.com/industry/2012/0422/1410.html
+
+9:44 2012-4-27
+website, 弯曲评论
+http://www.tektalk.org/
+
+9:46 2012-4-27
+embedded, linux, kernel, linux内核启动解析, s3c6410
+http://forum.eet-cn.com/BLOG_ARTICLE_11821.HTM
+
+14:03 2012-04-27
+website, personal info, company info
+http://www.192.com
+可以获得公司或个人的付费信息。 
+
+22:11 2012-05-02
+linux, driver; audio, usb audio, alsa, CM108 usb audio
+1, CM108 linux driver
+1), HOWTO: Configure ALSA to handle a USB sound card
+http://wiki.sabayon.org/index.php?title=HOWTO:_Configure_ALSA_to_handle_a_USB_sound_card
+2), C-Media CM108 and alsa
+http://www.digipedia.pl/usenet/thread/17997/10693/
+3), [SLE] USB sound? How to make it work?
+http://linux.derkeiler.com/Mailing-Lists/SuSE/2006-08/msg01736.html
+
+2, CM108 product
+1), 包邮6HV3电脑立体声 7.1声道 游戏 外置 USB 声卡混音网络k歌声卡
+http://detail.tmall.com/item.htm?id=13726831396&ad_id=&am_id=&cm_id=&pm_id=
+详细写了安装"USB PnP Sound Device"驱动后, 如何设置麦克风混响. 
+
+3, (20:52 2012-06-07)
+后来买的是另外一家的。
+1), Linux下测试过程: "11:58 2012-06-07", "12:07 2012-06-07".
+
+4, 其它参考资料: 
+高素质USB声卡。已更新外壳资料，（camck） diy的 USB声卡 之个人测评。
+http://www.pcwaishe.cn/thread-297257-1-2.html
+[耳放]CM108+TDA1543+OPA2134声卡（来更新原理图啦……）
+http://bbs.mydigit.cn/read.php?tid=352305
+
+21:57 2012-05-05
+android, gps, bluetooth, gps mouse; coding, android, location; 蓝牙gps轨迹记录仪
+1, 看了看android系统使用外部gps的可能性，蓝牙gps有人写的应用，通过模拟地点的方式把从bluetooth gps拿到的坐标系统给系统。
+淘宝上的价格，usb gps比蓝牙gps便宜一些。
+
+2, android gps mouse
+1), open source
+(1), project: 
+http://code.google.com/p/android-mock-gps
+(2), source: 
+git clone https://code.google.com/p/android-mock-gps/
+
+核心代码:
+git/MockGPS/src/com/tim/apps/mockgps/service/MockLocationService.java
+// Set one position
+Location location = new Location(LocationManager.GPS_PROVIDER);
+location.setLatitude(lat);
+location.setLongitude(lng);
+location.setAltitude(altitude);
+location.setBearing(bearing);
+location.setSpeed(speed);
+location.setAccuracy(accuracy);
+location.setTime(System.currentTimeMillis());
+mLocationManager.setTestProviderLocation(
+                 LocationManager.GPS_PROVIDER, location); 
+
+(3), Open interface
+Copy the following code in order to start/end mock gps in your app. 
+Intent intent = new Intent("com.tim.apps.mockgps.startmock");intent.putExtra("name", name);intent.putExtra("lat", lat);intent.putExtra("lng", lng);intent.putExtra("bearing", 10.0f);intent.putExtra("accuracy", 5.0f);intent.putExtra("speed", 30.0f);ctx.sendBroadcast(intent);
+
+但是这个软件在我的android pad上运行出错。
+
+2), app for external bluetooth gps
+http://forum.xitek.com/thread-786322-1-1-2.html
+本人开发了一个Android上的应用程序，可以实现Android手机连接蓝牙GPS。这样可以给手机省些电，也省去了手机内置GPS重新定位的时间。
+ 程序是用2.1 API开发的，所以必须是2.1以上的系统，我自己的是2.2。
+ 运行程序前先打开系统设置中的“允许模仿位置”。
+ 中文系统：设置-〉应用程序-〉开发-〉允许模仿位置
+ 英文系统：Settings->Applications->Development->Allow mock locations
+ 程序界面很简单，在这里就不介绍了。连接上GPS之后，不要按back键，不然程序就退出了，可以用home键，然后打开google map之类的程序，就能用外置蓝牙GPS定位了。
+ 朋友们使用后有什么意见可以反馈给我。
+ 下载连接：http:\\zshowcase.appspot.com\apps\BluetoothGps.apk
+Market上有一款Bluetooth GPS Mouse的软件，功能是一样的，不过免费版会每隔10分钟需要你重新连接一下。
+[knuzk 编辑于 2010-09-19 13:37]
+[2011-07-08 17:22 补充如下]
+声明：此软件为本人自娱自乐使用，如果同时能够帮助到您，本人将非常荣幸。但本人不为您使用该软件所带来的任何后果负责。
+
+3, ref android command
+[Share]最近研究Android command,稍微总结一下分享出来
+http://topic.csdn.net/u/20100326/17/1f0fc5a1-3bd2-4294-aa35-1bcb73357aa3.html
+
+3, android对于usb serial的支持
+1), 
+http://www.prolific.com.tw/eng/downloads.asp?ID=31
+NOTE: No need to install drivers for following:
+Linux Kernel 2.4.31 and above already includes built-in drivers for PL-2303H, PL-2303XA/HXA and PL-2303HXD.
+NOTE: Google Android OS is also based on Linux kernel so it also supports PL2303. 
+
+ref: Ubuntu USB-Serial port install procedure(written in 2007)
+http://forums.reprap.org/read.php?12,4546
+
+2), android serial programming
+http://code.google.com/p/android-serialport-api/
+
+4, usb gps
+1), 淘宝上usb gps很多，几十元的不是二手的就是需要外接天线。
+2), U盘超小USB-GPS套件 1米高精度，1秒定位！徒步可用！Sirf4级！
+http://item.taobao.com/item.htm?id=2710821578
+RMB188
+
+5, 蓝牙gps
+蓝牙gps兼容性好一些，不用考虑usb gps的usb serial驱动android是否支持。而且还有支持轨迹记录的，出去用很方便。
+全新长天holux M-1200E 性价比与性能最佳蓝牙GPS记录仪/超M241A
+http://detail.tmall.com/item.htm?id=13202833795&spm=1003.2.2.2&scm=1003.55.177.997261&acm=03013.1003.55.177.13202833795_1
+RMB245
+
+23:23 2012-5-16
+今天是第一次认真试电钢。先试的kawai cl26II，感觉手感比重，接近我前几天练的立试机钢。相比之下px130手感软很多。
+功能比较单一，没有录音功能，也不能分两个声部。不过这样反而给我比较踏实的感觉，认为它基本功能比较过关。
+下一步一个是再练习两次机钢，再比较确认一下手感。
+然后就是去其它琴行试试p95, sp170s，问问对kawai的评价。
+另外要问下多长时间能送货。
+
+13:17 2012-05-17
+software, skill, openSUSE, font, set Chinese and English seperately through fonts priority. 
+Dong Mao Zhang: http://download.opensuse.org/repositories/home muzlocker/openSUSE_11.4/
+Dong Mao Zhang: http://code.google.com/p/opensuse-topics/downloads/detail?name=fzfonts.tar.gz&can=2&q=
+
+15:59 2012-05-17
+software, skill, package, rpm, command, rpm command for package query
+1), query whether xen package is installed or not. 
+> rpm -qa xen
+xen-4.1.2_05-1.1.1.x86_64
+2), query whether *xen* package is installed or not. 
+> rpm -qa xen
+> rpm -qa *xen*
+kernel-xen-devel-3.1.0-1.2.1.x86_64
+xen-tools-4.1.2_05-1.1.1.x86_64
+kernel-xen-3.1.0-1.2.1.x86_64
+xen-doc-pdf-4.1.2_05-1.1.1.x86_64
+patterns-openSUSE-xen_server-12.1-25.21.1.x86_64
+xen-doc-html-4.1.2_05-1.1.1.x86_64
+xen-devel-4.1.2_05-1.1.1.x86_64
+xen-libs-4.1.2_05-1.1.1.x86_64
+xen-kmp-desktop-4.1.2_05_k3.1.0_1.1-1.1.1.x86_64
+xen-4.1.2_05-1.1.1.x86_64
+3), list file included in xen package
+> rpm -ql xen
+/boot/xen-4.1.2_05-1.1.1.gz
+/boot/xen-4.1.gz
+/boot/xen-4.gz
+/boot/xen-dbg-4.1.2_05-1.1.1.gz
+/boot/xen-dbg-4.1.gz
+/boot/xen-dbg-4.gz
+/boot/xen-dbg.gz
+/boot/xen-syms
+/boot/xen-syms-4.1.2_05-1.1.1
+/boot/xen-syms-dbg
+/boot/xen-syms-dbg-4.1.2_05-1.1.1
+/boot/xen.gz
+/usr/lib64/efi
+/usr/lib64/efi/xen-4.1.2_05-1.1.1.efi
+/usr/lib64/efi/xen-4.1.efi
+/usr/lib64/efi/xen-4.efi
+/usr/lib64/efi/xen.efi
+4), query "/boot/xen-4.1.gz" belongs which rpm package
+> rpm -qf /boot/xen-4.1.gz
+xen-4.1.2_05-1.1.1.x86_64
+
+22:05 2012-5-19
+software, skill, show nfs client, showmount
+showmount -a
+belong to nfs-client package. 
+
+17:41 2012-05-23
+music, overtune, i do not know what is this software?
+1, http://overtone.github.com/
+(1), install
+https://github.com/overtone/overtone/wiki/Installing-and-starting-jack
+
+11:13 2012-05-25
+software, skill, Linux, shell, ls, list only directory; list only file
+1, method 1: using grep to filter the attribute. 
+1), list dir
+ls -al | grep ^d | awk '{print $9}'
+2), list file
+ls -al | grep ^- | awk '{print $9}'
+2, method 2:
+ls -d */
+
+13:41 2012-05-25
+读书, 胡同台妹眼中的大陆：从台北到北京
+http://book.qq.com/s/book/0/22/22500/index.shtml
+
+18:00 2012-05-25
+shop, tools
+http://forrobot.taobao.com/
+北京智芯机器人科技
+机器人零配件一站式服务
+
+13:50 2012-06-06
+安达信会计师事务所
+http://zh.wikipedia.org/wiki/%E5%AE%89%E8%BE%BE%E4%BF%A1%E4%BC%9A%E8%AE%A1%E5%B8%88%E4%BA%8B%E5%8A%A1%E6%89%80
+维基百科，自由的百科全书
+跳转到： 导航, 搜索
+Globe icon
+	此條目或章節僅具有一部分地區的觀點或資訊，無法完整表達普世通用，並包含廣泛區域的觀點。請協助補充以避免偏頗。
+歡迎改善本文，或討論本文任何問題。
+
+安達信會計師事務所（Arthur Andersen），總部設於美國芝加哥，曾為全球前五大會計師事務所之一，主要替大公司提供稽核、稅務等咨詢服務，一度是全球最大之會計師事務所，分拆佔大部份營利的安盛咨詢（Andersen Consulting）後雖跌至第5，但仍保持當時第6位的均富會計師事務所（Grant Thornton LLP.）之十倍營業額。2001年1月1日，安盛咨詢（Andersen Consulting）更名為埃森哲公司（Accenture），成為全球上最大的咨詢公司。
+
+在2001年12月，安達信會計師事務所因捲入安然公司（Enron）醜聞而遭到解體。2002年，美國司法部將安達信會計師事務所以妨害司法的名義起訴，南德州地方法院陪審團宣判該公司有罪。由於聯邦法令規定被判有罪的公司不能為其他公司進行稽核業務，故安達信會計師事務所繳回其註冊會計師執照，等於結束營業。後雖於2005年上訴至最高法院，獲得一致同意先前判決過程有瑕疵，但此時該公司業務已然為其他公司所接收。
+
+安達信會計師事務所執照上繳後，美國安達信會計師事務所被安永會計師事務所（Ernst & Young）收購，而中國、香港部分則并入普华永道会计师事务所（PriceWaterhouseCoopers），亦因而令普华永道会计师事务所一躍成為中國及香港市場佔有率第一的會計師事務所。
+
+11:58 2012-06-07
+audio, usb sound card, CM108; alsa
+1, sles11 sp2
+1), dmesg
+[68144.626721] usb 2-1.5.1: new full-speed USB device number 9 using ehci_hcd
+[68144.719694] usb 2-1.5.1: New USB device found, idVendor=0d8c, idProduct=000c
+[68144.719698] usb 2-1.5.1: New USB device strings: Mfr=0, Product=1, SerialNumber=0
+[68144.719702] usb 2-1.5.1: Product: C-Media USB Headphone Set
+[68144.721299] ALSA mixer.c:845 9:0: cannot get min/max values for control 2 (id 9)
+[68144.721307] ALSA mixer.c:845 10:0: cannot get min/max values for control 2 (id 10)
+[68144.721692] ALSA mixer.c:845 9:0: cannot get min/max values for control 2 (id 9)
+[68144.721715] ALSA mixer.c:845 10:0: cannot get min/max values for control 2 (id 10)
+[68144.722488] input: C-Media USB Headphone Set   as /devices/pci0000:00/0000:00:1d.0/usb2/2-1/2-1.5/2-1.5.1/2-1.5.1:1.3/input/input10
+[68144.722614] generic-usb 0003:0D8C:000C.0006: input,hidraw2: USB HID v1.00 Device [C-Media USB Headphone Set  ] on usb-0000:00:1d.0-1.5.1/input3
+2), lsusb
+Bus 002 Device 009: ID 0d8c:000c C-Media Electronics, Inc. Audio Adapter
+3), device name
+(1), plug in CM108
+# ls /dev/snd/ -R
+/dev/snd/:
+by-id    controlC0  hwC0D0    pcmC0D0p  pcmC1D0p  timer
+by-path  controlC1  pcmC0D0c  pcmC1D0c  seq
+/dev/snd/by-id:
+usb-0d8c_C-Media_USB_Headphone_Set-00
+/dev/snd/by-path:
+pci-0000:00:1b.0  pci-0000:00:1d.0-usb-0:1.5.1:1.0
+(2), plug out CM108
+# ls /dev/snd/ -R
+/dev/snd/:
+by-path  controlC0  hwC0D0  pcmC0D0c  pcmC0D0p  seq  timer
+/dev/snd/by-path:
+pci-0000:00:1b.0
+4), sysfs
+(1), plug in CM108
+# ls /sys/class/sound/
+audio   card0  controlC0  dsp   hwC0D0  mixer1    pcmC0D0p  pcmC1D0p  timer
+audio1  card1  controlC1  dsp1  mixer   pcmC0D0c  pcmC1D0c  seq
+(2), plug out CM108
+# ls /sys/class/sound/
+audio  card0  controlC0  dsp  hwC0D0  mixer  pcmC0D0c  pcmC0D0p  seq  timer
+
+12:07 2012-06-07
+software, skill, audio, gstreamer, gst-launch, audio player, alsa tools, alsa utils; record, play
+1, alsa tools/utils
+ref SoundcardTesting: 
+http://www.alsa-project.org/main/index.php/SoundcardTesting
+aplay in alsa-utils package. 
+
+2, test
+1), search wav file and do not display error message
+> find / -name *.wav 2>/dev/null
+/usr/share/kde4/apps/korganizer/sounds/alert.wav
+...
+2), list device
+(1), # aplay -l
+**** List of PLAYBACK Hardware Devices ****
+card 0: PCH [HDA Intel PCH], device 0: ALC269VB Analog [ALC269VB Analog]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+card 1: Set [C-Media USB Headphone Set], device 0: USB Audio [USB Audio]
+  Subdevices: 1/1
+  Subdevice #0: subdevice #0
+(2), # aplay -L
+default:CARD=PCH                                                     
+    HDA Intel PCH, ALC269VB Analog                                   
+    Default Audio Device                                             
+front:CARD=PCH,DEV=0                                                 
+    HDA Intel PCH, ALC269VB Analog                                   
+    Front speakers                                                   
+surround40:CARD=PCH,DEV=0                                            
+    HDA Intel PCH, ALC269VB Analog                                   
+    4.0 Surround output to Front and Rear speakers                   
+surround41:CARD=PCH,DEV=0                                            
+    HDA Intel PCH, ALC269VB Analog                                   
+    4.1 Surround output to Front, Rear and Subwoofer speakers        
+surround50:CARD=PCH,DEV=0                                            
+    HDA Intel PCH, ALC269VB Analog                                   
+    5.0 Surround output to Front, Center and Rear speakers           
+surround51:CARD=PCH,DEV=0                                            
+    HDA Intel PCH, ALC269VB Analog                                   
+    5.1 Surround output to Front, Center, Rear and Subwoofer speakers
+surround71:CARD=PCH,DEV=0                                            
+    HDA Intel PCH, ALC269VB Analog                                   
+    7.1 Surround output to Front, Center, Side, Rear and Woofer speakers
+null                                                                    
+    Discard all samples (playback) or generate zero samples (capture)   
+default:CARD=Set                                                        
+    C-Media USB Headphone Set, USB Audio                                
+    Default Audio Device                                                
+front:CARD=Set,DEV=0                                                    
+    C-Media USB Headphone Set, USB Audio
+    Front speakers
+surround40:CARD=Set,DEV=0
+    C-Media USB Headphone Set, USB Audio
+    4.0 Surround output to Front and Rear speakers
+surround41:CARD=Set,DEV=0
+    C-Media USB Headphone Set, USB Audio
+    4.1 Surround output to Front, Rear and Subwoofer speakers
+surround50:CARD=Set,DEV=0
+    C-Media USB Headphone Set, USB Audio
+    5.0 Surround output to Front, Center and Rear speakers
+surround51:CARD=Set,DEV=0
+    C-Media USB Headphone Set, USB Audio
+    5.1 Surround output to Front, Center, Rear and Subwoofer speakers
+surround71:CARD=Set,DEV=0
+    C-Media USB Headphone Set, USB Audio
+    7.1 Surround output to Front, Center, Side, Rear and Woofer speakers
+iec958:CARD=Set,DEV=0
+    C-Media USB Headphone Set, USB Audio
+    IEC958 (S/PDIF) Digital Audio Output
+null
+    Discard all samples (playback) or generate zero samples (capture)
+3),aplay fail, it looks like more configuration needed. 
+# aplay -D hw:0 alert.wav
+Playing WAVE 'alert.wav' : Unsigned 8 bit, Rate 8000 Hz, Mono
+aplay: set_params:961: Sample format non available
+4), gst-launch successful
+(1), play with default sound card: 
+gst-launch-0.10 filesrc location=alert.wav ! decodebin ! audioconvert ! audioresample ! alsasink 
+(2), play with sound card 0: 
+gst-launch-0.10 filesrc location=alert.wav ! decodebin ! audioconvert ! audioresample ! alsasink device=hw:0
+(3), play with sound card 1: 
+gst-launch-0.10 filesrc location=alert.wav ! decodebin ! audioconvert ! audioresample ! alsasink device=hw:1
+(4), record and play with sound card 1
+gst-launch-0.10 alsasrc device=hw:1 ! audioconvert ! audioresample ! vorbisenc ! oggmux ! filesink location=record.ogg
+gst-launch-0.10 filesrc location=record.ogg ! decodebin ! audioconvert ! audioresample ! alsasink device=hw:1
+
+13:41 2012-06-26
+Marketing, 深圳华强北; SOC, arm, rochchip 3066, Cortex-A9 Dual Core
+1, 电子工程专辑
+1), 我陪美国人逛华强北的收获
+http://forum.eet-cn.com/BLOG_ARTICLE_12819.HTM?click_from=8800095657,8883567706,2012-06-26,EECOL,FORUM_ALERT
+http://forum.eet-cn.com/BLOG_ARTICLE_12820.HTM
+这这篇文章才知道瑞芯微3066 A9双核已经上市了. 我原来的公司还根本没有做A9的消息...
+2), 平板电脑和智能手机还大有可为
+http://forum.eet-cn.com/BLOG_ARTICLE_12816.HTM?click_from=8800095657,8883567706,2012-06-26,EECOL,FORUM_ALERT
+3), 这个女子会编程！记我的外婆是程序员
+http://forum.eet-cn.com/FORUM_POST_10008_1200233617_0.HTM?click_from=8800095657,8883567706,2012-06-26,EECOL,FORUM_ALERT&jumpto=view_welcomead_forum_1340688854888
+en: http://blog.progopedia.com/2012/jun/06/my-granny-programmer/
+1, RK3066
+http://cn.engadget.com/2012/04/13/rockchip-rk3066-40nm/
+瑞芯微Rockchip RK3066平台特性：
+　　·双核ARM Cortex-A9处理器，采用了Artisan处理器优化包（POP）进行实施，以提升性能。
+　　·四核ARM Mali-400 MP GPU，支持OpenGL ES 1.1/2.0和OpenVG 1.1
+　　·丰富的存储器支持，包括DDRIII、DDRII和LPDDRII
+　　·高性能专用2D处理器
+　　·1080P多种格式视频解码器
+　　·1080P H.264和VP8视频编码
+　　·3D H.264 MVC视频编码
+　　·嵌入式HDMI 1.4a，支持3D显示
+　　·嵌入式60bit/s ECC，支持MLC NAND、E-MMC、i-NAND和启动
+　　·支持双屏显示和双摄像头
+　　·独有的DVFS（动态电压和频率调整）
+笔者: 图片上标识: 支持LPDDR2-800.
+1), rk3066 list
+http://tabletrepublic.com/forum/cortex-a9-rockchip-3066/list-rk3066-tablets-1943.html
+2), AOSON 9.7寸, 1399RMB: 
+http://detail.tmall.com/item.htm?id=17735060175&ad_id=&am_id=&cm_id=&pm_id=
+
+12:43 2012-07-10
+生活小常识, 维生素B1片可以驱蚊
+
+14:12 2012-07-17
+arm开发板, Cortex-A9 MP, pandaboard; 代购
+1, 越洋购物网
+http://www.overseadeals.com/
+Pandaboard, Pandaboard ES: 1463, 1527. 
+2, 头狼商铺
+http://wolves.taobao.com/?spm=2013.1.1000126.21
+http://item.taobao.com/item.htm?id=14040473028
+Pandaboard ES 1480. 
+
+18:49 2012-07-20
+上海浦东南码头路1696弄41号503 李先生 13918612192 请承担往返运费 发货后告知我运单号
+
+15:35 2012-08-02
+mobile, Huawei, arm
+1, 华为高端智能手机押注海思
+abstract: 海思平台专供高端产品；高通平台专攻量大产品；新机种将不会再采用德仪平台，而新打入华为的联发科，主要是以双卡双待产品为主。 
+Ascend D1上市一再延期，据闻是需要解决处理器过热的问题。
+
+http://forum.esm-cn.com/FORUM_POST_1000164043_1200703056_0.HTM
+据台湾媒体报道，华为手机产品全球营销总监FREDERIC FLEURANCE表示，华为公司手机芯片战略将在明(2013)年发生重大改变，高端智能手机芯片将重要选择海思，预计将有至少4款高端智能手机处理器采用海思芯片，并将同步采用海思的LTE芯片。
+FREDERIC FLEURANCE表示，华为目前拥有高通、德仪、联发科、海思等5个芯片平台，华为今后策略是海思平台专供高端产品；高通平台专攻量大产品；新机种将不会再采用德仪平台，而新打入华为的联发科，主要是以双卡双待产品为主。 
+华为今年在MWC世界移动通信大会上发布采用海思四核心处理器平台的高端智能手机Ascend D1，引起轰动，但Ascend D1上市一再延期，据闻是需要解决处理器过热的问题。华为近来集中精力加强研发，将进一步加强与海思的合作，确保自身的元器件供应和垂直整合，提高利润率。 
+华为2011年开始推出手机自主品牌。华为已经在全球成立了8个设计中心，与微软、高通等公司成立联合实验室，并花费巨资，在市场强力推广品牌形象，今年预计投入2亿美元。
+
+20:32 2012-08-02
+embedded, watch, 电子表
+史上最成功的融资靠这货！可显示电话短信的智能电子表 
+http://forum.eet-cn.com/FORUM_POST_10003_1200236585_0.HTM
+这款产品目前正处于预订阶段，售价为150美元。在此之前，Pebble的创始团队希望在美国众筹平台KickStarter上融资10万美元，不料项目一推出就受到网友热捧，共有68929人向他们投资，总金额高达1027万美元，是预计融资额的100倍。Pebble也成为了KickStarter创立以来最成功的融资项目。
+
+09:53 2012-08-03
+职业规划, 离职原因分析
+离职136定理发布时间：2012-04-19 13:09:15  
+http://forum.eet-cn.com/BLOG_ARTICLE_12046.HTM
+最近公司离职率很高，除了主动离职还有被动离职，行业的洗牌越来越明显，大牌的公司通过福利的提升吸引了一大批本来实干的工程师们。老板一边抱怨这是由于队伍的不成熟导致的，希望找来一批30岁以上的工程师，他们不像出来1~5年的工作经验的人，老是吃碗里的看兜里的。可是HR反馈30岁以上的工程师实在很难找。最近看到一个离职分析的微博，136定理，一个月内离职跟HR有密切关系，3个月离职跟上司有密切关系，6个月离职跟公司文化有密切关系，1年后离职跟自己的晋升空间有关系，3年后离职跟发展平台有关。6年后基本就不会离职了。
+另一方面反观拜倒在糖衣炮弹下的工程师的共同特点：1.有家室开支更大（有选择的欲望） 2.年龄在28左右（工作5年内）3.熟悉现在的公司（或许比领导人更明白自己的位置和公司的位置）4.技术上有一定得本钱经得起跳槽的考验（有选择的本钱） 
+看来28左右是一个很关键的门槛，一方面有了家庭压力，特别是在房价高起，生活各处均有RMB做主的年代（需要通过跳槽进一步开发自己的价值）。另一方面社会的浮躁，从08年的4万亿计划开始，人们的生活开始发生了变化，大量的印钞让国民消费力大大削弱，地产作为支柱产业收到各路投机客的加入。投机市场越来越热各类艺术品的天价拍卖。当一个社会的人均以投机为主，忽视实业的时候，社会形成投机文化，像工程师这种技术实干的职业将会受到社会越来越多的诱惑。 
+这种职业的倦态，你的身上有吗？
+
+09:54 2012-08-03
+研发, 技术分析
+http://forum.eet-cn.com/BLOG_ARTICLE_12182.HTM
+败走麦城之后
+
+17:32 2012-08-20
+单位转换, 质量
+1磅=453.59克 
+
+18:06 2012-08-21
+Allwinner, A10, Onda Vi10
+[VI10精英版] 官方1.4固件升级刷机CM9，不用刷回1.0，不删除安装的程序，不格式化SD卡【申请精华】 
+http://www.ondabbs.cn/thread-169224-1-1.html
+1:先将机器电量保持在50%以上。。低电量刷机会死的很惨。
+2：下载自己需要的CM9固件：
+http://www.ondabbs.cn/forum.php?mod=viewthread&tid=163435&extra=page%3D1%26filter%3Dtypeid%26typeid%3D267%26typeid%3D267
+
+========================注意：以下是重点！==============================
+4：下载1.4固件的recovery，并刷入机器，，下载地址见此贴2楼 http://www.ondabbs.cn/forum.php?mod=viewthread&tid=166972&page=1&extra=#pid2248445
+5：下载固件包后，将下载的.zip文件复制到机器的内置卡中，即/mnt/sdcard
+6：按机器的OTA升级程序，按本地升级，选择刚才复制进平板的固件包
+7：按确认，等待系统自动检测固件包，然后重启进入刷机状态，剩下的，等待10分钟后，机器会自己帮你搞定的~~
+8：开机后系统会自动帮你优化安装了的APP。然后你的刷机就完成了！
+
+14:38 2012-08-27
+旅游, 秦皇岛, 昌黎, 翡翠岛
+沙漠和海洋.
+http://baike.baidu.com/view/359608.htm
+http://www.feicuidao.com/
+
+13:59 2012-09-03
+allwinnner, qual core, 传闻全志, 君正年底推出四核.
+1, http://www.bolopad.com/html/show-22-1421-1.html
+因为上周我们兴高采烈地告诉大家全志四核样机确实在9月亮相，心想离大批量生产的日子不远。但昨天小编突然收到神秘人士的电话，被告知全志四核的样机九月出不来了，估计要十一月才能出来跟大家见面。
+其次，今年下半年除了有三星猎户座Exynos 4412、全志四核、Nvidia Tegra3、晶晨的4核产品之外，年底还会有一款神秘的四核产品加入产团，纵观国内市场有可能会出四核芯片的可能就是君正的MIPS架构了，但是否君正呢？
+2, 关于全志四核
+http://bbs.imp3.net/thread-10716721-1-1.html
+
+19:35 2012-09-03
+全志芯片触摸屏校准问题
+http://bbs.imp3.net/thread-10712192-1-1.html
+
+13:35 2012-09-04
+嵌入式, 电源管理, 系统稳定性
+你知道如何加电吗？
+http://forum.eet-cn.com/BLOG_ARTICLE_13895.HTM
+
+14:17 2012-09-06
+package(封装), QFN, QFP
+QFN: Quad Flat No-lead package. also known as LCC(Leadless chip carrier) 
+QFP: Quad Flat Package
+ref: 
+http://zhidao.baidu.com/question/9525088
+http://so.hudong.com/search.do?so=doc&isFrom=intoDoc&q=QFN
+
+原来一直以为QFN的N是negtive, QFP的P是Positive. 
+

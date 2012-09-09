@@ -1,0 +1,686 @@
+.LOG
+14:11 2012-09-03
+GTD
+0, 14:00-22:10
+
+1, today
+1), work report. see"16:23 2012-09-03".
+2), libxl patch. see"17:26 2012-09-03".
+3), summary. better work then last week. 继续努力.
+
+16:23 2012-09-03
+work report - week 35
+1, [devel-server] work report - week 35
+[green]
+1, libvirt libxl driver. 
+1), improve the lock patch according to Jim's suggestion. 
+2), debug libxl migration patch. it is ok on upstream libvirt. 
+2, wireshark maintenance 
+1), update wireshark to 1.4.15 on sle10 and sle11. 
+2), fix security bug on sle9. four bugs need to patch. 3 of them has been finished. one patch could not apply directly and need to modified for wireshark 1.0.16
+
+17:02 2012-09-03
+virtualization, libvirt, xen
+1, https://bugzilla.novell.com/show_bug.cgi?id=778006 
+bamvor: i got the same error, but i do not try to fix it. it is a pity. 
+
+2, Jim fixed this bug. commit info
+commit f781e27653c7e50747c414a916c788cfc81760c4
+Author: Jim Fehlig <jfehlig@suse.com>
+Date:   Thu Aug 30 12:53:02 2012 -0600
+
+    Fix xen driver following changes to make it stateful
+
+    Recent work to improve support for loadable driver modules introduced
+    a regression in the xen driver.  The legacy xen driver is now a
+    stateful, libvirtd driver but was not being registered when building
+    without driver modules.
+
+    A slight behavior change was also noted in the xen drivers when
+    built as driver modules.  Previously, explicitly specifying a
+    connection URI was not necessary, but now
+
+    Compiled against library: libvirt 0.10.0
+    Using library: libvirt 0.10.0
+    Using API: QEMU 0.10.0
+    error: failed to get the hypervisor version
+    error: internal error Cannot find suitable emulator for x86_64
+
+    The xen drivers need to be registered before the qemu driver since
+    the qemu driver will return success with a null connection URI.
+    This ordering is safe since the xen drivers will decline when not
+    running the xen kernel.
+
+3, here is the patch, it is not difficult even for me(对我来书也不是很难). 
+diff --git a/daemon/Makefile.am b/daemon/Makefile.am
+index b00fc13..b45349c 100644
+--- a/daemon/Makefile.am
++++ b/daemon/Makefile.am
+@@ -131,6 +131,10 @@ if WITH_LXC
+     libvirtd_LDADD += ../src/libvirt_driver_lxc.la
+ endif
+ 
++if WITH_XEN
++    libvirtd_LDADD += ../src/libvirt_driver_xen.la
++endif
++
+ if WITH_LIBXL
+     libvirtd_LDADD += ../src/libvirt_driver_libxl.la
+ endif
+diff --git a/daemon/libvirtd.c b/daemon/libvirtd.c
+index 352d4fe..6973df6 100644
+--- a/daemon/libvirtd.c
++++ b/daemon/libvirtd.c
+@@ -66,6 +66,9 @@
+ # ifdef WITH_LXC
+ #  include "lxc/lxc_driver.h"
+ # endif
++# ifdef WITH_XEN
++#  include "xen/xen_driver.h"
++# endif
+ # ifdef WITH_LIBXL
+ #  include "libxl/libxl_driver.h"
+ # endif
+@@ -382,6 +385,12 @@ static void daemonInitialize(void)
+ # ifdef WITH_NETCF
+     virDriverLoadModule("interface");
+ # endif
++# ifdef WITH_XEN
++    virDriverLoadModule("xen");
++# endif
++# ifdef WITH_LIBXL
++    virDriverLoadModule("libxl");
++# endif
+ # ifdef WITH_QEMU
+     virDriverLoadModule("qemu");
+ # endif
+@@ -391,12 +400,6 @@ static void daemonInitialize(void)
+ # ifdef WITH_UML
+     virDriverLoadModule("uml");
+ # endif
+-# ifdef WITH_XEN
+-    virDriverLoadModule("xen");
+-# endif
+-# ifdef WITH_LIBXL
+-    virDriverLoadModule("libxl");
+-# endif
+ #else
+ # ifdef WITH_NETWORK
+     networkRegister();
+@@ -416,6 +419,9 @@ static void daemonInitialize(void)
+ # ifdef WITH_NWFILTER
+     nwfilterRegister();
+ # endif
++# ifdef WITH_XEN
++    xenRegister();
++# endif
+ # ifdef WITH_LIBXL
+     libxlRegister();
+ # endif
+
+17:26 2012-09-03
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont15, re-write new patch, cont1; send patch with git send-email
+1, recreate the branch with track to remote master. this is easy to update code to my branch.  
+bamvor@linux-bjrd:libvirt> git branch -f --track libxl_lock_implementation origin/master                                                                           
+Branch libxl_lock_implementation set up to track remote branch master from origin.
+bamvor@linux-bjrd:libvirt> patch -p1 < patch0903
+bamvor@linux-bjrd:libvirt> git add src/libxl/libxl_conf.h src/libxl/libxl_driver.c
+bamvor@linux-bjrd:libvirt> git commit -m "add libxl lock implemetation(NOT COMPILE)"
+[master 14626cb] add libxl lock implemetation(NOT COMPILE)
+ Committer: bamvor jian zhang <bamvor@linux-bjrd.bjz>
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly:
+
+    git config --global user.name "Your Name"
+    git config --global user.email you@example.com
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+ 2 files changed, 467 insertions(+)
+1), add user name and user email. 
+bamvor@linux-bjrd:libvirt> git config --global user.name "Bamvor Jian Zhang"
+bamvor@linux-bjrd:libvirt> git config --global user.email "bjzhang@suse.com"
+bamvor@linux-bjrd:libvirt> git commit --amend --reset-author
+[master 9af44fc] add libxl lock implemetation(NOT COMPILE)
+ 2 files changed, 467 insertions(+)
+
+2, fix configure and build error
+1), modify autogen.sh
+diff --git a/autogen.sh b/autogen.sh
+index 13df98b..f405635 100755
+--- a/autogen.sh
++++ b/autogen.sh
+@@ -60,16 +65,9 @@ bootstrap_hash()
+ # Only run bootstrap from a git checkout, never from a tarball.
+ if test -d .git; then
+     curr_status=.git-module-status
+-    t=$(bootstrap_hash; git diff .gnulib)
+-    if test "$t" = "$(cat $curr_status 2>/dev/null)" \
+-        && test -f "po/Makevars"; then
+-        # good, it's up to date, all we need is autoreconf
+-        autoreconf -if
+-    else
+-        echo running bootstrap$no_git...
+-        ./bootstrap$no_git --bootstrap-sync && bootstrap_hash > $curr_status \
+-            || { echo "Failed to bootstrap, please investigate."; exit 1; }
+-    fi
++     echo running bootstrap$no_git...
++     ./bootstrap$no_git --bootstrap-sync && bootstrap_hash > $curr_status \
++         || { echo "Failed to bootstrap, please investigate."; exit 1; }
+ fi
+ 
+ test -n "$NOCONFIGURE" && exit 0
+2), autogen.sh error messsage: 
+running: AUTOPOINT=true LIBTOOLIZE=true  autoreconf --verbose --install --no-recursive -I gnulib/m4
+autoreconf: Entering directory `.'
+autoreconf: running: true
+autoreconf: running: aclocal -I m4 -I m4 -I m4 -I gnulib/m4
+configure.ac:22: warning: macro `AM_SILENT_RULES' not found in library
+autoreconf: configure.ac: tracing
+autoreconf: running: true --copy
+configure.ac:22: warning: macro `AM_SILENT_RULES' not found in library
+autoreconf: running: /usr/bin/autoconf --include=gnulib/m4
+autoreconf: running: /usr/bin/autoheader --include=gnulib/m4
+autoreconf: running: automake --add-missing --copy --no-force
+configure.ac:2976: required file `gnulib/lib/Makefile.in' not found
+configure.ac:2976: required file `gnulib/tests/Makefile.in' not found
+autoreconf: automake failed with exit status: 1
+./bootstrap: autoreconf failed
+Failed to bootstrap, please investigate.
+3), manaul copy these two files from libvirt-0.9.13/gnulib
+bamvor@linux-bjrd:libvirt> find gnulib/ -name Makefile.in
+gnulib/lib/Makefile.in
+gnulib/tests/Makefile.in
+4), infinite loop: configure->make->configure->make ....
+config.status: creating po/Makefile
+INFO: gnulib update required; running ./autogen.sh first
+make: Warning: File `Makefile' has modification time 24 s in the future
+./autogen.sh
+5), modify cfg.mk
+diff --git a/cfg.mk b/cfg.mk
+index 4cdfd1b..f49051c 100644
+--- a/cfg.mk
++++ b/cfg.mk
+@@ -689,10 +689,6 @@ ifeq (0,$(MAKELEVEL))
+       stamp="$$($(_submodule_hash) $(_curr_status) 2>/dev/null)";	\
+       test "$$stamp" = "$$actual"; echo $$?)
+   _clean_requested = $(filter %clean,$(MAKECMDGOALS))
+-  ifeq (1,$(_update_required)$(_clean_requested))
+-    $(info INFO: gnulib update required; running ./autogen.sh first)
+-Makefile: _autogen
+-  endif
+ endif
+ 
+ # Give credit where due:
+
+6), build error
+libtool: compile:  gcc -std=gnu99 -DHAVE_CONFIG_H -I. -I.. -I../gnulib/lib -I../gnulib/lib -I../include -I../include -I../src/util -DIN_LIBVIRT -I../src/conf -export-dynamic -I/usr/include/libxml2 -Wall -W -Wformat-y2k -Wformat-security -Winit-self -Wmissing-include-dirs -Wunused -Wunknown-pragmas -Wstrict-aliasing -Wshadow -Wpointer-arith -Wbad-function-cast -Wcast-align -Wwrite-strings -Wlogical-op -Wstrict-prototypes -Wold-style-definition -Wmissing-noreturn -Wmissing-format-attribute -Wredundant-decls -Wnested-externs -Winline -Winvalid-pch -Wvolatile-register-var -Wdisabled-optimization -Wattributes -Wcoverage-mismatch -Wdeprecated-declarations -Wdiv-by-zero -Wendif-labels -Wextra -Wformat-contains-nul -Wformat-extra-args -Wformat-zero-length -Wformat=2 -Wmultichar -Wnormalized=nfc -Woverflow -Wpointer-to-int-cast -Wpragmas -Wno-missing-field-initializers -Wno-sign-compare -Wno-format-nonliteral -fstack-protector-all --param=ssp-buffer-size=4 -fexceptions -fasynchronous-unwind-tables -fdiagnostics-show-option -funit-at-a-time -fipa-pure-const -Werror -g -O2 -MT libvirt_driver_la-libvirt.lo -MD -MP -MF .deps/libvirt_driver_la-libvirt.Tpo -c libvirt.c  -fPIC -DPIC -o .libs/libvirt_driver_la-libvirt.o
+cc1: warnings being treated as errors
+libvirt.c: In function 'virDomainGetEmulatorPinInfo':
+libvirt.c:8981: error: logical '&&' with non-zero constant will always evaluate as true [-Wlogical-op]
+make[3]: *** [libvirt_driver_la-libvirt.lo] Error 1
+make[3]: Leaving directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt/src'
+make[2]: *** [all] Error 2
+make[2]: Leaving directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt/src'
+make[1]: *** [all-recursive] Error 1
+make[1]: Leaving directory `/home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/libvirt'
+make: *** [all] Error 2
+(1), remove all the "-Werror" with the command: 
+for f in `find . -name Makefile`; do sed "s/\-Werror//" $f -i ; done
+7), build complete. 
+ 
+4, checking
+1), make check
+result
+=======================================
+1 of 67 tests failed
+(4 tests were not run)
+Please report to libvir-list@redhat.com
+=======================================
+
+fail case: 
+TEST: libvirtdconftest
+      .....!!!!!!...!!!!!!!!!!!!!!!!!!!!!!!!!  39  FAIL
+FAIL: libvirtdconftest
+
+2), make syntax-check
+(1), check author fail
+((1)), message
+check_author_list
+bjzhang@suse.com
+maint.mk: committer(s) not listed in AUTHORS
+((2)), check rull in cfg.mk
+# Give credit where due:
+# Ensure that each commit author email address (possibly mapped via
+# git log's .mailmap) appears in our AUTHORS file.
+((3)), add my name in AUTHORS file
+
+(2), check empty line fail
+((1)), 
+prohibit_empty_lines_at_EOF
+.gitignore
+maint.mk: empty line(s) or no newline at EOF
+((2)), delete empy line in .gitignore
+
+(3), check tailing space fail
+((1)), message
+trailing_blank
+src/libxl/libxl_driver.c:1937:        if (libxlDomainObjEndJob(driver, vm))
+src/libxl/libxl_driver.c:2277:
+src/libxl/libxl_driver.c:2400:        if (libxlDomainObjEndAsyncJob(driver, vm))
+src/libxl/libxl_driver.c:3170:
+maint.mk: found trailing blank(s)
+
+(4), check CVE-2009-4029 fail, I could not understand it. skip.
+vulnerable_makefile_CVE-2009-4029
+./Makefile.in:2023:     -find $(distdir) -type d ! -perm -777 -exec chmod a+rwx {} \; -o \
+maint.mk: the above files are vulnerable; beware of running
+  "make dist*" rules, and upgrade to fixed automake
+  see http://bugzilla.redhat.com/542609 for details
+
+5, it looks like i need to regenerate the patch in the new branch. 
+
+6, (15:24 2012-09-04)
+try send patch
+1), generate patch
+git format-patch base
+Switched to branch 'libxl_lock_impl'
+Your branch is ahead of 'origin/master' by 3 commits.
+bamvor@linux-bjrd:libvirt> git branch
+* libxl_lock_impl
+  libxl_lock_use
+  libxl_migration
+  master
+  migration_lock
+bamvor@linux-bjrd:libvirt> git format-patch master
+0001-add-libxl-lock-implementation-NOT-COMPILE.patch
+0002-update-.gitignore.patch
+0003-add-ATTRIBUTE_UNUSED-for-fixing-compiling-warning.patch
+2), send email
+(1), 
+bamvor@linux-bjrd:libvirt> git send-email 000* --to bjzhang@suse.com
+...
+Need MIME::Base64 and Authen::SASL todo auth at /usr/local/libexec/git-core/git-send-email line 1140.
+(2), 
+sudo zypper in perl-Authen-SASL
+(3), git send email successful after install.
+
+13:37 2012-09-04
+GTD
+0, 11:45-21:20
+
+1, today
+1), 1h eating.
+2), test send email from git. see"17:26 2012-09-03"6.
+3), test libvirt libxl patch. see"17:08 2012-09-04"
+
+16:30 2012-09-04
+embedded, arm board, omap5 wishlist; samsung exynos 5 analysis
+1, omap5 wishlist
+https://groups.google.com/forum/#!topic/pandaboard/mQxpEEDM6Ww
+2, Samsung Announces A15/Mali-T604 Based Exynos 5 Dual
+http://www.anandtech.com/show/6148/samsung-announces-a15malit604-based-exynos-5-dual 
+1), memory interface: 128bit lpddr3 memory. 
+With its A5X Apple introduced the first mobile SoC with a 128-bit wide memory controller. A look at the A5X die reveals four 32-bit LPDDR2 memory partitions. The four memory channels are routed to two LPDDR2 packages each with two 32-bit interfaces (and two DRAM die) per package. Samsung, having manufactured the A5X for Apple, learned from the best. The Exynos 5 Dual is referred to as having a two-port LPDDR3-800 controller delivering 12.8GB/s of memory bandwidth. Samsung isn't specific about the width of each port, but the memory bandwidth figure tells us all we need to know. Each port is either 64-bits wide or the actual LPDDR3 data rate is 1600MHz. If I had to guess I would assume the latter. I don't know that the 32nm Exynos 5 Dual die is big eough to accommodate a 128-bit memory interface (you need to carefully balance IO pins with die size to avoid ballooning your die to accommodate a really wide interface). Either way the Exynos 5 Dual will equal Apple's A5X in terms of memory bandwidth.
+TI's OMAP 5 features a 2x32-bit LPDDR2/DDR3 interface and is currently rated for data rates of up to 1066MHz, although I suspect it wouldn't be too much of a stretch to get DDR3-1600 memory working with the SoC. Qualcomm's Krait based Snapdragon S4 also has a dual-channel LPDDR2 interface, although once again there's no word on what the upper bound will be for supported memory frequencies.
+(1), by vasanthakumar on Saturday, August 11, 2012
+LPDDR3 consumes more power than LPDDR2 ( some people confusingly inter-relate frequency and voltage), But conveniently overlook termination stuff.
+2), arm: cortex-A15; gpu: mali T604; USB 3.0, SATA 3, HDMI 1.4 and eDP 
+
+17:08 2012-09-04
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont16, test new patch on libxl_migration
+1, test patch on libxl_migration
+1), test migration
+2), test all the command i modified. 
+
+2, write test case for libxl api
+libxlDomainCreateWithFlags: start
+libxlDomainCreateXML: create
+libxlDomainSuspend: suspend
+libxlDomainResume: resume
+libxlDomainReboot: reboot
+libxlShutdownFlags: shutdown
+libxlDoDomainSave: save
+libxlDomainRestoreFlags: restore
+libxlDomainCoreDump: dump
+libxlDomainDestroyFlags: destroy
+libxlDomainSetMemoryFlags: setmem
+libxlDomainSetVcpusFlags: setvpus
+libxlDomainModifyDeviceFlags: detach-device, detach-disk, detach-interface, detach-device, detach-disk, detach-interface, update-device, domif-setlink, change-media
+
+17:41 2012-09-04
+"Antoine Ginies <aginies@suse.com>"_email_"QA process and regression tests"_20120904_1654
+hi all,
+i have asked the QA team for more information about virtualisation QA
+process, benchmark process, and it seems there is no specific tests.
+For SP3 and SLE12 it is plan to update Virtualization packages with new
+features, perhaps switch some packages to a new version, and you know
+this changes can have a deep impact on previous installation and usage
+of our tools.
+
+QA process is not our tasks, but we should provide a way to do QA on our
+packages, explain the difference between packages (old and new one),
+change in API, package restructuring, documentation update, new/obsolete
+features, explain how to do the update without breaking an running
+system, etc... 
+
+So i was wondering if you have any documentations, external/internal
+links, or whatever on this subject. All kind of documentation can help:
+releases-notes, TODO list, Changelogs, know bugs, etc.... I know some of
+them are trivial to find, but perhaps there is some other useful which
+are not public.
+
+The idea is to collect them, and create a "standard" QA process for
+virtualization, and keep it up to date for each release/SP. The big
+effort will be done the first time, then few changes and updates will be
+enough.
+
+regards
+
+-- 
+Antoine Giniès
+SUSE Project Manager
+France
+
+20:48 2012-09-04
+opensuse12.2 release; \TODO: check the relative email in order to know the release flow
+1, gold
+2, social media
+http://en.opensuse.org/openSUSE:Social_media_launch_plan#General_approach
+
+08:57 2012-09-05
+GTD
+0, 8:55-17:52
+
+1, today
+1), 8:57 personnal stuff.
+2), 11:13 test libvirt libxl patch. see"11:14 2012-09-05".
+
+10:29 2012-09-05
+shell, bash, getopts, emample
+> cat getopts.sh
+#!/bin/bash
+
+while getopts 'm:r:' OPT; do
+    echo "parameter is $OPT, argument is $OPTARG, next parameter at num $OPTIND"
+done
+
+> ./getopts.sh -m 123 -r asd
+parameter is m, argument is 123, next parameter at num 3
+parameter is r, argument is asd, next parameter at num 5
+
+11:14 2012-09-05
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont17, git stuff; test new patch on libxl_migration
+1, fix branch conflict
+1), if conflict is encountered, fix the conflict then add and commit, e.g.
+bamvor@linux-vm5:~/work/source/virtualization/libvirt/libvirt> git pull
+From .
+ * branch            libxl_lock_use -> FETCH_HEAD
+Auto-merged .gitignore
+CONFLICT (content): Merge conflict in .gitignore
+Automatic merge failed; fix conflicts and then commit the result.
+bamvor@linux-vm5:~/work/source/virtualization/libvirt/libvirt> vim .gitignore
+bamvor@linux-vm5:~/work/source/virtualization/libvirt/libvirt> git add .gitignore
+bamvor@linux-vm5:~/work/source/virtualization/libvirt/libvirt> git commit -m "fix conflict with libxl_lock_use"
+Created commit b166fed: fix conflict with libxl_lock_use
+
+2, update build.sh: add getopts and remte connection checking. 
+#!/bin/bash
+
+while getopts 'm:r:' opt; do
+    case $opt in
+        m)
+            echo "make argument is $OPTARG"
+            make_arg=$OPTARG
+            ;;
+        r)
+            echo "remote is $OPTARG"
+            remote=$OPTARG
+            ;;
+        *)
+            echo "Internal error!"
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z $remote ]; then
+    echo "Error: remote should not empty, exit"
+    exit 1
+fi
+
+ssh $remote 'echo -n'
+if [ $? -ne 0 ]; then
+    echo "Error: remote connection fail, exit"
+    exit 1
+else
+    echo "remote connection successful, start building"
+fi
+
+touch tools/virsh.c
+make $make_arg && sudo make install && ssh $remote 'cd /home/bamvor/work/source/virtualization/libvirt/libvirt && make install'
+
+3, migration test fail. it seems that some update in migraiton_lock is not introduced in libxl_migration branch. \TODO.
+
+16:19 2012-09-05
+maintenance, wireshark, update from 1.4.13 to 1.4.15, cont1
+1, continue to fix bug on sle9: bnc#776083
+1), http://www.wireshark.org/security/wnpa-sec-2012-17.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7603
+http://anonsvn.wireshark.org/viewvc/trunk/epan/dissectors/packet-afp.c?r1=44317&r2=44316&pathrev=44317
+bamvor: 
+(1), there is not similar logic in decode_kauth_acl. 
+(2), the follow changes is useless if i ignore the expert_add_info_format in decode_kauth_acl. 
+hf_afp_acl_entrycount: BASE_HEX to BASE_DEC
+2), http://www.wireshark.org/security/wnpa-sec-2012-20.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7570
+no permisstion.
+(1), get info from svn(wireshark1.8)
+------------------------------------------------------------------------
+r44360 | gerald | 2012-08-09 04:52:36 +0800 (Thu, 09 Aug 2012) | 12 lines
+
+Copy over r44312 from the trunk:
+
+  ------------------------------------------------------------------------
+  r44312 | mmann | 2012-08-07 13:09:59 -0700 (Tue, 07 Aug 2012) | 1 line
+  Changed paths:
+     M /trunk/epan/dissectors/packet-cip.c
+
+  Add a sanity check so we don't unnecessarily allocate memory for a Multiple Serv
+ice Packet message.  Bugfix 7570 (https://bugs.wireshark.org/bugzilla/show_bug.cgi
+?id=7570)
+  ------------------------------------------------------------------------
+
+Update the release notes.
+(2), get revision tree for epan/dissectors/packet-cip.c: "svn log epan/dissectors/packet-cip.c | less", diff changes: 
+svn diff -x -up epan/dissectors/packet-cip.c -r43258:44360 > patch
+not affect in sle9. 
+3), http://www.wireshark.org/security/wnpa-sec-2012-22.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7562
+http://anonsvn.wireshark.org/viewvc/trunk/plugins/ethercat/packet-ecatmb.c?r1=43149&r2=43148&pathrev=43149
+4), http://www.wireshark.org/security/wnpa-sec-2012-23.html
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7573
+no permisstion.
+(1), get info from svn(wireshark1.8)
+------------------------------------------------------------------------
+r44404 | gerald | 2012-08-10 06:12:51 +0800 (Fri, 10 Aug 2012) | 13 lines
+
+Copy over r44403 from the trunk:
+
+  ------------------------------------------------------------------------
+  r44403 | gerald | 2012-08-09 15:04:46 -0700 (Thu, 09 Aug 2012) | 3 lines
+  Changed paths:
+     M /trunk/epan/dissectors/packet-ctdb.c
+
+  Add a check for the number of nodes. Fixes a DoS in bug 7573 reported by
+  Ben Schmidt.
+  ------------------------------------------------------------------------
+
+Update the release notes.
+(2), get patch
+svn diff -x -up epan/dissectors/packet-ctdb.c -r43119:44404 > patch
+
+2, osc sr for CVE-2012-4049
+bamvor@linux-bjrd:wireshark.SUSE_SLE-9-SP3_Update_Teradata_Test> osc sr -m "CVE-2012-4049"
+created request id 21639
+
+3, (13:23 2012-09-06)
+bamvor@linux-bjrd:wireshark.SUSE_SLE-9-SP3_Update_Teradata_Test> osc sr -m "fix wireshark bug bnc#776083"
+There are already following submit request: 21639.
+Supersede the old requests? (y/n/c) y
+created request id 21644
+
+4, bugzilla
+this bug has been fixed, submit request id is as follows: 
+SLE9 SP3 teradata: request id 21644
+SLE10 SP3: request id 21599
+SLE11: request id 21600
+the request of SLE10 SP3 and SLE11 has been acceptted. 
+
+17:36 2012-09-05
+company, sle11 sp3, release flow, kernel update rule
+1, "Thorsten Kukuk <kukuk@suse.de>"_email_"Re: [kernel] kernel plans for SLE11 SP3"_20120905_1522
+> Hi,
+> 
+> I heard yesterday that a decision was supposedly taken to not
+> up-rev the kernel for SP3. Is that indeed the case?
+> 
+> And independently of the answer, is there a reason why once
+> again this discussion is being (or has been) carried out without
+> involving the virtualization team at all? Or maybe the KVM folks
+> know, and just the Xen side of things is left (intentionally?)
+> alone? Or am I not subscribed to the right mailing lists (where
+> if not on this one would such a discussion be held)?
+
+The reason is quite simple: the agreement is that we will
+stay on the kernel version except kernel team requests, 
+after evaluating all FATEs, a kernel version update.
+There was never an agreement that we will now update the
+kernel version with every Service-Pack.
+
+So this means for you, that you should always plan without
+a kernel version update. If you need one, you need convience
+the Labs to request a kernel update.
+
+13:23 2012-09-06
+GTD
+0, 12:40
+
+1, today
+1), 20' lunch.
+2), wireshark bnc776083 submit request. see"16:19 2012-09-05"3.
+3), check the mail: "[devel] SLE11 SP1 overlapping maintenance period ended"
+
+13:43 2012-09-06
+allwinner, A10, MK802, opensuse, arm; power management, AXP209
+1, yestoday MK802 boot opensuse arm fail. after compare the PCB with mele A1000, I found that there is no PMIC in MK802, so cpufreq can not be used. 
+if i disable cpufreq, MK802 should be OK. 
+\TODO update code in order to check PMIC automatically in kernel. 
+
+2, AXP209 PMIC material
+1), datasheet location
+http://hands.com/~lkcl/eoma/allwinner/AXP209%20Datasheet%20v1.0_cn.pdf
+2), about AXP209 and otg power supply
+http://bbs.mumayi.com/thread-310982-1-1.html
+3), dcdc2 for vdd core; dcdc3 for vdd ddr
+
+15:56 2012-09-06
+allwinner, A10, running opensuse on 1G memory device, MK802
+1, my log
+[    0.000000] CPU: VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] Machine: sun4i
+[    0.000000] CONFIG_SUNXI_IGNORE_ATAG_MEM set
+[    0.000000] Total Detected Memory: 1024MB with 2 banks
+[    0.000000] Total Detected Memory: 1024MB with 2 banks
+[    0.000000] 64 MB reserved for MALI
+[    0.000000] Ignoring unrecognised tag 0x00000000
+[    0.000000] Memory Reserved:
+[    0.000000]  SYS  : 0x43000000 - 0x4300ffff  (  64 kB)
+[    0.000000]  VE   : 0x44000000 - 0x48ffffff  (  80 MB)
+[    0.000000]  G2D  : 0x58000000 - 0x58ffffff  (  16 MB)
+[    0.000000]  LCD  : 0x5a000000 - 0x5bffffff  (  32 MB)
+[    0.000000] Memory policy: ECC disabled, Data cache writeback
+[    0.000000] On node 0 totalpages: 245760
+[    0.000000] free_area_init_node: node 0, pgdat c07fb46c, node_mem_map c08b9000
+[    0.000000]   Normal zone: 1280 pages used for memmap
+[    0.000000]   Normal zone: 0 pages reserved
+[    0.000000]   Normal zone: 146176 pages, LIFO batch:31
+[    0.000000]   HighMem zone: 768 pages used for memmap
+[    0.000000]   HighMem zone: 97536 pages, LIFO batch:31
+2, ubuntu log
+[    0.000000] CPU: ARMv7 Processor [413fc082] revision 2 (ARMv7), cr=10c5387d
+[    0.000000] CPU: VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] Machine: sun4i
+[    0.000000] Total Detected Memory: 1024MB with 2 banks
+[    0.000000] Ignoring unrecognised tag 0x00000000
+[    0.000000] Ignoring unrecognised tag 0x00000000
+[    0.000000] Memory Reserved(in bytes):
+[    0.000000]  SYS: 0x43000000, 0x00010000
+[    0.000000]  LCD: 0x5a000000, 0x02000000
+[    0.000000]  G2D: 0x58000000, 0x01000000
+[    0.000000]  VE : 0x44000000, 0x05000000
+[    0.000000]  RAMCONSOLE : 0x5be00000, 0x00200000
+[    0.000000] Memory policy: ECC disabled, Data cache writeback
+[    0.000000] On node 0 totalpages: 245248
+[    0.000000] free_area_init_node: node 0, pgdat c07877b4, node_mem_map c0949000
+[    0.000000]   Normal zone: 1280 pages used for memmap
+[    0.000000]   Normal zone: 0 pages reserved
+[    0.000000]   Normal zone: 145664 pages, LIFO batch:31
+[    0.000000]   HighMem zone: 768 pages used for memmap
+[    0.000000]   HighMem zone: 97536 pages, LIFO batch:31
+
+09:04 2012-09-07
+allwinner, A10, running opensuse on 1G memory device, MK802, cont1
+1, try opensuse from miniand 1G ubuntu image.
+Allwinner/image/ubuntu/MK802/lubuntu-desktop-12.04-3-720p-1GB-miniand
+1), try miniand uboot, kernel, modules with opensuse root
+OK
+2), try miniand uboot with my kernel, modules with opensuse root
+OK. 
+(1), add usbnet DM9601 support. OK
+(2), backup image. 
+linux-bjrd sda3 Allwinner/image/opensuse/of=opensuse_arm_0907_1104_MK802_auto_startxfce4__with_DM9601
+
+14:36 2012-09-07
+GTD
+0, 8:00-18:15
+
+1, today
+1), 40' sync meeting. 
+2), 20' breakfast. 
+3), 1h try opensuse arm on MK802. see"09:04 2012-09-07"
+4), 1h prepare slide for hackweek. doc: log/novell/opensuse_arm/opensuse_allwinner_arm.pdf
+5), 17:43 test and send lock patch to Jim. see"14:38 2012-09-07".
+6), create the git for my work log. see"18:12 2012-09-07"
+
+14:38 2012-09-07
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont18, test new patch on libxl_migration, cont1
+1, plan
+1), test each command I modified.
+2), test each command with virsh list running. 
+3), test each command with virsh migration(cannot test right now because of the migration bug). 
+
+2, update libxlVmStart
+the libxl driver lock shoube remove during libxlVmStart while the virDomainObjPtr should be locked. 
+
+
+    virDomainObjUnlock(vm);
+    libxlDriverUnlock(driver);
+    ret = libxl_domain_suspend(&priv->ctx, &suspinfo, vm->def->id, sockfd);
+    libxlDriverLock(driver);
+    virDomainObjLock(vm);
+
+3, all the function except libxlDomainModifyDeviceFlags test passed invidually without "virsh list". 
+git commit 36aaa9d3a2c7f085014605b1c9a3313f6c979a32
+
+18:12 2012-09-07
+git, getting started
+1, git init
+git add
+git commit
+2, git clone /path/to/git/dir
+git clone usr@/path/to/git/dir 
+

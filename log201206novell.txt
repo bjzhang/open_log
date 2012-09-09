@@ -1,0 +1,3450 @@
+
+12:23 2012-6-1
+company, lunch and learn; Boyang; Openstack, network
+1, nova volume
+http://docs.openstack.org/diablo/openstack-compute/starter/content/Nova-volume-d1e2000.html
+Nova-volume
+ Components
+Nova-volume provides persistent block storage compatible with Amazon's Elastic Block Store. The storage on the instances is non
+ 2. Installation and Configuration
+ persistent in nature and hence any data that you generate and store on the file system on the first disk of the instance gets lost when
+ 3. Image Management
+ the instance is terminated. You will need to use persistent volumes provided by nova-volume if you want any data generatedduring
+ 4. Instance Management
+ the life of the instance to persist after the instance is terminated.
+ 5. Storage Management
+Commands from euca2ools package can be used to manage these volumes.
+
+2, 每个nova computer要有一个nova network.
+
+14:02 2012-06-01
+GTD
+0, 11:00-15:40 16:20-18:30
+
+1, today
+1), 40' talk with Jiaju.
+2), Lunch and learn: Bo Yang, Openstack. see"12:23 2012-6-1"
+3), reading: Chen Duxiu. 
+4), 14:05-15:21 send xen patch. see"14:06 2012-06-01"
+5), 15:25-15:40 16:20-18:30 wireshark bug: check sles9 sp3 code. ref"14:34 2012-05-29". 
+
+14:06 2012-06-01
+virtualization, libvirt, xen, libxlDomainOpenConsole need a new api in xen, patch, resend patch to upstream, cont9, send xen patch
+1, commit message for patch v3
+[v3] libxl: Add API to retrieve domain console tty
+
+This api retrieve domain console from xenstore. With this new api, it is easy 
+to implement "virsh console" command in libvirt libxl driver.
+
+Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+
+Changes since v2:
+ * using ERROR_INVAL instead of ERROR_FAIL in libxl_console_get_tty and 
+   libxl__primary_console_find if need.
+ * remove _out from some value name in libxl_primary_console_exec
+ * add error handler and log message in libxl_console_get_tty. 
+   BUT, NOT update strdup to libxl__strdup. bacause libxl__strdup(0, tty) will 
+   lead to null pointer access in CTX maco.  
+ * add empty line between my comment and other function. 
+
+2, patch location:
+/home/bamvor/log/novell/hypervisor_and_tools/console/20120601_v3
+
+3, (18:16 2012-06-01)
+upstream reply, discuss about the libxl__strdup.
+1), "Ian Campbell <Ian.Campbell@citrix.com>"_email_"Re: [PATCH] [v3] libxl: Add API to retrieve domain console tty"_20120601_1809
+
+On Fri, 2012-06-01 at 08:21 +0100, Bamvor Jian Zhang wrote:
+>  BUT, NOT update strdup to libxl__strdup. bacause libxl__strdup(0,
+> tty) will lead to null pointer access in CTX maco. 
+
+I haven't looked at the rest of the patch you but thought I'd pick up on
+this now since we have at least one existing libxl__strdup(0, ..) in
+        b_info->blkdev_start = libxl__strdup(0, "xvda");
+        
+so we need to decide what to do in general. libxl__strdup wants the CTX
+so it can complain via the logs on malloc failure.
+
+This looks like a problem even with the functions which take a
+"gc_opt" (i.e. where gc==NULL is explicitly supposed to be allowed).
+
+libxl__alloc_failed() could take a gc_opt instead of a ctx and only log
+if it is non-null. It already also logs via stderr, since this is a
+catastrophic failure from which we won't return.
+
+We could also have a process-global libxl_alloc_failure_hook(const char
+*argh) to allow the calling application to have some chance to log via
+its own routines...
+
+IanJ -- you added all this, what do you think?
+
+Ian.
+
+2), (10:52 2012-6-2)
+Ian J 20120601_1838
+> so we need to decide what to do in general. libxl__strdup wants the CTX
+> so it can complain via the logs on malloc failure.
+Damn.  I shouldn't have let you talk me into adding the extra
+ctx-based logging, evidently.  I had forgotten the reason for the lack
+of that.  (Because it was in the next patch.)
+> This looks like a problem even with the functions which take a
+> "gc_opt" (i.e. where gc==NULL is explicitly supposed to be allowed).
+Yes.
+> libxl__alloc_failed() could take a gc_opt instead of a ctx and only log
+> if it is non-null. It already also logs via stderr, since this is a
+> catastrophic failure from which we won't return.
+Yes.
+> We could also have a process-global libxl_alloc_failure_hook(const char
+> *argh) to allow the calling application to have some chance to log via
+> its own routines...
+Yes.
+> IanJ -- you added all this, what do you think?
+I think the above is a good proposal.
+3), Ian C 20120601_1840
+> > IanJ -- you added all this, what do you think?
+> 
+> I think the above is a good proposal.
+Who's going to do it then ;-)
+(FWIW I think libxl_alloc_failure_hook is an optional nice to have)
+4), (15:16 2012-06-05)
+> -int libxl_primary_console_exec(libxl_ctx *ctx, uint32_t domid_vm)
+> +int libxl_console_get_tty(libxl_ctx *ctx, uint32_t domid, int cons_num, 
+> +                          libxl_console_type type, char **path)
+> +{
+> +    GC_INIT(ctx);
+> +    char *dom_path = 0;
+> +    char *tty_path = 0;
+> +    char *tty = 0;
+
+Is the compiler giving false positives about using these without
+initialising them?
+
+Otherwise these initialisations are simply hiding what would a useful
+warning from the compiler.
+
+Or is there some deliberate path by which these can be used without
+first being set to something explicit?
+
+> -    if (stubdomid)
+> -        rc = libxl_console_exec(ctx, stubdomid,
+> -                                STUBDOM_CONSOLE_SERIAL, LIBXL_CONSOLE_TYPE_PV);
+> -    else {
+> +    int rc = 0;
+This initialisation also potentially hides errors, I think. Better to
+explicitly set in the cases where we succeed.
+5), Ian J send the patch
+Bamvor Jian Zhang writes ("[PATCH] [v3] libxl: Add API to retrieve
+domain consol
+>  BUT, NOT update strdup to libxl__strdup. bacause libxl__strdup(0,
+>  tty) will lead to null pointer access in CTX maco.
+So once again, well done for spotting this.
+During some private discussion with Ian Campbell I came up with the
+a proposal to fix it, which I have now implemented in the form of the
+patch below.
+Please comment.
+NB this patch cannot be applied to xen-unstable.hg staging tip.  It
+needs to go in the middle of my save/restore series.  I think this is
+a sufficiently off-the-mainline bug (it will only show up with
+allocation errors) that it's better to avoid introducing any more
+merge conflicts than absolutely necessary.  And doing it this way
+avoids my series ending up with a tip containing callers which wrongly
+pass 0 for gc_opt.
+Thanks,
+Ian.
+
+From: Ian Jackson <ian.jackson@xxxxxxxxxxxxx>
+Subject: [PATCH] libxl: Do not pass NULL as gc_opt; introduce NOGC
+In 25182:6c3345d7e9d9 the practice of passing NULL to gc-using memory
+allocation functions was introduced.  However, the arrangements there
+were not correct as committed, because the error handling and logging
+depends on getting a ctx from the gc - so an allocation error would in
+fact result in libxl dereferencing NULL.
+Instead, provide a special dummy gc in the ctx, called `nogc_gc'.  It
+is marked out specially by having alloc_maxsize==-1, which is
+otherwise invalid.
+Functions which need to actually look into the gc use the new test
+function gc_is_real (whose purpose is mainly clarity of the code) to
+check whether the gc is the dummy one, and do nothing if it is.  And
+we provide a helper macro NOGC which uses the in-scope real gc to find
+the ctx and hence the dummy gc.
+Change all callers which pass 0 or NULL to an allocation function to
+use NOGC or &ctx->nogc_gc, as applicable in the context.
+We add a comment near the definition of LIBXL_INIT_GC pointing out
+that it isn't any more the only place a libxl__gc struct is
+initialised, for the benefit of anyone changing the contents of gc's
+in the future.
+Also, actually document that libxl__ptr_add is legal with ptr==NULL,
+and change a couple of calls not to check for NULL argument.
+Reported-by: Bamvor Jian Zhang <bjzhang@xxxxxxxx>
+Signed-off-by: Ian Jackson <ian.jackson@xxxxxxxxxxxxx>
+Cc: Bamvor Jian Zhang <bjzhang@xxxxxxxx>
+Cc: Ian Campbell <Ian.Campbell@xxxxxxxxxx>
+
+15:22 2012-06-01
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont2, check sle9 sp3 teradata
+1, ref
+https://bugzilla.novell.com/show_bug.cgi?id=763855
+https://bugzilla.novell.com/show_bug.cgi?id=763857
+https://bugzilla.novell.com/show_bug.cgi?id=763859
+
+2, bnc 763857
+1), affect: 
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7138
+http://anonsvn.wireshark.org/viewvc/trunk/epan/dissectors/packet-diameter.c?r1=42200&r2=42199&pathrev=42200&view=patch
+
+--- trunk/epan/dissectors/packet-diameter.c	2012/04/22 20:50:34	42199
++++ trunk/epan/dissectors/packet-diameter.c	2012/04/23 01:36:57	42200
+@@ -180,9 +180,7 @@
+ 
+ static const char* simple_avp(diam_ctx_t*, diam_avp_t*, tvbuff_t*);
+ 
+-static const value_string no_vs[] = {{0, null} };
+-static garray no_garr = { (void*)no_vs, 0 };
+-static diam_vnd_t unknown_vendor = { 0xffffffff, &no_garr, null,  &no_garr };
++static diam_vnd_t unknown_vendor = { 0xffffffff, null, null, null };
+ static diam_vnd_t no_vnd = { 0, null, null, null };
+ static diam_avp_t unknown_avp = {0, &unknown_vendor, simple_avp, simple_avp, -1, -1, null };
+ static garray* all_cmds;
+@@ -1391,6 +1389,11 @@
+ }
+ 
+ 
++/* note: dynamic "value string arrays" (e.g., vs_cmds, vs_avps, ...) are constructed using */
++/*       "zero-terminated" garrays so that they will have the same form as standard        */
++/*       value_string arrays created at compile time. since the last entry in a            */
++/*       value_string array must be {0, null}, we are assuming that null == 0 (hackish).   */
++
+ static int
+ dictionary_load(void)
+ {
+@@ -1418,6 +1421,8 @@
+ 	dictionary.vnds = pe_tree_create(emem_tree_type_red_black,"diameter_vnds");
+ 	dictionary.avps = pe_tree_create(emem_tree_type_red_black,"diameter_avps");
+ 
++	unknown_vendor.vs_cmds = g_array_new(true,true,sizeof(value_string));
++	unknown_vendor.vs_avps = g_array_new(true,true,sizeof(value_string));
+ 	no_vnd.vs_cmds = g_array_new(true,true,sizeof(value_string));
+ 	no_vnd.vs_avps = g_array_new(true,true,sizeof(value_string));
+ 
+3, bnc 763859 not affect sles9 sp3 teradata
+https://bugzilla.novell.com/show_bug.cgi?GoAheadAndLogIn=1&id=763859
+\TODO: i am not so sure about this, because there is no corresponding source code in wireshark 1.xx.  try to find out the changes in 1.4.13 later. 
+
+4, bnc 763855, continue at "11:03 2012-06-04"
+1), https://bugzilla.novell.com/show_bug.cgi?id=763855
+1) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=6805 (802.11)
+2) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7118 (802.3)
+3) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7119 (ANSIMAP)
+4) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7120 (ASF)
+5) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121 (BACAPP)
+6) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122 (HCIEVT)
+7) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7124 (LTP)
+8) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7125 (R3)
+9) https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7123 (IPMI)
+
+15:38 2012-06-02
+GTD
+0, 15:30-18:55
+
+1, today
+1), 10' attachmate vision. see"15:38 2012-06-02".
+2), 5' suse cloud beta1 release"15:40 2012-06-02".
+3), 5' colleague, Vincent Untz join SLES team. see"15:48 2012-06-02"
+4), 40' play with child of colleague. 
+5), learn armv8. see""
+
+15:38 2012-06-02
+company, attachmate, plan, FY13 goals
+1, "Jeff Hawn <Novell.Send-As@Attachmate.com>"_email_"Attachmate Group FY13 Goals"_20120602_0203
+[The Attachmate Group]
+[Jeff Hawn]
+Jeff Hawn
+Chairman and CEO
+Attachmate Group FY13 Goals
+Colleagues,
+Those of you who attended the Business Unit calls<https://innerweb.novell.com/news/articles/?p=1687> in early May heard Bob, Jay, and Nils explain their objectives for the 2013 Fiscal Year. I'm pleased to introduce a set of overarching goals for the Attachmate Group that apply to all of us, regardless of our BU, region, or department.
+These TAG goals incorporate key themes from the BU objectives and build on our Beliefs Model<https://innerweb.novell.com/news/articles/?p=1464> core focus: Customers Matter, People Matter, and Results Matter. To that we've added a "Quality Matters" initiative emphasizing operational excellence.
+The Attachmate Group FY 13 Goals
+Customers Matter
+  *   Create solutions that help our customers succeed
+  *   Innovate where it matters to our customers
+  *   Deliver exceptional service and support
+People Matter
+  *   Create alignment by reaching out to colleagues
+  *   Build informed, collaborative, trusting relationships
+  *   Foster opportunities for professional growth
+Results Matter
+  *   Achieve and overachieve our financial targets
+Quality Matters
+  *   Make operational excellence a competitive differentiator
+  *   Focus on efficiency, effectiveness and flawless execution
+Realize our FY13 Business Unit Objectives<https://innerweb.novell.com/news/articles/?p=1699>
+These TAG goals complement and align with our BU objectives. We'll talk more about these in an all-hands call in June, where we'll also review our FY13 operating plan and Variable Pay Plan. And you'll see these incorporated into the FY13 performance planning process that our HR team will launch soon. You'll find the TAG and BU goals published at innerweb.novell.com/news/articles/?p=1837<https://innerweb.novell.com/news/articles/?p=1837>
+Please use these goals to guide your team projects and day-to-day activities to ensure we're doing the most important work and working the right way.
+[Jeff Hawn signature]
+Jeff Hawn
+Chairman and CEO
+The Attachmate Group
+
+15:40 2012-06-02
+cloud, openstack, suse 
+1, "Christoph Thiel <cthiel@suse.de>"_email_"[devel] [ANNOUNCEMENT] SUSE Cloud 1.0 Beta1 released"_20120601_2240
+Hi everyone,
+We are excited to announce the release of SUSE Cloud 1.0 Beta1! 
+This is the first milestone for our all new SUSE Cloud 1.0 product, that
+will ship later this summer. It includes the OpenStack Essex[1] release,
+the Crowbar[2] deployment framework and all of their dependencies, most
+notably chef[3]. 
+The SUSE Cloud installation manual for Beta1 is available here:
+  http://download.suse.de/install/SLE-11-SP2-CLOUD-Beta1/SUSE-Cloud-Installation-Manual-Beta1.pdf
+The product ISO can be downloaded from:
+  http://download.suse.de/install/SLE-11-SP2-CLOUD-Beta1/SLE-CLOUD-11-SP2-x86_64-Beta1-DVD1.iso
+For further discussion about SUSE Cloud and this beta, please join the
+cloud@suse.de mailing list:
+  https://mailman.suse.de/mailman/listinfo/cloud
+Bugs should be reported to
+  https://bugzilla.novell.com/enter_bug.cgi?product=SUSE%20Cloud%201.0
+We are looking forward to your feedback!
+  Your SUSE Cloud team
+[1] http://openstack.org/
+[2] https://github.com/dellcloudedge/crowbar, https://github.com/suse-cloud/crowbar
+[3] http://wiki.opscode.com/display/chef/Home
+-- 
+Christoph Thiel, Project Manager, SUSE Cloud
+SUSE LINUX Products GmbH, Maxfeldstraße 5, 90409 Nürnberg, Germany
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg)
+
+2, bamvor: i have save it to "/home/bamvor/log/novell/cloud". read it later. 
+
+15:48 2012-06-02
+company, colleague, SUSE Linux Enterprise Applications, Milisav Radmanic, Vincent Untz 
+1, "Milisav Radmanic <radmanic@suse.com>"_email_"[devel] welcome Vincent Untz to the SLES department"_20120601_2104
+Welcome Vincent Untz to the SLES Applications team in the SUSE Linux Enterprise Department!
+From the first of June Vincent will move from the Operations & Services Department to the SUSE Linux Enterprise Department.
+In his new role Vincent will work on the OpenStack upstream project and our Cloud product. This Cloud product is a joint effort of the SUSE Linux Enterprise Department and the Cloud & Systemmanagement department.
+Many of you already know Vincent as an OpenSource advocate and engineer specifically engaged in GNOME and openSUSE. He's our SUSE representative at the GNOME Foundation advisory board and well known for his desktop-related upstream work.
+His professional track record together with his profound understanding of OpenSource development processes will help us to contribute even better to the OpenStack project and to build an excellent Cloud product.
+I am very excited about Vincent joining my team and I'd like to ask you to accompany me in giving him a warm welcome and support him in his new role. Let us all together build the best Linux products for the enterprise in the world!
+Thank you
+Milisav
+-- 
+Milisav Radmanic
+Engineering Manager SUSE Linux Enterprise Applications
+SUSE LINUX Products GmbH,
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg)
+Maxfeldstraße 5
+90409 Nürnberg
+Germany
+
+2, view the video in https://innerweb.novell.com/news/articles/?p=1464
+embrace change
+
+17:05 2012-06-02
+architecture, arm, armv8, 64bit, compiler, gcc, qemu; armv8 feature documents, ARMv8 Technology Preview
+1, "Alexander Graf <agraf@suse.de>"_email_"[opensuse-arm] gcc for aarch64"_20120601_1829
+I just learned from Peter that the AArch64 (armv8) port of gcc went public:
+  http://old.nabble.com/-AARCH64---PATCH-0-3--AArch64-Port-td33907309.html
+This doesn't mean we can compile aarch64 code yet, as we're still lacking binutils to generate binary output from the assembly, but we're getting closer.
+
+2, "Alexander Graf <agraf@suse.de>"_20120601_1848
+> And what is the qemu state for armv8 ?
+The opcode spec isn't out yet (hence the missing binutils), so we wouldn't know what to implement :). However, he just told me that apparently RH and Canonical are also interested in a QEMU port for armv8, so we might be able to get one rolling reasonably timely after the spec gets available.
+
+3, [AARCH64] [PATCH 0/3] AArch64 Port
+http://old.nabble.com/-AARCH64---PATCH-0-3--AArch64-Port-td33907309.html
+1), lots of differents between armv8 and armv7. 
+Nevertheless, we believe that the code is now in a
+state where it is worth starting the process of a public review so
+that we can address the outstanding issues in time for the GCC-4.8
+release. 
+
+Perhaps one of the more contentious design issues that we have made is
+to produce a compiler that is separate from the existing ARM
+compiler.  We spent quite a bit of time debating this internally, but
+concluded that keeping the sources separate was the correct answer:
+- There is no function-call-level compatibility between the AArch64
+   and AArch32 states; interworking can only occur at the exception
+   level boundary (eg between user and kernel states).
+- The A64 instruction set differs from ARM in several significant ways
+    - There are more registers
+    - There is no generalized conditional execution
+    - Register naming is substantially different
+    - There is at best only a similarity between the A64 and the
+      A32 and T32 mnemonics.  In particular, although Neon provides
+      similar functionality, the instructions are very different.
+- The floating-point register architecture in AArch64 differs from
+   that in AArch32.
+- The majority of the existing ARM-specific command-line options do
+   not apply to AArch64; conflating the two would be confusing to users
+- Very little code in the port back-end would be directly shared; and
+   in addition to the maintenance overhead, sharing the code would
+   create a performance overhead at run time.
+- By starting from scratch we've been able to fully utilize some of
+
+2), unfinished work
+There are still a number of components that require some further
+work.  Issues that we are aware of (at a coarse level of granularity)
+include:
+- Improving the arm_neon.h implementation and auto-vectorization
+- Support for languages beyond C, C++ and Fortran
+- Atomic optab support
+- Further memory and TLS models
+- Some of the extended compilation modes, such as profile support,
+   libmudflap, stack-protector.
+Some of these will be much easier to complete if we can openly discuss
+the issues with community experts.
+
+3), SCM source code tree: 
+The sources can be found in SVN in
+     svn://gcc.gnu.org/gcc/branches/ARM/aarch64-branch.
+This branch will track trunk until such time as the code is merged
+into trunk.  Patches to this branch should be tagged "[AARCH64]" and
+must be approved by ARM personnel.
+   the new constructs that GCC now contains. 
+
+4, some reference:
+1), AppliedMicro X-Gene ARMv8 64-bit Server-on-chip shown on FPGA 
+At ARM TechCon 2011 last week, Applied Micro was able to show their ARMv8 platform design already running on an FPGA, to be sent out to their partners in January so they can start working on the software for when they can have working silicon of their ARMv8 64-bit Server-on-chip platform, they say as early as in the 2nd half of 2012 already.
+another ref:  下文说的应该就是上面提到的FPGA版本.
+http://www.ciotimes.com/infrastructure/fwq/63485.html
+解析全球首款64位ARMv8架构的服务器
+2), Applied Micro's X-Gene: The First ARMv8 SoC
+http://www.anandtech.com/show/5098/applied-micros-xgene-the-first-armv8-soc
+(1), Cortex A15 features a 3-issue front end, and moving to 4 implies a generational gap in IPC. Note that we saw a similar transition going from the P6/NetBurst eras to Intel's Conroe (aka Core 2) architecture. 
+(2), APM's performance estimates put a 3GHz X-Gene at roughly half the integer performance of a 2.4GHz Sandy Bridge. The X-Gene advantage however is the ability to integrate many more cores. APM expects a quad-core X-Gene will be able to perform similarly to a dual-core Sandy Bridge Xeon, but with much lower power consumption.
+Update: APM has since pulled the slide it shared with us originally making the comparison to Intel's Sandy Bridge architecture. The implication being that its performance estimates may have been a bit too aggressive, only time will tell...
+(3), about the performance, again
+http://images.anandtech.com/galleries/1532/Screen%20Shot%202011-11-14%20at%201.41.15%20PM.png
+bamvor: according to the figure above. X-gene(32Cores, 32T, 3GHz) gets 1.5X times performance compare with Intel Sandybridge E3(4Cores, 8T).
+T mean thread i guess. 
+So, that means 3GHz x 4 Cores of ARM is equal to xGHz(2.4HGHz to 3.2GHz, no exactly value in figure) of Intel. 
+3), ARM 64位处理器架构ARMV8及芯片图解
+http://server.51cto.com/News-299918.htm 
+
+5, thinking(bamvor). 
+the gcc for arm did not finished for AArch64 according to the 1,2,3 article, that means there is not Linux kernel running on AArch64(with 64bit mode) at least right now. 
+
+6, ARMv8 Technology Preview
+1), www.arm.com/files/downloads/ARMv8_Architecture.pdf
+2), Work on 64-bit architecture started in 2007
+New instruction set (A64)
+Revised exception handling for exceptions in AArch64 state Fewer banked registers and modes
+
+Support for all the same architectural capabilities as in ARMv7
+ TrustZone
+ Virtualization
+Memory translation system based on the ARMv7 LPAE table format
+ LPAE format was designed to be easily extendable to AArch64-bit
+ Up to 48 bits of virtual address from a translation table base register
+3), exception: 
+(1), EL0 Stack Pointer can be used by higher exception levels after exception taken
+(2), 4 exception levels: EL3-EL0
+Forms a privilege hierarchy, EL0 the least privileged
+(3), Vectors distinguish
+Exception type: synchronous, IRQ, FIQ or System Error
+Exception origin (same or lower exception level) and register width
+(4), 
+EL0 App1 App2         App1 App2         Trusted App1 Trusted App2
+EL1 Guest Operating   Guest Operating   Secure World OS
+    System1           System2            |   AArch64:
+EL2 Virtual Machine Monitor (VMM) or     |_    separate privilege levels
+    Hypervisor                           |   AArch32:
+EL3 (TrustZone) Monitor -----------------/     same privilege level
+4), ARM architecture has a Weak memory model
+  Good for energy
+bamvor: what does Weak memory model mean? 
+5), Debug:
+ARM Hardware Debug support falls into 2 basic categories:
+  Self-hosted debug for debug facilities used by the operating system/hypervisor
+  Halting debug for external “target debug” where debug session is run on a separate host
+Self-hosted debug is basically part of the exception model
+  Hardware watchpoints and breakpoints to generate exceptions on debug events
+  Exceptions handled by a debug monitor alongside the OS Kernel or Hypervisor
+  AArch32 self-hosted (“monitor”) capability unchanged from ARMv7
+AArch64 self-hosted debug is strongly integrated into AArch64 exception model
+  Breakpoint and Watchpoint Addresses grow to 64-bits
+  Introduces an explicit hardware single step when debug monitor using AArch64
+Halting Debug view is not backwards compatible with ARMv7
+  External Debugger will need to change - even for fully AArch32 operation
+
+bamvor: "explicit hardware single step in debug monitor in AArch64.
+
+10:38 2012-06-04
+GTD
+0, 10:20-11:50 14:01-14:40 15:47-16:25 17:31-18:27
+
+1, today
+1), 10' check the mail. mailing list. openSUSE arm, see"10:43 2012-06-04". 
+2), 15:47-16:25 wireshark bug: sles9 sp3. see"11:02 2012-06-04".
+3), 14:01-14:20  how to set ip in gPXE. see"14:07 2012-06-04".
+4), 17:31- work report. see"16:33 2012-06-04"
+
+10:43 2012-06-04
+openSUSE, arm, dev tree, [opensuse-arm] armStoneA8: Failed to mount /dev, \TODO
+1, "Andreas Färber<afaerber@suse.de>"_email_"[opensuse-arm] armStoneA8: Failed to mount /dev"
+1), "Alexander Graf <agraf@suse.de>"_email
+> Failed to mount /dev: No such device
+> 
+> Our rootfs definitely contains /dev, so what is this complaining about?
+Please make sure that you have support for tmpfs and (if running w/o initrd) devtmpfs in the kernel :).
+2), bamvor: mount /dev is ok. but still other errors. \TODO: follow up. 
+
+11:02 2012-06-04
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont3, check sle9 sp3 teradata, cont1
+1, bnc 763855
+1), https://bugzilla.novell.com/show_bug.cgi?id=763855
+(1), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=6805 (802.11)
+maybe. read it later. 
+(2), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7118 (802.3)
+fixed by https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=6983, details: 
+http://anonsvn.wireshark.org/viewvc?view=revision&revision=41741
+Author: 	morriss
+Date: 	Fri Mar 23 00:53:58 2012 UTC (2 months, 1 week ago)
+Log Message: 	
+
+From Elliot Parsons via https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=6983 :
+
+In the packet-slowprotocols dissector, there is a bug in the event notification
+dissector. The code uses the incorrect value to skip past the data of a vendor
+specific notification.
+
+The attached patch file sets the offset to increment by raw_octet, which
+corrects the issue.
+
+--- trunk/epan/dissectors/packet-slowprotocols.c	2012/03/22 15:36:37	41740
++++ trunk/epan/dissectors/packet-slowprotocols.c	2012/03/23 00:53:58	41741
+@@ -2539,7 +2539,7 @@
+ 
+                 offset += OAMPDU_EVENT_LENGTH_SZ;
+ 
+-                offset += (raw_word-2);
++                offset += (raw_octet-2);
+                 break;
+             }
+             default:
+(3), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7119 (ANSIMAP)
+http://anonsvn.wireshark.org/viewvc?view=revision&revision=42129
+Author: 	etxrab
+Date: 	Wed Apr 18 11:12:15 2012 UTC (6 weeks, 4 days ago)
+Log Message: 	
+
+Fix Bug 7119 ANSI MAP infinite loop.
+Make conumed a guint16 to avoid wrapping add expert items.
+
+--- trunk/epan/dissectors/packet-ansi_a.c	2012/04/18 10:11:33	42128
++++ trunk/epan/dissectors/packet-ansi_a.c	2012/04/18 11:12:15	42129
+@@ -46,6 +46,7 @@
+ #include <epan/tap.h>
+ #include <epan/strutil.h>
+ #include <epan/emem.h>
++#include <epan/expert.h>
+ 
+ #include "packet-rtp.h"
+ #include "packet-bssap.h"
+@@ -919,6 +920,16 @@
+         curr_offset += ((edc_len) - (edc_max_len)); \
+     }
+ 
++#define EXTRANEOUS_DATA_CHECK_EXPERT(edc_len, edc_max_len) \
++    if ((edc_len) > (edc_max_len)) \
++    { \
++        proto_item *expert_item; \
++        expert_item = proto_tree_add_text(tree, tvb, \
++            curr_offset, (edc_len) - (edc_max_len), "Extraneous Data, dissector bug or later version spec(report to wireshark.org)"); \
++        expert_add_info_format(pinfo, expert_item, PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)"); \
++        curr_offset += ((edc_len) - (edc_max_len)); \
++    }
++
+ #define SHORT_DATA_CHECK(sdc_len, sdc_min_len) \
+     if ((sdc_len) < (sdc_min_len)) \
+     { \
+@@ -2734,7 +2745,7 @@
+ elem_cell_id_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint32 offset, guint len, gchar *add_string, int string_len)
+ {
+     guint8      oct;
+-    guint8      consumed;
++    guint16     consumed;
+     guint8      num_cells;
+     guint32     curr_offset;
+     proto_item  *item = NULL;
+notes: lots of change consumed from guint8 to guint16. 
+
+(4), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7120 (ASF)
+"Scheduled for the 1.6 branch.  Not present in the 1.4 branch."
+So, not found in 1.0.xx
+
+(5), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121 (BACAPP)
+Author: 	etxrab
+Date: 	Mon Apr 23 07:28:53 2012 UTC (6 weeks ago)
+Log Message: 	
+From Evan Huus:
+Another case where a ridiculously large length field was causing a loop counter
+to overflow. Had to pass pinfo all over the place to add expert info, but the
+meat of the fix is on line 4960 (after patch applied).
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121
+
+bamvor: there are lots of chages, check it carefully. 
+http://anonsvn.wireshark.org/viewvc/trunk/epan/dissectors/packet-bacapp.c?r1=42203&r2=42202&pathrev=42203
+
+(6), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122 (HCIEVT)
+Author: 	etxrab
+Date: 	Tue Apr 17 21:09:10 2012 UTC (6 weeks, 5 days ago)
+Log Message: 	
+From Evan Huus: We were using guint8s as loop counters based on field lengths, and they were overflowing/wrapping falsely. Making them guint16s fixes the problem. Bug 7122 -HCIEVT infinite loop https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122
+http://anonsvn.wireshark.org/viewvc/trunk/epan/dissectors/packet-bthci_evt.c?r1=42114&r2=42113&pathrev=42114
+
+--- trunk/epan/dissectors/packet-bthci_evt.c	2012/04/17 21:00:56	42113
++++ trunk/epan/dissectors/packet-bthci_evt.c	2012/04/17 21:09:10	42114
+@@ -1269,7 +1269,8 @@
+ static int
+ dissect_bthci_evt_ext_inquiry_response(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree)
+ {
+-    guint8      i, j, length, type;
++    guint8      length, type;
++    guint16     i, j;
+     proto_item *ti_eir         = NULL;
+     proto_item *ti_eir_subtree = NULL;
+
+(7), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7124 (LTP)
+no affect. 
+there is no packet-ltp.c file and no dissect_report_segment function in other files. So, skip this bug. 
+
+(8), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7125 (R3)
+no affect. 
+no "packet-assa_r3.c file"
+no ddissect_r3_cmd_manageuser and issect_r3_cmd_manageuser in other file. 
+
+(9), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7123 (IPMI)
+"*** This bug has been marked as a duplicate of bug 7120 ***", So no effect. 
+
+14:07 2012-06-04
+bootloader, PXE, gPXE
+1, ref: http://etherboot.org/wiki/scripting
+1), network
+ifopen net0
+set net0/ip 10.0.2.15
+set net0/netmask 255.255.255.0
+set net0/gateway 10.0.2.2
+set net0/dns 10.0.2.3
+2), kernel and initrd
+kernel http://147.2.207.240/repo/sles-9-sp3-x86_64/boot/loader/linux
+initrd http://147.2.207.240/repo/sles-9-sp3-x86_64/boot/loader/initrd
+boot
+
+14:39 2012-06-04
+suse, sles, try to install sles9 sp3
+1, dhcp fail.
+2, try to download the whole sles9 sp3 x86_64 from 147.2.207.240
+ref: http://www.vivizu.com/2012/04/18/linux%E4%B8%8Bwget%E5%A6%82%E4%BD%95%E4%B8%8B%E8%BD%BD%E6%95%B4%E4%B8%AA%E7%BD%91%E7%AB%99%EF%BC%8C%E6%88%96%E8%80%85%E7%89%B9%E5%AE%9A%E7%9B%AE%E5%BD%95%E5%85%A8%E9%83%A8%E6%96%87%E4%BB%B6/
+wget -r -np http://147.2.207.240/repo/sles-9-sp3-x86_64/
+  -c,  --continue                resume getting a partially-downloaded file.
+  -r,  --recursive          specify recursive download.
+  -np, --no-parent                 don't ascend to the parent directory.
+
+16:34 2012-06-04
+work report - week 22
+[devel-server] work report - week 22
+[green]
+1, wireshark maintanance: 
+1), update to wireshark 1.4.13 and send quest for sle10 sp3, sle 11.
+2), check patch for sle9 sp3 teradata: 
+there are 11 patches for 3 security updates this time.  several patches need to update.
+
+2, xen patch for retrieving domain console tty
+send patch v3 this week. 
+
+3, libvirt libxl migration. 
+learn libvirt qemu migration and lock relative code for libvirt libxl lock patch. 
+
+17:51 2012-06-04
+colleague, sles team, Mu Lei
+1, ""Joey Zheng" <jzheng@suse.com>"_email_"[devel-server] Welcome Mu Lei on board"_20120614_1748
+Hi all,
+
+I would like to introduce Mr. Mu Lei, who is based in Shenzhen, joined China Desktop team today, as a developer for the SLED product. He will be reporting to me.
+Before joining SUSE, Mu Lei is a GNU hacker/member and active contributor of GNU/Guile, maintainer of GNU/XmlAT. He is familiar with OpenSouce communities and know how to get problem solved by taking advantage of communities, which I believe will be good and benefit for all of our SLE products. 
+Welcome Mu Lei on board and wish his great success in SUSE!
+
+Thanks,
+Joey Zheng
+
+2, about guile
+http://www.gnu.org/software/guile/
+What is Guile? What can it do for you?
+Guile is the GNU Ubiquitous Intelligent Language for Extensions, the official extension language for the GNU operating system.
+Guile is a library designed to help programmers create flexible applications. Using Guile in an application allows the application's functionality to be extended by users or other programmers with plug-ins, modules, or scripts. Guile provides what might be described as "practical software freedom," making it possible for users to customize an application to meet their needs without digging into the application's internals.
+There is a long list of proven applications that employ extension languages. Successful and long-lived examples of Free Software projects that use Guile are TeXmacs, LilyPond, and GnuCash. 
+bamvor: guile is a dialect of lisp. I know it from Mu Lei. 
+
+3, about XmlAT
+http://www.gnu.org/software/xmlat/
+GNU Xmlat is derived from GNU SXML which used to be a tool to define and implement at same time a markup language.
+Given a document containing user defined tags and their definition a new document is produced.
+The new document is generated replacing the tags with their definition (it is possible to associate functions to tags).
+Xmlat aims to be the new XML tools for GNU operating system. Besides the old feature of GNU SXML, it will contains more new features for convenient XML processing, and provides conversion between XML and other format like json/YAML etc. 
+
+18:08 2012-06-04
+doc, GNU, Hurd, GNU Hurd项目详解 
+http://www.ha97.com/3188.html
+
+18:15 2012-06-04
+Linux, arm, distribution
+1, http://www.arm.com/community/software-enablement/linux.php
+ARM works with the open source community and Linux distributions as well as commercial Linux partners including:
+    Canonical (Ubuntu on ARM)
+    Debian
+    Fedora
+    Linaro
+    Maemo  
+    Movial
+    OpenSUSE 
+    Thundersoft
+    Tizen 
+
+2, patch for Linux kernel 3.3
+http://www.arm.com/community/software-enablement/linux.php
+
+11:02 2012-06-05
+mailing list, openSUSE, arm
+1, "Alexander Graf <agraf@suse.de>"_email_"[opensuse-arm] openSUSE 12.2 Beta for ARM"_20120605_0100
+Hi Dirk and Coolo,
+Since Adrian is on FTO this week, this one goes to the 2 of you :).
+I would really like to see us publish a sort-of-working 12.2 Beta for ARM. Now that the official 12.2 beta is out, all we need to do is take the current state of openSUSE:Factory:ARM, branch that off into its own OBS project and freeze it, right?
+That would allow the build to settle down for said release, so we can have images for people outside to test and get eager to have a working 12.2 on ARM eventually!
+Alex
+
+2, "Dirk Müller<dmueller@suse.com>"_reply
+On Monday 04 June 2012, Alexander Graf wrote:
+>
+> I would really like to see us publish a sort-of-working 12.2 Beta for ARM.
+> Now that the official 12.2 beta is out, all we need to do is take the
+> current state of openSUSE:Factory:ARM, branch that off into its own OBS
+> project and freeze it, right?
+Hi,
+I think we missed the current beta, and need to head for the next one. there
+are too many packages still failing to build (see the internal build, which is
+a bit further than the external one), so we really need to solve these issues
+first.
+do you prefer to freeze to avoid the current breakages in factory to unfold in
+:ARM? I think we have a list of known problems that we can work on already
+without caring about the occassional Factory breakage..
+> That would allow the build to settle down for said release, so we can have
+> images for people outside to test and get eager to have a working 12.2 on
+> ARM eventually!
+thats something we should discuss with coolo in person (how when ..)
+Greetings,
+Dirk
+ 
+3, "Alexander Graf <agraf@suse.de>"_reply
+> I think we missed the current beta, and need to head for the next one. there
+> are too many packages still failing to build (see the internal build, which is
+> a bit further than the external one), so we really need to solve these issues
+> first.
+Hrm. I don't think it's too much of an issue if 10% of the distro don't build yet, as long as we have a consistent repository out.
+> do you prefer to freeze to avoid the current breakages in factory to unfold in
+> :ARM? I think we have a list of known problems that we can work on already
+> without caring about the occassional Factory breakage..
+I'd mostly like to have a state I can point people to and say "if you want to develop something cool based on opensuse for arm, use this repo which is known-good". Right now, we have a factory repo that is in a terrible state, as it's halfway armv7l, halfway armv7hl, and only gets published every other month, because we never manage to keep up with the builds.
+>
+>> That would allow the build to settle down for said release, so we can have
+>> images for people outside to test and get eager to have a working 12.2 on
+>> ARM eventually!
+>
+> thats something we should discuss with coolo in person (how when ..)
+Sure, but please let's share whatever we discussed, so we actually end up being an open project ;)
+
+4, "Stephan Kulow <coolo@suse.de>"_reply_to_"Alexander Graf"
+> That would allow the build to settle down for said release, so we can have images for people outside to test and get eager to have a working 12.2 on ARM eventually!
+> 
+Actually freezing to get images out is something I asked from Adrian
+too. Because right now perl is new and you won't be able to install
+anything useful. So arm missed another chance.
+
+11:52 2012-06-05
+mailing list, work report, xen pv usb
+1, ""Kirk Allan" <kallan@suse.com>"_email_"[devel-server] work report - week 22 kallan"
+- Started looking into Xen pv USB.  Found that the front end Linux driver is in the pv guest but not the fv guest.  Able to get the front end and backend driver loaded, but was unable to get the usb mouse to work in the guest.  Need to learn how to build the Linux driver for the guest.
+
+13:30 2012-06-05
+presentation, IDC; economy; cloud computing
+1, "Alan Gao"_email_"IDC Directions 2012 Presentation"_20120605_1200
+store in: /home/bamvor/work/documents/marketing/IDC_2012
+there are some useful data and analysis for the market of China. 
+
+13:46 2012-06-05
+GTD
+0, 10:10-16:30 17:59
+
+1, today
+1), install sles11 sp2 on a different partition(create through shrink existance partition). 
+2), 30' read xen mailing list. see"15:31 2012-06-05" 
+3), xen patch v4. see"15:49 2012-06-05". 
+
+15:17 2012-06-05
+software, skill, vmware, boot virtual machine fail: "Reason: Failed to lock the file"
+1, "VMware启动报错Reason: Failed to lock the file的解决方法"
+http://www.verytjw.cn/article/10-05-29/158.html
+症状：  启动VMware虚拟机的时候出现了Cannot open the disk '*.vmdk' or one of the snapshot disks it depends on.Reason: Failed to lock the file.的错误。
+
+解决办法一：
+ 1、在VMware该虚拟机路径下的所有.lck文件和文件夹下删除或迁移至其它目录，一般就可以解决了。
+ 2、如果再次启动VMware的Windows Vista系统失败，尝试右键虚拟机出错的系统->Settings->Hardware->Hard Disk->Utilities->Map->映射虚拟硬盘到Z:\
+ 3、断开虚拟硬盘，重新加载，启动。系统就可以正常启动了
+此方法本人没用过，有网友说不能解决问题，如果有遇到Cannot open the disk '*.vmdk' or one of the snapshot disks it depends on.Reason: Failed to lock the file错误的朋友不妨也试一下。如果您成功了，请给我们留言，以便我们进行更好的技术交流。
+解决办法二：
+使用记事本打开*.VMX文件上加上一行代码disk.locking = "FALSE"，重新启动该虚拟机。
+使用方法二，问题得到解决，重新启动VMware正常启动，不会再出现Cannot open the disk '*.vmdk' or one of the snapshot disks it depends on.Reason: Failed to lock the file.错误。
+希望此文能帮到大家。
+2, I delete the all *.lck in the vm directory. it work for me. 
+
+15:31 2012-06-05
+mailing list, xen-devel, arm
+1, "Ian Campbell", "[Xen-devel] [PATCH 0/38] arm: boot a dom1 to "Calibrating delay loop" then hang"
+http://lists.xen.org/archives/html/xen-devel/2012-06/msg00099.html
+Sorry for the enormous dump, I seem to have accumulated a boat load of
+stuff in my tree...
+
+There's actually a bunch of random guff in here, but the main bit is
+xc_dom code in libxc to build a dom1 from a ARM zImage and enough
+hypervisor support to run it to:
+...
+        [    0.000000] Console: colour dummy device 80x30
+        [    0.191514] Calibrating delay loop... 
+
+(Stefano is looking at virtual timers and interrupt injection as we
+speak...)
+There is some non-ARM impact, specifically teaching xc_dom_* about the
+idea that RAM might not start at 0x000 (on the ARM platform we are
+similar too RAM starts at 0x80000000), I think that makes at least the
+libxc parts non-4.2 material at this stage.
+There are also three (more than usually) hacky patches needed to get to
+this point:
+        HACK: arm: initial XENMAPSPACE_gmfn_foreign
+        HACK: add simple xcbuild
+        HACK: arm: disable hypercall continuations.
+which I'm not proposing but I'm including because it doesn't work
+without them ;-).
+The rest I think is fair game for acking and cherry-picking the
+acceptable bits for commit.
+I still need to cleanup the Linux side of this, that probably won't
+happen today and these patches probably don't work without those
+changes... FWIW the XENMAPSPACE_gmfn_foreign thing is an even bigger
+hack there. Ultimately we should do the same thing as hybrid x86
+Ian.
+
+2, Ian C reply to himself
+Re: [Xen-devel] [PATCH 0/38] arm: boot a dom1 to "Calibrating delay loop" then hang
+http://lists.xen.org/archives/html/xen-devel/2012-06/msg00143.html
+
+On Fri, 2012-06-01 at 16:38 +0100, Ian Campbell wrote:
+> I still need to cleanup the Linux side of this, that probably won't
+> happen today and these patches probably don't work without those
+> changes... 
+I've pushed my dev tree, which contains several hacks and lots of stuff
+to cleanup, to:
+        git://xenbits.xen.org/people/ianc/linux-2.6.git devel/arm-hacks
+It's based of David's[0] vexpress-dt branch + Stefanos's[1]
+vexpress-dt-privcmd branch.
+It contains a backport of some old version of Mark Zynger's arch_timers
+stuff, a very hacky XENMAPSPACE_gmfn_foreign, loads of mess around UARTs
+and device tree stuff which make no sense etc etc.
+At the moment you need CONFIG_ARM_ARCH_TIMER=y for domU and =n for
+dom0... 
+Nobody look too closely ;-)
+Ian.
+[0] git://xenbits.xen.org/people/dvrabel/linux.git
+[1] git://xenbits.xen.org/people/sstabellini/linux-pvhvm.git
+
+3, bamvor: Ian C and David work on arm Versatile Express board. 
+I got the error "hang at Calibrating" in qemu omap3 emulator. 
+
+15:49 2012-06-05
+virtualization, libvirt, xen, libxlDomainOpenConsole need a new api in xen, patch, resend patch to upstream, cont10, write and send patch v4
+1, update
+1), delete the initialized value, check the compile warnings and errors about this. 
+2), still use strdup, because i need return the buffer to libvirt. explain it in comments. 
+2, (10:22 2012-06-06)
+modify the code.
+3, final commit log:
+[v4] libxl: Add API to retrieve domain console tty
+
+This api retrieve domain console from xenstore. With this new api, it is easy
+to implement "virsh console" command in libvirt libxl driver.
+
+Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+
+Changes since v3:
+ * leave variable uninitialised at the top of the function in order to avoid 
+   hiding the useful compiler warnings. 
+ * using libxl__strdup instead of strdup in libxl_console_get_tty. benefit from
+   the error handling behavior.
+   libxl__strdup(0, tty) should be replaced by libxl__strdup(NOGC, tty) after 
+   Ian Jackson commit his patch: "Do not pass NULL as gc_opt; introduce NOGC."
+
+09:55 2012-06-06
+GTD
+0, 9:30-12:20 13:13-15:35 15:54-18:44 20:35-22:20
+
+1, today
+1), check the mail. glad to know "suse manager", see"09:55 2012-06-06"
+2), 10:22-12:20 13:13-14:38 send xen patch. see"15:49 2012-06-05"2.
+3), 14:38-15:13 fix dns failed. see"14:50 2012-06-06"
+4), 15:54-18:44 20:36-21:10 wireshark. see"15:55 2012-06-06"
+5), copy a hvm vm for colleague. 
+6), 21:11-22:13 xen patch: upstream accept it finally. send email to Jim for thanks. see"21:11 2012-06-06". 
+
+09:55 2012-06-06
+software, skill, productivity, suse manager, suse studio
+1, ""Duncan Mac-Vicar P." <dmacvicar@suse.de>"_email_"[devel] SUSE Manager 1.7 Beta 2 is available !"
+Just follow the QuickStart guide at
+http://www.suse.com/documentation/suse_manager/pdfdoc/book_susemanager_quickstart/book_susemanager_quickstart.pdf
+Further documentation is availabe at
+http://www.suse.com/documentation/suse_manager/
+The most notable change is the inclusion of a full featured,
+production ready, open source database. The need for an external
+Oracle database has been dropped.
+Download it now from:
+http://beta.suse.com/private/SUSE-Manager-beta/beta2/Server-1.7
+http://beta.suse.com/private/SUSE-Manager-beta/beta2/Proxy-1.7
+For getting started, please refer to the attached release notes.
+***
+*** You will need _at least_ 4 GB of main memory and ~20GB of disk space
+*** to get the Beta installed
+***
+2, details, bamvor
+1), i download the quick start guide to "/home/bamvor/work/documents/book_susemanager_quickstart.pdf": 
+SUSE® Manager is a server solution for providing updates, patches, and security fixes for single SUSE® Linux Enterprise or Red Hat Enterprise Linux clients. It comes with a set of tools and a Web-based user interface for management tasks. 
+2), it looks like the customer can deploy and manage the suse studio image through suse manager. 
+SUSE Studio Images in SUSE Manager
+http://suse.gansert.net/?p=387
+Manage your appliances using SUSE Manager
+http://blog.susestudio.com/2012/02/manage-your-appliances-using-suse.html  
+
+10:16 2012-06-06
+mailing list, work report; virtualization, libvirt
+1, bruce mail
+identified reset issue wrt libvirt part of bnc#753313, handed off to Jim F.
+2, bamvor: the bug link: https://bugzilla.novell.com/show_bug.cgi?id=753313
+it about the virtio, pci passthrough. 
+
+11:52 2012-06-06
+SCM, mercurial, install hg 1.2.1
+1, fail
+make all && su -c "make install" && hg version
+gcc -pthread -fno-strict-aliasing -DNDEBUG -fmessage-length=0 -O2 -Wall -D_FORTIFY_SOURCE=2 -fstack-protector -funwind-tables -fasynchronous-unwind-tables -g -fwrapv -fPIC -I/usr/include/python2.6 -c mercurial/base85.c -o build/temp.linux-x86_64-2.6/mercurial/base85.o                                                    
+mercurial/base85.c:12:20: error: Python.h: No such file or directory            
+mercurial/base85.c: In function ‘b85prep’:                                      
+mercurial/base85.c:23: warning: implicit declaration of function ‘memset’       
+mercurial/base85.c:23: warning: incompatible implicit declaration of built-in function ‘memset’                                                                 
+mercurial/base85.c: At top level:                                               
+mercurial/base85.c:28: error: expected ‘=’, ‘,’, ‘;’, ‘asm’ or ‘__attribute__’ before ‘*’ token                                                                 
+mercurial/base85.c:76: error: expected ‘=’, ‘,’, ‘;’, ‘asm’ or ‘__attribute__’ before ‘*’ token                                                                 
+mercurial/base85.c:141: error: expected ‘=’, ‘,’, ‘;’, ‘asm’ or ‘__attribute__’ before ‘methods’                                                                
+mercurial/base85.c:150: error: expected ‘=’, ‘,’, ‘;’, ‘asm’ or ‘__attribute__’ before ‘initbase85’                                                             
+error: command 'gcc' failed with exit status 1 
+2, missing python-devel
+# rpm -qf /usr/include/python2.6/Python.h
+python-devel-2.6.0-8.12.2
+3, fail again
+ImportError: No module named osutil
+4, try mercurial 2.1
+make local 
+add mercurial 2.1 path to PATH
+
+14:50 2012-06-06
+network, linux, fix dns fail
+dns fail and vm in this computer can not get the ipaddress from company dhcp(147.2.207.240). 
+1, /etc/resolv.conf
+search bjz lab.bej.apac.novell.com
+nameserver 147.2.207.157
+nameserver 147.2.207.55
+nameserver 147.2.136.75
+nameserver 137.65.1.1
+nameserver 8.8.8.8
+2, change to 
+search bjz lab.bej.apac.novell.com
+nameserver 147.2.212.56
+nameserver 147.2.136.75
+nameserver 137.65.1.1
+nameserver 8.8.8.8
+nameserver 147.2.207.157
+nameserver 147.2.207.55
+
+notes: 147.2.212.56 is the dns server of Dongmao. DNS will fail if the first reachable nameserver do not response.
+3, after update "/etc/resolv.conf", dns is ok. virsh xen(xenlight not test) is ok. 
+
+15:05 2012-06-06
+computer, network, hostname and ip address
+147.2.207.55    linux-vm4
+147.2.207.119   linux-vm5
+147.2.207.144   linux-vm6
+147.2.207.77    linux-work
+147.2.207.67    linux-qs3x
+147.2.207.189   linux-xen-hvm10
+147.2.207.35    linux-14
+
+15:55 2012-06-06
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont4, make patch for sle9 sp3 teradata
+1, bug list
+1), bnc 763857
+https://bugzilla.novell.com/show_bug.cgi?id=763857
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7138
+2), bnc 763855
+https://bugzilla.novell.com/show_bug.cgi?id=763855
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7118 (802.3)
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7119 (ANSIMAP)
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121 (BACAPP)
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122 (HCIEVT)
+
+2, bnc 763857
+https://bugzilla.novell.com/show_bug.cgi?id=763857
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7138
+done
+
+3, bnc 764855
+https://bugzilla.novell.com/show_bug.cgi?id=763855
+1), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7118 (802.3)
+done
+2), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7119 (ANSIMAP)
+done, except the following not found
+@@ -11623,7 +11634,7 @@
+         }
+     }
+ 
+-    EXTRANEOUS_DATA_CHECK(curr_len, 0);
++    EXTRANEOUS_DATA_CHECK_EXPERT(curr_len, 0);
+ }
+3), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121 (BACAPP)
+losts of changes here. But patch failed because of location changes a lot. 
+try other way or i need to write a script to handle it. 
+
+17:54 2012-06-06
+CN70010
+
+21:11 2012-06-06
+virtualization, libvirt, xen, libxlDomainOpenConsole need a new api in xen, patch, resend patch to upstream, cont11, say thanks; record the location of my first patch
+1, "Ian Campbell <Ian.Campbell@citrix.com>"_email_20120606_1947
+On Wed, 2012-06-06 at 08:09 +0100, Bamvor Jian Zhang wrote:
+> This api retrieve domain console from xenstore. With this new api, it is easy
+> to implement "virsh console" command in libvirt libxl driver.
+> 
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+
+Applied, thanks.
+
+I trimmed a bunch of trailing whitespace, please watch out next time.
+
+> Changes since v3:
+>  * leave variable uninitialised at the top of the function in order to avoid
+>     hiding the useful compiler warnings.
+>  * using libxl__strdup instead of strdup in libxl_console_get_tty. benefit from
+>    the error handling behavior.
+>    libxl__strdup(0, tty) should be replaced by libxl__strdup(NOGC, tty) after
+>    Ian Jackson commit his patch: "Do not pass NULL as gc_opt; introduce NOGC."
+
+I introduced a "#define NOGC NULL" in an earlier patch so we don't miss
+converting any new instances to the proper scheme when Ian J's patch
+goes in. I did s/0/NOGC on this patch as I applied it. Hope that's ok.
+
+> 
+
+2, reply to Ian C and Ian J.
+> I trimmed a bunch of trailing whitespace, please watch out next time.
+thanks, I will do more check before send patch. 
+
+thanks both of you. gave lots of comment and suggestion for my patch. It means a lot to me. 
+
+bamvor
+
+3, have a look at my patch
+1), my patch is exist in staging branch, 
+http://xenbits.xen.org/hg/staging/xen-unstable.hg/
+after test it will push to 
+http://xenbits.xen.org/hg/xen-unstable.hg/
+2), the link to my patch: 
+http://xenbits.xen.org/hg/staging/xen-unstable.hg/rev/123628d31cf2
+
+4, reply to Jim("Re: libxl work"_20120509_1132)
+hi, Jim 
+
+my xen patch is acked by Ian C.  i can not finish this patch without you help. 
+Although it just a simple patch, it gave me a basic knowledge about how to write a patch and how to communicate with upstream. 
+
+thanks. 
+
+PS: the wireshark package i maintained need 6 or 7 patch to backport. I still need one or two day to finish it. So, maybe there is no more progress about the migration and lock patch for libvirt. i will try to do it faster next week. 
+
+bamvor
+
+21:47 2012-06-06
+virtualization, xen-unstable, arm, Cortex-A15
+read some code in "xen/arch/arm". from the Rules.mk and comment in head.S, I can know that these code is written for Cortex-A15 which support hardware virtualization extension. 
+So, Xen arm for pv in another SCM.
+
+11:21 2012-06-07
+GTD
+0, 11:00-12:25 13:30-18:52 20:56-22:25
+
+1, today
+1), install opensuse12.1 on vmware. 
+2), 11:44-12:25 15:54-18:40 20:56-22:15 wireshark. see"11:44 2012-06-07".
+3), 1h try linux usb sound card. sles11 sp2 support ok. see"12:07 2012-06-07"
+4), help GuanLiang write a script for file rename. 
+
+11:44 2012-06-07
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont5, make patch for sle9 sp3 teradata, cont1, bnc 764855
+1), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121 (BACAPP)
+write script to handle it. finish extract function replacement list. 
+
+7:57 2012-6-8
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting
+0, next sync move to 29/6, skip the Dragon Boat Festival(端午节).
+
+1, CHINA: 86-400-810-4782 or 10800-712-1665
+GERMANY: 49-69-2222-4872 or 0800-664-4253
+USA: 1-517-466-2153 or 866-692-4541
+Passcode: 4899663
+2, new member: Raine Curtis
+join last friday. 
+
+introduce China colleague to him. 
+
+3, cobi
+1), test iscsi case. 
+2), reproduce. 
+
+4, bamvor
+wireshark bug.
+libvirt qemu migration study, study the lock.
+xen patch for retrieving domain console tty. patch v3, patch v4.
+
+Boyang: which type of lock? 
+
+5, Bo Yang
+1), qemu brige helper(libvirt). basically it works. 
+2), tap. mark we tap???
+3), openstack.
+(1), learn architecture. 
+(2), database. mysql. 
+
+8:36 2012-6-8
+GTD
+1, today
+1), 8:00-8:36 virt sync meeting. see"7:57 2012-6-8".
+2), ask for leave. for house funding.  
+
+11:27 2012-06-11
+GTD
+0, 11:20-11:50 13:47-16:43 17:20-18:40 21:30-
+
+1, today
+1), 5' check the important mail. 
+2), 11:30-11:50 13:47-16:43 wireshark. script for bug. see"11:32 2012-06-11"
+3), 16:43-17:20 nap
+4), 17:20-18:21 check the mail.  
+5), 18:21-18:35 work report. see"18:21 2012-06-11".
+
+11:32 2012-06-11
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont6, make patch for sle9 sp3 teradata, cont2, bnc 764855, cont1
+1, plan
+1), continue to modify the script for bnc764855. 
+2), if can not finish patch today, try build. 
+2, script for bnc764855
+1), script: 由于贪婪匹配造成错误.
+希望用if ( $line =~ /(f[^\ ^\(]*).*\(\ *([^\,]*)/ ) {
+匹配: 
+return fSignedTag (tvb, pinfo, tree, offset, val_to_str(tag_no, BACnetFileStartOption, "unknown option"));
+到$1=fSignedTag, $2=tvb. 
+但是由于中间的".*", 得到了
+$1="fSignedTag (tvb, pinfo, tree, offset, val_to_str"
+$2=tag_no
+改为"if ( $line =~ /(f[^\ ^\(]*)\ *\(\ *([^\,]*)/ ) {"即可.
+2), output file after 4 script processed: 
+--- trunk/epan/dissectors/packet-bacapp.c	2012/04/23 07:19:22	42202
++++ trunk/epan/dissectors/packet-bacapp.c	2012/04/23 07:28:53	42203
+@@ -4843,8 +4865,8 @@
+ }
+ 
+ static guint
+-    guint8 *tag_no, guint8* tag_info, guint32 *lvt)
+fTagHeaderTree (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
++    guint offset, guint8 *tag_no, guint8* tag_info, guint32 *lvt)
+ {
+     guint8      tag;
+     guint8      value;
+@@ -4934,20 +4956,30 @@
+         } else
+             proto_tree_add_uint(subtree, hf_bacapp_tag_lvt,
+                 tvb, lvt_offset, lvt_len, *lvt);
++
+        if (*lvt > tvb_length(tvb)) {
++            expert_add_info_format(pinfo, ti, PI_MALFORMED, PI_ERROR,
++                    "LVT length too long: %d > %d", *lvt,
++                    tvb_length(tvb));
++            *lvt = 1;
++        }
+     }
+    else if (*lvt > tvb_length(tvb))
++        /* We can't add expert info, but we can still stop infinite loops */
++        *lvt = 1;
+ 
+     return tag_len;
+ }
+ 
+ static guint
+fTagHeader (tvbuff_t *tvb, packet_info *pinfo, guint offset, guint8 *tag_no, guint8* tag_info,
+     guint32 *lvt)
+ {
+    return fTagHeaderTree (tvb, pinfo, NULL, offset, tag_no, tag_info, lvt);
+ }
+ 
+ static guint
+fNullTag (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, const gchar *label)
+ {
+     guint8      tag_no, tag_info;
+     guint32     lvt;
+@@ -5017,18 +5049,18 @@
+     proto_item *ti;
+     proto_tree *subtree;
+ 
+    tag_len = fTagHeader (tvb, pinfo, offset, &tag_no, &tag_info, &lvt);
+     ti = proto_tree_add_item(tree, hf, tvb, offset+tag_len, lvt, ENC_BIG_ENDIAN);
+     subtree = proto_item_add_subtree(ti, ett_bacapp_tag);
+    fTagHeaderTree (tvb, pinfo, subtree, offset, &tag_no, &tag_info, &lvt);
+ 
+     return offset+tag_len+lvt;
+ }
+ 
+ /* set split_val to zero when not needed */
+ static guint
+-    const value_string *vs, guint32 split_val)
+fEnumeratedTagSplit (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
++    guint offset, const gchar *label, const value_string *vs, guint32 split_val)
+ {
+     guint32     val = 0;
+     guint8      tag_no, tag_info;
+@@ -5052,20 +5084,20 @@
+             "%s - %u octets (enumeration)", label, lvt);
+     }
+     subtree = proto_item_add_subtree(ti, ett_bacapp_tag);
+    fTagHeaderTree (tvb, pinfo, subtree, offset, &tag_no, &tag_info, &lvt);
+ 
+     return offset+tag_len+lvt;
+ }
+ 
+ static guint
+-        const value_string *vs)
+fEnumeratedTag (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
++        guint offset, const gchar *label, const value_string *vs)
+ {
+    return fEnumeratedTagSplit (tvb, pinfo, tree, offset, label, vs, 0);
+ }
+ 
+ static guint
+fSignedTag (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset, const gchar *label)
+ {
+     gint64      val = 0;
+     guint8      tag_no, tag_info;
+3), after delete the useless line, only "@@ -4934,20 +4956,30 @@" is need to patch by hand. 
+4), (21:43 2012-6-11)
+but the patch is incomplete, shoud be like this: 
++
++        if (*lvt > tvb_length(tvb)) {
++            expert_add_info_format(pinfo, ti, PI_MALFORMED, PI_ERROR,
++                    "LVT length too long: %d > %d", *lvt,
++                    tvb_length(tvb));
++            *lvt = 1;
++        }
+     }
++    else if (*lvt > tvb_length(tvb))
++        /* We can't add expert info, but we can still stop infinite loops */
++        *lvt = 1;
+5), update the script 03. remove patch line according to function_list. 
+\TODO: not finished. 
+
+2, \TODO
+2), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122 (HCIEVT)
+
+3, bnc 763855
+read it later: 
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=6805
+
+17:52 2012-06-11
+marketing, suse, microsoft, Windows Azure; cloud, virtual machine
+1, "Alan Gao"_email_"SUSE PRESS RELEASE - SUSE Linux Enterprise Server Now Available on Windows Azure"_20120607_2225
+SUSE Linux Enterprise Server Now Available on Windows Azure
+Nuremberg, Germany June 7, 2012 SUSE today announced that SUSE® Linux Enterprise Server and openSUSE® can now be run in Windows Azure Virtual Machines. Additionally, through SUSE Studio™, customers can rapidly develop cloud-ready applications and automatically launch them on Windows Azure, virtually eliminating inefficient manual processes.  
+Visit www.suse.com/suse-linux-enterprise-server-on-azure to learn how to build and deploy SUSE Linux Enterprise Server or openSUSE workloads onto Windows Azure. 
+2, Windows Azure
+1), link
+http://www.windowsazure.com/en-us/home/features/overview/
+http://zh.wikipedia.org/wiki/Windows_Azure
+2), a cloud platform, support windows server and several Linux distribution including SUSE, ubuntu, OpenLogic.
+ref: 
+http://www.windowsazure.com/en-us/manage/linux/
+http://www.windowsazure.com/en-us/manage/linux/other-resources/partner-solutions/
+
+3, microsoft voice
+"Kristin Kinan(SUSE News)"_email_"SUSE Linux Enterprise Server and openSUSE now on Windows Azure"_20120607_2300
+As  announced today <http://www.suse.com/company/press/2012/6/suse-linux-enterprise-server-now-available-on-windows-azure.html>
+( http://www.suse.com/company/press/2012/6/suse-linux-enterprise-server-now-available-on-windows-azure.html) , June 7th, SUSE Linux Enterprise Server and openSUSE can now run on Windows Azure Virtual Machines (Microsoft's cloud platform).
+What does this mean?
+Customers will be able to confidently run test or production Linux workloads on Windows Azure paying only for the hours they use. 
+Through SUSE Studio, customers can rapidly develop cloud-ready applications and automatically launch them on Windows Azure
+
+General Availability is targeted for end of summer
+Questions? Contact:
+ Kristin Kinan  <mailto:kkinan@suse.com>
+( mailto:kkinan@suse.com) (Microsoft Global Alliance Director): +1.716.533.9816
+ Frank Rego <mailto:frego@suse.com>
+( mailto:frego@suse.com)  (Business Development Manager): +1.503.869.5106
+ Joanne Harris <mailto:jharris@suse.com>
+( mailto:jharris@suse.com)  (ISV Marketing Manager): +1.425.505.7699
+ Amie Johnson <mailto:amie@suse.com>
+( mailto:amie@suse.com)  (PR Manager): +1.801.861.2893
+
+More Information and Sales Tools:
+ Datasheet: SUSE Linux Enterprise Server on Windows Azure (doc) <http://www.novell.com/site/docrep/2012/06/SUSE_Linux_Enterprise_Server_on_Windows_Azure_ds>
+( http://www.novell.com/site/docrep/2012/06/SUSE_Linux_Enterprise_Server_on_Windows_Azure_ds) 
+ Presentation: SUSE Linux Enterprise Server on Windows Azure (PPT) <http://www.novell.com/site/docrep/2012/06/SUSE_Linux_Enterprise_Linux_Server_on_Windows_Azure>
+( http://www.novell.com/site/docrep/2012/06/SUSE_Linux_Enterprise_Linux_Server_on_Windows_Azure) 
+ Press Release <http://www.suse.com/company/press/2012/6/suse-linux-enterprise-server-now-available-on-windows-azure.html>
+( http://www.suse.com/company/press/2012/6/suse-linux-enterprise-server-now-available-on-windows-azure.html) 
+www.suse.com/suse-linux-enterprise-server-on-azure
+www.moreinterop.com (Alliance website)
+www.windowsazure.com 
+
+Kristin Kinan
+Microsoft Global Alliance Director
+SUSE
+
+SUSECon 2012
+Register at suse.com/susecon
+Follow us at twitter.com/susecon
+
+18:10 2012-06-11
+company, brand, suse brand update
+1, "Michael Miller(SUSE News)"_email_"SUSE Brand Update"_20120608_0648
+Email Signature
+https://innerweb.novell.com/infocentral/sigs/suse_sig.html#
+Presentation Template
+https://innerweb.novell.com/site/docrep/2012/05/New_SUSE_Templates
+Letterhead, Envelope and Document Templates
+https://innerweb.novell.com/site/docrep/2012/05/New_SUSE_Templates
+Updated SUSE Overview Presentation
+https://innerweb.novell.com/site/docrep/2012/01/SUSE_Overview
+Business Cards
+https://prod11i.innerweb.novell.com/OA_HTML/OA.jsp?OAFunc=OAHOMEPAGE&amp;akRegionApplicationId=0&amp;navRespId=50743&amp;navRespAppId=178&amp;navSecGrpId=0&amp;transactionid=53227862&amp;oapc=19&amp;oas=QBTXNz2FMd2aCi5bKcGHsg..
+
+18:21 2012-06-11
+work report - week 23
+[devel-server] work report - week 23
+[green]
+1, wireshark maintanance: 
+1), check patch for sle9 sp3 teradata: 
+there are 5 patch from wiresshark upstream need to back port to sle9 sp3 teradata: 
+(1), bnc 763857
+https://bugzilla.novell.com/show_bug.cgi?id=763857
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7138
+(2), bnc 763855
+https://bugzilla.novell.com/show_bug.cgi?id=763855
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7118 (802.3)
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7119 (ANSIMAP)
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7121 (BACAPP)
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122 (HCIEVT)
+2), there are hundred lines mismatch while backport for bug 7121. wirte a script to apply it. 
+
+2, xen patch for retrieving domain console tty
+send patch v4 this week. xen upstream finally accept this patch. thanks to Jim Fehlig and Jiaju Zhang. 
+
+3, US/China virtualization sync up meeting. 
+
+10:36 2012-06-12
+GTD
+0, 10:20-11:43 12:32-17:50 
+
+1, today
+1), 20' check the mail. 
+2), 11:30-11:43 12:32-16:17 wireshark. script for bug. see"11:32 2012-06-11"
+3), 16:34-17:46 logAssistant, jump. see"16:36 2012-06-12".
+
+11:08 2012-06-12
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont7, make patch for sle9 sp3 teradata, cont3, bnc 764855, cont2
+1, plan
+1), continue to modify the script for bnc764855. 
+2), if can not finish patch today, try build. 
+3), https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=7122 (HCIEVT)
+4), bnc 763855
+read it later: 
+https://bugs.wireshark.org/bugzilla/show_bug.cgi?id=6805
+
+2, script for bnc764855
+1), update the script 03. remove patch line according to function_list. 
+(1), found a weird problem: 
+this two kind of block got the different result after "last" execute. 
+while(conditon) {
+    while (my $f=<@func>) {
+        #do something
+        last;
+    }
+}
+
+while(condition) {
+    foreach my $f (@func) {
+        #do something
+        last;
+    }
+}
+第一种情况下, last执行后, $f不会从@func里面从头取, 还是会接着last前的数据取.
+第二种情况才是我预期的: last之后, $f从$func的开始取元素. 不知道是为什么. 
+"$f=<@func>"是从别的地方抄来的. 
+
+2), summary for script
+(1), 1_extract_function_list/README
+perl wireshark-1.0.16-CVE-2012-2392-7121__script_01_function_extract__v1__get_function_list_from_match_between_patch_file_and_source_file -p wireshark-1.0.16-CVE-2012-2392-7121.patch  -s packet-bacapp.c
+(2), 2_replace_function_proto_definition_call/README
+perl wireshark-1.0.16-CVE-2012-2392-7121__script_02_function_definition_replace -f function_list -s packet-bacapp.c
+result is packet-bacapp.c.result
+(3), 3_remove__used_patch_line/README
+perl wireshark-1.0.16-CVE-2012-2392-7121__script_03_patch_check -p wireshark-1.0.16-CVE-2012-2392-7121.patch -f function_list
+result is wireshark-1.0.16-CVE-2012-2392-7121.patch.result
+(4), 4_remove__useless_patch_section/README
+perl wireshark-1.0.16-CVE-2012-2392-7121__script_04_patch__strip -p wireshark-1.0.16-CVE-2012-2392-7121.patch.result
+result is wireshark-1.0.16-CVE-2012-2392-7121.patch.result.result
+
+delete the incomplete patch line in wireshark-1.0.16-CVE-2012-2392-7121.patch.result.result by hand, and rename to wireshark-1.0.16-CVE-2012-2392-7121.patch.result.result.result.by_hand
+
+perl wireshark-1.0.16-CVE-2012-2392-7121__script_04_patch__strip -p wireshark-1.0.16-CVE-2012-2392-7121.patch.result.result.by_hand
+result is wireshark-1.0.16-CVE-2012-2392-7121.patch.result.result.by_hand.result
+(5), final patch need finish by hand
+--- trunk/epan/dissectors/packet-bacapp.c	2012/04/23 07:19:22	42202
++++ trunk/epan/dissectors/packet-bacapp.c	2012/04/23 07:28:53	42203
+@@ -4934,20 +4956,30 @@
+         } else
+             proto_tree_add_uint(subtree, hf_bacapp_tag_lvt,
+                 tvb, lvt_offset, lvt_len, *lvt);
++
++        if (*lvt > tvb_length(tvb)) {
++            expert_add_info_format(pinfo, ti, PI_MALFORMED, PI_ERROR,
++                    "LVT length too long: %d > %d", *lvt,
++                    tvb_length(tvb));
++            *lvt = 1;
++        }
+     }
++    else if (*lvt > tvb_length(tvb))
++        /* We can't add expert info, but we can still stop infinite loops */
++        *lvt = 1;
+ 
+     return tag_len;
+ }
+(6), generate the patch file(diff -up orig new)
+(7), update wireshark.changes
+- Fix bnc#763855: wireshark: Dos/Infinite loop when in IEEE 802.11 dissector
+  * wireshark-1.0.16-CVE-2012-2392-7118.patch (802.3)
+  * wireshark-1.0.16-CVE-2012-2392-7119.patch (ANSIMAP)
+  * wireshark-1.0.16-CVE-2012-2392-7121.patch (BACAPP)
+  * wireshark-1.0.16-CVE-2012-2392-7122.patch (HCIEVT)
+- Fix bnc#763857: wireshark: Null pointer dereference in ANSI A dissector
+  * wireshark-1.0.16-CVE-2012-2393.patch
+ 
+16:36 2012-06-12
+work, productivity, logAssistant, perl, vim, jump to section
+1, jump to the section. like ctags "Ctrl+]"
+1), ctags using tag file for jump.
+":help tag": 
+The lines in the tags file must have one of these three formats:
+1.  {tagname}		{TAB} {tagfile} {TAB} {tagaddress}
+2.  {tagfile}:{tagname} {TAB} {tagfile} {TAB} {tagaddress}
+3.  {tagname}		{TAB} {tagfile} {TAB} {tagaddress} {term} {field} ..
+
+but not work: 
+16:34 2012-06-12    log201206novell.txt /^16:34\ 2012\-06\-12
+
+2), learn the ~/.vim/plugin/taglist.vim and ~/.vim/plugin/cscope_maps.vim
+(1), expand: 
+":echo expand("<cword>")" get a c word from current position. 
+			<cword>		word under the cursor
+			<cWORD>		WORD under the cursor
+cword got "16" while cWORD got 16:34 for "16:34 2012-06-12". 
+(2), setpos and getpos
+:echo getpos(".")
+result is "[0, 1503, 1, 0]". 
+set the cursor position
+:call setpos(".", [0, 1503, 4, 0])
+(3), the first version, not consider the different data time format. not consider the "(", ")" around the date and time. 
+"temp for logAssistant
+command! -nargs=0 -bar LogAssistant call s:LogAssistant_jump()
+function! s:LogAssistant_jump()
+    let hour = expand("<cword>")
+"    echo hour
+    let pos = getpos(".")
+    let pos[2] = pos[2] + 3
+    call setpos(".", pos)
+    let min = expand("<cword>")
+"    echo min
+    let pos[2] = pos[2] + 3
+    call setpos(".", pos)
+    let year = expand("<cword>")
+"    echo year
+    let pos[2] = pos[2] + 5
+    call setpos(".", pos)
+    let mon = expand("<cword>")
+"    echo mon
+    let pos[2] = pos[2] + 3
+    call setpos(".", pos)
+    let date = expand("<cword>")
+"    echo date
+    let str = "^".hour.":".min." ".year."-".mon."-".date
+"    echo str
+    call search(str)
+
+endfunction
+
+10:55 2012-06-13
+company, colleague, virtualization, Raine Curtis
+""Jason Douglas" <jdouglas@suse.com>"_email_"[devel-server] Welcome Raine Curtis"_20120613_0825
+cc: Olaf Kirch, Ralf Flaxa
+Hello everyone,
+
+Please join with me in welcoming Raine Curtis to the SUSE family. When Raine joined the company on June 1st, he brought with him a wealth of experience. Over the course of his career, Raine has lent his talents to a variety of companies, including Novell (1999-2004), Hewlett-Packard, VMware, and Adaptive Computing, a Provo-based company specializing in management software for HPC and Cloud environments.
+
+Although Raine will report to me as a member of the virtualization team, he was primarily hired to work on field-driven custom engineering projects. These projects will require knowledge in a variety of subjects, some of which may fall within your area of expertise. With this in mind, I invite each of you to reach out to Raine, either in person or by email, and to volunteer your wealth of knowledge to assist him in his new assignment.
+
+Sincerely,
+
+Jason Douglas
+Manager, Virtualization Team
+
+11:22 2012-06-13
+mailing list, work report, SUSE Cloud, ceph/RADOS
+Jiaju Zhang work report week 23
+- ceph/RADOS backporting status
+  - As we would include RADOS in SUSE Cloud, what we cared about is 
+    rbd, net/ceph. There would be 2 directions when we do the backport:
+    1) backport all the patches from upstream, which include rbd, 
+       net/ceph and fs/ceph.
+    2) backport the patches which are only for rbd and net/ceph, since 
+       we don't need fs/ceph in SUSE Cloud.
+    What we have done for now is the direction 1), this is because:
+    1) some patches touched net/ceph and fs/ceph together, we should
+       split the patches and select the needed part manually. And the
+       splited mainline patches seems not to be easy to maintain in the 
+       future.
+    2) All patches are 199, rbd and net/ceph related patches are 124,
+       it seems not to save us much time.
+    3) cephfs may still needed according to Danny's comments.
+
+  - Patches have been sent to kernel@suse.de for review. All the 
+    comments so far are related to cephfs, not related to RBD. So it 
+    seems the RBD part is ready;)
+
+11:32 2012-06-13
+software, skill, use filterdiff for patch, extract patch with filename
+
+11:38 2012-06-13
+GTD
+0, 10:30-12:30 13:24-17:10
+
+1, today
+1), 30' check the mail. 
+2), 11:40-12:30 wireshark bug build. see"11:40 2012-06-13"
+3), 13:24-13:56 personal stuff.
+4), logAssistant jump script. see"14:10 2012-06-13". 
+
+11:40 2012-06-13
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont7, build sle9 sp3 teradata
+1, ref: "/home/bamvor/work/documents/doc_from_ChunYanLIU/autobuild"
+2, ssh fail
+bamvor@linux-bjrd:log> ssh bjzhang@wotan.suse.de
+ssh: connect to host wotan.suse.de port 22: Connection refused
+
+14:10 2012-06-13
+work, productivity, logAssistant, perl, vim, jump to section, cont1
+1, plan
+1), support full format "xx:xx xxxx:xx:xx"x-x)-(x)-((x))
+
+2, learn vim function
+1), getline
+    let line = getline(".")
+    echo line
+2), string function
+(1), stridx({haystack}, {needle} [, {start}])
+		The result is a Number, which gives the byte index in
+		{haystack} of the first occurrence of the String {needle}.
+		If {start} is specified, the search starts at index {start}.
+		This can be used to find a second match: >
+			:let comma1 = stridx(line, ",")
+			:let comma2 = stridx(line, ",", comma1 + 1)
+		The search is done case-sensitive.
+		For pattern searches use |match()|.
+examples: 
+:echo stridx("An Example", "Example")
+got 3
+:echo stridx("see\"12:56 2012-05-06\"3-1\)", "\"")
+got 3
+(2), strpart
+:echo strpart("abcdefg", 3, 2)
+got "de"
+3), loop statement: while
+    let start = 0 
+    while  start < 20
+        let start +=5
+        echo start
+    endwhile
+4), matchstr.
+ref: regex in vimscript
+http://stackoverflow.com/questions/3135322/regex-in-vimscript
+bamvor: 
+:echo matchstr("see\"11:33 2012-07-01\"", "[0-9][0-9]*\:[0-9][0-9]*")
+got "11:33".  
+
+3, got all the date time and section. 
+add search commands. next day. 
+
+14:30 2012-06-13
+software, skill, editor, vim
+1, gf: search and open the file under current cursor. 
+
+17:59 2012-06-13
+virtualization, xen, reading book: Xen and the Art of Virtualization, 3 DETAILED DESIGN, 3.3 Subsystem Virtualization, 3.3.3 Virtual address translation
+a guest OS will typically execute a TLB ﬂush before the ﬁrst use of a new mapping: this ensures that any cached translation is invalidated. Hence, com- mitting pending updates immediately before a TLB ﬂush usually sufﬁces for correctness. However, some guest OSes elide the ﬂush when it is certain that no stale entry exists in the TLB. In this case it is possible that the ﬁrst attempted use of the new mapping will cause a page-not-present fault. Hence the guest OS fault handler must check for outstanding updates; if any are found then they are ﬂushed and the faulting instruction is retried.
+
+10:48 2012-06-14
+GTD
+0, 10:30-11:51 12:38-18:30
+
+1, today
+1), 11:00-11:50 personnal stuff: kindergarten. 
+2), 12:40-13:31 14:08-14:29 wireshark: apply for account. see"12:57 2012-06-14"
+3), 30' nap. 
+4), 14:00-14:08 check the mail. 
+5), 14:30-18:03 logAssistant jump script. see"14:30 2012-06-14"
+6), 18:10-18:24 qemu migration. see"18:19 2012-06-14"
+
+12:57 2012-06-14
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont8, apply for abuild account; reply comment for bugs. 
+1, ssh to macintyre.suse.de, need install cisco vpn.
+ref: "08:44 2012-03-03"
+
+2, apply account
+1), email_to_"Lars Vogdt"_"apply for abuild account" 
+Hi, Lars
+
+This is Bamvor Jian Zhang from SUSE Server Team In Beijing.  I need to build sle9 sp3 package on abuild server. Do I have the account for abuild service? 
+I try to ssh to "macintyre.suse.de" with my email address(bjzhang) and password, but failed. 
+
+I need to build sle9 sp3 wireshark package for security bugs(bnc #763855, #763857) which dead line is 15 Jun. 
+It is very important for me. 
+
+Thanks
+
+Bamvor
+2), Lars's reply
+I'm currently traveling with limited access - so in case of problems please do not hesitate to contact rd-adm@suse.de.  
+You need a "developer account" (NIS account) to login to RD-ADM servers. This is a separate account beside your "innerweb account".  
+And for macintyre.suse.de, I guess you need to login to our "jumphost" login.suse.de with your developer account first as macintyre is located in a special network.  
+I hope this helps already.  
+With kind regards,
+Lars
+3), reply to Lars
+4), contact rd-adm@suse.de
+cc: Lars Vogdt, Jiaju Zhang
+Title: apply for "developer account" (NIS account) for RD-ADM servers
+
+This is Bamvor Jian Zhang from SUSE Server Team In Beijing. I need to build sle9 sp3 package on abuild server. So I need a developer account in order to access macintyre.suse.de or other machine for building. 
+
+There are several updates for security bugs(bnc #763855, #763857) of wireshark which dead line is 15 Jun. 
+
+Thanks
+
+Bamvor
+5), rd-adm automatically replay. 
+""RD-ADM via Ticket System" <rd-adm@suse.de>"_email_"[RT-ADM #28034] AutoReply: apply for "developer account" (NIS account) for RD-ADM servers"_20120614_1434
+Greetings from the OPS-Services Team,
+This message has been automatically generated in response to the
+creation of a trouble ticket regarding:
+	"apply for "developer account" (NIS account) for RD-ADM servers", 
+a summary of which appears below.
+There is no need to reply to this message right now.  Your ticket has been
+assigned an ID of [RT-ADM #28034].
+Please include the string:
+         [RT-ADM #28034]
+in the subject line of all future correspondence about this issue. To do so, 
+you may reply to this message.
+                        The OPS-Services Team ( rd-adm@suse.de )
+6), (11:48 2012-06-15)
+"Simon Crute <scrute@novell.com>"_email_"Re: NIS account for BJZhang"_20120614_1922
+I've created the NIS account for Bamvor Jian Zhang
+Initial password is  10377bjz
+
+Closing ticket. 
+> Hi
+> 
+> Please create a new NIS account for the following new employee:
+> Name         : BJZhang
+> Full Name    : Bamvor Jian Zhang
+> Email        : BJZhang@suse.com
+> Mobile       : 13810498791
+> Location     : Room 3603, Beijing Fortune Plaza, Office Tower A:No. 7
+> Dongsanhuan Zhonglu: Department   : Server
+> Manager      : JJZhang
+> Costcenter   : CN70010
+> Workforce ID : 96088
+> LDAP ID      : cn=BJZhang,o=Novell
+> User ID      : bjzhang
+> 
+> Homeserver   : loki.suse.de
+> Mailserver   : Novell
+> 
+> Thanks in advance and kind regards,
+> Lars
+>  
+-- 
+Simon Crute
+ACS Information Technologies UK Ltd. A Xerox company
+working on behalf of Novell IS&T 
++44-(0)-1344-326-313 (desk)
++44-(0)-7733-106041 (mobile)
+SameTime: Simon Crute
+GWIM: scrute.novell 
+MSN: simon.crute@snccc.co.uk
+"11:48 2012-06-15"
+3, reply on bugzilla
+1), reply for 763857
+(In reply to comment #5)
+> The SWAMPID for this issue is 47634.
+> This issue was rated as moderate.
+> Please submit fixed packages until 2012-06-15.
+> When done, please reassign the bug to security-team@suse.de.
+> Patchinfo will be handled by security team.
+pls see my commnet in bng #763855. 
+2), reply for 763855
+I've updated our package to 1.4.13 for sle10 and sles11. And the request has been accepted in 4 Jun. 
+I also add 5 patches for sle9 sp3 teradata(one for bug #763857, four for bug #763855). 
+But I do not have the account for abuild server. I have sent email to "Lars Vogdt" to apply the account. I will try to build wireshark on sles9 sp3 immediately after got the account. 
+Maybe it still take some time for getting the account and building the package. I am not sure I could finish the sle9 sp3 teradata in time. 
+3), reply for bug #763859
+I have finish my work and the request has been accepted in 4 Jun. 
+This bug do not affect the sle9 sp3 teradata. 
+
+14:30 2012-06-14
+work, productivity, logAssistant, perl, vim, jump to section, cont2, finish; vim, script example, function reference, command referece
+1, plan
+1), support full format "xx:xx xxxx:xx:xx"x-x)-(x)-((x))
+2), add shortcut(Ctrl+a is prefered. <C-a>).
+2, support full format
+1), i am wrong yesterday. 
+to check the string is empty or not, should not use: "if string"
+use "if strlen(string)" is correct. I am not sure what is best way to do it. maybe not strlen. 
+2), function with arguments(from ":help function): 
+To return more than one value, return a |List|: 
+  :function Compute(n1, n2)
+  :  if a:n2 == 0
+  :    return ["fail", 0]
+  :  endif
+  :  return ["ok", a:n1 / a:n2]
+  :endfunction
+
+3, successfull in the current file. 
+try to open another file. 
+1), support jump to logYearMonAppend.txt
+Year: 20xx
+Mon: xx
+Append: anything. 
+(1), get shell output through "system"
+system({expr} [, {input}]): Get the output of the shell command {expr}.
+I know this function from http://tech.groups.yahoo.com/group/vim/message/21611
+(2), close current buffer
+:[N]bd[elete][!]                        *:bd* *:bdel* *:bdelete* *E516*
+:bd[elete][!] [N]
+                Unload buffer [N] (default: current buffer) and delete it from
+                the buffer list.
+I know this command from http://stackoverflow.com/questions/1269648/how-do-i-close-a-single-buffer-out-of-many-in-vim
+
+4, successful in anyfile, next step: search current or next date. 
+test pattern: 
+see"18:21 2012-01-19", "18:42 2012-01-19"
+
+5, the final script, add it to "log/novell/Linux_environment/vim/vimrc". 
+(14:26 2012-06-28)
+update: fix search bug. do not allow the extra character between section number and date_time string. e.g. not to match this one: "xx:xx 20xx-xx-xx" 1-2) -(3)
+
+"jump to date time section 
+:map <C-\>1 :LogAssistantJump<CR>
+
+command! -nargs=0 -bar LogAssistantJump call s:LogAssistant_jump()
+
+function! s:LogAssistant_search_section(sec_1, sec_2, sec_3, sec_4)
+    if strlen(a:sec_1) 
+        if search("^".a:sec_1.",") > 0
+            if strlen(a:sec_2) 
+                if search("^".a:sec_2.",") > 0
+                    if strlen(a:sec_3) 
+                        if search("^".a:sec_3.",") > 0
+                            if strlen(a:sec_4) 
+                                call search("^".a:sec_4.",")
+                            endif
+                        endif
+                    endif
+                endif
+            endif
+        endif
+    endif
+endfunction
+
+"list the file fullfill the year and month, check year and month syntax
+function! s:LogAssistant_search_file(year, month)
+    if a:year < 2005 || a:year > 2099 
+        echo "invalid year"
+        return 
+    else
+        let year = a:year
+    endif
+    if a:month > 12 
+        echo "invalid month"
+        return
+    endif
+    if a:month < 10 && strlen(a:month) < 2 
+        let month = "0".a:month
+    else
+        let month = a:month
+    endif
+
+    let filelist = system("ls log".year."*.txt")
+    let fileList = split(filelist)
+"    echo filelist
+    let i = 0
+    let j = 0
+    for filename in fileList
+"        echo i filename
+        let result = matchstr(filename, "log".year.month."[A-Za-z_]*.txt")
+        if strlen(result)
+"            echo "result"result
+            let j += 1
+        else
+            let result = matchstr(filename, "log".year."[A-Za-z_]*.txt")
+            if strlen(result)
+"                echo "result"result
+                let j += 1
+            else
+                let fileList[i] = ""
+            endif
+        endif
+        let i += 1
+    endfor
+
+    let file_final_list = join(fileList, " ")
+"final result
+"    echo j file_final_list 
+    return file_final_list
+endfunction
+
+function! s:LogAssistant_jump()
+    let line = getline(".")
+    let sec_1 = ""
+    let sec_2 = ""
+    let sec_3 = ""
+    let sec_4 = ""
+
+    "positioning: search from the current or next 'time date' string which start
+    "from '"'
+    let current_cursor = getpos(".")
+    let current_col = current_cursor[2]
+    let start_str = strpart(line, 0, current_col)
+    let nearest_quotation = strridx(start_str, "\"")
+    let new_line = strpart(line, nearest_quotation)
+    let line = new_line
+
+    "search the time, date and section index: 
+    "e.g.  '"12:45 2012-06-08"1-2)-(3)-((4))'
+    let date_time = matchstr(line, "\"[0-9][0-9]*\:[0-9][0-9]*\ 20[0-9][0-9]\-[0-9][0-9]*\-[0-9][0-9]*\"")
+    if strlen(date_time) 
+        let date_time = strpart(date_time, 1, strlen(date_time)-2)
+        echo date_time
+        let num1_start = stridx(line, date_time) + strlen(date_time) + 1
+        let line = strpart(line, num1_start)
+        echo line
+        echo "current string for sec_1 is"line
+        let sec_1 = matchstr(line, "^[0-9][0-9]*")
+        if strlen(sec_1)
+            echo date_time sec_1
+            let line = strpart(line, strlen(sec_1))
+            echo "current string for sec_2 is"line
+            let sec_2 = matchstr(line, "^\-[0-9][0-9]*)")
+            if strlen(sec_2)
+                let line = strpart(line, strlen(sec_2))
+                let sec_2 = strpart(sec_2, 1)
+                echo sec_2
+                echo "current string for sec_3 is"line
+                let sec_3 = matchstr(line, "^\-([0-9][0-9]*)")
+                if strlen(sec_3)
+                    let line = strpart(line, strlen(sec_3))
+                    let sec_3 = strpart(sec_3, 1)
+                    echo sec_3
+                    echo "current string for sec_4 is"line
+                    let sec_4 = matchstr(line, "^\-(([0-9][0-9]*))")
+                    let line = strpart(line, strlen(sec_4))
+                    if strlen(sec_4)
+                        let sec_4 = strpart(sec_4, 1)
+                        echo sec_4
+                    endif
+                endif
+            endif
+        endif
+    endif
+    
+    if strlen(date_time) == 0 
+        return
+    endif 
+    echo "the search result is"date_time sec_1 sec_2 sec_3 sec_4
+
+    "select the file from current directory, filt it with the proper year and 
+    "month
+    let year_month = matchstr(date_time, "20[0-9][0-9]\-[0-9][0-9]*")
+    let year = strpart(year_month, 0, 4)
+    let month = strpart(year_month, 5)
+"    echo year month
+    let file_final_list = s:LogAssistant_search_file(year, month)
+"    echo file_final_list
+    let fileList = split(file_final_list)
+
+    "search each file in filelist. stop while match; close buffer while mismatch
+    for filename in fileList
+"        echo filename
+        exec "edit ".filename
+        if search("^".date_time) > 0
+            call s:LogAssistant_search_section(sec_1, sec_2, sec_3, sec_4)
+            break
+        elseif search("^(".date_time.")") > 0
+            call s:LogAssistant_search_section(sec_1, sec_2, sec_3, sec_4)
+            break
+        else
+            exec "bd"
+        endif
+    endfor
+endfunction
+
+15:27 2012-06-14
+software, skill, editor, Linux, vim, global commands
+http://www.cppblog.com/cfmonkey/archive/2009/08/26/26421.html
+global命令形式
+:h :g
+:h 12.4
+   :[range]global/{pattern}/{command}
+global命令在[range]指定的文本范围内（缺省为整个文件）查找{pattern}，然后对匹
+配到的行执行命令{command}，如果希望对没匹配上的行执行命令，则使用global!或vg
+lobal命令。
+
+18:19 2012-06-14
+virtualization, migraiton, qemu
+1, qemu 
+qemuDomainObjBeginJob and qemuDomainObjBeginAsyncJob call qemuDomainObjBeginJobInternal with flag driver unlocked, while qemuDomainObjBeginJobWithDriver and qemuDomainObjBeginAsyncJobWithDriver call qemuDomainObjBeginJobInternal with driver locked. 
+I can add the similiar code in libxl. 
+\TODO: when the driver in lock and unlock during migraiton? 
+
+9:17 2012-6-15
+openSUSE, arm, try openSUSE prebuild image on beagle clone board, SBC3530
+1, no kernel bootup log and no login
+2, modify ttyS2 to ttyS0 in kernel args, the right u-boot boot commands as follows: 
+fatload mmc 0 80200000 uImage
+setenv bootargs 'console=ttyS0,115200n8 androidboot.console=ttyS0 mem=256M root=/dev/mmcblk0p2 rw rootfstype=ext3 rootdelay=1 init=/init ip=off mpurate=720 omap_vout.vid1_static_vrfb_alloc=y'
+bootm 0x80200000
+
+3, kernel boot up message output, but no login. 
+1), udevd output the error message infinitly. 
+udevd[668]: unable to receive ctrl connection: Function not implemented
+
+maybe kernel config is not right. 
+\TODO: try beagle kernel on my old fs(angstrom) and opensuse fs. 
+2), the full kernel message
+OMAP3 Stalker # mmc init
+mmc1 is available
+OMAP3 Stalker # fatload mmc 0 80200000 uImage
+reading uImage
+
+2869540 bytes read
+OMAP3 Stalker # setenv bootargs 'console=ttyS0,115200n8 androidboot.console=ttyS0 mem=256M root=/dev/mmcblk0p2 rw rootfstype=ext3 rootdelay=1 init=/init ip=off mpurate=720 omap_vout.vid1_static_vrfb_alloc=y'
+OMAP3 Stalker # bootm 0x80200000
+## Booting kernel from Legacy Image at 80200000 ...
+   Image Name:   Linux-2.6.31-rc7-omap1
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    2869476 Bytes =  2.7 MB
+   Load Address: 80008000
+   Entry Point:  80008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+
+Starting kernel ...
+
+Linux version 2.6.31-rc7-omap1 (ema@ema3530) (gcc version 4.3.3 (Sourcery G++ Lite 2009q1-203) ) #63 PREEMPT Fri Feb 5 15:29:50 CST 2010
+CPU: ARMv7 Processor [411fc083] revision 3 (ARMv7), cr=10c53c7f
+CPU: VIPT nonaliasing data cache, VIPT nonaliasing instruction cache
+Machine: OMAP3 STALKER
+Memory policy: ECC disabled, Data cache writeback
+OMAP3530 ES3.1 (full speed SGX, IVA2)
+SRAM: Mapped pa 0x40200000 to va 0xe3000000 size: 0x100000
+Reserving 12582912 bytes SDRAM for VRAM
+Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 65024
+Kernel command line: console=ttyS0,115200n8 androidboot.console=ttyS0 mem=256M root=/dev/mmcblk0p2 rw rootfstype=ext3 rootdelay=1 init=/init ip=off mpurate=720 omap_vout.vid1_static_vrfb_alloc=y
+Unknown boot option `androidboot.console=ttyS0': ignoring
+PID hash table entries: 1024 (order: 10, 4096 bytes)
+Dentry cache hash table entries: 32768 (order: 5, 131072 bytes)
+Inode-cache hash table entries: 16384 (order: 4, 65536 bytes)
+Memory: 256MB = 256MB total
+Memory: 241664KB available (5088K code, 380K data, 140K init, 0K highmem)
+SLUB: Genslabs=11, HWalign=32, Order=0-3, MinObjects=0, CPUs=1, Nodes=1
+NR_IRQS:402
+Clocking rate (Crystal/Core/MPU): 26.0/332/500 MHz
+IVA2 clocking rate: 360 MHz
+Reprogramming SDRC clock to 332000000 Hz
+GPMC revision 5.0
+IRQ: Found an INTC at 0xd8200000 (revision 4.0) with 96 interrupts
+Total of 96 interrupts on 1 active controller
+OMAP34xx GPIO hardware version 2.5
+MUX: setup AD2_34XX_GPIO19 (0xd80025e6): 0x0113 -> 0x011c
+OMAP clockevent source: GPTIMER12 at 32768 Hz
+Console: colour dummy device 80x30
+Calibrating delay loop... 513.62 BogoMIPS (lpj=2007040)
+Mount-cache hash table entries: 512
+CPU: Testing write buffer coherency: ok
+regulator: core version 0.5
+NET: Registered protocol family 16
+MUX: setup AH14_34XX_GPIO21 (0xd80025ea): 0x0113 -> 0x011c
+MUX: setup AC5_34XX_GPIO18 (0xd80025e4): 0x0113 -> 0x011c
+MUX: setup AA10_3430_USB2HS_PHY_STP (0xd80025f2): 0x0013 -> 0x0003
+MUX: setup AA8_3430_USB2HS_PHY_CLK (0xd80025f0): 0x0013 -> 0x0003
+MUX: setup AA9_3430_USB2HS_PHY_DIR (0xd80025f4): 0x0113 -> 0x010b
+MUX: setup AB11_3430_USB2HS_PHY_NXT (0xd80025f6): 0x0113 -> 0x010b
+MUX: setup AB10_3430_USB2HS_PHY_D0 (0xd80025f8): 0x0113 -> 0x010b
+MUX: setup AB9_3430_USB2HS_PHY_D1 (0xd80025fa): 0x0113 -> 0x010b
+MUX: setup W3_3430_USB2HS_PHY_D2 (0xd80021d4): 0x0113 -> 0x010b
+MUX: setup T4_3430_USB2HS_PHY_D3 (0xd80021de): 0x0113 -> 0x010b
+MUX: setup T3_3430_USB2HS_PHY_D4 (0xd80021d8): 0x0113 -> 0x010b
+MUX: setup R3_3430_USB2HS_PHY_D5 (0xd80021da): 0x0113 -> 0x010b
+MUX: setup R4_3430_USB2HS_PHY_D6 (0xd80021dc): 0x0113 -> 0x010b
+MUX: setup T2_3430_USB2HS_PHY_D7 (0xd80021d6): 0x0113 -> 0x010b
+Registering NAND on CS0
+failed to get dss_enable
+Switched to new clocking rate (Crystal/Core/MPU): 26.0/332/720 MHz
+IVA2 clocking rate: 360 MHz
+Calibrating delay loop... 740.48 BogoMIPS (lpj=2891776)
+twl4030: client 1 is not initialized
+twl4030: client 1 is not initialized
+MUX: setup C23_34XX_GPIO98 (0xd8002114): 0x0000 -> 0x011c
+omap3stalkerdc: Driver registration complete 
+OMAP DMA hardware revision 4.0
+bio: create slab <bio-0> at 0
+i2c_omap i2c_omap.1: bus 1 rev3.12 at 2600 kHz
+twl4030: PIH (irq 7) chaining IRQs 368..375
+twl4030: power (irq 373) chaining IRQs 376..383
+twl4030: gpio (irq 368) chaining IRQs 384..401
+MUX: setup AD5_34XX_GPIO23 (0xd80025ee): 0x0113 -> 0x0104
+regulator: VMMC1: 1850 <--> 3150 mV normal standby
+regulator: VDAC: 1800 mV normal standby
+regulator: VUSB1V5: 1500 mV normal standby
+regulator: VUSB1V8: 1800 mV normal standby
+regulator: VUSB3V1: 3100 mV normal standby
+regulator: VPLL2: 1800 mV normal standby
+i2c_omap i2c_omap.2: bus 2 rev3.12 at 400 kHz
+i2c_omap i2c_omap.3: bus 3 rev3.12 at 400 kHz
+SCSI subsystem initialized
+twl4030_usb twl4030_usb: Initialized TWL4030 USB module
+usbcore: registered new interface driver usbfs
+usbcore: registered new interface driver hub
+usbcore: registered new device driver usb
+musb_hdrc: version 6.0, musb-dma, otg (peripheral+host), debug=0
+musb_hdrc: USB OTG mode controller at d80ab000 using DMA, IRQ 92
+NET: Registered protocol family 2
+IP route cache hash table entries: 2048 (order: 1, 8192 bytes)
+TCP established hash table entries: 8192 (order: 4, 65536 bytes)
+TCP bind hash table entries: 8192 (order: 3, 32768 bytes)
+TCP: Hash tables configured (established 8192 bind 8192)
+TCP reno registered
+NET: Registered protocol family 1
+omap-iommu omap-iommu.0: isp registered
+OMAP3LK-S Linux PSP version 03.00.00.02 (OMAP3 STALKER)
+NetWinder Floating Point Emulator V0.97 (double precision)
+VFS: Disk quotas dquot_6.5.2
+Dquot-cache hash table entries: 1024 (order 0, 4096 bytes)
+NTFS driver 2.1.29 [Flags: R/W].
+JFFS2 version 2.2. (NAND) © 2001-2006 Red Hat, Inc.
+msgmni has been set to 472
+alg: No test for stdrng (krng)
+io scheduler noop registered
+io scheduler anticipatory registered (default)
+io scheduler deadline registered
+io scheduler cfq registered
+OMAP DSS rev 2.0
+OMAP DISPC rev 3.0
+OMAP VENC rev 2
+Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+serial8250.0: ttyS0 at MMIO 0x4806a000 (irq = 72) is a ST16654
+console [ttyS0] enabled
+serial8250.1: ttyS1 at MMIO 0x4806c000 (irq = 73) is a ST16654
+serial8250.2: ttyS2 at MMIO 0x49020000 (irq = 74) is a ST16654
+brd: module loaded
+loop: module loaded
+at24 3-0050: 8192 byte 24c64 EEPROM (writable)
+i2c /dev entries driver
+smsc911x: Driver version 2008-10-21.
+IRQ 179/eth%d: IRQF_DISABLED is not guaranteed on shared IRQs
+smsc911x-mdio: probed
+eth0: attached PHY driver [Generic PHY] (mii_bus:phy_addr=ffffffff:01, irq=-1)
+Now use the OMAP Die_ID as MAC address
+net eth0: MAC Address: 02:00:5d:0a:00:04
+usbcore: registered new interface driver asix
+usbcore: registered new interface driver cdc_ether
+usbcore: registered new interface driver net1080
+usbcore: registered new interface driver cdc_subset
+usbcore: registered new interface driver zaurus
+omap2-nand driver initializing
+NAND device: Manufacturer ID: 0x2c, Chip ID: 0xba (Micron NAND 256MiB 1,8V 16-bit)
+Creating 5 MTD partitions on "omap2-nand.0":
+0x000000000000-0x000000080000 : "X-Loader"
+0x000000080000-0x000000260000 : "U-Boot"
+0x000000260000-0x000000280000 : "U-Boot Env"
+0x000000280000-0x000000680000 : "Kernel"
+0x000000680000-0x000010000000 : "File System"
+ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+ehci-omap ehci-omap.0: OMAP-EHCI Host Controller
+ehci-omap ehci-omap.0: new USB bus registered, assigned bus number 1
+ehci-omap ehci-omap.0: irq 77, io mem 0x48064800
+ehci-omap ehci-omap.0: USB 2.0 started, EHCI 1.00
+usb usb1: New USB device found, idVendor=1d6b, idProduct=0002
+usb usb1: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+usb usb1: Product: OMAP-EHCI Host Controller
+usb usb1: Manufacturer: Linux 2.6.31-rc7-omap1 ehci_hcd
+usb usb1: SerialNumber: ehci-omap.0
+usb usb1: configuration #1 chosen from 1 choice
+hub 1-0:1.0: USB hub found
+hub 1-0:1.0: 3 ports detected
+Initializing USB Mass Storage driver...
+usbcore: registered new interface driver usb-storage
+USB Mass Storage support registered.
+g_ether gadget: using random self ethernet address
+g_ether gadget: using random host ethernet address
+usb0: MAC 22:24:92:a2:46:4a
+usb0: HOST MAC 66:96:1e:5e:49:de
+g_ether gadget: Ethernet Gadget, version: Memorial Day 2008
+g_ether gadget: g_ether ready
+musb_hdrc musb_hdrc: MUSB HDRC host driver
+musb_hdrc musb_hdrc: new USB bus registered, assigned bus number 2
+usb usb2: New USB device found, idVendor=1d6b, idProduct=0002
+usb usb2: New USB device strings: Mfr=3, Product=2, SerialNumber=1
+usb usb2: Product: MUSB HDRC host driver
+usb usb2: Manufacturer: Linux 2.6.31-rc7-omap1 musb-hcd
+usb usb2: SerialNumber: musb_hdrc
+usb usb2: configuration #1 chosen from 1 choice
+hub 2-0:1.0: USB hub found
+hub 2-0:1.0: 1 port detected
+input: gpio-keys as /devices/platform/gpio-keys/input/input0
+input: TWL4030 Keypad as /devices/platform/i2c_omap.1/i2c-adapter/i2c-1/1-004a/twl4030_keypad/input/input1
+ads7846 spi1.0: touchscreen, irq 335
+input: ADS7846 Touchscreen as /devices/platform/omap2_mcspi.1/spi1.0/input/input2
+input: twl4030_pwrbutton as /devices/platform/i2c_omap.1/i2c-adapter/i2c-1/1-0049/twl4030_pwrbutton/input/input3
+twl4030_rtc twl4030_rtc: rtc core: registered twl4030_rtc as rtc0
+twl4030_rtc twl4030_rtc: Power up reset detected.
+twl4030_rtc twl4030_rtc: Enabling TWL4030-RTC.
+Linux video capture interface: v2.00
+tvp514x 2-005d: Registered to v4l2 master omap34xxcam!!
+omap-iommu omap-iommu.0: isp: version 1.1
+usbcore: registered new interface driver uvcvideo
+USB Video Class driver (v0.1.0)
+OMAP Watchdog Timer Rev 0x31: initial timeout 60 sec
+mmci-omap-hs mmci-omap-hs.0: Failed to get debounce clock
+Registered led device: stalker:D8:usr0
+Registered led device: stalker:D9:usr1
+Registered led device: stalker:D3:mmc0
+Registered led device: stalker:D4:heartbeat
+usbcore: registered new interface driver usbhid
+usbhid: v2.6:USB HID core driver
+Advanced Linux Sound Architecture Driver Version 1.0.20.
+usbcore: registered new interface driver snd-usb-audio
+No device for DAI twl4030
+No device for DAI twl4030 Voice
+No device for DAI omap-mcbsp-dai-0
+No device for DAI omap-mcbsp-dai-1
+No device for DAI omap-mcbsp-dai-2
+No device for DAI omap-mcbsp-dai-3
+No device for DAI omap-mcbsp-dai-4
+OMAP3 STALKER SoC init
+usb 1-2: new high speed USB device using ehci-omap and address 2
+TWL4030 Audio Codec init 
+asoc: twl4030 <-> omap-mcbsp-dai-0 mapping ok
+ALSA device list:
+  #0: omap3stalker (twl4030)
+TCP cubic registered
+NET: Registered protocol family 17
+NET: Registered protocol family 15
+RPC: Registered udp transport module.
+RPC: Registered tcp transport module.
+VFP support v0.3: implementor 41 architecture 3 part 30 variant c rev 1
+omapdss DPI: Could not find exact pixel clock. Requested 23500 kHz, got 24000 kHz
+usb 1-2: New USB device found, idVendor=0409, idProduct=005a
+usb 1-2: New USB device strings: Mfr=0, Product=0, SerialNumber=0
+regulator_init_complete: incomplete constraints, leaving VPLL2 on
+usb 1-2: configuration #1 chosen from 1 choice
+regulator_init_complete: incomplete constraints, leaving VDAC on
+hub 1-2:1.0: USB hub found
+hub 1-2:1.0: 4 ports detected
+twl4030_rtc twl4030_rtc: setting system clock to 2000-01-01 00:00:00 UTC (946684800)
+omapdss DPI: display already enabled
+omap_vout omap_vout: 'dvi' Display already enabled
+omapdss DPI: display already enabled
+omap_vout omap_vout: 'dvi' Display already enabled
+omap_voutBuffer Size = 3686400
+omap_vout: registered and initialized video device 0 [v4l2]
+omap_voutBuffer Size = 3686400
+omap_vout: registered and initialized video device 1 [v4l2]
+tvp514x 2-005d: tvp5146m2 found at 0xba (OMAP I2C adapter)
+Waiting 1sec before mounting root device...
+mmc0: new SD card at address aaaa
+mmcblk0: mmc0:aaaa SD02G 1.84 GiB 
+ mmcblk0: p1 p2 p3
+kjournald starting.  Commit interval 5 seconds
+EXT3 FS on mmcblk0p2, internal journal
+EXT3-fs: recovery complete.
+EXT3-fs: mounted filesystem with writeback data mode.
+VFS: Mounted root (ext3 filesystem) on device 179:2.
+Freeing init memory: 140K
+Warning: unable to open an initial console.
+<30>udevd[668]: starting version 182
+udevd[668]: unable to receive ctrl connection: Function not implemented
+
+3), the right inittab in my angstrom root fs. try to update the opensuse inittab, but still no login console
+# /etc/inittab: init(8) configuration.
+# $Id: inittab,v 1.91 2002/01/25 13:35:21 miquels Exp $
+
+# The default runlevel.
+id:5:initdefault:
+
+# Boot-time system configuration/initialization script.
+# This is run first except when booting in emergency (-b) mode.
+si::sysinit:/etc/init.d/rcS
+
+# What to do in single-user mode.
+~~:S:wait:/sbin/sulogin
+
+# /etc/init.d executes the S and K scripts upon change
+# of runlevel.
+#
+# Runlevel 0 is halt.
+# Runlevel 1 is single-user.
+# Runlevels 2-5 are multi-user.
+# Runlevel 6 is reboot.
+
+l0:0:wait:/etc/init.d/rc 0
+l1:1:wait:/etc/init.d/rc 1
+l2:2:wait:/etc/init.d/rc 2
+l3:3:wait:/etc/init.d/rc 3
+l4:4:wait:/etc/init.d/rc 4
+l5:5:wait:/etc/init.d/rc 5
+l6:6:wait:/etc/init.d/rc 6
+# Normally not reached, but fallthrough in case of emergency.
+z6:6:respawn:/sbin/sulogin
+S:2345:respawn:/sbin/getty 115200 ttyS0
+# /sbin/getty invocations for the runlevels.
+#
+# The "id" field MUST be the same as the last
+# characters of the device (after "tty").
+#
+# Format:
+#  <id>:<runlevels>:<action>:<process>
+#
+1:2345:respawn:/sbin/getty 38400 tty1
+
+11:08 2012-06-15
+GTD
+0, 11:00-11:55 13:10-14:20 15:00-18:32 20:48-22:40
+
+1, today
+1), 1h30' 11:08-11:16 openSUSE arm, see"9:17 2012-6-15".
+2), check the mail. "11:28 2012-06-15"
+3), 11:36-11:55 13:10-14:20 15:00-18:32 20:48-22:38 wireshark bug. see"11:36 2012-06-15".
+4), 14:20-15:00 nap
+
+11:28 2012-06-15
+company, Organizational Announcement
+"Jeff Hawn <Novell.Send-As@Attachmate.com>"_email_"Organizational Announcement"_20120615_0220
+Here is a review of my executive team as of July 1:
+  *   Nils Brauckmann - President and General Manager, SUSE
+  *   Bob Flynn - President and General Manager, Novell
+  *   Jay Gardner - President and General Manager, NetIQ
+  *   Kathleen Owens - President and General Manager, Attachmate
+  *   Charles Sansbury - Chief Operating and Financial Officer
+
+11:36 2012-06-15
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont9, got NIS account; 
+1, got account from Simon, see"12:57 2012-06-14"2-6). 
+1), login
+bamvor@linux-bjrd:log> ssh bjzhang@macintyre.suse.de                            
+Password:                                                                       
+Last login: Fri Jun 15 05:19:23 2012 from 149.44.167.2                          
+This machine is used for autobuild of packages.  Feel free to
+give it much to do;-) If any package is missing, please install using zypper.
+
+You can use /home and /abuild:
+/abuild: for package building
+/home: To save some data (warning: no backup)
+Do *not* create new top-level directories!
+
+Please note: If you want a more powerfull build machine or use other
+architectures, ask the architecture team about logins - they have
+enough machines to use.
+
+=> https://orthos.arch.suse.de/ (create account, if needed)
+
+This machine is maintained by ops-services@suse.de
+
+All stuff in:
+/tmp will be removed after 60 days
+/abuild and /var/tmp after 360 days
+
+2), need root. 
+got "n0vel!onl4" from david and Joey, fail. 
+
+3), (13:23 2012-06-15)
+send email to simon
+Hi, Simon
+
+I could log into macintyre.suse.de, but i cannot build the package with bjzhang account. It looks like i need a root password or sudo or anything else? 
+(1), bjzhang@macintyre:~/wireshark> build --clean
+You have to be root to use /usr/bin/build
+(2), bjzhang@macintyre:~/wireshark> BUILD_DIST=sles9-sp3-i386 linux32 abuild
+using /work/src/bin/abuild                                             
+Limit Virtual Memory to 5079792 (ulimit -v)                            
+Limits are now:                                                        
+core file size          (blocks, -c) 1                                 
+data seg size           (kbytes, -d) unlimited                         
+scheduling priority             (-e) 0                                 
+file size               (blocks, -f) unlimited                         
+pending signals                 (-i) 62905
+max locked memory       (kbytes, -l) 64
+max memory size         (kbytes, -m) 6853720
+open files                      (-n) 1024
+pipe size            (512 bytes, -p) 8
+POSIX message queues     (bytes, -q) 819200
+real-time priority              (-r) 0
+stack size              (kbytes, -s) 8192
+cpu time               (seconds, -t) unlimited
+max user processes              (-u) 62905
+virtual memory          (kbytes, -v) 5079792
+file locks                      (-x) unlimited
+You have to be root to use /work/src/bin/abuild. Exit.
+
+Thanks
+Bamvor 
+
+2, build result on build service
+ gcc -DHAVE_CONFIG_H -I. -I. -I../.. -I./../.. -I./.. -I/usr/local/include -DPLUGIN_DIR=\"/usr/lib/wireshark/plugins/1.0.16\" -DINET6 "-D_U_=__attribute__((unused))" -march=i586 -mcpu=i686 -fmessage-length=0 -O2 -Wall -g -Wall -W -Wendif-labels -Wpointer-arith -I/usr/local/include -pthread -I/opt/gnome/include/gtk-2.0 -I/opt/gnome/lib/gtk-2.0/include -I/opt/gnome/include/atk-1.0 -I/opt/gnome/include/pango-1.0 -I/usr/X11R6/include -I/usr/include/freetype2 -I/usr/include/freetype2/config -I/opt/gnome/include/glib-2.0 -I/opt/gnome/lib/glib-2.0/include -MT packet-bacapp.lo -MD -MP -MF .deps/packet-bacapp.Tpo -c packet-bacapp.c  -fPIC -DPIC -o .libs/packet-bacapp.o
+packet-bacapp.c: In function `fTagHeaderTree':
+packet-bacapp.c:1554: warning: implicit declaration of function `expert_add_info_format'
+packet-bacapp.c: At top level:
+packet-bacapp.c:1570: error: conflicting types for `fTagHeader'
+packet-bacapp.h:1930: error: previous declaration of `fTagHeader'
+packet-bacapp.c:1616: error: conflicting types for `fUnsignedTag'
+packet-bacapp.h:263: error: previous declaration of `fUnsignedTag'
+packet-bacapp.c:1679: error: conflicting types for `fSignedTag'
+packet-bacapp.h:274: error: previous declaration of `fSignedTag'
+packet-bacapp.c:1742: error: conflicting types for `fProcessId'
+packet-bacapp.h:1941: error: previous declaration of `fProcessId'
+packet-bacapp.c:1764: error: conflicting types for `fTimeSpan'
+packet-bacapp.h:1951: error: previous declaration of `fTimeSpan'
+packet-bacapp.c:1789: error: conflicting types for `fWeekNDay'
+packet-bacapp.h:1859: error: previous declaration of `fWeekNDay'
+packet-bacapp.c:1813: error: conflicting types for `fDate'
+packet-bacapp.h:297: error: previous declaration of `fDate'
+packet-bacapp.c:1858: error: conflicting types for `fTime'
+packet-bacapp.h:308: error: previous declaration of `fTime'
+packet-bacapp.c:1889: error: conflicting types for `fDateTime'
+packet-bacapp.h:1447: error: previous declaration of `fDateTime'
+
+1), expert_add_info_format is not called in the packet-bacapp.c 
+but in wireshark 1.4, 1.6 expert_add_info_format is called several times before adding this patch. 
+add "#include <epan/expert.h>" for this warning. 
+\TODO: search in repo later. why need this function? 
+2), add script for packet-bacapp.h
+(1), almost finished, but still some error. 
+((1)), fConfirmedRequestPDU comment include pinfo, but there is no pinfo arg in this function. 
+((2)), fAddress, fTagHeader not add function comment: pinfo.
+3), (20:52 2012-06-15)
+(1), fConfirmedRequestPDU: pinfo is add in original source code. this is not a bug for me patch. just ignore it temporary. 
+(2), fAddress function comment malformat.
+/** BACnetAddress ::= SEQUENCE {
+(3), fTagHeader: complex comment than other function
+ * @param tvb = "TestyVirtualBuffer"
+ * @param offset = offset in actual tvb
+but the fail reason is not above. it is because this function not found during function searching step. And this is because there is a empty line between comments and function prototype. 
+delete the empty line by hand. 
+(4), after 01 script process, add 24 pinfo in function prototype. after 02 script process, add 23 pinfo in function comments. 
+the missing one is because fPropertyValue do not have comments. 
+4), (21:12 2012-06-15)
+finish script.
+It takes 4 four hours to write this script. if I edit this header file by hand, it only need 30 minutes. I need more excise or I can not get the benifit from script. 
+5), not finished. 
+there are lots of function missing pinfo, add it.
+plan: 
+(1), extract function list from wireshark 1.6 souce code. extract the function which has the pinfo parameter. 
+(2), merge 02 and 05_01 as common function replacement for source and header(That means for function prototype and function call). 
+
+12:35 2012-6-16
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont10, write update script; try build again on ibs build service
+1, finish script 06. 
+try rebuild. 
+2, (20:34 2012-6-16)
+1), only one error: 
+ gcc -DHAVE_CONFIG_H -I. -I. -I../.. -I./../.. -I./.. -I/usr/local/include -DPLUGIN_DIR=\"/usr/lib64/wireshark/plugins/1.0.16\" -DINET6 "-D_U_=__attribute__((unused))" -fmessage-length=0 -O2 -Wall -g -Wall -W -Wendif-labels -Wpointer-arith -I/usr/local/include -pthread -I/opt/gnome/include/gtk-2.0 -I/opt/gnome/lib64/gtk-2.0/include -I/opt/gnome/include/atk-1.0 -I/opt/gnome/include/pango-1.0 -I/usr/X11R6/include -I/usr/include/freetype2 -I/usr/include/freetype2/config -I/opt/gnome/include/glib-2.0 -I/opt/gnome/lib64/glib-2.0/include -MT packet-bacapp.lo -MD -MP -MF .deps/packet-bacapp.Tpo -c packet-bacapp.c  -fPIC -DPIC -o .libs/packet-bacapp.o
+packet-bacapp.c: In function `fCalendaryEntry':
+packet-bacapp.c:1930: error: `pinfo' undeclared (first use in this function)
+packet-bacapp.c:1930: error: (Each undeclared identifier is reported only once
+packet-bacapp.c:1930: error: for each function it appears in.)
+packet-bacapp.c: In function `fStartConfirmed':
+packet-bacapp.c:5190: warning: unused parameter `pinfo'
+packet-bacapp.c: In function `fTagHeaderTree':
+packet-bacapp.c:1462: warning: unused parameter `pinfo'
+make[4]: *** [packet-bacapp.lo] Error 1
+make[4]: Leaving directory `/usr/src/packages/BUILD/wireshark-1.0.16/epan/dissectors'
+make[3]: *** [all] Error 2
+make[3]: Leaving directory `/usr/src/packages/BUILD/wireshark-1.0.16/epan/dissectors'
+make[2]: *** [all-recursive] Error 1
+make[2]: Leaving directory `/usr/src/packages/BUILD/wireshark-1.0.16/epan'
+make[1]: *** [all-recursive] Error 1
+make[1]: Leaving directory `/usr/src/packages/BUILD/wireshark-1.0.16'
+make: *** [all] Error 2
+error: Bad exit status from /var/tmp/rpm-tmp.32724 (%build)
+2), 
+diff -up wireshark-1.0.16.orig/epan/dissectors/packet-bacapp.c wireshark-1.0.16/epan/dissectors/packet-bacapp.c >  wireshark-1.0.16-CVE-2012-2392-7121.patch
+diff -up wireshark-1.0.16.orig/epan/dissectors/packet-bacapp.h wireshark-1.0.16/epan/dissectors/packet-bacapp.h >>  wireshark-1.0.16-CVE-2012-2392-7121.patch
+osc ci -m "update patch 7121 for fCalendaryEntry compile error"
+3), still error
+packet-bacapp.c: In function `fSpecialEvent':
+packet-bacapp.c:4483: warning: passing arg 2 of `fCalendaryEntry' from incompatible pointer type
+packet-bacapp.c:4483: warning: passing arg 3 of `fCalendaryEntry' makes pointer from integer without a cast
+packet-bacapp.c:4483: error: too few arguments to function `fCalendaryEntry'
+packet-bacapp.c: In function `fStartConfirmed':
+packet-bacapp.c:5190: warning: unused parameter `pinfo'
+packet-bacapp.c: In function `fTagHeaderTree':
+packet-bacapp.c:1462: warning: unused parameter `pinfo'
+make[4]: *** [packet-bacapp.lo] Error 1
+
+11:28 2012-06-18
+GTD
+0, 11:10-11:50 12:46-18:35
+
+1, today
+1), check the mail. no important email.
+2), 10' report to Jiaju about my wireshark status. 
+3), 11:10-11:50 wireshark sle9 sp3 teradate compile. see"11:29 2012-06-18"
+4), 12:46-14:56 work on beagleboard. see"13:09 2012-06-18"
+5), 14:56-15:23 nap. 
+6), install ubuntu for linaro. 
+7), 20' news. 
+8), work report. see"17:25 2012-06-18"
+
+11:29 2012-06-18
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont11; try build again on ibs build service, cont1
+1, fix error in "12:35 2012-6-16"2-3). 
+2, error:
+packet-ansi_a.c: In function `elem_is2000_scr':
+packet-ansi_a.c:5415: error: `pinfo' undeclared (first use in this function)
+packet-ansi_a.c:5415: error: (Each undeclared identifier is reported only once
+packet-ansi_a.c:5415: error: for each function it appears in.)
+packet-ansi_a.c:5415: error: `PI_PROTOCOL' undeclared (first use in this function)
+1), in wireshark 1.4 elem_is2000_scr has pinfo parameter. 
+is it right direction? 
+3, error
+packet-diameter.c:177: error: `null' undeclared here (not in a function)
+packet-diameter.c:177: error: initializer element is not constant
+packet-diameter.c:177: error: (near initialization for `unknown_vendor.vs_avps')
+packet-diameter.c:177: error: `null' undeclared here (not in a function)
+packet-diameter.c:177: error: initializer element is not constant
+packet-diameter.c:177: error: (near initialization for `unknown_vendor.vs_cmds')
+packet-diameter.c:177: error: `null' undeclared here (not in a function)
+packet-diameter.c:177: warning: excess elements in struct initializer
+packet-diameter.c:177: warning: (near initialization for `unknown_vendor')
+packet-diameter.c:177: warning: missing initializer
+packet-diameter.c:177: warning: (near initialization for `unknown_vendor.vs_avps')
+packet-diameter.c: In function `dictionary_load':
+packet-diameter.c:1071: error: `true' undeclared (first use in this function)
+packet-diameter.c:1071: error: (Each undeclared identifier is reported only once
+packet-diameter.c:1071: error: for each function it appears in.)
+
+
+13:09 2012-06-18
+opensuse, arm, beagle board, qemu
+1, ref link
+1), http://code.google.com/p/beagleboard/wiki/BeagleboardRevCValidation
+BeagleBoard validation software and diagnostic procedure is documented in the below listed links, kindly refer to the appropriate page based on the revision you have.  
+    xM validation procedure is still under development
+    For BeagleBoard Revision C4 and below
+    For BeagleBoard Revision Bx 
+2, download beagle board kernel, u-boot
+1), kernel
+git clone git://github.com/beagleboard/kernel.git
+it is a patch repo. 
+(1), the step provided by README.md
+beaglebone-3.2 patchset:
+git checkout origin/beaglebone-3.2 -b beaglebone-3.2
+./patch.sh
+(2), read patch.sh, it push kernel from Linux torvalds branch, then patch the kernel. 
+(3), try it on 3.2 and then try Linux 3.4 
+(4), the branch after "git checkout origin/beaglebone-3.2 -b beaglebone-3.2", 
+bamvor@linux-bjrd:kernel> git branch -a
+* beaglebone-3.2
+  master
+  origin/HEAD
+  origin/beagleboard-3.0
+  origin/beagleboard-3.2
+  origin/beagleboard-3.4
+  origin/beaglebone-3.2
+  origin/master
+(5), error while executing patch.sh
+((1)), error: 
+bamvor@linux-bjrd:kernel> ./patch.sh
+fatal: destination directory '.' already exists.
+((2)), modify patch.sh(maybe because my git too old?): 
+bamvor@linux-bjrd:kernel> diff patch.sh~ patch.sh -up
+--- patch.sh~   2012-06-18 15:55:39.000000000 +0800
++++ patch.sh    2012-06-18 15:52:30.000000000 +0800
+@@ -39,7 +39,7 @@ fi
+ cd ${DIR}/kernel
+
+ if [ ! -f ./.git/config ] ; then
+-       git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git .
++       git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+ else
+        git fetch
+ fi
+
+
+2), git clone git clone git://github.com/beagleboard/u-boot.git
+it is a source code repo. 
+3, another souce:
+1), git clone git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap.git linux-omap
+there are several kernel git in git.kernel.org, one is tmlind
+https://git.kernel.org/?s=omap
+https://git.kernel.org/?p=linux/kernel/git/tmlind/linux-omap.git;a=summary
+4, try linaro relase at the same time. 
+12.03 release is the last release including beagleboard
+http://www.linaro.org/downloads/1203
+
+17:25 2012-06-18
+work report - week 24
+[devel-server] work report - week 24
+[green]
+1, wireshark maintanance: 
+there are lots of function arguments need to be update after apply the wireshark upstream patch 7119 and 7121. And it is not easy for me to test wireshark according to the patch I add. So, it will take me some time next week. 
+2, libvirt lock work: readme some libvirt qemu code. 
+
+21:35 2012-6-18
+omap3530, beagleboard clone, ema3530, board-omap3stalker.c
+
+10:40 2012-06-19
+GTD
+0, 10:20-11:44
+
+1, today
+1), 10:20-11:20 wireshark bug. see"10:41 2012-06-19"
+2), 5' check the mail. 
+3), 1h read xen doc: Xen and the Art of Virtualization. see"17:05 2012-06-19"
+
+10:41 2012-06-19
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont12; try build again on ibs build service, cont2
+1, continue fix compile error in "packet-ansi_a.c"
+function pointer does not support in current script. modify it by hand. 
+build successful after this commit. 
+
+17:05 2012-06-19
+virtualization, xen, read xen doc: Xen and the Art of Virtualization
+这是我换工作之后，读完的第一个文档。
+断断断续续读了四个月才看完，只能说自己太懒了。
+当初刚开始看虚拟化，希望找一些宏观概括性的资料。这个文档可能是最符合我需求的。
+另我印象最深是文档中涉及到的与cpu架构相关的部分：里面提到了cpu tlb行为对xen pv设计的影响。
+
+11:45 2012-06-20
+GTD
+0, 10:30-11:50 12:53-18:30
+
+1, today
+1), 40' network is broken. set pc as static ip address. 
+2), test wireshark, but vm can not boot up. see"12:57 2012-06-20"
+3), 16:00-17:24 suse release training. see"16:11 2012-06-20"
+
+12:57 2012-06-20
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont13, test
+1, sles9 can not startted. 
+linux-work:/var/lib/xen/images_2/sles9_hvm_13 # virsh create sles9_hvm_13.orig.xml
+virsh list
+error: Failed to create domain from sles9_hvm_13.orig.xml
+error: POST operation failed: xend_post: error from xen daemon: (xend.err 'Device 0 (vif) could not be connected. Hotplug scripts not working.')
+
+16:11 2012-06-20
+company, training, suse release training
+1, work for suse 20 years. 
+2, support -- hr -- maintanance -- sle team
+3, FCS: first customer shipment. 
+alpha -- beta -- rc1 -- GM -- FCS
+                               L3                    -- PTF(Program Temperary Fix)
+                               MAINT                  \--
+                               SEC
+                               REQUESTS
+
+request from customer, project manager, r&d, fix bug. 
+
+collect ptf, security, fix into package A. this is a mantenance update
+
+4, process
+1), NEEDINFO
+2), provide patch, patchinfo.
+
+5, if the ptf do not need to merge into package maintenance update. L3 team will build the specific package for this customer. 
+
+6, support 10 years.
+1), first 5 years: maintenance update, security.
+2), 5-7 years: severe security update.  
+3), 7-10Year: LTSS: long time support. 
+
+7, test for maintenance. 
+
+8, new maintenance model?
+1), lower the maintenance gate. 
+
+old  condition:  
+data loss
+data corruption
+security
+regression
+
+new condition: minor featue; less critical
+
+2), there is different maintenance version for difference package.
+(1), for the package is very stable.  there is the same package for sles11 sp1 and sp2. e.g. bash. So, for the bash package only one version for sp1 and sp2.
+(2), for the packge is update from sp1 and sp2. there is the different package for sp1 and sp2, difference update for them respetively. e.g. apche 2.2 for sp1, 2.4 for sp2. 
+
+9, version-release-build-ptf
+
+10, how to add a completely new package in suse. 
+contac with product manager. there are lots of question need to be finished. 
+add to opensuse it is another good start. 
+
+11, ECO: engineering change order. 
+
+11:25 2012-06-21
+GTD
+0, 11:20-11:50 12:20-18:50
+
+1, today
+1), 11:40-12:20 lunch. 
+2), 30' go for a walk. 
+3), 14:10-15:40 libvirt qemu vm configuration. see"14:42 2012-06-21"
+4), 10' rest. 
+5), 15:50-18:41 libvirt qemu migration. see"15:54 2012-06-21"
+6), 40' nap. 
+
+12:47 2012-06-21
+vmware, vm, management
+sles11_sp2_x86_64_4: sles11 sp2. libvirt0.9.11, xen4.1 ok. 
+sles11_sp2_x86_64_5: sles11 sp2. libvirt0.9.11, xen4.1, qemu0.10 ok. 
+sles11_sp2_x86_64_6: sles11 sp2. xen4.2
+opensuse_12_1_x86_64_7
+sles11_sp2_x86_64_8: 5 clone. sles11 sp2. libvirt0.9.11, xen4.1, qemu0.10 ok. 
+
+14:42 2012-06-21
+virtualization, libvirt, qemu, configuration, prepare vm environment
+1, clone vm5 as vm8.
+2, qemu vm boot up failure. 
+1), error message got from qemu vnc
+Booting from Hard Disk...
+Boot failed: could not read the boot disk
+FATAL: No bootable device. 
+2), reason, wrong disk type. it is a ide(software virtual disk, i guess) not a virtio disk. 
+linux-vm5:/etc/xen/vm # diff -up sles11_qemu_12.xml~ sles11_qemu_12.xml
+--- sles11_qemu_12.xml~ 2012-06-21 14:33:06.000000000 +0800
++++ sles11_qemu_12.xml  2012-06-21 14:37:58.000000000 +0800
+@@ -20,6 +20,6 @@
+     <disk type='file' device='disk'>
+       <driver name='qemu' type='qcow2' cache='none'/>
+       <source file='/var/lib/xen/images_2/sles11_qemu_12/disk0.img'/>
+-      <target dev='hda' bus='ide'/>
++      <target dev='hda' bus='virtio'/>
+       <address type='drive' controller='0' bus='0' target='0' unit='0'/>
+     </disk>
+3), full qemu configuation file:
+novell/hypervisor_and_tools/conf_example/sles11_qemu_12.xml
+
+2, configure network in qemu
+1), "ifconfig eth0 up" fail: no such device.
+2), add network device
+    <interface type='bridge'>
+      <source bridge='br0'/>
+      <mac address='52:54:00:5e:c7:3c'/>
+      <model type='virtio'/>
+    </interface>
+
+3, configure console in qemu, ref"14:53 2012-04-20"
+
+4, migrate successful
+
+15:54 2012-06-21
+virtualization, libvirt, qemu, migration, debug, add debug log
+1, gdb skill
+1), add source code search at the beginning of the search path. 
+directory  /home/bamvor/work.local/source/libvirt-0.9.11/src/
+2, the true reason that gdb can not found the source code is i delete the source code(should be libvirt-0.9.12). 
+3, print priv->job
+$4 = {cond = {cond = {__data = {__lock = 0, __futex = 0, __total_seq = 0,
+        __wakeup_seq = 0, __woken_seq = 0, __mutex = 0x0, __nwaiters = 0,
+        __broadcast_seq = 0}, __size = '\000' <repeats 47 times>,
+      __align = 0}}, active = QEMU_JOB_NONE, owner = 0, asyncCond = {cond = {
+      __data = {__lock = 0, __futex = 0, __total_seq = 0, __wakeup_seq = 0,
+        __woken_seq = 0, __mutex = 0x0, __nwaiters = 0, __broadcast_seq = 0},
+      __size = '\000' <repeats 47 times>, __align = 0}},
+  asyncJob = QEMU_ASYNC_JOB_MIGRATION_OUT, asyncOwner = 29194, phase = 3,
+  mask = 55, start = 1340270536646, info = {type = 2, timeElapsed = 0,
+    timeRemaining = 0, dataTotal = 0, dataProcessed = 0, dataRemaining = 0,
+    memTotal = 0, memProcessed = 0, memRemaining = 0, fileTotal = 0,
+    fileProcessed = 0, fileRemaining = 0}}
+4, virCondWaitUntil -> pthread_cond_timedwait
+int virCondWaitUntil(virCondPtr c, virMutexPtr m, unsigned long long whenms)
+when successful, the mutex will be locked and ownd by the calling thread. 
+5, call
+qemuDomainMigratePerform3 -> qemuMigrationPerform -> qemuMigrationPerformJob/qemuMigrationPerformPhase
+qemuMigrationPerformPhase -> qemuMigrationJobStart -> qemuDomainObjBeginAsyncJobWithDriver
+                          -> doNativeMigrate -> qemuMigrationRun
+
+
+qemuDomainObjEnterMonitorAsync -> qemuDomainObjEnterMonitorInternal -> qemuDomainObjBeginJobInternal
+
+qemuDomainMigrateConfirm3 -> qemuMigrationConfirm
+                          -> qemuMigrationJobFinish -> qemuDomainObjEndAsyncJob
+
+6, different lock during migration
+qemuDriverlock: driver(qemud_driver)
+qemuMonitorLock: obj->privateData->mon(qemuMonitorPtr)
+virDomainObjPtr: obj(virDomainObjPtr)
+1), qemuDomainObjEnterMonitorInternal
+(1), 
+get the obj lock after condition check successful. 
+get the mon lock after save the obj, then release the obj and driver lock. 
+(2), 
+qemuDomainObjEnterMonitorInternal -> qemuDomainObjBeginJobInternal
+
+7, next, read qemuDomainObjBeginAsyncJobWithDriver and qemuDomainObjEndAsyncJob carefully. try to port to libxl. 
+
+11:27 2012-06-25
+GTD
+0, 11:00-11:50 14:46-19:12 
+
+1, today
+1), check the mail. the basic step for maintenance update. "jiaju zhang"_email(fw)_20120620_1539; hackweek, see"11:33 2012-06-25".
+2), work report. see"11:48 2012-06-25".
+3), 15:27-18:00 libvirt qemu migration. see"15:27 2012-06-25"
+4), 40' nap; 30' surfing. 
+5), 60' support QA team(Auther Guo, Jia Yao). vm-install or virsh create with autoyast. see"14:03 2012-06-28". 遇到权限问题"11:01 2012-06-28". 
+
+11:33 2012-06-25
+company, suse, hackweek VIII
+"Ralf Flaxa <rf@suse.de>"_email_"Welcome to Hackweek VIII - Jul 23rd to Jul 27th"_20120622_0200
+Hi!
+
+I am happy to announce and invite you to participate in our
+
+         8th HACKWEEK
+
+which is scheduled to happen in the week of Jul 23rd to Jul 27th.
+
+Hackweek shall give us a break to pursue a promising idea that occurred to us
+during our daily work, shall give us fresh inspiration, motivation and time
+to collaborate together, or at least get something done or enhanced that we
+never have time for during the daily routine.
+
+Rather than giving this hackweek any kind of "technology theme" I want
+us to aim for a higher level goal - "broaden your engineering skills".
+Examples are of course that you learn a new technology or programming
+languages/tools, but it can also be to try out other products, learn
+new methods or processes of designing, architecting, coding, testing,
+project managing, documenting or interacting/communicating.
+
+Of course we are very happy if you chose to do something that directly helps
+our strategy and products. But even if you pick a project that is completely
+unrelated but makes you more productive and motivated for the rest of the year
+you achieve the overarching goal of hackweek - to grow as an engineer.
+
+Thanks to the support of Nils Brauckmann I am happy to invite others
+outside of engineering to join us in hackweek. If you are technical enough
+feel free to join us in hacking, if you simply want to learn about the
+latest engineering stuff feel free to watch our demos and presentations
+or step by for a snack and ask questions. This is an open event, so you
+do not need an invitation from engineering, you simply need to talk
+to your manager and get his agreement to join hackweek.
+
+More details about the logistics around hackweek will be shared very soon
+by Olaf Kirch, who has volunteered (together with others) to lead
+the coordination of this 8th hackweek.
+
+Big thanks in advance to Olaf and his helpers!
+
+Happy hacking and learning!
+
+     Ralf
+
+P.S.: As always there will be some people not able to join hackweek
+due to vacation, being on L3 duty or working on an important update.
+It is impossible to find a date that works for everyone, but my promise
+for everyone inside engineering is that you will be allowed to take your
+hackweek outside of the formal hackweek. Simply agree on a time with
+your manager. And I want to thank those in advance who will be "on duty"
+during hackweek, showing our great customer commitment.
+
+11:48 2012-06-25
+work report - week 25
+[devel-server] work report - week 25
+[green]
+1, wireshark maintanance: 
+finally, build successful for wireshark sles9 sp3. but the network is broken in Beijing office. i will test wireshark test week.  
+2, libvirt lock work: readme libvirt qemu lock code: qemuDomainObjBeginAsyncJobWithDriver and qemuDomainObjEndAsyncJob.
+
+14:50 2012-06-25
+Linux, desktop, GNOME
+""Bin Li" <bili@suse.com>"_email_"[devel] Back from GNOME.Asia 2012"_20120625_1447
+Hi, 
+I participated the GNOME.Asia 2012 in HongKong last week, so now I should take advantage of the memory still fresh to make a summary. It's a very exited experience in GNOME Asia 2012 in HongKong.  
+My two topics got approved in this conference, and I really learned a lot from preparation.
+ 1) Local GNOME Users Group experience -- Beijing and Taiwan (Bin Li, China and ChunHung Huang, Taiwan) (English), pdf file.
+ 2) Open Build Service (Bin Li, China) (English), pdf file.  
+At this conference I met a lot of developer in Asia. The topic which I like most is from Fred Chien (Taiwan) talked about some cool work with JaveScript in GNOME.
+And also I met some foreigner, Aleksander,and JF, which I met them in Desktop Summit 2011.  Aleksander Morgado which is from Spain introduce ModemManager now supporting 4G/LTE.  JF which from Canada share the PiTiVi to us.
+You can find a lot of topics from our Beijing GNOME User Group.
+ Weiwu Zhang,Tong Hui, FanJun Kong, Ms Liansu Yu, Ms Eleanor Chen is our member.
+A little pity is that there are not so many people here, I hope next year more and more people could know and enjoy GNOME.Asia if it's in Beijing.  
+At last thanks for the sponsorship from GNOME foundation and SUSE.  
+http://libincharles.wordpress.com/2012/06/21/back-from-gnome-asia-2012/
+http://www.flickr.com/groups/1958066@N20/ .
+
+15:27 2012-06-25
+virtualization, libvirt, qemu, migration, debug, gdb debug
+1, plan
+1), read qemuDomainObjBeginAsyncJobWithDriver and qemuDomainObjEndAsyncJob 
+2), trace the lock(not started) 
+3), try to port to libxl(not started)
+
+2, read qemuDomainObjBeginAsyncJobWithDriver 
+qemuDomainObjBeginAsyncJobWithDriver -> qemuDomainObjBeginJobInternal
+1), qemuDomainObjBeginJobInternal
+jobs_queued++
+virDomainObjRef: dom->ref++
+qemuDriverUnlock: driver(qemud_driver)
+virCondWaitUntil->pthread_cond_timedwait
+virDomainObjUnlock(obj);
+qemuDriverLock(driver);
+virDomainObjLock(obj);
+
+感觉这里的关键是virCondWaitUntil.
+
+3, obj qemuDomainObjBeginJobInternal, qemuDomainObjEndAsyncJob 
+
+4, read 
+virDomainMigrateVersion3 support cancelled. If cancelled == 1 means migration failed on the previous step. 
+\TODO: Maybe(Maybe not) I should modify chunyan's migration patch like this. There are two reasons why Chunyan handle the migration fail in libxlDomainMigratePerform3. 
+1), Perform3 function waiting suspend result. libvirt qemu driver do the same thing. 
+2), If the suspend failed in libvirt Perform3, the Finish3 function will receive the cancelled flag. So the Confirm3 will not be called. 
+
+11:03 2012-06-26
+GTD
+0, 11:00-11:47 12:33-18:24
+
+1, today
+1), 40' piano: diary, surfing. 
+2), 40' marketing, embedded. see"13:41 2012-06-26".
+3), 14:19-18:24 libvirt qemu migration. see"14:20 2012-06-26".
+30' nap
+4), Summary: 昨晚和今天上班又有些放羊了. 以后要是要养成早睡早起, 上班不分心的习惯.  
+12:36 2012-06-26
+cloud, virtualization, openstack, qemu-kvm, disk image
+ssh root@openstack01.test.com
+openstack01: 147.2.207.105
+password: suse
+disk image: qcow2. 
+
+14:20 2012-06-26
+virtualization, libvirt, qemu, migration, debug, gdb debug, cont1
+1, full process
+virDomainMigrateVersion3
+
+Src: Begin
+      - Generate XML to pass to dst
+      - Generate optional cookie to pass to dst
+
+Dst: Prepare
+      - Get ready to accept incoming VM
+      - Generate optional cookie to pass to src
+
+Src: Perform
+      - Start migration and wait for send completion
+      - Generate optional cookie to pass to dst
+
+Dst: Finish
+      - Wait for recv completion and check status
+      - Kill off VM if failed, resume if success
+      - Generate optional cookie to pass to src
+
+Src: Confirm
+      - Kill off VM if success, resume if failed
+
+2, log: /home/bamvor/work/source/virtualization/libvirt/gdbinit/0621_qemu_migrate_lock_study/gdb_migrate_log.txt
+
+3, I guess i understand the qemuDomainObjBeginAsyncJobWithDriver and qemuDomainObjEndAsyncJob. try to port to libvirt libxl tomorrow. 
+
+18:07 2012-06-26
+software, skill, gdb, logging
+http://www.slac.stanford.edu/comp/unix/package/rtems/doc/html/gdb/gdb.info.Logging_output.html
+Logging output
+
+You may want to save the output of GDB commands to a file.  There are
+several commands to control GDB's logging.
+
+`set logging on'
+     Enable logging.
+
+`set logging off'
+     Disable logging.
+
+`set logging file FILE'
+     Change the name of the current logfile.  The default logfile is
+     `gdb.txt'.
+
+`set logging overwrite [on|off]'
+     By default, GDB will append to the logfile.  Set `overwrite' if
+     you want `set logging on' to overwrite the logfile instead.
+
+`set logging redirect [on|off]'
+     By default, GDB output will go to both the terminal and the
+     logfile.  Set `redirect' if you want output to go only to the log
+     file.
+
+`show logging'
+     Show the current values of the logging settings.
+
+11:00 2012-06-27
+opensuse, arm, demo
+1, "Guillaume Gardet <guillaume.gardet@free.fr>"_email_"[opensuse-arm] ARM demo at Solutions Linux in Paris"_20120626_2013
+Hi,
+
+I am back from Solutions Linux [0] in Paris where we hold a booth. We also had a demo of openSUSE running on ARM, on a Beagleboard xM.
+Some pictures: http://guillaume.gardet.free.fr/openSUSE/SSL_2012/
+It was very attractive  to have a little ARM board on our booth, lots of people come to our booth.
+The demo was quite simple, it was only a video playing (Big buck bunny [1]). We did not used the DSP accelerated codecs since it does not work yet with gstreamer but we used a software player based on libav and designed for omap devices (Beagleboards (xM) and pandaboards (ES)): omapfbplay.
+The demo was running all the day without any problem.
+omapfbplay is available on my personnal build service [2] and directly from my repo [3].  
+For the next booth, I hope to have a real little computer on my Beaglebord xM. (Xorg, firefox, ...) 
+If you have any question, please ask.
+
+Cheers, 
+Guillaume 
+
+[0]: http://www.solutionslinux.fr/?lg=en
+[1]: http://www.bigbuckbunny.org/
+[2]: https://build.opensuse.org/package/show?package=omapfbplay&project=home%3AGuillaume_G%3AARM
+[3]: http://download.opensuse.org/repositories/home:/Guillaume_G:/ARM/openSUSE_Factory/
+
+11:05 2012-06-27
+GTD
+0, 11:00-11:50 12:36-19:30
+
+1, today
+1), opensuse arm demo. see"11:00 2012-06-27"
+2), 11:05-11:50 libvirt qemu. see"11:10 2012-06-27"
+3), 12:40-14:10 libvirt libxl migration work report. 
+4), 14:10-15:50 Gao Yan HA training. 
+5), 16:00-16:30 learn about cyanogenmod android pad. 
+5), 16:34-19:22 libvirt libxl lock. see"16:35 2012-06-27"
+
+11:10 2012-06-27
+virtualization, libvirt, qemu, migration, debug, gdb debug, cont2
+1, qemu lock summary
+  * struct qemud_driver: RWLock: driver lock. get this lock while entering each libvirt qemu api. 
+    lock in libxl: libxlDriverPrivatePtr driver
+  * virDomainObjPtr:  Mutex: this is unversal lock in libvirt. 
+    Will be locked after calling any of the virDomainFindBy{ID,Name,UUID}
+    methods.
+    Lock must be held when changing/reading any variable in the virDomainObjPtr
+  * qemuMonitorPrivatePtr: Job conditions: for qemu job maybe sleep.
+    Since the virDomainObjPtr lock was dropped while waiting for the
+    job condition, it is possible that the domain is no longer active
+    when the condition is finally obtained.  The monitor lock is only
+    safe to grab after verifying that the domain is still active.
+  * qemuMonitorPtr:  Mutex: for qemu monitor cmd. 
+    The job condition *MUST* be held before acquiring the monitor lock
+    The virDomainObjPtr lock *MUST* be held before acquiring the monitor
+    lock.
+    The virDomainObjPtr lock *MUST* then be released when invoking the
+    monitor command.
+    The driver lock *MUST* be released when invoking the monitor commands.
+    This ensures that the virDomainObjPtr & driver are both unlocked while
+    sleeping/waiting for the monitor response.
+
+    bamvor: the sequence i understand(maybe wrong): 
+    driver lock
+    job condition
+    obj lock
+    monitorPtr
+    obj unlock
+    driver unlock
+    monitor cmd
+
+16:35 2012-06-27
+virtualization, libvirt, migration, libxl(xenlight), lock
+1, plan
+1), port qemuDomainObjBeginAsyncJobWithDriver and qemuDomainObjEndAsyncJob to libvirt libxl driver. 
+
+2, domainObjPrivatePtr: 
+qemudStartup -> qemuCreateCapabilities -> qemuDomainSetPrivateDataHooks
+    caps->privateDataAllocFunc = qemuDomainObjPrivateAlloc;
+    caps->privateDataFreeFunc = qemuDomainObjPrivateFree;
+    caps->privateDataXMLFormat = qemuDomainObjPrivateXMLFormat;
+    caps->privateDataXMLParse = qemuDomainObjPrivateXMLParse;
+qemuDomainObjPrivatePtr 
+
+libxlStartup: 
+    libxl_driver->caps->privateDataAllocFunc = libxlDomainObjPrivateAlloc;
+    libxl_driver->caps->privateDataFreeFunc = libxlDomainObjPrivateFree;
+libxlDomainObjPrivatePtr 
+
+I need to add job struct in libxlDomainObjPrivatePtr. 
+(14:48 2012-07-10)
+The sequence for init     
+1), func call virDomainObjNew
+virDomainAssignDef -(if domain does not exist)-> virDomainObjNew
+virDomainLoadStatus -> virDomainObjParseFile -> virDomainObjParseNode -> virDomainObjParseXML -> virDomainObjNew
+2), func call virDomainAssignDef
+virDomainLoadConfig
+virDomainObjUnref
+libxlDomainCreateXML
+libxlDomainRestoreFlags
+libxlDomainDefineXML
+libxlDomainMigratePrepare3
+qemuDomainAttach
+"14:49 2012-07-10"end 
+3, VIR_ENUM_IMPL: enum and string converter. 
+VIR_ENUM_IMPL(libxlDomainAsyncJob, LIBXL_ASYNC_JOB_LAST,
+              "none",
+              "migration out",
+              "migration in",
+              "save",
+              "dump",
+);
+will define libxlDomainAsyncJobTypeToString and libxlDomainAsyncJobTypeFromString. 
+4, \TODO: libxlDomainObjRestoreJob and libxlDomainObjTransferJob is not added at this time. these two function for Reconnect, ref qemuProcessReconnect and qemuProcessReconnectHelper.
+qemuDomainObjRestoreJob(virDomainObjPtr obj,
+qemuDomainObjTransferJob(virDomainObjPtr obj)
+
+5, (18:16 2012-06-27)
+finish modify. compile
+
+6, wrong seq
+4551        vm = virDomainFindByUUID(&driver->domains, dom->uuid);         │
+4552                                                                       │
+4553        virCheckFlags(LIBXL_MIGRATION_FLAGS, -1);                      │
+4554                                                                       │
+4555        libxlDriverLock(driver);
+1), should be
+    libxlDriverLock(driver);
+    vm = virDomainFindByUUID(&driver->domains, dom->uuid);         │
+2), it is still not work. 
+
+09:32 2012-06-28
+GTD
+0, 9:30-11:52 12:45-18:30 19:54-20:40
+
+1, today
+1), 9:33-11:52 13:10-13:30 14:34-18:27 libvirt libxl lock. see"09:34 2012-06-28"
+2), 12:55-13:09 philosopher: Bertrand Russell. see"12:55 2012-06-28".
+3), 20' support QA Jia Yao. vm repeart install. virsh cmd. 
+4), 14:05-14:30 fix logAssistant vim bug. see"14:07 2012-06-28"
+5), 19:54-20:40 mail patch to Jim and Jason. see"09:34 2012-06-28"5. 
+
+09:34 2012-06-28
+virtualization, libvirt, migration, libxl(xenlight), lock, cont1, debug, add print; basic test pass, send patch to Jim
+1, plan
+1), add print or print through gdb. check where hangs
+2), if not work, delete the lock and try again. 
+
+2, hang, print log
+2012-06-28 02:04:47.376+0000: 3632: info : libxlMigrationJobStart:365 : libxlMigrationJobStart: 365
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjBeginJobInternal:229 : libxlDomainObjBeginJobInternal: 229
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjBeginJobInternal:237 : libxlDomainObjBeginJobInternal: 237: virDomainObjRef done
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjBeginJobInternal:240 : libxlDomainObjBeginJobInternal: 240: libxlDriverUnlock done
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainNestedJobAllowed:193 : libxlDomainNestedJobAllowed: 193
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainNestedJobAllowed:193 : libxlDomainNestedJobAllowed: 193
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjResetJob:139 : libxlDomainObjResetJob: 139
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjBeginJobInternal:278 : libxlDomainObjBeginJobInternal: 278
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjResetAsyncJob:149 : libxlDomainObjResetAsyncJob: 149
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjBeginJobInternal:286 : libxlDomainObjBeginJobInternal: 286 driver lock start
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjBeginJobInternal:290 : libxlDomainObjBeginJobInternal: 290 driver lock done
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainTrackJob:171 : libxlDomainTrackJob: 171
+2012-06-28 02:04:47.376+0000: 3632: info : libxlDomainObjSaveJob:178 : libxlDomainObjSaveJob: 178
+2012-06-28 02:04:47.385+0000: 3632: info : libxlDomainObjSaveJob:187 : libxlDomainObjSaveJob: 187 done
+2012-06-28 02:04:47.385+0000: 3632: info : libxlDomainObjSetAsyncJobMask:202 : libxlDomainObjSetAsyncJobMask: 202
+2012-06-28 02:04:47.385+0000: 3632: info : libxlMigrationJobStart:379 : libxlMigrationJobStart: 379. done
+1), hang because doMigrateSend get vm obj which is got by the upper function libxlDomainMigratePerform3. 
+2), after modify it, the migrate successful:
+linux-vm5 loglevel 2, linux-vm8 loglevel 3. 
+test 20times(once for vm5->vm8, once for vm8->vm5). 
+3), but virsh list can not be executed while migrate. 
+this is because i am not release the obj and driver lock while migrate: 
+    virDomainObjUnlock(vm);
+    libxlDriverUnlock(driver);
+    libxl_domain_suspend(...);
+    libxlDriverLock(driver);
+    virDomainObjLock(vm);
+4), after add vm5->vm8 right. but vm8->vm5 wrong. 
+3, (13:11 2012-06-28)
+release the lock during doMigrateReceive. 
+1), hang at finish
+libxlDriverLock not unlock. 
+2), segmentation fault
+Program received signal SIGSEGV, Segmentation fault.
+libxlMigrationJobFinish (driver=0x7f527c031390, vm=0x0) at libxl/libxl_driver.c:388                                                                             
+388         return libxlDomainObjEndAsyncJob(driver, vm);
+because the vm is null.
+(1), move libxlMigrationJobFinish with virDomainRemoveInactive together. 
+    if ( libxlMigrationJobFinish(driver, vm) == 0 ) {
+        vm = NULL;
+    } else if (!vm->persistent || (flags & VIR_MIGRATE_UNDEFINE_SOURCE)) {
+        virDomainRemoveInactive(&driver->domains, vm);
+        vm = NULL;
+    }
+3), hang: vm5->vm8, vm8->vm5 fail(migrate not start yet). 
+virsh list pass at vm5. virsh list hang at vm8. it looks like vm8 driver lock not released. 
+    if (libxlMigrationJobFinish(driver, vm) == 0) {
+        vm = NULL;
+    } else if (!vm->persistent && !virDomainObjIsActive(vm)) {
+        virDomainRemoveInactive(&driver->domains, vm);
+        vm = NULL;
+    }
+4), "3)" not worked. hang after
+libxlNumDomains
+virDomainObjListNumOfDomains
+virDomainObjListCountActive
+(1), virDomainObjListCountActive depends on obj lock. fix it.
+5), test migrate 24 times. first time from vm5 to vm8, second time from vm8 to vm5. 
+
+4, generate patch, 
+1), patch series location: 
+/home/bamvor/log/novell/hypervisor_and_tools/migrate/20120628_debug/2
+
+5, email Jim, cc Jason, Jiaju
+(19:54 2012-6-28)
+Title: libvirt libxl migration and lock status reported by Bamvor
+Hi, Jim
+
+I add a exclusize mechanism for libvirt libxl driver(reference Job conditions in THREADS.txt). With this patch, the normal work(e.g. list domain) could execute while migration. 
+The core function in my patch is libxlDomainObjBeginAsyncJobWithDriver and libxlDomainObjEndAsyncJob. And two helper function for migration: libxlMigrationJobStart libxlMigrationJobFinish. 
+I test the migration 24 times successful while the "virsh list" is executed in both source and destination. 
+
+It is a rough patch, there is still some work to do:
+1), todo work:
+(1), i only protect the new migration is not allowed for the current migrate domain. but do not protect other op for this domain.
+I will add BeginJob and EndJob in the libxl api if needed. e.g. add these into create, destroy...
+(2), Job condition for normal work is not implemented. 
+(3), no clean up function. if user interrupt the migration, the libvirt maybe work abnormal. e.g. the vm alive in both source and destination. 
+(4), not update vm status while migration. 
+(5), the reconnect and recover situation is not considered. 
+2), known bug:
+after several times migrate, vm crash and rebootted. i do not know the reason. 
+3), live migration is not tested yet. 
+
+At the same time, I am sorry for the progess. The wireshark backport work is more complex than I mentioned in previous sync meeting. because the very old wireshark version(1.0.16) in sles9 sp3 teradata, there are about 1500 more lines need to add to the sles9 in order to backport the patch. all these extra line I added is add one parameter for some function. Although I write several script to do this, it still take me two week to do this. Now the wireshark package is compile pass, I need to build a sles9 environment to test it. I plan to do it from tomorrow. because i have already miss the deadline(15th Jun).
+
+Here is the explanation for the attachment. The 4th patch is my patch for libxl async job. All the following patch is applied to libvirt-0.9.12 release code. When i finish my work, I will send two patches as we discuss: one for lock, one for migration. 
+1), "[PATCH v2] Add migration APIs for libxl driver.txt"
+Chunyan v2 migrate patch.
+2), the patch i written before last sync meeting. 
+(1), 20120529_add_lock__libxlMigratePerform3
+add libxlDriverLock/Unlock in libxlMigratePerform3. This patch fix the crash during migration if anther virsh cmd is invoked. 
+(2), 20120529_fix_migrate_check_message_fail
+because the libvirt use non-block socket. This code will try read again while EAGAIN encountered. 
+This is not a final fix. IMO, there is no need to handshake between source and destination because libvirt could guarantee the migration sequence. I plan to try to remove the handshake next week. 
+3), 20120628_lock_improve__migrate_basic_test_pass__base_on_20120529_patch
+add lock in libvirt libxl driver. 
+
+6, \TODO
+although I support different job launched while migrate. there are still some work to do:
+1), VIR_MIGRATE_CHANGE_PROTECTION
+qemu only call qemuMigrationJobStart while VIR_MIGRATE_CHANGE_PROTECTION is set. 
+but this is not support in libxl driver libxlSupportsFeature.
+2), OUT, IN. \TODO this is useless in my current code. improve it.
+(1), 1472  src/qemu/qemu_driver.c <<qemudDomainSuspend>>
+    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_OUT) {
+        reason = VIR_DOMAIN_PAUSED_MIGRATION;
+        eventDetail = VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED;
+    } else {
+        reason = VIR_DOMAIN_PAUSED_USER;
+        eventDetail = VIR_DOMAIN_EVENT_SUSPENDED_PAUSED;
+    }
+(2), 1065  src/qemu/qemu_migration.c <<qemuMigrationCleanup>>
+    if (!qemuMigrationJobIsActive(vm, QEMU_ASYNC_JOB_MIGRATION_OUT))
+        goto cleanup;
+this is called while virsh finish the current operate and call the qemuClose(). If the asyncJob is not QEMU_ASYNC_JOB_MIGRATION_OUT, Cleanup will do nothing but exit. 
+(3), 1130  src/qemu/qemu_migration.c <<qemuMigrationBegin>>
+    /* Only set the phase if we are inside QEMU_ASYNC_JOB_MIGRATION_OUT.
+     * Otherwise we will start the async job later in the perform phase losing
+     * change protection.
+     */
+    if (priv->job.asyncJob == QEMU_ASYNC_JOB_MIGRATION_OUT)
+        qemuMigrationJobSetPhase(driver, vm, QEMU_MIGRATION_PHASE_BEGIN3);
+this is called while the migrate is Peer2Peer. 
+(4), 2723  src/qemu/qemu_migration.c <<qemuMigrationPerformPhase>>
+\TODO: I do not understant the difference between job start at begin phase or job start at perform phase
+    /* If we didn't start the job in the begin phase, start it now. */
+    if (!(flags & VIR_MIGRATE_CHANGE_PROTECTION)) {
+        if (qemuMigrationJobStart(driver, vm, QEMU_ASYNC_JOB_MIGRATION_OUT) < 0)
+            goto cleanup;
+    } else if (!qemuMigrationJobIsActive(vm, QEMU_ASYNC_JOB_MIGRATION_OUT)) {
+        goto cleanup;
+(5), \TODO: Difference asyncJob has different recover method. this is not support in my libxl code. 
+2865  src/qemu/qemu_process.c <<qemuProcessRecoverMigration>>
+             } else if (job == QEMU_ASYNC_JOB_MIGRATION_OUT) {
+2944  src/qemu/qemu_process.c <<qemuProcessRecoverJob>>
+             case QEMU_ASYNC_JOB_MIGRATION_OUT:
+((1)), 
+3), not cover the reconnect situation. 
+4), no clean up in close. if user interrupt the migration, the libvirt maybe work abnormal. 
+5), not update vm status while migration. 
+6), after several times migrate, vm crash and rebootted. i do not know the reason. 
+7), but live migration fail.
+
+11:01 2012-06-28
+virtualization, vm, access disk permission denied
+type qemu cmd line successful. but virsh create(or vm-install) fail. 
+This is because the filesystem permission. 
+after change the disk to the root filesystem, virsh create successful. 
+
+14:03 2012-06-28
+suse, autoyast, location, autoyast.xml可以放到"/", "/var/adm-mount", 等三个位置 
+
+14:07 2012-06-28
+work, productivity, logAssistant, perl, vim, jump to section, cont3, fix bug
+1, fix the following search bug in the first date time section. 
+"5), 60' support QA team. vm-install or virsh create with autoyast. see"14:03 2012-06-28". 遇到权限问题"11:01 2012-06-28". "
+
+2, additional test pattern, only the first should jump to the "((1))". other should stop because of the space. 
+"09:34 2012-06-28"4-2)-(5)-((1))
+"09:34 2012-06-28" 4-2)-(5)-((1))
+"09:34 2012-06-28"4 -2)-(5)-((1))
+"09:34 2012-06-28"4-2) -(5)-((1))
+"09:34 2012-06-28"4-2)-(5) -((1))
+
+7:56 2012-6-29
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting
+1, Lin ma
+1), kvm shadow mechanism. 
+2), kvm bug? 
+3), iSISC: api, but no GUI interface. add it in XML.
+
+2, Bamvor
+1), Jim reply to me.
+
+3, Bo Yang
+1), qemu rbd?
+2), opensuse.
+3), interview with Jiaju. 
+4), software lockup. by wactchdog.
+5), Jim: openstack. 
+
+4, Jim
+1), L3 bug
+2), openstack.
+
+5, hackweek
+cancal sync meeting.
+
+8:24 2012-6-29
+virtualization, libvirt, migration, libxl(xenlight), lock, cont2, discuss with Jim through email
+1, email to Jim. see"09:34 2012-06-28"5.
+2, Jim reply
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+>
+> I add a exclusize mechanism for libvirt libxl driver(reference Job conditions in THREADS.txt). With this patch, the normal work(e.g. list domain) could execute while migration.
+
+Sounds good.
+
+>  
+> The core function in my patch is libxlDomainObjBeginAsyncJobWithDriver and libxlDomainObjEndAsyncJob. And two helper function for migration: libxlMigrationJobStart libxlMigrationJobFinish. 
+> I test the migration 24 times successful while the "virsh list" is executed in both source and destination. 
+>   
+
+Cool!
+
+>
+> It is a rough patch, there is still some work to do:
+> 1), todo work:
+> (1), i only protect the new migration is not allowed for the current migrate domain. but do not protect other op for this domain.
+> I will add BeginJob and EndJob in the libxl api if needed. e.g. add these into create, destroy...
+>   
+
+The 'get' API's shouldn't need additional protection and can probably be
+left as is.  The 'put' APIs (any that change the vm state) would
+probably need to be protected during the migration (or save, dump, and
+other long-running operations).
+
+> (2), Job condition for normal work is not implemented. 
+>   
+
+What do you mean by "normal work"?  Something like list doamins or get
+domain info?
+
+> (3), no clean up function. if user interrupt the migration, the libvirt maybe work abnormal. e.g. the vm alive in both source and destination. 
+> (4), not update vm status while migration. 
+> (5), the reconnect and recover situation is not considered.
+
+Yeah, I suppose all of these need addressed.
+
+>  
+> 2), known bug:
+> after several times migrate, vm crash and rebootted. i do not know the reason. 
+> 3), live migration is not tested yet.
+
+I wonder if the crash occurs when not using libvirt?  E.g. if using 'xl
+migrate' or 'xm migrate'?  Maybe it has nothing to do with libvirt.
+
+> At the same time, I am sorry for the progess. The wireshark backport work is more complex than I mentioned in previous sync meeting. because the very old wireshark version(1.0.16) in sles9 sp3 teradata, there are about 1500 more lines need to add to the sles9 in order to backport the patch. all these extra line I added is add one parameter for some function. Although I write several script to do this, it still take me two week to do this. Now the wireshark package is compile pass, I need to build a sles9 environment to test it. I plan to do it from tomorrow. because i have already miss the deadline(15th Jun).
+>   
+
+Backporting stuff to sles9 does not sound fun :(. 
+
+> Here is the explanation for the attachment. The 4th patch is my patch for libxl async job. All the following patch is applied to libvirt-0.9.12 release code. When i finish my work, I will send two patches as we discuss: one for lock, one for migration. 
+> 1), "[PATCH v2] Add migration APIs for libxl driver.txt"
+> Chunyan v2 migrate patch.
+> 2), the patch i written before last sync meeting. 
+> (1), 20120529_add_lock__libxlMigratePerform3
+> add libxlDriverLock/Unlock in libxlMigratePerform3. This patch fix the crash during migration if anther virsh cmd is invoked. 
+> (2), 20120529_fix_migrate_check_message_fail
+> because the libvirt use non-block socket. This code will try read again while EAGAIN encountered. 
+> This is not a final fix. IMO, there is no need to handshake between source and destination because libvirt could guarantee the migration sequence. I plan to try to remove the handshake next week. 
+> 3), 20120628_lock_improve__migrate_basic_test_pass__base_on_20120529_patch
+> add lock in libvirt libxl driver. 
+>   
+
+Ok, I'll review the patches and respond with any comments.
+
+Thanks!
+Jim
+
+3, reply to Jim
+Thanks your reply. 
+> The 'get' API's shouldn't need additional protection and can probably be
+> left as is.  The 'put' APIs (any that change the vm state) would
+> probably need to be protected during the migration (or save, dump, and
+> other long-running operations).
+Yes, This is what i want to say. 
+
+> What do you mean by "normal work"?  Something like list doamins or get
+> domain info?
+In qemu, the normal work means not a long-running operation but still need to exclusive with async job. like qemuDomainGetXMLDesc, qemuDomainStartWithFlag...
+I am not sure whether I need distinct the normal and async job in xenlight. but These normal work need to Job condition.
+
+>> 2), known bug:
+>> after several times migrate, vm crash and rebootted. i do not know the reason. 
+> I wonder if the crash occurs when not using libvirt?  E.g. if using 'xl
+> migrate' or 'xm migrate'?  Maybe it has nothing to do with libvirt.
+I do not test this bug in detail. I will test it later.
+
+8:33 2012-6-29
+GTD
+0, 8:00-8:53 10:44-12:20 13:20-17:51
+
+1, today
+1), 8:00-8:30 sync meeting. see"7:56 2012-6-29". 
+2), 8:30-8:53 reply to Jim. see"8:24 2012-6-29"3. 
+3), 10:57-11:17 check the mail. 
+4), libvirt xenlight bug? see"13:35 2012-06-29".
+5), 13:49-15:39 16:51-17:45 wireshark. see"13:49 2012-06-29". 
+30' nap. 
+6), 15:40-16:20 Jiaju talk with me. 16:30-16:51 write notes. see"16:43 2012-06-29".
+
+13:35 2012-06-29
+virtualization, libvirt, xen, xenlight, libxl, libvirt libxl driver bug
+1, vm-install if xend pxe boot successful. 
+if xenlight, vm.xml set cdrom boot, but vm(xen config file) set network boot.
+it looks like libvirt libxl driver do not support pxe boot? 
+
+13:49 2012-06-29
+company, network, wireshark, fix 3 bugs from upstream, using new maintenance model for branching and checking out, cont14, add expert_add_info_format and try build
+1, add the following at the beginning of the file, first try wireshark package. then delete the useless included file. ref packet-ansi_a.c
+
+#ifdef HAVE_CONFIG_H
+# include "config.h"
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <epan/packet.h>
+#include <epan/prefs.h>
+#include <epan/tap.h>
+#include <epan/strutil.h>
+#include <epan/emem.h>
+#include <epan/expert.h>
+
+1), compile packet-bacapp.c pass.
+
+2, check dependencies: 
+ref: http://www.linuxquestions.org/questions/linux-general-1/how-to-check-rpm-dependencies-182045/
+bamvor@linux-bjrd:SUSE_SLE-9-SP3_Update_Teradata_Test> rpm -qR -p wireshark-1.0.16-26.2.x86_64.rpm                                                      
+warning: wireshark-1.0.16-26.2.x86_64.rpm: Header V3 DSA signature: NOKEY, key ID 8a7c64f9                                                                      
+rpmlib(VersionedDependencies) <= 3.0.3-1                                        
+/sbin/ldconfig                                                                  
+/sbin/ldconfig                                                                  
+rpmlib(PayloadFilesHavePrefix) <= 4.0-1                                         
+rpmlib(CompressedFileNames) <= 3.0.4-1                                          
+libatk-1.0.so.0()(64bit)                                                        
+libc.so.6()(64bit)                                                              
+libc.so.6(GLIBC_2.2.5)(64bit)                                                   
+libc.so.6(GLIBC_2.3)(64bit)                                                     
+libcrypto.so.0.9.7()(64bit)                                                     
+libdl.so.2()(64bit)
+libgdk-x11-2.0.so.0()(64bit)
+libgdk_pixbuf-2.0.so.0()(64bit)
+libglib-2.0.so.0()(64bit)
+libgmodule-2.0.so.0()(64bit)
+libgobject-2.0.so.0()(64bit)
+libgthread-2.0.so.0()(64bit)
+libgtk-x11-2.0.so.0()(64bit)
+libm.so.6()(64bit)
+libm.so.6(GLIBC_2.2.5)(64bit)
+libpango-1.0.so.0()(64bit)
+libpangox-1.0.so.0()(64bit)
+libpangoxft-1.0.so.0()(64bit)
+libpcap.so.0()(64bit)
+libpcre.so.0()(64bit)
+libpthread.so.0()(64bit)
+libpthread.so.0(GLIBC_2.2.5)(64bit)
+libwireshark.so.0()(64bit)
+libwiretap.so.0()(64bit)
+libz.so.1()(64bit)
+rpmlib(PayloadIsBzip2) <= 3.0.5-1
+
+3, sles9 sp3 teradata is not release by me. I have build the package successful but I have not test environment(So, not submit request). In addition, I do not know how to cover the code I modified for backport the upstream code. It still take me some time to do some basic test. 
+
+4, install sles9 sp3 on xenlight fail. try to install on vmware.
+
+16:43 2012-06-29
+company, team, Jiaju talk with me
+1, about English training: my English training is planed to October(still need to prove by Olaf). With Chunyan and new colleague. 
+2, about communication with US virtualization team: Jiaju think send to Jim email before sync meeting is good. 
+3, about hackweek: Jiaju agree that I can try to run opensuse on my arm board. 
+
+17:19 2012-06-29
+opensuse, arm, X-windows, omap, framebuffer
+"Guillaume Gardet <guillaume.gardet@free.fr>"_email_"Re: [opensuse-arm] xorg-x11-drv-omapfb config file"_20120627_2329
+It seems we can use omapdrm (staging driver) with those tools:
+https://github.com/robclark/xf86-video-omap
+
+Currently with omapfb, we use thsose tools:
+http://cgit.pingu.fi/xf86-video-omapfb/
+
