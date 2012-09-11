@@ -1,0 +1,2762 @@
+﻿
+10:51 2010-1-2
+时间管理
+0, 9:45
+
+1, 计划
+1), VC0816, 量产, 今天一定要完成tag测试代码 code. 明天完成测试. 然后讨论机台程序包括哪些东西. 
+2), perl学习. 希望可以完成section搜索. 
+"19:05 2009-12-31"的流程还可以优化. 发现没有state都要先检查是否是"section start"
+
+2, 执行
+1), 20' perl学习. 见"11:16 2010-1-2"
+2), VC0816, 量产, cache tag测试, 见"11:27 2010-1-2"
+3), arm arm 7-ar
+
+3, 次日计划<转移>
+1), 除了VC0816和perl学习. 每天浏览一章arm arm 7-ar. 
+2), VC0816, 实验修改tlb后原有程序能否正常继续运行. 如果可以, 希望明天完成VC0816量产测试编写和测试. 
+3), 别忘了填加班记录, 报销打车费. 
+
+11:16 2010-1-2
+软件技巧, 正则表达式, editplus, 搜索, perl, logAssistant, 续
+1, 发现12月31日的脚本只搜索第一个文件. 原因是当前文件结束时直接用了"exit"退出整个程序. 
+2, perl中单词边界是"\b", 不是"\<", "\>". 
+
+11:27 2010-1-2
+VC0816, SV, 量产, cache测试, tag, arm学习, mmu, tlb, tlb lockdown, 续
+1, 目的: 测试cache tag读写.
+clock: arm: 336, bus: 168.
+tag写: 访问没有在cache里面的数据/指令, cache 读入新的数据/指令时更新tag.
+tag读: 访问已经在cache里面的数据/指令. 
+2, 分析: 
+高速只有sram可用, 所以只能是把sram空间(全部?部分?)重新映射.
+不论怎样映射, 映射表都有变化, 我们的页表在sdram中, 高频时没有sdram, 所以只能利用cp15 c15寄存器修改tlb. 
+由于要修改tlb, 不清楚修改tlb时是否可以关mmu时修改. 感觉可能不行, mmu关闭的时候映射表可能不能访问. 如果是开mmu时修改tlb. 修改tlb后立刻生效, 程序如果正在修改的tlb位置恐怕会出问题(因为pc没变). 所以需要1k的细表. 
+(17:15 2010-1-2)虽然pc没变, 但是修改tlb后arm指令会在新地址继续运行, 也应该没什么问题, 明天实验"17:15 2010-1-2"end
+3, 所以难点是
+tlb修改和做细表映射. 而且所有映射内容都在tlb中. 不知道是否可以. 
+
+15:09 2010-1-2
+VC1600, VC0882, VC718, arm SOC, BSP, cortex-a8, TI OMAP3530, DVSDK: Linux PSP
+1, PSP下载:
+release代码可以从TI官网OMAP3530 Linux dvsdk下载. 最新代码参见"15:47 2009-11-27"2
+2, Linux PSP包括xloader, u-boot, kernel三部分. 
+3, signGP:
+"OMAP35x-PSP-SDK-02.01.03.11/host-tools/src/signGP.c", 把一级boot xloader的长度和加载地址(各占一个word)写在xloader bin前面. 并把新文件命名为xloader.bin.ift
+4, 简单看了看Linux中与cortex-a8相关启动代码. 感觉和arm926没有什么区别. cortex-a8与arm926的差异可能还要认真看trm. 
+
+16:22 2010-1-2
+arm, 网站, 登录名, 密码
+zhangjian@vimicro.com
+zhangjianZJ!
+
+16:33 2010-1-2
+VC1600, VC0882, VC0718, arm architecture, cortex-a8, ARM ARM 7-AR, armv7与armv6, armv4/v5差异
+1, 下载了"DDI0406B_arm_architecture_reference_manual_errata_markup_4_0.pdf". 下载这个文档是注册用于就可以下载. 
+附录D是cortex-a8去掉的feature, G和H是armv7与armv6, armv4/v5差异. 这些很有用. 
+2, armv6, v7都有APSR. APSR是application level CPSR的别名. ARMv7-AR的APSR其实就是PSR但是APSR只能访问condition flag(arm指令的N, Z, C, V, Q, DSP指令的GE[3:0]):
+In ARMv7-A and ARMv7-R, the APSR is the same register as the CPSR, but the APSR must be used only to access the N, Z, C, V, Q, and GE[3:0] bits. For more information, see Program Status Registers (PSRs) on page B1-14.
+3, armv6 add:
+— the ARM SIMD instructions to improve execution of multimedia and other DSP applications
+— instructions for improved context switching.
+用于改进的上下文切换的指令: Linux kernel中可能会用到, 需要关注. 
+4, Instruction set state:
+ARMv7的ThumbEE在armv4, v5中没有. armv4, v5中只有armv5tej有jazelle状态. 
+5, Alignment: v4,v5和v7有差异. \todo 细看.
+6, Endian support: 小端相同. 大端v4,v5是BE32与v7BE不同. 
+所谓BE就是任何情况下都是按byre为单位, 在类型长度内按大端排列. 例如如果是byte类型(byte寻址)be和le完全一样. 如果是word寻址. be和le取的word整体一致, 但内部byte排列顺序相反. 
+所谓BE32(big endian 32)是指任何情况下都按32bit方式组织的大端方式. 这样LE和BE32不对齐访问的行为就一致了:
+In ARMv7, all big endian accesses return the same bytes of data from memory as the corresponding little endian accesses. It is only the byte order in the returned value that is different. 由于armv4, v5本来就不允许不对齐访问. 所以不会有问题. p2021有区分不同endian的示例:
+Memory access: Bytes accessed in endian format:
+Size Address LE BE BE-32
+Doubleword A ZYXWVUTS STUVWXYZ VUTSZYXW
+Word A VUTS STUV VUTS
+Word A+4 ZYXW WXYZ ZYXW
+Halfword A TS ST VU
+Halfword A+2 VU UV TS
+Halfword A+4 XW WX ZY
+Halfword A+6 ZY YZ XW
+Byte A S S V
+Byte A+1 T T U
+Byte A+2 U U T
+Byte A+3 V V S
+Byte A+4 W W Z
+Byte A+5 X X Y
+Byte A+6 Y Y X
+Byte A+7 Z Z W
+7, 异常处理
+1), The ARM abort model
+v7出现data abort时, load/store 基址寄存器的值会恢复到load/store操作前. 
+ARMv6 and ARMv7 use a Base Restored Abort Model (BRAM). However, in ARMv5 and ARMv4 it is IMPLEMENTATION DEFINED whether this model, or a Base Updated Abort Model (BUAM) is used.
+8, system level memory
+1), armv4, v5:
+When a virtual to physical address mapping changes, caches must be cleaned and invalidated accordingly.
+2), Only ARMv4 and ARMv5 support tiny (1KB) pages.
+8, (16:39 2010-1-3)上下文切频
+armv7中快速上下文切频(FCSE)是可选的. 
+armv6, v7引入了VMSA(Virtual Memory System Architecture), 机制本身支持全局entry和进程entry. \todo 研究机制. 看Linux中是否使用. 见"17:00 2010-1-3"
+9, (11:28 2010-1-4)Appendix D Deprecated and Obsolete Features:
+sp, pc两个寄存器不像原来那样可以完全当作通用寄存器使用. Liaozhicheng当初用rvds3.0编译时发现有条没问题的pc指令现在不行了. \todo 细看. 
+
+11:12 2010-1-3
+时间管理
+0, 10:35-
+
+1, 计划
+1), 除了VC0816和perl学习. 每天浏览一章arm arm 7-ar. 
+2), VC0816, 实验修改tlb后原有程序能否正常继续运行. 如果可以, 希望明天完成VC0816量产测试编写和测试. 
+3), 别忘了填加班记录, 报销打车费. <DONE>
+
+2, 执行
+1), VC0882 coding kickoff. 见"11:19 2010-1-3"1,2.
+2), VC0882 arm环境计划. 见"11:19 2010-1-3"3
+
+11:19 2010-1-3
+(11:20 2010-1-4)
+VC1600, VC0882, 882 coding kick off, arm环境, rvds4.0目录: 编译器, 工具, rvds4.0环境设置; Linux, rvct, armcc
+1, Aiguo邮件"882 coding kick off"20100103_1001
+因598，830和816的项目，882项目的进度一直很缓慢，从下个礼拜一开始，我们要进入实质性阶段，大家严格按照进度来规划：
+1), zhangjian尽快熟悉A8，下个礼拜TI的转接板回来了，我们要开始尝试搭建环境，编写A8初始化汇编代码，建立A8的最小环境（bootloader），beizhan帮忙在882项目下面建立一个panda的目录，这个是882第一步调试环境，不考虑os，只需要有aasp就可以了，因此zhangjian需要熟悉一下598的环境；
+2), liaozhicheng，编写timer，interrupt的driver，这个按照598的规范来做，interrupt统一用os来管理；
+3), yinxingjie，开始编写CIF的driver，先熟悉一下598 IPP的driver，这个和598基本一致；(1月初步完成)
+4), shuyu，开始编写DE driver；(1月初步完成)
+5), sunguangyue，开始编写host driver，你来制定一个计划，我们review一下；
+6), beizhan，598的sd driver整理后移植到882下，暂时的文件系统就和598一致，保证大家的使用，如果觉的需要改进，尽快提出来；
+7), beizhan和caijin，开始熟悉GPU，确定验证方向，两个方向：其一是在PC下跑emulater，理解GC430的流程，其二理解linux或者windows ce下的driver，我们的目标是在nuclues下实现最基本的验证，后面我们找vivante交流一下，希望他们提供最简单的driver。
+882 FPGA大概在1.15开始，时间很紧了，因此大家一定抓紧时间。
+Beizhan，你帮忙礼拜一上午订一个会议室，我们召集email中人讨论882的项目安排，其他人等到598 code freeze后加入882。
+
+2, zhangjian, LiaoZhiCheng cortex-a8现有情况和计划:
+0), VC0882相关arm文档放在"D:\VC0882\document\arm": 包括cortex-a8 TRM, ARM_ARM_7AR.
+1), cortex-a8最小环境(1月15日之前完成):
+(1), 初始化代码: 比较xloader和Linux中arm926和cortex-a8启动代码. 初步看没有什么差异.
+\\10.0.2.36\sqmshare\Document\SOC\TI OMAP3530\TI资料\Linux\PSP: 有xloader, u-boot, kernel OMAP3530移植. 
+(2), armcc aasp环境. 参考VC0598.
+2), 比较cortex-a8与arm926差异. DDI0406B_arm_architecture_reference_manual.pdf(ARM_ARM_7AR)的附录D是cortex-a8去掉的feature, G和H是armv7与armv6, armv4/v5差异. 我目前的阅读笔记在"armv7与armv6, armv4/v5差异.txt"
+3), 调试环境: RVI正版只有五套, 还需要其它调试环境. 
+(1), RVDS4.0评估版过期后用新邮箱重新申请license就可以使用. 
+如果是这样将来上FPGA的人多了, 大家在自己工位上面可能用gcc更方便. 
+查gcc最低版本: 从"17:30 2009-10-28""cortex-a8, arm11, x86性能比较"看, gcc从4.3开始就可以支持了. 
+(2), 评估华恒Hammer-a8和openocd.
+A, 华恒Hammer-a8: 只实验过omap3530, 这和openocd是一样的.
+B, zhangjian: 调试环境如果rvi不能用可以先用openocd代替. 找xuelian帮忙做短点的线试试. RVI和openocd各做一根. 
+4), 是否需要armcc和gcc两套环境. 
+其它调试环境不支持armcc编译的映像. 
+5), rvds4.0编译器目录: C:\Program Files\ARM\RVCT\Programs\4.0\400\win_32-pentium. 包括: armcc, armar, armasm, fromelf, armlink. 头文件目录"C:\Program Files\ARM\RVCT\Data\4.0\400\include\windows"
+arm提供make有两个(不清楚是否是rvds4.0自带的, 还是3.0的), 都是3.81: 
+C:\Program Files\ARM\bin\win_32-pentium
+C:\Program Files\ARM\OpenSource\gnumake\3.81\4\win_32-pentium\bin
+6), rvds3.1开始用armenv设置环境. Linux有"source RVDS40env.posh"调用armenv设置. 会设置rvct bin目录到path, 加入RVCT40BIN, RVCT40INC, RVCT40LIB等环境变量. 
+例如我的电脑windows和Linux RVCT40INC分别是: 
+C:\Program Files\ARM\RVCT\Data\4.0\400\include\windows
+/usr/src/embedded_dev/software/ARM/RVCT/Data/4.0/400/include/unix
+
+3, zhangjian计划:
+1), 周二把VC0816的代码完成. 
+2), 周三比较cortex-a8和arm926启动代码. rvds3.0编译通过后上传CVS.
+3), 周四周五看VC0598 aasp环境, 希望本周完成移植. 
+4), 其它: 
+(1), rvds4.0+omap3530实验.
+(2), 调试器评估: 华恒, openocd
+(3), 找cortex-a8其它代码: 例如mmu, cache操作, 进程切换.
+(4), 继续分析cortex-a8与arm926差异及其对OS的影响. 例如进程切换的差异. 
+
+15:31 2010-1-3
+VC0816, SV, 量产, cache测试, tag, arm学习, mmu, tlb, tlb lockdown, 续
+1, VC0816, JMP10是lcd_d6(strap pin[6]是是否打印. 0(默认): 不打印. 1: 打印. 
+
+17:00 2010-1-3
+VC1600, VC0882, arm architecture, armv7, cortex-a8, Linux, 进程切换
+1, 进程切换参考"http://blog.chinaunix.net/u1/38994/showart_342896.html":
+在调用__switch_to之前,linux会先调用switch_mm()进行进程页表切换,当然如果next->mm==0,即next为内核线程切换,那不会调用switch_mm()函数,而是直接使用prev的进程地址空间,next->mm！=0,即next为普通进程切换,使用switch_mm()函数将prev的进程空间换出,换入next进程空间;
+/include/asm-arm/Mmu_context.h->switch_mm()->/include/asm-arm/Cpu-single.h->cpu_switch_mm(pgd,tsk)将pgd设置生效
+具体操作参见《linux2.4.19下__ioremap函数中remap_area_pages虚拟地址映射建立函数的代码分析》.
+2, cpu_switch_mm()分析: 
+proc-fns.h:226:
+#define cpu_switch_mm(pgd,mm) cpu_do_switch_mm(virt_to_phys(pgd),mm)
+
+cpu-single.h:
+#define cpu_do_switch_mm                __cpu_fn(CPU_NAME,_switch_mm)
+宏"__cpu_fn"把CPU_NAME和_switch_mm链接到一起. 
+CPU_NAME同样定义在"proc-fns.h": 
+CPU_NAME cpu_arm926
+CPU_NAME cpu_v7
+
+对于arm926来说, cpu_arm926_switch_mm(pgd)(arch/arm/mm/proc-arm926.S)表明是直接把pgd中描述的page table pointer写入到translation table base. 
+armv7也是cpu_arm7_switch_mm()(arch/arm/mm/proc-arm6_7.S). 只是比arm926代码少了清cache, tlb的工作. 
+但, 我同时还找到"cpu_v7_switch_mm()(proc-v7.S)", 里面使用了CONTEXT ID:
+ENTRY(cpu_v7_switch_mm)
+#ifdef CONFIG_MMU
+        mov     r2, #0
+        ldr     r1, [r1, #MM_CONTEXT_ID]        @ get mm->context.id
+        orr     r0, r0, #TTB_FLAGS
+        mcr     p15, 0, r2, c13, c0, 1          @ set reserved context ID
+        isb
+1:      mcr     p15, 0, r0, c2, c0, 0           @ set TTB 0
+        isb
+        mcr     p15, 0, r1, c13, c0, 1          @ set context ID
+        isb
+#endif
+我的android编译的是"proc-v7.S". 说明Linux中armv7的进程切换是VMSA推荐的方式. 这个需要详细看. 
+
+11:33 2010-1-4
+时间管理
+1, 计划
+继续完成"11:19 2010-1-3"
+
+12:36 2010-1-4
+gmail: 
+姓: arm
+名: test0104
+用户名, 密码: armtest0104
+arm passwd: Armtest010$
+
+14:00 2010-1-4
+绩效, 2009-12-16--2010-1-15, 加班
+17, 23, 23, 29, 30, 31
+
+15:16 2010-1-4
+长途, ip, 96446
+
+16:40 2010-1-4
+同事信息, 江海宗, 中星电子, 安防, 监控
+1, HR邮件
+江海宗先生就任中星微—中星电子副总裁一职，直接向公司总裁金兆玮汇报工作。江先生毕业于中国人民大学工业经济学专业；曾任职于松下电器（中国）有限公司、GE、CSST等著名公司的高层管理职务，行业经验和企业管理经验丰富；他的办公电话是：010-68948888-8807 Email:jianghaizong@vimicro.com; jiang.haizong@vimicro.com。
+
+2, CSST
+CSST: 中国安防技术有限公司（China Security & Surveillance Technology, Inc. 英文简称：CSST），是一家同时在纽约证券交易所和纳斯达克迪拜上市的公司。股票交易代码：CSR。
+
+根据"http://www.cf1688.com/news_info.asp?id=331"资料, 江海宗
+2008年12月任命为安防科技（中国） 有限公司常务副总裁（兼）。
+
+3, GE资料未找到. 
+
+4, 松下:
+根据"http://info.secu.hc360.com/list/zhibo.shtml"在2005年3月以松下电器（中国）有限公司系统销售公司副总经理身份参加了"全国首届安防行业优秀工程商大会"
+
+17:58 2010-1-4
+VC1600, VC0882, arm architecture, arm cortex-a8, arm7, arm9, pc的产生
+参见ARM SOC体系结构p65, p68的"PC的产生"
+所有arm的读pc行为都规定是pc=当前指令地址+8.
+1, arm7
+arm7和arm7之前的arm都是三级流水线, 在第三级执行时取操作数, 此时的pc是实际地址+8.
+取指-译码-执行
+     取指-译码-执行
+          取指-译码-执行
+2, arm9, arm9的5级流水线中在第二级"译码"有三个操作数读取端口, 所以大多数arm指令可以在译码阶段取操作数, 这样pc实际就是+4了. 为了和三级流水线一致. 5级流水线对此有特殊处理保证仍然是+8(zhangjian: 具体没看懂, 见p68和p66图4.4)
+取指-译码-执行-缓冲/数据-回写
+3, cortex-a8: 从ARM_ARM_7AR中知道pc仍然是+8. 具体原因没写. 
+
+11:16 2010-1-5
+时间管理
+1, 计划
+1), VC0816量产.
+2), check "11:19 2010-1-3"3计划.
+
+11:20 2010-1-5
+VC1600, VC0882, arm环境
+1, 项目当前计划和zhangjian工作计划见"11:19 2010-1-3"
+2, 目前的需要看xloader和u-boot代码, 前者适合入门, 后者更适合移植. 因为后者更全. 
+3, 学习arm pb a8 selftest的编程风格. 
+
+11:35 2010-1-5
+perl学习, editplus
+"editplus -cursor a:b -e filename"可以定位光标. 这样就可以直接定位日期了. 
+user tool argument中"$(AppDir)"表示editplus目录. 
+
+17:37 2010-1-5
+(14:36 2010-1-6)
+公司, 工卡, id号(19314260), 同事信息(HR), SunMin, 5171, 可以查工卡编号
+
+18:58 2010-1-5
+VC0830, SV, 结构体, 代码修改后未统一编译
+caijin遇到结构体变量赋值后结构体内发现数据变化. 后来发现是头文件修改后, 有文件没有重新编译. 
+
+10:21 2010-1-6
+时间管理
+0, 10:00
+
+1, 计划
+1), VC0816量产. 最近4天都没什么进展, 争取今天有一定进展, 明天完成. 见"14:38 2010-1-6"
+2), check "11:19 2010-1-3"3计划. 看1月4日, 1月3日计划. 
+
+14:38 2010-1-6
+VC0816, SV, 量产, cache测试, tag, arm学习, mmu, tlb, tlb lockdown, 续
+1, 实验daichunquan的tag测试程序. 看看能不能修改sram映射区域且指令可以继续执行. 
+	// modify lock tlb
+	tlb_victim = 0x00000000;
+	tlb_new_pa = 0x00200000;
+	asm volatile (
+		"MCR p15,0,%0,c15,c1,0 ;"				\
+		"MRC p15,4,%1,c15,c2,1 ;"				\
+		"MCR p15,4,%1,c15,c3,1 ;"				\
+		"MRC p15,4,%2,c15,c4,1 ;"				\
+		"ORR %2, # 0x00200000 ;"				\
+		"MCR p15,4,%2,c15,c5,1 ;"				\
+		"MCR p15,4,%0,c15,c7,1 ;"				\
+		:										\
+	:"r"(tlb_victim),"r"(tlb_tag),"r"(tlb_old_pa)
+	);
+2, 看tlb操作文档(arm926 trm r0p5: p238)和daichunquan代码时看translation table格式. 发现自己原来理解错了. 表中写的地址是物理地址, 不是虚地址. 
+3, 测试替换映射表后能否程序执行是否正常
+	;copy from kernel proc_arm926.S
+	ldr r0, =TTB_MODIFY
+;#ifdef CONFIG_MMU
+;	mov     ip, #0
+;#ifdef CONFIG_CPU_DCACHE_WRITETHROUGH
+	mcr     p15, 0, ip, c7, c6, 0           ; invalidate D cache
+;#else
+;@ && 'Clean & Invalidate whole DCache'
+con_clean
+	mrc     p15, 0, r15, c7, c14, 3         ; test,clean,invalidate
+	bne     con_clean
+;#endif
+	mcr     p15, 0, ip, c7, c5, 0           ; invalidate I cache
+	mcr     p15, 0, ip, c7, c10, 4          ; drain WB
+	mcr     p15, 0, r0, c2, c0, 0           ; load page table pointer
+	mcr     p15, 0, ip, c8, c7, 0           ; invalidate I & D TLBs
+;#endif
+;	mov     pc, lr
+结果映射表更新正确. 但是程序跑飞. 因为pc指针不会变. 所以只能是做1k page映射了. 
+
+4, 和zhicheng讨论, zhicheng提醒可以把0x2000000映射到不同地址, 这样就简单多了. 
+1), 映射到0x55500000, 0xaaa00000, 简单实验, 是可以的.
+2), 改写程序, 在上面两个地址各运行一次, 比对数据.
+
+16:02 2010-1-6
+VC1600, VC0882, VC0718, arm debug, arm SOC, cortex-a8, omap3530, 华恒科技 hammer-a8
+1, 提供20pin转14pin转接板.
+2, zhangjian发送邮件"答复: Fw: 仿真器技术手册"
+方工: 
+我们目前在评估不同厂商omap3530调试工具. 发现大家用法有些不同, 担心影响调试环境性能或稳定性, 所以和你确定如下问题:
+1), 支持omap3530是通过ads/rvds 脚本支持还是软件写死. 我们将来也可能会使用其它cortex-a8方案. 希望调试环境是对cortex-a8通用的. 
+2), 对rvds支持如何(具体支持哪些版本?), 是否支持elf文件. 我们希望能用rvds3.0调试. 
+3), 能否通过mem_ap下载映像到memory. 
+4), 是否支持non-invasive debug. 
+5), 仿真器最大clock.
+6), 连接问题
+(1), emu0, emu1两个pin如何使用. 我们omap3530板子是上拉的. 会不会有影响? 
+(2), nTRST是直连的还是经过缓冲的?
+(3), 仿真器是否使用rtck. 
+谢谢
+
+17:42 2010-1-6
+VC1600, VC0882, VC0718, arm SOC, cortex-a8, TI OMAP3530
+1, zhangjian发wangfeng邮件
+我们查到的TI OMAP3530有TI EVM, beagleboard, 瑞泰, 天漠等板子. 
+文件位置: "H:\36服务器porting资料备份\SOC\TI OMAP3530\OMAP3530开发板.xls"
+	硬件资源	支持的软件资源	提供软件	价格	联系方式	备注
+TI EVM	多	"Linux, WinCE6.0R3"	-			
+Beagleboard	基本资源	"Linux(android, angstrom…)"	同左	149$		
+北京瑞泰minilcd	同beagleboard	"Linux(android, angstrom…),  WinCE6.0R3"	angstrom	1000-3000	62105690 赵晓燕	"beagleboard""抄板"",可以使用beagleboard软件, TI WinCE移植"
+深圳天漠DevKit8000	同上	同上	angstrom+android+TI DVSDK image	2100	0755-25500944 / 0755-25631357	"beagleboard""抄板"",可以使用beagleboard软件, TI WinCE移植"
+北京瑞泰evm	多	-	-	12800
+注:深圳天漠是英倍特子公司.
+我们买的是北京瑞泰的minilcde, 感觉天漠提供的资料相对多一些. 附件是beagleboard, 瑞泰, 天漠三家板子介绍及北京瑞泰minilcde使用手册
+我们下载了beagleboard android源代码并编译运行成功. 运行TI WinCE demo成功. 
+
+附件: DevKit8000_Overview_Cn.pdf, BBSRM_latest.pdf, ICETEK-OMAP3530产品.pdf, ICETEK-OMAP3530-Mini使用手册.pdf
+
+2, 参考liaozhicheng
+开发板选型邮件(LiaoZhiCheng邮件"答复: 开发板和JLinkv7的购买"20091105_1839)
+Hi, xiaoduan：
+我和zhangjian商量后，觉得还是一次买好点，最终的决定如下配置：
+1）   arm11板子选用：
+公司：友坚恒天
+网址：http://www.urbetter.com/ProductShow.asp?ID=167
+联系电话：0755-86217140
+需要购买的产品型号：UT-S3C6410 + 7寸LCD + WIFI模块 + Camera模块 + GPS模块
+2）   cortex板子选用：
+公司：瑞泰创新 
+网址：http://www.realtimedsp.com.cn
+联系电话：62105690 赵晓燕
+需要购买的产品型号：ICTEK-OMAP3530- minilcde v3（注：新出的，网上还没更新，这板已包括 三合一扩展子板支持LCD,VGA,NET.） + 单买A（母口）转miniA线
+3）   就用最新的jlink v8.0吧。
+Thanks.
+
+17:49 2010-1-6
+问问caijin下午看的什么demo. 
+(17:04 2010-12-16)是MIPS演示, 声称性能超过Cortex-A8.
+
+9:54 2010-1-7
+时间管理
+0, 9:21
+
+1, 计划<DONEor转移>
+1), 简单试试转接板.
+2), VC0816 5个片子实验.  发信. 
+3), VC1600 review clkrst. 1月5日zhicheng发过信. 忘了看. 今天下午先看这个. 
+
+2, 执行
+1), 9:55-11:31, OMAP3530 jtag转接板, 见"9:55 2010-1-7"
+2), -12:42 午饭
+3), 12:50-13:40 VC0882 arm最小环境计划, 见"13:13 2010-1-7"
+4), 13:41-15:10 VC0882 mas review: clkrst 本来计划一下看完的, 发现比VC0718要复杂, 只好晚上继续看了. 
+5), openocd. 见"16:12 2010-1-7"
+
+3, 次日计划<转移>
+openocd加上eclipse实验稳定性. 如果基本可用, openocd就暂告段落了. 明天会继续做VC0816 cache tag和VC0882 mas review: clkrst. 
+另外给arm发信问rvi问题. 见"16:12 2010-1-7"4
+
+9:55 2010-1-7
+VC1600, VC0882, VC0718, arm debug, cortex-a8, SOC: OMAP3530 jtag转接板
+1, 简单试试转接板.
+1), 查原理图, 检查连通性. 
+发现lvhaifang把TI jtag这边pin画反了. 只能是反着插, 剩下三根偶数线飞线. 
+2), openocd还是不稳定, 时间稍长一点就"Warn : Invalid ACK in SWJDP transaction", 下午试试降速, 查这个warning的含义. 另外试试rvi. 
+
+12:42 2010-1-7
+VC1600, VC0882, VC0718, arm debug, SOC: OMAP3530, jtag: codehammer-a for cortex-a8
+1, 连接omap3530时有转接板. 从工程师回答看是通过脚本配置icepick. 
+2, ZhangJian至Aiguo邮件"申请购买华恒codehammer-a for cortex-a8仿真器"20100107_1105
+华恒的a8仿真器只测过rvds2, 我们用应该没问题. 价格是3000元. 
+网址: http://www.hhcn.com/chinese/develop-tool/codehammera8.htm
+据销售说节前没什么货, 现在只有一套了. 
+联系人: 华恒科技市场部 方成俊 5325173
+-----邮件原件-----
+发件人: 华恒科技 市场部 [mailto:market@hhcn.com]
+发送时间: 2010年1月7日 10:37
+收件人: Zhangjian
+主题: Re: 答复: Fw: 仿真器技术手册
+张工，您好！
+关于您邮件中的问题做以下回复：
+1), 支持omap3530是通过ads/rvds 脚本支持还是软件写死. 我们将来也可能会使用其
+它cortex-a8方案. 希望调试环境是对cortex-a8通用的.  
+软件是写死的，不能保证支持其他cortex-a8
+2), 对rvds支持如何(具体支持哪些版本?), 是否支持elf文件. 我们希望能用rvds3.0
+调试.  
+支持 elf文件，测试过rvds2.0
+3), 能否通过mem_ap下载映像到memory.  
+ 可以
+4), 是否支持non-invasive debug.
+不支持
+5), 仿真器最大clock. 
+ 12M
+6), 连接问题
+(1), emu0, emu1两个pin如何使用. 我们omap3530板子是上拉的. 会不会有影响?  
+不使用这两个pin,不影响
+(2), nTRST是直连的还是经过缓冲的? 
+直连
+(3), 仿真器是否使用rtck.
+ 不使用 
+
+13:13 2010-1-7
+VC1600, VC0882, arm最小环境, cortex-a8, SOC: omap3530
+1, 参"11:19 2010-1-3"3和"11:20 2010-1-5", 总的来说三个事情, 建立最小环境, 学习cortex-a8变化, 建立/评估调试环境. 相比1月3日的计划进展比较慢. 
+2, 建立/评估调试环境:
+1), 目标: 建立两套比较可靠的调试环境: 一是rvi, 二是openocd或codehammer. 
+2), 已有进展: openocd可以调试omap3530, 但是不太稳定. RVI暂时没连上omap3530. 
+3), 计划:
+(1), 其实计划实验4套. 除了前面三个还有qemu模拟omap3530和realview板子. 今天回家下载qemu. 
+(2), 今天实验openocd稳定性问题和RVI连接OMAP3530. 如果两个都可以jtag暂时如此. 明天再加入eclipse. 
+
+3, 建立最小环境: 
+1), 目标: 建立VC0882最小环境, 初期只包括c语言启动环境(汇编), 库的桩脚函数, uart. 为了便于实验, uart需要支持VC0882和TI OMAP3530.
+2), 已有进展: 目前只简单看了xloader代码. 
+3), 下一步: (依赖: 有好用的调试环境)
+(1), 明天开始详细看xloader代码和u-boot代码. 还是希望本周完成TI OMAP3530可以跑的aasp. 
+(2), cache, mmu, 进程切换等其它操作函数. 
+依赖: 详细学习cortex-a8变化. 
+
+4, 学习cortex-a8变化
+1), 目标: 熟悉cortex-a8与v7差异. v7与v5差异. 为搭建最小环境做准备.
+2), 进展: 初步分析了差异, log见"16:33 2010-1-2"armv7与armv6, armv4/v5差异.
+3), 计划: 继续分析cortex-a8与arm926差异及其对OS的影响. 例如进程切换的差异. 
+
+16:12 2010-1-7
+VC1600, VC0882, VC0718, arm debug, jtag: openocd/RVI, SOC: OMAP3530
+1, 现有问题: icache: 
+(自LEDblink README):
+One major problem (090904) is that OpenOCD does not control invalidation
+of the I-cache when uploading updated program code to RAM. So the processor does not execute the same code fron I-Cache as the debugger can read from memory thrugh the AHB-MEMAP.
+
+If we are executing in UBoot, halt the processor, upload and runs a program then 
+everything works because ththe code region is not cached. If we change our code, rebuilds and uploads without somehow clearing the caches, the the MPU will run the old code but gdb will see the new code. And confusion starts.
+2, 开始gdb调试不行, 后来发现是原来无意中删除了"monitor halt". 现在感觉降速到100k还是比较稳定的. 调试u-boot的".gdbinit": 
+echo Setting up the environment for debugging gdb.\n
+# This connects to OpenOcd at localhost:3333
+target remote localhost:3333
+# Increase the packet size to improve download speed.
+set remote memory-write-packet-size 1024
+set remote memory-write-packet-size fixed
+#omap3_dbginit must be run in OpenOCD after every reset
+monitor omap3_dbginit omap3530.cpu
+#monitor cortex_a8 dbginit
+#monitor mww 0x5401d030 0x00002000
+monitor halt
+# Load the program executable called "u-boot"
+load u-boot
+# Load the symbols for the program.
+symbol-file u-boot
+我在汇编start.S和lib_arm/board.c设置断点都没有问题. 
+在6M下测试感觉也比原来稳定(但下载速度仍然是1k/sec), 原因未知. 
+3, openocd的serve包括gdb_server, telnet_server, tcl_server. 
+\todo 整理openocd调试架构. 
+4, RVI仍然不行, 有时间用逻辑分析仪看. 发信(未发送):
+抄送arm公司那个人. aiguo, fengbeizhan, liaozhicheng. 附上原理图. 
+
+we are using arm Realview ICE debug TI OMAP3530 board which use TI 14pin jtag interface. 
+we use convert board(see attachment) to convert arm 20pin jtag interface to TI 14pin jtag. 
+
+zhangjian
+vimicro
+
+5, windows编译:
+1), Linux编译参数: 
+./configure --enable-parport  --enable-ft2232_libftdi --enable-jlink --prefix=/home/dec/bin/openOCD4Cortex-a8
+2), Windows下, bootstrap运行有问题, 直接复制Linux下编译通过的完整目录.
+位置: "36: Lnux\host\openocd\for cortex-a8\openocd_LinuxBuildDone.tar.gz"
+./configure --enable-ft2232_ftd2xx --with-ftd2xx-win32-zipdir=/home/ftd2xx_win32/ --enable-jlink --prefix=/home/bin/openOCD4Cortex-a8
+3), make
+发现用的rvds的make, 在全局Path中把mingW make path(D:\Software\MinGW\bin)放到最前面: 
+D:\Software\MinGW\bin;C:\Program Files\ARM\bin\win_32-pentium;C:\Program Files\ARM\Utilities\FLEXlm\10.8.5.0\1\win_32-pentium;C:\Program Files\ARM\RVCT\Programs\4.0\400\win_32-pentium;C:\Program Files\ARM\ADSv1_2\bin;C:\Program Files\Common Files\NetSarang;D:\Software\Graphviz2.20\bin;D:\softare\Perl\site\bin;D:\softare\Perl\bin;%SystemRoot%\system32;%SystemRoot%;%SystemRoot%\System32\Wbem;D:\Software\openocd-r717\bin;D:\Software\openocd-r717\utils\bin;C:\Program Files\ARM\Multi-ICE;C:\Program Files\ARM\Multi-ICE\system;C:\Program Files\OpenOCD\0.1.0\bin\;C:\Program Files\ARM\RVI\Tools\3.3\106\programs\win_32-pentium;C:\Program Files\ARM\RVD\Core\4.0\1106\win_32-pentium\bin;C:\Program Files\ARM\RVI\GDB\3.3\8
+(1), 出错:
+src/target: 
+gcc -std=gnu99 -DHAVE_CONFIG_H -I. -I../.. -I../../src/helper -I../../src/jtag -I../../src/xsvf -g -O2 -I/home/bin/openOCD4Cortex-a8/include -D__USE_MINGW_ANSI_STDIO -I/home/ftd2xx_win32 -Wall -Wstrict-prototypes -Wformat-security -Wextra -Wno-unused-parameter -Wbad-function-cast -Wcast-align -Wredundant-decls -Werror -MT target.lo -MD -MP -MF .deps/target.Tpo -c target.c -o target.o
+
+看target.c, 2545: 
+command_print(CMD_CTX,
+        "dumped %zu bytes in %fs (%0.3f kb/s)", fileio.size,
+        duration_elapsed(&bench), duration_kbps(&bench, fileio.size));
+由于%zu是无符号的, 但fileio.size是sszie_t, 所以把fileio.size强制转为(size_t)fileio.size. 
+(2), src/flash/flash.c: 906, src/flash/nand.c: 1686, src/flash/mflash.c: 754.
+同样问题和改法. 
+(3), make install时发现源代码目录"openocd/contrib/libdcc"里面有openocd调试工具范例. 可以看看. 似乎不错. 
+(4), 编译结果"36: Linux\host\openocd\for cortex-a8"
+4), 同样实验u-boot, 同样是500k. 下载(速度4kbyte/sec比Linux 1k/sec快)设置断点正常. 明天加上eclipse实验稳定性. 如果基本可用, openocd就暂告段落了. 明天会继续做VC0816 cache tag和VC0882 mas review: clkrst. 
+
+10:03 2010-1-8
+公司, 行政, 15层同事工位, 
+wangyang邮件"工位更新"20100108_0959
+D:\work\Documentation\15F工位图_091211.xls
+
+10:36 2010-1-8
+1, 切频的时候trace clk会不会有影响.
+zhangjian: 我们现在没有HTM, 所以cpu停的时候trace停下来应该没问题. 
+2, CKD_CPU_NDIV可以动态改. FPGA时可以测到吧? 
+3, cpu和bus在不同pll? 那就是说cpu和bus是异步的? 
+4, 硬件切频流程到底如何. cpu在任何memory运行是否都会gate ddrc. 
+1), cpu频率改变时是否不影响bus. \todo 测试项
+2), cpu切频时软件查CPU_CLK_CFG_BUSY的意义? 如果cpu_clk不稳定, 软件运行不受影响么? 会影响下次切频么? 
+3), memory参数是何时换的, shadow需要更新(ddrc绿色). ddrc_mrs0, ddrc_emrs1是shadow. 切频时可以配置是否发命令更新(DRAM_REFRESH.emrs1_after_selfref, mrs_after_selfref, 在退出selfrefresh后发送. 这和VC0830现在的软件切频流程是一致的, 见Clkrst_Drv_TriggerSwitch()(VC0830\clkrst\drv\clkrst_drv.c)). 
+没有ddrc_emrs23是cuiyunfei确认的, 没有与频率有关的东西. 其实个人觉得多加会保险, 但是既然IC觉得没必要, 也只能这样了. 
+5, When N=1, CKD_ACLK is bypassed. div和bypass怎么联系上的? 
+6, DDRC_SYNC_MODE起什么作用? 何时同步, 何时不同步?
+
+12:44 2010-1-8
+同事信息, ZengJuanJuan, 8950, 知识产权, 研发记录簿
+
+13:16 2010-1-8
+VC1600, VC0882, VC0718, arm SOC, 模拟器: qemu, BSP: Android, jtag: openOCD, android相关新闻
+总结: qemu omap3530有sd移植, 需要尽快实验. android omap3530有elcaire也需要尽快实验. 周末下载. 
+1, qemu
+1), 主线最新版本是0.12.1
+git: http://savannah.nongnu.org/git/?group=qemu
+omap3530没有加入主线. 
+2), OMAP3530移植:
+Documentation: Cortex-A8 port (Version #15): 这是omap3 qemu介绍文档, 下面两个移植都有提到
+http://www.riscosopen.org/wiki/documentation/pages/Cortex-A8+port/versions/15. 已下载至"36 Linux\host\tools\simulator\qemu\qemu_for_omap3530.htm"
+(1), 之前关注的qemu, 最近比较忙没有更新
+http://code.google.com/p/qemu-omap3/
+(2), 这个也是qemu omap3(自2)网页), 而且最近比较活跃. 从目录看已经支持了mmu等设备, 这个对我很有帮助. 代码已下载"36: Linux\host\tools\simulator\qemu\qemu_0.10.0-0sb10.tar.gz".
+https://garage.maemo.org/projects/qemu
+2, android
+http://0xlab.info/planet.html android相关新闻
+1), 今天才注意到embinux是OHA做的, 现在已经支持到Eclair了, 这个要尽快实验: 
+http://labs.embinux.org/index.php/Android-Eclair_porting_guide_to_BeagleBoard
+2), rowboat无更新.
+
+3, openocd
+1), maillist achieve:
+https://lists.berlios.de/pipermail/openocd-development/
+2), cortex-a8 debug introduction(回家下载):
+http://arttools.blogspot.com/2009/09/debugging-on-cortex-a8-system.html
+3), 关于初始化语句"mww 0x5401d030 0x00002000"的地址计算(\todo 看omap3530 trm and adiv5): 
+From lundin at mlu.mine.nu  Wed Sep  2 18:12:56 2009
+From: lundin at mlu.mine.nu (Magnus Lundin)
+Date: Wed, 02 Sep 2009 18:12:56 +0200
+Subject: [Openocd-development] Cortex-A8 problems
+...
+>
+>> So in the OMAP initialisation script we have the line
+>>
+>>      # set DBGEN signal
+>>        mww 0x5401d030 0x00002000
+>>   
+> Hi Magnus,
+>
+>    It seems that the debug address space is remapped from 0xD4010000 
+> to 0x54010000.
+>    But I could not find out any sections mentioned this remapping.
+>
+>    Also, I checked the global memory space mapping in omap35x_TRM.
+>    The corresponding address of 0x54010000 is for MPU emulation.
+>    I could not find out why this remapping is needed.
+>    Anything do I miss?
+>
+
+The ap debug base address is 0x80000000, you can se this  in  the 
+romtable information for DAP #1 with dap inf 1.
+Here you can also se the offsets from the debug base address to the  
+debug component adresses.  To get the memory address in the MEMAP memory 
+map you must add base+offset:
+( the 2 LSB bits are status and not part of the address)  
+0x80000000+0xD4010000 = 0x54010000  ( unsigned 32 integer addresses )
+
+So the values given in OMAP35x TRM  table 1.52:  Debugger Address Space 
+are not the memory bus addresses but the offsets from the romtable base 
+address.
+
+More information can be found in the  ARM Debug Interface v5  
+Architecture Specification,  ARM IHI 0031A,  sec. 8.1.3 and 14.6
+4), \todo 查我的出错信息有没有. 
+
+14:01 2010-1-8
+时间管理
+0, 10:00-23:21
+
+1, 计划<DONEor转移>
+1), 其它
+2), 总结下午会议内容. 
+
+2, 执行
+1), 
+2), 14:00-17:52 VC0882 mas review clkrst.
+3), 晚上-23:12 openode, windows, 见"20:11 2010-1-8"
+
+3, 次日计划<转移>:
+0), 本周总结. 
+1), 见"13:16 2010-1-8", 总结: qemu omap3530有sd移植, 需要尽快实验. android omap3530有elcaire也需要尽快实验. 周末下载. 
+2), 总结1月8日下午会议收获. 
+3), 关注"Marvell推出高清全编解码和3D应用处理器ARMADA 610系列"(Yangzuoxing邮件), 加入日志中Marvell, Qualcomm处理器部分. 
+4), VC0816收尾.
+5), 另外给arm发信问rvi问题. 见"16:12 2010-1-7"4
+
+20:11 2010-1-8
+VC1600, VC0882, VC0718, arm debug, jtag: openocd/RVI, SOC: OMAP3530, compiler: codesourcery, 编译armv7程序, 编译NEON程序
+1, 为了编译windows下的openocd, 安装最新arm编译器.
+arm工具链下载地址: http://www.codesourcery.com/sgpp/lite/arm/portal/subscription?@template=lite
+1), 编译arm-7a thumb-2方式: 
+ARMv7-A Thumb-2 - Little-Endian, Soft-Float, GLIBC
+Command-line option(s): -mthumb -march=armv7-a
+Sysroot subdirectory: thumb2/
+Dynamic linker: lib/ld-linux.so.3
+2), 编译NEON:
+(1), 自动生成: 
+To enable generation of NEON vector code, use the command-line options -ftree-vectorize -mfpu=neon -mfloat-abi=softfp. The -mfpu=neon option also enables generation of VFPv3 scalar floating-point code.
+(2), c intrinsics(arm_none.h, \todo 看):
+Sourcery G++ also includes support for manual generation of NEON SIMD code using C intrinsic functions. These intrinsics, the same as those supported by the ARM RealView® compiler, are defined in the arm_neon.h header and are documented in the 'ARM NEON Intrinsics' section of the GCC manual. The command-line options -mfpu=neon -mfloat-abi=softfp must be specified to use these intrinsics; -ftree-vectorize is not required.
+
+2, 建立符号链接的命令在mingW的执行有问题, rm也是. 符号链接部分手工建立. 
+3, make:
+1), 
+bash.exe"-3.1$ make
+System not configured - see README
+make: *** [all] Error 1
+2), 复制Linux下uboot的include\config.mk后. 仍然有问题. 暂时放弃. 
+3, openocd出错信息: Warn : Invalid ACK in SWJDP transaction
+今天用的时候感觉还可以, 时间长了才有可能断开. 
+4, 发现windows下编译u-boot或xloader都比较困难. 于是编译LEDblink
+1), 如果用arm-none-linux-gnueabi编译LEDblink最后链接时会提示:
+LEDblink.o:(.ARM.exidx+0x0): undefined reference to `__aeabi_unwind_cpp_pr0'
+2), 编译通过后用eclipse调试, 没有问题. 与原来调试Linux方式相同.
+把每步都抓了图, 见"36 Linux\host\openocd\openocd_gdb_eclipse使用方法.doc".
+注: 如果不设置断点一直运行, 可以看到jtag边上两个led(D6,D7)明暗变化. 
+3), eclipse中register默认是10进制, 如果希望修改为16进制可以圈选全部寄存器后统一设置类型. 
+
+23:22 2010-1-8
+时间管理, 本月加班时间, 明天有空详细计算, 希望加班时间到60以上. 
+17,22,23,29,30,31,2,3,6,7,8,9
+9日加班4.4小时, 其中2,3,9是休息日. 各加班6小时. 其余每天按2.5小时计算. 目前大约共加班8*2.5+3*6+4.4=42.4. 如果下周除了周三都加班2.5小时, 本月共加班52.4小时. 
+
+10:13 2010-1-9
+时间管理
+0, 9:53-
+
+1, 计划
+-1), 总结1月8日下午会议收获. <DONE>, 见"20:06 2010-1-10"
+0), 本周总结. <转移>
+1), VC0882 pll问题: 一般应用中都是除2. <DONE>: 为了减小jitter(周期变化)
+2), 见"13:16 2010-1-8", 总结: qemu omap3530有sd移植, 需要尽快实验. android omap3530有elcaire也需要尽快实验. 周末下载.  <转移>
+3), 关注"Marvell推出高清全编解码和3D应用处理器ARMADA 610系列"(Yangzuoxing邮件), 加入日志中Marvell, Qualcomm处理器部分.  <转移>
+4), VC0816收尾.<转移>
+5), 另外给arm发信问rvi问题. 见"16:12 2010-1-7"4. <转移>
+
+2, 执行
+1), 10:05-11:04, 软件技巧, editplus, perl, 见"10:22 2010-1-9", "10:56 2010-1-9".
+
+3, 次日计划:
+1), 本周总结. 
+2), 今天连接RVI到VC0830也有问题, 难道是我软件装的有问题? 再其它人机器试试. 
+3), 写arm邮件(如何写配置文件, arm文档). 参"16:34 2010-1-9".
+4), VC0816收尾: 周一希望把映象给zhaolong.
+5), 继续学习VC0882 clkrst, 参见"20:06 2010-1-10"
+6), 见"13:16 2010-1-8", 总结: qemu omap3530有sd移植, 需要尽快实验. android omap3530有elcaire也需要尽快实验. 周末下载. 
+7), 关注"Marvell推出高清全编解码和3D应用处理器ARMADA 610系列"(Yangzuoxing邮件), 加入日志中Marvell, Qualcomm处理器部分. 
+
+11:15 2010-1-9
+项目经验, VC0830, VC0598, video, lcdc, de, 带宽压力, 压力测试
+VC0830当初lcdc在带宽紧张情况下会fail. 即使带宽再恢复lcdc也不行恢复正常. 所以单独花了三个月时间修这个bug. 
+VC0598现在也有类似问题.
+这提醒我压力测试的重要性, normal情况正常不行. 
+
+11:35 2010-1-9
+VC1600, VC0882, arm architecture, debug, performance monitors
+1, arm学习:
+1), performance monitors, 这个是armv7加入的:
+见ARM_ARM_7AR, C9.1 About the performance monitors.
+cortex-a8 TRM: Table 3-82 Performance Monitor Control Register bit functions
+2), ddrc中加入performance counter: 见ddrc_reg performance页面. 
+感觉"ACTIV_CYC_P"是个总的counter: This counter used to calculate transfer time (clock cycle) of all AXI transactions from DDRC AXI Interface. This transfer time contain command request and acknowledge time, write/read data transfer time to/from external DDR SDRAM. This counter wills plus one if command queue is not empty at each clock cycle.
+相比VC0830, 提供的计算细化很多, VC0830 sdrc负载在marb寄存器中:
+MARB_SDRC_WKLD_THRSHLD, MARB_SDRC_WKLD_PRESTEP, MARB_SDRC_WKLD_CURSTEP前面两个对应中断MARB_SRCPND[10],[9].
+
+11:45 2010-1-9
+VC1600, VC0882, mas review, clkrst, Meeting minutes
+1, HuangWei邮件"VC0882 CLKRST MAS REVIEW Meeting minutes"20100109_1044
+感谢大家参加昨天下午的 CLKRST MAS review meeting， 下面是此会议的 action items.
+1). Watchdog timer从PSO移到PMU, wdog_rst_n 在PMU中合并入pso_rst_n, reset整个 PSO （owner: liuzixi, zhangqian)
+2). global software reset可能要细分为两种： 一种是reset整个pso,另一种是reset除了ARM Debug logic以外的整个 PSO  （Owner： huangwei)
+3). global software reset 从PSO移到PMU, 且加入memory-mapped register 记录reset type  （owner: liu zixi)
+4). DDRC sync mode, 即ACLK和DDRC_MCLK同步模式下， 如果从DDRPHY DLL 到ACLK leaf pin的clock network latency 较大， 需要在从DDRPHY DLL 到 ITM的clock tree 上插入buffer以达到balance clock tree的目的，咨询 SYNOPSYS service 这样做有不有问题  (owner： Cun Yun Fei).
+5). 为 AXI fabric加上软件控制的clock gating. (owner : huangwei)
+2, 昨天讨论笔记:
+1), cpu和bus异步主要为了节省功耗;
+2), reset变动, 把watch reset和global_software_reset从PSO移到PMU域, 这样的目的是简化reset逻辑, 因为正常reset逻辑如果在PSO, reset时自己也会被reset, 这样不好设计. 
+\todo
+
+14:45 2010-1-9
+(23:33 2010-1-10)
+VC1600, VC0882, arm architecture, 最小环境
+1, 调试环境
+1), rvds: RVI还不能联omap3530(\todo 发邮件).
+已经找了一个rvds4.0破解版(似乎主要破解的是eclipse相关内容, 试试eclipse能不能调试), 编译器可以运行. 实验调试.(首先保证编译可用, 这样大家就可以在工位写代码了). RVDS4.0正版只有两套, 所以实验室也需要装盗版. 
+\todo 用正版破解试试. 
+否则: 现在用的rvds4.0评估版需要每个月新注册一个邮箱(gmail邮箱可以随意申请, 而且可以直接上网访问), 看大家能不能接受. 
+2), openocd整个调试环境已经可以了: rvds4.0 eclipse+arm-none-eabi
+
+2, 下周计划是arm最小环境和arm调试接口深入分析(结合arm文档和openocd代码). 同时给arm发信. 有空的话需要深入看clkrst. 
+
+15:05 2010-1-9
+VC1600, VC0882, arm debug, jtag: openocd, usb2jtag, 使用ftdi2232/ft2232
+自: http://www.ourdev.cn/bbs/bbs_content.jsp?bbs_sn=3803109&bbs_page_no=1&bbs_id=1032
+1, 基于FT2232D这个IC的，不同的是SRST,TRST这两个脚的控制不同的！ 
+2, usb jtag(ft2232)相比并口的优势: 
+General Restrictions 
+Theoretically, a USB based pod is able to stimulate the JTAG bus with a much higher frequency than bit-banging on the parallel port would allow. Even more when bit shifts and clock events are combined and compressed into higher level commands. In reality, this requires to consider some specific features of USB. 
+To put it simple, each transaction over USB is bound to a 1 ms raster. E.g. a bit-bang style operation looks like this: 
+command: set clock high  
+command: set clock low  
+command: read TDO  
+result: current TDO  
+Given that each of the steps occurs in this 1 ms raster, the whole sequence takes 4 ms. That's far more than for parallel port drivers and results in a ridiculous overall performance. Even if this sequence is combined into one command plus one result by the FT2232 protocol, it's still 2 ms just for reading one bit of TDO. 
+Performance Gain 
+The most important rule of thumb to increase the overall transaction performance with the FT2232 chip is: 
+Minimize the number of USB transactions  
+The immediate consequence is to build command streams as long as possible. This should be achieved with the command queuing methods described above. A USB transaction is triggered only under certain conditions: 
+forced flush on the cable todo queue  
+maximum number of result bytes for submitted commands is reached  
+the ftdi-mpsse and ftd2xx-mpsse trigger a hidden transaction when their send buffer (4K) is full  
+There is a significant difference between libftdi and libftd2xx. The latter one allows to schedule up to 64*64 bytes of result data while libftdi fails with more than 4*64. As a consequence, the FT2232 driver is forced to perform around 16x more USB transactions for long command streams with TDO capture when running with libftdi. 
+
+16:34 2010-1-9
+VC1600, VC0882, arm debug, jtag: RVI, 连接cortex-a8错误信息: 
+\todo 对比"10:36 2010-1-8"我的问题. 
+> connect  "@Cortex-A8_0@RVI"
+Error V2801C (Vehicle): 0x0506000b: No connection to target.
+
+20:06 2010-1-10
+VC1600, VC0882, mas review, clkrst, meeting, 原文见小本p42-p45.
+摘要: 下面是1月8日"VC0882 clkrst mas review meeting"笔记, 主要涉及pll, clockswitch, power management. 总的来说VC0882与VC0830相比clkrst变化较多, 需要深入看. meeting minutes见"11:45 2010-1-9".
+1, pll时 TCMC 65LP.
+1), xclk变化: 支持12,13,24,26等, 实际spec支持更多.
+2), 146k-1.2G: \todo 查这个频率范围的含义.
+3), output频率: 240-1.2G. 目前设计cpu最高800MHz.
+4), 面积: 0.1mm2(include isolator)
+5), 3ma@600. 
+6), leakage? 待查. 
+7), 原有设计中6个pll(+xclk)都给cpu,bus选择. 这样后端中所有pll都会再一起. 可能clock到其它用pll的模块的走线会很长. zhukai建议高频pll少mux. 
+例如: mipi phy需要再1GHz测试, 这个频率没法从芯片外输入, 只能由内部pll供给. 因为从外部输入这么高频率的clock很困难. 
+会议讨论: 改为1,2,6+xclk给cpu,bus. 
+8), 目前预计的floorplan:
+/---------------\
+|    |          |
+|ddr |          |
+|phy |          |
+|    |      pll |
+|    |----------|
+|    |    ARM   |
+\---------------/
+ddr phy: synopsys.
+9), ddr phy内部有1ns margin. 要求从ddr phy输出到ddrc, axi bus回到ddr phy的延时最大是1ns. 否则ddr phy内部需要补偿. 
+\todo 看ddr phy关于这个的示意图. 
+10), VC0882 pll是先reconfig再reset. \todo 确认. 如果这样的话与VC0830不同. 
+11), 增加pll reset count: 需要5us. VC0830的pll其实也需要count, 但是软件, 硬件都没有加. \todo 这个对切频稳定性有影响么? 
+
+2, clkmask功能去掉了, clkmask本意时cpu,bus比例不变是降低功耗. 
+开会时YangZuoXing好像说时对avs(动态调整电压?)有影响. 
+
+3, 占空比是否可调, 是. 包括NFC. \todo 查clkrst确认.
+
+4, 细看figure2-9, 这个图是glitch free的图, huangwei说是一级同步, 确认. 老是不看电路图都不会了. 
+
+5, pmu liuzixi内部做clock选择(RTC clk或xclk).
+
+6, 由于系统异步设计, AXI分: main AXI, Cpu AXI, perpheral AXI等. 需要了解系统时钟域. 
+\todo 查CDC: cross domain clock? 
+
+7, audio 可能用IP. 输入是12MHz. 如果不是需要但是一个pll提供clock. 现在与usb等share pll的方案就不行了. 重要!!
+
+8, avs: 动态电压调整. 根据系统负载调整. 
+\todo: 这个难以测试. 但testplan也得一样写上.
+
+9, 切频时间. reset pll 5us, 5000xNR. \todo 查. 
+openissue: 用哪个做为counter的clock计数? 讨论结果是xclk. 
+\todo 用xclk计数是否再任何频率都够用. 希望避免像VC0830一样的pll stable时间不够的问题. 
+
+10, VC0882新feture, cpu,bus,ddrc可以都是异步. 不过bus, ddrc异步会影响一点性能. 是MP4组的要求, 因为pcddr没法跑太低的频率, 但是希望把bus频率降低功耗. 
+
+11, 与1合并. 
+
+12, 查同事信息: huamin, zhukai, dongxiangfu. 
+
+13, 其余与1合并.
+1), 关于reset:
+(1), 讨论中发现wdt, global_software_reset在PSO域, wdt_reset和global_software_reset复位PSO域时需要保证自己的复位逻辑是正确的, 这样逻辑上不好处理. 会议讨论结果是: 把这两个reset都放在PMU域.
+(2), cortex_a8有多个reset. \todo 查TRM. 
+会议讨论: 把reset cortex-a8时是否reset cortex-a8 debug做为属性. 
+
+14, 与1合并.
+
+15, clock switch
+1), cpu_clk_cfg_busy, 表示是否稳定到目标频率(从硬件切频完成到稳定到目标频率前cpu运行不受映象). 
+2), VC0882中clkswitch改名为recfg, cpu,bus可以独立切频(因为二者是异步关系). 
+\todo 查其它设计中有没有二者异步的. 
+
+16, ddrc可以与bus同步或异步, 后者效率低一些. 是MP4组为了省功耗. 
+\todo test plan review: 又是容易有corner的地方. 
+
+17, 内部sram 16k. \todo 了解VC0882 memory map. 
+
+18, 与15合并.
+19, 与9合并.
+
+20, bus recfg
+1), bus切频...(忘了)
+2), 因为bus recfg时会gate ddrc, 除了ddrc当前已经执行的命令会完成. 其余queue中的命令会block. 这样必须各模块不能有timeout, 否则会出问题. 
+zhangjian: 因为VC0882中各模块访问ddrc都是通过dma template, 所以保证dma template没有timeout就可以. 
+\todo 这点需要跟踪. 
+
+21, 与1合并
+
+22, cpu,ddrc都有performance monior. 详见"11:35 2010-1-9"
+
+23, gpu有自动gate, vdec会加自动gate. 
+
+23:28 2010-1-10
+项目, 综合提供, Meeting Minutes, Meeting Minutes Format
+自: http://www.meetingwizard.org/meetings/meeting-minutes-format.cfm
+\todo 这个网站好像是介绍meeting相关内容的. 
+Meeting Minutes Format
+These days, many of us find ourselves in the position of taking meeting minutes without a clue of how to go about it. The following is a guide for making this task easier: 
+Make sure that all of the essential elements are noted, such as type of meeting, name of the organization, date and time, name of the chair or facilitator, main topics and the time of adjournment. For formal and corporate meetings include approval of previous minutes, and all resolutions. 
+Prepare an outline based on the agenda ahead of time, and leave plenty of white space for notes. By having the topics already written down, you can jump right on to a new topic without pause. 
+Prepare a list of expected attendees and check off the names as people enter the room. Or, you can pass around an attendance sheet for everyone to sign as the meeting starts. 
+To be sure about who said what, make a map of the seating arrangement, and make sure to ask for introductions of unfamiliar people. 
+Don't make the mistake of recording every single comment, but concentrate on getting the gist of the discussion and taking enough notes to summarize it later. Remember that minutes are the official record of what happened, not what was said, at a meeting. 
+Use whatever device is comfortable for you, a notepad, a laptop computer, a tape recorder, a steno pad, shorthand. Many people routinely record important meetings as a backup to their notes. 
+Be prepared! Study the issues to be discussed and ask a lot of questions ahead of time. If you have to fumble for understanding while you are making your notes, they won't make any sense to you later. 
+Don't wait too long to type up the minutes, and be sure to have them approved by the chair or facilitator before distributing them to the attendees. 
+Don't be intimidated, you may be called upon many times to write meeting minutes, and the ability to produce concise, coherent minutes is widely admired and valued. 
+Example of Minutes Format 
+Name of Organization:
+Purpose of Meeting:
+Date/Time:
+Chair:
+ 
+Topic Discussion Action Person
+Responsible 
+1.     
+2.    
+3. 
+
+17:52 2010-1-21
+VC0816, SV , 量产, 
+1, 把cache测试地址改为0xfe0, 但没有锁入的地址仍然会引起sdrc访问.
+所以只能是把lockdown 0x1000, 但测试fe0.
+2, 还要加300MHz和测试3way. 
+1), 600_300_150, 012way+tag
+坏片两片pass(l和i), 3片fail。 5好片pass。
+2), 600_300_150, way
+开始没有修改3way的频点, 所以5个好片都能筛出来, 相当于是测试了336_168 3way的映像.
+坏片: 两片pass(l, d3), 其余fail， 好片pass
+代码和映像位置: 36: share\zhangjian\VC0816\elf_bin\20100121_mp_0120+sdrcPowerDown.
+
+3, 发信, 说明频点参数用法. 上传CVS（mmu_cache.S 1.26):
+1), 原有多余memory访问问题已解决, 原因和解决办法分别是
+(1), 测试012三路中最后一路cache的+0xff8偏移时, 由于此时pc是+0x1000, 造成cpu取指时把0x1000所在的8个word(1个cacheline)读入cache, 这个地址正好是没有锁入cache的sdram区域, 所以产生了sdram访问. 解决办法是每路测试时最后8个word不测试.
+(2), daichunquan邮件"在结束的时候也发生很多向sdram写的操作，比如第一个地址是0x00102d40，写的都是0xaaaaaaaa". 分析原因时cache测试后的unlock操作导致cpu换入新数据时把旧数据写回. 解决办法是cache测试后不执行cache unlock操作. 
+
+2), 附件中四个压缩包分别是336_168的012way+tag测试, 3way测试和300_150两个测试.
+300_150频点测试结果, 由于频率降低, 有坏片没有筛出是正常的：
+(1), 600_300_150, 012way+tag
+坏片两片pass(l和i), 3片fail。 5好片pass。
+(2), 600_300_150, way
+坏片: 两片pass(l, d3), 其余fail， 好片pass
+
+3), 加入切频频点方法
+(1), 使用已有频点.
+直接修改"SI_CACHE_TEST_OP"宏, 例如
+SI_CACHE_TEST_OP EQU SI_600_300_150
+表示在672_336_168切频. 目前支持的频点如下
+SI_pll_cpu_bus: 
+SI_672_336_168
+SI_480_240_60
+SI_504_262_126
+SI_576_144_72
+SI_528_264_132
+SI_576_288_144
+SI_560_280_140
+SI_600_300_150
+(2), 加入新频点方法, 以加入SI_600_300_150为例, 
+(1), 在"SYSTEM_INFO DATA"数组的SI_NUMBER前加入频点, 同时把SI_NUMBER加1(加入SI_600_300_150后, SI_NUMBER从7增加为8):
+;7: SI_600_300_150
+DCD 12,0x1100,600,0x1401f4,0,0, 0x56, 0x0085000c
+;8: SI_NUMBER 
+DCD 0,0,0,0,0,0,0,0
+(2), 频点信息包括(ckd具体计算方法参见详见VC0816 databook clkrst章, uart波特率见uart章)
+DCD 12,0x1100,600,0x1401f4,0,0, 0x56, 0x0085000c
+A, 默认xclk频率: 12. 如果xclk是24MHz, 需要把strap pin(LCD_DATA[3]=1), 程序会根据strap pin判断xclk, 并调整pll ckd.
+B, cpu_bus_ckd: 高8位是bus ckd=1+1+2=4. 低8位是cpu ckd=0+0+2=2. 
+C, pll频率(MHz): 为了保持与VC0830/VC0816 SV程序一致, 此程序不使用.
+D, pll_ckd(@12MHz): pll_freq = 12/0x14*0x1f4*2=600. 为了24MHz也能够使用, 要求ckd的main div(0x1f4)必须是4个倍数.
+E, F: 均为0. 为了保持与VC0830/VC0816 SV程序一致, 此程序不使用.
+G; 0x56. per_ckd(for uart): per_freq = pll / (5+6+2) / 2 = 23.07923...
+H: uart_band_div: uart波特率固定为115200, 根据如下公式计算uart div的整数和小数部分.
+uart_baud = per_freq(Hz) / uart_div / 16
+uart_div = 0xc+0x85/256 = 12.51953125.
+
+20:56 2010-1-21
+丢失工作日志的损失:
+1, 最近在整理cortex-a8资料, 用scosystem这个概念. 从board(3530 3个主芯片功能), SOC(架构差异, 各家各有优势: arm+dsp, armv7等等), cpu core, isa四个层次说明.
+
+21:58 2010-1-21
+今天liaozhicheng遇到的nand供电问题造成读写速度上不去, 和sd卡电压低造成acmd41 有问题时一类. \todo 总结.
+
+22:33 2010-1-21
+时间管理
+明日计划
+1, 简单实验华恒hammmer-a for cortex-a8调试3530是否好用. 需要找个机器编译u-boot, 并且实验rvds3.0(因为3.0能看v7指令).
+2, aasp汇编到c语言希望完成. 从目前看, 就是cache地方不同. 代码用branch方式. 这样避免本机挂掉造成问题.
+
+12:42 2010-1-22
+开发环境, arm debug, rvds3.0, license设置
+rvds3.0 license如果配置错误, 不会在rvds启动时提示, 在连接debugger才提示.
+我今天安装rvds3.0时遇到这个错误, 后来发现是自己复制的license少了下面几行:
+SERVER dell-bcb79dda9a 0007e94c6f66
+VENDOR armlmd
+USE_SERVER
+加上并修改hostname为"dell-bcb79dda9a"正常, 判断方法:
+lmtools: Server status->Perform Status Enquiry， 查到类似信息说明license设置正确。
+--------
+Status
+--------
+Flexible License Manager status on Fri 1/22/2010 12:35
+
+[Detecting lmgrd processes...]
+Error getting status: Cannot connect to license server system.
+ The license server manager (lmgrd) has not been started yet,
+ the wrong port@host or license file is being used, or the
+ port or hostname in the license file has been changed.
+Server name:   127.0.0.1
+License path:  27000@127.0.0.1
+FLEXnet Licensing error:-15,10.  System Error: 10061 "WinSock: Connection refused"
+For further information, refer to the FLEXnet Licensing End User Guide,
+available at "www.macrovision.com".
+--------
+Status
+--------
+Flexible License Manager status on Fri 1/22/2010 12:38
+
+[Detecting lmgrd processes...]
+Error getting status: Cannot connect to license server system.
+ The license server manager (lmgrd) has not been started yet,
+ the wrong port@host or license file is being used, or the
+ port or hostname in the license file has been changed.
+Server name:   127.0.0.1
+License path:  27000@127.0.0.1
+FLEXnet Licensing error:-15,10.  System Error: 10061 "WinSock: Connection refused"
+For further information, refer to the FLEXnet Licensing End User Guide,
+available at "www.macrovision.com".
+--------
+Status
+--------
+Flexible License Manager status on Fri 1/22/2010 12:40
+
+[Detecting lmgrd processes...]
+License server status: 27000@dell-bcb79dda9a
+    License file(s) on dell-bcb79dda9a: E:\sofewere\rvds and softether\license3.0.lic:
+
+dell-bcb79dda9a: license server UP (MASTER) v10.8
+
+Vendor daemon status (on dell-bcb79dda9a):
+
+    armlmd: UP v10.8
+
+Feature usage info:
+
+Users of armulate:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of ISSM_ARM_Cortex-M3:  (Uncounted, node-locked)
+
+Users of ISSM_ARM_Cortex-A8:  (Uncounted, node-locked)
+
+Users of axd:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of adwu:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of trace:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of armsd:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of codewarrior:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of rvp_backend:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of rvp_gui:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of SG_ARM1176_CT:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of SG_ARM1136_CT:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of SG_ARM926_CT:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of SG_ARM_Cortex-A8_CT:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of RTSM_Pool_Pro:  (Error: 2 licenses, unsupported by licensed server)
+
+Users of fromelf:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of armasm:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of compiler:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of armlink:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of rvd_arm:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of rvd_ide:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of rvd_rtos:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of rvd_trace:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+Users of rvd_multi:  (Uncounted, node-locked)
+
+Users of rvd_iss:  (Total of 1 license issued;  Total of 0 licenses in use)
+
+14:14 2010-1-22
+VC0882, arm debug, cortex-a8, jtag: RVI, codehammer-a, openocd, cortex-a8调试器比较, \todo 实验ads能否调试rvds4.0编译的axf
+excel见"\\10.0.2.36\sqmshare\Document\Jtag_Debugger\cortex-a8仿真器比较.xls"
+1, 速度: 
+RVI 67kbyte/s
+codehammer 33kbyte/s
+openocd 8kbyte/s
+2, 是否支持armv7和NEON指令集
+RVI, openocd支持.
+codehammer: 只支持ads, 华恒没有用过rvdebugger(如果能使用rvds3.0可以支持armv7).
+3, elf同2. ads不支持elf.
+
+14:52 2010-1-22
+rvds4.0, armtest04, armtest0, armTEST0$
+
+15:38 2010-1-22
+VC0882, IC流程学习, \todo 搞清如下flow的顺序.
+zhouzhitao负责MPW(multi project wafer, 公司几个项目共用一个wafer, 降低成本)的flow. 
+flow包括: 综合(dct), Formality(形式验证?, 一致性, 工具是Synopsys Formality?), dft, 静态时许分析(pt: primetime). 
+sign-off: 投片之前的分析。分析timing，power等等. 
+
+16:06 2010-1-22
+arm debug, jtag: openocd, 用openoc连接VC0816测试其下载速度, 失败
+1, openocd arm926ejs cfg.
+每次连接后要重启板子, 否则会提示halt timeout. 
+telnet_port 4444
+gdb_port 3333
+interface ft2232
+jtag_speed 0
+ft2232_vid_pid 0x1457 0x5118
+ft2232_layout "jtagkey"
+reset_config trst_and_srst
+jtag_device 4 0x1 0xf 0xe
+daemon_startup attach
+target arm926ejs little reset_run 0 arm926ejs
+run_and_halt_time 0 5000
+ft2232_device_desc "USB<=>JTAG&RS232 A"
+arm7_9 fast_memory_access enable
+2, load_image时报错:
+value captured during scan didn't pass the requested check: captured: 0x00000244
+ check_value: 0x00000009 check_mask: 0x00000009
+in_handler reported a failed check
+value captured during scan didn't pass the requested check: captured: 0x00000244
+ check_value: 0x00000009 check_mask: 0x00000009
+in_handler reported a failed check
+value captured during scan didn't pass the requested check: captured: 0x00000244
+ check_value: 0x00000009 check_mask: 0x00000009
+in_handler reported a failed check
+value captured during scan didn't pass the requested check: captured: 0x00000244
+ check_value: 0x00000009 check_mask: 0x00000009
+暂时放弃.
+
+18:26 2010-1-22
+arm debug, RVI内部芯片
+1, s3c2410, 
+2, k4s561632H-UC75 x 2
+3, netchip 2272
+4, 245缓冲器 x 8
+5, ssr 38lf400a
+6, xilinx spantan
+7, smsc LAN91c111
+8, xilinx FPGA
+
+20:09 2010-1-22
+同事信息, 前威盛同事, AIC: 李志刚(公司CP经理也叫李志刚), AE: 易宏宇
+加盟中星微AIC部任高级模拟电路设计工程师的李志刚，直接向高级模拟电路设计经理孙涛汇报工作。李志刚先生毕业于中科院半导体所微电子专业并获得博士学位；加盟中星微之前曾在威盛电子、互芯集成电路任职；他的办公电话是：010-68948888-7333 E-mail：zhigangli@vimicro.com
+加盟中星微产品工程部任高级软件工程师的易宏宇，直接向资件研发经理尹文超汇报工作。易宏宇先生毕业于北京航空航天大学机械电子工程专业并获得硕士学位；加盟中星微之前曾在威盛电子任职；他的办公电话是：010-68948888-7334 E-mail：yihongyu@vimicro.com
+
+13:35 2010-1-25
+rvds4.0, armtest25, armtest2, armTEST@%
+00219B631B79
+
+15:40 2010-1-25
+时间管理
+1, 计划:
+1), 看看zhicheng那里保存的我的邮件: Linux选型. <DONE>
+2), 上传openocd到36.
+
+2, 执行
+1), openocd编译使用. 见"17:45 2010-1-25". 将来有时间再加入eclipse说明. 
+
+3, 次日计划<转移>:
+1), VC0882 开始移aasp到3530, 目标: 能够进入c语言. 周三aasp可以运行. 周四debug. 周五支持VC0882.
+2), 设置editplus: 热键. logAssistant. 
+
+15:51 2010-1-25
+重新装机
+1, 用的zhangpu安装后的映像(只有驱动). 自己也ghost了一份. 
+2, 软件都安装完成后再做一个ghost. 
+
+17:45 2010-1-25
+VC1600, VC0882, arm debug, cortex-a8, jtag: RVI, SOC: OMAP3530
+用rvds4.0破解版连接omap3530正常, 先前有问题应该是RVDEBUG_INSTALL设置为rvds3.0路径造成的. 目前是使用4.0, 3.0时换不同的环境变量:
+C:\Program Files\ARM\RVD\Core\4.0\1106\win_32-pentium
+C:\Program Files\ARM\RVD\Core\3.0.1\309\win_32-pentium
+
+19:14 2010-1-25
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide)
+0, 本log已保存到"openocd编译使用日志.txt"(36: Document\Jtag_Debugger\openocd).
+1, Linux编译
+1), libusb
+(1), 只能用0.1.x版本. 不能用新版(1.xx)
+http://sourceforge.net/projects/libusb/files/libusb-0.1%20%28LEGACY%29/0.1.12/
+(2), configure; make; sudo make install
+2), libftdi
+(1), http://www.intra2net.com/en/developer/libftdi/download.php
+(2), configure; make; sudo make install
+(3), 为了避免openocd找不到, 直接libftdi到/usr/lib目录
+[dec@localhost libftdi-0.17]$ sudo cp src/.libs/libftdi.* -a /usr/lib/
+3), openocd
+(1), http://openocd.git.sourceforge.net/git/gitweb.cgi?p=openocd/openocd;a=tag;h=cd8ad2e961d3476ddfad3353390ce99a4872bdf1
+(2), ./bootstrap
+生成configure脚本. 打包"openocd_0_4_0_rc1_bootstrap.tar.gz"(36: Jtag_Debugger\openocd).
+(3), ./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD4Cortex-a8
+(4), 加入版本信息, 参"36: SOC\TI OMAP3530\jtag\BeagleBoardOpenOCD.htm":
+[dec@localhost openocd]$ cat doc/version.texi
+@set UPDATED 21 December 2009
+@set UPDATED-MONTH December 2009
+@set EDITION 0.4.0-rc1
+@set VERSION 0.4.0-rc1
+(5), make; sudo make install
+4), 实验:
+(1), 加入驱动规则
+[dec@localhost interface]$ cat /etc/udev/rules.d/50-ftdi.rules
+# udev rules file for OpenJTAG of www.100ask.net
+#
+
+ACTION!="add", GOTO="OpenJTAG_rules_end"
+SUBSYSTEM!="usb_device", GOTO="OpenJTAG_rules_end"
+
+SYSFS{idVendor}=="1457", SYSFS{idProduct}=="5118", MODE="664", GROUP="users", RUN+="/sbin/modprobe ftdi_sio vendor=0x1457 product=0x5118"
+
+LABEL="OpenJTAG_rules_end"
+[dec@localhost interface]$ sudo cp /mnt/hgfs/share/50-ftdi.rules /etc/udev/rules.d/
+[dec@localhost interface]$ sudo udevcontrol reload_rules
+(2), 修改openocd配置文件
+A, jtag配置文件
+Linux中插入ftdi2232后在usbfs中可以看到: 
+cat /proc/bus/usb/devices
+T:  Bus=02 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  9 Spd=12  MxCh= 0
+D:  Ver= 2.00 Cls=00(>ifc ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
+P:  Vendor=1457 ProdID=5118 Rev= 5.00
+S:  Manufacturer=www.100ask.net
+S:  Product=USB<=>JTAG&RS232
+C:* #Ifs= 2 Cfg#= 1 Atr=80 MxPwr=100mA
+I:* If#= 0 Alt= 0 #EPs= 2 Cls=ff(vend.) Sub=ff Prot=ff Driver=(none)
+E:  Ad=81(I) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+E:  Ad=02(O) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+I:* If#= 1 Alt= 0 #EPs= 2 Cls=ff(vend.) Sub=ff Prot=ff Driver=ftdi_sio
+E:  Ad=83(I) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+E:  Ad=04(O) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+
+说明product name是"USB<=>JTAG&RS232". 根据这些信息从jtagkey.cfg修改:
+[dec@localhost OpenOCD4Cortex-a8]$ cat share/openocd/scripts/interface/100ask.cfg
+#
+# 100ask openjtag
+#
+
+interface ft2232
+ft2232_device_desc "USB<=>JTAG&RS232"
+ft2232_layout jtagkey
+ft2232_vid_pid 0x1457 0x5118
+
+B, 注释限速的语句
+[dec@localhost OpenOCD4Cortex-a8]$ sudo  vim share/openocd/scripts/target/omap3530.cfg
+#jtag_rclk 1000
+#$_TARGETNAME configure -event "reset-start" { jtag_rclk 1000 }
+
+[dec@localhost OpenOCD4Cortex-a8]$ sudo vim share/openocd/scripts/board/ti_beagleboard.cfg
+#jtag_rclk 6000
+
+(3), 运行:
+A, [dec@localhost OpenOCD4Cortex-a8]$ sudo bin/openocd /home/dec/bin/openOCD4Cortex-a8/share/openocd/scipts -f interface/100ask.cfg -f board/ti_beagleboard.cfg
+Open On-Chip Debugger 0.4.0-rc1-dev-snapshot (2010-01-25-22:17)
+For bug reports, read
+        http://openocd.berlios.de/doc/doxygen/bugs.html
+RCLK - adaptive
+Warn : omap3530.dsp: huge IR length 38
+RCLK - adaptive
+trst_only separate trst_push_pull
+Info : RCLK (adaptive clock speed) not supported - fallback to 1000 kHz
+Info : JTAG tap: omap3530.jrc tap/device found: 0x0b7ae02f (mfg: 0x017, part: 0xb7ae, ver: 0x0)
+Info : JTAG tap: omap3530.dap enabled
+Info : omap3530.cpu: hardware has 6 breakpoints, 2 watchpoints
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011150
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011150
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x540111
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011150
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x540111
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x540111c0
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x540111
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x540111c0
+暂时不清楚为什么有这些错误.
+
+B, 连接telnet:
+telnet localhost 4444
+
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+Open On-Chip Debugger
+> omap3_dbginit omap3530.cpu
+> halt
+target state: halted
+target halted in ARM state due to debug-request, current mode: Supervisor
+cpsr: 0x400001d3 pc: 0x80e87f18
+MMU: disabled, D-Cache: disabled, I-Cache: enabled
+> arm reg
+System and User mode registers
+      r0: 49020000       r1: 00000003       r2: 00000001       r3: 00000060
+      r4: 80e61780       r5: 80eac2dc       r6: 80eac2dc       r7: 80ea7a64
+      r8: 80e3ffdc       r9: 00000002      r10: 00000018      r11: 00000000
+     r12: 00000000   sp_usr: 00000000   lr_usr: 00000000       pc: 80e87f18
+    cpsr: 400001d3
+.....
+.....
+
+C, 连接GDB:
+[dec@localhost uboot-02.01.03.11]$ cat .gdbinit
+echo Setting up the environment for debugging gdb.\n
+
+# This connects to OpenOcd at localhost:3333
+target remote localhost:3333
+
+# Increase the packet size to improve download speed.
+set remote memory-write-packet-size 1024
+set remote memory-write-packet-size fixed
+
+#omap3_dbginit must be run in OpenOCD after every reset
+monitor omap3_dbginit omap3530.cpu
+#monitor cortex_a8 dbginit
+#monitor mww 0x5401d030 0x00002000
+
+monitor halt
+
+# Load the program executable called "u-boot"
+load u-boot
+
+# Load the symbols for the program.
+symbol-file u-boot
+
+# Set a breakpoint at main().
+#b main
+
+# Run to the breakpoint.
+
+[dec@localhost uboot-02.01.03.11]$ arm-none-linux-gnueabi-gdb
+GNU gdb (Sourcery G++ Lite 2009q1-203) 6.8.50.20081022-cvs
+Copyright (C) 2008 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "--host=i686-pc-linux-gnu --target=arm-none-linux-gnueabi".
+For bug reporting instructions, please see:
+<https://support.codesourcery.com/GNUToolchain/>.
+Setting up the environment for debugging gdb.
+0x00000000 in ?? ()
+The target may not be able to correctly handle a memory-write-packet-size
+of 1024 bytes. Change the packet size? (y or n) [answered Y; input not from terminal]
+target state: halted
+target halted in ARM state due to debug-request, current mode: Supervisor
+cpsr: 0x400001d3 pc: 0x80e87f18
+MMU: disabled, D-Cache: disabled, I-Cache: enabled
+Loading section .text, size 0x1ca68 lma 0x80e80000
+Loading section .rodata, size 0xa38 lma 0x80e9ca68
+Loading section .rodata.str1.1, size 0x524b lma 0x80e9d4a0
+Loading section .data, size 0x17f0 lma 0x80ea26ec
+Loading section .u_boot_cmd, size 0x55c lma 0x80ea3edc
+Start address 0x80e80000, load size 148535
+Transfer rate: 2 KB/sec, 970 bytes/write.
+(gdb)
+如果不halt, 下载速度可以到达27k. 但是下载后没法cont. 
+
+2, Windows编译, ftdi使用官网驱动, 所以不需要libusb. 
+1), http://www.ftdichip.com/Drivers/D2XX.htm, 下载WinXP驱动"CDM 2.06.00 WHQL Certified.zip"(Linux驱动不行, 目前configure ftdi2232处无法通过, 即使可以, 也不能在native win32下使用), 解压到/home/目录, 并把目录中的空格改为"_": "CDM_2.06.00_WHQL_Certified"
+2), ./configure --enable-ft2232_ftd2xx --with-ftd2xx-win32-zipdir=/home/CDM_2.06.00_WHQL_Certified --prefix=/home/bin/OpenOCD4Cortex-a8
+报错: checking for ftd2xx.lib exists (win32)... checking whether ftd2xx library works.
+.. configure: error: Cannot build & run test program using ftd2xx.lib
+同时windows弹出提示"没有找到ftd2xx.dll, 因此应用程序未能启动".
+把"ftd2xx.dll"复制到openocd目录问题解决. 如果之前已经安装了ftdi2232的驱动, "ftd2xx.dll"肯定在系统目录中, 实验: 
+安装openjtag驱动后, 再做configure, 的确没有报错. 
+3), 实验: 
+D:\software\MinGW\home\openocd_compiled_by_zhangjian\OpenOCD4Cortex-a8\win32>bin\openocd.exe -s ..\share\openocd\scripts -f  interface/100ask.cfg -f board/ti_beagleboard.cfg
+其余相同, 下载速度7.6kbyte/s. 
+如果不halt, cont时提示断点有问题. 
+
+注: 工具链位置: "D:\software\CodeSourcery\Sourcery_G++_Lite\arm_2009q3_67_arm_none_linux_gnueabi\bin"
+
+3, 保存映像:
+OpenOCD4Cortex-a8.tar.gz(36: Document\Jtag_Debugger\openocd), 保存了win32和linux openocd(for ftdi2232), windows下程序至少需要ftd2xx.dll(其余dll依赖未实验), 配置脚本位于 share\openocd\scripts修改见上面日志.
+[dec@localhost OpenOCD4Cortex-a8]$ tree -L 3
+.
+|-- linux
+|   |-- bin
+|   |   `-- openocd
+|   `-- lib
+|       |-- libopenocd.a
+|       |-- libopenocd.la
+|       `-- openocd
+|-- share
+|   |-- info
+|   |   |-- dir
+|   |   |-- openocd.info
+|   |   |-- openocd.info-1
+|   |   `-- openocd.info-2
+|   |-- man
+|   |   `-- man1
+|   `-- openocd
+|       |-- contrib
+|       `-- scripts
+`-- win32
+    |-- bin
+    |   `-- openocd.exe
+    `-- lib
+        |-- libopenocd.a
+        |-- libopenocd.la
+        `-- openocd
+
+15 directories, 10 files
+
+
+20:02 2010-1-25
+VC0882, 最小环境, FPGA, arm debug, cortex-a8, RVI连接VC0882, 连通性,FPGA连线检查
+0, 第一次连接VC0882, RVI提示no connection, 主要在查连通性和FPGA内部连线是否正确. 
+1, 开始时供电不足，造成电源供电不正常。把电源调到5.4，此时FPGA输入电压5.05, 保险丝4.65.  RVI仍然提示no connection(10M, 20k).
+2, 后来量jtag信号, 发现RVI autoconfigure时信号幅度不正确(3.3v逻辑, 上拉不到1v). 拔掉RVI测量, 发现没有正确上来, 确认是FPGA ucf问题. 需要重新生成FPGA. 
+
+10:03 2010-1-26
+时间管理
+0, 9:37
+
+1, 计划<DONEor转移>
+1), VC0882 开始移aasp到3530, 目标: 能够进入c语言. 周三aasp可以运行. 周四debug. 周五支持VC0882.
+2), 设置editplus: 热键. logAssistant. <DONE>
+3), 实验openocd在其他机器是否可用. <DONE>安装100askopenjtag驱动后可以. 
+4), 继续整理liaozhicheng发的重要邮件. 
+5), 下班后: 更新log\logAssistant目录到手机. 
+6), 两个博客, 有空看看:
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2009%2F08%2F03%2F4404184.aspx
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2008%2F12%2F05%2F3455380.aspx
+
+2, 执行
+1), 1h, 设置editplus, 见"10:17 2010-1-26"
+2), 11:10- VC0882最小环境. 见"20:35 2010-1-26"
+
+3, 次日计划<转移>
+1), 找beizhan领RVI. 重要. 一个RVI放在实验室. 
+2), VC0882最小环境, 见"20:35 2010-1-26"-3-4)
+
+11:23 2010-1-26
+VC0882, 最小环境, arm cortex-a8, aasp在omap3530运行, ESDE与mingW共存, rvds4.0与rvds3.0共存
+1, ESDE与mingW共存
+eclise下编译提示: 
+armcc -I. -I./include --preinclude ./build/macro.h  -O0 --cpu=ARM926EJ-S --loose_implicit_cast --brief_diagnostics --diag_suppress=2083 --debug -W --apcs /adsabi  -c aasp/AASP_cmd_help.c -o build/aasp/AASP_cmd_help.o 
+Error: C3057E: bad option '--apcs d:'
+Error: C3057E: bad option '--apcs software'
+Error: C3057E: bad option '--apcs MinGW'
+Error: C3057E: bad option '--apcs adsabi'
+make: *** [build/aasp/AASP_cmd_help.o] Error 1
+
+看系统环境变量
+系统: 
+D:\software\Perl\site\bin;D:\software\Perl\bin;C:\Software\Perl\site\bin;C:\Software\Perl\bin;d:\software\MinGW\bin;C:\Program Files\Java\jre1.5.0_09\bin;C:\Program Files\Common Files\NetSarang;C:\Program Files\ARM\bin\win_32-pentium;%SystemRoot%\system32;%SystemRoot%;%SystemRoot%\System32\Wbem;C:\Program Files\Common Files\Thunder Network\KanKan\Codecs;C:\Program Files\ARM\RVD\Core\4.0\1106\win_32-pentium\bin;C:\Program Files\ARM\RVD\Core\3.0.1\309\win_32-pentium\bin;C:\Program Files\ARM\Utilities\FLEXlm\10.8.5.0\1\win_32-pentium;C:\Program Files\ARM\Utilities\FLEXlm\10.8.0\12\win_32-pentium;C:\Program Files\ARM\RVCT\Programs\4.0\400\win_32-pentium;C:\Program Files\ARM\RVCT\Programs\3.0\586\win_32-pentium;C:\Program Files\ARM\RVI\Tools\3.3\106\programs\win_32-pentium;C:\Program Files\ARM\RVI\GDB\3.3\8
+
+用户:
+C:\Program Files\CVSNT\;C:\ESDE\runtime\bin;C:\ESDE\gcc\bin;C:\ESDE\multi-ice
+
+把"C:\ESDE\runtime\bin;C:\ESDE\gcc\bin;"移到系统最前面, 这样提示:
+armcc -I. -I./include --preinclude ./build/macro.h  -O0 --cpu=ARM926EJ-S --loose_implicit_cast --brief_diagnostics --diag_suppress=2083 --debug -W --apcs /adsabi  -c aasp/AASP_cmd_help.c -o build/aasp/AASP_cmd_help.o 
+Error: C3057E: bad option '--apcs adsabi'
+这就是rvds4.0的问题了, 见2. 
+
+但是这样修改后mingW无法正常使用: mingW下运行make时提示:
+bash.exe"-3.1$ make -v
+Vimicro EDE Arguments Transfer V0.1
+Vimicro EDE eCos Win32 Wrapper V0.3
+Wrap: C:\ESDE
+Input: c:\ESDE\runtime\bin\make.exe -v
+Output: C:\ESDE/wrap/c:\ESDE\runtime\bin\make.exe -v
+文件名、目录名或卷标语法不正确。
+如果使用mingW, 需要把"d:\software\MinGW\bin"放到前面, 这样提示如下:
+bash.exe"-3.1$ make -v
+GNU Make 3.81
+Copyright (C) 2006  Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.
+There is NO warranty; not even for MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.
+
+This program built for i686-pc-msys
+
+2, rvds4.0与rvds3.0共存, 差异
+1), 注释config.ads.mk的"--apcs /adsabi", ASFLAGS, CCFLAGS, CPPFLAGS
+#rvds4.0已经不支持这个参数. 
+#ASFLAGS+= --apcs /adsabi
+到链接时提示
+Error: L6218E: Undefined symbol __rt_stackheap_init (referred from main.o).
+Not enough information to list image symbols.
+Not enough information to list the image map. 
+2), 查文档发现初始化流程有变化. 
+rvds4.0 DUI0203I_rvct_developer_guide.pdf, p54, 
+rvds3.0 DUI0203G_rvct_developer_guide.pdf, p37
+
+3, 也就是说omap3530上跑aasp, 有三个内容: cortex-a8初始化代码, rvds4.0 lib初始化, uart打印. 
+
+12:30 2010-1-26
+根据邮件恢复, VC0882, 最小环境, arm cortex-a8, debug: coresight, openocd; 总结, 文档: openocd代码初步浏览
+1, 有了arm linux kgdb分析基础(参考"13:19 2010-1-14"), 简单分析一下openocd中调试架构, 为稍后深入看ADIv5和coresight做准备. 
+从arm linux kgdb分析可以知道, 支持gdb调试是个分层架构. 上层是对gdb调试协议的接口, 下层是根据gdb调试协议的请求控制具体硬件进行相应动作. 对于openocd这类支持多种architecture和多种server的硬件调试器.
+上层除了接gdb还可以接tcl等. 
+下层则支持不同architechture. 可以细分:
+------cortex-a8-----
+           |
+--------adi v5------
+           |
+---jtag interface---
+           |
+------openocd-------
+ 
+2, 代码分析
+1), server/gdb_server.c:
+初始化: gdb_init(): 调用"add_service()"注册"gdb_input_inner()".
+调用: gdb_input_inner()->gdb_breakpoint_watchpoint_packet()->breakpoint_add()
+gdb_breakpoint_watchpoint_packet()与kgdb中gdb_cmd_break()作用相同: 都是根据请求设置断点. 
+2), target/breakpoints.c: 负责断点的管理, 通过target.c抽象层访问不同target. 
+(1), breakpoint_add()->target_add_breakpoint()->target->type->add_breakpoint(target, breakpoint); 
+(2), 每个arch(这里的arch划分是比较细的cortex-a, cortex-m是不同的target)是一个target. 对于cortex-a8来说add_breakpoint是"cortex_a8_add_breakpoint()". 
+(3), cortex_a8_add_breakpoint()->cortex_a8_set_breakpoint():
+和kgdb_arch_set_breakpoint()一样, 先读(cortex_a8_read_memory)后写(cortex_a8_write_memory)替换断点处指令, 只是这里替换的是bkpt指令:
+armv4_5.h:#define ARMV5_BKPT(Im) (0xe1200070 | ((Im & 0xfff0) << 8) | (Im & 0xf))
+指令格式见ARM_ARM_7AR. \todo查Im有什么用: 从代码看是固定的0x0(armv4,v5), 0x11(cortex-a8)可能没什么用. 
+在满足一定条件下, arm就进入的调试状态. 
+(4), cortex_a8_read_memory()/cortex_a8_write_memory()通过调用ADIv5的mem_ap_read_buf_u32/16/8, mem_ap_writebuf_u32/16/8函数实现
+它们都会调用adi_jtag_dp_scan(). 后面就是ADI调试协议的内容了. ADI下面是不同的jtag仿真器. 
+ 
+3, 从代码jtag_dp看, openocd仍然用的jtag协议. 没有用sw_dp. 我们的VC0882是否支持jtag_dp呢?
+1), 请教huangwei, 默认是jtag_dp, 可以选择sw_dp或jtag_dp. 查coresight_component文档.
+
+12:36 2010-1-26
+根据邮件恢复, VC0882 最小环境, Linux debug, arm cortex-a8, kernel kgdb, 代码分析
+VC1600, 对于armv7 BE支持有问题, \todo分析硬件断点机制; 总结, 文档
+0, 摘要:
+kgdb对armv7小端支持没有问题. kgdb代码写的很清楚, 很容易看出哪些是gdb协议内容, 那些是gdbserver部分.
+1), kgdb有部分与arm arch有关, 与具体arm SOC无关.
+2), kgdb也用串口, console也用串口. 所以必须(?)有两个串口? 
+3), 支持编译时指定断点(似乎是用于特定用途, 不清楚是否开放), 见5-4)
+4), 同时列举了arm其余未定义指令异常处理函数. 
+ 
+5), 参考资料
+(1), ARM kernel 2.6.26 下的kgdb调试http://www.unixresources.net/linux/clf/linuxK/archive/00/00/70/85/708507.html
+(2), arm平台的kgdb调试实验
+(3), kgdb在ARM开发板上调试kernel成功
+6), 从分析结果看, 在nucleus下加入gdbserver并不是很复杂. 
+7), 遗留问题:
+(1), 只分析了软件断点, 没有分析硬件断点等
+ 
+1, driver/serial/kgdboc.c通过"tty_find_polling_driver"查找kgdboc指定的串口配置. 找到后赋值给"kgdb_tty_driver". 然后通过"kgdb_register_io_module"注册"kgdboc_io_ops".
+2, kernel/kgdb.c: 
+1), "kgdb_register_io_module()"会调用new_kgdb_io_ops->init, 再调用"kgdb_register_callbacks".
+2), "kgdb_register_callbacks"会调用"kgdb_arch_init()", 注册sysreg+g热键, register_console.
+3, arch/armkernel/kgdb.c: 
+int kgdb_arch_init(void)
+{
+        register_undef_hook(&kgdb_brkpt_hook);
+        register_undef_hook(&kgdb_compiled_brkpt_hook);
+ 
+        return 0;
+}
+4, 设置取消断点
+软件断点: 首先把断点加入数组(从逻辑看是break类命令), 然后在continue或step后激活断点. 
+1), 总体流程:
+kgdb_handle_exception()->gdb_serial_stub()->gdb_cmd_break()->kgdb_set_sw_break() or kgdb_remove_sw_break()
+2), 设置断点流程: 
+kgdb_set_sw_break() -> kgdb_validate_break_address()
+                        -> 区分已定义, BP_REMOVED和BP_UNDEFINED三种情况处理, 把断点加入kgdb_break数组. 设置BP_SET state.
+(1), kgdb_validate_break_address()测试能否设置断点: 先set断点, 再remove. 
+(2), kgdb_arch_set_breakpoint()设置断点: 
+通过probe_kernel_read()把要设置断点的地址的指令保存到save_instr. 通过probe_kernel_write()把未定义指令(arch_kgdb_ops.gdb_bpt_instr)写入该地址. 
+arch_kgdb_ops.gdb_bpt_instr在arch/arm/kernel/kgdb.c定义. 区分了大端(BE32), 小端(LE):
+struct kgdb_arch arch_kgdb_ops = {
+#ifndef __ARMEB__
+        .gdb_bpt_instr          = {0xfe, 0xde, 0xff, 0xe7}
+#else /* ! __ARMEB__ */
+        .gdb_bpt_instr          = {0xe7, 0xff, 0xde, 0xfe}
+#endif
+即0xe7ffdefe(见下面"KGDB_BREAKINST"). e7是高位, 如果按byte保存在默认情况下(小端)应该是在第三个byte. 从这里定义看, 没有考虑armv7 BE, 只考虑了armv4,v5的BE32. 也就是说编译为armv7BE时, 如果定义了__ARMEB__(大端)反而gdb无法正常工作. 
+\todo, 为什么用byte不直接用word呢? 
+(3), kgdb_arch_remove_breakpoint()取消断点:
+把原来替换的指令写回去. 
+3), kgdb_remove_sw_break(), 设置kgdb_break数组对应断点state为BP_REMOVED.
+ 
+4), kgdb_activate_sw_breakpoints(): 遍历kgdb_break数组, 对设置BP_SET flag的断点调用kgdb_arch_set_breakpoint()设置断点. 并增加BP_ACTIVE state.
+ 
+5, 断点触发: 
+1), arch/arm/kernel/entry-armv.S的"__und_svc"会调用"do_undefinstr()", 只有svc模式会调用是对的, 因为kgdb是内核态的调试手段. 用户空间直接用gdb. 
+2), "do_undefinstr"调用"call_undef_hook()"实际处理这个未定义指令. 如果返回值是0(表示成功?)直接返回, 否则会调用"arm_notify_die": 内核态会oops, 用户态调用"force_sig_info()"(感觉是要杀死这个进程)
+3), arch/arm/kernel/traps.c, "call_undef_hook()"有两个参数一是全部寄存器regs, 二是发生异常的指令instr. 遍历undef_hook查找匹配的处理函数并执行. 两个要求: instr符合要求(mask, val), cpsr符合要求(mask, val). 
+返回值: 如果处理函数存在返回其返回值, 如果不存在返回1. 
+(1), 现有两个undef_hook如下:
+static struct undef_hook kgdb_brkpt_hook = {
+        .instr_mask             = 0xffffffff,
+        .instr_val              = KGDB_BREAKINST,
+        .fn                     = kgdb_brk_fn
+};
+static struct undef_hook kgdb_compiled_brkpt_hook = {
+        .instr_mask             = 0xffffffff,
+        .instr_val              = KGDB_COMPILED_BREAK,
+        .fn                     = kgdb_compiled_brk_fn
+};
+arch/arm/include/asm/kgdb.h: 
+#define KGDB_BREAKINST          0xe7ffdefe
+#define KGDB_COMPILED_BREAK     0xe7ffdeff
+查ARM_ARM_7AR手册p227: 
+0xe7ffdeff = 0x1110  0111  1111  1111  1101 1110 1111 1111
+             31:28  27:24 23:20 19:16 15:12 11:8  7:4 3:0 
+[31:28]: condition: 1110(Always)
+[27:25]: 指令类型: 011(media instruction)
+[24:20]: op1: 1 1111
+[15:12]: rd: 1101
+[7:5]: op2: 111
+[4]: 1
+[3:0]: Rn: 1111
+如果是media instruction而且op1, op2全是1, 就是undefine instruction, 而且永远是未定义指令:
+Permanently UNDEFINED. This space will not be allocated in future. 
+/*
+重要! 这段注释很有用: 
+gdb假设我们调试用户进程, 它会在断点处插入SWI指令, 当SWI发生时下一条指令地址会存入R14_svc(zhangjian: swi异常会进入svc处理器模式). 但是对于kernel调试这样不行: 因为kernel本来就处于svc模式, 这样发生swi异常时我们的lr本来的会被覆盖(zhangjian: 处理完swi, 就回不去了).  
+为了避免这个问题, 我们强制进入未定义指令异常, 这样就能保存kernel全部状态了.
+KGDB_COMPILED_BREAK用于编译时指定断点, 目前至少有两个用途: trap_init()后产生第一个断点(zhangjian: 打印信息见参考资料(1): "kgdb: Waiting for connection from remote gdb..." ). 二是sysrq-G(zhangjian: 见参考资料(1): kgdb提供了magic_sysrq, 键值是'g'。所以系统启动后，你可以通过如下的命令再次进入到调试模式：echo g > /proc/sysrq_trigger). (zhangjian: KGDB_COMPILED_BREAK作用结合4)看)
+另外我们建议arm硬件designer加入类似SH或PPC的真正的trap(异常?)这样kgdb能方便很多. 
+ 
+ * GDB assumes that we're a user process being debugged, so
+ * it will send us an SWI command to write into memory as the
+ * debug trap. When an SWI occurs, the next instruction addr is
+ * placed into R14_svc before jumping to the vector trap.
+ * This doesn't work for kernel debugging as we are already in SVC
+ * we would loose the kernel's LR, which is a bad thing. This
+ * is  bad thing.
+ *
+ * By doing this as an undefined instruction trap, we force a mode
+ * switch from SVC to UND mode, allowing us to save full kernel state.
+ *
+ * We also define a KGDB_COMPILED_BREAK which can be used to compile
+ * in breakpoints. This is important for things like sysrq-G and for
+ * the initial breakpoint from trap_init().
+ *
+ * Note to ARM HW designers: Add real trap support like SH && PPC to
+ * make our lives much much simpler. :)
+ */
+4), 从"kgdb_arch_handle_exception()(arch/arm/kernel/kgdb.c)"看
+compiled_break是指kernel编译时就指定的断点. 对于这类断点, 处理后必须直接指定下一条指令, 否则就会一直触发这个断点了. 这个可以用于第一个断点. 
+两个异常都会调用"kgdb_handle_exception()"(kgdb_handle_exception(1, SIGTRAP, 0, regs)), 而且返回值都是0. 
+5), "kgdb_handle_exception()"
+(1), 首先检测gdb是否连接.
+(2), 与gdb上位机通信前的准备工作, 包括smp中等其它cpu停止, 执行pre_exp_handler增加模块引用计数等.
+(3), gdb_serial_stub: 与host通信. 
+(4), 后处理: 执行post_exp_exception减少引用计数. 
+ 
+6, arm中其它未定义指令异常, PSR_T_BIT = 0表示是ARM状态, 1表示是Thumb状态. 也就是说可能没有考虑thumbEE调试, 从实际情况看, kernel运行中也不太可能进入thumbEE状态, 所以没有问题, normal的gdb是否考虑了thumbEE调试呢?  
+arch/arm/kernel/traps.c: 
+static struct undef_hook arm_mrc_hook = {
+        .instr_mask     = 0x0fff0fff,
+        .instr_val      = 0x0e1d0f70,
+        .cpsr_mask      = PSR_T_BIT,
+        .cpsr_val       = 0,
+        .fn             = get_tp_trap,
+};
+ 
+arch/arm/kernel/ptrace.c
+static struct undef_hook arm_break_hook = {
+        .instr_mask     = 0x0fffffff,
+        .instr_val      = 0x07f001f0,
+        .cpsr_mask      = PSR_T_BIT,
+        .cpsr_val       = 0,
+        .fn             = break_trap,
+};
+ 
+static struct undef_hook thumb_break_hook = {
+        .instr_mask     = 0xffff,
+        .instr_val      = 0xde01,
+        .cpsr_mask      = PSR_T_BIT,
+        .cpsr_val       = PSR_T_BIT,
+        .fn             = break_trap,
+};
+ 
+arch/arm/kernel/kprobe.c
+static struct undef_hook kprobes_break_hook = {
+        .instr_mask     = 0xffffffff,
+        .instr_val      = KPROBE_BREAKPOINT_INSTRUCTION,
+        .cpsr_mask      = MODE_MASK,
+        .cpsr_val       = SVC_MODE,
+        .fn             = kprobe_trap_handler,
+
+};
+
+12:37 2010-1-26
+根据邮件恢复, VC1600, VC0882, VC0718, Linux版本选型, kernel版本差异(changelog), human readable changelog(for newbie), ftrace, kernel变化
+Human readable Changelog和选型log: 
+\\10.0.2.36\sqmshare\share\Linux\kernel\changelog 
+1, kernel human readable changelog
+http://kernelnewbies.org有很多资料, 例如"http://kernelnewbies.org/LinuxChanges"是最新kernel changelog, "http://kernelnewbies.org/Linux_2_6_28"是2.6.28的changlog.
+注意到ftrace是2.6.27加入的. 
+2, 2.6大致进化过程(具体版本有误差)
+1), 2.6.10: ldd3, ulk3. 
+2), 2.6.21: platform bus. 
+3), 2.6.31 测试. 移植架构清楚, 调度算法改进. 
+830 Linux: 2.6.27.
+3, (16:27 2010-1-13)Linux版本选型要考虑的内容
+1), 对cortex-a8/armv7支持如何:
+(1), 2.6.26开始支持thumbEE和thumb-2(for userspace app). 
+(2), 2.6.32: fix thumb-2 16bit指令导致text没有32bit对齐的问题: 
+Since the Thumb-2 instructions can be 16-bit wide, data in the .text sections may not be aligned to a 32-bit word and this leads to unaligned exceptions. This patch does not affect the ARM code generation.
+详见 commit: "http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=88987ef91b99cf99bc5d167caeb31d4958fbf931"
+2), 是否支持omap3530和realview cortex-a8: 便于在qemu和3530板子上研究kernel.
+(1), 从2.6.28开始会beagleboard等初步支持. 
+(2), 2.6.32: 开始支持omap4
+3), 是否适合ip参考代码移植(例如gpu等).
+4), 对android支持如何? 尤其是对cortex-a8有优化的android eclair(2.0)对应的kernel版本.
+5), debug支持:
+(1), ftrace: 
+A, 从2.6.27开始kernel支持ftrace(x86, arm, ppc)
+B, 2.6.32: arm irq trace, 可以trace完整. 详见 commit"http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=0d928b0b616d1c5c5fe76019a87cba171ca91633"
+B, 2.6.28: Boot tracer
+C, 2.6.32: Tracing improvements: perf tracepoints, perf timechart and perf sched
+(2), kgdb: 2.6.27开始支持了arm kgdb. 从commit看, 为了使用debugger把trap init提前(当初还奇怪为什么要做这个修改). 
+commit: http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commit;h=5cbad0ebf45c5417104b383dc0e34f64fa7f2473
+kgdb: support for ARCH=arm
+This patch adds the ARCH=arm specific a kgdb backend, originally
+written by Deepak Saxena <dsaxena@plexity.net> and George Davis
+<gdavis@mvista.com>.  Geoff Levand <geoffrey.levand@am.sony.com>,
+Nicolas Pitre, Manish Lachwani, and Jason Wessel have contributed
+various fixups here as well.
+The KGDB patch makes one change to the core ARM architecture such that
+the traps are initialized early for use with the debugger or other
+subsystems.
+[ mingo@elte.hu: small cleanups. ]
+[ ben-linux@fluff.org: fixed early_trap_init ]
+6), 其它(option):
+(1), filesystem, ubi支持: 2.6.27
+
+4, (22:47 2010-2-1)VC0882 kernel选型和debug方式调查
+Hi, aiguo, beizhan
+
+我最近看了看Linux从2.6.26开始各版本的改进. 感觉对于VC0882项目, 我们最低需要用2.6.27版本, 29更好(kernel最新版本是2.6.33-rc6). 
+2.6.27支持arm的kgdb调试(分析见附件)和ftrace便于我们debug kernel移植代码和驱动. 27内核对android支持也较好, 还支持ubi(flash filesystem).
+android支持27, 29等版本. 29同时对TI OMAP3530支持较好, 便于比较研究. 
+还有就是看ip提供的driver在哪个版本便于移植: 如果对应的kernel版本小于27, 移植driver到大于等于27的版本难度差不多. 
+
+详细版本差异参见附件. 
+
+12:40 2010-1-26
+根据邮件恢复, 软件技巧, ads, armasm, ads中类似宏定义的用法, ":DEF:", SETL
+1, 判断语句:
+1), IF :DEF:SYS_MEMORY_SIZE_16M ;判断SYS_MEMORY_SIZE_16M是否定义.
+的":DEF:"在"DUI0204E_rvct_assembler_guide.pdf"p94有说明. 
+2), "IF TEST_CLKSWITCH = {TRUE}", 判断TEST_CLKSWITCH是否为真.
+2, 定义
+    GBLL Debug
+Debug SETL {TRUE}
+
+12:50 2010-1-26
+根据邮件恢复, VC1600, VC0882, mas review, clkrst, meeting, 原文见小本p42-p45.
+摘要: 下面是, 主要涉及pll, clockswitch, power management. 总的来说VC0882与VC0830相比clkrst变化较多, 需要深入看. meeting minutes见"11:45 2010-1-9".
+1, pll时 TCMC 65LP.
+1), xclk变化: 支持12,13,24,26等, 实际spec支持更多.
+2), 146k-1.2G: \todo 查这个频率范围的含义.
+3), output频率: 240-1.2G. 目前设计cpu最高800MHz.
+4), 面积: 0.1mm2(include isolator)
+5), 3ma@600. 
+6), leakage? 待查. 
+7), 原有设计中6个pll(+xclk)都给cpu,bus选择. 这样后端中所有pll都会再一起. 可能clock到其它用pll的模块的走线会很长. zhukai建议高频pll少mux. 
+例如: mipi phy需要再1GHz测试, 这个频率没法从芯片外输入, 只能由内部pll供给. 因为从外部输入这么高频率的clock很困难. 
+会议讨论: 改为1,2,6+xclk给cpu,bus. 
+8), 目前预计的floorplan:
+/---------------\
+|    |          |
+|ddr |          |
+|phy |          |
+|    |      pll |
+|    |----------|
+|    |    ARM   |
+\---------------/
+ddr phy: synopsys.
+9), ddr phy内部有1ns margin. 要求从ddr phy输出到ddrc, axi bus回到ddr phy的延时最大是1ns. 否则ddr phy内部需要补偿. 
+\todo 看ddr phy关于这个的示意图. 
+10), VC0882 pll是先reconfig再reset. \todo 确认. 如果这样的话与VC0830不同. 
+11), 增加pll reset count: 需要5us. VC0830的pll其实也需要count, 但是软件, 硬件都没有加. \todo 这个对切频稳定性有影响么? 
+ 
+2, clkmask功能去掉了, clkmask本意时cpu,bus比例不变是降低功耗. 
+开会时YangZuoXing好像说时对avs(动态调整电压?)有影响. 
+ 
+3, 占空比是否可调, 是. 包括NFC. \todo 查clkrst确认.
+ 
+4, 细看figure2-9, 这个图是glitch free的图, huangwei说是一级同步, 确认. 老是不看电路图都不会了. 
+ 
+5, pmu liuzixi内部做clock选择(RTC clk或xclk).
+ 
+6, 由于系统异步设计, AXI分: main AXI, Cpu AXI, perpheral AXI等. 需要了解系统时钟域. 
+\todo 查CDC: cross domain clock? 
+ 
+7, audio 可能用IP. 输入是12MHz. 如果不是需要但是一个pll提供clock. 现在与usb等share pll的方案就不行了. 重要!!
+ 
+8, avs: 动态电压调整. 根据系统负载调整. 
+\todo: 这个难以测试. 但testplan也得一样写上.
+ 
+9, 切频时间. reset pll 5us, 5000xNR. \todo 查. 
+openissue: 用哪个做为counter的clock计数? 讨论结果是xclk. 
+\todo 用xclk计数是否再任何频率都够用. 希望避免像VC0830一样的pll stable时间不够的问题. 
+ 
+10, VC0882新feture, cpu,bus,ddrc可以都是异步. 不过bus, ddrc异步会影响一点性能. 是MP4组的要求, 因为pcddr没法跑太低的频率, 但是希望把bus频率降低功耗. 
+ 
+11, 与1合并. 
+ 
+12, 查同事信息: huamin, zhukai, dongxiangfu. 
+ 
+13, 其余与1合并.
+1), 关于reset:
+(1), 讨论中发现wdt, global_software_reset在PSO域, wdt_reset和global_software_reset复位PSO域时需要保证自己的复位逻辑是正确的, 这样逻辑上不好处理. 会议讨论结果是: 把这两个reset都放在PMU域.
+(2), cortex_a8有多个reset. \todo 查TRM. 
+会议讨论: 把reset cortex-a8时是否reset cortex-a8 debug做为属性. 
+ 
+14, 与1合并.
+ 
+15, clock switch
+1), cpu_clk_cfg_busy, 表示是否稳定到目标频率(从硬件切频完成到稳定到目标频率前cpu运行不受映象). 
+2), VC0882中clkswitch改名为recfg, cpu,bus可以独立切频(因为二者是异步关系). 
+\todo 查其它设计中有没有二者异步的. 
+ 
+16, ddrc可以与bus同步或异步, 后者效率低一些. 是MP4组为了省功耗. 
+\todo test plan review: 又是容易有corner的地方. 
+ 
+17, 内部sram 16k. \todo 了解VC0882 memory map. 
+ 
+18, 与15合并.
+19, 与9合并.
+ 
+20, bus recfg
+1), bus切频要注意是否影响video刷屏, audio播放, 录音等连续操作. 
+2), 因为bus recfg时会gate ddrc, 除了ddrc当前已经执行的命令会完成. 其余queue中的命令会block. 这样必须各模块不能有timeout, 否则会出问题. 
+zhangjian: 因为VC0882中各模块访问ddrc都是通过dma template, 所以保证dma template没有timeout就可以. 
+\todo 这点需要跟踪. 
+ 
+21, 与1合并
+ 
+22, cpu,ddrc都有performance monior. 详见"11:35 2010-1-9"
+ 
+23, gpu有自动gate, vdec会加自动gate.
+
+14:49 2010-1-26
+VC0882, arm debug, cortex-a8, Linux, 调试, 函数调用关系, call_graph
+1, 现在感觉无OS下用静态调试关系分析工具很有用. Linux下用kgdb, ftrace和qemu比较好用.  
+2, 静态调用关系分析工具一年前整理过, 见"36 Share\Linux\host\tools\call_graph". 当初的方法是egypt+codeviz+graphviz:
+1), egypt利用gcc3的rtl文件分析出函数和函数调用. 我用的是gcc4, egypt也能用. 其实gcc4的编辑机制已经变了, 如果利用gcc4的机制可能效果更好. 
+2), 用脚本把egypt脚本转为codeviz格式. 
+3), codeviz: 本来是修改编译器的, 我只用了codeviz的脚本把egypt生成的完整调用关系(网状)转为单一函数起始的调用关系(树状). 
+4), 最后用graphviz画图. 
+5), bamvor目录 do_sdio_write.png和VC0830_bootloader\Usb_Boot.png等等都是这样生成的. 
+
+17:11 2010-1-26
+VC0882, 最小环境, FPGA, arm debug, cortex-a8, RVI连接VC0882, 续, rom table
+1, 昨天是TMS改成了输出, 造成双驱动. 
+2, 能找到ARMCS-DP. 能读到rom table. 但是地址0x80000000, 不正确, 0x60004000, debugger看到的是0xe0004000. 
+1), 通过dp只能访问到ap(access point), ap包括mem-ap(apb-ap, ahb-ap)和jtag-ap.
+2), 查rom table格式.
+3), rom table访问方式: SW/JTAG-DP -> APB-AP -> ROM table
+3, 实验openocd: 
+0), 顺便看了看openocd代码:
+(1), "cortex_a8_read_regs_through_mem"(target\cortex_a8.c)当MMU打开时会有问题, 这可能是openocd暂时不支持cortex-a8 MMU, cache开的原因之一. 看来openocd要是希望完整支持cortex-a8还需要补充部分代码. 
+(2), openocd中所有mem_ap_read_xxx, mem_ap_write_xxx都是对apb-ap的操作. 可能这是openocd下载速度慢部分原因. 用ahb-ap肯定速度能快几倍. 
+1), 读到0x4ba00477, JTAG-DP
+2), \todo 实验i.MX51的脚本.
+4, (12:47 2010-1-27)进展
+1), 昨晚huangwei说可能查到了问题. 
+2), yangzuoxing感觉用仿真会快一些, 见YangZuoXing邮件"答复: please update rtl code"20100127_1240:
+Hi, meiping,
+我们A8的东西，都仿了那些PATH?
+靠FPGA来解决问题是比较慢的。
+
+> 发件人: Huang wei 
+> 发送时间: 2010年1月27日 11:54
+> 收件人: Yang Zuo Xing; Guo haifeng; Jia jihua; ge meiping
+> 主题: Re: please update rtl code
+> 改了个 Coresight IP 的APB address.   
+3), GeMeiPing现有仿真情况:
+GeMeiPing邮件"答复: please update rtl code"20100127_1311
+我仿真的PATH：
+Cortex-A8 从rom跑程序。
+ARM 访问寄存器、ROM、SRAM正常。
+JTAG－DP。
+
+没有仿真的PATH：
+Coresight 各个component，包括APB-AP AHP-AP  ETM  ITM  ATB etc。
+
+Coresight要验证起来要花些时间，不管是自己建立环境还是使用ARM提供的环境，我想是不是针对目前FPGA出的问题，我这边做一些相应的仿真？
+4), WangXin arm coresight仿真资料
+WangXin邮件"答复: please update rtl code"20100127_1334
+Meiping & Zuoxing, 
+The user guide of Coresight descript how to use functional test vectors to verify that the RTL of each
+CoreSight component is delivered and unpacked correctly as below, 
+Building the simulation world and replaying vectors on RTL
+To build the vector replay testbench for Verilog RTL simulation and replay vectors:
+1. From your top-level CoreSight directory go to the vector build and replay area:
+cd implementation/<csblock>/vectors/tbench
+where <csblock> refers to the appropriate CoreSight block.
+2. Ensure that your simulator is on the path. The scripts provided for vector replay
+on RTL are:.
+BuildVerilogVCS
+Builds testbench and replays vectors using the VCS tools.
+Please check whether all basic function can be run first. 
+5), YangZuoXing认为需要仿真的内容.
+zhangjian: 感觉现在根据没到这一步————连a8都看不到, 目前最需要的是确定coresight本身的正确性. 也即是JTAG->apb-ap-a8, jtag-ahb-ap-bus两条通路. 
+YangZuoXing邮件"答复: please update rtl code"20100127_1344
+Hi, meiping,
+前我们需要通过JTAG仿通5个通路，从高到低的优先级为：
+1. JTAG->A8->A8 REGISTER
+2. JTAG->A8->PROGRAM->882 REGISTER
+3. JTAG->A8->PROGRAM->882 SRAM
+4. JTAG->CORESIGHT->882 REGISTER
+5. JTAG->CORESIGHT->882 SRAM
+6), 下转"10:41 2010-1-29".
+
+20:35 2010-1-26
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, arm926 example: build1, build2, build3
+0, 总体计划: 移植aasp到OMAP3530, 周二: 能够进入c语言. 周三: aasp可以运行. 周四: debug细节问题. 周五支持VC0882.
+1, 今天发现rvds4.0初始化方式有变化. 又看了看VC0598代码, 发现598 nucleus汇编代码和VC0830, VC0816变动很大, 借鉴了楼下HeJu的代码. 我目前是要做无OS的aasp. 从目前看难点一是cortex-a8初始化代码(应该只有mmu, cache不同), 二是rvds4.0初始化流程的变化(要用armlib造成必须按rvds4.0初始化流程做). 
+2, 这样看计划先用arm现成的example建立基本c环境, 然后再实验armlib memcpy是否正常, 然后加入桩脚函数支持printf等函数. 
+3, 基本c环境
+1), example: "C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\emb_sw_dev", This directory contains the example projects referenced in the Developer Guide, Chapter 3, "Embedded Software Development"
+2), build1, 2通过. build2实现了uart基本操作函数以实现printf, scanf等. 
+3), build3, 增加了"__user_initial_stackheap"(source\uish.s). 
+运行时死在"__rt_lib_init", 发现是sp在0x07020000, 显然不正确. 
+(1), "TWO_REGION_MODEL"默认没有定义. 
+(2), 连接脚本是"uish.s": 
+    LDR   r0,=0x07000000 ;HB            ; The stack and heap are placed in top 64MB of SDRAM.
+    LDR   r1,=0x07020000 ;SB
+修改. 查pb arm926手册知道系统共有128Mbyte内存. 我的830板子是32Mbyte memory, 简单起见直接改为: 
+    LDR   r0,=0x01000000 ;HB            ; The stack and heap are placed in top 64MB of SDRAM.
+    LDR   r1,=0x01020000 ;SB
+修改后build3运行正常. 
+
+9:46 2010-1-27
+时间管理
+0, 9:40
+
+1, 计划<转移>
+1), VC0882 移植aasp到3530, aasp可以运行
+2), 找beizhan领RVI. 重要. 一个RVI放在实验室. <DONE>.
+3), VC0882最小环境, 见"20:35 2010-1-26"-3-4)
+4), 继续整理liaozhicheng发的重要邮件. 
+5), 下班后: 更新log\logAssistant目录到手机. <DONE>
+6), 两个博客, 有空看看:
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2009%2F08%2F03%2F4404184.aspx
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2008%2F12%2F05%2F3455380.aspx
+7), 收集邮件: wangyang发的工位图, 最近2年的同事入职/晋升通知. 
+
+2, 执行
+1), VC0882最小环境, 见"9:49 2010-1-27"--"19:57 2010-1-27"有"VC0882, 最小环境"的log.
+(午饭1小时, 晚饭1.5小时 19:20继续).
+
+3, 今日进展, 见"19:57 2010-1-27"3. 
+
+4, 次日计划:
+1), build3,4 for omap3530. 顺利的话明天上午应该能搞定了. 明天下午先看下rvds eclipse工具使用的遗留问题(makefile, eclipse直接连接rvdebugger), 然后开始移植aasp. 估计得周五完成了. 
+2), 看fromelf工具时突然发现c专家编程是很久以前看的书了. 连前段时间看的<程序员修炼之道>也很久没翻了. 
+
+9:49 2010-1-27
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, arm926 example: build4
+0, 根据build2\readme.txt, 这个project中使用了一个semihost函数, 所以没有定义"__use_no_semihosting": 
+The symbol  __use_no_semihosting is not imported into this project.  This is because a semihosting function is executed during C library initialization to set up the application stack and heap location.  
+
+1, 续"20:35 2010-1-26", 接下来需要成功运行build4, build5, 并支持omap3530和VC0882. 
+2, build4: 增加了vector和$Sub$$main(), 使用了timer.
+0), 根据"DUI0203I_rvct_developer_guide.pdf"p55 armv7m与其他arm的向量不同: 
+The vector table on page 6-4 for ARMv6 and earlier, ARMv7-A and ARMv7-R
+profiles
+The vector table on page 6-31 for ARMv6-M and ARMv7-M profiles.
+1), 注释TCM(830没有)和ROM_RAM_REMAP(我们直接从ram运行)
+TCM, ROM_RAM_REMAP
+2), 链接脚本使用了ROM_LOAD, 830显然没法支持, 修改直接映射到ram. 
+scatter\embedded_scat.scat: 
+修改前, 主要是去掉TCM, 所以区域要合并(否则报错, \todo 复现问题并分析).
+ROM_LOAD 0x34060000 0x03F90000
+{
+    ROM_EXEC +0 0x3FA00000
+    {
+        init.o (INIT, +FIRST)            ; Initialization code
+        initTCM.o                        ; Initialise TCMs
+        initMMU.o                        ; Create Translation Table
+        * (InRoot$$Sections)             ; All library sections that must be in a root region
+                                         ; e.g. __main.o, __scatter*.o, * (Region$$Table)
+    }
+
+    I-TCM 0x0000 0x8000                  
+    {                                    ; assumes 32K I-TCM
+        vectors.o (Vect, +FIRST)
+        * (+RO)                          ; any remaining code inc C lib.
+    }
+
+    D-TCM 0x10000 
+    {
+        * (+RW,+ZI)
+    }
+}
+修改后: 
+ROM_LOAD 0x0 0x01F90000
+{
+    ROM_EXEC +0 0x01000000
+    {
+        vectors.o (Vect, +FIRST)    	
+        init.o (INIT)            ; Initialization code
+        ;initTCM.o                        ; Initialise TCMs
+        initMMU.o                        ; Create Translation Table
+        * (InRoot$$Sections)             ; All library sections that must be in a root region
+                                         ; e.g. __main.o, __scatter*.o, * (Region$$Table)
+        * (+RO)                          ; any remaining code inc C lib.    
+    }
+
+    OTHER_DATA 0x10000 
+    {
+        * (+RW,+ZI)
+    }
+}
+3), 运行时发现在init_clock死. 
+(1), build4用的是clock_irq.c, 和原来不同. 
+(2), 根据build4/readme.txt, timer是100Hz. 
+(3), (11:35 2010-1-27)build4加入timer中. 这里面的clock似乎只是测试中断, 每次irq中断都会直接调用timer的中断处理程序(inc_clock(), 因为只有这一个irq)
+(4), 参"DUI0349B_rvct_libraries_guide.pdf"p118, clock函数
+This is the standard C library clock function from time.h.
+Syntax
+clock_t clock(void)
+Usage
+If the units of clock_t differ from the default of centiseconds, you must define __CLK_TCK on the compiler command line or in your own header file. The value in the definition is used for CLK_TCK and CLOCKS_PER_SEC. The default value is 100 for centiseconds.
+Note
+If you reimplement clock() you must also reimplement _clock_init(). 
+Return
+The returned value is an unsigned integer.
+(5), ref_clock()(source/clock_irq.c)考虑了读timer value前正好发生中断的情况, 感觉挺好的, \todo Linux移植中会不会用到呢? 
+unsigned ref_clock(void)
+{
+    int clk, count;
+    unsigned long temp; 
+    clk=clock_counter;
+    count=TIMER_TMR0D;
+    
+    if (clk==clock_counter)  // A timer IRQ did not occur between the counter and timer values being read.
+    {
+      temp = clk*10+(10-count);
+      return temp;
+    }
+    else                     // A timer IRQ did occur between the counter and timer values being read
+    {
+      temp = (clk+1)*10;
+      return temp;
+    }
+}
+(6), 修改后build4运行通过. 测试计时是否正确: 
+        0       1       2       4       5       6       8       12
+counter 0xdad   0x2154  0x37dd  0x66c5  0x7da1  0x9526  0xc365  0x120e2
+inter   -       5031    5769    12008   5852    6021    11839   23933
+误差基本在1s之内, 应该是人工测量的误差. 
+\milestone: mini_c_env_20100127_build4_ok.rar(D:\work\VC0830\code\milestone).
+
+3, build5(没有实验). build5和build4的功能相同, 只是把build4中用宏定义的寄存器基址和堆栈地址用脚本定义. 虽然不用, 还是分析一下机制. 
+\todo 这个机制可以将来在介绍VC0882最小环境时介绍. 
+1), 寄存器地址, 以timer为例, 把timer模块的寄存器定义为结构体struct timer, 在链接脚本(scatter file)中指定该结构体的起始地址: 
+A, scatter file: 
+Timer0 TimerBase UNINIT
+{
+timer.o (+ZI)
+}
+B, TimerBase在versatile.h定义. 
+C, timer.c: 
+#include "versatile_struct.h"
+struct timer timer0;
+D, struct timer在 include\versatile_struct.h 定义
+struct timer
+{
+  volatile unsigned Load;           // @0x00
+  volatile unsigned Value;          // @0x04
+  volatile unsigned Control;        // @0x08
+  volatile unsigned Clear;          // @0x0C
+};
+
+2), 堆栈地址: ARM_LIB_STACKHEAP, 见"15:40 2010-1-27"6
+
+4, 下一步是在omap3530上移植现有程序, 移植后需要详细分析memory map和汇编(当初zhicheng建VC0816 ads环境时加入aasp后不稳定, 这个地方要留意, 保证库的稳定性). 然后去掉semihost, 最后加入aasp. 希望明天完成(因为周末周四到周末不知道是否会加班, 而且周四, 周五可能会有coresight的事情). 
+
+14:36 2010-1-27
+VC1600, VC0882, VC0718, 竞争对手, TI DaVinci, TMS320DM6467T, H.264 60fps@1080p, 8路D1
+1, 自TI邮件"全新 1GHz DM6467T 与 1080p IP 摄像机参考设计"20100127_1431
+全新 1GHz TMS320DM6467T 达芬奇 (DaVinci™) 视频处理器可实现高达每秒 60 帧的 H.264 1080，或 8 通道 D1 编码。
+该1 GHz DM6467T是一款可实现网络数字视频应用的单芯片处理器，可进行高清 (HD) H.264（每秒 60 帧）解码，同时还可提供优化的影像支持与高级视频处理功能，通过第三方解决方案同时支持多达 8 个通道的 H.264 D1 实时视频。www.ti.com/dm6467t_elp 
+立即使用最新 DM6467T 评估板启动您的设计。该 EVM 配有完整的软件、工具以及演示应用，可帮助开发人员评估视频处理算法与芯片性能，并立即启动应用开发。此外，德州仪器 (TI) 还将推出 TMDXSDV6467T 子卡，该产品能够与现有 DM6467 评估板实现显示向后兼容 
+注意： 在 DVSDK 测试版中，H.264 1080p 的解码速度略低于 60fps，也不可同时进行 H.264 解码与编码。GA 版将解决这些问题，并计划在 2010 年第 2 季度提供。 
+
+2, dm6467介绍:
+自"dm6467-HDVICP功能说明_2009-4-16.doc"(D:\VC1600WCVS\doc\competitor\ti)
+DM6467片内包含用于视频处理的协处理器HDVICP（High-Definition Video/Imaging Co-processor），HDVICP可以完成视频编解码中的许多复杂算法，以减轻DSP负荷提高整体速度。HDVICP所有控制寄存器和数据buffer都可以映射到系统内存空间，DSP和ARM核都可以访问这两个协处理器，输入和输出数据可以直接由CPU读取，也可以通过系统DMA读取。
+
+每个HDVICP都包含一个ARM968处理器、若干个加速单元和相应的缓冲器。对HDVICP所有的控制过程都可以由内部的ARM968完成，以尽量减少DSP的工作提高整体效率。
+
+HDVICP一共包括有7个加速单元：
+a.	IPE（Intra-prediction Estimation），处理H.264编码的帧内预测搜索
+b.	ME（Motion Estimation），处理编码中的运动估计搜索
+c.	MC（Motion Compensation），处理编解码中的运动补偿
+d.	CALC（Calculation Engine），处理DCT/IDCT、量化/反量化、帧内预测计算（H.264）和DC/AC预测（MPEG4）
+e.	BS（Boundary Strength Calculation），计算H.264滤波器边界强度
+f.	LPF（Loop Filter），H.264去块滤波器
+g.	ECD（Entropy Coding/Decoding），处理变长编码以及H.264的CABAC编解码
+
+根据HDVICP的工作模式，可以推断出HDVICP内部每个加速单元就是一个独立的处理器，处理器有各自事先设定的运行程序，所有参数和输入数据直接写入每个单元的内存，处理完成后再结果从其内存中读取出来。如果有HDVICP内部加速单元的具体资料，应该可以绕过api函数直接对加速单元编程，修改其运行程序或运行参数，这样就有希望对非标准协议实现加速功能。
+
+15:40 2010-1-27
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, arm runtime memory model分析
+0, 阅读"DUI0349B_rvct_libraries_guide.pdf"2.10节(p88), 下文如无特殊说明都是对此文件的引用. 
+introduction和system overview参见"DUI0203I_rvct_developer_guide.pdf"3.4节. 
+\todo 默认memory model是什么呢? 
+
+1, 分为Single memory region和Two memory regions. 前者的堆栈共用一个区域, 后者是两个区域. 用"__use_two_region_memory"参数区分(p88).
+2, 三种方法定义堆栈地址:
+To modify the behavior of the heap and stack manager, you can use any of the following methods:
+• use a scatter-loading description file
+• redefine __user_setup_stackheap() and __user_heap_extend()
+• define symbols to specify the intial stack pointer and the start and end of the heap.
+__user_setup_stackheap() 设置堆栈地址, __user_heap_extend()设置额外的堆栈地址, 系统在需要时使用(\todo 细看)
+
+3, __user_setup_stackheap()
+1), 使用__user_setup_stackheap()代替arm旧有的"__user_initial_stackheap()"可以减小代码体积, 因为前者不需要临时栈:
+Using __user_setup_stackheap() rather than __user_initial_stackheap() improves
+code size because there is no requirement for a temporary stack.
+2), 这个函数必须用汇编编写, 函数返回值如下: 
+__user_setup_stackheap() returns the:
+• heap base in r0
+• stack base in sp
+• heap limit in r2
+• stack limit in r3.
+Note
+__user_setup_stackheap() must be reimplemented in assembler.
+r2,r3在"Two memory regions"时使用.
+
+4, __user_initial_stackheap()的变化.
+使用链接脚本的情况下, Image$$ZI$$Limit不会定义. 
+
+5, 利用链接脚本定义.
+ARM_LIB_STACKHEAP. This region has the EMPTY attribute. 会定义如下两个symbols: 
+Image$$ARM_LIB_STACKHEAP$$Base and Image$$ARM_LIB_STACKHEAP$$ZI$$Limit.
+例如example中final_scat.scat(scatter)
+ARM_LIB_STACKHEAP 0x10000 EMPTY 0x4000
+表示Image$$ARM_LIB_STACKHEAP$$Base=0x10000, Image$$ARM_LIB_STACKHEAP$$ZI$$Limit=0x14000, 既heap start address 0x10000, 向上增长; stack start address 0x14000, 向下增长. 
+
+6, 问题: arm example里面用的是"__user_initial_stackheap()", 而且developer guide里面用的也是这个函数. 但是文档明明说推荐用__user_setup_stackheap(). 有点费解. 这个问题作为遗留问题稍候解决. 
+
+16:13 2010-1-27
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, emb_sw_dev build4支持OMAP3530, fromelf学习
+0, 续"9:49 2010-1-27"4, 现有环境(example build4)支持omap3530. 
+arm example源代码"C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\emb_sw_dev"
+1, 从build1开始实验. 需要修改链接地址, 从link ref doc知道用--ro_base指定代码段链接地址.
+If this option is not specified, and no scatter-load file is specified, the default is --ro_base=0x8000.
+2, 突然发现OMAP3530串口无法输入, 用openjtag+830又可以. 还是换线试试. 换了线用putty没事. dnw还是不行. 暂时不管. 后来用超级终端是可以的. 
+3, 查看axf文件, 学习fromelf:
+1), The following examples show how to use fromelf:
+fromelf --text -c -s --output=outfile.lst infile.axf
+Creates a plain text output file that contains the disassembled code and the symbol table of an ELF image.
+fromelf --bin --16x2 --output=outfile.bin infile.axf
+Creates two files in binary format (outfile0.bin and outfile1.bin) for a target system with a memory configuration of a 16-bit memory width in
+two banks.
+The output files in the last example are suitable for writing directly to a Flash device.
+2), 学习fromelf:
+(1), "--text"用于解析axf文件. 是默认输出选项. 
+(2), • To produce a plain text output file that contains the disassembled version of an ELF image and the symbol table, use:
+fromelf --text -c -s --output=outfile.lst dhry.axf
+A, elf header, 这里面包括elf文件名(dhry.axf), Entry point(0x8000, elf默认entry point), 编译器, 链接器(rvds4.0)等等. 
+    File Name: dhry.axf
+
+    Machine class: ELFCLASS32 (32-bit)
+    Data encoding: ELFDATA2LSB (Little endian)
+    Header version: EV_CURRENT (Current version)
+    Operating System ABI: none
+    ABI Version: 0
+    File Type: ET_EXEC (Executable) (2)
+    Machine: EM_ARM (ARM)
+
+    Image Entry point: 0x00008000
+    Flags: EF_ARM_HASENTRY (0x05000002)
+
+    ARM ELF revision: 5 (ABI version 2)
+
+    Built with
+    ARM C/C++ Compiler, RVCT4.0 [Build 400]
+    ARM Linker, RVCT4.0 [Build 400] 
+
+    Header size: 52 bytes (0x34)
+    Program header entry size: 32 bytes (0x20)
+    Section header entry size: 40 bytes (0x28)
+
+    Program header entries: 1
+    Section header entries: 16
+
+    Program header offset: 51816 (0x0000ca68)
+    Section header offset: 51848 (0x0000ca88)
+
+    Section header string table index: 15
+
+B, 代码段:
+** Section #1 'ER_RO' (SHT_PROGBITS) [SHF_ALLOC + SHF_EXECINSTR]
+    Size   : 18808 bytes (alignment 4)
+    Address: 0x00008000
+
+    $a
+    !!!main
+    __main
+        0x00008000:    eb000000    ....    BL       __scatterload ; 0x8008
+        0x00008004:    eb000032    2...    BL       __rt_entry ; 0x80d4
+...
+
+C, 数据段(ER_RW)和未初始化数据段(ER_ZI)对应elf是data和bss(Block Started by Symbol), 参见c专家编程Enp123.
+** Section #2 'ER_RW' (SHT_PROGBITS) [SHF_ALLOC + SHF_WRITE]
+    Size   : 64 bytes (alignment 4)
+    Address: 0x0000c978
+
+
+** Section #3 'ER_ZI' (SHT_NOBITS) [SHF_ALLOC + SHF_WRITE]
+    Size   : 10536 bytes (alignment 4)
+    Address: 0x0000c9b8
+
+D, 符号表(symbol table)
+** Section #11 '.symtab' (SHT_SYMTAB)
+    Size   : 12768 bytes (alignment 4)
+    String table #12 '.strtab'
+    Last local symbol no. 525
+
+    Symbol table .symtab (797 symbols, 525 local)
+
+      #  Symbol Name                Value      Bind  Sec  Type  Vis  Size
+    ========================================================================
+
+      1  $a                         0x00008000   Lc    1   --   De 
+      2  $d                         0x0000803c   Lc    1   --   De 
+      3  $a                         0x00008044   Lc    1   --   De 
+...
+
+(2), • To list to stdout all the global and static data variables and all the structure field addresses, use:
+fromelf --text -a --select=* infile.axf
+• To produce a text file containing all of the structure addresses in inputfile.axf but none of the global or static data variable information, use:
+fromelf --text -a --select=*.* --output=structaddress.txt infile.axf
+• To produce a text file containing addresses of the nested structures only, use:
+fromelf --text -a --select=*.*.* --output=structaddress.txt infile.axf
+• To produce a text file containing all of the global or static data variable information in inputfile.axf but none of the structure addresses, use:
+fromelf --text -a --select=*,~*.* --output=structaddress.txt infile.axf
+这几个都没有实现, 看来"--select"需要看看, 以后可能有用, 感觉是根据格式筛选的. \todo.
+
+17:26 2010-1-27
+VC0882, 最小环境, FPGA, arm debug, cortex-a8, RVI连接VC0882, 续, 连接cortex-a8不稳定
+0, FPGA使用: 
+F1_DONE和F2_DONE都亮表示FPGA配置，然后再按一下复位(s1, soft reset).
+1, 昨天错误是component地址配置错误. rom table本身是对的. 还有其他地方要改. 
+2, 在10MHz clock下可以扫到cortex-a8和其他component. 但连接时提示"Error: could not determin target state". 
+实验各种时钟频率: 
+20k target not response.
+1M: 连接正常，可以查看arm寄存器，但是0x60000000寄存器无法访问()
+1M could not determin target state 提示两次.
+5M: 连接可以。查看不到arm寄存器。could not determin target state 提示很多次。
+看来和速度有关系。
+3M: 也有错。复位试试。有一次连接成功但是状态是run，而且无法停止。
+再实验1M，这次连接成功，但是提示unkn。
+实验500k连接也有一次成功, 但是"could not determin target state"错误次数比一次成功读写arm reg那次要多. 
+3, 分析, 实验: 
+1), 考虑timing问题
+(1), 目前arm(24MHz), coresight是一个时钟频率. coresight内部是同步的. 考虑降低系统clock. 
+(2), 加上RTCk, 让rvds4.0自动配置时钟, 可能还能自动调整相位? 
+(3), 其他: FPGA内部timing? 
+2), 确定访问cortex-a8时用的sw还是jtag. 可以通过SW_EN(信号名不准确)判断. 
+3), 确定所有component数目和id正确. 
+
+19:57 2010-1-27
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, emb_sw_dev build4支持OMAP3530, 续
+1, build1目录: 
+armlink --diag_style=ide --cpu=ARM926EJ-S --info=totals --info=unused -odhry_omap3530.axf dhry\dhry_2.o dhry\dhry_1.o --ro_base=0x80008000
+1), rvds4.0连接Cortex-a8(OMAP3530)信息:
+> connect  "@Cortex-A8_0@RVI_3"
+ARM RealView ICE
+Base H/W: V1 Rev G-01
+TurboTAP Rev: 1.86
+Firmware: 3.3.0, Build 948
+Copyright ARM Limited 2002-2007
+Attached to stopped device
+Warning: No stack/heap or top_of_memory defined - setting top_of_memory to
+0x00080000
+Stopped on Stop detected on target
+Stopped at N:0x80E87F18: <Unknown>
+Warning: 0x02400102: Cannot enable Semihosting because vector-catch for SVC is
+enabled
+Stop>
+
+2), PS, 对于软件调试最小环境来说, 有256k甚至1M的memory, 和uart, irq, timer等基本模块. 
+
+3), 调试omap3530时感觉很慢, 后来正常运行dhry时也是. 
+(1), 发现build1中sp是定死的0x800000, 这样对于omap3530来说肯定不行. 手工在代码运行时修改为0x80800000, 程序运行通过. 
+(2), 设置栈顶
+A, 查"DUI0203I_rvct_developer_guide.pdf"p44, 没有实现__user_setup_stackheap() 或__user_initial_stackheap()或者没有使用链接脚本时并且打开了semihost时(默认只能打开? \todo 确定), 栈顶由semihost操作给出: 
+The stack base location is provided by a semihosting operation during application startup. The value returned by this semihosting operation depends on the debug environment.
+B, RVDebugger菜单Target->Connection Properties:
+当前连接是RVI_3, 
+CONNECTION=\Advanced_Information\Default\ARM_config\Stack_Heap
+The ARM tools automatically set the stack and heap based on the top of memory using semihosting. To change the setting, change the values in the right pane.
+把"*Stack bottom"从<above heap>改为0x80800000. 
+注: 如果是<above heap>, 似乎返回的是0x00800000.
+修改后程序运行正常. 
+
+2, build2. 加入omap3530 uart支持. 
+1), 参考NS16550_putc(), NS16550_getc()(omap3530/uboot-02.01.03.11/drivers/serial/ns16550.c, xloader目录相同).
+2), uart无输出. 用原来编译好的映像跟踪, 发现用的是uart3...
+发现用结构体定义好处是对于多个模块只需要定义基址, 不用定义具体寄存器的宏. 
+\todo 在VC0882中我负责的模块考虑用这个方法. 
+3), 修改后build2 pass. 开始有时跑不起来, 后来连续实验三次都过了. 暂时仍未build2是pass的. 
+4), guide:
+(1), source/serial.c中定义"OMAP3530".
+(2), 编译
+D:\VC0882\mini_env\mini_c_env\build_2>armlink --diag_style=ide --cpu=ARM926EJ-S --info=totals --info=unused -odhry_omap3530.axf source\serial.o source\retarget. o source\clock.o dhry\dhry_2.o dhry\dhry_1.o --ro_base=0x80008000
+
+3, 今天的进展是在没有禁止semihost情况下, armlib可以使用(printf, scanf). 但是还没有使用链接脚本, 另外现在还是不知道rvds到底根据哪个脚本编译的, 只能说是勉强完成. 
+代码映像: "D:\work\VC0830\code\milestone\mini_c_env_omap3530_build1,2_ok". omap3530编译build1, build2方法见对应目录的readme_omap3530.txt. 
+后面是build3,4. 顺利的话明天上午应该能搞定了. 明天下午先看下rvds eclipse工具使用的遗留问题(makefile, eclipse直接连接rvdebugger), 然后开始移植aasp. 估计得周五完成了. 
+
+9:10 2010-1-28
+时间管理
+0, 8:55-18:10
+
+1, 计划
+1), VC0882最小环境, 移植aasp到OMAP3530, 详见"19:57 2010-1-27"3
+2), 记录程序员修炼之道的技巧. 
+3), 有空把logAssistant搜索顺序改为按文件名逆序搜索, 应该会好很多. 
+4), 继续整理liaozhicheng发的重要邮件. 
+5), 下班后: 更新log\logAssistant目录到手机.
+6), 看fromelf工具时突然发现c专家编程是很久以前看的书了. 连前段时间看的<程序员修炼之道>也很久没翻了. 
+7), 杂: 
+(1), 下班时复制电子工程专辑确认信息到手机, 回家传真. 
+(2), 两个博客, 有空看看:
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2009%2F08%2F03%2F4404184.aspx
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2008%2F12%2F05%2F3455380.aspx
+(3), 收集邮件: wangyang发的工位图, 最近2年的同事入职/晋升通知. 
+
+2, 执行
+1), -10:09 杂, RVI更换电源线, 见"9:39 2010-1-28"
+2), VC0882最小环境, 移植aasp到OMAP3530, 见"10:34 2010-1-28"
+(11:40-12:27午饭, 休息)
+
+9:39 2010-1-28
+VC1600, VC0882, arm debug, jtag: RVI注意事项, \todo 整理RVI注意事项
+今天写ICP编号时发现三相电源线是125V10A的, 比较危险. 赶紧把现在用的两个ICE的线都换成两相的(16A, 250V). 
+1, 使用两相电源线, 原配三相电源线是125V, 10A的.
+2, arm推荐用LVDS那根高速jtag线(40pin): 
+a long 40-way ribbon cable and a Low Voltage Differential Signaling (LVDS) 40-way to 20-way probe.
+
+10:14 2010-1-28
+软件技巧, xterm, 设置xmanager远程连接到Linux vmware虚拟机
+1, Linux端
+软件位于"36: Share\Linux\host\xterm\xterm_242"
+#install dep
+sudo rpm -ivh dep\*.rpm
+#install xterm
+sudo rpm -ivh xterm-242-2.fc10.i386.rpm
+#get ip address, 36服务器上vm默认得到的ip是192.168.41.128
+ifconfig
+2, Host(Windows端), 
+1), 如下设置xmanager->startx.
+host: 192.168.41.128
+User Name: dec
+Passwd: 111111
+Execution Command: /usr/bin/xterm -ls -display $DISPLAY
+Save and Run, Short cut to desktop. 
+3, xmanager配置正确后, 
+修改/etc/inittab
+id:5:initdefault:
+改为
+id:3:initdefault:
+这样节省虚拟机资源. 减轻系统负担
+
+10:34 2010-1-28
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, emb_sw_dev build4支持OMAP3530, 续"19:57 2010-1-27"
+1, build3, 增加了"__user_initial_stackheap"(source\uish.s). 
+1), 还是用的最笨的办法修改 uish.s:
+    GBLL OMAP3530
+    IF :DEF: OMAP3530
+    LDR   r0,=0x81000000 ;HB            ; The stack and heap are placed in top 64MB of SDRAM.
+    LDR   r1,=0x81020000 ;SB
+	
+    ELSE
+;    LDR   r0,=0x07000000 ;HB            ; The stack and heap are placed in top 64MB of SDRAM.
+;    LDR   r1,=0x07020000 ;SB
+    LDR   r0,=0x01000000 ;HB            ; The stack and heap are placed in top 64MB of SDRAM.
+    LDR   r1,=0x01020000 ;SB
+    ; r2 not used (HL)                  ; The heap limit and stack limit are not used
+    ; r3 not used (SL)                  ; in a one-region model
+    ENDIF ; IF :DEF: OMAP3530
+2), 修改链接脚本:
+链接地址从0x0改为0x80000000
+RAM_LOAD 0x80000000
+{
+    CODE_EXEC 0x80000000
+    {
+        * (+RO)
+    }
+
+    DATA_EXEC +0
+    {
+        * (+RW,+ZI)
+    }
+}
+3), 编译:
+armlink --diag_style=ide --cpu=ARM926EJ-S --scatter=../scatter/simple_scat_omap3530.scat --info=totals --info=unused -odhry_omap3530.axf source\uish.o source\serial.o source\retarget.o source\clock.o dhry\dhry_2.o dhry\dhry_1.o
+4), 运行通过. 
+
+2, build4: 增加了vector和$Sub$$main(), 使用了timer.
+1), vectors.s无变化. init.s需要调用MMU和TCM init, TCM代码已经注释了. MMU代码需要用cortex-a8的. submain.c里面的cache_init()也需要改为cortex-a8的. 还有链接脚本要改. 要加入timer. 凡是定义"LOCATIONS_IN_CODE"的地方都要查, 默认是从0x0放置的. 
+2), MMU init
+(1)分析arm926的initmmu.s: 除了使用domain15, 其余代码与mmu_cache.s相同. 
+domain设置只要保证translation table和domain access control(p15, 0, r0, c3, c0, 0)一致即可. 
+(2), 自己直接写这段code有难度. 参考rvds4.0 cached_dhry(C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\cached_dhry\CortexA8dhry). 
+ref cortex-a8 mmu, tlb, cache code for mini_c_env build4.
+mini_c_env project copy from "C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\emb_sw_dev". support VC0830 32MByte memory and omap3530.
+3), 实验CortexA8dhry.
+(1), 修改链接脚本. 修改后编译通过, 运行到"MCR     p15, 1, r0, c9, c0, 2      ; Write L2 Auxilary Control Register "报出未定义指令异常(0x4@0x14004, 这个地址应该是用户没有指定异常向量时arm自动设置的). 
+注: 现在在查cortex-a8 mmu,cache问题, 如果难以解决, 暂时跳过. 
+(2), 查cortex-a8 TRM.
+只有在"Secure privileged"才能写, 否则会报出未定义指令异常. 根据TRM table2-8也就说需要进入monitor mode. 代码运行到这里是SVC mode. 不符合要求. 先跳过试试. 
+(3), 跳过后, 运行到开mmu之前. 实验mmu映射是否正确. 把0x8c100000同时映射到0x8c000000和0x8c100000. 开mmu前两个地址数据不同, 开mmu后数据相同, 手工修改时两个地址数据同时变化. 
+(4), 注释这句后, dhry运行成功. \todo cortex-a8 mmu, cache稍候研究, 暂时跳过. 
+4), 比较差异并移植"CortexA8dhry"的cortex-a8 mmu,cache代码到emb_sw_dev build4.
+(1),发现"CortexA8dhry"工程只能选择cortex系列, "emb_sw_dev"工程只能选择arm9-arm11. 后来发现是自己没看到边上有滚动条, 晕了...
+(2), 建立"embedded_scat_omap3530.scat"并按omap3530修改
+(3), 新建规则, 把编译选项抄过来
+A, armcc
+Command: armcc -c --diag_style=ide --depend_format=unix_escaped --no_depend_system_headers
+All options: --debug --cpu=Cortex-A8 -O3 -Otime --no_inline -DMSC_CLOCK -W
+B, armasm
+Command: armasm --diag_style=ide
+All options: -g --cpu=Cortex-A8
+A, armlink
+Command: armlink --diag_style=ide
+All options: --cpu=Cortex-A8 --scatter="../scatter_omap3530.scat" --entry=Start --info=totals --info=unused
+还是不行, 放弃. 
+(4), 修改LOCATION_IN_CODE涉及到的内容.
+(5), 修改init.s和initmmu.s. 直接用Cached_CortexA8dhry的代码.
+(6), 编译提示找不到TTB, 删除所有TTB symbol.
+(7), 编译通过, 运行出错. 发现是memory方案导致translation table, __main地址错误. 
+完全用Cached_CortexA8dhry的方案. 测试通过.
+代码和映像: "D:\work\VC0882\code\milestone\mini_c_env_build4_omap3530_ok_skip_timer.rar"
+5), 现在的问题是semihost没有关. 先关闭semihost, 然后加入aasp. 
+
+3, (18:30 2010-1-28)总结: 一月七日时计划当周(01040-0110)完成omap3530 aasp. 现在看来当时想简单了: rvds4.0 init sequence; cache mmu这两部分都各需要二至三天.  将来还有同时支持armcc和gcc的工作. 现在这两个剩余问题是去掉semihost, 和读懂mmu, cache代码. cache, mmu, uart(可能只是做库相关的初始化?)在main前初始化与我们原有架构不同.
+
+12:16 2010-1-28
+VC0830, VC0816, VC0598, 现有开发环境的优缺点
+1, 利用eclipse+perl+makefile的方式管理工程, 比arm CodeWarrier更灵活和具有扩展性. 可以容易移植到非Windowss平台. 
+同时充分利用了armcc编译编译器(速度, size优于gcc)
+缺点: 没有私有makefile参数. gnu通用的makefile是递归调用的, 容易实现更复杂的编译参数和依赖关系. 
+2, 用配置文件支持gcc和armcc, 可以支持其他编译器. 
+3, rvds可以调试arm axf(向后兼容)和elf(支持gcc toolchain)文件. 
+4, dragon. 一套代码, arm和pc可以控制相同的功能. 
+
+9:22 2010-1-29
+VC1600, VC0882, VC0718, arm debug: cortex-a8, coresight, CAST: CoreSight Access Tool(for coresight low level debug)
+1, JiaJiHua邮件"转发: Can't connect to RV-ICE (445941)"20100129_0849
+[From Andrew Lee-Smith - ARM Technical Support]
+Please quote reference number 445941 when referring to this issue.
+Hello Jia,
+> Now the JTAG of A8 can be detected.
+> And the ROM table address can be read correctly.
+> After that, the "RealView Debugger v4.0" reports some error, as shown 
+> in attached file.
+Thank you for your email.
+From this it looks like the Cortex-A8 is not responding as we would expect it would in a functional system. You need to validate your implementation at a lower level.
+I can recommend that you use the CSAT (CoreSight Access Tool) provided by RealView-ICE to debug this problem. CSAT allows you to examine individual registers in the DAP and on the APB (debug bus). You can then validate your implementation in a more specific manner.
+The documentation for this tool can be found in 'Program Files\ARM\Documentation\RVI', and the tool it's self (csat.exe) can be found in 'Program Files\ARM\Tools\....\programs'
+The documentation provides clear examples of how to connect to the various components in a CoreSight system, but please let me know if you need any more help.
+
+2, CAST这个工具, 原来看到过, 没注意. 看来是和openocd一个层次的东西. 
+这样将来用openocd时就有参照工具了. 
+RVdebugger                      arm-gdb
+   |                               |
+  RVI SW    CAST  RVI-console   openocd
+   \__________|________/           |   
+              |                    |
+             RVI HW         ftdi2232(usb2jtag)
+               \___________________/
+                         |
+                     coresight
+                         |
+              arm and other coresight component
+
+PS: 当初RVI连接omap3530时, 自己就没发邮件. 估计发了邮件arm也是提这个工具. 
+
+3, 有了CAST这个工具, 也是便于将来连接其它debugger(openocd, codehammer-a)
+硬件需要写coresight module文档, 这样软件才能用CSAT debug.
+另外调试coresight时, 也要像其他模块那样先仿真通过. 仿真要仿真全部low level path,和更多高层次的case. 像WangXin team目前用c写复杂case仿真其它模块一样. 
+
+9:41 2010-1-29
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, 去掉semihost(non semihosting), 加入aasp, 续"10:34 2010-1-28"
+1, non semihosting
+1), 如果去掉semihost? 
+(1), __use_no_semihosting
+IMPORT __use_no_semihosting is only required to be added to a single assembly source file. Similarly, #pragma import(__use_no_semihosting) is only required to be added to a single C source file. It is not necessary to add these inserts to every single source file.
+(2), 加入__use_no_semihosting但链接的库使用了semihost, 编译器会报错, 使用"--verbose --list=out.txt"查看. 
+If you include a library function that uses semihosting and also reference __use_no_semihosting, the library detects the conflicting symbols and the linker reports an error. To find out which objects are using semihosting, link with --verbose --list=out.txt,
+(3), 发现已经去掉了, 原来理解错了, 从build1,build2开了semihost, build3开始就去掉了. 
+2, 加入aasp
+1), 复制工程, 去掉配置文件中无用部分. 
+运行成功. 上传CVS.
+(1), 上传CortexA8dhry
+A, 原始版本:
+original cortex-a8 Dhrystone project, copy from C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\cached_dhry\CortexA8dhry
+B, 支持OMAP3530:
+modify for omap3530, see readme_VC0882.txt for further information
+2), 上传"mini_c_env", 其实现在已经可以把VC0830和OMAP3530共存, 暂时没有时间. 先把OMAP3530的上传. \todo 上传VC0830部分. workbench直接调用rvdebugger也稍候加入. 
+(1), build_1_omap3530需要加入semihost设置. 加入后也不行. 原来似乎用用arm926指令集编译的映像跑的. 
+(2), build_4_omap3530可以. 先上传这个. 前面问题稍候解决. 
+(3), CVS:
+copy from "C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\emb_sw_dev". 
+for basic armlib c environment test
+support VC0830 32MByte(todo) memory and omap3530(only for build4 currently).
+3), 上传"mini_aasp"初始版本.
+mini_aasp: copy from VC0882/mini_env/mini_c_env, only build_4_omap3530 is reserved. 
+4), 复制VC0882/panda/aasp目录到mini_aasp
+(1), aasp/aasp.c:
+//rvds4.0不允许把"const char*"赋给"void *), 加入强制转换. 
+//default_value=(((Group *)(param->type))->items+i)->name;	
+default_value=(void*)((((Group *)(param->type))->items+i)->name);
+(2), 发现aasp里面直接调用了uart函数, 这样不太好吧. 看来得复制整个uart目录了...
+复制了uart(不含test, uart_app_irda.c), pdma, interrupt, padc(不含padc_test.c), memory(不含mem_test.c, buf_test.c目录. 先编译通过,再根据OMAP3530修改(应该只改timer就够了). 
+(3), uart_drv.c:
+A, //mini_aasp中应该不需要, 暂时注释
+//#include "../cache/cache.h"
+(4), uart_drv.c(uart_app_fileopt.c, uart_base.h同样)
+mini_aasp不支持uart dma模式, 用"UART_PDMA"宏. 
+(5), AASP_chell.c
+//rvds4.0要求stdin做强制转换, 类型明明是一样的....
+//char* fgetssubT (char *buf, unsigned int n, FILE *fp, Subcmd *subcmds)
+//char *ptr;
+ptr = (char*)fgetssubT(line, sizeof(line),stdin,subcmds);
+(6), interrupt中__isr_start, 定义了异常向量位置, 目前MINI_AASP不需要. 用"MINI_AASP"宏注释. 
+(7), adslib/command.S是给TAB用的? 暂时复制到source目录
+(8), 定义ncnb memory region. 
+5), 现在似乎只剩这两个错误了: 
+armlink : error L6200:  Symbol __stdin multiply defined (by stdio_streams.o and retarget.o).
+armlink : error L6200:  Symbol __stdout multiply defined (by stdio_streams.o and retarget.o).
+(1), 找不到原因, 暂时注释
+retarget.c的
+//FILE __stdout;
+//FILE __stdin;
+注释后会提示:
+armlink : error L6915:  Library reports error: __use_no_semihosting was requested, but _sys_open was referenced
+看来是有的库使用了semihost导致的?
+(2), 在build1实验:
+在dhry_1.c中加入(加入前可以编译通过)
+struct __FILE { int handle;   /* Add whatever you need here */};
+FILE __stdout;
+FILE __stdin;
+编译提示: 
+armlink : error L6200:  Symbol __stdin multiply defined (by stdio_streams.o and dhry_1.o).
+armlink : error L6200:  Symbol __stdout multiply defined (by stdio_streams.o and dhry_1.o).
+
+3, 看看到底是哪个库导致的(DUI0349B_rvct_libraries_guide.pdf chapter 2). 
+1), stdio: 这个应该没问题, 加入aasp之前就有. 但要注意不能重新实现_sys_xxx;
+However, you cannot reimplement the _sys_ prefixed functions (for example, _sys_read()) when using the standalone C library because they require library initialization.
+mini_aasp中没有找到. 但是VC0882/panda_os里面的Io_custom.c重新实现了很多_sys_xxx函数. 将来要改. 
+2), string: Functions in this file work without any library initialization, with the exception of strcoll() and strxfrm(), that require locale.
+3), stdlib:
+多数都不需要初始化, 除了: 
+• ato*() requires locale
+• strto*() requires locale
+• malloc(), calloc(), realloc(), and free() require heap functions
+• atexit() is not available when building an application without the C library.
+malloc这串的看看. 
+(1), PS, 如果OS提供了堆的管理, 需要: 
+If you are developing embedded systems that have limited RAM or that provide their own heap management (for example, an operating system), you might require a system that does not define a heap area. To avoid using the heap you can either:
+• reimplement the functions in your own application
+• write the application so that it does not call any heap-using function.
+You can reference the __use_no_heap or __use_no_heap_region symbols in your code to guarantee that no heap-using functions are linked in from the ARM library. You are only required to import these symbols once in your application, for example, using either:
+• IMPORT __use_no_heap from assembly language
+• #pragma import(__use_no_heap) from C.
+(2), \todo 看Support for malloc, 关注mallco,free算法.
+4), 下面三个也没找到:
+#include <time.h>
+#include <sys/types.h>
+#include <sys/times.h>
+5), 正郁闷, 重新看avoid semihost时, 看到了
+To find out which objects are using semihosting, link with --verbose --list=out.txt, search the output for the symbol, and find out what object referenced it. 
+兴奋着实验, 发现... 看不懂@$#~!
+(1), 试试mini_c_env build3, 发现build3的配置改乱了. \todo 稍后恢复. 
+(2), 用build1实验. 感觉是根据define和ref关系去分析.
+(3), 少了stderr? 在retarget.c加入"FILE __stderr;". 错误依旧. 
+6), 既然提示"_stdin,_stdout multiply defined stdio_streams.o and retarget.o"那就从"stdio_streams.o"入手, 看看它定义了哪个符号导致的这个问题.
+Loading member stdio_streams.o from c_5.l.
+              definition:  __stderr
+              definition:  __stdin
+              definition:  __stdout
+              definition:  __aeabi_stderr
+              definition:  __aeabi_stdin
+              definition:  __aeabi_stdout
+              reference :  _initio
+              reference :  _terminateio
+
+(1), _initio由谁定义? 
+Loading member initio.o from c_5.l.
+              definition:  _initio
+              definition:  _terminateio
+              reference :  __aeabi_memclr4
+              reference :  __aeabi_stderr
+              reference :  __aeabi_stdin
+              reference :  __aeabi_stdout
+              reference :  __rt_SIGRTRED
+              reference :  __rt_lib_init_stdio_2
+              reference :  __rt_lib_shutdown_stdio_2
+              reference :  __stderr
+              reference :  __stderr_name
+              reference :  __stdin
+              reference :  __stdin_name
+              reference :  __stdout
+              reference :  __stdout_name
+              reference :  fclose                    //NONE
+              reference :  free                      //很多调用
+              reference :  freopen
+              reference :  setvbuf
+A, 查initio.o ref的symbol. 这些symbol中肯定有我调用的函数. 
+在build4中实验, 使用free时没事. 使用fclose时链接报错:
+armlink : error L6915:  Library reports error: __use_no_semihosting was requested, but _sys_open was referenced
+在DUI0349B_rvct_libraries_guide.pdf的"Table 2-3 Direct semihosting dependencies"可以看到. _sys_close, _sys_open都是依赖semihost实现的. 
+
+(2), 把所有Direct semihosting dependencies都拉出来看看. 
+See Tailoring the runtime memory model on page 2-70. You might have to reimplement this function if you are using scatter-loading.
+__user_initial_stackheap() 
+
+See Tailoring error signaling, error handling, and program exit on page 2-60.
+_sys_exit()
+_ttywrch()
+
+See Tailoring the input/output functions on page 2-79.
+_sys_command_string(),
+_sys_close(), _sys_ensure(),
+_sys_iserror(),
+_sys_istty(), _sys_flen(),
+_sys_open(), _sys_read(),
+_sys_seek(), _sys_write(),
+_sys_tmpnam()
+
+See Tailoring other C library functions on page 2-93.
+clock(), _clock_init(), remove(),
+rename(), system(), time()
+\todo 继续.
+
+7), 半天查不到, 最后先注释__use_no_semihosting和
+//struct __FILE { int handle;   /* Add whatever you need here */};
+//FILE __stdout;
+//FILE __stdin;
+发现NCNB和NCNB_1有重合: 是地址算错了. 修改后编译通过. 
+
+8), 先修改寄存器, aasp跑起来再慢慢修改. 
+(1), 现在的问题主要是aasp调用的uart函数和寄存器问题. 先解决aasp调用的uart函数. 
+(2), (22:01 2010-1-29)总结今日进展: aasp修改中, 发现真是混乱啊. 明天接着改. 
+
+9), aasp的功能还包括进入子模块, 热键退出等. 
+看看能不能用标准库的fxxx函数. 我们自己实现的函数其实不全. 
+
+9:42 2010-1-29
+时间管理
+0, 9:01-
+
+1, 计划
+1), VC0882最小环境, 移植aasp到OMAP3530, 详见"19:57 2010-1-27"3
+2), 记录程序员修炼之道的技巧. 
+3), 有空把logAssistant搜索顺序改为按文件名逆序搜索, 应该会好很多. 
+4), 继续整理liaozhicheng发的重要邮件. 
+5), 下班后: 更新log\logAssistant目录到手机.
+6), 看fromelf工具时突然发现c专家编程是很久以前看的书了. 连前段时间看的<程序员修炼之道>也很久没翻了. 
+7), 杂: 
+(1), 下班时复制电子工程专辑确认信息到手机, 回家传真. 
+(2), 两个博客, 有空看看:
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2009%2F08%2F03%2F4404184.aspx
+http://z.xiaoi.com/r?blog.csdn.net%2Fhello_wyq%2Farchive%2F2008%2F12%2F05%2F3455380.aspx
+(3), 收集邮件: wangyang发的工位图, 最近2年的同事入职/晋升通知. 882联系表. 
+
+2, 执行
+1), 9:40-11:34 VC0882最小环境, 移植AASP到OMAP3530, 见"9:41 2010-1-29"
+
+10:41 2010-1-29
+VC0882, 最小环境, FPGA, arm debug, cortex-a8, RVI连接VC0882, 续, 连接cortex-a8不稳定, 续"17:26 2010-1-27", ICD, ICV最近两天进展(上接"17:11 2010-1-26"), cortex-a8和coresight时钟域分析
+总结: 仿真发现是clock 同步, 异步问题, IC据此修改. 
+1, GeMeiPing邮件"答复: please update rtl code"
+1), 20100127_1402
+ Jtag访问A8需要通过coresight  的apb-ap，jtag不能直接访问到A8 core
+Coresight大概有三条path
+3、   JTAG-DP -> APB-AP -> ROMTABLE ETM  ITM  ATB etc
+4、   JTAG-DP -> AHB-AP -> system memory
+5、   JTAG-DP -> JTAG-AP -> other JTAG device
+其中3在882中是不需要的，只要通1，2即可
+现在FPGA是哪个地方没有通？
+2), 20100128_1148
+我这边建立了一个简单的JTAG环境，基本上打通了下面两条PATH
+1、JTAG-DP -> APB-AP -> ROMTABLE ETM  ITM  ATB etc
+2、JTAG-DP -> AHB-AP -> system memory
+使用JTAG-DP -> APB-AP可以读到某些component的内容了，但是在访问的某个时刻死掉了，我需要debug一下。
+使用JTAG-DP ->AHB-AP -> system memory这条通路，可以正确读rom内容，正确读写sram内容。
+Hi，huangwei
+我看到AHB_ROM_ADDR设置为32'hFFFFFFFF，这个值是不是需要与APB_ROM_ADDR一致？我不知道FPGA上使用的工具会不会用到这个值？
+3), 20100128_1439
+Hi，huangwei
+仿真时发现由apb-ap 访问不到cortex-a8内部的debug寄存器，原因大概是coresight中的apbclk与cortex-a8中的apbclk不是同步时钟，也就是pclkdbg与pclk异步，cpu_wrapper也没有做cdc同步，导致apb-ap读不到cortex-a8的debug寄存器。
+验证时这两个时钟是异步的，FPGA上这两个时钟是同步的吗？
+波形在：/work/gemp/project/vc0882/vrf/sim_fpga/log_jtag4
+==回复==gaohaifeng同主题邮件_20100128_1443
+FPGA上pclkdbg与pclk这两个时钟也是异步的
+4), 20100128_1520
+我估计FPGA上读写cortex－a8 debug寄存器不稳定是这个原因引起的
+另外，仿真上coresight  ahb-ap能够正确访问系统memory。
+==回复==HuangWei同主题邮件_20100128_1556
+cpu_wrapper.v is updated. change A8 PCLK's connection from PCLKSYS to PCLKDBG.
+zhangjian: 分析见"3"
+
+2, cortex-a8复位问题.
+1), GeMeiPing邮件"答复: please update rtl code"20100129_1027
+目前通过APB-Ap访问Coresignt component，只有ETM访问还会出错。出错的原因是powered_down_error，我怀疑是咱们给的power reset时序不对。ARM文档中要求ARESETn   ARESETNEONn在nPORESET release后维持8 cycles，但是咱们的提供的所有reset是同时release的。
+2), huangwei同主题邮件20100129_1234
+asic 是按照这个做的，但fpga为了简化没有处理。具体是不是这个原因我看一下波形吧。
+3), JiaJiHua同主题邮件20100129_1341
+针对这个问题改进了clkrst_sys.v。在hdl/clkrst/fpga目录下，请更新该目录下的所有文件，重新仿真一下。
+
+3, cortex-a8和coresight clk, reset and power
+1), cortex-a8时钟域(见cortex-a8 TRM "Clock, Reset, and Power Control")
+cortex-a8有三个时钟域: clk, pclk, atclk.
+(1), AXI interface clock是clk经过aclken gate的结果.
+(2), cortex-a8 internal debug clk是pclk经过pclken gate. cortex-a8 internal atb clk同理.
+(3), APB interface signal @A.5 "APB interface". 没有找到HuangWei说的PCLKSYS和PCLKDBG. \todo 电话HuangWei.
+2), cortex-a8 POR, 从TRM364可以知道cortex-a8上电复位时, debug部分限于arm(含NEON)部分开始工作. 这样应该是为了保证arm上电后就可以trace吧. 
+原文: 
+Figure 10-6 shows three critical aspects:
+1. At the beginning of power-on reset, CLK must be held LOW for a minimum of
+the equivalent of two REFCLK clock cycles to place components within the
+processor in a safe state.
+2. The nPORESET, PRESETn, and ATRESETn resets must be held for eight
+CLK cycles. This ensures that reset has propagated to all locations within the
+processor.
+3. The ARESETn and ARESETNEONn resets must be held for an additional eight
+CLK cycles following the release of nPORESET and PRESETn to enable those
+domains to exit reset safely.
+
+12:40 2010-1-30
+VC0882, 最小环境, arm cortex-a8, SOC: omap3530, 移植aasp到OMAP3530, 续, 去掉semihost(non semihosting), 加入aasp, 续, 续"9:41 2010-1-29"
+1, 修改aasp_keywait_unblock和aasp_keywait_unblock_quit两个函数.
+1), 确定现在是否开了接收中断.
+(1), irq模块: uart3是M_IRQ_74.
+mask前的中断状态: INTCPS_ITRn, 0x48200080 + (0x20 * n): 0x482000c0[10]
+source pend: INTCPS_PENDING_IRQn, 0x48200098 + (0x20 * n)
+(2), uart开中断:
+In the FIFO interrupt mode (the FIFO control register UARTi.FCR_REG[0] FIFO_EN bit is set to 1 and relevant interrupts are enabled by the UARTi.IER_REG register), an interrupt signal informs the processor of the status of the receiver and transmitter.
+0x4902_0008[0]=1
+(3), 接收中断这个内容可能要看一下Linux kernel代码. 稍候实验. 
+\todo 要是提前准备了qemu就好了. 
+暂时注释aasp热键这部分代码. 
+(4), 修改中又看了看aasp代码. 感觉现在aasp代码是在库下面的接口层(fgetc)做了回显. 这就不对了. 我们应该在库的上面操作啊. \todo 看看u-boot是怎么实现的. 
+
+2, 编译后可以运行到AASP脚本和提示符. 然后无反应. 
+1), 先上传CVS代码(注释有错, aasp.c上传了两次):
+代码和映像位置"D:\work\VC0882\code\milestone\mini_aasp_aasp提示符和脚本正确_用户无法输入.rar"
+(1), 建立了main()(bootloader/main.c). 原有main()(dhry_1.c)改为dhry(). 将来作为命令加入. 
+(2), aasp和其他必要代码从"D:\VC0882\panda"复制.
+(3), 编译后, 可以运行到aasp提示符. 脚本执行正确. 但是用户输入没有反应, 初步查看是aasp按照"\n"判断. 实际uart输入的是"\r"(回车).
+(4), aasp的热键功能没有加入. 
+
+3, (16:06 2010-1-30)目前有三方面功能要完成:
+1), aasp用户输入, 退格等操作. 
+2), 进入, 退出子目录, 执行子目录命令.
+3), aasp热键.
+
+4, 先解决第一个(AASP_FIX_USER_IO)
+这个问题实际是"fgetsT()(aasp\aasp.c)"按"\n"而不是"\r"处理. 实际用户输入的"\r"换行.  另外用户输入换行'\r'时, aasp应该同时输出回车'\n", 这时为了与windows处理一致. 
+1), 把'\r'改为'\n'后输入命令+回车可以执行. 但是只输入回车是AASP提示符"AASP :/>"没有换行. 
+2), 发现AASP提示符"AASP :/>"本身就不包括换行. 说明是在回显中处理的. 
+3), 把Uart_Read4Aasp(uart\Uart_app_fileopt.c)加入到"fgetsT()(aasp\aasp.c)中. 除了回显和命令查找. 
+4), 编译后测试通过. 
+5), 上传CVS.
+
+12:40 2010-1-30
+时间管理
+0, 11:10
+
+1, 计划
+1), VC0882最小环境, 移植aasp到OMAP3530, 计划见"9:41 2010-1-29"3-8)-(2)

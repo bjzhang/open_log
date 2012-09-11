@@ -1,0 +1,2038 @@
+﻿
+10:30 2010-10-2
+时间管理
+0, 9:45(国庆放假)
+
+1, 本日
+1), 和beizhan, zhicheng讨论, bootloader, 工作安排. 见"10:35 2010-10-2"
+2), 支持yuyang使用VC0882 timer. 
+3), review bootloader clkrst代码. 
+被"4)"打断. 
+4), 20' 支持liuxiaotao调试VC0718 emmac: task创建后aasp task不能while(1). 
+5), 验Linux-2.6.35 VC0882 framebuffer. 见"18:32 2010-10-2"
+
+10:35 2010-10-2
+VC0882, bootloader, 讨论, 工作安排
+1, 前两天beizhan说需要bootloader各模块review, 今天说本来希望我clkrst review后review整个bootloader. 我一直没有review clkrst, beizhan似乎有点不满意. 
+zhicheng十一会review bootloader. 
+
+2, 和beizhan讨论十一安排, 我的想法是bootloader clkrst, sd review: 2天. VC0882 review 1天. arm总结. 
+beizhan希望先做紧急的事情, 希望我review完成后可以考虑Linux下加压的问题, 用29,35都可以. 
+综合beizhan预期, 我自己的计划:
+0), 感觉下面列的事情有点多了, 自己总是把事情搞的越来越多. 
+1), bootloader clkrst, sd review 2天. clkrst重点先放在代码功能, 再放在case覆盖(重点: pmu fast wakeup). sd重点是我原来不了解的协议. 
+如果用不了两天就需要看其它模块, 其实对我来说, pmu和ddrc也很需要看. 需要考虑将来VC0882 SV的工作. 
+2), VC0882 review: review arm功能; 给ICV造case. 1天.
+问arm, trace丢中断, 速度慢两个问题. 
+3), arm总结也希望做完. 要不然拖得时间太长了. 
+4), Linux加压. 为了将来使用方便, 希望在35下测试. 需要调通de和sd卡. 调通de和sd估计需要1.5天. 加4层估计需要半天. 测试1天. 共三天. 
+5), 抽空看yinxingjie VC0718 Linux video架构. 
+6), 上下班路上看LDD3. 先看chapter 4 debug. 
+
+PS: 做了一年882, 感觉自己生活方式都变了, 回家觉得没什么事情做. 除了工作, 唯一感兴趣的事情就是看书了. 
+
+3, 上午这就又过去了, 感觉两天review完clkrst和sd又很悬啊. 
+本来很想十一开始<系统程序员成长计划>, 后来想了想, 还是先close已经开始的工作: 如果有空余时间, 计划先把自己移植的Linux调通. 
+
+14:26 2010-10-2
+(10:32 2010-10-3)
+VC0882, bootloader, review
+1, bootloader spec3.0
+1), VC0882有64krom, 32ksram. 这比830的32k rom(?), 4k sram大很多. 而且足够保存完整的16kByte的1级页表(实际也可以不用完成的页表: 页表不完整会影响程序访问到不允许的区域时异常处理, 但是对程序基本功能没有影响). 
+2), 升级按键未加入.(今天zhengwei的更新已加入这个修改).
+3), 总流程图:
+(1), 微调bootloader总流程图布局. 
+(2), 步骤44差一根线: 没有加密时直接跳到步骤49. 
+4), nandflash boot:
+(1), bbt: linux mem bbt, linux nand bbt两个有什么区别? 前者速度快? 
+5), usb boot:
+(1), 步骤9强制工作模式为1是什么意思? "载完退出并执行程序镜像"?
+(2), 4.2.3.2 系统进入Usb Boot模式: 需要增加S8按键的情况.
+6), sd boot. 大致看了一下. 
+
+2, clkrst code review. 
+
+3, 汇编代码review. 
+
+4, padc code review
+
+5, sd code review; zhengwei修改的代码需要看一下. 
+
+17:46 2010-10-2
+VC0882, 项目资料, 平板电脑, mid
+D:\work\VC0882\Documentation\平板电脑产品试用_戴博
+包括瑞芯微RK2806(文中说是RK2808, 感觉应该没什么快有样机. 而且说明是android1.6)两款和ipad. 
+
+18:32 2010-10-2
+VC0882, Linux, video, de, framebuffer
+1, 想实验wenlei framebuffer, 发现编译出错, 需要给wenlei发信提醒.
+<video/vc088x_de.h>未上传. 
+由于没有编译具体的屏, 所以没发现寄存器名称定义问题. 
+2, (11:15 2010-10-3)
+1), 给shuyu邮件, 需要按编程规范修改(取消):
+(1), 寄存器映射. 
+(2), 文件, 目录名. 
+(3), 考虑718和882 de共存. 
+3, (15:27 2010-10-3)确认寄存器配置有无问题.
+的确有不一样的地方:
+1), 需要确认代码是否一致. 
+2), 会不会和xxxl/__raw_xxxl差别有关? 
+修改为__raw_xxxl为xxxl, 没有变化. 
+发现最主要的差异是0x60022104, 29是0x86800000, 35是0x87000000. 35上是先配置为0x86000000, 然后又被修改, 查. 
+有trace不方便跟踪, 去掉trace.
+3), set_fb_fix会修改0x60022104. 
+4), 查"2", "3)"时, 发现lcd padc没有初始化. 
+加入padc后framebuffer工作正常. 
+4, \todo 整理代码, 上传:
+1), gpio操作函数, 参考gpio config, set, get的方式修改dm9000和lcdif中临时映射某个寄存器的方法.
+2), framebuffer寄存器用ioremap映射. <DONE>
+3), 整理gpio和framebuffer代码, 添加注释. 生成第一个代码注释. 
+5, (17:55 2010-10-5)修改总结(未发信).
+1), 修改framebuffer driver, tpg110 lcd可以使用. 
+(1), 加入lcdif padc init
+(2), 按编程规范修改了de和lcdif寄存器名称.
+(3), 添加vc088x_fb_platdev, 包括de的寄存器, 中断和lcdif的寄存器三个resource. 
+2), \todo 代码没有考虑和718共存. 将来调718时再做修改.
+
+9:55 2010-10-3
+时间管理
+0, 9:35(十一加班)
+
+1, 本日
+1), 30' LDD3 debugging techniques, p11-p15, proc filesystem.
+2), review bootloader代码: 今天至少要完成clkrst部分, 希望能完成padc, 汇编. 明天看sd. 见"14:26 2010-10-2"2. 未完成. 明天一定完成clkrst. 
+3), 2010-10-3"2"效率低, 实验Linux-2.6.35 VC0882 framebuffer. 见"18:32 2010-10-2"2. framebuffer可用. 下一步考虑加压.
+
+16:16 2010-10-3
+VC0882, 测试, 加压测试, 流控和非流控
+1, 之前测试usb加压出问题, 又出现836加压时sd出问题. 于是几个manager建议加大压力测试. 所以后来beizhan才建议我考虑Linux加压(见"10:35 2010-10-2").
+2, VC0882模块分类
+yangzuoxing邮件"答复: 836 SD 读写异常--VC0882 压力case增加"20100930_1411
+我们的模块可以分为两类：
+1）不带流控的，例如DE,CIF,AUD, 没有流控的UART等。这种模块在带宽紧张的时候数据可以错，但系统带宽恢复的时候需要能正常工作。
+2）流控模块，SD,NAND,USB等，在带宽紧张的时候，也不能数据出错。
+所以，我们需要在带宽紧张的情况下，测试几乎所有的模块，看看工作是否有什么问题。
+
+18:44 2010-10-4
+时间管理
+0, (十一加班)
+
+1, 本日
+1), 调整framebuffer driver代码, 没有网卡时正常, 有网卡时出错. 明天看具体原因. 
+
+2, 次日: 见10-2.
+
+10:09 2010-10-5
+时间管理
+0, 9:45(十一加班)
+
+1, 本日
+1), 上传framebuffer代码, 见"18:32 2010-10-2"5.
+2), 总结: 十一加班其实效率不高, 开始是精神不好, 后来是没有按照既定计划做, 等于多数时间都用在framebuffer驱动了, 如果我没时间做加压测试, 这个本来可以在过节后由shuyu调的. 
+7号过来时, 必须把bootloader clkrst review完成. 然后给仿真发之前讨论的两个case(irq和timer那个问题可能需要用qiaowei的usb台子). 
+
+11:13 2010-10-5
+VC0882, arm, Cortex-A8, mmu, cache
+1, Supersection大小是16MByte, 但是一级页表表项仍然需要16个. 原来不理解为什么需要Suppersection. 今天看文档发现tlb buffer是用一个entry表示一个Supersection entry, 这样tlb的效率会高(ARM_ARM_7AR p1281). 
+Support for Supersections, Sections and Large pages enables a large region of memory to be mapped using only a single entry in the TLB.
+TLB是instruction和data各32 entry全相联. lockdown支持32个entry(Cortex-A8 TRM p306). 
+separate, fully-associative, 32-entry data and instruction TLBs
+support for 32 lockable entries using the lock-by-entry model
+
+16:04 2010-10-5
+VC0882, VC0718, Linux, 代码调整, 续, review xiaotao代码, 续
+1, CVS使用技巧:
+cvs update -d -P  //更新cvs, 不显示空目录. \todo 查如何设置CVS默认参数. 
+
+2, review
+1), emi.c 按编程规范修改. <DONE>
+2), 现在mach-vc088x/irq.c和emi.c里面都会操作寄存器, 前者是一直会使用. 后者只是设置emi timing时临时使用. 如果以后还需要一直使用除了emi srcpnd以外的寄存器, 就需要把irq.c和emi.c的寄存器在一起管理. 
+
+10:43 2010-10-7
+时间管理
+0, 10:25
+
+1, 本日
+1), 把bootloader clkrst review完成. 
+2), 总结: 今天谈不上效率高, 但也做了十一的必选动作. 希望逐步提高计划准确性. 
+
+10:45 2010-10-7
+VC0882, arm, Cortex-A8, BTB, branch prediction
+1, zhangjian邮件"question on Cortex-a8 branch prediction"20101001_1114
+there are several questions about BTB.
+1, As mentioned in Cortex-A8 TRM, branch penalty is 13cycle. It is same as our simulation result: 
+In our simulation, it takes 15 cycles per loop(see the code below) while the BTB is disabled, so the branch penalty is 15 - 2 = 13 cycle. 
+As far as I know, the integer pipeline is 13 stages, why it need the total 13cycle in branch mispredict? 
+__asm void loop()
+{
+    mov r0, #0x0xff
+loop
+    subs r0, r0, #1
+    bne loop
+    bx lr 
+}
+2, Is there a static-predict in Cortex-A8?  Maybe It assumes fetch the instruction from destination label while fetch a branch instruction. 
+3, Cortex-A8 TRM 3.2.26 c1, Auxiliary Control Register[7] Disable branch size mispredicts, what does branch size mispredicts mean? 
+4, Auxiliary Control Register[6] IBE: is it means the following btb invalidate instruction? 
+• MCR p15, 0, Rx, c7, c5, 6 ; invalidate entire branch predictor array
+• MCR p15, 0, Rx, c7, c5, 7 ; invalidate VA from branch predictor array
+if I enable the BTB, should I set IBE=1? 
+
+2, support-cores@arm.com语句"Re: : question on Cortex-a8 branch prediction (472780)"20101006_0352
+[From Paul Sigmon - ARM Technical Support]
+Please quote reference number 472780 when referring to this issue.
+Zhang,
+1) The A8 pipeline is 14 stages so a miss will clear the pipe line and the 14 cycle penalty is the result.
+2) The A8 does not use static prediction or generation.  Prediction is based on 'the last time we executed the branch at this address, and the previous 10 branches leading up to this branch were x then we take/don't take this branch'.
+3) 'Disable branch size mispredicts' disables branch size mispredicts, which occur when an incorrectly aligned stale prediction is detected.  I'm talking to the design team to see if I can get a better answer for you on this one.
+4) The two instructions are used to either invalidate the  entire branch prediction array or invalidate it by Modified Virtual Address. The two instructions shouldn't be required, as individual entries are invalidated as they're discovered to be stale.  However, there is an errata (430973) with workarounds that state that this bit should be set.
+Paul Sigmon
+Principal Application Engineer
+ARM, Inc.
+
+3, 回复arm邮件:
+看errta, 回信,
+>1) The A8 pipeline is 14 stages so a miss will clear the pipe line and the 14 cycle penalty is the result.
+qoutw arm documwntation: 13 stage pipeline, 13 cycle penalty.
+>2) The A8 does not use static prediction or generation.  Prediction is based on 'the last time we executed the branch at this address, and the previous 10 branches leading up to this branch were x then we take/don't take this branch'.
+thanks.
+>3) 'Disable branch size mispredicts' disables branch size mispredicts, which occur when an incorrectly aligned stale prediction is detected.  I'm talking to the design team to see if I can get a better answer for you on this one.
+ok, thanks yoir ...
+4) The two instructions are used to either invalidate the  entire branch prediction array or invalidate it by Modified Virtual Address. The two instructions shouldn't be required, as individual entries are invalidated as they're discovered to be stale.  However, there is an errata (430973) with workarounds that state that this bit should be set.
+
+10:59 2010-10-7
+VC0882, bootloader, review, clkrst, padc
+1, 先review clkrst, 最后review padc.
+2, clkrstre view:
+1), 时钟需要重新计算. 与zhaoyan的仿真结果对应. 
+2), bypass bit含义与bootloader spec对照. 
+3), driver.h中的寄存器bit定义. 
+4), pmu部分仔细check. 
+
+3, 修改, 发信:
+1), 按照bootloader启动流程, 完整review了clkrst代码, 完善注释. 
+2), usb clock配置顺序有冗余, 可改可不改. 目前配置顺序, 
+上电第一次配置: 
+配置uphy clk -> __CLKRST_UphyClkCtrlEnAll() -> 配置usb mclk -> enable usb mclk ->  ungate uphy clk.
+接收512info后:
+配置usb mclk -> enable usb mclk -> 配置uphy clk -> __CLKRST_UphyClkCtrlEnAll().
+其中: __CLKRST_UphyClkCtrlEnAll(): disable UOTGC_AUTO_CLKGATE_EN(默认就是disable), ungate UHOSTEOC_UPHYCLK_GT和UOTGC_UPHYCLK_GT.
+与jiajihua沟通, 只要usb无传输, 没有顺序问题. 所以"__CLKRST_UphyClkCtrlEnAll()"实际是个多于的流程, 也没有副作用. 
+
+另外, jiajihua提醒, 如果是reset usb, 需要先释放phy reset, 后释放controller reset. 
+
+3), 两个小问题, 不需要修改: 
+(1), _VIM_CLKRST_GetDdrcClkSrcCfg(), 有可能返回b111这个不存在的case. 但目前流程中只有通过512info或pmu fast wakeup会配置ddrc clksrc. 可以由用户保证传入的info是正确的. 
+(2), VIM_CLKRST_GetUartBypass在初始化uart时没有做. 因为VIM_BOOT_CLKRST_BYPASS_UART只负责是否配置uart mclk和bcr. 是否初始化由strappin决定. 
+
+4), \todo
+(1), 实验确认汇编修改是否正确
+a, 汇编67-79行：disable wdt，不应该把TIMER_TMRSTOP这个寄存器读出来，因为他是只写的。(已改, 涉及文件 vectors.s)
+b, 汇编80-83行：还把wdt强行换了mode了。把timer7变成onetime mode应改成mask timer7。(已改, 涉及文件 vectors.s)
+(2), double check clkrst寄存器操作. 
+
+5, 发信
+1), __CLKRST_UphyClkCtrlEnAll修改:
+[4]配置为0. [1]不变. [0]=0.
+2), VIM_USB_Init修改: 
+VIM_USB_Clkset();
+//如下两个时钟已经分别在_VIM_CLKRST_ClkSwitchStor和_VIM_CLKRST_EnUsbMclk
+//打开. 这里不需要. 
+//VIM_CLKRST_UOTGEOC_UNGATE();
+//VIM_CLKRST_UOTGPHY_UNGATE();
+3), VIM_HAL_SWDelay用VIM_HAL_SWDelayAsm实现. 并去掉二者delay的const修饰. 
+3), 函数VIM_SDIO_Clkset中的注释中“需要更正”不知道更正没有？
+4), delay: 使用VIM_HAL_SWDelayAsm替换VIM_HAL_SWDelay. 
+5), issue: 请xuwenyan实验并关闭两个issue. 
+6), 实验修改的部分: otg clock(qiaowei), 汇编(zhangjian).
+
+5)和6)需要今天下午5点之前完成. 
+
+6, lidongliang给ICV release, lidongliang邮件"Release 882 bootloader Ver10 给仿真"20101008_1733
+Hi，jihua
+麻烦用附件 bootloader.bin  文件再出一版 boot 测试用的 CF 版本，几个版本都要有
+谢谢
+Hi，yingqi
+Release 882 bootloader Ver10 给仿真
+与上版相比，修改如下：
+1), __CLKRST_UphyClkCtrlEnAll修改:
+寄存器UPHY_CLK_CTRL，  [4]配置为0. [1]不变. [0]=0.
+2), VIM_USB_Init修改: 
+VIM_USB_Clkset();
+//如下两个时钟已经分别在_VIM_CLKRST_ClkSwitchStor和_VIM_CLKRST_EnUsbMclk
+//打开. 这里不需要. 
+//VIM_CLKRST_UOTGEOC_UNGATE();
+//VIM_CLKRST_UOTGPHY_UNGATE();
+3), VIM_HAL_SWDelay用VIM_HAL_SWDelayAsm实现. 并去掉二者delay的const修饰. 
+4), delay: 使用VIM_HAL_SWDelayAsm替换VIM_HAL_SWDelay. 
+5). 添加了 按键控制进入usb boot 功能
+6). 汇编67-79行：disable wdt，不应该把TIMER_TMRSTOP这个寄存器读出来，因为他是只写的。(已改, 涉及文件 vectors.s)
+7). 汇编80-83行：还把wdt强行换了mode了。把timer7变成onetime mode应改成mask timer7。(已改, 涉及文件 vectors.s)
+8). 函数VIM_PADC_UartInit永远返回错误。(已改, 涉及文件 VIM_PADC_Driver.c)
+总的来说，除了添加了功能5）以外，其它都是小修改
+代码见附件，也可check CVS， tag是release_Ver10
+使用build目录下我已经编译完成的bootloader.bin 进行仿真
+谢谢
+
+7, 我给kongyingqi发信, 强调usb otg clock需要仿真.
+zhangjian2kongyingqi邮件"答复: Release 882 bootloader Ver10 给仿真"20101008_1933
+由于ASIC和FPGA时钟方案不同, 下面的1), 2)两个修改在FPGA版本上没法测试. 希望仿真能仿一下: 
+如果strappin switch target clk不是xclk, 在strappin切频后, usb otg 时钟(mclk, otg)正确, 且otg可以正常工作. 
+
+15:48 2010-10-7
+VC0882, Linux, qemu
+我之前在fedora core下编译的qemu, 在其它发行版可能会提示找不到"libtinfo.so.5", 建立libncurses.so.5
+s[zhangjian@icp-desktop zhangjian]$ ll /lib/libtinfo.so.5 
+lrwxrwxrwx 1 root root 24 Jul 29 21:54 /lib/libtinfo.so.5 -> /usr/lib/libncurses.so.5
+
+19:13 2010-10-7
+VC0882, review, arm, Cortex-A8
+1, zhangjian邮件"Cortex-A8 Auxiliary Control Register疑问, 是否需要测试?"20101001_1105
+1), Cortex-A8 trm 3.2.26 c1, Auxiliary Control Register[4] ASA表示enables speculative accesse, 这个什么含义? 
+和咱们的cpu wrapper设计是否有关系? 有没有必要在FPGA和仿真中测试? 
+2), [3] L1PE和[0] L1ALIAS是L1相关的. L1ALIAS也请你解释一下含义. 这两个是否需要测试么? 
+
+2, huangwei邮件"Re: Cortex-A8 Auxiliary Control Register疑问, 是否需要测试? "20101003_1715
+1. refer to the following
+ 
+An instruction can remain in the pipeline between being fetched and being executed.
+Because there can be several unresolved branches in the pipeline, instruction fetches are
+speculative, meaning there is no guarantee that they are executed. A branch or
+exceptional instruction in the code stream can cause a pipeline flush, discarding the
+currently fetched instructions.
+Fetches or instruction table walks that begin without an empty pipeline are marked
+speculative. If the pipeline contains any instruction up to the point of branch and
+exception resolution, then the pipeline is considered not empty. If a fetch is marked
+speculative and misses the L1 instruction cache and the L2 cache, it is not forwarded to
+the external interface. Fetching is suspended until all outstanding instructions are
+resolved or the pipeline is flushed.
+This behavior is controlled by the ASA bit in the CP15 Auxiliary Control Register c1.
+See c1, Auxiliary Control Register on page 3-61 for information on the ASA bit. By
+default, this bit is 0, indicating that speculative fetches or instruction table walks are not
+forwarded to the external interface. If this bit is set to 1, then neither fetches nor
+instruction table walks are marked speculative, and are forwarded to the external
+interface.
+Given the aggressive prefetching behavior, you must not place read-sensitive devices in
+the same page as code. Pages containing read-sensitive devices must be marked with the
+TLB XN (execute never) attribute bit.
+ 
+2. L1ALIAS 是由于L1 cache大小和最小的page size 引起，在TRM没有解释是怎么处理的，不过这个完全是A8内部的设计，
+L1ALIAS用缺省值的话对软件就完全透明了，我觉得可以不测试。
+
+3, 整理
+ASA表示当arm预取指令时, 如果cache miss, 是否从外部memory取指. 默认不取.
+问题2问arm.
+
+11:23 2010-10-8
+VC0882, Linux, 加压测试; VC0830加压bug
+1, 和aiguo说了一下, aiguo没法不同意, 也没很同意. 于是这封信只发给aiguo, 抄送beizhan, lingming. 
+考虑到VC0830中发现DMA, NFC DMA, SD有压力相关的bug, 而且sd的问题只在Linux发现过. 需要在882 Linux平台下做压力测试. 
+
+1), 需要准备如下模块的驱动和测试程序. 
+(1), sd移植, 需要四个sd同时工作. owner: dongliang.
+(2), dma, 可以先写一个简单的字符设备驱动. owner: xiaotao. 
+(3), decoder解码, display到屏. yanmin. 
+(4), framebuffer, 单层driver ok, 还需要支持多层和不同格式. owner: shuyu.  
+
+2), 计划做如下系统级测试:
+(1), decoder解码(一层), read sd; 同时de刷屏; 系统中至少使用两个sd. 文件系统包括ramdisk和sd等; dma搬移. 
+(2), 四个sd同时使用. 
+
+2, aiguo回信"答复: 考虑在882 Linux下加压测试"20101008_1458
+好的，我们要好好计划一下，既能起到测试的目的，又能把相关的driver做起来，正好也能够给大家具体任务。
+关于linux的任务，我们还要好好分配一下，目前来看，下面的人接下来主要在linux上：
+Xiaotao，zhicheng，yangmin，shuyu，wangwenli（可能会有718 GE，我们希望他在882上，现在需要找一个人，是否上海？？？），mengfandong，dongliang，yingxingjie（718 video），还有其他人…..
+
+14:50 2010-10-8
+时间管理
+0, 9:20
+
+1, 本日
+1), 上午: bootloader 代码讨论. 
+2), 2h: 882 bootloader代码修改测试, review clkrst寄存器, pmu fast wakeup和padc. 见"15:23 2010-10-8"
+
+15:23 2010-10-8
+VC0882, bootloader, review, clkrst, padc, 续: 代码修改测试, review clkrst寄存器
+1, 计划: 882 bootloader代码修改测试, review clkrst寄存器, pmu fast wakeup和padc.
+2, 代码修改测试
+1), 测试delay时间. 
+g_speedtest_delay_start	0x016930BF
+g_speedtest_delay_end	0x016C4A4B
+timer时间是203148, 理论计算是"320016". \todo 按理说不应该有差异, 分析. 
+2), 测试汇编(wdt). <DONE>
+3, review clkrst
+1), 删除无用的"VIM_CLKRST_PLL_STATUS", 及相关函数. 
+2), review clkrst寄存器定义.
+3), review pmu中clkrst相关部分. 无问题. 
+4, review padc, 无问题. 
+
+10:01 2010-10-9
+时间管理
+0, 9:35
+
+1, 本日
+(1), 问xiaotao 代码格式化命令, 需要更新文档. 见"12:43 2007-1-22"2
+(2), 报销. <DONE>
+(2), 给仿真发之前讨论的两个case(irq和timer那个问题可能需要用qiaowei的usb台子). 见"16:51 2010-10-9".
+(3), "2)"的同时, 看arm文档, 见"17:13 2010-10-9".
+
+11:36 2010-10-9
+VC0718, nucleus, ethernet, emac, lisr里面不能使用信号量, \todo 看nucleus文档, 需要知道原因
+之前xiaotao的写法是在lisr里面直接用信号量发给协议栈. 根据nucleus文档, lisr里面不能使用信号量. 
+
+15:08 2010-10-9
+VC0882, android, zhaoyuan, android工作划分
+aiguo转发zhaoyuan邮件: aiguo邮件"转发: 882 schedule"20101009_1216
+1, aiguo:
+1), u-boot
+USB - Ethernet
+2), System
+ARM Subysytem	
+Clock	
+DDR	
+Watchdog	
+3), PM:
+DVFS	
+CPU Loading Predictor	
+CPU Loading Monitor	
+4), GPU
+FPGA阶段: 
+建立多层次的debug及profiling体系，如性能允许力争跑起几个简单但典型的应用
+芯片回来后:
+移植各层面驱动，能将几个重点应用流畅运行（赛车游戏，动态壁纸，如果Flash加入了GPU
+优化，可以对比加速前后的效果）. 性能测试，兼容性测试，调优等
+5), tools
+SD Image Packer
+SD Image Downloader
+
+16:51 2010-10-9
+VC0882, arm, Cortex-A8, 
+1, 在"mini_c_env_nolib_armcc"基础上建立简化case, 实验timer irq处理设为device属性时有无问题. 
+D:\VC0882\mini_env\arm_coresight_test\irq_timer_device_attr_test
+2, 晚上加mmu和cache又搞了半个小时. 后来发现其实直接用bootloader的环境就挺好的. 做事之前怎么不认真分析一下呢? 
+3, 由于Makefile.arm问题, clean时删除了vectors.s, 需要重新写vectors.s。
+不过这也促进我重新整理一下思路。计划构造如下case(其实先应该构造case).
+irq异常后, 判断如下三种情况: timer0中断, 无效中断(进入irq异常但是srcpnd为0), 其他有效中断. 由于只是开了timer0的中断, 所以第三种情况应该不存在. 正常来说应该只有第一种case, 如果有第二种case, timer中断处理有问题. 
+4, 调试了半天. 最后发现是irq返回有问题. 
+应该是
+subs pc, lr, #4
+我写成了
+movs pc, lr
+这样没法发生irq异常后, 都会漏掉一条指令. 
+这个问题如果正向分析, 应该如何分析呢? 
+
+5, 修改print, 改为递归形式, 有段时间不写了, 有些生疏:
+VOID HALPrint_DecNum(const UINT32 decNum)
+{
+	if ( decNum > 10 ) {
+		HALPrint_DecNum(decNum/10);
+	}
+
+	VIM_UART_SendOneChar(0, decNum%10 + '0'); 
+}
+
+6, 修改后, 没法复现, 对照代码, 发现panda_os下面开了BTB.
+
+7, 修改后仍然不行. 回忆panda_os下出错过程. 看来应该是先推出了中断态, 然后才unmask, 这样才出的问题. 我现在小环境里面是在irq异常unmask, 后面做Interrupt_Context_Restore. 这样时间就长了, 估计就没事了. 
+看来需要看nucleus中断处理. 只能下周再做了. 
+
+17:13 2010-10-9
+VC0882, arm, Cortex-A8, arm总结: mmu, ttb, assembler
+1, 开mmu何时生效?
+考虑到开mmu时, 后面指令已经取指, 在pipeline中. 所以即使开mmu指令造成memory映射变化, 也不会影响到开mmu指令后面的几条指令. 
+考虑到A8有13级流水线, 也许可以取多条指令(没有考虑ASA: AXI speculative access对A8取指的影响).
+这可能和通常的直觉有差异. 需要注意. 
+
+2, translation table(TTBR0, TTBR1, TTBCR)
+A8中mmu页表管理分为tlb和memory(含L2 cache)两层. 
+首先看tlb有没有, 如果tlb miss, 根据TTBCR配置选择TTBR0, 还是TTBR1. 根据是TTBCR[2:0](N)的大小. 如果N=0, 选择TTBR1, 如果N>0, 根据[31:32-N]是否全为0选择TTBR0, TTBR1. 
+看起来这样很怪. 其实联想arm文档中提到建立TTBR1作为OS kernel页表, TTBR0做为task页表. 且Linux和windowCE的kernel空间都是0xC0000000--0xffffffff, 就容易理解了:
+[31:32-N]是否全0, 实际是区分高低地址, 如下表, 
+0xF     b1111
+0xE     b1110
+0xD     b1101
+0xC     b1100
+0xB     b1011
+0xA     b1010
+0x9     b1001
+0x8     b1000
+0x7     b0111
+
+如果N=1, 地址小于0x80000000时使用TTBR0, 大于使用TTBR1. 这样在某种程度上区分了kernel和用户空间. 但似乎不太彻底. 从目前看, kernel启动过程中的确没有使用这个机制. 我看到的是TTBR0和TTBR1相同. kernel启动后不清楚. 
+
+3, (10:06 2010-10-13)
+embedded assembler和inline assembler. inline实际还会被编译(arm和gnu都是如此): 使用的寄存器可能有变化, 可能在前面插入一些指令以根据设置保护现场, 也可能把你的语句翻译为你预期外的形式. 所以最好确认一下编译结果是你预期的. 相对而言embedded assembler和直接写汇编函数一样.
+
+18:10 2010-10-9
+VC0718, arm, Cortex-A8, memcpy和寄存器访问速度都比A8慢: 主要原因是ddr initial latency差异; ICP测试使用的memcpy函数不同, 修改后相差4-5倍. 
+1, Cuiyunfei 
+http://10.0.2.208/mantis/view.php?id=9819 注释(0019651)
+cuiyunfei 2010-10-08 16:58
+882和718在DDRC上性能的不同也可能会有很大影响：
+主要可能是DDRC在initial latency上有很大不同，882的initial latency无论在写操作还是在读操作都会比718快，而且要快很多，最少要快2到3倍。882的read initial latency大约在15~30个bus clock cycles之间吧，而718的initial latency至少70~90个bus clock cycles。所谓read initial latency可以理解为从发出读命令到收到第一个读数据的时间。所以，如果arm发出不连续的单个读命令，那么效率会很低，因为如果当他收到前一个指令的数据后才发下个命令的话，那么每执行一条指令就会经过很长的initial latency时间，这个会严重影响效率，但当命令被连续发出或每次访问的数据很多时，这方面的损失就没那么明显了。而且，除了read initial latency之外， write initial latency也是比较长的。
+造成inital latency长的原因是由synopsys DDRC IP本身决定的，这个latency是它固有的延迟，再加上在这个IP和bus直接还要加上一个128到256转换的逻辑，更增加的lantency的长度。这个问题目前没有什么办法能解决，只希望synopsys最新的IP能够比这个好写，目前它的最新IP我们正在评估中。 
+
+2, Maowei邮件"答复: 仿真比较的结果"20101009_1707
+从波形上看，以cpu从ddr读指令->cpu发出写uart寄存器操作->cpu发出读uart寄存器操作->下一次cpu从ddr读指令为一个分析周期的话，
+选取任意一个周期做分析，882执行这个周期需要184 cycle，718需要224 cycle。
+ 
+其中主要的差异是从ddr读指令的时间，882需要39 cycle，718需要63 cycle，这个差异和cuiyufei在issue上给出的指标基本一致。
+此外在cpu从发一次操作结束到发起另一次操作的间隔(包括从读指令完成到写寄存器、写寄存器完成到读寄存器、读寄存器完成到下一次读指令)上，
+718也比882慢一些，大概5～8个cycle吧。
+
+3, YangLei邮件"答复: 仿真比较的结果"20101009_1751
+刚才跟Aiguo， Cuiyunfei， Zhangqian讨论了一下， 718中memory copy 操作慢的最主要原因有2点。
+1.       ddrc的initial latency  比较大，这跟ip自身的pipeline更长有关，另外ddr3高频的timing参数更加苛刻也加大了latency。 
+2.       ddrc对写response的处理机制不同。 882里的w respone是ddrc axi 接口收完写data就会回复, 而718用的IP是在wdata真正写到dram之后才会回response.   这样的好处是很安全，像882里由于提前回response要做addr conflict check来防止read after write 或者 write after read  hazard. 
+ddrc数据传输的效率跟init latency是2个不同的参数，没有必然联系的。Initial latency 大步一定就会效率低。
+
+4, (11:27 2010-10-11)之前测试使用的memcpy VC0882和VC0718不同. 修改后,发现速度只有4-5倍的差异. 
+Bianyingfeng邮件"718 memcpy与VIM_LIB_Memcpy"20101011_1113
+之前的实验有一个问题，就是在882的实验中用的都是memcpy库函数，而在718的实验中用的都是VIM_LIB_Memcpy。由于memcpy的效率比VIM_LIB_Memcpy高,所以导致了882中VIM_HAL_Memcpy比718的VIM_HAL_Memcpy快很多。为什么两边用了同样的的宏，而且编译选项也是一样，却调用了不一样的函数呢，是由于某个脚本中强制定义了VIM_LIB_Memcpy的开关。
+从下面实验数据中可以看出来，718关cache和882关cache相差就没有两个数量级了，而是4-5倍。
+718_v5_platform               CPU=25M                   AXI=12M
+关闭cache       
+VIM_LIB_Memcpy    30449 bytes/second
+memcpy                     679657 bytes/second
+882 platform             CPU=24m         AXI=24M
+关闭cache
+VIM_LIB_Memcpy    149365 bytes/second
+memcpy                     2239589 bytes/second
+
+9:42 2010-10-11
+时间管理
+0, 9:10
+
+1, 本日
+(1), 问zhaoyuan u-boot代码. arm11板子. <DONE>
+(2), 上午看yinxingjie Linux驱动架构. 
+(3), 下午Linux例会. 见"9:56 2010-10-11".
+(4), 30' 支持xiaotao sscanf得到十进制和十六进制. 支持yinxingjie Linux环境. 
+(5), 30' 支持mengfandong uotg调试. dma地址处理有问题. 
+(6), 30' 整理下午Linux例会内容. 
+(7), 总结: 还是感觉很累, 需要尽快调整好状态. 
+
+9:49 2010-10-11
+VC0882, arm总结
+1, 环境移植
+移植工作从rvds3.0到rvds4.0, 从jlink/multiICE到RVI, arm926ej-s到Cortex-A8, console(aasp)的改进. 
+1), rvds4.0环境的移植. rvds4.0启动流程.
+
+2, trace的调试
+1), 连线. 
+2), TPIU timing测试.
+3), 配置trace.
+
+9:56 2010-10-11
+VC0882, VC0718, Linux, 例会; 项目计划
+1, 例会安排
+1), 需要分配每个人的任务. 
+xiaotao(网卡, 中断性能评估总结). 
+shuyu: fb driver需要改进. 寄存器配置方式不好. 加四层和格式. 
+2), 讨论加压, DMA驱动谁写.
+3), u-boot, Linux driver安排.
+4), VC0718 Video Linux driver架构讨论. 
+
+PS: 今天和haifeng沟通, 4FPGA没法加usb, I/O不够. 之前试过, 没办法才单独出版本. 
+usb需要用上下两层. 
+
+2, 发信:
+下午2点, 第五会议室 Linux例会
+1), sync up;
+2), 讨论718 video架构.
+
+3, 实际开会, yinxingjie有VC0718 test plan review. 所以今天只是sync. 
+(14:27 2010-10-11)meeting minutes
+wenlei: gpu. 运行无反应. 
+fandong: uhost pass. otg device: 有问题, 似乎是寄存器问题. 后续工作: 调通usb otg Linux device driver. usb otg ethernet. 最后做otg host.
+shuyu: fb driver初步ok. 需要了解android framebuffer各层的使用. 后续工作, 完善framebuffer驱动, 加四层和格式, 修改寄存器配置方式. 
+dongliang: sd, 正在移植. 后续工作: 支持4个sd同时使用. 
+yangmin: rv, vc1有问题, 其余每个一个case测试pass. 后续工作: 需要显示到屏上. 
+xiaotao: 网卡初步可用. 后续工作: DMAC Linux driver. 网卡接hub可试试. 中断性能评估总结. 718 emac Linux. 
+beizhan, dongliang, zhangjian: 了解android开发.
+
+882计划在Linux平台下做加压测试, 计划做case, 大家做驱动时需要支持这些case: 
+(1), decoder解码(一层), read sd; 同时de刷屏; 系统中至少使用两个sd. 文件系统包括ramdisk和sd等; dma搬移. 
+(2), 四个sd同时使用.
+
+4, 给aiguo, beizhan发clkrst, ddr Linux驱动工作划分.
+clk: 
+clkrst也要支持加压测试. 
+ddr: training(频点变化, 温漂); pmu(self-refresh, fast wake-up);
+
+5, (17:43 2010-10-12)昨天, 今天和beizhan, aiguo聊882相关事情. 
+一直在882上面的有wangzhengwei, yangxing, wangwenlei, beizhan和zhangjian. (其实应该也有zhicheng吧, zhicheng应该不上718, 认真考虑zhicheng的工作安排).
+shuyu过段时间会去718. SV时回来. 
+目前882怎么做还没有思路. 需要想一想. 我的感觉是熟悉android需要有切入点. 考虑自己熟悉程度和对android的重要性, 自己考虑多看看framebuffer, surface finger等内容. 这样对于android java和c++框架也就有了了解. 而且fb使用的de也和clkswitch的vblank有关系. 
+
+17:31 2010-10-12
+时间管理
+0, 9:40
+
+1, 本日
+1), 10:30- 12:15 讨论718 video Linux架构. \todo 见今日yinxingjie邮件.
+2), -16:45 ICT会议. 
+3), 10' 和aiguo讨论882 Linux计划. 见"17:43 2010-10-12"5
+4), 总结: 本来希望今天继续做给仿真的两个case. 但现在Linux(clkrst, ddr)和882 clock方案两个事情看起来比较着急. 估计共需要2小时完成. 完成这两个之后, 今天肯定就快下班了. 希望抓紧时间, 看一看"我编程, 我快乐"里面的p64-p65练习, 做一个练习再回家. 
+实际今天都没做. 自己效率是不是太低了? 
+
+19:25 2010-10-12
+VC0882, clkrst, pll, pll频率能否满足模块要求, 分析882时钟需求
+1, huangwei邮件"答复: 882 pll 使用评估"20101012_1546
+PLL1：   708Mhz
+PLL2:    754Mhz
+PLL3:    770MHz
+PLL4:    630Mhz
+PLL5:    631Mhz
+PLL6:    550Mhz
+2, duanlihua邮件, 各模块的工作时钟.
+D:\work\VC0882\Documentation\clkrst\vc0882_module_clock_requirement.xls
+3, fengbeizhan邮件"882 pll 使用评估"20101012_1004
+Hi，zhangjian
+请从我们的角度，评估一下目前综合后的pll 能否达到各个模块的设计要求，请把divider 也结合起来，再根据系统常用的datapath来完成这个评估。目前先不考虑多个pll使用的功耗问题，先评估一下系统设计的最大performance能否达到，icp需要做到心里有数。
+等你评估的基本方案出来后，我们开会讨论一下。
+Hi，zuoxing
+你把目前各个模块综合的最大时钟发给我们，我们好根据这个来评估一下。
+说明：以上评估只是我们ic team内部的一个评估，实际结论还要以zhaoyuan team为准， icp的评估情况，请先不要发给ae，以免影响ae的判断。
+4, (16:47 2010-10-21)
+Clocks for Cortex-A8:           PLL1
+Clock Structure for DDRC_MCLK, ACLK,PCLK and STOR_PERI_ACLK: PLL2
+Clock Structure  for memory sub-system working clocks:       PLL3 
+Clock structure for storage and peripheral working clocks:    PLL6
+Audio clocks structure :       PLL4
+video-in clocks:  PLL3
+Clock structure for video out working clocks:   PLL3
+Clock structure for video sub-system working clocks: venc&vdec : PLL5  gpu: PLL3
+USB PHY clocks :  PLL5
+PMU AVS working clock structure: PLL2
+
+10:06 2010-10-13
+VC0718, Linux, video架构
+1, yinxingjie邮件"718 video的架构会议记录"20101012_1425
+关于718 video的架构会议记录：
+Sdk层的线程实现要考虑灵活,可以在用户态实现,也可以在内核态实现,需要规划interface.
+设备实现:
+Vi(Sif+Dcvi):  用一个v4l2设备实现,因为需要实现两个port联合实现的bt1120
+Ipp(Ripp+vipp): 用一个v4l2设备实现,
+Dipp:实现两个设备,一个dipp0，一个dipp1,dipp和de之间的交互可以考虑中断中实现
+De:实现四个设备.
+Vdsp:按功能分来实现不同的设备
+2, 如果希望sdk层在用户空间和内核空间之间可以移动, 可能需要注意:
+抽象如下函数: 进程建立和同步, memory分配等等. 不直接操作设备文件. 
+
+10:19 2010-10-14
+时间管理
+0, 9:50(10-13 9:40)
+
+1, 本日
+1), 分析882 clock方案. 见"10:24 2010-10-14".
+2), 30' 看wenlei, yangmin进展. 见"14:45 2010-10-14"
+3), 1.5h: ICP leader例会. 见研发记录簿p136-p137.
+
+10:24 2010-10-14
+VC0882, clkrst, pll, pll频率能否满足模块要求, 分析882时钟需求, 续
+1, 上午zhaoyuan上来和beizhan讨论. 
+说huangwei邮件提到的各pll频率是由于后面带了divider才被限制住, 如果没有divider, 都能到1.2GHz. 
+反思: 
+1), 这个事情, 其实从ICD来看, 也许觉得divider影响pll综合频率是正常的, 所以邮件里面没说这个事情. 当然也可以说, 如果huangwei多从软件角度想一想, 也许可以说清楚. 
+2), 从我自己这个角度. 
+(1), 其实明明知道文档上写了PLL是1.2GHz, 当时就接受了pll跑不上去这个事实, 难道是受了830 pll可以到900, 但是只能跑672这个事实的影响? 
+但是你怎么不想一想, 其实672就是受了divider的影响啊...
+犯一次错误可以原谅, 犯两次错误就没法接受了.
+感觉最近自己的工作越来越没有灵感了. 
+(2), 整理一下思路: 
+我之前的做法是根据beizhan的要求, 分析huangwei给出的clock能否达到我们的要求. 然后我就去做了. 自己除了找了一个求最小公倍数的函数外, 没什么思考, 当然找到LCM这个函数, 本身也很难算是思考. 
+最近一段时间, 工作基本凭感觉, 少有思考. 
+之前我是认为, 拿到一件事情要先分析, 然后再做. 从现在开始要注意了, 不能把自己的好习惯/想法都丢了. 
+
+11:15 2010-10-14
+VC0882, memory, ddrc, self-refresh, DDR3退出self_refesh后，数据不能正确保存: 后来认为是环境(台子)问题关闭
+1, 0009619  [882] ddrc+phy  功能未实现  重复出现  2010-09-03 18:15  2010-10-11 09:53  
+报告人  xuhongyu  查看状态  公共    
+指派给  zhaobeihua  
+优先权  中  完成度  重新打开    
+状态  已关闭    产品版本   
+摘要  0009619: DDR3退出self_refesh后，数据不能正确保存.  
+说明  测试步骤：
+1.cfcode:vc0882_20100814_1700_fpgaDdr3_a8_20100809_L1_32_L2_128_Neon_48M_2fpga_NoFd.ace
+2.power on 882fpga and 连接ice
+3.load 一个4M的文件到内存0x81000000.
+4.设置寄存器0X60011018 BIT[25:24]=3 & BIT[15:0]=FFF.
+5.此时看到示波器中CLK被gate住，CKE拉低。
+6.等待10分钟后，将改寄存器0X60011018 BIT[25:24]=0，随意访问一个寄存器地址或是run 程序，此时clk恢复正常，查看0x6001100c BIT[27:24]=2
+7.将0x81000000处4M空间大小的数据load到一个文件中，和原来的文件进行比对。
+8.其中有10个bit不一样的地方。  
+附加信息  重复3次实验，不一样的bit位每次都不相同，每次都是10个bit的错误。  
+
+2, (0019380)xuhongyu 2010-09-14 18:37
+用另一套fpga 和 ddr3 子板 对退出self_refresh 后数据不能正确保存的问题又进行了测试，具体的内如如下：
+1．Fpga_1 + ddr3_1 pass
+2. Fpga_1 + ddr3_2 pass
+3. Fpga_2 + ddr3_1 fail
+4. Fpga_2 + ddr3_2 pass
+  所以从目前的测试结果来看，“退出self_refresh 后数据不能正确保存”是我们的 环境问题问题造成的  
+
+3, (0019414) xuhongyu  2010-09-15 17:32
+所有samsung的ddr 3 在退出self_refresh 后数据都会出错（单bit 错误）。 而hynix 的 ddr3 退出self_refresh 后数据是正确的
+
+14:45 2010-10-14
+(10:18 2010-10-15)
+VC0882, Linux, gpu, vdec, 进展
+1, gpu:
+1), 10月14日进展
+(1), 之前不能出图是没有建立设备文件. 
+(2), 可以出图. 形状正确, 颜色不对. 
+(3), memory分配时报错. 
+2), 10月15日进展
+(1), 颜色问题是屏的型号, 从31换为13就可以了. (24bit改为16bit).
+(2), memory分配问题待查. 
+2, vdec:
+1), 10月14日进展
+vc1解码正确. rv解码完成但是对比错误. 其余格式都正确. pp还没有做. 
+2), 10月15日进展
+rv解码每次结果不同: 怀疑rv解码问题是memory cache问题或对齐问题. memory分配计划从kmalloc改为dma_alloc_xxx. 对齐问题计划给size做page对齐, 看看对解码结果有无影响. 
+
+10:25 2010-10-15
+时间管理
+0, 9:40
+
+1, 本日
+1), 2h: 882 clock分析. 今天需要有初步结果. 见"10:29 2010-10-15".
+为了提高效率, 更换为"2)".
+2), 2h: VC0882 android调研, 浏览了android应用开发(书). 见"17:34 2010-10-15".
+
+10:29 2010-10-15
+VC0882, clkrst, pll, pll频率能否满足模块要求, 分析882时钟需求, 续, 希望今天有初步结果
+1, 需要考虑带宽. 
+2, (13:08 2010-10-18)信是发了. 感觉心里不是很有底. 
+
+11:13 2010-10-15
+VC0882, VC0718, 工具, 寄存器转换: excel->word
+D:\VC1600WCVS\doc\mas\pub_src\register_table_requirement
+
+14:53 2010-10-15
+VC0882, Linux, dmac, 加压方法, 代码改进
+1, xiaotao邮件"dmac 加压测试程序已经完成，正在规范代码。"20101015_1525
+应用程序目录：       Linux\app\dmac
+驱动程序目录：       Linux\kernel\linux-2.6.35\drivers\char\vc0882\dmac
+测试脚本：               Linux\app\dmac \dma.sh
+如果有人要进行dma测试，只有该上面的测试脚本就行了，无须修改代码编译程序。
+测试程序的参数解释如下：
+                      type      need_cmp  buffersize           bustlen         listnum
+dmac_test   1            0                   0x100000           0
+dmac_test   2            1                   0x100000           0            4
+type:             1 为dma直接测试
+                     2 为list测试模式
+need_cmp: 是否需要对比结果
+buffersize:   dma传输大小
+listnum:        list个数
+
+2, 编程风格;
+寄存器定义;
+ioctl number定义规范化: 先定义magic(Framebuffer 'F'), ioctl macro.
+ioctl number定义在dmac的头文件. app直接include. 参考linux/fb.h和LDD3. 
+app目录移到Linux/app目录.
+ioctl.c看看怎么改名.
+
+16:38 2010-10-15
+VC0882, storage, usb, 加压测试: dma, cif, de
+1, 这个问题已经debug有一段时间了. 加压后才会出问题. 
+2, mengfandong邮件"uhost 中断传输加压问题"20101015_1634(结论我移到了前面)
+从实验现象看:
+1  in传输在这几种加压情况下都可以通过。
+2  Out传输在de+dmac情况下通过概率会低于sif+dmac（out传输需要从memory中读取数据，de也是读，而sif为写，不过dmac包括读和写）
+3 fail 的几项，有可能等很长时间(并不知道会多长)会通过，但当时在几分钟或十几分钟内没有通过，fail的那几种情况有时还是会碰到通过的情况(我想是带宽正好确保数据能够从memory中读回(在有限的时间内))
+上面的实验都是使用lpddr。
+下面是ip核文档中的内容page 83：
+If the data fetch crosses the microframe (or frame) boundary, that transaction must not be executed on the USB and the memory transaction is terminated as soon as possible. If the transaction is already started on the USB (because the OUT threshold value is less than the transaction length), a buffer error results. (out传输在取数据跨越microframe时，将停止)
+An IN data transfer to the memory that crosses a microframe (or frame) boundary is not considered an error case. The qTD Servicer waits until all data is transferred to memory before it gives qtd_srvc_done to the LPLMU. (丛这句话看的话，能解释无论怎么加压，in传输都是没有问题的)
+如果按照上面文档的解释，上面的现象很可能是合理的。我们需要验证一下IP核的实际行为是否为上面文档所描述的。
+1)       jiahua能否从ip  code上来看一下
+2)       等icv验证组的同事的仿真结果。尤其是out传输，造一个在一个microframe内无法从memory中取出指定数据的case。
+
+单独对usb中断传输的in和out在各种加压情况下进行了测试，下面是实验结果：
+1 interrupt out传输 提高优先级
+1.1 加4层图片 (已经半屏以上花掉)
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+1.2 加4层图片+dmac
+   1.2.1 de静态压力
+   传输长度：500(字节)    result: pass (比不加dmac时间要长)
+   传输长度: 1024(字节)   result: fail (but one time success)
+   传输长度：2050(字节)   result:
+   1.2.2 de动态压力
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: fail
+   传输长度：2050(字节)   result:
+1.3 加sif
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+1.4 加sif+dmac
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: fail (some time pass)
+   传输长度：2050(字节)   result: 
+1.5 单加dmac
+传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass (时间有时长有时短)
+   传输长度：2050(字节)   result: pass
+2 interrupt in传输 提高优先级
+2.1 加4层图片 
+   传输长度：500(字节)    result: pass  (比out传输快很多)
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+2.2 加4层图片+dmac
+   1.2.1 de静态压力
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+   1.2.2 de动态压力
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+2.3 加sif
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+2.4 加sif+dmac
+   传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+2.5 单加dmac
+传输长度：500(字节)    result: pass
+   传输长度: 1024(字节)   result: pass
+   传输长度：2050(字节)   result: pass
+
+16:43 2010-10-15
+VC0882, bootloader, sd, clkrst, 仿真发现问题: 1是代码问题, 2是sd仿真模型问题
+1, sd初始化中在打开时钟之前就配置了sd寄存器. 因此造成出错. 修改方法是把sdio调用的clkrst函数移到sd初始化最前面. 
+(17:53 2010-12-8)上面日志提到的修改从_VIM_SD_PRO_CtrllerInit()改为VIM_SD_DrvInit()加入了VIM_SDIO_Clkset(). 见VIM_SD_Driver.c 1.46, VIM_SD_Protocol.c 1.59; 
+static void _VIM_SD_PRO_CtrllerInit(UINT8 number, UINT8 clkEdge)
+{
+	__SD_ResetAll(number);// Note : reset socket sel = 1
+	__SD_SetClkEdge(number, clkEdge);
+	__SD_SetBlockSize(number, SD_DEFAULT_BLKSIZE);
+	VIM_SDIO_Clkset(number, BUS_CLK_100K);	//BUS_CLK_FPP page 83/121
+	VIM_SD_SetBusWidth(number, BUS_WIDTH_4BIT); // 直接设置成4bit?
+}
+
+void VIM_SD_DrvInit(UINT8 number)
+{   
+	VIM_SDIO_Clkset(number, BUS_CLK_100K);	//BUS_CLK_FPP page 83/121
+    __SD_IntSetMask(number, SD_INT_MASK_ALL);
+}
+原来VIM_SDIO_Clkset()
+"17:53 2010-12-8"end
+2, Lidongliang邮件"答复: Release 882 bootloader Ver11 给仿真"20101015_1538
+查看了协议与代码，也跟yanglei 讨论过了
+SD 协议中规定： 当ACMD41 的参数为0时，可用于查询SD card 支持的电压范围
+目前bootloader 中的代码使用了这一功能
+先通过ACMD41 查询SD card 支持的电压范围，再通过ACMD41 设置工作电压
+但目前的仿真模型中，没有这一功能
+只能接收一次  ACMD41 ，之后card的状态就转到等待下一个命令（SEND_CID） 
+如果host 再次发送ACMD 41， sd 模型就不会响应，由此导致Response timeout
+致使SD boot 不能通过初始化阶段
+目前鉴于仿真模型不便修改
+Release出来的Bootloader  由于没有问题，而且已经经过了大量的测试，也不会修改
+但是针对仿真模型这一问题，我们会单独出一版bootloader 程序，专用于SD boot的仿真
+其它部分的仿真仍然在原本release的版本上进行
+
+17:34 2010-10-15
+VC0882, Linux, android, 调研
+1, android kernel与标准kernel差异; 逐个模块了解; 查android开发平台. 包括s3c6410.
+
+10:17 2010-10-18
+时间管理
+0, 9:35
+
+1, 本日
+1), 882 clock分析. 今天需要有初步结果. 见"10:29 2010-10-15".
+2), 60' 下午例会, 早点准备. <DONE>: 例会没有开, 改为让大家发信, 看了xiaotao, fandong, shuyu的进展. 见"14:17 2010-10-18"
+3), 和beizhan聊:
+(1), yangxing和fandong的工作安排. yangxing需要加ddr总结.
+(2), beizhan建议我尽快考虑android. 尽快有个安排. 
+
+14:17 2010-10-18
+VC0882, Linux, 例会, sync up
+0, 上周计划:
+大家目前进度和后续工作如下: 
+wenlei: gpu. 运行无反应. 后续工作: 继续调试
+fandong: uhost pass. otg device: 有问题, 似乎是寄存器问题. 后续工作: 调通usb otg Linux device driver. usb otg ethernet. 最后做otg host.
+shuyu: fb driver初步ok. 需要了解android framebuffer各层的使用. 后续工作, 完善framebuffer驱动, 加四层和格式, 修改寄存器配置方式. 
+dongliang: sd, 正在移植. 后续工作: 支持4个sd同时使用. 
+yangmin: rv, vc1有问题, 其余每个一个case测试pass. 后续工作: 需要显示到屏上. 
+xiaotao: 网卡初步可用. 后续工作: DMAC Linux driver. 网卡接hub可试试. 中断性能评估总结. 718 emac Linux. 
+beizhan, dongliang, zhangjian: 了解android开发.
+882计划在Linux平台下做加压测试, 计划做case, 大家做驱动时需要支持这些case: 
+(1), decoder解码(一层), read sd; 同时de刷屏; 系统中至少使用两个sd. 文件系统包括ramdisk和sd等; dma搬移. 
+(2), 四个sd同时使用.
+
+1, 没有开会. 请大家直接回复进展
+1), xiaotao: 上周DMAC Linux driver 已经完成。
+2), shuyu: 4 layer framebuffer还没有调通，有点问题，还在debug中。
+3), SD 目前0,1,3口单独工作正常，但有以下2个问题正在debug
+1．Sd2口不能识别卡。 分析认为可能是fpga 环境的问题，4FPGA 版本上4个sdio支持的有问题，需要在2fpga上测试，目前测试中
+2．不同的sd 口之间复制文件出错，正在分析
+4), wangwenlei: GPU基本调通，运行各个case都，在屏上的显示的都正常。
+只是在分配内存时会报警告WARNING: 
+at mm/page_alloc.c:1968 __alloc_pages_nodemask+0x16c/0x678()
+arm_vmregion_alloc: allocation too big (requested 0x2000000)
+5), yangmin: Vc1能跑过
+Vdec rv解码结果还比对不上，正在debug。显示输出还未实现
+6), mengfandong: Otg device 已经跑通。
+(1), bamvor: 和fandong沟通. 目前只有一个疑问:
+原有代码ep0不使用dma搬运, 但是代码中有地方没有考虑ep0, 都做了cache操作, 造成系统报错. 见"18:39 2010-10-18".
+(2), 下一步需要理解Linux usb gadget ethernet架构, 为u-boot移植做准备. 
+
+2, (14:47 2010-10-21)截至目前, 新进展如下.
+1), dongliang: 四个sd卡已经通了. 
+2), shuyu: 四层framebuffer修改完成. 加入了格式支持, 测试了read/write. 没有测试mmap.
+shuyu邮件"答复: 今天下午Linux例会取消. 请大家回复一下上周任务的进展"20101021_1426
+4层framebuffer已经加进去了，代码已经提交，默认的fb0对应de的layer0， fb1对应de的layer1，依次类推。
+Fb3显示放最上层，fb0目前在最底层。
+Gpu代码原来用fb0， 需要修改到fb2或者fb3上面。
+Vdec显示的话，用fb0或者fb1。 
+
+18:39 2010-10-18
+VC0882, Linux, dma, cache操作
+和fandong一起看代码, 感觉是29到35变化中dma_sync_single_for_cpu()实现有差异.
+在29中它调用的dma_sync_single_range_for_cpu()只做dmabounce_sync_for_cpu(), 而这个函数在882上面由于没有定义CONFIG_DMABOUNCE, 所以该函数直接返回(1).
+在35中, 如果dmabounce_sync_for_cpu()返回1, 会再进一步调用__dma_single_dev_to_cpu(). 正是__dma_single_dev_to_cpu()报出地址非法(addr==0xffffffff).
+static inline void dma_sync_single_range_for_cpu(struct device *dev,
+		dma_addr_t handle, unsigned long offset, size_t size,
+		enum dma_data_direction dir)
+{
+	BUG_ON(!valid_dma_direction(dir));
+
+	if (!dmabounce_sync_for_cpu(dev, handle, offset, size, dir))
+		return;
+
+	__dma_single_dev_to_cpu(dma_to_virt(dev, handle) + offset, size, dir);
+}
+
+9:58 2010-10-19
+时间管理
+0, 9:40
+
+1, 本日
+(1), yangxing需要加ddr总结. yangxing会给我发arm计划. <DONE>
+(2), 支持shuyu. 开始发现de, lcdif寄存器映射在使用之后. 修改后register_framebuffer出错, debug没有看出明显的问题. 后来用默认的vimc_video_defconfig编译就可以正常注册了. 
+(3), aiguo, lingming, xiaotao开会讨论中断. xiaotao发了邮件, "18:16 2010-10-19".
+(4), android计划, 和zhicheng讨论, 见"15:02 2010-10-19".
+
+15:02 2010-10-19
+(10:22 2010-10-20)
+VC0882, android, 资料收集, 项目计划; 网址
+1, 邮件和资料
+title: android学习计划建议
+ai guo; fengbeizhan; lidongliang; liaozhicheng
+cc: zhang jian
+hi, all
+
+1), 大致想法: 网上已经有OMAP3530, i.mx515, s3c6410的android移植经验(见最后). 基于这些资料, 我估计把android基本运行起来(包括lcd, touchpanel, sd, audio等基本硬件)需要1-2周的时间.  硬件支持后, 再用4周时间具体学习android框架(以底层, hal为主).
+
+2), 硬件资源, 再买两个板子: 
+(1), 考虑到我们对omap3530熟悉一些, 主要学习工作还是以omap3530为主, 大家一起用一个板子有点紧张, 建议再买一个深圳天漠的OMAP3530板子, 把wifi等扩展也一起买了, 便于学习. 现在这个是北京瑞泰的, 买不同公司的也能拿到更全的资料. 
+
+(2), 其它开发板: 辰汉了基于freescale i.MX 515(Cortex-A8)的推出android2.2平板电脑方案和开发板. 这个也可以买一个, 便于对比(具体价格我还没有问). 辰汉介绍:
+i.MX515开发板: 
+http://www.morninghan.com/MX51_MPK1.html
+i.MX515 平台电脑方案:
+http://www.morninghan.com/Products_5-MX51tablet.html
+三星的s5pc110和s5pv210也有开发板, 没找到大公司的android2.2方案. 可以暂时不买. 
+(3), 其它资源: 可能需要一个ICE. 虽说驱动是现成的, 有时候可能还是需要单步调试. 
+
+3), 具体要调试哪些模块: 
+(1), android和板子的环境主要是dongliang, zhicheng和我三个人做. 具体模块大家可以纵向做: 每个人了解这个模块驱动, 中间件和应用, 重点是驱动和中间件. 
+(2), 如果882上有六个人(zhicheng, wenlei, dongliang, zhangjian, shuyu, beizhan), 可以考虑调试如下11个模块: nand, sd memory, display, touchpanel,  audio(alsa), GPU, keypad, power, clkswitch, wifi, camera. 一个人分一个大模块就差不多了. 
+人员里面没算yangxing, 他arm还需要2-3周. 到时视进展而定.
+(3), 没有列video codec: 我感觉video codec比较复杂, 担心时间来不及, 
+(4), 除了这些之外, 一般mid还会有backlight, g-sensor, vibrator, bluetooth, 这些和882片内硬件关系不大, 可以暂时不考虑. 
+
+4), 我收集的android资料(以上传到"\\10.0.2.36\sqmshare\Document\Linux\android\android资料收集.txt": 
+我搜集了一些android资料. 包括android移植过程, android架构分析等, 见"\\10.0.2.36\sqmshare\Document\Linux\android".
+(1), http://www.eoeandroid.com/index.php
+很好的中文android开发社区, 在里面找到很多资料. 英文的社区暂时没找到.
+
+(2), 目前已经有移植android2.2的文档, 根据文档的提示移植android应该不会太困难.
+a, Rockie’s Android Porting Guide
+基于s3c6410的android2.2移植, 从头开始, 包括建立board makefile, 移植sdio, alsa. keymap等等, 文字描述不多, 逻辑清楚. 
+下载地址: http://www.eoeandroid.com/thread-17380-1-1.html
+原文: http://wenku.baidu.com/view/67b9e8bd960590c69ec37691.html
+作者博客: http://hi.baidu.com/aokikyon, 有大量android文章, 推荐阅读. 
+
+b, OMAP3530 android2.2移植. 
+http://www.eoeandroid.com/viewthread.php?tid=35282
+作者blog: zwolf.cublog.cn
+
+c, android2.2 代码目录介绍:
+http://bbs.witech.com.cn/thread-1859-1-1.html
+
+(3), android底层开发入门:
+自: http://www.eoeandroid.com/thread-36656-1-1.html
+根据我做驱动开发的经验，android简单的底层开发应该关注以下几个方面，请注意“简单”两字，这里指的是android自带framework的东西，如accelerator。
+首先需要做的是linux的驱动开发，这部分与andorid没有联系.
+其次是做android的hal开发。
+以sensor开发例，
+android提供了很多sensor的统一接口，详见android\src\hardware\libhardware\include\hardware\sensors.h
+我们要做的是把这个文件里要求的一些函数接口补充完整，
+若想了解android的从上到下的调用关系，可以看看
+http://blog.csdn.net/JerryMo06/archive/2010/04/15/5487476.aspx
+做另外的东西也是类似方法，但如果一些新式的东西，比如nfc，在我使用用的andorid里还没集成，需要自己开发framework,   可以看看android\src\hardware中目前可用的东西。
+
+(4), beagleboard
+a, beagleboard有了新板子:
+http://beagleboard.org/hardware-xM
+b, 基于beagle board的android2.2, 不过没看到具体进展
+http://beagleboard.org/linux_education
+c, beagle board android2.1映像
+http://code.google.com/p/0xdroid/wiki/UsingPreBuiltImages
+d, beagle board移植中遇到的实际问题:
+http://code.google.com/p/0xdroid/wiki/Roadmap
+
+(12:30 2010-10-25)http://blog.csdn.net/maxleng博客也不错. 大量android分析文章. "12:30 2010-10-25"end
+
+2, 分工(未发邮件)
+liaozhicheng: nand, camera, 触摸屏;
+dongliang: sd memory, audio(alsa), wifi;
+zhangjian: power, clkswitch;
+wangwenlei: GPU, keypad;
+shuyu: diaplay(lcd, framebuffer和上层的surface finger等).
+yangxing: arm还需要2-3周. 视进展而定.
+video codec还没有安排. 
+一般mid还会有backlight, g-sensor, vibrator, bluetooth, 这些基本和882片内硬件关系不大, 可以暂时不考虑. 
+
+3, (10:36 2010-10-20)fengbeizhan转发邮件"转发: VC0882 Android Feature List review meeting notice"20101020_1029
+D:\work\VC0882\Android\VC0882 Android Pad Feature List 0.4.pdf
+1), VC0882支持usb wifi和sdio wifi两种.
+2), Android Application: 
+(1), UI风格定制，主要会由于以下原因。(PRI3)
+客户提出明确定制化要求。
+Key数目不满足Android标准系统要求。bamvor: 这个为什么不满足, 难道是最近有变化? 当初mas review时为什么没有说明? 
+需要支持鼠标。
+为突出GPU对UI操作性的提成。
+
+4, (10:15 2010-12-23)eoeandroid中找到android2.3的feature介绍. 
+
+5, (12:43 2010-12-27)android新闻:
+http://www.opda.cn/
+
+18:16 2010-10-19
+VC0718, VC0882, Linux, 中断性能评估
+liuxiaotao邮件"中断下一步要做的事情"20101019_1743
+上面的结论，还需要试验一下，得出更准确的试验结果。
+目前打算，通过timer定时触发中断，模拟 718 vdsp 产生的中断。
+a. 统计中断各个阶段所需要的时间
+b. 不断缩小timer时间，统计718能承受的最大中断个数。
+当然，上面的结果是系统在最理想的情况下的结果，而实际情况肯定不是这样的。
+当系统负载比较重的情况下，上面的数据值肯定要变大。
+这个就不好评测了，主要受下面两个因素影响。
+1.     时间点2那儿会循环处理当前所有的中断
+（这个跟当前中断的个数以及中断处理程序所消耗的时间有关）
+2.     时间点3那儿会被优先级更高的进程抢占
+（这个跟当前系统中优先级更高的进程数以及这些进程所消耗的时间有关）
+以上所述，需要通过进一步的试验验证。
+之前测试的过程中，遇到的问题：
+通过内核线程等待的时候，等待信号的函数，第一次会消耗12000左右，之后就1200左右。
+通过app的ioctl下来等待信号，每次都会消耗12000左右。
+这个问题还要进一步研究。
+
+10:00 2010-10-20
+VC0882, Linux, mid方案调查, 香港电子展看展报告
+自: fengbeizhan邮件"转发: 香港电子展看展报告"20101020_0952
+D:\work\VC0882\Documentation\香港电子展1015.doc
+从报告中看, 似乎公司又要做完整的方案, 包括芯片, 软件, PCB, 模具等等.
+
+10:23 2010-10-20
+时间管理
+0, 9:42
+
+1, 本日
+1), 整理android计划, 给aiguo, beizhan, dongliang, zhicheng发信. 见"15:02 2010-10-19".
+2), 看"VC0882 Android Pad Feature List 0.4", 见"15:02 2010-10-19"3
+3), 支持: 
+(1), bianyingfeng: mmu permission fault. 
+(2), mengfandong(Linux uhost移动硬盘测试): 没有copy完, 串口也死了. 
+今天顺便实验了log助手: 需要查shell的while怎么用: 
+-f x:\log*.txt -k "shell|bash" -c "while"  -i
+4), 30' 和dongliang讨论android分工. 两个人基本想法一致.
+5), 给aiguo, beizhan发Linux clkrst ddr安排. 续"9:56 2010-10-11"4, 见"16:12 2010-10-20". 未完. 
+6), yangxing发了ddr总结初稿, beizhan要求也要写ddr培训文档. yangxing文档见yangxing邮件"DDR总结"20101020_1818, "D:\work\VC0882\ddr\ddr总结.doc".
+7), 20' 支持xuxiang Linux kernel cache操作函数. 35和32相比函数有所变化, 见"14:17 2010-10-21"
+
+16:12 2010-10-20
+VC0882, Linux, android, 项目计划; TI OMAP3530 DVSDK
+1, clkrst, ddrc, pmu Linux驱动工作分析. 这个是针对zhaoyuan上次发的Android工作安排写. 
+2, 为了更好了解OMAP3530, 下载最新TI OMAP3530 DVSDK4.0
+http://software-dl.ti.com/dsps/dsps_public_sw/sdo_sb/targetcontent/dvsdk/DVSDK_4_00/latest/index_FDS.html
+3, 给aiguo, beizhan发clkrst, ddr Linux驱动工作划分.
+clkrst: 按照Linux架构做时钟配置. 
+clkswitch: 882里面clkswitch涉及到core(cpu,bus,ddrc)和主要模块(vdec, venc, gpu). 目前只看到Linux下有cpufreq这个架构.
+批量测试. 
+ddr: training(频点变化, 温漂); pmu相关(self-refresh, fast wake up);
+
+看TI PSP文档. 
+看VC0882 android feature. 
+
+TI
+Proceedings of the Linux Symposium, June 27-30, 2007 [http:// ols.108.redhat.com/2007/Reprints/pallipadi-Reprint.pdf]
+interface: Documentation/arm/OMAP/omap_pm
+
+This is list of features supported in this release:
+• Supports Dynamic Tick framework.
+• Supports the cpuidle framework with MPU and Core transition to
+RETENTION and OFF states. The menu governor is supported.
+• Basic implementation for cpufreq.
+• Support SmartReflex with automatic (hardware-controlled) mode of
+operation.
+
+The actual transition to suspend is implemented in the function
+omap3_pm_suspend().
+
+
+
+18:12 2010-10-20
+软件技巧, Mozilla, firefox, install addon: 如果是单独下载的组件(addon), 如何安装? 
+自: http://flashgot.net/faq#qa4_1
+So I've downloaded this XPI thing. I've never seen such a file type! What the hell am I supposed to do with this kind of file?
+A:   Just drag and drop this file onto your browser window. If it doesn't work, select the Tools|Add-ons|Extensions menu item: the Extension Manager window opens, and you can drag and drop your XPI file there.
+
+10:29 2010-10-21
+时间管理
+0, 10:24
+
+1, 本日
+1), 10' TI DVSDK md5sum, 并上传服务器. 
+2), 中午, 20': 写Linux training readme. "\\10.0.2.36\sqmshare\Document\Linux\training".
+3), 20' 支持caijin OMAP3530. caijin完善了u-boot saveenv部分的文档.
+4), 20' 给xiaotao发信, 需要讨论VC0718 Linux training安排, 见"14:20 2010-10-21".
+5), 10' 上传framebuffer test到CVS(for shuyu). "Linux\app\video\framebufferTest"
+6), 15' 支持shuyu加压测试. 发信. 见"15:12 2010-10-21"
+7), 15:13- 查板子资料. 希望1小时内完成. 见"14:51 2010-10-21".
+被8)打断. 
+8), 30' 确定加压测试case, 和beizhan讨论. 见"15:12 2010-10-21"3.
+9), 1h: 讨论VC0882 clkrst. 见"18:08 2010-10-21". 
+1h: 整理下午讨论的882 clock. 已上传CVS"D:\VC0882\document\clkrst".
+10), 总结: 最近需要逐步改进工作方法. 例如如果安排大家工作, 需要明确. 今天我发了加压测试但是没有说明具体测试哪些case, 具体如何分工. 这样大家工作可能就不明确. 
+还有shuyu中午说framebuffer可以了, 我当时就应该反应到请shuyu发信. 
+
+11:25 2010-10-21
+VC0882, android, 资料收集, 项目计划, 续, 准备周五下午的android介绍
+1, android框图, 没有模块的作用. 
+纵向分析. 至少要举例.
+framebuffer, surface finger...
+
+2, 研究方法
+对比DVSDK4.00和OMAP3530 android kernel知道android kerenl变化.
+对比android公版和OMAP3530 android知道android修改. 
+
+DVSDK已上传"\\10.0.2.36\sqmshare\Document\SOC\TI OMAP3530\TI资料\Linux\DVSDK4.00"(下载后校验了md5sum)
+
+14:17 2010-10-21
+VC0882, VC0718, Linux, memory管理, cache操作
+昨天支持xuxiang移植TI cmem(continious memory)到Linux-2.6.35, xuxiang发现dma_xxx这些cache操作函数有变化(35和32相比函数有所变化)
+代码来自TMS320DM365的DVSDK:
+D:\work\VC0718\Linux\linuxutils\cmem, 自: \\10.0.2.36\sqmshare\Projects\Security BU\7xx\VC0718\VC0718_SDK\Doc\Competitor\TI\ti sdk\dvsdk_3_10_00_12\dvsdk_3_10_00_12\linuxutils_2_25_01_06\packages\ti\sdo
+
+14:20 2010-10-21
+VC0718, Linux training, 
+1, 给xiaotao发信
+等你整理完Linux中断文档后, 咱们讨论一下下周二上午718 Linux training的事情. 
+
+我的想法: 目的是为了大家尽快开始Linux下driver开发. 考虑到时间紧(不到一个上午), 而且部分同事有一定基础, 主要介绍Linux driver开发中常用机制和API, 同时对应Linux现有代码(例如OMAP3530的代码), 不深入分析.
+
+我在36 Linux training目录写了Linux training内容和文档说明("\\10.0.2.36\sqmshare\Document\Linux\training\readme.txt"), 到时可以给大家介绍一下, 便于大家参考之前的文档. 
+
+我觉得可以介绍如下内容: memory分配, 锁和同步机制, 中断(注册, 下半部分机制), 异步通知, 阻塞非阻塞. 你看看有什么补充么? 
+
+另外, 咱们还需要讨论一下分工, 我希望咱俩互换一下介绍的内容, 这样对咱们自己也是一个复习.
+
+谢谢. 
+2, 讨论后, 加上cache操作. 
+分工: xiaotao: memory分配, 锁和同步机制, 中断(注册, 下半部分机制);
+zhangjian: 异步通知, 阻塞非阻塞: cache操作. 
+
+14:51 2010-10-21
+(17:33 2010-10-22)
+VC0882, android, 资料收集, 项目计划, 续, 查开发板资料, 发购买建议
+1, 开发板
+
+考虑到我们对omap3530熟悉一些, 主要学习工作还是以omap3530为主, 大家一起用一个板子有点紧张, 建议买一个天漠的SBC8100开发板, 包括7寸屏, wifi, 3G数据moderm, 摄像头. 现在这个是北京瑞泰的, 买不同公司的也能拿到更全的资料. 之前说的i.MX 515和s5pv210都是android方案, 暂时不考虑. 具体如下:
+
+1), SBC8100购买信息
+公司：深圳天漠科技有限公司
+网址：http://www.timll.com/chinese/OMAP/devkit8000.asp
+联系电话：0755-25500944 / 0755-25631357
+SBC8100: 256M memory + 7寸LCD(带触摸屏) + 数字摄像头 + 3G usb moderm(WCDMA).
+税前4250. SBC8100比DevKit8000扩展接口全, 但是不提供wifi源码.
+
+2), 对比开发板Devkit8000: 
+需要购买的产品型号：DevKit8000(256M memory) + 7寸屏(带触摸屏) + 数字摄像头 + wifi + 3G数据moderm. 
+无发票: 2850, 有发票: 3310.
+
+3), 其余相关开发板, 都有不合适的地方.
+(1), 天漠的K7: (www.opensourcemid.org)
+有全部android2.1代码, 驱动方面如果是天漠自己都可以提供, 如果第三方的没法提供. 例如wifi驱动没法提供. 
+无票: 2300(3G), 2000. 开票加17个点.
+但是这个板子没有jtag接口. 
+(2), 辰汉了基于freescale i.MX 515(Cortex-A8)的推出android2.2平板电脑方案(这个现在没货, 基本只做批发). 
+i.MX515 平台电脑方案:
+http://www.morninghan.com/Products_5-MX51tablet.html
+(3), 辰汉开发板. 12800, 只有android2.1方案, 感觉不是android2.2就没必要了. 
+i.MX515开发板: http://www.morninghan.com/MX51_MPK1.html
+OMAP3530由于有beagleboard开源方案, 所以便宜. 
+(4), 之前买6410的友坚有s5pv210开发板, 也是android2.1方案, 暂时不考虑. 
+板子+7寸屏: 9800, 
+wifi usb: 300.
+camera usb:400.
+
+2, (17:48 2010-10-27)duanxiaohui说价格有问题, 担心买错的(同事工作严谨, 赞一个). 我没有保留分列价格造成我自己还是打电话确认. 另外, 如果确定购买, 需要问sales的名字, 也需要说明公司名, 这样便于采购核实. 后来确认了一下, duanxiaohui算的是含税的价格. 我自己计算的不含税的价格差了100元. 
+SBC8100 256M 7寸LCD 3980, 3400.
+模拟摄像头: 250+250.
+CDMA8000: 525, 450.
+总计: 5090, 4350(比之前算的多了100元)
+
+这里天漠说的数字摄像头其实是usb接口的. 我觉得用OMAP3530的摄像头接口调试更有针对性. 
+数字摄像头(USB接口): 585, 500.
+
+15:12 2010-10-21
+VC0882, Linux, 驱动调试, 加压测试
+1, zhangjian2LinuxAll. 
+如果大家驱动单独测试ok了, 可以继续实验加压测试. 包括加入dma copy, 四个sd卡同时使用. De刷四层等等. 具体参考之前例会的邮件. 
+附件是dma用法. 具体问题可以请xiaotao支持. 
+关于时钟: 目前各模块使用在初始化脚本中配置, 脚本中类似” setmem /W 0x600000xx=xxx”的就是配置模块使用, 大家可以对照” D:\VC1600WCVS\doc\FPGA\882_fpga\fpga_scheme\ vc0882_fpga_clkrst_scheme和VC0882_REG_CLKRST_FPGA.V0.36”查看各模块时钟. 
+例如0x600000f4=0x500. 说明de_pixel_clk是108/6=18MHz. 时钟方面问题由我支持. 
+加压测试最后要出一个统一的report. 请大家测试后, 发信说明测试内容, 结果和CF code版本.
+2, bamvor: dma加压测试方法见"14:53 2010-10-15".
+3, 加压测试的事情, 我看大家驱动都有进展了, 就发信说要开始加压测试. 这其实是看了情况, 只是做出一个直接的反应. 如果要想提高效率, 需要能一下想到更多. 
+1), fengbeizhan邮件"答复: 请大家开始做Linux下的加压测试"20101021_1529
+具体的加压测试case你规划一下，是每个人都负责一些，还是一个人负责了。最好这2天就能开始，等好了移交给测试人员。 希望这周把加压的事情结束，下一步就是android了。
+到底都有哪几个case可以加压，写清楚，然后用起来没有问题就提交。
+aiguo邮件"答复: 请大家开始做Linux下的加压测试"201021_1549
+那就zhangjian安排一下大家，882的人都可以安排。我们尽快先看看测试情况！
+2), beizhan希望加压测试本周完成. 感觉很难. 这个一会儿和beizhan讨论时需要说明一下. 
+回复beizhan, aiguo邮件: 
+882 Linux里面加压测试会尽量加入已有驱动: 包括4层framebuffer. 四个sd卡, vdec, uhost, uotg, dma, 网卡.
+其中4sd和usb只能在2FPGA做. 
+所以主要想做两个case:
+(1), 4FPGA: GPU刷屏; vdec刷屏; de刷剩余两层. sd copy: sd文件系统和ramdisk之间copy; sd文件系统和nfs之间copy(一个sd卡); dma搬运: 周期性的比较或不比较数据. 
+gpu, vdec是否关心正确性? 
+(2), 2FPGA: 
+uhost接移动硬盘(memory和uhost之间copy)或uotg device作为PC优盘(PC上copy).
+sd copy(四个sd卡和三个sd卡都需要测试(因为bootloader可能会占用一个sd卡)): sd文件系统和ramdisk之间copy; sd文件系统和nfs之间copy(一个sd卡); dma搬运: 周期性的比较或不比较数据; de刷四层;
+(3), 四个sdio. 
+
+讨论: 
+1), 双屏需要么.<不需要>
+2), GPU的2D和3D能否同时使用? 刚才没找到wenlei, 不知道GPU 2D在35有没有测试.
+GPU上海测试比较充分. 可以少做一些. (22:32 2010-10-24)2d已测试"22:32 2010-10-24"end.
+3), uotg如果后面能把ethernet用起来是最好. 这样测试更有意义. 
+4), 这里面cpu的负载时钟比较轻. 
+(1), cpu跑算法也可以加压. jpeg解码.
+(2), 除了dma比较时arm负载比较重. 
+dma里面如果用dma_xxx cache函数做, 就可以提到cpu效率, 这样会好一些. 估计xiaotao一天之内可以完成(代码不复杂, 之前没这么用过, 所以时间留了富裕). 
+(3), 但是cpu负载还是比较轻, 如果能跑QT或directFB会好一些, 按理说这些在29上面跑过, 在35上跑应该比较容易.
+5), dma搬运最好使用随机数. 
+6), de动态压力调整.
+
+4, (17:43 2010-10-23)
+目前Linux进展: dmac正确, sd之前正确, 目前有错; vdec解码正确未显示; gpu之前正确, shuyu修改framebuffer驱动后无法显示到屏上. 
+uotg如果后面能把ethernet用起来是最好. 这样测试更有意义. 
+需要加cpu负载. 
+dma里面加入cache操作函数, 提高cmp速度(需要与dongliang讨论xiaotao有无时间).
+
+5, 给aiguo, beizhan发信、
+send: fengbeizhan
+cc: ai guo; zhangjian
+VC0882 Linux压力测试case和各模块驱动进展
+
+hi, beizhan
+
+根据咱们之前的讨论，我构造了11个加压测试case(见附件)。附件中同时列出了加压测试准备工作的情况（既882 Linux下各模块驱动/测试程序进展）。
+目前，sd，gpu，uhost三个模块有问题。dma驱动需要改进（不影响加压测试开始）。需要增加一个arm压力case（初步计划使用jpeg编解码。由我完成。这个有现成的库，我之前用过）。
+dmac驱动改进估计需要xiaotao半天到一天的工作，基本不会影响xiaotao现有工作。我会先和dongliang讨论一下xiaotao有没有时间。
+
+按照目前这个情况，可能下周二(10/26)，周三才有可能提交部分测试。下周我希望能把所有测试case都提交。
+
+best regards
+zhangjian
+
+6, (11:59 2010-10-25)
+经过和beizhan讨论, 确定11个加压测试case, 见附件. 同时上传到了CVS: “D:\Linux\doc\testplan\VC0882_Linux_压力测试.xls”
+每个case由测试内容中最后一个模块的owner做本case的测试并提交测试.
+将来测试会从CVS checkout代码. 请大家务必把所有的代码都上传. 
+
+18:08 2010-10-21
+VC0882, clkrst, meeting minutes
+1, lcdif, 
+liuzixi:
+150MHz可以, 但是IO上可能有风险.
+720p可以. 1080p比较危险. 
+IO驱动能力是8ma. 大屏需要提高驱动能力. 
+接大屏的风险高一些(基本没戏). 接HDMI桥会好一些.
+2, case1, case2的差异? 
+case2是为了达到各模块的最高频率. 
+3, 整理vdec, venc等文档到performance.
+4, 发讨论结果: 满足AE要求. 加yinong, wangxin, yangzuoxing. 
+5, (16:45 2010-10-22)今天上午和huangchen确认. clk_out需要26Mhz, 所以重新计算, 发现有些div是奇数, 担心占空比有问题. 经过huangwei提醒, 设计上没有问题. 
+huangwei邮件"答复: max freq in worst case"20101022_1637
+zhangjian2fengbeizhan邮件"答复: max freq in worst case"20101022_1645
+经huangwei提醒, 我才想起来882 clkrst的确是这么设计的. 无论divider都能保证占空比是1:1, mas原文如下: 
+If (ndiv+1) is an even number, when R_clkcnt reaches 0, clk_o toggles and R_clkcnt is reloaded with ndiv; when R_clkcnt reaches (ndiv+1)/2, clk_o toggles.
+
+If (ndiv+1) is an odd number, when R_clkcnt reaches 0, clk_o toggles. when R_clkcnt reaches (ndiv+1)%2, R_force0 becomes 1 to asynchronous reset clk_o to 0. Note that R_force0 is clocked by the falling edge of clk_i. By this approach, clk_o’s duty cycle is about 50%. Figure 2-2 illustrates this clearly.
+
+21:28 2010-10-21
+VC0882, 工作总结, \todo完善
+今天一个是切频时能不能同时保证video和audio. 这个是我之前自己没完全想清楚. 
+一个是882是否支持双屏显示(支持两个DBI肯定可以, 两个DPI没戏, 一个DBI一个DPI有可能). 这个是我本来不清楚, 只是听beizhan提了双屏有问题, 自己理解错了. 
+
+10:03 2010-10-22
+VC0882, arm, Cortex-a8, bootloader, memory barrier, isb, dsb
+lidongliang邮件"转发: CDC Multi Bit synchonization Confirm [需要lidongliang确认]"20101022_0937
+Hi jianbo, 
+Owner:Liu Zixi     ,EXT:8194,  47  in u_pmu_top_reg.rpt 
+这个warning是由pmu_marb_bootsel引起的，assign  pmu_marb_bootsel = boot_sel_sel ? boot_sel_sw : {1'b0,boot_sel_first};
+通过pmu_top的abp配置进来boot_sel_sel，而组合逻辑中的另一个信号boot_sel_first，是有padc的apb配置进来的，
+组合逻辑产生pmu_marb_bootsel后，输出到cpu_subsystem中，在cpu_wrapper中又组合逻辑产生了ARADDR和AWADDR，
+boot_sel_sel属于 pmu_mclk域，boot_sel_first属于padc_mclk域，pmu_marb_bootsel属于pmu_mclk域，而ARADDR和AWADDR属于aclk域。
+如果能保证这些信号稳定之后，AXI才开始工作则没有问题，否则将出现亚稳态。
+请huangwei确认一下。
+[huangwei] 这个问题只是在软件修改 remap寄存器的时候才可能有问题。我的理解是 修改 remap寄存器 的代码应该放在 non-remap的memory region,同时在修改前后都加上ISB，DSB保护，就可以保证真正用到remap寄存器的时候，remap寄存器的值早已经稳定了。 不过，我还是建议大家讨论一下这个问题。
+Hi lidongliang，  请确认一下软件修改 remap 寄存器的场景和注意点，谢谢~
+
+10:04 2010-10-22
+时间管理
+0, 9:50
+
+1, 本日
+0), 事情很多, 看来今天一定要加班了. 
+需要白天做的事情: clk_out作用; 和xiaotao讨论718Linux training; 板子购买(因为需要打电话); 
+加压的实验只能晚上或明天做了, 加压具体case也是晚上或明天做. 
+1), 1.5h: 分析clock, 昨天对clk_out考虑不周. 
+2), 10' Linux加压测试进展: dongliang 4个sd的case有问题(之前测试通过), 正在debug. 也和dongliang说了希望sd通了以后, 加dma测试.
+3), 20' 和xiaotao讨论718 training分工. 见"14:20 2010-10-21"2. 
+4), 40' 在zhicheng帮助下确定要买的开发板. 见"14:51 2010-10-21".
+5), 总结: 
+感觉最近每天记录的工作时间, 也就3,4个小时, 看来有时间黑洞. 
+
+17:10 2010-10-22
+公司, 假期, 年假, 项目假; 今天fengyajuan给我发了年假提醒
+年假: 目前剩余3天, 明年还有5天. 一共8天. 
+项目假: 882项目假我一共有10天. 
+
+18:13 2010-10-22
+VC0882, Linux, android, 开发板, UT-S3C6410(友坚恒天): s3c6410, android2.1升级
+zhangjian邮件"ubetter.fae@163.com"20101022
+你好, 我是北京中星微电子有限公司. 2009年11月购买了UT-S3C6410开发板.
+现在希望升级为android2.1, 谢谢.
+开发板序列号是: UT-SAA000431
+谢谢
+zhangjain
+
+13:01 2010-10-23
+android
+groups.google.com/group/android-developers
+
+14:20 2010-10-23
+时间管理
+0, 12:10-18:20
+
+1, 本日
+0), 本来计划先做加压测试. 后来先查了android资料. 等加压测试表格和718 Linux training准备后再继续android. 
+1), 1h: android资料收集见"17:02 2010-10-23".
+2), 10' 本来想实验在公司下载android. 结果repo执行出错, 见"16:59 2010-10-23"
+3), 根据与beizhan讨论结果, 确定加压测试case, 并发目前Linux驱动进展. "15:12 2010-10-21"4.
+
+16:59 2010-10-23
+VC0882, Linux, android
+本来想实验在公司下载android. 结果repo执行出错: 
+get source过程见"\\10.0.2.36\sqmshare\Document\Linux\android\Get Android Source=+.html"
+[zhangjian@icp-desktop official_git]$ repo init -u git://android.git.kernel.org/platform/manifest.git
+Traceback (most recent call last):
+  File "/home/zhangjian/bin/repo", line 595, in <module>
+    main(sys.argv[1:])
+  File "/home/zhangjian/bin/repo", line 562, in main
+    _Init(args)
+  File "/home/zhangjian/bin/repo", line 181, in _Init
+    _CheckGitVersion()
+  File "/home/zhangjian/bin/repo", line 210, in _CheckGitVersion
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+  File "/usr/lib/python2.6/subprocess.py", line 633, in __init__
+    errread, errwrite)
+  File "/usr/lib/python2.6/subprocess.py", line 1139, in _execute_child
+    raise child_exception
+OSError: [Errno 2] No such file or directory
+
+17:02 2010-10-23
+VC0882, Linux, android资料收集, android计划思考
+1, 查找android资料, 目前能访问的还是eoeandroid比较全. 
+参考"Android开发资源完全汇总", 我这里只是列出我看过觉得不错的: 
+1), http://www.eoeandroid.com
+资料很全的中文android网站. 
+2), http://www.moandroid.com
+android资料也不错
+3), android官网只能曲线访问: 
+"developer.android.com 无法访问解决方法.txt",
+(1), developer.android.com可以通过"http://androidappdocs.appspot.com"访问. 
+(2), source.android.com可以通过"http://sites.google.com/a/android.com/opensource/"访问.
+这里面从应用角度介绍android很全. 可以用于从上到下了解android. 还包括android sdk和ndk下载. 
+几个主要的功能:
+a, android developer's guide
+http://androidappdocs.appspot.com/guide/index.html
+里面的"what-is-android"和"Application Fundamentals"推荐阅读, 概述了android应用程序机制, 包括说明activity和intent的作用等. 网上流传的android框架图就来源于前者. 
+b, resources
+http://androidappdocs.appspot.com/resources/index.html
+包括technique articles和forums.
+"Common Tasks and How to Do Them in Android"类似于android getting started. 
+c, packages:
+http://androidappdocs.appspot.com/reference/packages.html
+能看到所有android packages.
+
+(3), 可以通过"http://groups.google.jp/group/android-developers"访问android-developers google groups网站. 但是具体条目没有找到. 好处是找到了"stackoverflow.com"这个不错的网站, 这时一个讨论开发各种文档的maillist. 
+FAQ: http://stackoverflow.com/faq
+
+2, android计划思考
+经过昨天beizhan提醒，讨论android时应该尽可能把各方面都了解到。制订规划时要考虑周到。我本来想周五下午如果讨论，也就是简单说说，没想到说涉及到规划问题。
+3d开发可能需要考虑3d硬件本身的特性。见程序员200810 iPhone opengl es技术。
+\todo 根据"http://androidappdocs.appspot.com/guide/basics/what-is-android.html"了解每个模块. 
+
+22:25 2010-10-24
+时间管理
+1, 本日
+1), 加压测试表格.
+2), 收集android资料, 每个模块的名称. 
+3), yangxing上周总结.
+
+10:45 2010-10-25
+时间管理
+0, 10:05
+
+1, 本日
+1), 早晨来了就要确认: android开发板需要确认一下SBC8100和DevKit8000能否用一个kernel. 等待天漠回复. <DONE: SBC8100只有dm9000引脚与DevKit8000不同, 对于使用beagleboard没有影响>.
+2), 40' 给大家发加压测试表格. 见"15:12 2010-10-21"6
+3), 复制logAssistant到MID.
+4), 整理android资料.<DONE>
+5), 下午VC0882 Linux sync up, android计划, "15:53 2010-10-25".
+6), android资料目录规划. 上传资料. <DONE>
+7), VC0882 Linux dongliang 四个sd互相copy正确. 之前可能是CF版本和台子问题. 
+8), 例会后开始718驱动准备. 
+
+12:01 2010-10-25
+VC0882, Linux, 例会, sync up
+1, 加压测试说明. 
+2, android讨论. 
+我下载了最新的android代码, 放到了: 
+/opt/share/zhangjian/development/android/official_git/trunk
+计划请zhicheng, dongliang开始在OMAP3530上做.
+
+3, 我的android想法:
+计划从开发环境(SDK, NDK), framework, 代码目录结构三个角度说明. 
+
+2, android计划思考
+经过昨天beizhan提醒，讨论android时应该尽可能把各方面都了解到。制订规划时要考虑周到。我本来想周五下午如果讨论，也就是简单说说，没想到说涉及到规划问题。
+3d开发可能需要考虑3d硬件本身的特性。见程序员200810 iPhone opengl es技术。
+\todo 根据"http://androidappdocs.appspot.com/guide/basics/what-is-android.html"了解每个模块. 
+
+3, (9:26 2010-10-25)
+bind and keypad driver is unknown.
+bind driver is a driver for service communication, e.g. audio finger. service manager is the deamon service.
+
+14:55 2010-10-25
+VC0882, 奖金
+奖金按照milestone, dr.yang会出详细milestone. 
+sv验证完成, 量产, ...
+
+15:53 2010-10-25
+VC0882, Linux, 例会, sync up, android
+1, beizhan首先说了一下总体情况, 882现在要做android系统. 我也需要注意这个. 原来就不注意. 
+
+2, meeting minutes
+1), 计划在OMAP3530运行android2.1, 学习android移植等内容. 
+Zhangjian会回家下载code. 
+http://code.google.com/p/0xdroid/wiki/Roadmap
+2), 分工
+zhicheng: nand, android文件系统, android启动流程. 
+wangwenlei: gpu, OpenGL/ES, SGL, surface manager. 
+dongliang: sd, opencore, surface manager.
+shuyu: framebufer, surface manager, opencore.
+zhangjian: clkrst, power manager.
+mengfandong: u-boot usb gadget ethernet, usb(host, otg), activity和intent机制(包括activity和process, activity 和 bind driver).
+aiguo: application framebuffer, JNI.
+fengbeizhan: gpu, camera.
+yangxing: 完成ddr总结和arm任务后, 看audio(driver and application).
+3), 请大家把资料放到"\\10.0.2.36\sqmshare\Document\Linux\android".
+
+18:03 2010-10-25
+VC0882, Linux, uhost, 支持mengfandong测试DVD-RW
+编译遇到错误, INT_MAX未定义, 后来google得到解决方法: 
+自: http://www.errorhelp.com/search/details/73323/error-int_max-was-not-declared-in-this-scope
+
+Error #73323
+error: 'INT_MAX' was not declared in this scope
+User's solution
+This works!
++26 Vote Up
+Vote Down +26 Vote Up
+
+#include <limits.h>
+
+21:56 2010-10-25
+VC0882, VC0718, Linux, 阻塞非阻塞: poll; 异步通知
+1, 阻塞和非阻塞
+参见” training/2_advance_char_driver”
+1), poll分析
+以video for Linux two的"mem2mem_testdev.c (drivers\media\video)"为例分析poll的使用. 参见"m2mtest_poll()"和"device_isr()"
+
+poll系统调用在fs/select.c定义. poll_wait是__pollwait().
+在timeout未到或没有timeout时如何等待不太理解. \todo 继续. 
+
+(1), init_poll_funcptr是注册poll_wait函数, 可以看出每个poll_wait基本都是调用类似方式注册到等待队列"add_wait_queue(wait_address, &entry->wait);".
+mem2mem test中poll_wait调用方式:
+poll_wait(file, &src_vb->done, wait);
+(1), 从用户调用poll开始分析: 
+poll->do_sys_poll->poll_initwait()
+                   do_poll(): 死循环, 直到poll条件满足或超时. 
+                   poll_freewait()
+poll_initwait(): 设置pwq->polling_task为当前进程. 
+do_poll()->do_pollfd()->m2mtest_poll()->v4l2_m2m_poll()->poll_wait()->poll_wait()->__pollwait()->"init_waitqueue_func_entry(&entry->wait, pollwake);"
+               ->add_wait_queue()
+do_pollfd(): 针对fd做poll, 这里没有循环. 
+init_waitqueue_func_entry(): 设置pollwake为"wait_queue_t.func".
+add_wait_queue(): 添加到等待队列中. 
+
+(2), 如上通过添加到等待队列, 系统正在等待. 下面分析唤醒
+device_isr(): 采用timer模拟事件. 此函数会调用wake_up环境在等待队列中的进程. 例如"wake_up(&src_buf->vb.done);"是唤醒src_buf的等待队列. 
+wake_up()->__wake_up()->__wake_up_common()(kernel/sched.c)->wait_queue_t.func()
+这里"wait_queue_t.func()"就是刚才设置的pollwake(): 
+pollwake()->__pollwake()->default_wake_function()->try_to_wake_up(), try_to_wake_up()会唤醒当前进程. 
+
+另外, 文件关闭时, 也会唤醒. 
+m2mtest_release()->v4l2_m2m_ctx_release()
+
+(3), 以我目前的理解, driver中的poll会进入两次, 这样唯一的问题是"__pollwait()"中会注册两次等待队列. 但是第二次注册后, 很快就注销了. 虽说没什么大问题, 还是需要考最后实验确定, \todo 希望中OMAP3530 qemu模拟器实验. 
+
+2), poll 测试代码见"poll_test_code\test_tos_mac.c"
+用户空间有poll和select两个函数, 二者功能一样. 只是一个是BSD Unix加入的, 一个是System V(贝尔实验室)加入的. 
+
+2, 异步通知
+参见” training/ 7_Linux_vdec_Driver”.
+上面提到的poll的方式其实就是查询的方式(废话, poll就是是查询的意思). 
+既然是查询, 还是要查. 如果能有中断机制就好了. 用户空间的中断机制就是异步通知. 
+用法很简单, 我们只要用sigaction注册一个中断处理函数, 就可以了. 
+具体函数见"training/ 7_Linux_vdec_Driver/内核分析"的"函数调用与数据结构".
+
+3, DMA cache操作函数:
+这部分代码我之前没用过, 最近看xuxiang再使用才看的, 这里主要列出有哪些函数.
+参见kernel代码”arch\arm\include\asm\cacheflush.h”, dma-mapping.h
+文档见” DMA-API-HOWTO.txt (documentation)”.
+0), DMA的方向:
+DMA_TO_DEVICE means "from main memory to the device" DMA_FROM_DEVICE means "from the device to main memory"
+1), 一次映射
+dma_alloc_coherent(), 分配memory并调用dmac_flush_range().
+dma_free_coherent()
+2), 反复映射
+(1), Single buffer
+dma_sync_single_for_device(), 
+dma_sync_single_for_cpu()
+dma_map_single()
+dma_unmap_single()
+
+(2), The scatter list versions of the above methods.
+int dma_map_sg(struct device *, struct scatterlist *, int,
+		enum dma_data_direction);
+void dma_unmap_sg(struct device *, struct scatterlist *, int,
+		enum dma_data_direction);
+void dma_sync_sg_for_cpu(struct device *, struct scatterlist *, int,
+		enum dma_data_direction);
+void dma_sync_sg_for_device(struct device *, struct scatterlist *, int,
+		enum dma_data_direction);
+3), 内部函数不建议使用
+dmac_map_area():clean and invalidate
+dmac_unmap_area(): invalidate
+dmac_flush_range(): clean and invalidate
+前面两个函数考虑方向. 最后一个不考虑方向. 
+
+10:09 2010-10-26
+(21:05 2010-10-31)
+VC0882, Linux, 项目进展, 2010年10月25日--2010年10月31日; 加压工作周总结
+1, 10月25日
+1), wenlei: gpu: 可以正确显示到屏上. 
+2), donglinag: sd: 四个sd卡读写正确. 见dongliang邮件"10:10 2010-10-26".
+3), android
+(1), VC0882 Linux sync up: 讨论了android计划. 
+(2), zhangjian: 下载了android2.2和beagleboard 0xdroid android2.1移植. 
+2, 10月28日
+1), zhicheng已经开始实验OMAP3530 android2.1. 
+2), liuxiaotao: uart改为DMA模式. 丢数现象改善很多, 但还是会丢数(例如按键"上"包括三个字符, 丢第二个字符). 实验panda_os查询模式有无问题. 明天xiaotao会实验原有无DMA方式. 今天分析认为对于处理连续输入若干字符应该也很有效. 
+3, 10月29日
+1), xiaotao: xiaofan帮助下确认uart dma模式丢数是timtout frame设置太小, 需要从1改为4. \todo 需要知道应该如何设置. 一个frame interval有多大? 
+2), dongliang: sd 6M可用. 4处修改(zhangjian记录, 似乎不准确, \todo 确认): 
+cmd前等idle; 先triger cmd后trigger dma; ; 加锁(\todo 看加在了什么位置).
+3), yangmin, shuyu: vdec+sd+net再加framebuffer后kernel启动出错. 正在debug.
+4, 10月29日
+1), yangmin: vdec经过调试, 可以出图, 数据有错. 
+yangmin邮件"答复: 今天下午Linux例会取消. 请大家回复一下上周任务的进展"20101029_1946
+Vdec图出来了，但是还有问题。
+在\\10.0.13.101\share\yangmin\目录下有个case25，拷贝到卡里，运行里面的run_rv即可。
+2), xiaotao: uart dma模式虽然不会丢数, 但是隔一段时间(1-2分钟), 可能就没法输入了. 
+5, 10月30日
+1), lidongliang: 继续debug sd问题, 发现在12M下正确, 24MHz下single正确, multi错误. 详见"10:10 2010-10-26"2. 
+6, (19:39 2010-11-1)上周工作总结:
+上周大家主要在完善uart, gpu, vdec, sd等模块驱动, 并逐步开始做简单的加压case. 从目前实验情况看, 加压后系统不稳定, 串口等模块会出错, 但是kernel没有panic. 本周会集中精力解决加压测试中遇到的问题. 本周会逐步把加压case提交测试. 
+
+上周具体进展如下: 
+1), uart: 经过xiaotao调试, 没有压力下丢数和稳定性有很大改善, 本周会继续完善, 并实验压力下是否稳定. 之前不稳定的原因: 一是流程问题, 二是对于uart驱动理解有欠缺. 
+2), gpu: shuyu修改framebuffer驱动后一度显示有错, 本周经过调试已经可以在屏上正确显示. 
+3), vdec: 经过yangmin和shuyu调试, 初步可以显示到屏上, 但是数据有错(周一已经解决).
+4), arm: 新增arm测试jpeg测试程序. 已提交CVS. 
+5), sd: dongliang在调整代码, 改善稳定性. 对比panda_os流程并与IC讨论, 稳定性有提高, 目前de加压测试中, sd clock=12MHz时shuyu的sd卡正确, 24M下只有single read/write正确. dongliang自己的sd卡一直是正确的. 
+6), de: shuyu逐步调整代码, 目前已经支持RGB, YUV的各种格式. 为了提高效率, 增加了用户传入framebuffer指针这个功能. 
+7), dmac, uhost, uotg模块本身无问题. 
+
+10:10 2010-10-26
+VC0882, Linux, storage, sd
+1, lidongliang邮件"答复: 今天下午Linux例会取消. 请大家回复一下上周任务的进展"20101025_2134
+经过这几天的debug
+SD 已经可以正常运行了
+1． 同一个sd 卡内部copy，del文件，没有问题
+2． 4个sd card之间copy ，del 文件，没有问题
+3． 测试了使用/不使用 bounce buffer 两种情况
+ - bounce buffer 是一个NCNB 区域，使用bounce buffer即将要写到card中的数据先从CB 内存copy到bounce buffer，再通过sd dma将bounce buffer中数据写入到card中
+前面出错的情况有以下几个原因：
+1． CF code 原因，目前成功测试的是：vc0882_rev0_01102121_02080900_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20101009_1800_RAM256K_ROM256K_LPDDR16b_4SDIO_bootloaderbin1020.ace
+前面一直在用版本vc0882_20100915_1800_fpgaLpddr_a8_20100809_L1_32_L2_128_Neon_48M_2fpga_all.ace ，这个版本上sdio 工作不太稳定，容易报错如下
+[CH 3]int status:0x400
+mmcblk2: retrying using single block read
+[CH 3]int status:0x3484
+mmcblk2: error -110 sending read/write command, response 0xffffffff, card status
+0x800b00
+end_request: I/O error, dev mmcblk2, sector 0
+[CH 3]int status:0x3484
+[CH 3]int status:0x400
+mmcblk2: error -110 sending status comand
+mmcblk2: error -110 sending read/write command, response 0xffffffff, card status
+0xffffffff
+end_request: I/O error, dev mmcblk2, sector 1
+ 除了该错以外，还经常报  DATA  CRC ERROR 的错误
+2． C code 没有问题用CVS上最新的即可，不用加锁来控制4个sdio 的访问
+3． SD子板不稳定，带Nandflash socket 的4 sdio 板子中sdio3 的card in socket 检测不稳定
+4． 我对882 的fpga 环境还是不够熟悉
+注意不是所有版本都支持4 sdio，大部分2FPGA 都只支持sdio0，4FPGA上sdio2 支持的有问题
+大家在使用SD card 的过程中有什么问题及时与我沟通
+
+2, LiDongLiang邮件"答复: 今天下午Linux例会取消. 请大家回复一下上周任务的进展"20101030_1722
+进一步调试发现，刷4层图
+1．   24M 下shuyu的2G卡 在读数据时会产生data crc error
+2．   12M 下 shuyu的2G 卡能正确读数据
+3．   24M 下 只使用single sector read/write 没有问题
+下面会进一步debug 为什么在24M下multi sector read/write 会出现data crc error 中断
+
+3, (21:44 2010-11-1)
+Lidongliang邮件"答复: 今天下午Linux例会取消. 请大家回复一下上周任务的进展"20101101_2143
+SD  driver 应该没有问题了
+我已经上传代码
+最重要的错误在于：
+1． 以前的sd driver中一直使用正沿采数
+而实际的sd 绝大多数情况下都用负沿采数
+-- 很faint
+2． 修改了其它几个问题
+下来会修改driver：
+1．   使用 Bounce buffer的情况
+2．   使用dma boundary 进一步加速sd 的读写速度
+3．   使用acmd 加速sd 的读写速度
+Sd 如果还有什么问题，大家及时联系我
+SD 出错后，串口会打印 
+[CH 0]int status:0x1000
+
+bamvor: dongliang今天解决了4层DE加压情况下单个sd使用. 明天会实验4个sd copy. 
+
+10:13 2010-10-26
+时间管理
+0, 9:00
+
+1, 本日
+1), 30' 准备VC0718 Linux驱动training.
+2), 1h: VC)718 Linux驱动training.
+3), 20' 给fandong发u-boot gadget ethernet参考资料, 见"14:34 2010-10-26". 估计这个事情剩下fandong都能搞定. 
+4), 完成arm编解码jpeg, 见"14:42 2010-10-26"
+5), 总结: 
+(1), 今天VC0718 Linux training时没有想到需要先介绍Linux驱动开发基本概念, 如果不介绍, 效果不好. 自己还是太局限. 
+(2), 没有完全考虑到jpeg工作量, 下午以为automake生成了Makefile就没问题了. 
+
+14:34 2010-10-26
+VC0882, Linux, u-boot gadget ethernet参考资料
+1, zhangjian2mengfandong
+1), Blob这个bootloader支持usb gadget Ethernet, 代码在如下目录
+/opt/share/zhangjian/development/Linux/bootloader/blob/src/lib的ether-pxausb.c, pxa_usb_xxx.c
+Blob具体用法可以参考blob官网. 代码稍候我会上传到CVS. 
+2), 有人正在OMAP3530上面做u-boot usb gadget支持, 目前只支持ACM moderm. 暂时不支持ethernet. 
+http://elinux.org/U-boot_musb_gadget_support
+
+14:42 2010-10-26
+VC0882, Linux, 加压测试; 使用autoconf工具自动生成Makefile
+1, jpeg库
+1), 使用公司的jpeg Cmodel
+D:\Utilities\JpegCmodel
+2), jpeg-6b
+http://code.google.com/p/google-desktop-for-linux-mirror/downloads/list
+jpeg-6b是我自己原来用过的. 为了便于将来比较性能, 采用公司的jpegCmodel.
+3), 解码后格式不对怎么办? caijin提供了YUV数据, 可以直接用这个编码. 
+\\10.0.13.101\data\Hantro_6280\testcase_fpga\jpeg
+4), YUV420P, YUV420S, YUV422I格式: 
+planar: YYYYYYYYUUUUUUUUVVVVVVVV
+semi-planar: planar: YYYYYYYYUVUVUVUVUVUVUVUV
+Interleave: YUYVYUYVYUYVYUYVYUYVYUYVYUYVYUYVYUYV
+interleave里面还有其它组合. 这里没有列出. 
+
+2, 需要如下安装包, 
+sudo apt-get install autoconf automake
+
+3, 后来在FC10实验的:
+1), 整理自动编译过程.
+(1), 主要参考的第一篇文章.
+http://www.cppblog.com/liu1061/articles/54740.html
+http://linux.chinaunix.net/techdoc/system/2008/10/10/1037300.shtml
+http://www.linuxforum.net/books/automake.html#IDX79
+http://amjith.blogspot.com/2009/04/autoconf-and-automake-tutorial.html
+http://www.airs.com/ian/configure/configure_2.html
+http://www.digitalpeer.com/id/getting
+(2), 扩展名含义.
+*.ac是表示autoconf输入文件. 
+*.am表示automake输入文件.
+*.in表示configure输入文件.
+
+2), 编译出错: 
+(1), 如下错误, 从"http://rpm.pbone.net/index.php3"搜索到是"xulrunner-devel-1.9.1.9-1.fc11.i586.rpm". 从"http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/10/Everything/i386/os/Packages/"下载, 后来发现并不是这个库. 
+g++ -DHAVE_CONFIG_H -I. -I..     -g -O2 -MT main.o -MD -MP -MF .deps/main.Tpo -c -o main.o main.cpp
+In file included from main.cpp:4:
+option.h:6:21: error: fstream.h: No such file or directory
+option.h:7:22: error: iostream.h: No such file or directory
+经过caijin帮忙调试, 把头文件去掉".h", 后再用同样方法修改"option.cpp", 解决了这个问题, 
+(2), 但是main.cpp, 还是有错: 
+g++ -DHAVE_CONFIG_H -I. -I..     -g -O2 -MT main.o -MD -MP -MF .deps/main.Tpo -c -o main.o main.cpp
+In file included from main.cpp:4:
+option.h:73: error: 'ifstream' does not name a type
+option.h:81: error: 'ostream' has not been declared
+
+在option.h里面加入"using namespace::std;". main.cpp编译通过. 
+
+(3), 后面是链接错误:
+发现link到了rvds里面的libstdc++.so. 没办法只能先把rvds所在目录改名(software->software.bak).
+
+3), 编译通过后, 测试解码, 发现有问题, caijin帮忙debug, 似乎是宏块计算错误, caijin进一步debug后解决.
+
+4, 在FC10实验交叉编译. 
+1), ./configure --host=arm-none-linux-gnueabi
+2), 解码正确. 编码还没有实验. 暂时也够用的. 
+明天做2FPGA和4FPGA的压力测试. 
+
+5, 以为机器上面没有pop, 后面发现应该是top, 自己搞错了. 
+
+6, (10:45 2010-10-27)
+在Linux CVS上上传jpeg. 同时做一遍生成makefile的过程.
+1), sudo apt-get install autoconf automake
+2), autoconf
+修改并改名为configure.ac: 
+[zhangjian@icp-desktop JpegCmodel]$ diff -urN configure.scan configure.ac
+--- configure.scan      2010-10-28 04:23:26.805368956 +0800
++++ configure.ac        2010-10-28 04:22:13.012869412 +0800
+@@ -1,8 +1,15 @@
+ #                                               -*- Autoconf -*-
+ # Process this file with autoconf to produce a configure script.
+ 
++# rename from configure.scan to configure.ac for autoconf
++
+ AC_PREREQ([2.65])
+-AC_INIT([FULL-PACKAGE-NAME], [VERSION], [BUG-REPORT-ADDRESS])
++#"["  and "]" means treat the stuff in "[" and "]" as a whole
++# AC_INIT([FULL-PACKAGE-NAME], [VERSION], [BUG-REPORT-ADDRESS])
++# AM_INIT_AUTOMAKE for automatic generate Makefile.in
++# jpeg is the the name of execution.
++AC_INIT([jpeg], 1.0)
++AM_INIT_AUTOMAKE
+ AC_CONFIG_SRCDIR([src/JPEGEnc.cpp])
+ AC_CONFIG_HEADERS([config.h])
+
+@@ -21,6 +28,6 @@
+ AC_FUNC_MALLOC
+ AC_CHECK_FUNCS([memset pow strncasecmp])
+ 
+-AC_CONFIG_FILES([Makefile
+-                 src/Makefile])
++# generate Makefile acoording to the AC_CONFIG_FILES
++AC_CONFIG_FILES([Makefile src/Makefile])
+ AC_OUTPUT
+
+3), 编写Makefile.am, 将来由此生成Makefile.in给configure使用. configure再把Makefile.in生成Makefile. 
+(1), 由于我们把source放在src, 目录, 所以顶层Makefile.am很简单: 
+cat Makefile.am
+SUBDIRS = src
+
+cat src/Makefile.am 
+bin_PROGRAMS = jpeg
+jpeg_SOURCES = \
+JPEGapi.h\
+JPEGDec.cpp\
+JPEGEnc.cpp\
+JPEGfpdct8x8.cpp
+...(以下省略)
+
+按理说, 文件应该可以自动加入.
+
+(2), aclocal
+(1), 会生成aclocal.m4, 之前运行aclocal遇到过如下错误, 错误原因是没有写AC_INIT(误认为AM_INIT_AUTOMAKE可以代替AC_INIT, 把AM_INIT_AUTOMAKE的AM看成AC了)
+[zhangjian@icp-desktop JpegCmodel]$ aclocal
+configure.ac:16: error: m4_defn: undefined macro: _AC_LANG
+../../lib/autoconf/lang.m4:108: AC_LANG_POP is expanded from...
+../../lib/autoconf/c.m4:694: AC_PROG_CXX is expanded from...
+configure.ac:16: the top level
+autom4te: /usr/bin/m4 failed with exit status: 1
+aclocal: autom4te failed with exit status: 1
+(2), 目录如果需要使用其他路径下的宏，可以通过命令行的 -I 选项指定
+-I DIR add directory to search list for .m4 files
+3), autoheader生成config.h.in
+4), automake --foreign --add-missing --copy
+Makefile.in, src/Makefile.in, depcomp, install-sh, missing, 
+5), autoconf, 这里终于生成了传说中的configure.
+后面就是"./configure && make", 或"./configure --host=arm-none-linux-gnueabi && make"即可. 
+
+7, 在ubuntu10.04下编译出的jpeg解码, 发现结果和FC10的结果不同. FC10的结果是正确的. 奇怪..
+(10:44 2010-11-10)上面这个问题疑似解决, 似乎是当时搞错了."10:44 2010-11-10"end
+
+10:29 2010-10-27
+时间管理
+0, 10:15
+
+1, 本日
+1), 上传jpeg代码. 见"14:42 2010-10-26"6. 本来希望上午完成. 到了11:10也没有完. 只能下午再做了. 
+2), 看SMP. 见"11:16 2010-10-27".
+3), 下午会议. 
+4), 确认SBC8100板子价格. 见"14:51 2010-10-21"5.
+5), 项目经验, 查问题的思路, 见"20:06 2010-10-27"
+
+11:16 2010-10-27
+VC0882, arm, Cortex-A9, Cortex-A15, SMP
+1, Cortex-A9 SMP
+1), Individual Cortex-A9 processors in the Cortex-A9 MPCore cluster can be implemented with their own hardware configurations.
+2), 
+There are other configuration options that impact Cortex-A9 MPCore system integration. The major options are:
+• One or two AXI master port interfaces, with address filtering capabilities
+• An optional Accelerator Coherency Port (ACP) suitable for coherent memory transfers
+• A configurable number of interrupt lines.
+bamvor: Cortex-A9 TRM里面提到: 
+two 64-bit AXI master interfaces with Master 0 for the data side bus and Master 1 for the instruction side bus
+不知这个和上面的Cortex-A9 SMP TRM提到的两个AXI master是否是一回事. 
+3), Cortex-A9 Configuration, 下面的不懂
+Jazelle DBX extension per Cortex-A9 processor Full or trivial
+Shared Peripheral Interrupts (SPIs) 0-224, in steps of 32
+Accelerator Coherency Port
+Private Memory Region
+4), 多核的一致性问题
+(1), 为了保证一致性, 需要设置为write-back, shareable, normal memory. 
+1.5 About Cortex-A9 MPCore coherency
+Memory coherency in a Cortex-A9 MPCore is maintained following a weakly ordered
+memory consistency model.
+Cache coherency among L1 data caches of the Cortex-A9 processors in the cluster is maintained when the Cortex-A9 processors are operating in Symmetric
+Multi-Processing (SMP) mode. This mode is controlled by the SMP bit of the Auxiliary Control Register.
+To be kept coherent, the memory must be marked as Write-Back, Shareable, Normal
+memory. 
+Note: When the Shareable attribute is applied to a memory region that is not
+(2), 发出一致性操作广播的条件, 接收和执行一致性广播的条件: 
+1.5.3 Maintenance operations broadcasting
+All processors working in SMP mode on the same coherent domain can send and receive TLB and Cache Maintenance operations. The ARM Architecture Reference Manual gives detailed information on broadcast operations.
+A Cortex-A9 processor in the A9-MP cluster broadcasts broadcastable maintenance operation when it operates in SMP mode (ACTLR.SMP=1) and when the maintenance operation broadcasting is enabled (ACTLR.FW=1).
+A Cortex-A9 processor can receive and execute broadcast maintenance operations when it operates in SMP mode, ACTLR.SMP=1.
+2, Cortex-A9 TRM
+1), In the Cortex-A9 the VA and MVA are identical.
+A8里面VA和MVA是否相同?
+查A8 TRM, MVA和VA不同, 通过"Process ID"转换: 
+The lower bits of the VA indexes the instruction cache. The VA is translated using the Secure or Nonsecure Process ID, CP15 c13, to the MVA, and then to PA in the Translation Lookaside Buffer (TLB). The TLB performs the translation in parallel with the cache lookup. The translation uses secure descriptors if the core is in the Secure state. Otherwise it uses the nonsecure ones.
+查, ARM_ARM_7AR, p1244: 
+只有使用FCSE时, MVA和VA才会不同, FCSE在Cortex-A8中基本不使用, 所以A8中可以认为MVA和VA相同. 
+The term Modified Virtual Address relates to the Fast Context Switch Extension (FCSE) mechanism, described in Appendix E Fast Context Switch Extension (FCSE). Use of the FCSE is deprecated in ARMv6 and the FCSE is optional in ARMv7. When the FCSE is absent or disabled, the MVA and VA have the same value. However the term MVA is used throughout this section, and elsewhere in this manual, for ache and TLB operations. This is consistent with previous issues of the ARM Architecture Reference Manual.
+2), 今天看Cortex-A9 TRM还有一个收获, Programmer's Model里面有一个addressing, 是说arm请求指令或数据时如何寻址. 会有例子说明. 例如arm取指时的寻址过程. 
+原来总觉得Programmer's Model里面的东西很快, 看来还是原来理解不到位, 发现Programmer's Model里面的东西要认真看. \todo.
+
+20:06 2010-10-27
+(11:02 2010-11-11)
+(10:52 2011-1-5)
+项目经验, VC0882, VC0718, 查问题的思路; 总结, 文档; 软硬件划分
+软硬件划分, 定位是软件还是硬件问题, 硬件问题包括板级问题和芯片内部逻辑问题.
+1, 板级问题: 例如供电电压是否过低造成奇怪错误; 电流是否过大引起过流保护; 阻抗匹配; 电气连接是否正确, 板子是否稳定, 其它开发环境问题(PC软件和硬件: rvds等).
+电源问题参见"10:44 2010-11-11". 
+阻抗匹配参见原来VC0882环境调试中ddr问题. 
+2, 仿真有无问题. 
+3, 是确定性错误还是随机错误. 如果是数据确定性错误或者有一定规律, 从规律本身入手. 
+数据问题有规律遇到的问题: 可能是其它进程修改(718 sd复制错误是timer中断修改了memory数据). 可能是cache一致性问题(VC0882 shuyu cif问题, 882的0x0和0x80000000地址都进入的cache). 
+4, 联合相关模块讨论. 例如arm(mmu, cache), 总线, memory(ddr). 
+5, 如果代码是从其它环境移植的, 要考虑环境差异. 例如代码和链接脚本是否需要修改, 例如地址有没有越界, 有没有与具体硬件相关部分的变化(造成寄存器基址变化, 寄存器定义变化), 编译器版本变化导致的编译选项修改等等. 参见见"10:34 2011-1-5".
+
+11:54 2010-10-28
+VC0882, Linux, Android, 资料收集
+本邮件同时上传到"\\10.0.2.36\sqmshare\Document\Linux\android\杂\android_资料收集_20101028.txt"
+摘要: 下载了beagleboard 0xdroid kernel. beagleboard上面有android2.2移植, 但是资料少. 另外TI也有android开发包. 两个都可以关注一下: 
+1, 下载了kernel. (已经按照网站说明做了git clone和git checkout): 
+\\10.0.2.36\sqmshare\Document\Linux\android\source_sdkbeagle-0xdroid_kernel_20101027.tar.gz
+
+2, beagleboard rowboat也有2.2方案, 下面提供了下载方式
+http://code.google.com/p/rowboat/wiki/ConfigureAndBuild
+
+3, TI android, 目前是eclair(对应2.1版本)
+Texas Instruments Android Releases¶
+TI provides Android DevKit for all OMAP35x, AM35x, AM37x and DM37x
+based EVM and Beagleboard platforms. The releases can be found here.
+TI Android Eclair DevKit V1.0
+Next Release Oct 22nd (Features: Froyo, 3D graphics, Flash 10,
+Stagefright, etc)
+Any issues post your query directly to TI engineers on
+http://e2e.ti.com "Android"
+
+目前的TI eclair版本
+http://focus.ti.com/docs/toolsw/folders/print/androidsdk-sitara.html
+http://software-dl.ti.com/dsps/dsps_public_sw/sdo_tii/TI_Android_DevKit/01_00_00/index_FDS.html
+
+TI android eclair user guide
+http://processors.wiki.ti.com/index.php/TI-Android-%C3%89clair-DevKit-V1_UserGuide#Building_Android_Sources
+Follow the instructions provided here to install SGX (OpenGL) package
+into the filesystem
+http://code.google.com/p/rowboat/wiki/ConfigureAndBuild#Install_the_Android_Graphics_SGX_SDK_on_Host_Machine
+
+14:28 2010-10-28
+时间管理
+0, 11:00
+
+1, 本日
+1), 找I2C, SPI, UART, TPI, AUD, Clkrst 软件和测试同事. 见"15:12 2010-10-28"
+2), 准备明天下午zhaoyuan开会内容. 见"15:10 2010-10-28". 未完. 
+2), VC0882 Linux vdec copy数据到fb很慢. shuyu改为直接从用户空间传递. 
+
+
+15:10 2010-10-28
+VC0882, Linux, clkrst
+1, arm电源管理
+1), 时钟调整. cpu在独立的pll上(pll1), 使用pll6作为backup pll. 可以调整arm到任意频率. 
+2), arm中可以关闭的clock: NEON. 
+3), 功耗? \todo 问huangwei. 
+
+2, ddr
+降低功耗方法: 降低频率, 关闭dll(含200Mhz这个特殊频率关闭phy dll), 关闭odt, 进入self-refresh. 
+1), 频率
+ddrc: worse case 333MHz, typical 400MHz, best case 500MHz. 
+ddr phy: dll on: >100Mhz. 此外phy dll支持100Mhz, 200Mhz两个dll关闭的频率. 关闭dll降低功耗
+lpddr: 0-200, 无dll
+ddr2:  0-533, pll on: >125MHz. 
+ddr3:  0-1033. dll on: >125MHz. 这里有个问题. 0-125MHz是dll off, 300-333是ddr3要求的频率. 125-300能否工作? 
+2), odt
+阻抗匹配, phy和dram里面都有. 通常266MHz以下不需要, 以上需要. 与PCB板级设计有关. 
+882 FPGA测试: off 50mA, on 300mA @ 24MHz. 频率越高差异越大. 
+3), self-refresh. 进入self-refresh时功耗大约6uA. 
+退出self-refresh需要200-300cyle for ddr2, 500cycle for ddr3.         
+
+3, clkrst
+VC0882和VC0830时钟的区别. 882bus和ddrc工作在异步模式. clocksource配置灵活. 
+
+
+arm, ddrc电源管理. 
+
+pmu: normal, idle(gate arm and some modules), halt(gate all pso modules), sleep, power down. 电源管理可以利用idle(在cpu_idle()里面直接进入idle状态?). 
+
+15:12 2010-10-28
+VC0882, 模块自查: arm, clkrst, uart, spi, audio, tpi, kpd
+1, fengbeizhan邮件"VC0882 项目的思考和讨论"20101027_1117
+882 周一发现了一个非常严重的bug，是nfc仿真时发现ddr带宽在不紧不慢（当一个数据刚写出去，另一个数据刚好进来）时，ddrc在写memory时把数据会写错，且以后的写都会出错，这个bug对882的稳定性威胁非常大！icd会重新出一版进行测试。
+我也一直在反思，这个bug从上fpga那天就存在，为何我们在fpga上没有发现？这个bug出现的概率比较小，按道理我们在fpga上时完全可以碰到这种情况的；碰到这个情况时软件可能就会跑飞，是不是我们碰到这个问题了，我们就认为是fpga不稳定，就直接重新启动运行了，而重新启动就可能不会再碰到这个问题了。
+鉴于此，在882马上要tape out的关口，我们需要所有mail 收件人里的人员，都要做如下的几项事情：
+1）想想在以前调试或测试中是不是存在这种不稳定的情况或比较奇怪的情况；
+2）大家前一段时间进度比较赶，导致是不是还有那些疑问没有搞清楚；
+3）对882这个项目，站在自己的角度还有那些担心的地方；
+4）大家手头882这个项目，是不是还有那些工作没有完成；
+大家先想一想，接着我们会按照如下的分组分别讨论，每个分组也指定了具体的负责人；请各位负责人一定负起责任，争取在本周里，把这个事情圆满的完成。
+Icp讨论分组list以及小组负责人：
+1）usb 小组： lingming
+2）decode/encode 小组：caijin
+3）video小组：shuyu、xingjie
+4）bootloader、audio小组： dongliang
+5）外设、clock等小组：zhangjian
+6）存储、gpu等小组：beizhan
+大家有什么好的建议，欢迎随时提出！
+如果还有什么补充的，请xuelian、wangxin、zuoxing、yinong补充！
+
+2, 我今天找个模块owner都明确了一下, 各owner会详细过一遍. 
+1), UART
+loop test有些波特率会丢失, 598也是如此.
+2), boxue: audio, tpi正在查. 
+3), kpd没有人负责, 我只能自己看一下. 
+4), arm, clkrst: 需要我自己看. 
+arm写现有的两个问题: timer interrupt问题和memory访问data abort问题. 
+clkrst需要确认仿真情况. 
+
+3, (18:27 2010-10-29)
+我和i2c, tpi, uart, spi, clkrst, arm这些模块的owner各自看了各模块的mas, testplan和原有的issue. 觉得没有遗留问题. 这些模块我不太了解, 感觉很难判断, 所以也没有召集大家开会. 
+
+kpd这个模块. 由于zhangpu走了, 我也是不太了解. 查了一下kpd的issue, 没有IC本身的bug. 
+
+我担心的地方: 
+1), arm: 打开mmu和cache时, arm memcpy时可能data abort. 这个我会看一下能不能复现. 如果能复现, 会给仿真仿.
+2), timer, irq: timer irq处理问题. 这个之前和仿真和组内都讨论过了, 还是有些担心, 在panda_os大环境里面可以复现, 在自己小环境里面没法复现, 我会再花时间看看能不能复现. 
+
+16:16 2010-10-28
+VC0882, memory, ddrc与bus的同步异步模式
+1, yangzuoxing邮件"答复: VC0882: 关于DDR 与总线的同步模式"20101028_1113
+HI, ALL,
+882的DDR与内部总线有两种工作模式：同步模式和异步模式。
+同步模式的好处是LATENCY能小4拍，不好的地方就是DDR与BUS的频率一定要一样，这一点上不如异步模式灵活。
+异步模式的好处就是BUS,DDR的频率可以不一样，使用更灵活一些，如果使用DDR2/3，并且要支持低功耗模式，一定要使用异步模式。
+我们原来的计划是LPDDR使用同步模式，DDR2/3使用异步模式。
+为了在异步模式支持到333MHZ,我们将DDR的CLOCK TREE做得很短， 这样DDR与BUS CLOCK TREE就很不平衡，差了很多。造成同步模式下不能达到200MHZ的频率。目前能做到133MHZ.
+考虑到目前项目的SCHEDULE，我们打算放弃继续优化同步模式的工作频率。
+也就是说，将来就不建议AE使用同步模式，就一直使用异步模式好了。
+同步模式的LATENCY小4拍，希望带来的一个直接好处是DDR的UTILIZATION能好一些。但根据前一段时间的仿真结果来看，影响比较小。
+YANGLEI会比较一下LPDDR在200MHZ的情况下，同步，异步的效率差异。但这个结果要5天后才能出来。
+大家看看，如果效率上没有大的影响，去掉同步模式是否能接受？
+请在本周5 18:00前给一个反馈。
+THANKS.
+YANG ZUOXING
+
+2, zhangjian2lidongliang"答复: VC0882: 关于DDR 与总线的同步模式"20101613
+1), Bootloader里面只支持同步到异步的切换.  同步频率分配是160, 120, 60三组. 如果同步模式最高只有133MHz, 160对应的strappin配置就没法工作. 
+2), 后面dr. yang又说去掉, 不是不支持同步模式吧. 我记得当初说系统上电时没法保证ddr phy立即可用. dr,yang邮件原文: 
+大家看看，如果效率上没有大的影响，去掉同步模式是否能接受？
+
+3, 我上面这个邮件有问题. bootloader上电是异步. 所以882不支持同步模式对bootloader没有影响. 
+
+21:13 2010-10-28
+VC0882, Linux, 加压测试
+1, usb版本. 使用vimc_sd_defconfig编译, 启动到sd probe出错, data abort. 
+使用的是今天晚上8点的kernel CVS版本. CF code版本: 
+vc0882_rev0_01102702_02080900_USB2FPGA_UHOST_noCifGpuEncDec_tag20101026_1500.
+FPGA台子编号: 8. 
+编译好的映像位于"\\10.0.2.36\sqmshare\Document\Linux\daily_backup\fail_case\20101028_882_kernel_boot_fail_in_sd_probe". 
+
+2, 今天xiaotao测试Linux中启动DMA接收数据三个字符会丢中间的字符. 请xiaofan帮忙查一下DMA使用有无问题. 
+
+3, 今天测试arm jpeg解码程序. 只有第一次解码后串口死(kernel没有死). 后面4次都解码和比较正确. 
+
+4, PS没有发信: 
+PS: 
+考虑到Linux系统设计因素多, 出了问题不好查, 我建议多备份一些典型的映像, 便于出问题时对比. 
+请大家把882 Linux典型的映像放到这个目录(\\10.0.2.36\sqmshare\Document\Linux\daily_backup). 包括zImage, vmlinux, System.map, kernel config, kernel CVS checkout时间, CF code版本等.
+典型的fail_case放到fail_case目录. 
+
+16:27 2010-10-29
+时间管理
+0, 12:30(上午体检)
+
+1, 本日
+1), 1h: zhaoyuan android clkrst讨论, 下周四上午讨论文档初稿. 见"研发记录簿"p141. \todo 整理.
+2), 过模块issue并和boxue, xiaofan确认882有无问题. 见"15:12 2010-10-28".
+
+17:59 2010-10-29
+Linux 2.6.36 内核将支持 国产君正 XBurst JZ4740 CPU
+http://www.openmobilefree.net/?p=644
+
+19:40 2010-10-29
+工作还是觉得没有重点。
+加压测试进展：yangmin已经使用了pp做格式转换和downsizer。目前down sizer是从1280*720 to 800*450. 解第一个frame后，segmentation fault. 其实可以用coredump调试。当时没反应过来。
+dongliang sd修改需要理解。是否dma和cmd index都写入才有时钟？

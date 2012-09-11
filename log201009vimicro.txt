@@ -1,0 +1,2182 @@
+﻿
+9:00 2010-9-1
+Linux, 设备模型, 阅读"Professional Linux Kernel Architecture.pdf" chapter 6: Device Drivers, 设备号从16bit到32bit的变化, dev_t, \todo
+设备号从16bit(8:8) to 32bit(12:20), 为了兼容原有文件系统, kernel内部和外部bit定义不同, 外部: 0..7 minor, 8..19 major, 20..31 minor高位.  \todo 在什么地方做的转换, vfs?
+转换函数: new_encode_dev, new_decode_dev.
+
+10:08 2010-9-1
+时间管理
+0, 9:50-23:40
+
+1, 本日
+1), 20' Linux阅读, 见"9:00 2010-9-1".
+2), 发信. 提醒今天和明天下午Porting文档讨论. 见"10:12 2010-9-1".
+3), 和zhicheng确认有无porting基本文档. 无. 自己写了一个, 见"10:33 2010-9-1"
+4), 下午: Porting讨论. 见"14:41 2010-9-1".
+5), 1h: 分析IRQF_VALID作用. 见"14:41 2010-9-1"4
+6), VC0718中断性能评估, 可以使用OMAP3530测试, 见"20:42 2010-9-1".
+7), 继续debug Linux-2.6.35.2移植. 见"21:03 2010-9-1"
+
+10:12 2010-9-1
+VC0882, VC0718, Linux porting, 发信
+hi, all
+今天下午和明天下午两点在第七会议室讨论porting文档, 这次主要讨论移植的guideline. 今天下午讨论移植基础环境(machine_desc, 文件功能等)和uart, 明天下午讨论timer和irq. 
+请大家把整理的文档发出来. 
+
+hi, zhicheng
+
+下面这篇文章是咱们原来找到的, timer架构的演进说的很清楚.
+\\10.0.2.36\sqmshare\Document\Linux\kernel\timer\ols2006-hrtimers.pdf
+
+10:33 2010-9-1
+VC0882, Linux porting, 移植基本文档, 位置: "\\10.0.2.36\sqmshare\Document\Linux\kernel\porting\移植最小环境.txt"
+本文档说明移植需要添加的必备文件和结构体, uart, irq, timer三个模块的具体移植分析再另外文档说明. 
+Linux kernel在arm soc上运行, 至少需要timer, irq, uart三个模块以及几个函数和宏定义. 除uart模块外, 其它都在arch/arm目录下. 
+移植文档中可以加入对于硬件的要求, 例如timer的continues mode, uart寄存器定义尽量通用. 
+1, 添加mach-xxx和plat-xxx目录
+mach-xxx目录是针对某个SOC系列的移植代码, 例如Marvell的pxa系列, TI的OMAP2-OMAP4系列, Samsung的S3C241x, S3C244x系列, VImicro的VC088x, VC071x系列. 基于此系列的板子, 在mach-xxx/board-xxx.c描述. board-xxx.c中的machine_desc是移植中最重要的结构体. 
+如果不同SOC系列之间有共同点, 例如VC0882和VC0718有很多功能模块, 可以把公共部分放到plax-xxx目录, 例如定义plat-vc0xxx. 
+但对于kernel来说, 还是会从mach找所需的文件. 
+
+添加目录后需要修改Kconfig和Makefile, kernel中添加其它文件或目录也是同样道理: 
+arch/arm/Kconfig: 
+config ARCH_VC088X
+        bool "Vimicro VC088X"
+        select GENERIC_TIME
+        select GENERIC_CLOCKEVENTS
+        help
+          Support for Vimicro's VC088X platform (VC0882).
+
+source "arch/arm/plat-vc088x/Kconfig"
+source "arch/arm/mach-vc0882/Kconfig"
+
+arch/arm/Makefile: 
+ machine-$(CONFIG_ARCH_VC0882)     := vc0882
+    plat-$(CONFIG_ARCH_VC088X)     := vc088x
+注: 这里的vc0882表示mach-vc0882目录, vc088x表示plat-vc088x目录. 
+
+2, 添加board-xxx.c
+如前所述, board-xxx.c对应具体的板子, 例如VC0882项目中FPGA板子对应arch/arm/mach-vc0882/board-fpga.c, 其中最重要的就是machine_desc结构体, 使用MACHINE_START和MACHINE_END宏定义这个结构体: 
+MACHINE_START( VC088X, "Vimicro VC0882 FPGA Board" )
+        .phys_io      = 0x60000000,
+        .io_pg_offst  = (( 0xf0000000 ) >> 18 ) & 0xfffc,
+        .boot_params  = 0x80000100,
+        .map_io       = vc088x_map_io,
+        .init_irq     = vc088x_init_irq,
+        .timer        = &vc088x_timer,
+        .init_machine = vc0882_fpga_init,
+MACHINE_END
+这里列出的都是必要项, 下面逐项说明含义
+1), MACHINE_START( VC088X, "Vimicro VC0882 FPGA Board" )
+定义nr和name两个变量: 
+	.nr     = MACH_TYPE_VC088X,
+	.name   = "Vimicro VC0882 FPGA Board",
+nr由arch/arm/tools/gen-mach-types脚本从arch/arm/tools/mach-types生成到arch\arm\include\asm\mach-types.h(35.2 kernel已经改为生成到arch\arm\include\asm\generated\mach-types.h, 前者include后者, 35.3移到了include\generated\mach-types.h).
+kernel启动时调用__lookup_machine_type查找到对应的nr, 确定machine_desc. 
+所以需要在mach-types添加nr, 例如如下方式定义了nr是2690: 
+vc088x                  MACH_VC088X             VC088X                  2690
+生成的mach-types.h: 
+#define MACH_TYPE_VC088X               2690
+2), 定义io空间基址(对于arm SOC一般是寄存器基址)
+.phys_io      = 0x60000000,
+3), 定义io空间虚拟地址的page offset: 
+.io_pg_offst  = (( 0xf0000000 ) >> 18 ) & 0xfffc,
+4), 定义启动参数(tags)偏移: 
+.boot_params  = 0x80000100,
+5), 定义io(寄存器)映射函数: 
+.map_io       = vc088x_map_io,
+6), 定义irq初始化函数(主要是注册irq, 见irq文档)
+.init_irq     = vc088x_init_irq,
+7), 定义system tick timer指针, 
+.timer        = &vc088x_timer,
+8), 定义SOC初始化函数, 
+.init_machine = vc0882_fpga_init,
+9), 这些函数的调用关系:
+start_kernel() 
+    -> setup_arch() 
+        ->paging_init()(arch\arm\mm\mmu.c)
+            ->bootmem_init(): 根据memory配置得到high_memory地址
+            ->devicemaps_init()
+				->mdesc->map_io()(vc088x_map_io)
+        -> system_timer = mdesc->timer;//(&vc088x_timer)
+    -> init_IRQ()
+        -> machine_desc.init_irq()(vc088x_init_irq)
+	-> time_init()(arch/arm/kernel/time.c) -> system_timer->init()
+    -> rest_init() -> kernel_init() -> do_basic_setup() -> do_initcalls() -> ("arch_initcall") ->init_machine()(vc0882_fpga_init)
+    arch_initcall并不是一个函数, 是把init_machine放到initcall section的第三部分.
+
+3, 添加其它必要文件:
+这些文件主要是定义一些宏或实现一些底层函数, 都比较简单: 
+1), mach/timex.h: 
+这个文件用于定义CLOCK_TICK_RATE:
+#define CLOCK_TICK_RATE         (HZ * 100000UL)
+2), mach/memory.h, 定义memory的物理地址偏移:
+#define PHYS_OFFSET             UL(0x80000000)
+3), mach/vmalloc.h, 定义vmalloc区域的结束地址:
+#define VMALLOC_END       (PAGE_OFFSET + 0x38000000)
+这个end是从omap2拿来的, 没搞清楚为什么要设为这个数, 反正到"feffffff"之前都是vmalloc区域和platform区域. 可能将来718会需要更大区域吧. 
+4), mach/irqs.h: 定义NR_IRQS
+5), 底层irq处理, 主要是得到irq的offset, 定义在entry-macro.S
+6), system.h, 需要实现arch_idle和arch_reset.
+7), 缺少文件arch/arm/mach-vc088x/Makefile.boot(copy from mach-omap2):
+  zreladdr-y		:= 0x80008000
+params_phys-y		:= 0x80000100
+initrd_phys-y		:= 0x80800000
+8), ucompress.h, zImage解压缩时需要.
+9), mach/clkdev.h, linux-2.6.35下需要. 定义__clk_put, __clk_get.
+
+4, 可选文件:
+1), mach/hardware.h: 寄存器列表.
+2), mach/debug-macro.S: lowlevel debug. 
+3), mach/io: IO_ADDRESS, 同时include hardware.h
+
+14:41 2010-9-1
+VC0882, Linux, 移植讨论: 移植基本文件, uart, irq: IRQF_VALID, IRQF_NOAUTOEN
+1, set_termios: 必须调用uart_update_timeout. char_time.
+触发start_tx后, 必须发送完xmit缓冲中所有数据. 
+
+2, 其他:
+1), Documentation\devices.txt, 里面有已分配的设备号. 其中4(tty), 64是第一个Uart.
+
+3, 今天讨论的遗留问题:
+1), VMALLOC_END应当如何确定? 
+2), break_ctrl起什么作用? 分析uart流控的接口. 
+3), tty相关设备文件的作用和关系: 
+/dev/tty: c, 4, 0-63: virtual console
+/dev/ttyS, c, 4, 64-255: Uart cosole
+/dev/console: c, 5, 1: 
+/dev/pty: c, 5, 2, psudo console
+目前理解是/dev/ttyS供printk使用, /dev/console供printf使用. 
+/dev/pty供telenetd(可能还包括sshd?)使用, 但telenet实际使用的端口应该是/dev/tty设备. 
+
+4, irq
+和dongliang讨论machine_desc.init_irq()时set_irq_flags(i, IRQF_VALID);的作用.
+结合网上资料和代码确认, IRQF_VALID表示允许注册irq, 如果不设置IRQF_VALID, request_irq会返回EINVAL. 具体如下: 
+set_irq_flags首先会设置"IRQ_NOREQUEST | IRQ_NOPROBE | IRQ_NOAUTOEN"到desc->status, 如果看到IRQF_VALID会去掉desc->status的IRQ_NOREQUEST(整个过程由desc->lock保护): 
+	desc->status |= IRQ_NOREQUEST | IRQ_NOPROBE | IRQ_NOAUTOEN;
+	if (iflags & IRQF_VALID)
+		desc->status &= ~IRQ_NOREQUEST;
+	if (iflags & IRQF_PROBE)
+		desc->status &= ~IRQ_NOPROBE;
+	if (!(iflags & IRQF_NOAUTOEN))
+		desc->status &= ~IRQ_NOAUTOEN;
+在注册irq实际handler时, 如果存在IRQ_NOREQUEST, request_irq()返回-EINVAL: 
+request_irq()->request_threaded_irq():
+	if (desc->status & IRQ_NOREQUEST)
+		return -EINVAL;
+注: 
+以上分析基于CONFIG_GENERIC_HARDIRQS定义的情况, 包括arm在内的多数架构都有定义.
+
+参考文档: arm linux 下中断流程简要分析--初始化 
+http://blog.csdn.net/aaronychen/archive/2008/09/03/2874643.aspx
+
+另外, 据文档嵌入式linux的中断函数实现和分析(http://blog.csdn.net/myleeming/archive/2008/10/20/3111526.aspx): 
+set_irq_flags(i, IRQF_VALID | IRQF_PROBE);//如果设置为IRQF_VALID，则表示此中断可用，设置为IRQF_PROBE，则表示此中断可探测，如果设置为IRQF_NOAUTOEN则表示不能自动enable此中断
+
+20:42 2010-9-1
+VC0882, VC0718, arm, 中断性能评估, 续, OMAP3530也开放了中断的软件测试寄存器
+hi, xiaotao
+
+OMAP3530也开放了中断的软件测试寄存器, 咱们可以同时在OMAP3530上测试中断性能. OMAP3530与VC0882的区别是L2是256K, 总线是L3, L3不是AMBA协议. 
+寄存器功能描述见datasheet 10.4.1.1 Input Selection: 
+A software interrupt is generated if the corresponding bit in the MPU_INTC.INTCPS_ISR_SETn register is set (register bank number: n = [0,2] for the MPU subsystem INTCPS, 96 incoming interrupt lines are supported). The software interrupt clears when the corresponding bit in the MPU_INTC.INTCPS_ISR_CLEARn register is written. Typical use of this feature is software debugging.
+
+OMAP3530 datasheet: 
+36: "Document\SOC\TI OMAP3530\芯片datasheet\TI OMAP35x Applications Processor.pdf"
+
+21:03 2010-9-1
+VC0882, Linux porting, 自己学习Linux-2.6.35.2kernel, 续, 调试
+1, 上次是在calibrate_delay中等不到tick. 今天至少要完成timer的功能. 
+2, timer debug:
+1), 发现timer0没有开, 而且set_next_event和set_mode也有问题. 
+2), vc1600_timer_hw_init()的write写成了writew, 应该是writel: 
+    writel( (1 << VIM_TIMER_0 ), IO_ADDRESS(TIMER_TMRSTART));
+    writel( (1 << VIM_TIMER_0 ), IO_ADDRESS(INTC_UNMASK_L));
+3), 没有进入过set_next_event, 所以timer中断不会来. 
+来中断后, 需要清timer二级中断. 
+另外, irq模块明明没有中断, 为什么总是在irq处理函数中? 
+4), CLOCK_EVT_FEAT_PERIODIC有问题, 注释之, 这样系统只能用CLOCK_EVT_FEAT_ONESHOT:
+set_next_event中64bit timer的高32bit一直是0, 感觉是类型问题. 
+5), get_irqnr_and_base加入了返回irqstat, 不清楚是否有用, 反正现在能到kernel_init了. \todo 继续实验. 
+6), 5)修改后, 有一次可以跑到"vimc_serial_init_port()", 其余情况就跑不到了. 加入low level debug. 
+7), uart初始化有问题, 为了简化先改为在map_io映射, 这样便于实验. 
+发现vimc.c根本没有编译...
+编译出错, 明天继续查. 
+8), 今日总结: 今天kernel已经可以运行到do_initcall, 明天需要先加上printassci或early printk然后调试uart.
+
+21:24 2010-9-1
+面试, 今天面试一个唐桥公司的leader, 他们公司的监控芯片的video codec采用独立的ddr, 这样很多处理简化很多. 
+
+10:33 2010-9-2
+时间管理
+0, 10:30
+
+1, 本日
+1), 30' 整理下周需要完成的工作. 
+2), 下午porting讨论后确定机制要继续分析: 
+(1), 中断的机制我和dongliang会分析, 最近VC0718中断性能评估正好用到. 
+(2), timer机制zhizheng已经分析差不多了, 完成就行了. 
+(3), uart机制可以等xiaotao VC0718移植完成后再继续分析. 
+(4), 讨论完成后问dongliang sd/mmc driver有没有什么问题, 是否需要帮忙. 
+3), 30' VC0882 ddr切频问题, 见"16:40 2010-9-2".
+4), 20' 帮yangmin看kernel malloc后如何给user使用? 可以参考vfb.c和fbmem.c里面的mmap实现自己的mmap, 具体还需要看一下. 
+5), 给arm发邮件, 问trace问题. 
+6), 20' serial vimc.c部分编译通过. 明天调试. 
+
+2, 次日和其它计划
+0), 明日:
+(1), 搭Linux环境.
+(2), VC0718中断性能评估: 给xiaotao提供arm:bus=24:24和24:12的FPGA版本; 研究Linux中断处理过程各部分消耗的时间: 这个可以给arm发邮件问一下, trace和rvdebugger能否直接测量. 
+(3), 完成Linux-2.6.35.2的调试. 这个估计完成kernel启动最多需要2天. 还是希望这周完成. 
+1), 下周计划:
+(1), arm和bus的问题. 这个拖的时间比较长了. 考虑下周发信. 包括: 和kongyingqi讨论device属性问题. 1), device属性问题: 如果寄存器device属性debug完成提醒lingming更新718环境. 回复"718里面环境需要修3改的内容"20100720_1416.  实验BTB和write alloc效果. 给ICD, ICV发信, 解决疑问问题. L2对系统性能的影响: 开不开L2的write allocate, 会对系统有多大影响? Linux中L2策略如何? 问一下suxin. 
+(2), driver spec(cache, mmu, interrupt), 本来应该上周完成的. 计划周末完成. 
+(3), arm总结. 本来希望移植完成后再做. 目前看难道需要并行? 不希望并行. 
+2), 以下是下下周开始的计划
+1), Application_Initialize()有疑问需要查: g_first_available_memory传递问题. 
+3), 整理设备模型讨论的遗留问题("14:18 2010-08-30"2), 包括mengfandong 设备模型example bug. 
+4), neon结果整理，和caijin讨论解码不对的事情；
+5), yangxing应该可以开始L2 cache lockdown debug了. 
+
+11:23 2010-9-2
+VC0882, trace, arm, Cortex-A8, PB-A8, profiler
+1, arm邮件"RE: arm profiler PB-A8 sample (467210)"20100714_0646
+[From Ralph Fulchiero - ARM Technical Support]
+Please quote reference number 467210 when referring to this issue.
+Dear Zhang Jian,
+You wrote:
+> Is there a PB-A8 sample script and document for arm profiler?
+No - we do not have a Profiler script for the PB-A8.  
+> I have already got the arm profiler result in RTSM Cortex-A8 EB, but
+fail in PB-A8.
+> 
+> Do i need to run a trace etm init script before run the arm profiler
+from arm workbench? If I run 
+> the init script, workbench say device in use. But if I do not run the
+init script, workbench 
+> download image fail(no error message) and no profiler result.
+A good first step for profiling is to confirm that you can trace your target with RVT2 in RVD.  We know that in May you had another support
+case (#463399) where you were able to get trace working in RVD.   
+Can you still trace the target from RVD?
+If so, then you should be able to capture a profile.  You do not need to run the ETM script from the ARM Profiler.  However, the board must be configured to a suitable clock speed for tracing as described in the following FAQs:
+	http://armassist.arm.com/knowledge/viewdoc.html?id=13408
+	http://armassist.arm.com/knowledge/viewdoc.html?id=13409
+We recommend setting the clock appropriately in RVD, verify that RVT2 can capture a valid trace in RVD, disconnect from the PB-A8 in RVD and then try and perform a profile (without power cycling the board).  
+You can not have an active session with RVD while simultaneously trying to profile.  This may have been the reason why you received the "device in use" message.
+Please let us know what progress you make.
+
+2, 继续问, Zhangjian邮件"答复: arm profiler PB-A8 sample (467210)"20100902_2027
+Hello, Fulchiero 
+
+Thanks your reply. 
+
+> We know that in May you had another support
+> case (#463399) where you were able to get trace working in RVD.   
+> Can you still trace the target from RVD?
+The case is closed. And, the trace is ok.
+> the board must be configured to a suitable clock speed for tracing as 
+> described in the following FAQs:
+>	http://armassist.arm.com/knowledge/viewdoc.html?id=13408
+>	http://armassist.arm.com/knowledge/viewdoc.html?id=13409
+Thanks, but I cannot reach the link right now. Could you send me these document as accessary?
+> We recommend setting the clock appropriately in RVD, verify that RVT2 can 
+> capture a valid trace in RVD, disconnect from the PB-A8 in RVD and then try 
+> and perform a profile (without power cycling the board).  
+Yes, i try it, but no useful reponse in the profiler. Do we have the getting started documantion for the profiler in Cortex-A8 base system?
+
+There is also a profiler menu item in the analysis in Rvdebugger. Does it do the same thing in the workbench? 
+It is non-selectable in my analysis windows while the trace is ok. why? 
+
+PS: Currrently, I try to use the profiler in our Cortex-A8 FPGA system not in PB-A8 . 
+
+Thanks in advance.
+
+Zhangjian
+
+16:35 2010-9-2
+arm, arm7TDMI-s, 含义(网上中文翻译, 仅供参考)
+http://zhidao.baidu.com/question/14755698
+T-支持16 为压缩指令集Thumb
+D-支持片上Debug
+M-内嵌硬件乘法器(Multiplier)
+I-嵌入式ICE,支持片上辅助调试 
+
+s: 表示可综合. 
+
+16:40 2010-9-2
+VC0882, memory, ddr, clock, clkswitch
+zhangjian邮件"答复: vc0882：ddr2 clock switch 0831"20100902_1641
+DMA搬运程序为什么会跑死? 是DMA搬运后的memory比较出错还是dma搬运前就死了, 如果是前者, 就需要判断是切频问题还是memory问题. 因为可能有部分指令进入cache, 所以切频后跑了几条指令后从ddr取数时才会死. 
+之前830, 816项目经验是首先定位出是切频问题还是memory配置问题, 可以通过rvdebugger直接配置到切频后的ddrc/ddr状态, 然后做memory的压力测试确认memory是否稳定, 如果memory不稳定说明和切频没关系. 去查memory问题. (软件跑死还是比对出错其实一样的, 只是一个读指令出错, 一个是读写数据出错).
+如果memory稳定, 多数就是切频流程问题, 可以在sram中反复做ddr切频, 看看切频是否出错. 
+下面邮件提到切频前DMA ok, 切频后DMA fail. 这个切频前后的ddrc状态是相同的么? 另外测试次数会不会有点少, 之前项目做dma测试至少5000-10000次, 每次大约几M的数据量. 也做过1-2天的切频和DMA的测试, 
+软件跑死可以根据 882 CVS文档 D:\VC0882\document\ VC0882 environment freshman guide.doc的“7 出错时要看哪些寄存器”分析, 这个yangxing清楚. 我能想到的就是再分析一下软件跑飞的地址和出错指令有没有规律, 如果没有规律软件就很难debug了. 
+
+15:52 2010-9-3
+时间管理
+0, 10:00
+
+1, 本日
+1), 搭Linux环境.
+2), 完成Linux-2.6.35.2的调试. 遇到问题较多, 看来短期不会完成, 以后只能利用晚上时间debug了. 见"21:47 2010-9-3"
+
+17:24 2010-9-3
+VC0882, VC0718, Linux, 工作日志, 工作总结
+以后计划每天写工作日志, 记录Linux开发每个人的进度
+1, 2010年9月3日: 
+1), 把Linux机器搬到原来lingming usb实验室, 有两个2FPGA一个4FPGA. 
+在新的实验室, xiaotao试通了nfs挂载, 在10.0.13.198建立的nfs目录. 会总结nfs使用(包括启动时挂载和启动后挂载), 问aiguo/beizhan解决网卡, 网线和hub(882 FPGA网卡挑hub)不够问题. 
+2), 遇到的问题:
+(1), 启动后mount nfs提示类似如下提示信息: 
+RPC: failed to contact local rpcbind server (errno 512).
+RPC: failed to contact local rpcbind server (errno 5).
+rpcbind: server localhost not responding, timed out
+RPC: failed to contact local rpcbind server (errno 5).
+按照"11:04 2009-10-10"4的方式mount参数加入"-o nolock", 不加其他参数. 
+根据文档有两个情况需要加入"nolock", 一个是mount /var目录, 一个是NFS servers不支持NLM协议:
+NLM locking must be disabled with the nolock option when
+using NFS to mount /var because /var contains files used
+by the NLM implementation on Linux.   Using  the  nolock
+option  is  also  required  when mounting exports on NFS
+servers that do not support the NLM protocol.
+(2), dm9000不是每次都能link up成功. 
+看open代码发现没有open每次都返回0(0表示成功), 这样可能会使议栈认为open成功, 
+实际不是每次都成功. xiaotao对比cs8900发现后者的open会区分成功还是失败.
+3), usb  host发现没开时钟.
+4), yangmin vdec编译完成, 尚未运行.
+
+2, 本周:  linux porting guideline完成.
+
+21:47 2010-9-3
+VC0882, Linux移植, uart, memory信息不正确
+1, debug-macro.S里面访问uart寄存器使用ldrb, strb是不对的, 应该使用ldr和str. 不知pxa为什么这么写, 难道pxa中这个寄存器就是8位的?
+2, map io时提示: 
+<4>BUG: mapping for 0xc02f3f1c at 0xc029d026 overlaps vmalloc space
+<4>BUG: mapping for 0xc02f3f1c at 0xc029d026 overlaps vmalloc space
+<4>BUG: mapping for 0xc02f3f1c at 0xc029d026 overlaps vmalloc space
+<4>BUG: mapping for 0xc02f3f1c at 0xc029d026 overlaps vmalloc space
+一计算, 发现还真是重合了, 
+VMALLOC_END = PAGE_OFFSET + 0x38000000 = 0xf8000000. 
+#define VMALLOC_END	  (PAGE_OFFSET + 0x38000000)
+改为: 
+#define VMALLOC_END	  (PAGE_OFFSET + 0x30000000)
+3, uart丢数, 简单起见, busyuart中加入了十几个nop. 没有用. 去掉nop. 
+4, memory layout不正确, 修改CMDLINE:
+CONFIG_CMDLINE="console=ttyS0,115200n8 mem=128M"
+修改前: 
+<6>Memory: -1070645420MB = 3224321876MB total
+<5>Memory: 3224321876k/0k available, 3223964614k reserved, 3224321876K highmem
+<5>Virtual kernel memory layout:
+    vector  : 0xc02f3f54 - 0x00000000   (-1071002621 kB)
+    fixmap  : 0xc02f3f54 - 0x00000001   ( 842 kB)
+    DMA     : 0x00000cb6 - 0xc000c028   (-1071002621 MB)
+    vmalloc : 0xffff0000 - 0xffff1000   (   4 MB)
+    lowmem  : 0xfff00000 - 0xfffe0000   ( 896 MB)
+    modules : 0xffc00000 - 0xffe00000   (   2 MB)
+      .init : 0xc1800000 - 0xf0000000   ( 744 kB)
+      .text : 0xc0000000 - 0xc1000000   (  16 kB)
+      .data : 0xbf000000 - 0xc0000000   (  16 kB)
+5, 修改后打印信息仍然很乱:
+<5>d?"àCPU: ?—à?à?A [00000000] revision -1071006457 (ARMv?—à?à?A), cr=c0310340
+CPU: ;?)à;?)à data cache, (null) instruction cache
+Machine: >?)à]?)à?
+
+<4>Warning: bad configuration page, trying to continue
+Memory policy: ECC ??)à€?àabled, Data cache (null)
+<7>On node -1070645540 totalpages: 0
+<7>free_area_init_node: node -1070645540, pgdat 00000000, node_mem_map c02a1233
+<7>  u*à zone: 0 pages used for memmap
+<7>  u*à zone: 0 pages reserved
+<7>  u*à zone: 0 pages, LIFO batch:3223982837
+Built -1070645316 zonelists in (null) order, mobility grouping Built %i zonelist  s in %s order, mobility grouping %s.  Total pages: %ld
+.  Total pages: -1070645316
+<5>Kernel command line: ?à Dà
+<6>{?)à hash table entries: 0 (order: -1070984737, 3224321916 bytes)
+<6>^**à hash table entries: 0 (order: -1070984737, 3224321916 bytes)
+<6>1+*à hash table entries: 0 (order: -1070984737, 3224321916 bytes)
+<6>Memory: -1070645420MB = 3224321876MB total
+<5>Memory: 3224321876k/0k available, 3223964550k reserved, 3224321876K highmem
+<5>Virtual kernel memory layout:
+    vector  : 0xc02f3f54 - 0x00000000   (-1071002685 kB)
+    fixmap  : 0xc02f3f54 - 0x00000001   (1087 kB)
+    DMA     : 0x00007bc1 - 0xc000c028   (-1071002685 MB)
+    vmalloc : 0xffff0000 - 0xffff1000   (   4 MB)
+    lowmem  : 0xfff00000 - 0xfffe0000   ( 896 MB)
+    modules : 0xffc00000 - 0xffe00000   (   2 MB)
+      .init : 0xc8800000 - 0xf0000000   ( 632 kB)
+      .text : 0xc0000000 - 0xc8000000   ( 128 kB)
+      .data : 0xbf000000 - 0xc0000000   (  16 kB)
+<6>Hierarchical RCU implementation.
+<6>     Verbose stalled-CPUs detection is disabled.
+<6>NR_IRQS:-1070645308
+<6>VC1600 clockevent source: 3224321964 Hz
+Console: ×V+àJ+àP (null) -1070901538x-1070645340
+<6>Calibrating delay loop... <c>3224321972.00 BogoMIPS (lpj=3223959308)
+<6>pid_max: default: 3224321980 minimum: 0
+Mount-cache hash table entries: 3224321924
+<6>CPU: Testing write buffer coherency: ok
+<6>NET: Registered protocol family -943620204
+6, 看所有头文件,
+#define VMALLOC_END	  (PAGE_OFFSET + 0x30000000)
+修改为
+#define VMALLOC_END	  (0xe0000000)
+7, 修改后没有进展, 与OMAP3530对比. 
+Linux version 2.6.35.2-svn9 (zhangjian@icp-desktop) (gcc version 4.4.1 (Sourcery G++ Lite 2010q1-202) ) #1 Sat Sep 4 07:02:47 CST 2010
+CPU: ARMv7 Processor [412fc083] revision 3 (ARMv7), cr=10c03c7f
+CPU: VIPT nonaliasing data cache, VIPT nonaliasing instruction cache
+Machine: OMAP3 Beagle Board
+Memory policy: ECC disabled, Data cache writeback
+OMAP3430/3530 ES3.0 (iva sgx neon isp )
+SRAM: Mapped pa 0x40200000 to va 0xfe400000 size: 0x100000
+Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 32512
+Kernel command line: console=ttyS2,115200n8 ramdisk_size=8192 root=/dev/ram0 rw rootfstype=ext2 initrd=0x81600000,8M nohz=0ff
+PID hash table entries: 512 (order: -1, 2048 bytes)
+Dentry cache hash table entries: 16384 (order: 4, 65536 bytes)
+Inode-cache hash table entries: 8192 (order: 3, 32768 bytes)
+Memory: 128MB = 128MB total
+Memory: 119508k/119508k available, 11564k reserved, 0K highmem
+Virtual kernel memory layout:
+    vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+    fixmap  : 0xfff00000 - 0xfffe0000   ( 896 kB)
+    DMA     : 0xffc00000 - 0xffe00000   (   2 MB)
+    vmalloc : 0xc8800000 - 0xf8000000   ( 760 MB)
+    lowmem  : 0xc0000000 - 0xc8000000   ( 128 MB)
+    modules : 0xbf000000 - 0xc0000000   (  16 MB)
+      .init : 0xc0008000 - 0xc001c000   (  80 kB)
+      .text : 0xc001c000 - 0xc01eb000   (1852 kB)
+      .data : 0xc01fc000 - 0xc02226a0   ( 154 kB)
+Hierarchical RCU implementation.
+        Verbose stalled-CPUs detection is disabled.
+NR_IRQS:368
+Clocking rate (Crystal/Core/MPU): 13.0/332/500 MHz
+omap_hwmod: l3_hwmod: cannot be enabled (3)
+omap_hwmod: l4_core_hwmod: cannot be enabled (3)
+omap_hwmod: l4_per_hwmod: cannot be enabled (3)
+omap_hwmod: l4_wkup_hwmod: cannot be enabled (3)
+Reprogramming SDRC clock to 332000000 Hz
+GPMC revision 5.0
+IRQ: Found an INTC at 0xfa200000 (revision 4.0) with 96 interrupts
+Total of 96 interrupts on 1 active controller
+OMAP GPIO hardware version 2.5
+OMAP clockevent source: GPTIMER12 at 32768 Hz
+Console: colour dummy device 80x30
+Calibrating delay loop... 234.25 BogoMIPS (lpj=917504)
+pid_max: default: 32768 minimum: 301
+Mount-cache hash table entries: 512
+CPU: Testing write buffer coherency: ok
+Found NAND on CS0
+Registering NAND on CS0
+Unable to get DVI reset GPIO
+OMAP DMA hardware revision 4.0
+bio: create slab <bio-0> at 0
+SCSI subsystem initialized
+Switching to clocksource 32k_counter
+Unpacking initramfs...
+Initramfs unpacking failed: no cpio magic
+Freeing initrd memory: 8192K
+NetWinder Floating Point Emulator V0.97 (double precision)
+VFS: Disk quotas dquot_6.5.2
+Dquot-cache hash table entries: 1024 (order 0, 4096 bytes)
+msgmni has been set to 249
+alg: No test for stdrng (krng)
+io scheduler noop registered
+io scheduler deadline registered
+io scheduler cfq registered (default)
+Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+serial8250.0: ttyS0 at MMIO 0x4806a000 (irq = 72) is a 16550A
+serial8250.1: ttyS1 at MMIO 0x4806c000 (irq = 73) is a 16550A
+serial8250.2: ttyS2 at MMIO 0x49020000 (irq = 74) is a 16550A
+console [ttyS2] enabled
+Power Management for TI OMAP3.
+VFP support v0.3: implementor 41 architecture 3 part 30 variant c rev 2
+VFS: Cannot open root device "ram0" or unknown-block(0,0)
+Please append a correct "root=" boot option; here are the available partitions:
+Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0
+8, 对比发现与memory相关的基本都不正确. 看到需要一步一步单步分析了. 
+需要知道这些memory信息都是从哪里打印的. 
+当然, 也有可能是print本身的问题造成的误导. 目前感觉凡是写死的字符串都是正确的. 
+
+17:45 2010-9-4
+Linux, kernel, Proceedings of the Linux Symposium
+http://www.kernel.org/doc/ols/
+http://free-electrons.com/docs/arm-linux/: arm Linux介绍.
+powerTOP
+http://free-electrons.com/docs/: Linux部分文档.
+视频: 
+http://free-electrons.com/community/videos/conferences/
+http://free-electrons.com/blog/elc-2010-videos/
+http://free-electrons.com/pub/video/2008/ols/: ols 2008视频
+qemu:
+http://free-electrons.com/community/demos/qemu-arm-directfb/
+Linux kernel交叉注释:
+http://lxr.linux.no/linux/
+http://lxr.free-electrons.com/
+
+1:46 2010-09-05
+VC0882, Linux training, 调试: kernel module和application
+1, 调试Linux kernel模块.
+可以用rvds load命令load不同section到不同地址, \todo 周一上午需要在实验室实验, 应该问题不大. 
+load /pd/r 'c:\source\demofile.axf ;ER_RO,ER_ZI ;12345' &0x8A00
+2, 调试application. 
+gdb, gdb server.
+3, (21:31 2010-09-05)
+1), connect "@coretile.core@A8"
+readfile,raw,gui,nowarn "F:\Linux development\VM_Share\daily_save\20100905\Image"=0x8000
+load/pd/ni 'F:\Linux development\VM_Share\daily_save\20100905\vmlinux'
+setreg @pc=0x8000
+setreg @r0=0
+setreg @r1=1897
+setreg @r2=0
+2), 中断寄存器基址不同. 修改后仍然不行, 看来PBA8的GIC太新了. 
+试试versatile, uart和irq寄存器基址不同. 看来想用现场的code比较困难. 
+3), 实验ISSM(使用integrator ap的代码, CPU是A8, timer没起来, calibrate_delay过不去. 跳过后在kernel_init中发生kernel panic. 
+4), 从文档看, RTSM的模型应该和versatile一致, 也许改一下基址就可以了. 
+
+10:19 2010-9-6
+VC0882, Linux, 设备模型, \todo 发信. 
+阅读: \\10.0.2.36\sqmshare\Document\Linux\kernel\device_model\udev.pdf
+modprobe $MODALIZES, 查找module.alies, 后者由depmod -a生成.
+udevadm, udevinfo, udeevtest, udevtrigger.
+udev/mdev还支持firmware load
+
+10:33 2010-9-6
+VC0882, VC0718, Linux
+xiaotao: 中断性能评估进展, 有空试试网卡, porting进展: 准备移植到718. 
+
+10:35 2010-9-6
+时间管理
+0, 10:00
+
+1, 本日
+1), Linux kernel module调试(时间短, rvds下面的没有试通). 
+2), 下午training.
+3), 和xiaotao讨论kernel目录结构. 
+4), 由于明天请假, 晚上需要做中断性能评估的事情. 
+
+10:36 2010-9-6
+VC0882, VC0718, Linux training, meeting minutes, 学习资料, 文档; \todo 遗留问题
+第六次training(mmc子系统) meeting minutes
+一, 任务分配
+1, porting: xiaotao, zhicheng: 整理目录结构(本周三讨论), 移植VC0718. 
+2, 中断性能评估: 
+1), xiaotao: 实验1, 2. 测试48:24和24:12两个版本. 
+2), zhangjian: 分析中断流程各部分时间. 
+3, uhost: mengfandong, 本周调通.
+4, mmc, lidongliang:  mount成功, 读写正确.  
+5, On2 vdec driver, yangmin: 跑通一个case. xiaotao支持yangmin使用26.35服务器的nfs. 
+6, video in(v4l2), shuyu, yinxingjie: 参考VC0836 sensor driver. 
+7, PCI-E, xiaofan, luohongyu: 看Linux driver. 
+8, GPU, wangwenlei: 看概念. 下一步准备移植driver到2.6.35. 
+9, 编程风格: zhangjian, zhicheng整理Linux编程风格. 
+
+二, 相关参考资料
+0, training资料位于:
+\\10.0.2.36\sqmshare\Document\Linux\training\6_Linux_mmc_subsytem_analysis
+1, 块设备入门文档. 
+\\10.0.2.36\sqmshare\Document\Linux\kernel\写一个块设备驱动
+2, 调试kernel模块方法: 
+\\10.0.2.36\sqmshare\Document\Linux\开发环境\调试Linux kernel module.txt
+3, 中断下半部分介绍: softirq, tasklet; work queue, kernel thread. 
+见"\\10.0.2.36\sqmshare\Document\Linux\kernel\LINUX内核设计与实现"第七章. 和同目录的Linux设备驱动(3rd)第十章. 
+4, 刚才涉及到的工作队列, 可以参考我原来的学习笔记: \\10.0.2.36\sqmshare\Document\Linux\kernel\工作队列和工作者线程.txt
+4, 设备模型参考资料: 
+找到一篇介绍udev和mdev的文章, 介绍了设备节点自动创建和模块驱动自动加载
+\\10.0.2.36\sqmshare\Document\Linux\kernel\device_model\udev.pdf
+5, Linux Symposium: zhicheng讲porting时涉及到的timer架构就是参考了2006年的文章. 
+\\10.0.2.36\sqmshare\Document\Linux\kernel\ols_LinuxSymposium
+目前包括从2002-2009年年会的所有pdf, 2008年视频下载中. 
+
+三, 遗留问题
+1, request_blkdev作用? dongliang说没有时间注册工作. 感觉不对啊, 应该是有的.
+
+16:21 2010-9-6
+Linux, 工作队列和工作者线程, kernel thread
+简要说明: 
+1, 建立工作队列 -> 设置工作并唤醒工作者线程 -> 工作者线程查询所有工作并完成, 完成后睡眠.
+2, 相关函数:
+1), 建立: 静态: INIT_WORK; 动态: create_singlethread_workqueue.
+2), 工作: queue_work
+3), flush: flush_workqueue
+4), 内部函数
+worker_thread()
+3, 文件
+workqueue.h
+
+学习笔记(共两部分):
+*******************************************************************************
+学习笔记一"10:25 2008-11-8": 
+*******************************************************************************
+
+*******************************************************************************
+学习笔记二"23:31 2008-11-10"
+*******************************************************************************
+
+9:50 2010-9-8
+时间管理
+0, 9月7日请病假
+
+9:51 2010-9-8
+时间管理
+0, 9:50
+
+1, 本日
+0), 现在压的事情比较多了, 自己移植工作暂缓.d
+本月迟到较多, 目前只剩下80分钟迟到时间, 到9月23日再计算一下迟到时间. 
+1), ICP key stuff例会. 
+2), 下午和zhicheng讨论编程规范. 
+3), 其它支持. 
+
+20:54 2010-9-8
+VC0882, VC0718, Linux, 工作日志
+1, yangmin, VC0882 vdec On2 driver
+之前状态: 上次跑通的case是把码流编译到driver中, 运行时有中断, 但是文件没有输出出来, 所以不清楚是否正确. 
+next: 完整跑通这个case. 
+2, mengfandong usb echi, ohci
+之前echi问题是映射的寄存器地址不正确. VC0882 usb ip的寄存器分为三部分, 0x0--0x200-1是VC0882自己的uhost寄存器, 0x200--0x400-1是OHCI, 0x400开始是EHCI.提供给ECHI的应该只是ECHI的寄存器. 而且resouce中也不应该占用其它寄存器, 否则OHCI申请时就没法申请了, 这是request_mem_region()的作用. 
+\todo: 有个问题, resources里面的end都会减一, 印象中这时文档规定的, 但是忘了是哪里写的.
+3, 编程规范: 
+今天和zhicheng讨论了编程规范. 今天和zhicheng讨论了一次, zhicheng会写出文档, 周五讨论.
+4, 中断性能评估: xiaotao在做, 进度未知. 
+5, Linux移植, 
+1), VC0718 timer中断可能有问题. 具体还要和xiaotao讨论. 
+2), 2.6.35的移植有些用法需要整理. 另外当初没有要求xiaotao上传原始版本是个失误, 不便于将来比对. 后面上传CVS时, 一定要先上传原始版本. 
+
+10:55 2010-9-9
+时间管理
+0, 9:45
+
+1, 本日
+(0), 问zhaoyuan子arm11开发板
+(1), review xiaotao Linux移植代码. 
+(2), 继续分析中断机制: VC0718中断性能评估: 给xiaotao提供arm:bus=24:24和24:12的FPGA版本; 研究Linux中断处理过程各部分消耗的时间.
+(3), 游泳. 
+
+15:33 2010-9-9
+VC0882, 工具, rvds, rvdebugger, apr文件
+apr文件是rvdebugger工程配置文件, 例如下面的配置文件可以配置了source_mapping: 把代码目录中的"\opt\share"目录映射为"y:"
+[zhangjian@icp-desktop trunk]$ cat vmlinux.apr 
+# Auto-Project file created by RVDEBUG. Do not hand edit unless
+# you know what you are doing. Use the Settings Window
+# Copyright (c) 2002 - ARM Ltd
+$make_prj
+[PROJECT] 
+source_search="y:"
+source_mapping="\opt\share->y:"
+[MAKEFILE=default] 
+application="vmlinux"
+arguments="This project does not build anything"
+command="@echo $a"
+
+15:55 2010-9-9
+VC0882, Linux, device model
+1, platform bus里面platform_device_add会检查resource是否冲突. 
+2, CONFIG_HOTPLUG配置后才能支持设备注册时自动创建设备节点
+
+10:11 2010-9-10
+时间管理
+0, 10:05
+
+1, 本日
+1), ...
+2), 和xiaotao讨论中断性能评估. 
+3), aiguo, dongliang, beizhan找我, 见"16:45 2010-9-10".
+(0), 问zhaoyuan子arm11开发板
+(1), review xiaotao Linux移植代码. 
+(2), 继续分析中断机制: VC0718中断性能评估: 给xiaotao提供arm:bus=24:24和24:12的FPGA版本; 研究Linux中断处理过程各部分消耗的时间.
+(3), 晚上看Linux softirq. 见LingMing邮件"探讨一下Linux 的softirq"20100908_1832
+
+6, 问题
+3), rvdebugger是否支持加载符号表到不同地址. <DONE>见"22:54 2010-8-30"1
+
+10:57 2010-9-10
+VC0882, Linux, 中断, trace
+1, 昨天jtag子板不能用是因为有一根线焊错地方了. 
+2, 
+/** 
+ * __vectors_start, __stubs_start和__kuser_helper_start都在
+ * arch/arm/kernel/entry-armv.S定义. 
+ */
+void __init early_trap_init(void)
+{
+	unsigned long vectors = CONFIG_VECTORS_BASE;
+	extern char __stubs_start[], __stubs_end[];
+	extern char __vectors_start[], __vectors_end[];
+	extern char __kuser_helper_start[], __kuser_helper_end[];
+	int kuser_sz = __kuser_helper_end - __kuser_helper_start;
+
+	/*
+	 * Copy the vectors, stubs and kuser helpers (in entry-armv.S)
+	 * into the vector page, mapped at 0xffff0000, and ensure these
+	 * are visible to the instruction stream.
+	 */
+	//from 0xc000e044 to 0xffff0000
+
+	memcpy((void *)vectors, __vectors_start, __vectors_end - __vectors_start);
+	//from 0xc000de20 to 0xffff0200
+	memcpy((void *)vectors + 0x200, __stubs_start, __stubs_end - __stubs_start);
+	//from 0xc000ddc0 to 0xffff0fa0
+	memcpy((void *)vectors + 0x1000 - kuser_sz, __kuser_helper_start, kuser_sz);
+
+	/*
+	 * Copy signal return handlers into the vector page, and
+	 * set sigreturn to be a pointer to these.
+	 */
+	//from 0xC03BDF30 to 0xffff0500
+	memcpy((void *)KERN_SIGRETURN_CODE, sigreturn_codes,
+	       sizeof(sigreturn_codes));
+
+	flush_icache_range(vectors, vectors + PAGE_SIZE);
+	modify_domain(DOMAIN_USER, DOMAIN_CLIENT);
+}
+3, "CONFIG_GENERIC_HARDIRQS_NO__DO_IRQ"表示当未定义irq_desc.handle_irq时不进入__do_IRQ(). __do_IRQ()是个比较早的处理所有中断的函数, 感觉没有考虑level和edge的区别. 在omap和vc0882上都定义了"CONFIG_GENERIC_HARDIRQS_NO__DO_IRQ". 
+static inline void generic_handle_irq_desc(unsigned int irq, struct irq_desc *desc)
+{
+#ifdef CONFIG_GENERIC_HARDIRQS_NO__DO_IRQ
+	desc->handle_irq(irq, desc);
+#else
+	if (likely(desc->handle_irq))
+		desc->handle_irq(irq, desc);
+	else
+		__do_IRQ(irq);
+#endif
+}
+
+16:45 2010-9-10
+VC0882, 项目, SV
+VC0882 SV阶段由我负责. report关系由dongliang改为aiguo. 
+beizhan提醒说注意技术不要钻的太深. 
+SV阶段: 
+wenlei: gpu; yangxing: ddr, autotest; wangzhengwei: clkrst+pmu; shuyu: video;.
+和zhaoyuan team合作的可能需要我和几个人一起做. 
+
+16:49 2010-9-10
+VC0882, VC0718, Linux, 中断性能评估; 系统调用定义分析; Linux实时补丁: rt.wiki
+1, 今天xiaotao的测试结果是:
+# ./trigger 
+### index5 = 21
+------ 0 1 1561
+------ 1 2 3593
+------ 2 3 25462
+------ 3 1 1542
+------ 4 2 3836
+------ 5 3 25488
+------ 6 1 937
+------ 7 2 2193
+------ 8 3 19435
+------ 9 1 1585
+------ 10 2 4292
+------ 11 3 42676
+------ 12 1 1466
+------ 13 2 4193
+------ 14 3 37693
+------ 15 1 1065
+------ 16 2 2344
+------ 17 3 20476
+------ 18 1 1071
+------ 19 2 2578
+------ 20 3 17464
+### total int_num5 = 7
+# ./test1 
+### begin test!
+########################------------------->>>>>>>>>>>>>>>
+########################-------------------<<<<<<<<<<<<<<<
+### index2 = 51
+------ 0 1 27606474
+------ 1 2 27607599
+------ 2 1 63621
+------ 3 2 65732
+------ 4 3 68311
+------ 5 3 68467
+------ 6 1 24827640
+------ 7 2 24829916
+------ 8 3 24841182
+------ 9 1 24846851
+------ 10 2 24847920
+------ 11 3 24850389
+------ 12 1 24852435
+------ 13 2 24853536
+------ 14 3 24855671
+------ 15 1 24857631
+------ 16 2 24858698
+------ 17 3 24860748
+------ 18 1 24862699
+------ 19 2 24863316
+### total int_num2 = 17
+
+2, 后来讨论感觉是单次触发是错了kernel和用户空间切换这个事情. 所以把单次触发的ioctl改为连续触发. 
+另外观察实验结果发现, kernel thread连续触发中有些index错乱, 这样可能是保存第三个时间的时候中断就出来了. 但是从设计上预期是前一个中断处理后才trigger第二个中断. 
+
+3, (17:57 2010-9-10)xiaotao刚才的实验结果和之前分析类似. 
+1), xiaotao邮件"good new …… 一个中断周期2万多个cycle的初步分析"20100910_1829
+一个中断周期2万多个cycle的初步分析
+刚才跟zhangjian单步跟了一下，结果如下：
+                Ioctl  ->    trigger  ->  return-to-app  ->  schedule()
+                              |         |                   |
+                               Interrupt                     等待线程  
+根据单步跟踪的结果分析如下：
+用户a线程通过ioctl，来触发中断，
+中断马上来临，中断完毕， 
+然后返回用户线程a，即开始执行return-to-app（2万个cycle就来自这儿）
+然后调度，然后就进入内核里的等待线程。
+中断返回会走2条路： 1. 进程调度
+                    2. 回到中断发生前的线程，继续原线程执行
+显然这中情况下，选择了第二条路。导致一个中断周期2万多个cycle
+那也说明，完全在内核态下，一个中断周期（从向量表，到中断服务程序，到等待线程）3000-4000个cycle，是合理的。
+
+2), aiguo回信, 邮件"答复: good new ……  一个中断周期2万多个cycle的初步分析"20100910_2026
+哦，看来上次的结论我们推翻了，也奇怪，上次zhangjian在nucleus下统计的还比这个值大，我们可能还需要在nucleus下测试一下，L1和L2都开下测试。
+看来，这次写文档我们解释一下上次统计的数据，上次包括了系统调用，而这次没有。
+另外，在video driver中，异步通知我们要研究一下，也需要测试一下kill_fasync，就是driver通知用户程序，这个也是video driver中应用比较多，因此我们需要认真分析，实际的情况可能就是要系统调用。
+
+3), zhangjian邮件"答复: good new ……  一个中断周期2万多个cycle的初步分析"20100910_2211
+目前只是个初步分析, 下一步xiaotao会用performance monitor得到各主要部分时间点(包括中断处理, 调度, sys_ioctl进入和退出的时间点, 用户空间ioctl返回等), 确认这个推测. 
+因为单步调试时会产生大量tick和tick引起的调度, 所以可能和实际情况有差异. 
+注: sys_ioctl在fs\ioctl.c定义. 
+
+4), 后来自己分析了sys_ioctl的定义: 
+sys_ioctl定义位于: 
+SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
+
+(以下定义为与include\linux\syscalls.h)
+#define SYSCALL_DEFINE3(name, ...) SYSCALL_DEFINEx(3, _##name, __VA_ARGS__)
+
+在未定义"CONFIG_HAVE_SYSCALL_WRAPPERS"时, 
+#define SYSCALL_DEFINEx(x, name, ...)					\
+	asmlinkage long sys##name(__SC_DECL##x(__VA_ARGS__))
+
+CONFIG_HAVE_SYSCALL_WRAPPERS只有powerpc有定义. 
+
+所以展开是
+sys_ioctl(__SC_DECL3(unsigned int, fd, unsigned int, cmd, unsigned long, arg))
+
+又因为: 
+#define __SC_DECL1(t1, a1)	t1 a1
+#define __SC_DECL2(t2, a2, ...) t2 a2, __SC_DECL1(__VA_ARGS__)
+#define __SC_DECL3(t3, a3, ...) t3 a3, __SC_DECL2(__VA_ARGS__)
+#define __SC_DECL4(t4, a4, ...) t4 a4, __SC_DECL3(__VA_ARGS__)
+#define __SC_DECL5(t5, a5, ...) t5 a5, __SC_DECL4(__VA_ARGS__)
+#define __SC_DECL6(t6, a6, ...) t6 a6, __SC_DECL5(__VA_ARGS__)
+
+实际就是把tx和ax之间的", "去掉了. 
+所以
+sys_open(unsigned int fd, unsigned int cmd, unsigned long arg)
+
+这和syscalls.h(include\linux)里面的原型是相同的:
+asmlinkage long sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
+
+4, Linux实时性:
+<精通Linux设备驱动开发>第二章内核, p30, 提到rt.wiki.kernel.org有可以改进kernel实时性的补丁. 也被称为"CONFIG_PREEMPT_RT". 网页打不开, 有空看看. 
+文中提到已经有多个rt补丁合并到了主线, 可以从如下网站下载, 
+http://www.kernel.org/pub/linux/kernel/projects/rt/
+最新的补丁只到2.6.33
+
+17:02 2010-9-10
+软件技巧, source insight, Add and Remove Project Files; Document Options -> File filter: 把*.o也加入到了工程, 后来发现是file filter写错了
+make file里面的"*.mk", 写成了"*,mk". 当初查的时候看了file filer, 没看出问题. 当时想只能是一个一个修改file filer, 这样就太慢了. 今天是发现了新选项, 所以效率高: 
+Document Options里面有"include while adding to projects", 这个选项可以控制哪些文件会加入到工程中. 不选中这个选择, file filer就不起作用了.
+
+13:20 2010-9-13
+VC0882, storaget, sd, dma, usb otg; arm, Cortex-A8, 乱序造成的错误; memory_barrier
+1, VC0882 sd问题, 最后发现加入memory_barrier就可以了, \todo 需要理解分析问题的过程. 
+
+2, Zhangjian邮件"答复: 882 sd出错"201009131347
+memory_barrier会影响两方面: 一是保证了寄存器配置都生效(寄存器是device属性); 二是保证L1 dcache和L2 cache的一致性操作完成. 
+但是我们封装的cache一致性操作函数已经在最后调用了memory_barrier. 所以这里加入memory_barrier应该是保证了寄存器的调用顺序. 
+
+可以编译时定义"-define=MMU_REGISTER_STRONGLY_ORDERED=1"保证寄存器都是stronly-ordered属性, 确认是配置寄存器未生效. 
+
+注: 我们封装memory_barrier()函数包括isb和dsb两个指令, 作用见ARM_ARM_7AR, p162: 
+The DMB and DSB memory barriers affect reads and writes to the memory system generated by load/store instructions and data or unified cache maintenance operations being executed by the processor. Instruction fetches or accesses caused by a hardware translation table access are not explicit accesses.
+
+ARM_ARM_7AR位于"VC1600WCVS: doc\module\Cortex-A8\doc\ARMv7_architecture\DDI0406B_arm_architecture_reference_manual.pdf"
+
+13:51 2010-9-13
+VC0882, SV
+板子review
+基本path, 一周.
+一个月完成所有feature.
+autotest.
+功耗测试.
+机台
+
+16:29 2010-9-13
+VC0882, Linux, 代码review
+1, 编程风格. 
+2, log.h是否保留? 
+3, 与我自己的移植对比, 看差异, 有没有必要修改. 
+
+16:49 2010-9-13
+VC0882, lpddr, ddr3, sd, 关闭mmu, cache后不稳定
+1, ddr3
+测试sd copy and compare 1M文件, 两次都正确. 
+关闭reorder, (0x60011000, 0xf0060改为0xe0060), 同样测试正确. 
+脚本: DDR3_256MB_2x16b_FIFO.inc
+CF: vc0882_20100827_1800_fpgaDdr3_sd0_a8_20100809_L1_32_L2_128_Neon_48M_2fpga_all.ace
+编译命令: build -m=fat,sd,dmac,tools -dram=128M -define=XCLK_48MHZ=1 -define=SD0_ONLY=1 --define=CACHE_OFF=1 all 
+台子: ddr3台子.
+2, lpddr
+测试sd copy and compare 1M文件, 两次都正确. 
+CF: vc0882_rev0_01091002_02080900_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100909_1600_RAM256K_ROM256K_LPDDR_4SDIO_bootloaderbin0908.ace
+
+18:43 2010-9-13
+VC0882, Linux, 中断性能评估
+今天发现内核ioctl时会调用lock_kernel, 而且会禁止抢占. 而且这个时间大约是34000cycle(16410+18384), 是大头. 真正用户和kernel空间切换的时间很短(1453和282). 
+app0:	495485087	
+syscallioctl1:	495486540	1453
+vfs_ioctl1:	495487496	956
+ioctl1:	495488530	1034
+ioctl2:	495489462	932
+ioctl3:	495489484	22
+kernel2:	495490269	785
+kernel3:	495493261	2992
+vfs_ioctl2.5:	495509671	16410
+kernel6:	495528055	18384
+vfs_ioctl2:	495533543	5488
+syscallioctl2:	495533796	253
+app9:	495534078	282
+
+20:00 2010-9-13
+时间管理
+0, 10:00
+
+1, 本日
+1), 上午, 1.5h: Linux编程规范, 计划周一, 周二完成中断性能评估和移植. 
+2), 下午和xiaotao讨论中断性能评估, 和zhicheng讨论Linux移植. 但效率不高. 
+
+20:04 2010-9-13
+VC0882, VC0718, arm, Cortex-A8, APB, 寄存器支持64bit访问, 但是不支持小于32bit访问
+1, Kongyingqi邮件"关于strd（ltrd）的使用及功能验证波形"20100913_1910
+A8支持64bit的读写，即strd和ldrd指令。经过验证，在882中，我们可以对寄存器进行64bit的读写操作。
+case描述：
+向0x60002000（INTC的寄存器基地址）写入一个64bit的数，然后把这个数读到两个32bit的寄存器中
+源代码：
+    EXPORT   strd_ts
+strd_ts  FUNCTION
+    LDR r0, =0x12345678
+    LDR r1, =0x87654321
+    LDR r2, =0x60002000
+    STRD r0,r1,[r2]
+    LDRD r0,r1,[r2]
+    mov pc,lr
+    ENDFUNC
+写时的波形：
+
+该指令在读写64bit寄存器时非常有用，也能在一定程度上提高寄存器读写的效率（当然，提高寄存器读写效率不止这种方式，而且这也不是最好的～）。比如前几天所说的对INTC模块操作时可能涉及到64bit寄存器读写。操作寄存器本是软件行为，个人感觉，用这条指令来写验证代码比直接用sv force要来得好些。
+
+图片见"D:\work\VC0882\Documentation\arm\关于strd（ltrd）的使用及功能验证波形.msg"
+2, 根据这个邮件, 我发信给huangwei, jiangbo, zhangqian, zhangxueqian, 请他们帮忙分析. 
+3, huangwei邮件"Re: VC0882/VC0718寄存器能否做64bit访问?"20100913_2024
+X2P的文档有下述限制:
+1. AXI transactions with a size less than the APB data bus width are not issued on the APB and
+returned to the AXI flagged with an error response (SLVERR)
+2. APB decoding fixed to 32-bit addresses, regardless of configured APB address width or AXI
+address width
+从上面看的话，X2P应该是支持downsizing的，但不支持upsizing.
+
+huangwei邮件"Re: VC0882/VC0718寄存器能否做64bit访问? "20100913_2033
+至于能不能用64-bit去访问register,  ARMv7 architeecture是这样说的：
+In ARMv7, regions of the memory map for these accesses are defined as Device or Strongly-ordered memory. To ensure system correctness, access rules for Device and Strongly-ordered memory are more restrictive than those for Normal memory:
+? both read and write accesses can have side effects
+? accesses must not be repeated, for example, on return from an exception
+? the number, order and sizes of the accesses must be maintained.
+4, (11:22 2010-10-2)jiangbo邮件"答复: VC0882/VC0718寄存器能否做64bit访问? "20100929_1343
+根据X2P的DataBook，应该可以。
+而且还可以用Burst N一次读写N个64bit（2N个32bit），也就是说可以批量读写。
+However，请有限度使用，IP Spec上可以支持，不过我们没有专门测过。
+5, 9月29日 ICV时, 我确认了:
+访问寄存器区域不能使用小于32bit的指令, 例如ldrb, strb这些byte访问都不行, 到报出data abort. 
+
+20:49 2010-9-13
+VC0882, VC0718, Linux移植
+1, CONFIG_ARM_L1_CACHE_SHIFT_6
+/*
+ * The maximum alignment needed for some critical structures
+ * These could be inter-node cacheline sizes/L3 cacheline
+ * size etc.  Define this in asm/cache.h for your arch
+ */
+#ifndef INTERNODE_CACHE_SHIFT
+#define INTERNODE_CACHE_SHIFT L1_CACHE_SHIFT
+#endif
+
+VC0882是i+d=64k, suxin他们的配置应该是不正确的. 
+2, CLOCK_TICK_RATE作用? 
+
+3, (10:20 2010-9-14)review".config", 为什么增加了8250?
+
+10:22 2010-9-14
+时间管理
+0, 10:10
+
+1, 本日
+1), 中断性能评估. 
+2), 支持yangxing: VC0718 arm.
+3), 改进logAssistant, 见"11:44 2010-9-14"
+4), 和aiguo讨论:
+(1), VC0718移植尽快完成. 
+(2), 中断性能评估最多搞到明天就得暂停, 先完成移植. 
+5), bootloader代码修改: gate, ungate stor src时也会通过bypass bit判断是否操作
+6), 给beizhan发页表属性. 见"19:38 2010-9-14".
+7), 增加RealviewICE问题集, 见"11:01 2010-6-8".
+8), 和lingming讨论设备模型, 见"22:25 2010-9-14".
+9), 完成irq driver spec初稿. 
+10), 总结: 感觉还是对进度的掌控不够, 没法确实保证进度. 
+
+11:44 2010-9-14
+软件技巧, logAssistant, 改进: 支持搜索section内的一个keyword.
+1, 可以支持搜索section内部内容: 
+例如如下命令是不论section keyword, 都搜索"device属性问题"这个关键字. 
+-f \\10.0.13.101\share\zhangjian\log\log2010*vimicro.txt -k "." -c device属性问题  -i
+2, 暂时没有支持搜索section内的多个关键字.
+
+19:39 2010-9-14
+VC0882, Linux, arm, Cortex-A8, mmu, 页表属性
+Linux页表属性定义"arch/arm/include/arm/pgtable-hwdef.h"
+memory type定义"arch/arm/mm/mmu.c", 定义了属性的配置. 
+映射时会根据传入的memory type选择不同的属性. 例如寄存器一般选择MT_DEVICE属性. 
+例如映射寄存器通常用create_mapping(kernel启动时映射), ioremap(驱动自己映射自己的寄存器). 
+
+20:11 2010-9-14
+VC0882, OTG, DE加压后sd copy出错; 反思, 总结
+1, dr.yang 提醒做DE加压的arm memcpy. 
+bamvor: 反思, 其实自己也应该能想到.
+2, 实验(定义"LIB_USING_USER_DEFINED_MEMCPY")
+20次, cpy and cmp 10M, 出错四次. 
+定义"VIM_HAL_MEMCMP_ERROR_ADDRESS"确认出错地址. 
+3, qiaowei邮件"答复: 882 sd出错"20100914_2035 
+使用版本：
+vc0882_rev0_01090306_02080900_USB2FPGA_UOTG_noCifGpuEncDec_tag20100827_1800_LPDDR4mA.ace
+更改脚本init_lpddr_micron_128M.inc
+setmem /W 0x60011000=0xf0060，由0xf0060改为0xe0060
+加"-define=MMU_REGISTER_STRONGLY_ORDERED=1"编译选项
+使用47om的LPDDR，使用2.5V电压
+在MEM中拷贝数据进行比较，结果如下：
+mem  SD0:/>memcpy_test
+[MEM]->do_mem_mem_cpy_test()
+memcpy src(Int)/[0]
+memcpy dst(Int)/[0]
+memcpy size(Int)/[1048576]10485760
+memcpy count(Int)/[10]20
+memcpy random(Int)/[1]1
+cache, tlb maintenance after copy before compare(Int)/[0]
+test region size is 0x03800000.
+source region start address is 0x00996f00.
+destination region start address is 0x02596fc0.
+0: memcpy from 0x011253f5 to 0x02836168 fail@(0x0153d841: 0xbee6890a, 0x02c4e5b4: 0xbee6890a)(error count 1)注意：在比较时这两个数不同，当在打印出来再读一遍时两个数已经相同了
+1: memcpy from 0x00a37d4d to 0x0376aeb9 successful(error count 1)
+2: memcpy from 0x00a1aefb to 0x02de727d fail@(0x00af563f: 0x714f9270, 0x02ec19c1: 0x714f9270)(error count 2) 注意：在比较时这两个数不同，当在打印出来再读一遍时两个数已经相同了
+3: memcpy from 0x00f848b6 to 0x0309f06a fail@(0x011394ca: 0x37ddf7df, 0x03253c81: 0xf9fef537)(error count 3)
+4: memcpy from 0x01952b45 to 0x02feb77b successful(error count 3)
+5: memcpy from 0x01b05b32 to 0x02ad3399 fail@(0x01d026be:y0x02c02849, 0x02ccff28: 0xa4108102)(error count 4)
+6: memcpy from 0x00cc177a to 0x02dd9058 fail@(0x016580be: 0x420000c0, 0x0376f99f: 0x80100142)(error count 5)
+7: memcpy from 0x01a12fac to 0x031aa34f fail@(0x02257dec: 0x25df7700, 0x039ef18f: 0x25df7700)(error count 6) 注意：在比较时这两个数不同，当在打印出来再读一遍时两个数已经相同了
+8: memcpy from 0x01299f22 to 0x02fa3eb2 successful(error count 6)
+9: memcpy from 0x00b97fe9 to 0x02f62c7c fail@(0x00c93101: 0x1eec1695, 0x0305dd94: 0x1eec1695)(error count 7) 注意：在比较时这两个数不同，当在打印出来再读一遍时两个数已经相同了
+10: memcpy from 0x011a86cf to 0x02602652 successful(error count 7)
+11: memcpy from 0x01728858 to 0x02fd83ce successful(error count 7)
+12: memcpy from 0x018a5360 to 0x03447db1 successful(error count 7)
+13: memcpy from 0x01aa9cb0 to 0x0308644d fail@(0x01ba2340: 0xffef77b7, 0x0317eade: 0xffffef77)(error count 8) 注意：ffef77是相同的
+14: memcpy from 0x015b96e3 to 0x0266d4eb fail@(0x01f10a3f: 0x0833f7fb, 0x02fc4849: 0xffef0833)(error count 9) 注意：0833是相同的
+15: memcpy from 0x00d5dda2 to 0x027c5bb7 successful(error count 9)
+16: memcpy from 0x01018501 to 0x02c92df2 fail@(0x013fc501: 0xff3dd973, 0x03076df2: 0xff3dd973)(error count 10) 注意：在比较时这两个数不同，当在打印出来再读一遍时两个数已经相同了
+17: memcpy from 0x013545b9 to 0x0265e8dd fail@(0x017b5f41: 0xfff78120, 0x02ac0265: 0xfff78120)(error count 11) 注意：在比较时这两个数不同，当在打印出来再读一遍时两个数已经相同了
+18: memcpy from 0x00f3a13c to 0x02b75ec9 fail@(0x0118c114: 0xffcdf3ff, 0x02dc7ea4: 0xf9b7ffff)(error count 12)
+19: memcpy from 0x012e878f to 0x02dd0857 successful(error count 12)
+4, 不加压是正确的. 
+5, 和dr.yang一起, 对比, 发现数据错误是有规律的. 有的是比较时错误, 读的时候正确. 有的是移位8, 16, 24的差异. 
+6, 使用1.8v, 13/20. 概率差不多. 
+
+22:25 2010-9-14
+VC0882, Linux, 设备模型, platform bus, 结合代码理解device只能绑定一个driver, driver可以有多个device
+1, 一个device只能有一个driver: 
+platform_device_add()->device_add()->kobject_add()
+                                     bus_attach_device().
+1), bus_attach_device()->device_attach()->bus_for_each_drv()->
+里面是个while循环, 如果没有出错会一直找. 初看这样不符合一个device只能绑定一个driver的道理, 但是: 
+__device_attach()->driver_probe_device()里面会判断device_is_registered(), 如果已经注册会返回ENODEV. 这样就会退出bus_for_each_drv. 
+device_is_registered()是返回"return dev->kobj.state_in_sysfs"
+2), kobject_add()->kobject_add_varg()->kobject_add_internal()中最后一步是设置
+    kobj->state_in_sysfs = 1;
+3), "1)"中能进入device_attach()的前提是"bus->p->drivers_autoprobe"为真, 这是在platform_bus_init()->bus_register()设置的(drivers_autoprobe=1).
+
+2, 一个driver可以关联多个device
+在bus_for_each_dev()中也是一个while循环, 但__driver_attach()必定返回0, 这样while肯定会走完. 
+
+10:07 2010-9-15
+时间管理
+0, 9:52
+
+1, 本日
+0), 最近迟到太多了, 工作效率也不高, 需要认真调整. 
+1), 2h: Linux移植: 代码整理.
+被2)打断. 
+2), 30': 加入clean icache区域的函数.
+3), 30' 参与讨论sd/ddr问题. 见"20:42 2010-9-15"2
+4), 和xiaotao讨论中断性能测试, 有进展, 今天会发出文档. \todo 遗留问题: hrtime何时会进入inactive状态? 
+5), 支持beihua ddr3 debug, 见"20:42 2010-9-15"3
+6), 总结: 今天xiaotao发中断评估进展后, aiguo发信说先做718 porting然后再继续分析. 其实这个邮件是不是我也可以发呢? 需要思考如何提高沟通的效率. 
+
+10:26 2010-9-15
+VC0882, Linux
+1, gpio.c: 待修改. 
+不能直接使用"CONFIG_MACH_VC0882_FPGA", 需要使用kernel提供的宏. 
+2, timer: 
+去掉了718 irqs.h里面的_VECTOR结尾. 
+3, 该修改hardware.h了. 
+4, 头文件不需要的都要去掉. 
+5, (22:56 2010-9-15)除了mmc.c未修改, 还有前面提到的没有修改. 其余已修改. 明天编译. 上午需要复习882 bootloader clkrst. 
+
+20:42 2010-9-15
+VC0882, memory, ddr3, \todo 总结
+1, 之前ddr切频问题把参数调松一些就好了. 但是之前的参数也不算紧. 
+2, 下午讨论的ddr问题实际是ddrc中reorder机制的地址冲突检测有bug. 
+实验发现加压情况下开reorder出错, 不开reorder没问题. 场景是DE刷屏, 写sd卡. 写sd卡时由于要修改fat表, 写完fat表会写文件. 发现文件每次都是对的, 每次都是fat表出错, 而且经常是16个byte里面前4个byte正确, 后12个byte是全0. 
+最后cuiyunfei查出问题是地址冲突检测时没有考虑进位(bamvor: 看来单元测试很重要啊, 可惜我们一直没有做).
+\todo 详细写出分析过程. 总结思路. 参考研发记录簿2_p130. yangzuoxing邮件"about ddrc reorder bug"20100915_1705
+3, 晚上beihua的ddr3问题: 需要加delay后才能正确加载映像, 可以在ddr初始化后delay, 也可以在上电后通过复位delay. 原因未知. 
+我帮beihua加入了脚本中delay的函数: doloop. 参考"D:\VC0882\document\tools\rvds_scipt_read_sp_relative_region.inc"
+
+9:59 2010-9-16
+时间管理
+0, 9:40
+
+1, 本日
+0), 今天比之前早, 但还是迟到了, 明天一定不能迟到. 
+1), 2h: Linux代码整理
+2), 1h: 和beizhan讨论Linux i2c driver. 
+3), 准备bootloader clkrst review. 
+4), 和xiaotao讨论VC0718和VC0882共存问题. 计划用一个共用的寄存器. 
+5), 3h: bootloader问题: 编译器优化问题, 已给arm发信. 见"18:47 2010-9-16". 
+6), 今天知道fandong的otg file storage已经可以了. 
+
+13:34 2010-9-16
+VC0882, bootloader, clkrst
+0, 问dongliang icache打开有没有提到. 
+L2: L2 timing可以通过512info配置. L2EN可以在启动最后打开. 
+1, 先介绍clkrst模块功能, 结合bootloader图.
+对应到主要API.
+2, strappin对应的频点.
+3, API, 
+1), 三个主要API配置的时钟. 
+2), 其它提供的API: get/set 模块clock.
+3), 介绍主要内部API. 
+最近有修改: gate/ungate stor clk src 加入bypass. 
+4, delay:
+1), switch delay
+2), pll delay. 
+3), gate/ungate, enable/disable. 
+
+18:47 2010-9-16
+VC0882, bootloader, 编译器bug导致delay循环未退出. 
+1, zhaoyan说pll lock后的delay没有作用
+1), 反汇编, 第一个是-O3 -Otime的, 第二个是-O0的. 
+0x000024b8:    e3500000    ..P.    CMP      r0,#0
+0x000024bc:    1a000002    ....    BNE      0x24cc ; __switch$$ + 144
+0x000024c0:    e2544001    .@T.    SUBS     r4,r4,#1
+0x000024c4:    2affffda    ...*    BCS      0x2434 ; __switch$$ + 76
+0x000024c8:    ea000007    ....    B        0x24ec ; __switch$$ + 176
+0x000024cc:    e3740001    ..t.    CMN      r4,#1
+0x000024d0:    0a000005    ....    BEQ      0x24ec ; __switch$$ + 176
+0x000024d4:    e3740106    ..t.    CMN      r4,#0x80000001
+0x000024d8:    9a000001    ....    BLS      0x24e4 ; __switch$$ + 168
+0x000024dc:    e2544001    .@T.    SUBS     r4,r4,#1
+0x000024e0:    2afffffd    ...*    BCS      0x24dc ; __switch$$ + 160
+0x000024e4:    e3a00000    ....    MOV      r0,#0
+0x000024e8:    e8bd81f0    ....    POP      {r4-r8,pc}
+
+
+0x00002da4:    e3500000    ..P.    CMP      r0,#0
+0x00002da8:    1a000002    ....    BNE      0x2db8 ; _VIM_CLKRST_GenPll + 80
+0x00002dac:    e1b00006    ....    MOVS     r0,r6
+0x00002db0:    e2466001    .`F.    SUB      r6,r6,#1
+0x00002db4:    1afffff8    ....    BNE      0x2d9c ; _VIM_CLKRST_GenPll + 52
+0x00002db8:    e3760001    ..v.    CMN      r6,#1
+0x00002dbc:    0a000005    ....    BEQ      0x2dd8 ; _VIM_CLKRST_GenPll + 112
+0x00002dc0:    e320f000    .. .    NOP      
+0x00002dc4:    e1b00006    ....    MOVS     r0,r6
+0x00002dc8:    e2466001    .`F.    SUB      r6,r6,#1
+0x00002dcc:    1afffffc    ....    BNE      0x2dc4 ; _VIM_CLKRST_GenPll + 92
+0x00002dd0:    e3a00000    ....    MOV      r0,#0
+0x00002dd4:    e8bd8070    p...    POP      {r4-r6,pc}
+
+2), 发信:
+为了避免编译器bug修改_VIM_CLKRST_GenPll代码. 如果不修改, "#ifndef SIMULATION"里面的循环不会执行. 
+从
+    UINT32 i = VIM_CLKRST_PLL_LOCK_TIMEOUT;
+    while ( !_VIM_Clkrst_PllLock(num)
+        && i-- != 0 ){};
+    if ( (UINT32)(-1) != i ) {
+#ifndef SIMULATION
+        while( i-- != 0 ){};
+#endif // #ifndef SIMULATION
+        return VIM_SUCCEED;
+    }
+
+    return VIM_CLKRST_PLL_CONF_TIMEOUT;
+}
+改为
+	UINT32 i = 0;
+    UINT32 const end = VIM_CLKRST_PLL_LOCK_TIMEOUT;
+    
+    while ( !_VIM_Clkrst_PllLock(num)
+        && i++ < end ){};
+   
+    if ( end == i ) {
+    	return VIM_CLKRST_PLL_CONF_TIMEOUT;
+    } else {
+#ifndef SIMULATION
+        while( i++ < end ){};
+#endif // #ifndef SIMULATION
+        return VIM_SUCCEED;
+    }
+    return VIM_CLKRST_PLL_CONF_TIMEOUT;
+
+2, 在小环境做实验, 也是如此, 感觉是-O3 -Otime时循环会被展开. 
+"D:\VC0882\mini_env\compiler_test\O3_Otime_loop_fail".
+给arm发邮件. 确认. 
+
+hi, mate
+
+There is an unexpected compile result for me. I want an addon delay after the status is ok. But it skips the delay loop and returns while using the "-O3 -Otime" compiler parameter, see the instruction in address "0x0000021c" below. Is it normal? Skip the delay for time optimize? 
+The delay is correct with "-O0" parameter. The source code is in the attachment. 
+
+Here is a part of disassembler with "-O3 -Otime"
+    our_main
+        0x000001ec:    e59f3048    H0..    LDR      r3,[pc,#72] ; [0x23c] = 0x6000
+        0x000001f0:    e59f0048    H...    LDR      r0,[pc,#72] ; [0x240] = 0x75300
+        0x000001f4:    e5931000    ....    LDR      r1,[r3,#0]
+        0x000001f8:    e1a02001    . ..    MOV      r2,r1
+        0x000001fc:    e2811001    ....    ADD      r1,r1,#1
+        0x00000200:    e352000a    ..R.    CMP      r2,#0xa
+        0x00000204:    2a000001    ...*    BCS      0x210 ; our_main + 36
+        0x00000208:    e2500001    ..P.    SUBS     r0,r0,#1
+        0x0000020c:    2afffff9    ...*    BCS      0x1f8 ; our_main + 12
+        0x00000210:    e3700001    ..p.    CMN      r0,#1
+        0x00000214:    e5831000    ....    STR      r1,[r3,#0]
+        0x00000218:    0a000005    ....    BEQ      0x234 ; our_main + 72
+        0x0000021c:    e3700106    ..p.    CMN      r0,#0x80000001
+        0x00000220:    9a000001    ....    BLS      0x22c ; our_main + 64
+        0x00000224:    e2500001    ..P.    SUBS     r0,r0,#1
+        0x00000228:    2afffffd    ...*    BCS      0x224 ; our_main + 56
+        0x0000022c:    e3a00000    ....    MOV      r0,#0
+        0x00000230:    e12fff1e    ../.    BX       lr
+        0x00000234:    e3a00001    ....    MOV      r0,#1
+        0x00000238:    e12fff1e    ../.    BX       lr
+
+Note: I test the code in the our cortex-A8 based soc and RTSM Cortex-A8. The result is same. The compiler tool version is: ARM NEON C/C++ Compiler, RVCT4.0 [Build 400].
+
+Besides, there is another compiler issue from my colleague "Caijin@vimicro.com". The Case id is 467986, its topic is "armcc compiler option --vectorize". What is the status of this case? 
+
+thanks
+zhangjian
+
+3, support-sw@arm.com邮件"RE: why the loop is optimized (471650)"20100916_2253
+[From Martin Weidmann - ARM Support]
+Please quote the following support case reference number in any response: 471650
+Dear Zhangjian,
+>
+> There is an unexpected compile result for me. I want an addon delay 
+> after the status is ok. But it skips the delay loop and returns while 
+> using the "-O3 -Otime" compiler parameter, see the instruction in 
+> address "0x0000021c" below. Is it normal? Skip the delay for time 
+> optimize?
+>
+> The delay is correct with "-O0" parameter. The source code is in the 
+> attachment.
+>
+I am afraid that we did not receive the attachment that you referred to.  It is possible that it was blocked by one of the mail servers.  Could you try resending it?
+Without the attachment it is difficult to say for certain what is happening.  However, I expect that the compiler is performing redundant expression elimination.  Take the following code as example:
+  i = 100;
+  while (i > 0)
+    i--;
+At a low level of optimization (e.g. -O0) the compiler will normally generate the assembler for the loop.
+At higher optimization levels (e.g. -O3) the compiler may identify redundant expressions and remove them.  So a loop like this can be replaced with the equivalent of "i=0".  This legal in C as it does not change the functional out-come of the code, even though it changes the timing.
+Although the behaviour is legal, it may not be desirable.  For example you may be trying to introduce a delay in software.  To ensure the loop is not optimized out you would have to mark "i" as being "volatile" in the above example.
+Regards,
+Martin
+
+4, 给大家发信, 提醒. 
+1), 本来想实验一下arm建议的volatile和不使用volatile差异, 发现并不一定有优化. 所以想实验不容易. 
+2), 发信: 
+注意: i--这类loop可能在"-O3 -Otime"时被优化掉
+hi, all
+
+最近调试bootloader时, zhaoyan发现使用"-O3 -Otime"时如下循环被优化掉:
+i = 100;
+while (i > 0)
+    i--;
+arm解释说这样优化是合理的:
+At a low level of optimization (e.g. -O0) the compiler will normally generate the assembler for the loop.
+At higher optimization levels (e.g. -O3) the compiler may identify redundant expressions and remove them.  So a loop like this can be replaced with the equivalent of "i=0".  This legal in C as it does not change the functional out-come of the code, even though it changes the timing.
+
+如果不想被优化掉, arm建议使用volatile修饰i: 
+Although the behaviour is legal, it may not be desirable.  For example you may be trying to introduce a delay in software.  To ensure the loop is not optimized out you would have to mark "i" as being "volatile" in the above example.
+
+另外, 经实验, 改为i++形式也是可以的: 
+    i = 0;
+    end = 100;
+    while( i++ < end ){};
+
+我搜了一下, bootloader里面没找到其它类似问题. 
+这个问题我第一次遇到, 可能很多人也不清楚, 提醒大家注意:)
+
+5, 回复YuLiJie邮件"答复: i--这类loop可能在"-O3 -Otime"时被优化掉"20100917_1238
+hi, all
+
+我只是说可能会被优化掉. 例如后面1), 2)两个情况, 即使使用yulijie提到的"{i=100; while (i--);}"也会被优化掉. 
+另外如果i保存在寄存器中, 使用"volatile"也不会有多余的memory access. 
+我想说用c语言实现总有不确定性, 我们也不能假设一定用哪个优化选项. 
+830 bootloader里面为了保险用汇编实现的delay. 
+
+下面两个case都是"-O3 -Otime"编译的: 
+1), case1, 只有TIMEOUT大于0xefffffff时, 才会执行循环, 否则跳过. 
+//模拟等待硬件状态的过程
+UINT32 wait_status(UINT32 n)
+{
+	static UINT32 i = 0;
+	if ( i++ < 10 )	{
+		return 0;
+	}
+	return 1;
+}
+
+UINT32 our_main()
+{
+    UINT32 i = TIMEOUT;
+	while ( !wait_status(1)){};
+    while( i-- ){};
+    return SUCCEED;
+}
+
+our_main
+    0x000001ec:    e59f3030    00..    LDR      r3,[pc,#48] ; [0x224] = 0x6000
+    0x000001f0:    e59f1030    0...    LDR      r1,[pc,#48] ; [0x228] = 0x75300
+    0x000001f4:    e5930000    ....    LDR      r0,[r3,#0]
+    0x000001f8:    e1a02000    . ..    MOV      r2,r0
+    0x000001fc:    e2800001    ....    ADD      r0,r0,#1
+    0x00000200:    e352000a    ..R.    CMP      r2,#0xa
+    0x00000204:    3afffffb    ...:    BCC      0x1f8 ; our_main + 12
+    0x00000208:    e3710106    ..q.    CMN      r1,#0x80000001
+    0x0000020c:    e5830000    ....    STR      r0,[r3,#0]
+    0x00000210:    9a000001    ....    BLS      0x21c ; our_main + 48
+    0x00000214:    e2511001    ..Q.    SUBS     r1,r1,#1
+    0x00000218:    2afffffd    ...*    BCS      0x214 ; our_main + 40
+    0x0000021c:    e3a00000    ....    MOV      r0,#0
+    0x00000220:    e12fff1e    ../.    BX       lr
+
+2), case2, 只是把while循环放到"{}"里面. 循环直接被优化掉. 
+UINT32 our_main()
+{
+	while ( !wait_status(1)){};
+	{
+	    UINT32 i = TIMEOUT;
+	    while( i-- ){};
+	}
+    return SUCCEED;
+}
+
+our_main
+    0x000001ec:    e59f201c    . ..    LDR      r2,[pc,#28] ; [0x210] = 0x6000
+    0x000001f0:    e5920000    ....    LDR      r0,[r2,#0]
+    0x000001f4:    e1a01000    ....    MOV      r1,r0
+    0x000001f8:    e2800001    ....    ADD      r0,r0,#1
+    0x000001fc:    e351000a    ..Q.    CMP      r1,#0xa
+    0x00000200:    3afffffb    ...:    BCC      0x1f4 ; our_main + 8
+    0x00000204:    e5820000    ....    STR      r0,[r2,#0]
+    0x00000208:    e3a00000    ....    MOV      r0,#0
+    0x0000020c:    e12fff1e    ../.    BX       lr
+
+9:34 2010-9-17
+时间管理
+0, 9:28
+
+1, 本日
+0), 本月第一次正常到公司, 以后要坚持:)
+1), 40': 和zhengwei讨论VC0882 SV clkrst, ddr, pmu. 和beizhan确认, zhengwei做clkrst和pmu; yangxing做ddr和autotest.
+2), 40'+30' 实验和给大家发信. i--循环被优化的问题. 见"18:47 2010-9-16"3. 后来继续讨论. 
+3), 50' 面试. 
+
+15:46 2010-9-17
+VC0882, Linux, video, v4l2, camera
+camera driver: 
+\\10.0.2.36\sqmshare\Document\SOC\UT-S3C6410-7A\Linux_v0.20\linux-2.6.24_v0.20\kernel\urbetter-linux-2.6.24-20090901.tar.bz2\linux-2.6.24\drivers\media\video\samsung\ov9650.c
+camera test:
+\\10.0.2.36\sqmshare\Document\SOC\UT-S3C6410-7A\Linux_v0.20\linux-2.6.24_v0.20\test\camera
+板子文档: \\10.0.2.36\sqmshare\Document\SOC\UT-S3C6410-7A\Linux_v0.20\linux-2.6.24_v0.20\user_manual
+
+16:03 2010-9-17
+1, 如果只是恢复到用户空间才处理, 感觉效率有影响? 其实既然是通知到用户进程, 肯定是要先返回用户空间.
+2, 说明哪些是kernel哪些是用户空间. 
+3, 看/dev/mem. 
+
+10:07 2010-9-19
+时间管理
+0, 9:50
+
+1, 本日
+1), ftrace, 见"10:40 2010-9-19"
+2), 准备下午bootloader clkrst review.
+3), 下午bootloader clkrst review.
+4), 3)完成后看xiaotao kernel进展. 
+
+10:40 2010-9-19
+VC0882, Linux, ftrace; Ftrace Function Graph ARM
+1, 使用Linux-2.6.29, 发现没有定义"__gnu_mcount_nc". 直接实验35kernel. 
+2, 使用Linux-2.6.35kernel. 看log发现mmc驱动没有找到. 对比beagle默认编译选项, 发现只选择了hsmmc...
+实验. 
+3, (21:41 2010-10-19)
+Ftrace Function Graph ARM
+http://elinux.org/Ftrace_Function_Graph_ARM
+
+17:04 2010-9-19
+VC0882, Linux, 移植
+1, 没有找到"VIMC_VM_REG_BASE_UART0".(自己source insight的问题).
+2, 小问题:
+1), *.bak为什么加入svn? 
+2), .config_718_882_good文件放到arch/arm/configs
+3), 名称统一: vc0718里面出现了vc0882-uart.
+
+10:16 2010-9-20
+时间管理
+0, 9:50
+
+1, 本日
+1), 看yangmin training内容. 异步通知和mmap. \todo 这两部分自己理解还很浅, 需要近期自己写代码实验. 
+2), training
+3), bootloader发信. 
+4), 需要整理AE关于sd的需求. 了解.
+
+13:42 2010-9-20
+echo wakeup > current_tracer
+echo latency-format > trace_options
+echo 0 > tracing_max_latency
+echo 1 > tracing_enabled
+busybox
+echo 0 > tracing_enabled
+cat trace
+
+touch /root/test2
+echo 123 > /root/test2
+
+17:17 2010-9-20
+VC0882, VC0718, Linux training, meeting minutes
+1, 9/30之前在Linux-2.6.35下完成如下driver: 
+1), gpu: wangwenlei;
+2), vdec: yangmin;
+3), ethernet(emi): liuxiaotao;
+4), host, otg device: mengfandong. 
+2, 10/8讨论718 video一个模块的架构. yinxingjie. 
+3, 考虑vdec多路方案: yangmin, caijin.
+
+19:08 2010-9-20
+公司, 招聘, 
+www.51job.com     用户名：中星微电子, 账户：user, 密码：Job0212
+www.zhaopin.com   用户名：zhongxing39619, 密码：20080118
+英才网的信息如下
+www.chinahr.com
+用户名：zhxing
+密码：Job2009
+
+19:18 2010-9-20
+软件技巧, svn, 过滤常见的不需要的文件
+svn status  | grep -v modules\.order | grep -v modules\.builtin | egrep -v ".*\.(cmd|o|bak|mod\.c|ko)"  | grep -v "drivers\/char\/defkeymap\.c" | grep -v "drivers\/char\/consolemap_deftbl\.c" | grep -v "initramfs_data\.cpio"
+
+9:56 2010-9-21
+时间管理
+0, 9:45
+
+1, 本日
+1), 30': 确定yangxing arm工作. 见"10:20 2010-9-21"
+2), 20': 支持hanzhimin环境, 更新rvi使用方法文档("20:43 2010-8-9"2).
+3), 看xiaotao 移植代码. 讨论文档. 
+
+10:20 2010-9-21
+VC0882, VC0718, arm, Cortex-A8, yangxing任务
+1, Linux L2 debug. 希望能证明之前推测. 
+svn 文档: \\10.0.2.36\sqmshare\Document\Linux\开发环境\svn\svnbook.pdf
+2, 718 arm测试项. 
+3, A8 lockdown.
+1), DDI0344J_cortex_a8_r3p2_trm: 3.2.54 c9, L2 Cache Lockdown Register
+说明A8 lockdown如何使用. 
+2), 816经验: 代码"D:\VC0816\mass_production\cache_lockdown"结合资料: \\10.0.2.36\sqmshare\Document\ARM\arm体系结构\ARM嵌入式系统开发-软件设计与优化.pdf, 12.6 cache锁定. 
+arm926使用: "Arm926ejs_Technical Reference Manual_r0p5": 2.3.11 TLB Lockdown Register c10.
+4, 文档: cache debug tools; 代码(arm, cache)函数的注释. 
+5, arm模拟器:
+\\10.0.2.36\sqmshare\Document\Linux\training\1_Linux_env_and_driver_introducton1\内核编译，基于qemu 模拟器的内核调试运行.txt
+
+11:02 2010-9-21
+软件技巧, logAssistant, 改进
+1, 如果搜索section内的东西, 文件名, 行号等用"#"代替, 这样把section match line和section分开, 而且有了分割线, 看起来更清楚: 
+"##################"(##################,##################,##################): VC0816, SV, clkrst, 移植830clkrst代码到816
+"\\10.0.13.101\share\zhangjian\log\log200906vimicro.txt"(2217,0,): 8), 注意看图. module使用xclk时, xclk也是先除了2的. 我说怎么串口会是乱码呢, 感情divider完全算错了. 
+2, 为了输出的文件名短一些, 把101 log目录映射到"x:"
+
+14:36 2010-9-21
+VC0882, VC0718, Linux, 
+1, 完成plat头文件, 其余还需要继续整理. 
+2, \todo 
+1), 头文件是否整理过. 
+2), 考虑一下gpio, emi, sd等driver能否正常加入.
+3), 没有修改的文件是否暂时不上传? 是, 包括gpio, emi, clock.
+4), timer clock source和event到底是否用一个timer? 
+5), 加入static关键字. 
+3, \todo 和830 driver对比.
+
+17:29 2010-9-21
+软件技巧, eclipse, make target中不显示目录: make target中有个按钮"Hide empty folder", 可以不显示make target中没有target的目录
+
+17:44 2010-9-21
+VC0882, VC0718, bus, AXI, 总线宽度不同corner case不同
+1, AXI burst是以总线宽度为单位, 例如718 AXI是128bit, burst length 4是128bit *4=16byte * 4 = 64byte
+2, 对于DMA等模块的验证也有影响, 例如64bit时, src和dst各有8个可能, 128bit时, src和dst各有16个可能. 
+3, 有空问一下beihua ddr 最大 burst长度是如何确定的? 
+
+18:25 2010-9-21
+VC0882, Linux, gpu, 疑问: 编译器的头文件从哪里来的? 
+
+10:23 2010-9-23
+时间管理
+0, 10:00
+
+1, 本日
+1), 修改kernel code;
+2), 和yangxing, bianyingfeng讨论mmu, cache问题, bianyingfeng有时间做一些实验见"11:34 2010-9-23". \todo 需要问bianyingfeng是否有时间. 可以讨论一下arm, bus有什么遗留问题需要做. 
+3), Linux porting review, 见"14:34 2010-9-23"
+
+11:34 2010-9-23
+VC0882, VC0718, arm, Cortex-A8, mmu, cache, 性能实验
+1, 做6*2*3这些实验: 
+1), p1307: B3.7.2 C, B, and TEX[2:0] encodings without TEX remap
+TEX[2:0] C B Description Memory type Page Shareable
+000 0 0 Strongly-ordered Strongly-ordered Shareable
+000 0 1 Shareable Device Device Shareable
+000 1 0 Outer and Inner Write-Through, no Write-Allocate Normal S bit
+000 1 1 Outer and Inner Write-Back, no Write-Allocate Normal S bit
+001 0 0 Outer and Inner Non-cacheable Normal S bit
+001 1 1 Outer and Inner Write-Back, Write-Allocate Normal S bit
+2), 开不开BTB, (在panda_init.s修改)
+目前知道开不开BTB对memcpy的性能影响很大. 
+3), test case: fat; sd; memcpy_test
+2, 今天从yangxing处知道, VC0882 ddrc write bus(也就是arm读ddr)时只能用burst 1. 每次都发burst8+mask, 发了8次. 需要确认是否lpddr, ddr2, ddr3都是如此? 
+
+14:34 2010-9-23
+VC0882, VC0718, Linux, kernel porting code review, Linux编程规法review, Linux下使用CVS; meeting minutes, 任务
+今天下午review了Linux-2.6.35 kernel code, Vimicro ICP Linux编程规范. meeting minutes如下(10:36 2010-9-25更新完成情况): 
+1, review Linux移植文档相关问题
+1), 修改VIMC_VM_REG_BASE_XXX为882的寄存器地址. <DONE>
+2), VC0882 timer模块没有mask. 问kongyingqi. 
+3), 确认VC0882的中断是电平还是边沿? kongyingqi说是边沿的. 
+4), vc1600系统是否封装debug信息. 
+5), kernel, 编程规范, porting文档上传. CVS目录结构为: 
+bootloader(u-boot); kernel(linux-2.6.35); fs(基本文件系统, 可以直接使用); app(测试程序, 只有sourecode); doc(CodeStyle, Porting, DriverSpec); tools(暂时是空).<DONE>
+6), xiaotao申请VC0718 machine id. <DONE>
+7), zhangjian写CVS过滤文件. <DONE>
+
+2, 明确一下大家的任务, 希望10.1之前把882 Linux-2.6.29下的driver移到Linux-2.6.35: 1), wangwenlei, zhangjian: gpu;
+2), yangmin: vdec;
+3), liuxiaotao: ethernet(emi, 可能需要10.1调emac);  中断机制研究.
+4), mengfandong: host, otg device, u-boot usb虚拟网卡(用otg device实现usb gadget). 
+5), yinxingjie: 10/8讨论718 video一个模块的架构. 
+6), yangmin, caijin: 考虑vdec多路方案. 
+7), zhangjian: u-boot porting, 了解zhaoyuan进展; 中断机制研究.
+8), zhicheng整理Linux timer机制. 
+
+3, 需要研究文件系统: 目前比较流行的是ubi和btsfs. 
+
+4, Linux下使用CVS: 
+[zhangjian@icp-desktop Linux]$ export CVSROOT=:ext:zhangjian@10.0.31.4:/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY
+[zhangjian@icp-desktop temp]$ cvs co Linux
+cvs checkout: No CVSROOT specified!  Please use the `-d' option
+cvs [checkout aborted]: or set the CVSROOT environment variable.
+[zhangjian@icp-desktop temp]$ export CVSROOT=:ext:zhangjian@10.0.31.4:/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY
+[zhangjian@icp-desktop temp]$ cvs co Linux
+The authenticity of host '10.0.31.4 (10.0.31.4)' can't be established.
+RSA key fingerprint is 56:69:a5:de:fb:ce:f9:03:37:60:5e:66:4a:c3:f9:a5.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added '10.0.31.4' (RSA) to the list of known hosts.
+zhangjian@10.0.31.4's password: (默认密码是登录名+1234)
+cvs checkout: Updating Linux
+U Linux/note.txt
+
+10:11 2010-9-24
+时间管理
+0, 9:50
+
+1, 本日
+(1), Linux CVS过滤文件, 见"11:18 2010-9-24"
+(2), 解决物理地址问题. 见"14:56 2010-9-24", 未完成, 继续.
+
+11:18 2010-9-24
+VC0882, VC0718, Linux, 上传CVS, 添加ignore files; 软件技巧, svn, git, cvs过滤文件; shell脚本
+1, cvs ignore文件是".cvsignore", 原始Linux source code有".gitignore", 用下面脚本替换".gitignore"为".cvsignore": 
+#!/bin/bash
+
+replace=`find * -name .gitignore`
+#echo $replace
+for name in $replace; do
+#       echo $name
+        newname=`echo $name | sed s/git/cvs/`
+        echo rename $name to $newname
+        mv $name $newname
+done
+
+bamvor: 有段时间不写脚本, 还有些紧张:)
+
+14:56 2010-9-24
+VC0882, VC0718, 设置正确的uart物理地址, frame size overflow; Linux kernel如何用一个Image支持多个板子(1-1))
+1, 设置正确的uart物理地址
+1), 内核解压缩时. 通过
+machine_is_vc088x()宏, 判断是否是vc088x. 
+
+其实很多板子是传了arch_id, 因为decompress_kernel(arch/arm/boot/compressed/misc.c)函数的传入参数有arch_id. 
+static __inline__ void __arch_decomp_setup(unsigned long arch_id)
+{
+    //...
+}
+#define arch_decomp_setup()	__arch_decomp_setup(arch_id)
+
+不过这样不清晰, 而且decompress_kernel已经设置了"__machine_arch_type", 所以用machine_is_vc088x()宏就可以了. 
+
+如果没有定义machine_arch_type, 会直接定义为machine id宏(CONFIG_MACH_VC0718, CONFIG_MACH_VC088X), 这是只有一个板子的情况. 如果有多个板子. 第二次判断时, 之前已经定义过machine_arch_type, 这时就会定义machine_arch_type为__machine_arch_type. 而__machine_arch_type就是kernel启动时bootloader传给r1的machine id. 这样就实现了支持多个板子. 
+
+#ifdef CONFIG_MACH_VC088X
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type     __machine_arch_type
+# else
+#  define machine_arch_type     MACH_TYPE_VC088X
+# endif
+# define machine_is_vc088x()    (machine_arch_type == MACH_TYPE_VC088X)
+#else
+# define machine_is_vc088x()    (0)
+#endif
+
+#ifdef CONFIG_MACH_VC0718
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type     __machine_arch_type
+# else
+#  define machine_arch_type     MACH_TYPE_VC0718
+# endif
+# define machine_is_vc0718()    (machine_arch_type == MACH_TYPE_VC0718)
+#else
+# define machine_is_vc0718()    (0)
+#endif
+
+2), low level debug时, 自己从__machine_arch_type读出machine id. 判断是否是vc0882(id = 2690).
+
+2, 编译, frame size溢出
+  CC      lib/decompress_bunzip2.o
+lib/decompress_bunzip2.c: In function 'get_next_block':
+lib/decompress_bunzip2.c:511: warning: the frame size of 1896 bytes is larger than 1024 bytes
+找到, http://madwifi-project.org/ticket/2284
+I've faced the same errors. The issue is, that gcc 4.4 allows maximum 1024 bytes of stack for function. I've replaced some static arrays and structs to kmalloc'd pointers. Note that this is my first kernel patch, although I can confirm it works well for me.
+于是看decompress_bunzip2.c, 511行是get_next_block()的结束, 这个函数是系统函数, 没看到和vimc移植相关的东西. 暂时不管. 
+
+这个在kernel config可以配置:
+CONFIG_FRAME_WARN:
+
+   Tell gcc to warn at build time for stack frames larger than this.
+   Setting this too low will cause a lot of warnings.
+   Setting it to 0 disables the warning.
+   Requires gcc 4.4
+
+   Symbol: FRAME_WARN [=1024]
+   Prompt: Warn for stack frames larger than (needs gcc 4.4)
+     Defined at lib/Kconfig.debug:28
+     Location:
+       -> Kernel hacking
+
+3, low level debug也出错
+1), 汇编中b,f的含义, 原来以为b是binary, 完全不对:(
+arch/arm/plat-vimc/include/mach/debug-macro.S:10: Error: bad instruction `import __machine_arch_type'
+arch/arm/kernel/debug.S:167: Error: backward ref to unknown label "1002:"
+arch/arm/kernel/debug.S:167: Error: backward ref to unknown label "1003:"
+
+参考GNU as chapter 5 symbols -- 5.2 Local Labels知道, b和f其实是表示目的跳转目标在当前跳转指令的后面和前面. 
+the ‘b’ stands for “backwards” and the ‘f’ stands for “forwards”
+所以只有在debug.S 167行第一个的addruart才会报错, 因为其它的addruart都可以找到上一个addruart定义的label. 
+
+GNU as支持同一个序号的label在同一文件中多次使用. 也支持把这些序号在编一个序号: 
+for example, the first 1: may be named .L1C-B1, and the 44th 3: may be named
+.L3C-B44.
+C-B: This unusual character is included so you do not accidentally invent a symbol of the same name. The character has ASCII value of ‘\002’ (control-B).
+另外, 还有dollar label, 它也有序号, 没太看懂: 
+They can also be distinguished from ordinary local labels by their transformed names which use ASCII character ‘\001’ (control-A) as the magic character to distinguish them from ordinary labels. For example, the fifth definition of ‘6$’ may be named ‘.L6C-A5’.
+
+2), 未定义符号
+  AS      arch/arm/kernel/debug.o
+arch/arm/plat-vimc/include/mach/debug-macro.S: Assembler messages:
+arch/arm/plat-vimc/include/mach/debug-macro.S:10: Error: bad instruction `import __machine_arch_type'
+
+1002:   adr     \rx, __machine_arch_type
+修改为: 
+vimc_type:
+        .long __machine_arch_type
+
+1002:   adr     \rx, vimc_type
+
+3), 立即数范围限制(CMP要求是8位二进制): 
+  AS      arch/arm/kernel/debug.o
+arch/arm/kernel/debug.S: Assembler messages:
+arch/arm/kernel/debug.S:167: Error: invalid constant (a82) after fixup
+arch/arm/kernel/debug.S:183: Error: invalid constant (a82) after fixup
+
+    cmp     \rx, #0xA82
+    ldreq   \rx, =VIMC_VC088X_REG_BASE_UART0 			@ VC088x physical
+    ldrne   \rx, =VIMC_VC0718_REG_BASE_UART0 			@ VC0718 physical
+改为: 
+    @ VC088X machine id(2690 in dec, 0xA82 in hex) can not used as 
+    @ immediate number. So Compare 0xB00 to distinguish VC088X and VC0718.
+    cmp     \rx, #0xB00
+    ldrls   \rx, =VIMC_VC088X_REG_BASE_UART0 			@ VC088x physical
+    ldrhi   \rx, =VIMC_VC0718_REG_BASE_UART0 			@ VC0718 physical
+
+4, 修改后编译通过, 但是在VC0882板子运行, uart基址得到的是VC0718的. 后来发现是mach-vc088x/718里面的Kconfig名称和mach-types的名称不对应造成的. 
+
+5, (10:22 2010-9-25)昨天解压缩后kernel跑死, 怀疑是解压缩出错.
+1), 看Kconfig, 发现有四中压缩方式(下面是前三个): 
+config KERNEL_GZIP
+	bool "Gzip"
+	depends on HAVE_KERNEL_GZIP
+	help
+	  The old and tried gzip compression. It provides a good balance
+	  between compression ratio and decompression speed.
+
+config KERNEL_BZIP2
+	bool "Bzip2"
+	depends on HAVE_KERNEL_BZIP2
+	help
+	  Its compression ratio and speed is intermediate.
+	  Decompression speed is slowest among the three.  The kernel
+	  size is about 10% smaller with bzip2, in comparison to gzip.
+	  Bzip2 uses a large amount of memory. For modern kernels you
+	  will need at least 8MB RAM or more for booting.
+
+config KERNEL_LZMA
+	bool "LZMA"
+	depends on HAVE_KERNEL_LZMA
+	help
+	  The most recent compression algorithm.
+	  Its ratio is best, decompression speed is between the other
+	  two. Compression is slowest.	The kernel size is about 33%
+	  smaller with LZMA in comparison to gzip.
+实验(KERNEL_LZMA), 压缩速度慢一些, 但是size小了37%. 下表是Image, gzip zImage, lzma zImage的size: 
+-rwxr-xr-x  1 zhangjian icp 8209856 Sep 25 02:54 Image*
+-rwxr-xr-x  1 zhangjian icp 2395172 Sep 25 18:19 zImage*
+-rwxr-xr-x  1 zhangjian icp 3813632 Sep 25 02:55 zImage*
+这样解压缩使用lib/decompress_unlzma.c, 就避免了"2"编译decompress_bunzip2.c的frame size溢出. 
+2), 编译, 实验, 还是运行出错, 而且直接运行Image也是如此. 
+3), (20:33 2010-9-25)晚饭回来继续实验. 没法ping通198服务器, 发现是接aolynk hub的机器都ping不通10.0.26.1网关了. 重新插拔了hub到网口的网线就好了. 
+4), 目前发现是machine id不正确, 然后跳转到low level debug打印时没有得到正确的uart基址. 
+5), 分析一下, 发现这时"=__machine_arch_type"尚未赋值, 所以没法打印. 需要修改代码. 
+6), 找不到machine id的原因是arch/arm/mach-vc088x/Makefile写的有问题: CONFIG_MACH_VC088X写成了CONFIG_MACH_VC0882. 
+7), 发现kernel进入start_kernel之前就打开了mmu. 所以low level debug中物理地址其实很难用machine id判断. 在map_io之前是开了mmu但是寄存器没有映射, 这段没法打印, 想一想也是合理的: map_io之前都是与SOC无关的, 不应该有错. 只能保证默认板子uart物理地址正确, 目前addruart如下, 包括GNU as汇编如何访问全局变量, 宏定义等等: 
+        .macro  addruart, rx, tmp 
+        mrc     p15, 0, \rx, c1, c0
+        tst     \rx, #1                                     @ MMU enabled?
+        ldrne   \rx, =VIMC_VM_REG_BASE_UART0                @ virtual
+        beq     1002f                                       @ get physical
+        b       1003f   
+1002:   ldr     \rx, =__machine_arch_type
+        sub     \rx, \rx, #0x40000000
+        ldr     \rx, [\rx]
+        @ set tmp as non-default SOC machine id. because we can not get the 
+        @ __machine_arch_type in the earyly kernel boot.
+        ldr     \tmp, =MACH_TYPE_VC0718
+        cmp     \rx, \tmp
+        ldrne   \rx, =VIMC_VC088X_REG_BASE_UART0            @ VC088x physical
+        ldr     \rx, =VIMC_VC0718_REG_BASE_UART0            @ VC0718 physical
+1003:   nop
+8), 修改后可以正确运行, 映射寄存器后, low level可以正确打印. 
+实验了gzip和lzma, 都可以正确解压, 之前出错应该是上面low level debug和machine id的问题. 
+现在的问题是kernel大小是8M, 去掉kernel hacking也有7M多. kernel启动后释放的memory有6160k, 看来主要是__init数据, 需要查查是哪里的数据. 
+
+6, 用xiaotao CVS上的vimc_defconfig也是如此. 是kernel的问题? 不过OMAP3530的kernel Image是8789920byte, 看来差不多. 
+
+10:07 2010-9-25
+时间管理
+0, 9:55
+
+1, 本日
+1), 修改代码: 在VC088X或VC0718使用一个Linux kernel Image都得到正确物理地址. 见"14:56 2010-9-24"5. 完成修改. 明天merge到CVS. 
+2), VC0882 bootloader NFC修改divider之前需要gate mclk. 见"15:12 2010-9-25".
+3), 总结: 这两天看起来做的事情不多. 但还是写了一些代码, GNU as原来基本没写过东西. 
+
+15:12 2010-9-25
+VC0882, bootloader
+1, 反思
+这次发现这个问题主要是因为自己的没有时间认真看mas. 如果不是zhicheng在718项目发现, 可能将来bootloader 512 info中就没法配置nfs时钟.
+当时beizhan提出有没有必要先gate->修改divider->ungate. 我当时因为希望代码尽量简单(实际到最后发现也不简单, 所以开始就没必要省这个事情), 也和huangwei确认过不需要(当然只是宏观的确认, 没有深入到模块), 看起来继承之前项目的东西还是很重要的.
+code review: 如果提不出好的问题, IC同事由于对代码, 编程风格等不熟悉, 所以可能不会有很好的效果.
+
+2, 发信
+VC0882 bootloader clkrst配置nfc时钟问题的讨论
+huangwei; pengxiaoming; zhaoyan; liaozhicheng
+cc: yinong; yangzuoxing; wangxin; kongyingqi; gemeiping; ai guo; fengbeizhan; lidongliang; zhangjian
+
+hi, all
+
+刚才和designer, zhicheng讨论发现, VC0882设计上要求修改nfc divider流程是先gate nfc mclk, 再修改nfc的divider, 最后ungate nfc mclk, 这和bootloader步骤不同, 但仿真没有出错, 所以希望大家一起帮忙分析并仿真证明.
+
+修改前(版本1.73)VC0882 bootloader配置步骤是:
+1, gate storage periphral clock source;
+2, 修改nfc的divider
+3, ungate nfc mclk.
+4, ungate storage periphral clock source;
+步骤1会导致usb暂时没有mclk导致usb不可用. 所以在最近把"1", "4"两个步骤改为可以bypass(由512info配置). 
+这个里面没有gate nfc mclk这个步骤, 没法保证usb和nfc同时可用. 目前最新代码(版本1.74)中已经根据designer建议, 在1,2之间加入gate nfc mclk.
+
+刚才也和zhaoyan沟通, 推测之前仿真没有问题的原因是: bootloader做了步骤1, 起到了"gate nfc mclk"类似的作用. 
+
+现在bootloader代码已经比较稳定了, 希望确认清楚是否需要修改. 麻烦xiaoming, huangwei, zhaoyan构造case证明修改nfc divider前不gate nfc mclk会有问题, 并且gate nfc mclk不会有问题. 谢谢.
+
+zhangjian
+
+10:23 2010-9-26
+VC0882, VC0718, storage, usb, otg, host和slave判断方法
+Otg的mini连接线分为mini A连接线和mini B连接线。
+11Mini A：ID PIN直接连接到地，协议上要求对地阻抗小于10欧姆。(OTG AS HOST)
+Mini B：ID PIN不连接或者经过一个大于100K欧姆的电阻连接到地，协议上要求对地阻抗大于100K欧姆。(OTG AS DEVICE)
+控制器可以根据这个阻抗特性判断是哪种连接线连接到插座上。
+
+17:12 2010-9-26
+VC0598, 
+1, 看tiankuan邮件
+1), 开xclk和pll应该做了, 需要确认. 
+VIM_SET_XCLKON();
+VIM_CORE_PLL_POWER_ON();
+VC0898(VC0598A): bootloader 配置pll. 
+VC0598B(ABI寄存器配置).
+2), baseband的clock? 如果<=64M, delay就足够. 
+3), ABI_CLK_RST问题需要看VC0598 databook. 
+VIM_HIF_WRITE_REG32(ABI_CLK_RST, 0x01);/*reset arm9 cpu*/
+VIM_USER_DelayMs(1);
+VIM_HIF_WriteRegBitVal(ABI_CLK_RST,4,4,1);/*release arm9 cpu*/
+VIM_USER_DelayMs(10);/*wait bootload run*/
+VIM_HIF_WriteRegBitVal(ABI_CLK_RST,0,0,0);/*enable biu_clk*/
+4), D:\VC0830\baseband\trm830\v830abi\v830_abi.c
+
+2, 回信
+hi, tiankuan
+
+经过和dongliang确认, 目前配置流程如下, 和你的流程是一致的. 具体细节可以请zixi和jingfei支持. 
+
+void V830_AbiInit(void)
+{
+	volatile int i = 0;
+
+	HAL_WRITE_REG32(ABI_CTRL, 0x51);
+	for(i=0; i<640000; i++);
+	HAL_WRITE_REG32(ABI_CTRL, 0x41);
+	for(i=0; i<64000; i++);
+	HAL_WRITE_REG32(ABI_CTRL, 0xc1);
+	for(i=0; i<64000; i++);
+	HAL_WRITE_REG32(ABI_CTRL, 0xe1);
+	for(i=0; i<64000; i++);
+
+
+	for(i=0; i<64000; i++);
+	HAL_WRITE_REG32(ABI_CLK_RST, 0x10);
+}
+
+注: VC0598A pll配置是在bootloader配置的. 
+
+21:24 2010-9-26
+VC0882, VC0718, Linux, CVS, SSH
+1, CVS key其实是ssh密钥, 用于SSH登录等. 
+2, 参考"http://blog.chinaunix.net/u1/34845/showart_295744.html"可以不输入密码, 但是这样似乎绕过了公司权限管理, 暂时不向大家推广. 列出主要步骤
+1), ssh-keygen -t rsa(输入parsephrase时两次回车不输入)
+2), 把~/.ssh/id_rsa.pub复制到CVS服务器自己的目录的"~/.ssh/authorized_keys2". 
+可以通过putty/xmanager等中断, 先打开~/.ssh/id_rsa.pub并复制内容到打开的"~/.ssh/authorized_keys2"文件. 
+3), 这样就可以用CVS checkout了. 
+原理解释(我的理解, 可能不准确): 步骤1生成了ssh rsa密钥, 步骤2把public key复制到CVS服务器自己目录. 这样自己使用CVS时, 会根据这个public key判断客户端(就是执行ssh-keygen -t rsa, 生成密钥的机器)是否有权限. 自己生成的key, 当然权限没问题了. 
+3, 看了看生成的private和public key, 本来想反向从putty key做出ssh key. 做完后使用CVS时需要输入parsephrase, 看来当初做这个key的时候加了parsephrase. 
+附, "2"生成的public和private key. 
+
+[zhangjian@icp-desktop .ssh]$ cat id_rsa.pub
+ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAxWUM95mWq56m7GLhuy/xz8bAQ89jRTgIVX8qGWTLH+2hsJ2QEprW8YIcGmv/+o/ALqz77fam305WC/ZHhRF2NDvXCoBienrxRiTDh+wQc2Nz3MnWOKGvj2k2VmLYrgUNkkXxeEfGJTDEqi9jtMQEsHgqDxKfgQGTCuCA7YD17OaMInj/emchNcyIzcHCG2PUSQx5PR9OPRzyz2SZSYG7C40sx9biQbQU2SQIuAMzxJP0iN4f7hEvRYlIP8we/+oc/nquIhsOdziDkJqkdyFoEvSwdBJrKXHereKPbiKH/jvQBKKsDnAasyI0Hn99D1ccOjtqnfAm/jreDgR4FKu42Q== zhangjian@icp-desktop
+[zhangjian@icp-desktop .ssh]$ cat id_rsa
+-----BEGIN RSA PRIVATE KEY-----
+MIIEoQIBAAKCAQEAxWUM95mWq56m7GLhuy/xz8bAQ89jRTgIVX8qGWTLH+2hsJ2Q
+EprW8YIcGmv/+o/ALqz77fam305WC/ZHhRF2NDvXCoBienrxRiTDh+wQc2Nz3MnW
+OKGvj2k2VmLYrgUNkkXxeEfGJTDEqi9jtMQEsHgqDxKfgQGTCuCA7YD17OaMInj/
+emchNcyIzcHCG2PUSQx5PR9OPRzyz2SZSYG7C40sx9biQbQU2SQIuAMzxJP0iN4f
+7hEvRYlIP8we/+oc/nquIhsOdziDkJqkdyFoEvSwdBJrKXHereKPbiKH/jvQBKKs
+DnAasyI0Hn99D1ccOjtqnfAm/jreDgR4FKu42QIBIwKCAQB8E6HANKfZluyUlez5
+UVYq1LNd0tCvKojlSJ4elyCXufCa5rJU1ls4uC7sCV8Shj5JOYhpsPstRy7FsL89
+szRbWNBPvmnJVJeobuFOH1rML+Jthi7hxLd+tyl4IN/4WvKWdRtwLR12dmz9Qlvt
+943rRDexs+87JY+gb9wDAJqU55Tp9SI10xVqsVlelU6ZgJOH3gWk3AIyWA24BsDm
+nhR3MFtLu2wPLfoUI3A9SOyTU0McE3w38HSyh4aT3M24+SAWUozzwNMoP5lpCvP7
+UQllrh35cGe3vPL8McHwE/Nz/gRz/OIxxq21u4rmh9OU9/U/uWQ01WdbReLhzFk0
+MMorAoGBAOwhdckyrB+96SrKFVprEsBppkeOzlW2VVYgCV/08dV5ocLk4B3WrUuE
+Y7pc5RFvK69jkA7nMdLer8X3eJ1ZGYEY94uyrHVMqVKD90Vv3o0VkY5IZj3Bo6W9
+NamAh9XfE/qXrDo8S2Y5cr6s/yxnPKWGtP0VLTCMe5oc6uCA+W79AoGBANYBK8Ws
+SEgfmqztMzwZMxHkVm6FIYCrDPs5Ie8rfSIaHnuNY95S4Izu5QSFQWQlNUMbjCh/
+VS5iGSwui4AvFbpNoraOjUk7+3crV8OaWTTEWcPwSs43282lRnc1evSgzeWdKfKx
+f+Xv1ozUM90j1c2fmas0tUZgikO4a8PX8E4NAoGBAKHrDvBdQtPv8FfbB1PxpnVP
+wno2CdRfxXzixJmSBOonhN1pvkBYsVhayArDWz8nqO1LlfuXOBuRYpZgjTiyIB4C
+fdwiv2ZgdBtTLTbtn+u3BLlWN3rN7I7oJMwAXSTwvT4e3H+0UPWjvGV98M39pe3Y
+tp7p8xn57lsMg80lPVNrAoGADDqUyXePGhBvPRTeWzSj1SL9n+pZr5S+6cjAHEug
+wB6/6c2QrZ5V+Wy8oSwvn1KVVEq3jUkaz3NR5UR9AAKwyNE8f3XcMBIOXpTDL7+t
+U3jvL8SWj3Dn/R9jHME6Od1NmBeb/z1Xw/8TkwTPw35j/R8QGGlpcbxfrBkqurvh
+2JMCgYBZKIrvNf03OMOwof1YBovG644HWVqcS4QjxbTT/XkR65ekhEmN61inxkO4
+TsQbAWrC3mRytM0+Pz35CVt7uOcYcBKKOXTyLSlueRLqVsWuBqkVfFHJ7o6LnZlG
+3qkVCa/fEqmyq3LzhPUJ05hY20HRefyf4GJ2yf3zpICb8YnPdQ==
+-----END RSA PRIVATE KEY-----
+
+21:54 2010-9-26
+VC0882, VC0718, Linux, 代码调整
+1, 明天和xiaotao讨论. 
+1, gpio.h放到plat目录是否不太好? reg和irqs.h都是放在mach目录的.
+emi.c放到mach-vc088x也不太好. 
+dm9000.c的原始文件在哪里? 
+REG_EMI_SRCPND没必要加REG字头吧. 
+2, 把昨天完成的代码上传CVS. 
+1), modify CONFIG_MACH_VC088X_FPGA to CONFIG_MACH_VC088X and CONFIG_MACH_VC0718_FPGA to CONFIG_MACH_VC0718 according to the mach-types definition.
+2), support both vc088x and vc0718 uart base address in <mach/uncompress.h>
+3), modify debug-macro.S
+4), add low level debug in both vc088x and vc0718 board-fpga.c. for low level debug printascii test.
+5), add frame size overflow warning message to lib/decompress_bunzip2.c
+3, (11:08 2010-9-27)和xiaotao讨论后, 代码改进如下:
+1), gpio.h(vc088x, vc0718)放到mach目录
+2), emi.c放到mach-vc088x也不太好. 将来VC0718调好后把公共部分移到plat目录. 
+3), 寄存器命名: 模块_XXX(for vimc公共模块), VC088X_模块_XXX, VC0718_模块_XXX, 
+4), dm9000的中断修改: 目前是把emi一级中断直接给dm9000, 实际dm9000只使用了emi的二级中断0. 这个修改后, dm9000的driver不需要做任何修改. 
+
+22:13 2010-9-26
+时间管理
+0, 9:55
+
+1, 本日
+1), 白天主要是支持VC0598, yangmin vdec Linux driver; 和xiaotao讨论Linux kernel; 
+2), 使用cvs key, 不希望使用密码. 见"21:24 2010-9-26". 未解决. 
+3), 修改代码: 在VC088X或VC0718使用一个Linux kernel Image都得到正确物理地址. 见"14:56 2010-9-24"5. 完成修改. 明天merge到CVS. 
+
+10:12 2010-9-27
+时间管理
+0, 9:10
+
+1, 本日
+1), 和xiaotao讨论昨天xiaotao上传的代码. 见"21:54 2010-9-26"3
+2), 帮助fandong debug uhost DE加压问题. 见"16:28 2010-9-27"
+
+16:28 2010-9-27
+VC0882, uhost, DE加压
+1, 
+1), 旧版本. DDR reorder 关闭后可以. 
+2), 新版本, DDR reorder 开关都不行. delay或断点都可以.
+
+2, 发现hanzhimin测试时都定义了MMU_REGISTER_STRONGLY_ORDERED.
+Q: 需要确认有多少模块开了STRONGLY_ORDER.  otg一直是定义测试的. 和beizhan讨论是否需要重新测试. 
+A: CVS只有OTG加过. 
+
+11:25 2010-9-28
+时间管理
+0, 9:40
+
+1, 本日
+1), 30' 看Linux下寄存器的属性. 
+2), 40' 讨论uhost, uotg问题. \todo 问qiaowei meeting minutes. 
+3), 为了支持fandong调试"2)"usb问题, 需要写查看mmu页表的文档, 把这个作为arm文档的起始. 见"11:33 2010-9-28"
+4), 模块调试方式改进, 见"22:54 2010-8-30"5. 
+5), 总结: 
+(1), 今天状态不好, 原来的处理方式就是耗时间到下班. 但是现在事情越来越多, 这样肯定不行, 太浪费时间了. 从今天开始, 以后如果效率低, 就要安排效率低也能完成的工作, 减小状态/心情对工作的影响. 
+(2), 之前讨论分工时, 忘了说framebuffer由谁做. 也可能aiguo当时考虑是shuyu做, 只是shuyu现在请假了. 至少我自己漏掉了这个. 
+
+11:33 2010-9-28
+VC0882, VC0718, arm, Cortex-A8, VC0882项目arm总结文档, mmu页表属性; 总结, 文档
+1, 如何查看mmu页表以及memory属性? 
+1), 找到一级页表基址
+读TTB0, TTB1两个寄存器,根据xxx判断当前使用的是哪个寄存器. 
+低5位(需确认)是属性. 看高位表示页表的物理地址, 需要转为虚拟地址. 例如Linux里面页表地址是0x80004019. 说明页表的虚拟地址是0xc0004000. 
+2), 计算虚拟地址的偏移. 
+arm mmu页表以虚拟地址为索引, 所以我们只能通过虚拟地址查到物理地址, 不能反过来查(\todo 有PA 2 VA寄存器么). 
+例如我希望查kernel内核空间0xc0000000是从哪个物理地址映射的. 
+arm架构一级页表是1Mbyte 一个entry, 一个entry占用一个word(4bytes).
+所以0xc0000000 / 1Mbyte * 4byte = 0x3000.
+因此0xc0000000开始的1Mbyte区域对应的页表位置是0x80004000+0x3000 = 0x80007000.
+注: 这里其实也可以口算: 除以1Mbyte就是减去20位2进制数(5位16进制). 0xc0000000去掉5位是0xc00. *4bytes是左移两位. 0xc=b1100. 左移两位是0x11 0000, 所以最终的结果就是0x3000.
+3), 查看表项. 
+例如查到0x80007000地址的数据是. 0x800xxxxe. 
+4), 可能需要查二级页表. 待续. 
+
+2, Linux中页表属性的设置----寄存器部分
+
+13:01 2010-9-28
+VC0882, VC0718, arm, Cortex-A8, VC0882项目arm总结文档, Cortex-A8 ecosystem; 总结, 文档, 素材
+Cortex-A8 ecosystem, 这个我写了很多次了. 
+A8 cache line refill支持critical word first, 这个在总线上是通过AXI wrapper访问实现的. 
+这里是想说A8 feature和AXI总线的关系. 基于A8的系统总线都是AXI的. 
+
+14:12 2010-9-28
+VC0882, bootloader
+1, AE提出用bootloader启动时通过判断一个keypad按键确定是否进入usb boot. 作用:
+zhaoyuan邮件"答复: USB模式"(beizhan转发)20100928_1001
+1), 对研发的好处:
+在研发的中后期，要在完整的Device上进行开发，此时频繁烧写Code,现在都需要拆机飞线来控制Strap Pin
+2), 对生产的好处:
+在生产时，由于某种原因(人为操作失误，烧录PC异常掉电，)会发生某些整机烧录后出现异常，或者直接在工厂进行软件版本升级，此时需要重新烧录。
+3), 这个需求上次Review的时候提出来的
+
+2, 说说我的想法:
+1), huangchen提到的keypad方式, 不如直接把usb boot的strappin接成按键(比如类似手机背后的复位孔). 和用keypad模块的一个按键道理是一样的. 同时bootloader代码不需要修改. 
+2), 系统启动异常需要具体分析: 如果烧写过程未完成, crc会出错. 这样肯定会进入usb boot. 如果烧写过程完成, 二级bootloader就可以启动(usb烧写和二级bootloader用到的最小系统应该是一样的), 这时用beizhan说的办法.
+
+3, (18:09 2010-9-30)后来讨论的结果还是添加一个按键. 
+wangzhengwei修改和测试结果, wangzhengwei邮件"答复: 按键热启动测试通过"20100930_1729, 1808
+Hi beizhan
+1，使用带bootloader的ddr2 cf-code，使用ddr2
+2，把新编译的bootloader通过rvdebug download进去：
+readfile,raw,gui "D:\VC0882\882bootloader\bootloader\build\bootloader.bin"=0x10000000
+  1) 按reset，同时按住S8，程序跑到_VIM_Boot_USBBoot
+  2) 按reset，不按住S8，程序走strap-pin的boot流程
+3，normal sleep 后，按键S8，程序正常执行，打印vimicro；
+不按键S8，程序正常执行，打印vimicro。
+4，fast wakeup，无论按键与否，bootloader都不走这个流程，同normal sleep。 
+fastwakeup2 -ste 0 -ms0 1 -ms1 1 -ms2 1 -ms3 1 -md0 1 -tb 1 -idb 0 -de 0 -zc 0x07b00000 -dm 0x0f00 -dr 0 -wc 1 -cfg1 0x1ff0260 -cfg2 0x541
+5，usb reload，无论按键与否，走usb load
+pmu -> config_usb_load
+6，watchdog reset，无论是否按键S8，来不走usb  load流程
+timer -> wdog 
+7，software reboot，无论是否按键S8，来不走usb  load流程
+Pmu -> reboot
+3，5，6，7打印输出
+SYS_TIMER_INIT_DONE
+H0x00000001
+H0x00000001
+SYS_MMC_SC_BOOT_START
+测试通过。
+
+16:43 2010-9-28
+VC0882, Linux
+VC0882 Linux移植: framebuffer驱动由谁负责?
+hi, aiguo, beizhan
+
+现在wenlei测试gpu需要framebuffer驱动, 上次讨论移植Linux-2.6.35驱动分工时漏掉了.
+我已经请wenlei先把framebuffer驱动直接从29移到35. fb驱动架构已经比较稳定了, 估计问题不大. 
+以后framebuffer驱动由谁负责呢? 是否是shuyu负责, shuyu之前看过一些. 
+
+zhangjian
+
+17:33 2010-9-28
+VC0882, Linux, GPU, memory分配, buddy info
+wenlei发现35 kernel中如果使用128M memory, GPU请求32Mbyte memory会出错. 
+是__alloc_pages_nodemask中get_page_from_freelist()分配失败后, __alloc_pages_slowpath()中提示page order超过了MAX_ORDER(11, 也就是8M).
+使用256M memory没有问题. 
+之前使用29的kernel没有问题(不清楚传给kernel的mem=xxx, size是多大), 看代码发现, 上述函数有较大调整. 
+
+10:35 2010-9-29
+时间管理
+0, 9:40
+
+1, 本日
+1), 下午VC0882 ICV A8, coresight, interrupt, clkrst tset review. 
+
+11:03 2010-9-29
+VC0882, Linux, storage, mtd, nand
+和zhicheng讨论nand. 
+zhicheng发现包括nand下面包括pxa, s3c都是会有一次copy. 例如pxa驱动自己通过dma_alloc_coherent分配memory, 然后copy到或从系统buffer copy.
+和zhicheng一起对比nand/omap2.c, onenand/omap2.c, onenand/samsung.c, 这些driver会使用dma_map_single直接把系统buffery转为物理地址, nand直接读写系统buffer. 
+之前dongliang看sd时, 发现mmc子系统使用的是dma_map_sg, 不明白nand里面为什么用dma_map_single, 难道是mtd架构上只传单个buffer? 或者是因为FTL每次基本也就是读写一个page. 
+
+11:52 2010-9-29
+VC0882, Linux, 同事信息, 边rongguang, android, 驱动
+
+18:55 2010-9-29
+VC0882, VC0718, Linux, 代码调整, 续, review xiaotao代码
+In D:\Linux\kernel\linux-2.6.35: cvs.exe -q update -P -d
+CVSROOT=:ext:zhangjian@10.0.31.4:/doing/public/methodology/ic-arch-
+verif/fpga_verif/VERIFY
+
+P arch/arm/configs/vimc_defconfig
+P arch/arm/mach-vc0718/Kconfig
+P arch/arm/mach-vc0718/Makefile
+P arch/arm/mach-vc0718/board-fpga.c
+P arch/arm/mach-vc0718/gpio.c
+P arch/arm/mach-vc088x/Kconfig
+P arch/arm/mach-vc088x/Makefile
+P arch/arm/mach-vc088x/board-fpga.c
+P arch/arm/mach-vc088x/emi.c
+P arch/arm/mach-vc088x/gpio.c
+P arch/arm/mach-vc088x/irq.c
+P arch/arm/plat-vimc/Kconfig
+P arch/arm/plat-vimc/Makefile
+cvs update: arch/arm/plat-vimc/clock.c is no longer in the repository
+cvs update: arch/arm/plat-vimc/emi.c is no longer in the repository
+P arch/arm/plat-vimc/gpio.c
+cvs update: arch/arm/plat-vimc/io.c is no longer in the repository
+cvs update: arch/arm/plat-vimc/mmc.c is no longer in the repository
+cvs update: arch/arm/plat-vimc/print-cycle.c is no longer in the repository
+P arch/arm/plat-vimc/include/mach/debug-macro.S
+U arch/arm/plat-vimc/include/mach/gpio.h
+P arch/arm/plat-vimc/include/mach/uncompress.h
+U arch/arm/plat-vimc/include/mach/vc0718_gpio.h
+U arch/arm/plat-vimc/include/mach/vc088x_gpio.h
+P arch/arm/plat-vimc/include/mach/vc088x_irqs.h
+P arch/arm/plat-vimc/include/mach/vc088x_reg.h
+P arch/arm/plat-vimc/include/plat/emi.h
+cvs update: arch/arm/plat-vimc/include/plat/gpio.h is no longer in the repository
+cvs update: arch/arm/plat-vimc/include/plat/vc0718_gpio.h is no longer in the repository
+cvs update: arch/arm/plat-vimc/include/plat/vc088x_gpio.h is no longer in the repository
+U drivers/char/vdec/Kconfig
+U drivers/char/vdec/Makefile
+U drivers/char/vdec/README
+U drivers/char/vdec/driver_load.sh
+U drivers/char/vdec/hx170dec.c
+U drivers/char/vdec/hx170dec.h
+P drivers/net/dm9000.c
+P drivers/serial/vimc_uart.c
+P lib/decompress_bunzip2.c
+
+Success, CVS operation completed
+
+14:14 2010-9-30
+VC0882, emi, emi bootloader
+yangxing邮件"你要的EMI boot 文件已经弄好了，请进行测试"20100930_1424
+你需要的pmu的两个文件，和DDR2的文件已经给你弄好了。
+在\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\bin下。
+请你学习一下，这些文件是如何编译的，下次你就可以自己编译了，如果有不清楚的请问我和zhangjian，文档在D:\VC0882\document\EMI\ EMI bootloader使用方法.txt里面。
+
+14:42 2010-9-30
+时间管理
+0, 10:00
+
+1, 本日
+1), 现在工作积压太多了. 十一期间主要是清理目前工作, 后面希望能几种精力做Linux. 
+2), zhaoyao: delay. 看bootloader里面其它delay. 见"14:56 2010-9-30"
+3), 60' driver spec: 完成arm(含cache, mmu, performance monitor) driver spec初稿, 已上传. 
+
+14:56 2010-9-30
+VC0882, bootloader, clkrst, genPll, pll lock后的delay; arm, Cortex-A8, 分支预测(BTB)的进一步学习
+1, 看zhaoyan axf文件有无delay. 看bootloader里面其它delay.
+2, 这个时间和arm文档写的13个penalty是一致的(每条指令1个cycle, 13+2x1=15cycle).
+zhaoyan邮件"答复: bootloader pll lock后delay修改"20100930_1539
+从仿真上看，每次循环的时间为15个cpu cycle。
+ 
+对应delay code：
+__asm VOID VIM_HAL_SWDelayAsm(const UINT32 delay)
+{
+         cmp r0, #0         
+         bxeq lr
+loop
+         subs r0, r0, #1
+         bne loop
+         bx lr
+}
+3, 分支预测(BTB)的进一步学习:
+1), 不打开BTB或BTB预测错误, penalty都是13cycles.
+2), 基本所有修改PC的指令都会被预测, 除了:
+(1), 第二个操作数是立即数不会被预测: 
+ADD pc, r4, #4 is not predicted.
+(2), xxxS指令不会被预测(movs, subs等), 还有其它修改PC时, 同时修改CPSR或其它寄存器的指令也不会预测.
+Instructions with the S suffix are not predicted. They are typically used to return from exceptions and have side effects that can change privilege mode and security state.
+Instructions that restore the CPSR from memory or from the SPSR These instructions change the PC. They potentially change processor state, privilege mode, and security state. To fetch the target instructions in the new privilege mode, the processor must flush the pipeline
+
+16:04 2010-9-30
+VC0882, 时钟域, mclk
+一般各模块都有aclk, mclk, pclk三个时钟域. 
+但DMAC只有ACLK和PCLK两个时钟域(\todo 确认).
+(21:04 2012-05-17)
+应该是这样的，因为dmac主要就是访问memory，mclk没有作用。
+
+

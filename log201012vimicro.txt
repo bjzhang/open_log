@@ -1,0 +1,2071 @@
+﻿
+19:36 2010-12-1
+时间管理
+0, 10:45
+
+1, 本日
+1), VC0882 bootloader讨论. 
+
+20:48 2010-12-1
+VC0882, bootloader
+1, Liuzixi: Sleep时ddrc应该切频到dll bypass模式。
+bamvor: 查文档, 没有找到这个说法. 
+
+dll software reset是否需要还是需要讨论. 加入bypass bit. 
+
+14:58 2010-12-2
+时间管理
+0, 10:15
+
+1, 本日
+1), VC0882 bootloader讨论.
+
+15:23 2010-12-2
+1, 代码修改;
+2, 512info和pmu寄存器有修改;
+3, power on和wakeup的差异;
+4, strappin的影响: 如果xclk, 如何?
+
+11:58 2010-12-3
+VC0882, bootloader, cdc, nfc时钟处理修改(见5), \todo 关注zhicheng meeting mintues; bootloader zhangjian的又一个错误(见7)
+1, 计算时间, 考虑bootloader arm运行在240MHz. 
+1), strappin里面30-40次, 小于ms.
+2), load image
+映像200k, 每次读最小512byte, 每次读包括两次开两次关. 
+400 * 4 * 2 * 1500, 大约20ms.
+2, bootloader里面加入如下两个函数
+1), VOID VIM_CLKRST_NFCA_ECC_CLK_OFF(VOID);
+(1), gate nfc aclk;
+(2), disable ecc ckd enable;
+2), VOID VIM_CLKRST_NFCA_ECC_CLK_ON(VOID);
+(1), ungate nfc aclk;
+(2), enable ecc ckd enable;
+3, 此外bootloader文档需要修改. 我这边还需要完成ddr clk的流程图, 请dongliang帮忙改. 
+4, FPGA上可能没有相关时钟gate, enable控制. 
+5, (以下内容未发邮件, 当时商量是zhicheng发)
+1), 原本xiaoming建议流程如下:
+Lidongliang转发pengxiaoming邮件"nfc的配置方法沟通"20101202_2052
+(1), 关掉nfc_arst_n
+(2), 关掉ecc_mrst_n
+(3), 配置nfc的寄存器
+(4), 打开nfc_arst_n
+(5), 打开ecc_mrst_n
+(6), 发送dma_trigger,让nfc开始工作.
+这里的实质要求就是在配置nfc的寄存器时, 我们希望能够关掉nfc_arst_n和ecc_mrst_n. 
+2), 但是经huangwei确认, 没法没法单独控制nfc_arst_n, 只能控制nfc_rst. 这样导致整个nfc含寄存器都进入reset状态. 所以改为下面方式, 由reset改为gate: 
+nfc寄存器配置流程需要改为
+(1), gate nfc aclk;
+(2), ecc ckd disable;
+(3), 修改寄存器; 
+(4), ungate nfc aclk;
+(5), ecc ckd enable;
+(6), 发送dma_trigger,让nfc开始工作
+6, (11:59 2010-12-4)这个问题是GeMeiPing后端仿真发现的, 据xiaoming说概率很小, 再仿真可能都不会发现. 
+882 nfc问题 跨时钟域的逻辑，但寄存器都在其中一个时钟域。
+nfc里面其实包括ecc和nfc两部分, 这两部分有些寄存器是共用的, 而且二者所有的寄存器会都放在nfc时钟域, 这样理论上说配置寄存器影响了ecc的逻辑, 后面软件trigger读写, 由于nfc和ecc在两个时钟域, 存在ecc部分逻辑进入不定态的可能性.
+7, (13:55 2010-12-4)bootloader zhangjian的又一个错误
+VOID VIM_CLKRST_NFCA_ECC_CLK_OFF(VOID)
+{
+	__CLKRST_StorPeriAclkEnBit(STOR_PERI_NFC_ACLK_GT);
+	__CLKRST_StorPeriMclkDisBit(STOR_PERI_MCLK_CKD_ECC_EN);
+}
+写成了: 
+VOID VIM_CLKRST_NFCA_ECC_CLK_OFF(VOID)
+{
+	__CLKRST_StorPeriMclkEnBit(STOR_PERI_NFC_ACLK_GT);
+	__CLKRST_StorPeriAclkDisBit(STOR_PERI_MCLK_CKD_ECC_EN);
+}
+这个还是huanglei再看的时候有问题, 又问huangwei, huangwei觉得不对又找的dongliang. 我自己的失误耽误了大家.
+8, (16:40 2010-12-4)
+这个问题ASIC仿真无问题, FPGA实验出错, 后来请meiping仿真, 发现问题: 
+GeMeiPing邮件"答复: change CLKRST RTL (FPGA) for NFC CDC issue"20101204_1634
+使用你修改过的FPGA NFC clk仿真出现问题
+ECC_MCLK一直没有时钟，看了一下波形
+ckd_ecc_en_local信号一直是高阻太，clkrst_stor_peri_mclk.v中ckd_ecc_en_local没有申明就直接用了，应该是这个原因引起的高阻态。
+
+13:25 2010-12-3
+时间管理
+0, 10:05-16:40
+
+1, 本日
+1), 上午, 3h: VC0882, bootloader, nfc时钟处理修改, \todo 关注zhicheng meeting mintues, 见"11:58 2010-12-3".
+2), 2h: ddr clk流程图.
+
+12:01 2010-12-4
+时间管理
+0, 11:10
+
+1, 本日
+1), bootloader nfc clk代码昨天修改有问题. 见"11:58 2010-12-3"7. 
+2), 和zhicheng, xiaoming一起看为什么FPGA上测试不过. 后来发现是版本问题. 见"11:58 2010-12-3"8
+3), 完善bootloader ddr clk图, 发信. 文件已上传到"2010-12-1 bootloader_clkrst_ddr问题讨论.vsd"
+
+13:55 2010-12-4
+VC0882, storage, nfc
+nfc写数据时ecc编码直接使用nfc mclk, 可以关闭ecc clk.
+nfc读数据时ecc解码比较复杂, 使用ecc clk, 即使不使用ecc也需要ecc工作, 也必须打开ecc clk. 
+
+15:39 2010-12-4
+VC0882, clkrst
+为了保险, 重新阅读clkrst mas, 阅读到2.2
+1, clk enable = 0时, output会在当前周期完成才会停止. 
+Note that when clock divider port “en” is 0, its output is not stopped until internal clock counter count down to 0, that is, “en” takes effect only when clock divider output clock is supposed to have a rising edge. This strategy is taken in order to guarantee the output clock’s integrity.
+2, 修改divider时也会等前一个周期完成:
+clkdiv supports dynamic change of ndiv. When ndiv is changed, ndiv does not take effect until clock counter reach 0 in order to guarantee the divided clock’s integrity. 
+
+10:38 2010-12-6
+VC0882, VC0718, wdt, ICE
+1, wdt rst会不会重读strappin? \todo
+VC0882: 从文档上看, 不会;
+VC0718: gaoxiaoyu说会. 
+
+11:30 2010-12-6
+时间管理
+0, 9:45
+
+1, 本日
+1), bootloader ddr clk流程图修改; 见"11:34 2010-12-6"1
+2), bootloader usb boot时钟配置. \todo 总结, 反思: 又是一个clk没考虑到的问题. 
+
+11:34 2010-12-6
+VC0882, bootloader, 修改
+1, ddr clk流程图:
+谢谢huangwei提醒. 修正了初始化状态状态的说明. 
+把LP=0, ddr_bp=0改为LP=1, ddr_bp=1. 代码没有问题. 
+同时修正了几处拼写错误. 
+
+18:07 2010-12-6
+VC0882, memory, ddr
+1, VC0882 ddr io pad没法进入低功耗模式
+
+14:27 2010-12-7
+时间管理
+0, 11:35
+
+1, 本日
+1), bootloader
+2), 编程练习, 处理clkrst寄存器;
+3), 总结：bootloader感觉生疏。很久不写程序了，基本功退化，思路也理不清。
+
+16:09 2010-12-7
+VC0882, clkrst, 寄存器读写测试, c语言编程练习
+1, 目的: 输入寄存器名称/地址和寄存器的值, 打印出含义. 
+重构: 使用双向链表重写? (是否有必要).
+详述: 
+1), 如何得到寄存器的含义? 
+寄存器地址和值通过reglist得到, 
+(1), 寄存器保存为数组. 
+(2), 每个寄存器定义为一个struct, 用bitfield方式分隔不同field. 
+(3), 每个bitfield
+(4), 如果希望灵活需要正则表达式. 优先级低.
+因为目前只需要处理10-20个寄存器, 所以暂时手工处理. 
+2), 处理各种输入格式. 优先级低;
+2, 实践: 
+1), bitfield原来没有用过, 如果是小端是LSB在前. 
+2), 函数指针还是不熟悉: 
+若有函数
+UINT32 func(struct tag_VIM_CLKRST_Cfg *cfg);
+如果是改为函数指针的形式是
+UINT32 (*funcT)(struct tag_VIM_CLKRST_Cfg *cfg);
+实际就是把函数, func改为指针形式(*funcT).
+所以typedef是: 
+typedef UINT32 (*funcT)(struct tag_VIM_CLKRST_Cfg *cfg);
+2, (18:17 2010-12-8)
+今天只有不到一个小时。希望能有一个能用的框架。初步实现目的。
+为了简单使用数组而不是链表，这样省了很多数据结构函数。实现时一时没想清楚，险些自底向上，后来先写接口函数才逐步完成。
+下一步打算
+1), 先实现bootloader使用的clkrst寄存器。
+2), 改进数据结构，数组改为链表。这个其实不是必须的，主要是为了配合最近系统程序员书的练习内容。
+
+16:29 2010-12-7
+VC0882, bootloader, nfc
+VC0882 bootloader又有一个问题, zhaoyan仿真时把"clkConfDelay  == 4;", 这样nand boot时时间会很长. 这个问题其实应该是我也会看出来的. 这次是zhicheng提出来的. 
+虽然从道理上说, 仿真也应该给出出错的原因. 但是我自己的问题是完全惯性思维认为是ddr配置问题导致出错, 没有想一想"出错"只是表象. 这个知识完全是自己之前积累的东西, 怎么能现在还糊涂呢? 最近不断怀疑自己基本功不扎实. 
+
+17:35 2010-12-8
+VC0882, bootloader, 代码检查
+1, 接口函数使用. 
+2, 仿真未覆盖的case. 未作. 
+
+17:36 2010-12-8
+时间管理
+0, 15:10
+
+1, 本日
+1), bootloader wakeup仿真问题. 后来发现是phy_io_cfg被bypass了. 
+2), bootloader clkrst检查. 见"17:35 2010-12-8".
+
+18:27 2010-12-8
+项目, cvs, 迁移; 脚本, perl, find: 递归搜索; changeCVSRoot.pl
+1, aiguo邮件"转发: cvs迁移"20101208_1524
+Hi,all
+我们的CVS要迁移，大家不要在旧的CVS提交代码，直接换成新的CVS来提交代码，新旧CVS的主要区别主要有两个：
+1）  需要cvs.vimicro.com的key，以前zhifeng给大家发过，如果谁还没有，就直接发信给zhifeng，cc给我。
+2）  直接替换所有的cvs目前下的root，把:ext:aiguo@10.0.31.4:/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY替换成:ext:aiguo@cvs.vimicro.com:/project/fpga_verif/VERIFY，一切搞定。
+如果谁有问题，和旁边搞定的同学学习一下。
+2, Linux下写脚本替换:
+1), sed "s/@10.0.31.4\:\/doing\/public\/methodology\/ic-arch-verif/@cvs.vimicro.com\:\/project/g" Root -i
+-i表示直接在输入文件替换. 
+完整脚本:
+#!/bin/bash
+
+replace=`find * -name Root`
+#echo $replace
+for name in $replace; do
+#       cat ${name}
+       sed "s/@10.0.31.4\:\/doing\/public\/methodology\/ic-arch-verif/@cvs.vimicro.com\:\/project/g" ${name} -i
+done
+参考"11:18 2010-9-24".
+3, windows下使用mingW不行, 原因未知, 估计是语法问题. 
+4, (15:38 2010-12-9)改用perl实现. 
+1), File::Find
+搜索中默认是会改变目录的, 可以用"no_chdir"参数保证目录不变. 开始无法打开文件, 一直不知道原因, 后来看<perl语言入门>看到提示才想起来. 
+其实自己也可以尝试打印当前目录, 到了自己遇到问题, 还是有些着急. 
+当时只是想到用简单脚本对比调试:
+[zhangjian@icp-desktop Linux]$ cat test.pl 
+#!/usr/bin/perl
+
+$file="./doc/CodeStyle/CVS/Root";
+print "$file\n";
+if ( !open FILE, $file)  {
+        die "Cannot open $file: $!";
+}
+while (<FILE>) {
+        print;
+}
+2), 改写文件也是这次才学会, 先把文件都读出, 然后改写这个array, 最后写回. 
+如果对于较大的文件, 这样可能太费内存了. 
+if ( !open FILE, '<', $RootFile ) {
+        die "Cannot open $RootFile: $!";
+    }
+my @result = <FILE>;
+close FILE;
+for $line (@result) {
+    print "before replace $line";
+    $line =~ s/$find/$replace/g;
+    print "after replace $line";
+}
+open FILE, '>', $RootFile;
+print FILE @result;
+close FILE;
+
+5, 这个脚本写了将近两个小时, 最终结果如下:
+1), 用法: 在需要替换的目录执行这个脚本, 不需要参数. (cat changeCVSRoot.pl)
+#!/usr/bin/perl
+
+use File::Find;
+
+my $count = 0;
+my $dir = ".";
+my $find = "\@10\.0\.31\.4\:\/doing\/public\/methodology\/ic\-arch\-verif";
+my $replace = "\@cvs\.vimicro\.com\:\/project";
+find (\&wanted, $dir);
+print "totallly $count Root files\n";
+
+sub wanted
+{
+	#search the file exactly named "Root"
+	if ( /^Root$/ ) {
+		$count++;
+		my $RootFile = "Root";
+		#convert filename to bash output format, just for bash test.
+#		$RootFile =~ s/\.\///g;
+		print "$File::Find::name\n";
+		if ( !open FILE, '<', $RootFile ) {
+		        die "Cannot open $RootFile: $!";
+    		}
+		my @result = <FILE>;
+		close FILE;
+		for $line (@result) {
+			print "before replace $line";
+			$line =~ s/$find/$replace/g;
+			print "after replace $line";
+		}
+		open FILE, '>', $RootFile;
+		print FILE @result;
+		close FILE;
+	}
+}
+2), 其实当初用bash写脚本时, 大约只使用了30', 希望perl也能熟悉, 对于类似工作, 如果写脚本的时间和使用工具(包括google或请教同事)的时间相差不多, 就好了. 
+
+10:09 2010-12-9
+时间管理
+0, 9:50
+
+1, 本日
+1), 10:05-11:14 英语练习; <DONE>
+2), 2h: windows下脚本. <DONE>，见"18:27 2010-12-8"4
+3), bootloader clkrst test case检查. <取消>
+4), 编程练习: clkrst寄存器含义打印. 见"16:09 2010-12-7"2
+目前段错误: 后来利用最后一点时间调通了, 很高兴:)
+
+14:46 2010-12-9
+VC0882, FPGA, 寄存器, reglist, 读写测试, 文档
+D:\VC0882\document\RegisterTest.doc
+
+9:49 2010-12-10
+VC0882, tapeout, review
+1, aiguo邮件"答复: about 882's tapeout review"20101209_1403
+882 Tapout review meeting minutes（ICP and QA team）：
+1) 加入眼图的测试（包括usb和ddr），xuelian team开始学习相关的知识，也可以协调haifang training
+2）建立视频编解码库，特别是1080P的视频源需要搜集，需要市场部提供
+3）戴博提供nandflash list，最好ddr list也能提供
+4）在SV阶段加上大的电阻触摸屏测试，这样能够很好验证我们的多点触摸的算法，需要市场部提供资源
+5）ddr test plan中不过的片子，加上详细的注释，包括什么原因导致不能测试，什么原因导致测试不过，这样便于后面查阅，xuelian提供
+6）ICD整理一个ddr 调试的 notes，把这些经验传承给AE
+7）在SV阶段能够使用现有的DDR子板，这样能够加快SV DDR的验证，需要haifang确认
+8）xuelian整理一个最终的test plan文档，作为882最后tap out review的结果
+9）戴博补充一些山寨的sd，覆盖更全面的sd兼容性测试
+10）市场部多找一些电容屏，最好能够找到各种接口的，如I2C，SPI等
+11）A8的benchmark的测试需要ICP提前研究
+
+9:50 2010-12-10
+时间管理
+0, 9:40
+
+1, 本日
+1), VC0882 clkrst寄存器. 
+2), 复制xiaotao资料到mp4. 路上做882总结. 心得, 问题等等.
+
+9:54 2010-12-10
+VC0882, clkrst, 寄存器读写测试, c语言编程练习, 续, perl
+1, 目的
+1), 先实现bootloader使用的clkrst寄存器。
+2), 改进数据结构，数组改为链表。这个其实不是必须的，主要是为了配合最近系统程序员书的练习内容。
+2, bootloader里面使用的clkrst寄存器.
+1), 疑问: 列表和数组是什么关系? 
+2), qw里面用空格分隔字符串, 不需要再加",". 
+my @reg_base_func = qw(VIM_HAL_WRITE_REG, VIM_HAL_READ_REG, VIM_HAL_READ_REG32, VIM_HAL_WRITE_REG32);
+应当改为:
+my @reg_base_func = qw(VIM_HAL_WRITE_REG VIM_HAL_READ_REG VIM_HAL_READ_REG32 VIM_HAL_WRITE_REG32);
+3), 后来又发现寄存器函数有遗漏, 加入后得到完整的bootloader clkrst使用的寄存器名称
+[zhangjian@icp-desktop extract_register]$ cat extract_register 
+#!/usr/bin/perl
+
+use strict;
+
+my $cur_file = shift @ARGV;
+
+#define several reg functions
+my @reg_base_func = qw(VIM_HAL_WRITE_REG VIM_HAL_READ_REG VIM_HAL_READ_REG32 VIM_HAL_WRITE_REG32);
+my @reg_high_level_func = qw(VIM_HAL_WRITE_UINT32_BITVAL VIM_HAL_WRITE_UINT32_MASK VIM_HAL_READ_UINT32_BITVAL VIM_HAL_READ_UINT32_BITCHECK);
+my @reg_module_func = qw(_VIM_CLKRST_WriteUint32MaskDelay _VIM_CLKRST_WriteRegDelay);
+#generate reg func
+my @reg_all_func;
+push @reg_all_func, @reg_base_func;
+push @reg_all_func, @reg_high_level_func;
+push @reg_all_func, @reg_module_func;
+#print "@reg_all_func\n";
+
+open STDIN, $cur_file;
+while(<>){
+        foreach my $func (@reg_all_func) {
+                if ( /$func\(([^,)]*).*\)/ ) {
+                        printf "register name is $1\n";
+                        next;
+                }
+        }
+}
+4), 还需要去掉重复定义. 
+(1), //x:
+x表示运行使用空格. 
+(2), "#"似乎有特殊含义? \todo
+(3), 想自己从regdef提取寄存器花了1.5小时也没有完成. 后来意识到其实有一个自己写的脚本可以从reglist xls里面提取出来. 这次这个时间没必要. 
+同样的东西在excel里面用2分钟就完成了. 
+唉, 做事情, 还是经常想不清楚. 
+(4), 如果print后面没有加"\n", 可能执行流程和预期有差异. 
+下面代码后面两个print加入"\n"之前, 只有printf打印没有print打印, 直接执行了next.
+foreach my $func (@reg_all_func) {
+        if ( /$func\(([^,)]*).*\)/ ) {
+                my $reg_name = $1;
+                printf "register name is $reg_name\n";
+                if ( exists $reg_def_hash{$reg_name} ) {
+                        print "address is $reg_def_hash{$1}\n";
+                } else {
+                        print "error: register not defined\n";
+                }
+                next;
+        }
+}
+(5), 总共用了3.5个小时才完成这个. 其实这个不是问题的关键. 这个事情就属于重要但是不紧急的情况. 
+用法: 
+ ./extract_register base_function_definition.
+ 会输出base function保护的寄存器及其对应的地址. 
+(6), 修改为代码所需格式: 
+a, 字符串转为小写(lc):
+my $result = lc $string;
+注: 转为大写: uc
+b, 修改中发现输出有问题, ","在addr那行总是到了最前面(实际应该在最后). 后来发现保存为文件没有问题. 难道是终端的问题导致perl输出顺序错误? 
+5), 代码还需要把名称对应的地址写出来.
+其实这个就不需要提取了, 直接include "VIM_DRIVER_Refdef.h"就行了. 
+3, 续2. 
+其实当初为了是bootloader使用, 是怕寄存器太多, 结果发现寄存器已经很多, 所以不如直接parser reglist. 预计下班前完成. 
+(19:47 2010-12-10)如果不去吃饭, 基本是下班前完成. 今天下午后半段调整了思路, 感觉效果还可以. 
+下一步就是如何把bitfield的数值和打印关联起来了. 另外有个小问题是, reversed的bit宽度需要单独计算. 
+
+19:40 2010-12-10
+项目, CVS, 迁移; Linux, 组设置错误造成cvs commit有问题
+1, XunZhiFeng邮件"答复: 求助"20101210_1857
+[root@nisa ~]# id fenglj
+uid=5075(fenglj) gid=5000(others) groups=5000(others),1253(vc1600)
+对比了一下，是当初组设置有问题
+2, bamvor: 
+上cvs.vimicro.com看了一下, 现在fenglijun的gid和我一样, 
+[zhangjian@cvsserver ~]$ id zhangjian
+uid=1283(zhangjian) gid=511(sv) groups=511(sv),1253(vc16001)
+[zhangjian@cvsserver ~]$ id fenglj
+uid=5075(fenglj) gid=511(sv) groups=511(sv),1253(vc16001)
+看起来是gid和groups设置问题造成CVS commit有问题. 
+
+FengLiJun邮件"求助"20101210_1428
+Hi zhifeng:
+CVS迁移后发现有的文件夹能commit，有的不能，update都正常。
+例如VC0718\panda_os\ipp 目录下能提交，VC0718/dragon目录提交会报错，提示打不开锁定的文件，没有权限：cvs [commit aborted]: could not open lock file `/project/fpga_verif/VERIFY/VC0718/dragon/VPanel/,vreglist.cpp,': Permission denied
+不知道和maguojun的问题是不是类似，麻烦指点一下啊。
+
+14:18 2010-12-13
+时间管理
+0, 10:10
+
+1, 本日
+1), 上午: zhaoyuan android team review;
+2), 下午: Lidongliang VC0882 sync up;
+3), 编程练习, 处理clkrst寄存器. 见"16:58 2010-12-13".
+
+14:46 2010-12-13
+VC0882, sync up
+1, liuxiaotao
+1), android
+(1), beagle android正确. VC0882错误. 
+一个是驱动差异, 一个是文件系统介质不同(beagle是sd, 882是ramdisk).
+(2), android调试. 
+(3), 文档. 
+2, zhangjian
+1), 882总结;
+2), zhaoyuan文档准备: ddr design doc review; porformance monitor/clk switch 工作讨论;
+3), 加压测试. 
+3, lidongliang
+1), mutlimedia:
+(1), 本周framework, 下周opencore. 
+2), android移植. 
+4, LiDongLiang邮件"答复: 882 sync up meeting"20101213_1539
+总结大家手头的事情及本周的工作
+Meeting minutes 如下
+wangwenlei
+1. 7882 的调试。数字部分已经调试完毕并提交测试，目前支持7882的SV 调试。
+2. GPU 的遗留问题。以前能加载上模块，后来无法加载了，kernel提示rellocation error。还需继续调试。
+3. 配合houpeixin，在882 fpga上运行AE提供的android系统，其中GPU部分已经移植完毕。主要是学习，方便后面的调试。
+yangxing
+1. 三个PAD 测试。
+上周开始测试，熟悉，找一些资料
+本周五完成所有的测试。音视频格式等，会有相应的testplan出来。
+2. 在882 panda os里面调试cache lock down。代码已经写好。
+3. Linux 移植时，遇到了cache的问题，当时虽然解决了，但没有完全弄清楚，希望整理报告出来。并完善cache 工具。
+zhangjian
+1. ddr 的 design document。主要集中在低功耗。
+2. 准备 bus performance monitor，clk switch 文档。下周与zhaoyuan讨论。
+3. 加压测试的文档整理。
+shuyu
+1. 辅助yangxing测试3个pad。
+2. zhaoyuan 要求提供背光的控制。把背光算法做成工具，在3个pad上面跑跑效果。出文档说明。
+3. 看SurfaceFlinger 相关内容。 
+xiaotao
+1. 用zhanjian下载的android 源代码自己编译后在882上跑起来了。需要整理文档。
+问题：换过一个LCD屏后，显示的图片正常了，但android 不能正常run。在图像初始化时，提示内存分配失败。正在调试
+自己编译的镜像挪到beagle board板子上，跑起来没问题。
+try：移植SD到android 内核
+2. android 的linux下的开发环境建立，APP，Framework 层都可通过ddms 调试。已经做完，并写完文档。
+3. 研究android 系统的功能裁剪及添加。
+fandong
+请假
+anzhiming
+1. 量产工具
+1). 12月份的工作量完成了80%；目前量产工具有几个问题正在解决。
+2. 718 的emac
+1). emac 的fpga验证方面的testplan大多提交测试，有一项还在调试，远程唤醒帧。
+lidongliang
+1. 研究MediaPlayer 的Framework 层，计划本周结束。开始看Library 层的内容。
+2. 与xiaotao一起移植android。
+另外每个人都要总结882，按时发出总结报告。
+
+16:58 2010-12-13
+VC0882, clkrst, 寄存器读写测试, c语言编程练习, 续, perl, 续
+1, 最近做这个工作希望达到两个目的：
+一个是把clkrst的寄存器规则加进去，check一下bootloader对clock配置有无问题。
+二是完成一个自动生成basefunc的函数。
+2, perl的"else if"是elsif, 既不是elif也不是elseif, "else if". 呵呵.
+3, 字符串操作函数: 
+1), ".", 连接字符串, 开始以为是",", 其实不是. 
+2), "x", 这种操作能把操作符左边字符串重复操作符右边数字那么多次：
+"barney"x (4+1) # "barney"x 5, "barneybarneybarneybarneybarney"
+4, 脚本编写完成. \todo 写文档. 以后进行重构. 
+发现huangwei clkrst寄存器有些错误造成脚本parser出错, 修改后正确. 
+5, (19:22 2010-12-13)\todo, 为了完成任务一, 需要写一个通用的print函数: check寄存器的哪一个bitfield有变化, 打印出有变化的bitfield, 忽略reserve bit.
+明天估计需要2小时完成. 任务二放到周三完成. 周二需要有882总结初稿. 
+
+17:14 2010-12-13
+VC0882, android, training, surface flinger
+资料目录: \\10.0.2.36\sqmshare\Document\Linux\training\10-Android_env_IPC_MediaPlayer_SurfaceFlinger
+1, surface flinger:
+1), 维持layer的order. 
+2), front和back两个buffer 乒乓机制:
+1), 自: http://blog.csdn.net/BonderWu/archive/2010/10/20/5953872.aspx
+这个动态变化的实现我没仔细看，可以参照 ：/frameworks/base/lib/surfaceflinger/layer.cpp 中的 setbuffers() 。
+2), 在gr_flip中设置fb结构体index(0或1), 然后调用set_active_framebuffer根据fb结构体index设置y offset, 这样就实现了乒乓. 
+注: android里面乒乓buffer是连续的buffer, size是屏幕的两倍. 
+2, 框架中: 基本上说蓝色是java, 绿色是c++, 红色是c语言. 
+3, Bp, Bn: proxy, native. 
+4, VC0882 meeting minutes:
+今天请shuyu介绍了android surface flinger机制(一), 疑问如下: 
+1), android overlay是否可以用VC0882 hardware overlay实现. 
+2), android Graphics.c里面是如何得到framebuffer地址并使用的? 
+
+14:14 2010-12-14
+时间管理
+0, 14:10-20:20(上午病假)
+
+1, 本日
+1), VC0882 项目总结. 
+
+14:19 2010-12-14
+软件技巧, outlook, 新邮件提示/显示未读邮件提示, 工具->选项->首选参数选项卡: 电子邮件选项->高级电子邮件选项: 在通知区域显示信封图标.
+
+14:21 2010-12-14
+(01:29 2010-12-15)
+(11:25 2010-12-15)
+VC0882, 项目总结, 宏观总结, 分阶段总结1,2
+1, 邮件
+1), aiguo邮件"882 postmortem meeting"20101210_1722
+每个项目结束后都会有一个postmortem，请参与882的每个人都总结一下882项目过程中的得失，经验，team协作等。
+大家把总结发给我，beizhan和xuelian。
+2), FengBeiZhan邮件"答复: 882 postmortem meeting"20101210_1740
+所有参与过882的人都要写这个文档， 当文档写好后，大家一起要开会和老大们一起讨论这些文档所写的细节的。
+结束时间：2010-12-16 （下周四）18:00；
+3), aiguo邮件20101214
+总结的事情大家也抓紧时间，总结的信也发送给dongliang。
+2, 列一下自己在882项目做的工作, 收获, 存在的问题. 是否总结了文档. 
+
+16:29 2010-12-14
+VC0882, android, training, 续, media play
+资料目录: \\10.0.2.36\sqmshare\Document\Linux\training\10-Android_env_IPC_MediaPlayer_SurfaceFlinger
+1, android开发环境. 
+eclipse
+DDMS: 自: http://www.moandroid.com/?p=638
+DDMS 的全称是Dalvik Debug Monitor Service，它为我们提供例如：为测试设备截屏，针对特定的进程查看正在运行的线程以及堆信息、Logcat、广播状态信息、模拟电话呼叫、接收SMS、虚拟地理坐标等等。
+bamvor: 从名称看只是给java调试用的. 
+ADB: android debug bridge. 通过usb和开发板通信.
+2, 目录结构:
+1), src:
+2), gen: 资源文件id
+3), Android2.2: package引用. 
+4), assets: 未知. 
+5), res: 资源, 例如包括:
+(1), drawable
+(2), layout: 用xml描述布局. 
+(3), values: 工程名称相关.
+6), AndroidManifest.xml: android应用程序中很重要的xml, 包括intent和activity等. 
+7), default.properies: 包括api level.
+3, android概述:
+1), activity, intent, content provider, service.
+activity -- intent filter -- content? intent filter起什么作用? 
+service里面也有intent filter.
+2), AndroidManifest.xml实例, 在两个activity之间切换. 
+(1), 自: 《Android应用开发揭秘》源码\第3章\Examples_03_01
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+      package="com.yarin.android.Examples_03_01"
+      android:versionCode="1"
+      android:versionName="1.0">
+    <application android:icon="@drawable/icon" android:label="@string/app_name">
+        <activity android:name=".Activity01"
+                  android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name="Activity02"></activity>
+    </application>
+    <uses-sdk android:minSdkVersion="5" />
+</manifest> 
+(2), 解释: 
+自: http://zhidao.baidu.com/question/195292472
+android.intent.action.MAIN
+决定应用程序最先启动的Activity
+
+android.intent.category.LAUNCHER
+决定应用程序是否显示在程序列表里
+
+4, media player
+source code: 《Android应用开发揭秘》源码\第7章\Examples_07_01\src\com\yarin\android\Examples_07_01\Activity01.java
+可以看到application是如何编写的. 
+
+5, 下面看framework层. 
+1), JNI: jni是java通用的机制, 负责java调用c++. 
+代码: \\10.0.2.36\sqmshare\Document\Linux\training\10-Android_env_IPC_MediaPlayer_SurfaceFlinger\Java jni
+java中定义"private native"开始函数, 实际是c++的函数. 
+
+6, IPC, binder等等
+1), 
+自: 10-Android_env_IPC_MediaPlayer_SurfaceFlinger\android IPC机制\Android的IPC机制Binder的各个部分.doc
+这个就是Android 提供给我们的外特性：在Android 中，要完成某个操作，所需要做的就是请求某个有能力的服务对象去完成动作，而无需知道这个通讯是怎样工作的，以及服务在哪里。所以Andoid 的IPC 在本质上属于对象请求代理架构，Android 的设计者用CORBA的概念将自己包装了一下，实现了一个微型的轻量级CORBA 架构，这就是Andoid 的IPC设计的意图所在，它并不是仅仅解决通讯，而是给出了一个架构，一种设计理念，这就是Android 的闪光的地方。Android 的Binder 更多考虑了数据交换的便捷，并且只是解决本机的进程间的通讯，所以不像CORBA 那样复杂，所以叫做轻量级。
+2), class RefBase: 引用计数.
+3), bn需要实现. bp基本是照抄.
+bn, bp参考"10-Android_env_IPC_MediaPlayer_SurfaceFlinger\android MediaPlayer\zhangjian_upload\android media player类继承关系.jpg", 自: http://www.360doc.com/content/10/1118/22/11192_70565009.shtml, android学习笔记.
+从名字可以看出, proxy是代理, native才是实际需要实现的部分. 
+4), "Android的MediaPlayer架构介绍收藏.doc"里面可以看出. 
+MediaPlay和MediaPlayService之间通过IPC通信(bamvor: 看来就是binder了, 中间会用到bp?). MediaPlayService会调用PVPlayer, 后者是opencore部分了, 也就是实际负责播放的部分. 
+5), 貌似MediaPlayer, MediaPlayClient, MediaPlayerService三个会用到IPC? 
+6), \todo: opencore里面的node和openmax是什么关系? 
+
+17:41 2010-12-14
+VC0882, android, zhaoyuan, suxin: lcd闪烁
+1, suxin邮件"答复: 我把工具放到如下目录，试一试，有问题，及时反馈，thanks"20101214_1739
+另外，昨天提到的由一级bootloader启动后，LCD显示闪烁的问题，今天比对了脚本中DDR设置、实际打印出来的DDR设置和烧写工具ini文件中的DDR设置，发现ini文件与脚本文件有部分DDR寄存器值不同。修改ini文件内容后，可以明显降低LCD刷新时闪烁，但在近距离观看时，仍然可以看到字迹有轻微的抖动。
+
+10:07 2010-12-15
+系统, ghost, 自: TanJiaLiang
+Ghost镜像放在\\10.0.2.36\sqmshare\share\tanjialiang\GHOST_882_780
+Ghost的光盘在Xue nan处，有需要请随时联系我或Xuenan
+
+10:08 2010-12-15
+时间管理
+0, 9:55
+
+1, 本日
+1), 882总结;
+2), 14:00-15:30 android讨论. 
+3), 20' 读报
+4), 882总结. 见"15:02 2010-12-15", 初步完成, 明天继续细化. 
+5), 编程练习, 处理clkrst寄存器. 见"17:44 2010-12-15"
+
+7, 自己Linux porting一直没有调通, 感觉很不stable.
+如果把qemu和Linux结合起来呢? 
+
+14:23 2010-12-15
+VC0882, android training, 环境和调试
+1, out product有编译文件列表. 
+
+17:44 2010-12-15
+VC0882, clkrst, 寄存器读写测试, c语言编程练习, 续, bootloader clkrst处理检查函数
+
+11:06 2010-12-16
+时间管理
+0, 9:50-19:35
+
+1, 本日
+1), 30' 和yangxing讨论毕业论文. 
+2), 882总结. 直接写到word文档中，最后贴回工作日志。
+
+14:02 2010-12-16
+VC0882, 没有时间去听IC的postmortem，很遗憾。这个东西对我来说很重要，但是现在事情处理不过来，只能暂缓了。对于我来说还是先巩固基础，走扎实一点比较好。
+\todo 问一下dongliang的体会。看看ICD有没有文档。
+
+9:58 2010-12-17
+时间管理
+0, 9:32
+
+1, 本日
+1), VC0882总结, 见"10:25 2010-12-17". 
+2), 改写脚本输出全部搜索结果。统计882工作日志字数。
+
+10:25 2010-12-17
+VC0882, 总结
+1, 上午浏览整个文档，做小修改。下午针对有问题的地方做大的补充或修改。
+
+0:03 2010-12-18
+软件技巧, perl, logAssistant
+1, 经过改进, 已经可以输出完整搜索结果, 只是多了一个日期. 另外没有考虑多个日期的情况(目前只能保存一个日期). 
+需要实验结果是否正确, 并重构代码.
+2, (20:14 2010-12-18)预期目标:
+1), 实现正确功能; 预计30分钟.
+2), 重构代码. 预计30分钟.
+3, 修正昨天的代码: 
+(20:36 2010-12-18)有两个日期的问题还是没有找到, 看来需要分析一下$status状态机. 
+4, (19:45 2010-12-19)
+(1), 发现需要用双反斜杠才行, 奇怪.
+if ( 1 == match_section_start($cur_line, "\\(", "\\)") ) {
+    print "skipping\@line<$i>: $_\n";
+    $status = 1;
+}
+
+sub match_section_start {
+    #input parameter
+    my $line = $_[0];
+    my $start = $_[1];
+    my $end = $_[2];
+    #return parameter
+    my $match = 0;
+    #internal content
+    #define section start/end pattern
+    #remove ^. add it while match
+    #caution: using ' not " in the following regular expression
+    my @section_start_keywords =
+    (
+        # "15:16 2009-12-7"
+        '\d{1,2}:\d{1,2}\ 20\d\d-\d{1,2}-\d{1,2}',
+        # "#2006-8-7 21:07"
+        '\#20\d\d\-\d{1,2}\-\d{1,2}\ \d{1,2}:\d{1,2}',
+        # "#15:20 2006-3-10"
+        '\#\d{1,2}:\d{1,2}\ 20\d\d\-\d{1,2}\-\d{1,2}',
+        # "#20060519 2345"
+        '\#20\d{6}\ \d{4}'
+    );
+
+    print "$line: start<$start>, end<$end>\n";
+    foreach (@section_start_keywords) {
+        if ( $line =~ /^$start$_$end/ ) {
+            print "match and return\n";
+            $match = 1;
+            last;
+        }
+    }
+    $match;
+}
+(2), 初步完整, 进一步验证. 
+5, (21:56 2010-12-19)下一步:
+1), 验证脚本功能;
+2), 支持设置output文件名(含目录)和输出到日志目录;
+3), 支持在结果中搜索, 需要支持原文件自动备份.
+4), 其他改进: 例如是否输出到文件(可以支持自动控制: 一般情况显示, 结果太多就不显示).
+5), 重构脚本.
+6), 支持近义词, 同义词. 脚本到了这个阶段需要支持这个功能了. 否则每次输出的太多. 
+
+10:08 2010-12-20
+时间管理
+0, 9:50-22:00
+
+1, 本日
+1), 40' 和zhengwei讨论718时钟管理. 建议zhengwei参考Linux和830的方式. 
+2), logAssistant改进和修改882工作总结。
+3), 14:00-21:40 882项目ICP总结. 每个人介绍自己总结. 
+
+22:01 2010-12-20
+VC0882, 总结
+1), 查882 sleep和idle功耗。ddr self-refresh功耗。
+问IC相关同事。从表格中查到的功耗也就是几个ma。很小，难道mid有其他模块功耗？ 
+
+10:50 2010-12-21
+VC1600, VC0718, arm, Cortex-A8, L2配置
+1, L2开关
+3.2.26 c1, Auxiliary Control Register
+[1] L2EN B B Enables L2 cache:
+0 = L2 cache disabled
+1 = L2 cache enabled. See Table 3-48 on page 3-61 for details.
+The reset value for this bit is 1.
+2, L2 timing
+3.2.55 c9, L2 Cache Auxiliary Control Register
+Data RAM latency
+Tag RAM latency
+(15:51 2011-3-30)SV上Data RAM latency和Tag RAM latency都是3cycles，所以L2 Cache Auxiliary Control Register=0x82.
+
+
+13:39 2010-12-21
+VC0882, memory, ddrc, 阅读mas, chapter1,2
+1, 
+1), Supported AXI burst type: incremental and wrap
+2), Advanced features such ODT,OCD,ZQ Calibration and additive latency
+\todo 查这些feature.
+(1), ODT:
+On-Die Termination
+(2), OCD (only for DDR2)
+Off-Chip Driver
+DDR2 SDRAM supports driver calibration feature
+(3), ZQ Calibration (only DDR3)
+ZQ Calibration command is used to calibrate DRAM Ron & ODT values. DDR3 SDRAM needs longer time to calibrate output driver and on-die termination circuits at initialization and relatively smaller time to perform periodic calibrations. It consist of ZQCL and ZQCS.
+ZQCL (ZQ Calibration Long) command is used to perform the initial calibration during power-up initialization sequence of DDR3 SDRAM.
+ZQCS (ZQ Calibration Short) command is used to perform periodic calibrations to account for voltage and temperature variations of DDR3 SDRAM.
+3), 查: 
+(1), Active power down
+(2), Resetting power down for DDR3(硬件不支持).
+4), Narrow transfer
+Reason: 这部分逻辑先以一个wraper(design by huangwei, module named DDRC_X2X)的方式做在DDRC和marb之间，成熟后可考虑移植到DDRC内部.
+bamvor: 后来应该没有在ddrc内部使用. 
+5), \todo 是否只针对lpddr? 
+DQS is edge-aligned with data for READs and center aligned with data for WRITEs. 
+
+2, basic cmd
+1), A subsequent ACTIVE command to another row in the same bank can only be issued after the previous row has been closed. 
+A subsequent ACTIVE command to another bank can be issued while the first bank is being accessed, which results in a reduction of total row-access overhead. T
+2), (9:40 2010-12-22)
+进一步看了read, write和precharge.
+对于auto prechange有疑问. \todo 细看. 
+
+3, (17:28 2010-12-22)\todo 了解ddr power down和deep power down差异. 
+
+13:45 2010-12-21
+(9:06 2010-12-27)
+(18:29 2011-1-14)
+(16:37 2011-1-30)
+(14:18 2011-3-9)
+软件技巧, 工具, 脚本(script), logAssistant, editplus, perl; 时间管理; 总结文档
+-1, 序言
+其实好工具很多, 关键是要能搜索到我所有的资料. 粘贴邮件这个事情如果能直接搜索邮件就好了. 
+一直再做日志管理工具的原因之一: 需要时能找到的资料才是有用的资料, 可能用日志工具只处理了我接触到资料的一部分, 但这一部分是我可以长期(几年甚至更长)利用的.  不光想分享工具，也想分享这个过程。
+0, 脚本与DRY法则.
+DRY = Do not Repeat Yourself. 
+如果发现是明显重复的工作, 常常可以用脚本帮忙. 实际上, 我在看到需要重复三次以上的机械劳动时就会考虑用工具帮我做, 这个工具经常是脚本. 
+我这里说的重复性工作尤其指哪些容易出错的重复性工作, 例如眼花看串行, 遗漏.
+1, 正则表达式
+从通配符开始说, 搜索postmortem, 但是忘了mortem怎么拼写, 只记得m?t?m, 这时可以用通配符搜索, 当然也可以用正则表达式"postm.*t.*m"搜索. 
+1), 很多工具都支持正则表达式, 例如perl, grep, sed, editplus, ultraedit等等. 
+\todo 加入正则表达式工具. 
+2), 搜索Linux cmdline, 但是只记得"mem=xxxM", 其中xxx是数字. 
+3), 查看arm应用程序使用了哪些共享库(需求自wenlei/yangmin). 
+readelf | grep Share
+4), 再举一个例子: 
+#define MARB_PORT_STATICS(_point_name)                                  \
+static ssize_t show_##_point_name##_rclass(struct sysdev_class *class,  \
+                           struct sysdev_class_attribute *attr, \
+                           char *buf)                           \
+{                                                               \
+        return sprintf(buf, "%s rclass test\n", #_point_name);  \
+}                                                               \
+static SYSDEV_CLASS_MODULE_ATTR(_point_name, rclass, 0444, show_##_point_name##_rclass, NULL); 
+替换为
+static ssize_t show_cpu_rclass(struct sysdev_class *class,
+                           struct sysdev_class_attribute *attr,
+                           char *buf)
+{
+        return sprintf(buf, "%s rclass test\n", "cpu");
+}
+static SYSDEV_CLASS_MODULE_ATTR(cpu, rclass, 0444, show_cpu_rclass, NULL);
+5), 更多例子
+(1), 搜索我所有和某个问题相关的文档并输出。例如找出日志中与Linux cpio or ramdsik相关的内容。
+(2), 查找如何设置outlook阅读窗格的位置: 这个默认是在右侧, 我安装了xobni后, 右侧就有点不方便, 移到下面比较好, 搜索"软件技巧 outlook". 
+(3), 查公司的ip电话, 搜索"ip|长途".
+2, logAssistant介绍
+1), 历史演化. 
+我从2005年开始记工作日志，开始只是使用记事本可以插入时间，日期这个功能，记事本没法生成了就建个新的。
+后来学习Linux时想到用bash脚本搜索，最后用bash and c language完成。
+毕业之前我一直在Linux环境工作，后来在windows下就不太方便了，实验过cygwin不好用。
+零九年改用新学习的perl
+Logassistant
+2), 正则表达式没法解决的:
+(1), 希望查找AE android review文档位置, 搜索关键字(android|AE review, bamvor: 现在已经加入: 逐步符合后面使用习惯)没有找到. 需要搜索内容. 只记得和140还是160服务器有关系. 如果单独搜索140或160这种数字会非常多(大约700个结果).
+用如下命令可以找到"-f X:\log*.txt -k "android|ae" -i -o x:\output.txt -c 160|140", 只有三组结果. 这样就容易找到. 
+3), \todo 完善:
+查找本月某项工作的情况，例如12月882 bootloader我做了哪些事情。
+查找某个技术问题，尤其是搜索资料很多时。
+3, editplus的辅助工具, 其实和zhengwei推荐的sourceinsight插件一样. 根据需要个性化设置工具更提高效率. 
+1), macro:
+在section或时间管理section中跳转. 
+跳到下一个序号. 
+去掉多余的空行. 
+4, 分享"时间管理"
+自己从去年开始时间. 感觉还很不成熟. 但是做事情总是一步一步做的. 和大家分享一些时间管理经验. 
+5, \todo:
+分享相关经验
+脚本用途很广。lax? 查文档. 根据语法自动生成解析器.
+用脚本生成规则。
+dry do not repeat yourself. 工作中尽量减少重复。重复容易出错，重复一次两次就会重复多次。
+6, 题外话
+1), 其它推荐工具: VBA. Visual Basic for Application. 如果在MS office里面有重复性工作, 就可以用VBA帮忙. 举例: 用脚本实现vlookup, hlookup增强版. 
+2), rvdebuggger脚本. 见"16:20 2011-1-30".
+
+7, (16:16 2011-4-18)
+正则表达式例子
+1), 例如我想用xiaotao写好的ddr pattern把verify_read_write里面第二和第四个测试数据提取出来, 有很多方法: 手工提取(一共50行, 不是很费时), excel提取(用逗号和空格作为excel文本表格的分隔符). 也可以用这里提到的正则表达式. 
+int TEST_ADDR_BA(void)
+{
+	//column address
+
+	if(verify_read_write(0x567000, 0x3456789A, 0x567001, 0x3456789A) != 0)
+		return -1;
+	//...
+}
+
+查找: "^.*0x[0-9a-zA-Z]*,\ (0x[0-9a-zA-Z]*),\ 0x[0-9a-zA-Z]*,\ (0x[0-9a-zA-Z]*).*"
+替换: "\1 \2"
+如果用perl处理, 可以把注释和return也同时处理掉. 
+2), 接上.
+想定义数组时发现我忘了加",", 怎么办, 50行手工加太麻烦了, 还是可以用正则表达式.
+3), vi和正则表达式的结合. 
+
+8, (10:34 2011-12-28)
+文本编辑器. 原来用免费的editplus, 现在不免费了. 改用vi. 
+1), vi正则表达式搜索与替换. 
+2), vi列编辑. 
+Ctrl+v进入列选择状态. 用Shift+i插入, 按两次ESC退出. 会把每行都插入. 
+
+13:46 2010-12-21
+时间管理
+0, 10:30
+
+1, 本日
+1), 1h: zhicheng(718 bootloader cache), fenglijun(718 程序跑死, ICE无法连接)讨论. 
+2), 30' 邮件. 
+3), 70' 阅读ddrc mas, 从开始到active cmd. 
+4), 17:26- android AE文档. 
+
+14:57 2010-12-21
+VC0882, android
+1, liuxiaotao [mailto:liuxiaotao@vimicro.com]邮件"android内核跟标准内核的差别"20101221_1426
+1. 基于ARM架构增加Gold-Fish平台,相应增加的目录如下:
+      kernel/arch/arm/mach-goldfish
+      kernel/include/asm-arm/arch-goldfish
+2. 增加了yaffs2 FLASH文件系统,相应增加的目录为:
+      kernel/fs/yaffs2
+      实际上，Android包经过编译后生成的system.img和ramdisk.img文件就是yaffs2格式的包.
+3. 增加了Android的相关Driver,相应目录为:
+      kernel/drivers/android   
+      主要分为:
+           Android IPC系统:       Binder (binder.c)
+           Android 日志系统:       Logger (logger.c)
+           Android 电源管理:       Power (power.c)
+           Android 闹钟管理:       Alarm  (alarm.c)
+           Android 内存控制台:     Ram_console (ram_console.c)
+           Android 时钟控制的gpio: Timed_gpio (timed_gpio.c)   
+ 4. 增加了switch处理, 相应的目录为:
+      kernel/drivers/switch/    
+   5. 增加了一种新的共享内存处理方式, 相应增加的文件为:
+      kernel/mm/ashmem.c
+2, zhangjian回复
+1), Android kernel git好像包括omap, msm, common等几个分支. 貌似这些分支是针对不同的硬件平台. 
+Goldfish这个移植我记得是在某一个android kernel git上面有. 不知道现在还是不是这样.  
+2), 补充：
+从http://android.git.kernel.org/可以看到8个和kernel有关的分支。
+kernel/common.git Common Android Kernel Tree Android Open Source...  3 days ago summary | shortlog | log | tree 
+kernel/experimental.git Experimental Kernel Projects Android Open Source...  2 months ago summary | shortlog | log | tree 
+kernel/linux-2.6.git Mirror of git://git.kernel...  Android Open Source...  6 days ago summary | shortlog | log | tree 
+kernel/lk.git (L)ittle (K)ernel bootloader Android Open Source...  8 months ago summary | shortlog | log | tree 
+kernel/msm.git Kernel tree for MSM7XXX family...  Android Open Source...  4 weeks ago summary | shortlog | log | tree 
+kernel/omap.git  Android Open Source...  2 months ago summary | shortlog | log | tree 
+kernel/samsung.git Kernel tree for Samsung system...  Android Open Source...  13 days ago summary | shortlog | log | tree 
+kernel/tegra.git Kernel tree for NVIDIA Tegra...  Android Open Source...  7 hours ago summary | shortlog | log | tree
+
+15:06 2010-12-21
+软件技巧, outlook, 个人文件夹位置
+我的个人文件夹位置: "D:\work\database\zhangjian.pst"
+
+17:27 2010-12-21
+VC0882, android, AE, 文档; ddr
+1, 文档划分:
+我的工作包括arm, ddr, performance monitor, clkswitch等. 
+目前计划写成三个文档, arm, ddr(ddr+performance monitor), clkswitch. 
+原本之前和zhaoyuan讨论, clkswitch主要是arm, bus, ddr的切频. 但对于软件来说, vdec, venc, gpu等模块clksrc的变化代码和前三个类似. 而且从系统功能来说, 其实后面三个也需要调整频率. 所以考虑在一个文档描述这些事情. 
+2, (18:29 2010-12-22)ddr代码位置. 
+1), omap2, ddr进入自刷新:
+beagle_0xdroid/kernel/arch/arm/mach-omap2
+pm24xx.c: omap2_enter_full_retention()->omap2_sram_suspend()
+omap2_sram_suspend()是: 
+omap24xx_cpu_suspend()(sleep24xx.S)
+2), omap3, 类似, \todo进一步看. 
+omap_sram_idle()->_omap_sram_idle(omap3_arm_context, save_state);
+
+18:14 2010-12-21
+VC0882, 板级问题, 总结, 文档
+1, FengBeiZhan邮件"Vc0882 ICP 板级调试心得总结"20101221_1813
+根据昨天会议的要求，我们icp要写个板级调试的总结文档，便于大家相互学习总结。
+请大家把自己的扳机调试心得、体会、要求等发给 zhangjian、fengbeizhan、lidongliang，cc aiguo；
+这个事情由zhangjian负责跟踪解决。
+
+2, zhangjian回复邮件:
+大家在板级调试时都遇到过许多问题，有的查起来很耗时间，希望能把经验传承下去，对882SV，718等项目有帮助。
+板级问题可能涉及很多，例如IC设计问题，板级设计问题，台子使用问题，模块特点导致的问题，软件错误等，文档可以包括使用注意事项，原因，判断方法（例如通过文件读写比对判断ddr有没有虚焊），改进意见，参考文档（例如trace的时序要求来自arm文档）等。
+
+9:39 2010-12-22
+时间管理
+0, 9:31
+
+1, 本日
+1), 20' VC0882 ddr. 见"13:39 2010-12-21"2-2).
+2), 30' 请假. 
+3), 40' 邮件. 
+4), 20' 保存网络, 写博客. 
+5), 14:00-17:05 ICP QA 882总结. 
+6), 看beagle ddr相关代码. 见"17:27 2010-12-21"2.
+被7)打断.
+7), 和wenlei讨论系统架构. arm/dma访问memory的差别.
+
+10:12 2010-12-22
+公司, 制度, 假期, 病假统计
+目前共8.5天. 
+4月: 1天. 
+5月: 2天. 
+6月: 0.5天. 
+8月: 0.5天. 
+9月: 1天. 
+12月: 3.5天. 
+
+10:20 2010-12-22
+VC0882, android, 工作任务和讨论
+1, LiDongLiang邮件"答复: android 下步工作的讨论"20101217_1752
+Meeting minutes如下：
+android 下步工作计划
+总结需要研究的工作列举如下：
+1. android 配置及编译过程。
+2. 视频编解码加入android，移植工作。
+3. 882 各模块linux driver的开发。例如audio。
+4. 挑代表性设备研究。
+5. NDK 的研究
+6. 熟悉android 某设备
+7. 看别人的android是怎么做得，如beagle board。例如优化，移植等。
+8. android内核与公版内核差异
+9. 弄清楚android的研究目标。
+10. 子系统各层结构，及各层之间接口。
+11. 比较882 与别人的硬件上的差异。模块的有无及性能比较。
+12. 立足于kernel 层，以驱动为切入研究。
+13. android 目录结构研究。可能间接的了解android框架。
+14. android下usb 的使用，直接用usb driver，还是做了一些封装。
+15. library 层是重点。
+16. android 启动流程研究
+17. android专用内核的编译和配置。针对framebuffer，可能android与不同的kernel 有区别。
+18. android IPC 机制研究。
+19. 真正了解android以后，可以更好的指导芯片的开发，用hw去匹配sw，以加速sw的运行。
+20. OpenCore 的研究
+21. SurfaceFlinger 的研究。
+- app - Framework 的接口。
+- Framework - library 的接口。
+- library - kernel 接口。
+- app 的用法。
+22. 电源管理
+23. 以下是《Android主要机制深入研究》文档中的专题
+IPC 框架分析Binder，Service，Service manager
+Service 深入分析
+Android 启动过程详解
+Zygote Service
+Android GWES 之基本原理篇
+Android GWES 之消息系统
+Android GEWS 窗口管理之基本架构原理
+Android GWES 之Android 窗口管理
+Android GWES 之输入系统
+Android 输入系统之输入路径详解
+Android 电话系统-概述篇
+电话系统之rilD
+Android 电话系统之RIL-Java
+电话系统之GSMCallTacker
+Android 应用程序框架之无边界设计意图
+Android 应用框架之AndroidApplication
+Android 应用框架之Activity
+Android GDI 之显示缓冲管理
+Android GDI 之共享缓冲区机制
+Android GDI 之SurfaceFlinger
+Android GDI 之SurfaceFlinger 之动态结构示意图
+Android GDI 之Surface&Canvas
+任务安排：
+zhangjian：                30-40%
+1), 电源管理研究
+- 预计2011-1-7日讲
+zhicheng：                 40%
+1), Android 启动过程详解。暂定，视718工作量而定。
+- 预计2011-1-6日讲
+xiaotao：           100%
+1), android 配置及编译过程。
+- 预计下周五。
+wenlei：            80%
+1), 看GPU 2D相关内容。
+- 预计2011-1-5日讲
+fandong：                  40%
+1), android下usb 的使用，直接用usb driver，还是做了一些封装。
+- 28日讲。
+shuyu：                      80%
+1), surface flinger 及framebuffer
+- 搞清框架，接口，主要类关系。
+- 882 要做的工作。
+- 2010-12-30 发讲座文档出来。
+- 2周。预计2011-1-4日讲。
+lidongliang：    100%
+1), 视频编解码加入android，移植工作。
+- 搞清楚框架及大概流程。1周，预计27日讲
+提前1-2天发文档出来。
+
+17:25 2010-12-22
+VC0882, memory, ddrc, 总结, yangxing总结
+自: D:\VC0882\document\总结\VC0882工作总结——icp——杨星.doc
+DDR模块调试过程中经验总结：
+1.clock switch问题。clock switch出问题主要在于切频完成后，设置的DDR参数不好用，在我们这种情况下，也就是说设置的参数和初始化timing参数不一致。
+2.self-refresh问题。这个问题现象是随着时间的增加，自刷新丢数的数量增多。最终解决问题是把VREFCA和VREFDQ连到一起，都供电0.75V(转接板D3 CVTR#1)。看来三星的芯片还是比较特别，值得注意。
+3.arm 读写DDR（不开cache）只能是burst1,非ARM，例如DMA可以达到burstN。
+4.只有LPDDR有DEEP POWER DOWN，这种模式没啥用，完全断电，不保障数据。
+5.self-refresh （without clk and cke is low）与 auto-refresh的区别
+6.power-down模式会自动进入power-down,然后隔一段时间（7.8us）发一个退出power-down模式的命令，但是强制进入就不会发这个命令，如果长期不退出，则会丢是数据。(cke 为低+NOP命令就进入了power down, cke为高+NOP命令就退出了)，需要clk供时钟，同时clk要拉低。
+7.dll-on模式在FPGA阶段有可能不好用，要注意的是从dll-off到dll-on都要rst，dll-on/dll-off控制在mrs1里面，dll-rst在mrs0里面。
+8.需要注意的是，根据流程，每次做命令操作前，都要看ddrc_idle寄存器是否是idle状态，才能进行命令操作。如果命令被操作完成要看dram_cmd_status是否显示命令执行完成。
+9.data training与data training with mpr的区别，data training 本来是用一块专用的DDR区域来进行training,这样比较耗时，这时想到用一个mpr（Multi Purpose Register），就是一个ddr里面的寄存器进行training工作，会加快速度。
+10.AL,CL,RL,WL.AL(Additive Latency), CL(CAS Latency),RL(Read Latency),WL（Write Latency）.RL=AL+CL,本来active就是发出了行地址，需要隔一段时间才能发出列地址，我们可以加大AL使列地址提前发出来，然后储存在DDR3里面的CMD_QUEUE里面，然后在DDR里面进行等AL时间再执行列地址（W/R）,再隔CL时间，才正式进行数据传输，同时第一个DQS（下降沿）也不是传输的数据，从第二个开始。
+11.我们的DDRC里面的MASK是不能够控制单bytemask，只能同时mask某个32位。
+12.关于电压，LPDDR,DDR2都是1.8V的电压，DDR3是1.5V的电压。
+
+17:57 2010-12-22
+软件技巧, source insight, project rebuild时直接退出, 可能是工程所在目录硬盘空间不够
+今天用source insight 新建 Beagle Linux工程, 结果两次都是在rebuild时出错退出, 进入后加入的工程文件只剩下Makefile. 删除部分硬盘空间就行了. 
+工程所在目录, 不是代码目录. 不要搞混了. 
+
+8:52 2010-12-23
+VC0882, memory, ddrc, 阅读mas, chapter3; VC0718 ddr切频方式不同
+1, \todo 几种ddr的差异再看。
+2, axi burst type还有fixed，查。
+3, Virage ddrc ip: 
+1), read-modify-write: test and set, test and increment, various statistic update.
+2), flexible address mapper logic.
+3), speculative refresh mechanism.
+4, 718使用ddrc ip，所以没法使用882的切频方式，只能在sram或cache切频。
+5, (12:18 2010-12-22)speculative refresh mechanism see chapter 5.8
+
+9:39 2010-12-23
+时间管理
+0, 9:25
+
+1, 本日
+1), 30' 杂, 邮件. 
+(1), 问fenglijun 软件跑死, ICE无法连接. 进展如何. \todo 等回信. 
+2), 关注android进展. 见"10:47 2010-12-23"和"15:02 2010-10-19"4.
+3), 继续看beagle ddr相关代码. 续"17:27 2010-12-21"2.
+14:19-
+
+10:47 2010-12-23
+VC0882, android, 2.3, gingerbread, 新特性; honeycomb
+之前只看到一些零碎的android2.3的预测或介绍, 这次找到android2.3两篇介绍文档感觉比较全, 和大家分享: 
+36服务器\\10.0.2.36\sqmshare\Document\Linux\android\overview.
+另外网上有人说android honeycomb会在2011年2月的通信展发布, 这样就不是android3.0了(android3.0计划2011年5月公布). 
+感觉这次android2.3的改进集中在多媒体(其中提到android2.3使用了新的多媒体框架代替opencore)和native开发方面.
+1, "Android 2.3 Platform and hightlights.txt"
+原文: android2.3新特性
+http://blog.csdn.net/BonderWu/archive/2010/12/08/6063008.aspx
+转自
+Android 2.3 Platform
+http://androidappdocs.appspot.com/sdk/android-2.3.html
+Android 2.3 Platform Highlights
+http://androidappdocs.appspot.com/sdk/android-2.3-highlights.html
+
+2, "介绍姜饼Android 2.3 Gingerbread！！（完整版）.txt"
+网友总结的android新特性:
+[Android 最新资讯] 介绍姜饼Android 2.3 Gingerbread！！（完整版）
+自: http://www.eoeandroid.com/thread-50942-1-1.html
+
+11:04 2010-12-23
+VC0882, android, AE, 文档, ddr, 续, beagle ddr使用
+继续看beagle ddr相关代码. 续"17:27 2010-12-21"2.
+1, 分析OMAP3530文档
+1), 4.8 PRCM Idle and Wake-Up Management
+actice, inactive, retention, off. 这里的inactive和882的halt类似. retention和sleep类似. 
+2), 4.11.3.1 Sleep Sequences (Transition From ON to RETENTION/OFF)(p403).
+对照"omap_sram_idle"看流程. 需要知道什么时候会调这个.
+分析"omap3_pm_init()".
+2, 看代码， pm34xx.c:
+arch_initcall(omap3_pm_early_init);
+late_initcall(omap3_pm_init);
+1), omap3_pm_early_init
+貌似是配置一些寄存器，包括voltage controll。
+2), omap3_pm_init
+(1), 包含配置所有模块的power和clock状态。clock状态主要是是否打开auto idle（模块空闲时是否自动关闭时钟）。
+(2), suspend_set_ops(&omap_pm_ops);
+设置到suspend_ops指针。
+(3), pm_idle = omap3_pm_idle;
+process.c cpu_idle会调用。\todo 细看。
+(4), 注册cpuidle。
+(5), 注册reboot_notifier_list的notifier用于系统reboot时。
+(6), atomic_notifier_chain_register(&panic_notifier_list,
+					&prcm_panic_notifier);
+没细看，kernel panic时也需要pmu处理？
+
+3, omap_sram_idle调用者总结
+cpu_idle(process.c)->omap3_pm_idle()
+omap_pm_ops.enter()(omap3_pm_enter())->omap3_pm_suspend()
+从这里可以看出cpu_idle下和系统sleep时对于ddr来说如果前者hlt_counter=0，操作可能一样的。
+
+4, hlt_counter作用分析。
+cpu_idle()中如果hlt_counter是0会调用pm_idle，也就是OMAP3530会进入低功耗模式（sleep?）。
+系统启动时通过传递参数可以分别设置hlt_counter是1或0。
+__setup("nohlt", nohlt_setup);
+__setup("hlt", hlt_setup);
+另外可以通过enable_hlt(减少), disable_hlt(增加)计数.
+omap3中: 
+omap3_pm_prepare()->disable_hlt()
+omap3_pm_finish()->enable_hlt()
+在arm架构下这个enable和disable除了omap2和omap3和floopy没有人调用. 
+不清楚其它平台是怎么做的. 
+根据struct platform_suspend_ops注释可以看出，prepare是进入sleep前的准备，finish是wakeup后调用。
+看起来如果准备进入sleep状态，就不允许通过cpu_idle进入sleep状态。
+
+5, 对于882来说，虽然cpu进入idle，但是其它模块可能还在工作，如果此时另ddr进入self-refresh，也许由于其它master访问很快就会退出来，而且ddr3退出self-refresh需要512cycle，比较慢。
+今天看文档，ddrc还支持power down，似乎更符合要求。
+
+6, 回过头来分析omap_sram_idle:
+omap3_pm_init()->omap_push_sram_idle(): 把omap34xx_cpu_suspend()放到sram, sram中的指针给_omap_sram_idle.
+
+omap_sram_idle()
+    _omap_sram_idle(): 进入睡眠。
+    cpu_init()：以下开始唤醒流程。
+
+sleep34xx.S里面是睡眠和唤醒代码。
+睡眠时需要设置ddr进入self-refresh，退出时有一个wait_sdrc_ok(Make sure SDRC accesses are ok)。后者在882中如果是从sleep恢复就不需要。
+
+7, 系统中何时调用omap3_pm_enter？
+pm_suspend()->enter_state()->suspend_devices_and_enter()->suspend_enter()->suspend_ops->enter(state)
+
+pm_suspend()就由系统调用了。
+
+19:15 2010-12-23
+VC0882, SV, 任务分配
+1, 项目计划
+1月30日芯片(BGA445)回来, BGA445也是用于量产的封装. 
+4月15日 小pp. 
+
+2, 人员分配
+1), 882 SV工作量和难度较大的模块
+(1), performances: shuyu? 
+(2), audio: yangming(实习生)
+(3), 挑片tool(含高低温): mengfandong, shuyu.
+(4), clock: liuxiaotao
+(5), ddr: lidongliang, 其中ddr兼容性: yangxing.
+(6), pmu, 功耗, 7882: zhangjian
+(7), 环境/cpu: liuxiaotao, lidongliang, zhangjian.
+注: 
+(1), liuxiaotao, lidongliang, zhangjian三个人的工作相关性很强, 需要相互了解. 
+(2), guzhaohui(实习生)如果有时间也需要辅助liuxiaotao, lidongliang, zhangjian的工作. 
+(3), audio, 挑片tool, clock和pmu代码需要在芯片回来前完成. 
+2), 882 FPGA已有模块
+usb: mengfandong.
+nfc, emi, efuse: yangxing.
+peripheral(i2c, uart, spi, tpi, kpd, pwm): wangzhengwei.
+sd: anzhiming;
+video codec: shuyu;
+cif: mengfandong;
+de, gpu: wangwenlei
+bootloader: lidongliang, zhangjian.
+注: video子系统由shuyu负责. 
+
+3, 预计加班情况
+可能需要lidongliang, zhangjian初三开始加班. 如果人手不够还需要shuyu和liuxiaotao加班. 
+
+4, 例会安排:
+1), 12月27日: ICP android总结;
+2), 1月3日: zhangjian介绍Linux和android中电源管理.
+
+5, 未发邮件：
+zhangjian: 是否dongliang也可以介绍一下598中是怎么做的? 
+
+10:55 2010-12-24
+VC0882, android, AE, ddr, clkswitch, performance monitor
+1, ddr3是第一优先级。量产后考虑lpddr。
+ddr：进入self-refresh。
+
+2, clkswitch
+1), arm, bus, ddr都允许更改pll。
+原因：预计提供比较均匀的频点，例如100,200,300,400,500,...
+2), 提供接口：
+arm clkswitch；
+bus/ddrc clkswitch。
+
+3, performance monitor.
+1), 给clkswitch用。
+2), 给工程师调试。\todo：看文档。
+在sys下面提供系统状态。能不能提供具体每个模块的统计效率？
+
+4, 代码量：clkswitch和performance monitor。
+
+5, 下周二讨论performance monitor。
+
+14:44 2010-12-24
+(18:09 2010-12-27)
+VC0882, clock, 参考资料; Linux; VC0830, clkrst, clkswitch
+1, Linux时钟：
+1), 文档
+198: file:///Z:/zhangjian/development/kernel/output/html/index.html
+2), VC0830 Linux clock移植
+Z:\zhangjian\development\kernel\vmc\arch\arm\mach-vmc
+clock.c/h和clkrst目录。
+2, VC0830
+D:\VC0830\VC0830\clkrst
+notes.txt是说明。
+clkrst_app_module_clock.c/h是时钟管理, 参照Linux clock架构. 
+clkrst_app_switch.c/h做切频。提供切频api. 
+clkrst_app_operation_point.c: 自动切频测试管理, 支持不同的迭代器. 
+为了方便测试, 提供打包方式传入clk, ddr参数. 可以启动后一直切频. 
+
+3, Linux：arm切频使用cpufreq管理。不同governer是不同的策略。见Documentation文档。
+3, 我的cvskey
+\\10.0.2.36\sqmshare\share\zhangjian\26_99_bak\software\cvskey
+:ssh:zhangjian@cvs.vimicro.com:/project/fpga_verif/VERIFY
+modules: VC0830
+4, 882 clock规划
+D:\VC0882\document\clkrst\vc0882_pll_module_clock_分析.xls里面的方案三是将来AE会使用的方式。
+
+15:00 2010-12-24
+时间管理
+0, 9:25
+
+1, 本日
+1), 10:00-11:40 AE android我的工作讨论。
+2), 3h: 改进reglist parser脚本，上传到882 document road tools dir.
+3), 给xiaotao发我linux和830 clock资料。
+4), 总结：今天这个脚本是将来qemu开发和882sv调试需要用的。系统中多个模块寄存器手工排序太麻烦了，考虑用有序链表。需要考虑到一下qemu clok部分多长时间完成。现在pmu，dvfs，performance monitor代码都需要写，自己计划一下，看看有没有可能写完。
+计划下周要开始写代码。上面三个加clkswitch预计各一周。
+
+15:03 2010-12-24
+VC0882, performance, 文档
+1, 自shuyu邮件:
+如下文档看看前面第一页的公式就可以了，后面的可以不用看。
+VC0882\document\performance\test & report part1\performance 分析报告-ICP.doc
+如下文档需要细看
+VC1600WCVS\doc\mas\VC0882\DW_AXI\VC0882_MAS_INTERCONNECT_V0.31.doc
+VC1600WCVS\doc\mas\VC0882\DW_AXI\VC0882_REG_INTERCONNECT_V0.30.xls
+
+17:43 2010-12-24
+软件技巧, perl, 字符串比较
+1, perl中字符串比较函数
+教训----perl中字符串比较(2009-09-27 11:42:31)
+自: http://blog.sina.com.cn/s/blog_5cef35c50100ewgb.html
+转载标签： perl ne 杂谈 
+之前看教程时看到过，但看完就无视了，写程序时不等于还是用的!=。
+Apache虽然检查到错误，但只写在了错误日志里，还是继续执行了后面的语句，结果是无视了这个比较，跳过了一个$condition变量的赋值，而后面又是用这个$condition作为数据库查询的条件，本来只返回几百条的查询，返回了整个数据库的上千万条记录，拖垮了服务器。联系OP重启，结果reboot命令也卡住没响应，最后只能靠SA。
+重启，扫盘，查错，从日志里找到这个万恶的“!=”已经是第二天了...
+比较关系 数字 字符串
+相等     ==   eq
+不等     !=    ne
+小于      <    Lt
+大于      >    gt
+小于等于 <=    le
+大于等于 >=    ge
+
+18:21 2010-12-24
+软件技巧, vi, 正则表达式, 去掉一个tab
+需要考虑有没有注释符合"#"的两种情况. 
+".,$s/^\(#*\)\t\t/\1\t/gc".
+vi里面貌似不支持"?". 
+
+21:51 2010-12-24
+VC0882, performance, axi interconnect, mas 阅读
+1, 总线优先级调整。
+2, performance monitor
+marb
+arbiter
+ddrc
+3, (11:28 2010-12-27)ddrc performance monitor
+1), ddrc mas chapter 14
+只有ddrc效率是ASIC支持的，其余例如queue，page conflict都是FPGA和Simulation支持的。
+The following counters are used to calculate DDRC efficiency. DDRC efficiency is one of most important parameter used to evaluate DDRC total efficiency. It can be calculated by the following formula:
+DDRC efficiency = ( (rdata_size_p+wrdata_size_p) / active_cyc_p) *100%
+
+8:36 2010-12-27
+VC0882, 板级问题, 总结, 文档, 续, 发提醒邮件
+一周时间已过，大家总结写怎么样了，到现在我一个也没有收到。没发给我的麻烦转发给我:)
+可能大家都有很多事情忙，总结这东西越早写越节省时间。而且后面882SV的进度很紧，现在花点时间总结后面就能少走弯路。即使自己觉得习以为常的东西对其它人和后面的项目可能也是宝贵经验。
+
+PS: 邮件发给Beizhan, dongliang, zhangjian, cc Aiguo.
+
+10:22 2010-12-27
+时间管理
+0, 10:02
+
+1, 本日
+1), 20' 发邮件: 板级调试总结. 见"8:36 2010-12-27"。
+2), 25' android总结; 见"10:50 2010-12-27"2. 
+3), 20' performance monitor文档, 代码阅读. 还有ddr部分未看. 见"21:51 2010-12-24"3。
+4), 下午android总结会议. 看有没有订会议室(有, dongliang订的).
+5), 给aiguo和beizhan发我android工作安排变化. <DONE: 例会上已经提到>
+
+10:50 2010-12-27
+VC0882, android, 总结; clock, power, cpuidle, cpufreq, Linaro, DS-5, web2.0
+1, LiDongLiang邮件"android 总结"20101227_1009
+下午2:00,7会议室
+Android 总结会议
+大家利用早上的时间整理一下这段时间来所做的
+android的研究或者工作
+每人写个简要的文档，写清楚
+1.       所做过的android 方面的研究内容。
+a)         内容点希望比较详细的列出来，但具体的细节实现及理解等暂时不要求写出来。
+b)         自己对自己研究的方面做个评价或者总结，例如什么地方比较清楚，什么地方有待研究，目前遇到的问题是什么等等。
+2.       将用到的资料整理一下，放到\\10.0.2.36\sqmshare\Document\Linux\android\Android总结-2010-12-27  每人自己的目录中。
+2, 我的总结
+目录：\\10.0.2.36\sqmshare\Document\Linux\android\Android总结-2010-12-27\zhangjian\android总结.txt
+大家一起学习android这段时间我其实没怎么看。这里总结我看过所有android相关内容。
+1), 在beagle和模拟器上实验当时最新的android。
+beagle上面实验的是rowboat，模拟器是2009Q1实验的当时最新的android。
+2), 看android和Linux kernel clock和power管理。目前主要看了kernel部分的clock管理(830已经实践过)，cpu idle管理(cpuidle架构)，cpu切频管理(cpufreq架构)。后面两个目前只是看了文档，准备看代码。
+3), android脚本开发工具。
+android ase or "script layer for android"(sl4a). 只是bash，perl等众多常见脚本。有大量api。
+这时我自己周末在家实验的，见同目录的"android_sl4a.txt"。
+
+4), android需要关注的组织：Linaro
+见"10:32 2010-11-23"1
+
+5), android需要关注的工具：DS-5.
+DS-5 xiaotao已经给大家发过介绍了。这是一个集成环境，如果用DS-5，可以在android开发环境上节省时间。
+见"10:32 2010-11-23"2
+
+6), android与web2.0
+见"10:32 2010-11-23"3
+
+7), 其它:
+(1), android Linux kernel驱动。
+看了android framebuffer中pingpang buffer如何实现。
+
+8), android中需要关注的东西很多。我建议关注咱们擅长的部分。
+(1), 例如说对于882硬件很熟悉，之前又有830, 816, 598 clock和power经验，可以多一些人看clock和power（上次android任务也是这样分配的）。
+(2), 关注android工具和优化，也就是前面提到的Linaro和DS-5这些东西。
+(3), 对于产品很重要的东西，例如performance。这个我不清楚原来是怎么做的。
+
+11:23 2010-12-27
+VC0882, AE, usb, 网卡
+1, MengFanDong邮件"答复: usb网卡9500驱动开发所需资料"20101224_1125
+大家一起沟通了一下，没什么问题。
+下一步计划：
+1 请zhaoyuan 继续盯一下资料的事情，尽快拿到资料datasheet，并且最好能要到这个网卡的裸驱动(linux下的驱动框架的因素太多，不利于向uboot移植)，如果有裸驱动，拿到资料后进度可能会更快一些
+2  uboot的usb网卡根据实际应用的需要，首先开发usb host，以前的需求otg host方式优先级降低 (请zhaoyuan 确认一下 )
+3  尽快调试uboot里的usb host，争取在datasheet 回来之前准备好 usb host层的驱动
+4 资料到手后争取用两周的时间测通基本的ping命令(当然我们会尽量向前争取时间，这只是一个估计时间)
+5 年前还有5周时间，尽量在这5周内，完成usb网卡和筛片工具
+Aiguo，zhaoyuan：是否有要补充的，这样安排如果没有问题，就这样进展了？
+
+17:14 2010-12-27
+VC0882, SV, 项目计划, 测试计划
+1, YangZuoXing邮件"关于882 SV测试计划"20101223_1736
+我们今天开会讨论了一下882 SV的计划。
+目前看来，芯片最快要在1.30日到BEIJING.
+因此需要HAIFENG,WEIRAN在1月29日之前提供上电调试过的SV板(主板，核心板，7882板，其他子板)。 
+请HAIFENG提供SV板的计划表。
+请CHENYING监督这个计划的实施。
+1月30日~2月1日：       上电，板级调试，保证板子的电源，时钟没问题，没有接触不良，短路等板级问题。在此基础上看看PMU/PAD 和CPU/CLK是否正常。这个阶段需要的人：
+ICD：        LIU ZIXI, HUANGWEI
+SV:             LV HAIFENG, ZOU WEIRAN
+ICP:           请BEIZHAN安排一下相关的人
+2月5日~2月8日：         需要将DDR调通；如果形势好，就调别的东西。这个阶段需要的人：
+ICD：        ZHAO BEIHUA, LIU ZIXI, HUANGWEI
+SV:            LV HAIFENG, ZOU WEIRAN
+ICP:           请BEIZHAN安排一下相关的人
+2月9日以后：                   那就全体都上了。
+
+2, Fengbeizhan回复邮件.
+如下是icp的人员安排：
+1月30日~2月1日：       上电，板级调试，保证板子的电源，时钟没问题，没有接触不良，短路等板级问题。在此基础上看看PMU/PAD 和CPU/CLK是否正常。这个阶段需要的人：
+ICD：        LIU ZIXI, HUANGWEI
+SV:             LV HAIFENG, ZOU WEIRAN
+ICP:      LI DONGLIANG, ZHANG JIAN
+2月5日~2月8日：         需要将DDR调通；如果形势好，就调别的东西。这个阶段需要的人：
+ICD：        ZHAO BEIHUA, LIU ZIXI, HUANGWEI
+SV:            LV HAIFENG, ZOU WEIRAN
+ICP:           LI DONGLIANG, ZHANGJIAN, SHUYU,LIU XIAOTAO（4套板子，安排4个人）
+2月9日以后：                   那就全体都上了。
+
+17:21 2010-12-27
+VC0882, SV, 项目计划, clk, clkswitch, ddr, pmu工作安排
+1, LiDongliang邮件"答复: android 总结"20101227_1719
+Hi，aiguo，beizhan
+下午zhangjian，xiaotao和我一起讨论了SV回来前的工作计划。初步整理如下：
+clock 的计划，xiaotao
+1. 12月29日下午讨论 panda 验证平台中时钟方案设计。要求大家在讨论之前要熟悉linux和598的时钟方案。
+2. 1月6日下午review clock的代码。要求xiaotao 在这之前要完成clock 的基本框架及基本功能。
+3. 1月12日下午再次review clock的代码。要求xiaotao在这之前要按照第一次review 结论修改完代码。希望这次review以后，clock的框架定下来。
+4. 1月19日下午再次review clock代码。要求xiaotao 完成其它相关的代码，包括细节和测试代码。
+5. 1月24日下午再次review clock代码。此次review希望clock相关代码基本完成。
+6. 1月25日 - 1月29日 修改代码，查漏补缺，做最后的检查。
+ddrc 的计划，lidongliang
+1. 1月6日提供给xiaotao/zhangjian所需代码
+1. 需要DDRC enter/exit self-refresh code。需要考虑PHY IO/clock 的控制，以达到功耗最低。
+2. 针对6个ddram 的寄存器配置。 
+3. ddrc training 代码
+2. 1月6日review 相关内容。
+3. 1月13日提供最终版代码。
+4. 1月14日 - 1月21日 考虑ddram的搜索代码/工具。
+5. 1月22日 - 1月28日 与 xiaotao/zhangjian 一起讨论clock/ddrc/pmu.
+6. 带yangming 做audio codec的driver。
+pmu 的计划，zhangjian
+1. 3号前完成performance monitor。
+2. 1月3日 - 1月10日 修改添加 pmu代码。
+3. 1月13日下午，review pmu相关代码。要求在此之前完成pmu基本代码。含DVFS, 7882 相关内容。
+4. 1月20日下午，再次review pmu相关代码。基本完成pmu相关代码。
+5. 1月21日 - 1月28日，检查修改代码。考虑android中的支持/调试。
+总的来说：
+时间还是很紧的，目前安排的都是882 panda 验证平台上面的事情
+Linux / android 下面的内容研究工作还没有安排进去
+目前看来，只能是在做的过程中，找空去研究了
+
+17:27 2010-12-27
+(16:51 2010-12-28)
+VC0882, power, performance, mas, INTERCONNECT: dw axi, performance monitor, ddrc, 文档阅读; 6: 和zhaoyuan, bianrongguang讨论软件功能需求
+0, 用30'和shuyu讨论, 记录见笔记本p16-p17. 
+1, 代码位置:
+1), 读寄存器: D:\VC0882\panda_os\marb\test
+2), matlab
+D:\VC0882\document\performance\matlab code.
+其中main_plot_file_all.m是主要打印函数. 
+2, 阅读performance monitor寄存器
+1), marb class分读写两种, 一共11个. 名称如下. 具体配置见mas, "2.3	CBRR+PWM"部分.
+master port 11 ar class (CORE SIGHT)
+master port 10 ar class (FACE DETECT)
+master port 9 ar class (DMAC)
+master port 8 ar class (GPU)
+master port 7 ar class (EMI BURST)
+master port 6 ar class (VIDEO CODEC)
+master port 5 ar class (CIF)
+master port 4 ar class (DE)
+master port 3 ar class (PERI SUBSYS)
+master port 2 ar class (STOR SUBSYS)
+master port 1 ar class (CPU)
+另有class2和class3之间的优先级调制. 
+2), trafic control
+vcodec和gpu. 可以调整最大的outstanding transaction. 用于调整两个模块带宽占用. 默认是最大, 不限制模块. 
+3), 0x100开始是配置, 包括cpu, de, cif, vcodec, emi burst, gpu模块:
+ID_CFG: 统计哪些id, 可以用于抓某个具体模块或某个模块的某类操作(例如arm的L2 cache读写)
+ADDR_TX_NUM
+DATA_TX_NUM
+ADDR_ST_CYC
+A2LSTRD_LATENCY: latency, 例如read:  from its read address being issued to the last read data coming back
+注意: 这里面没有stor和peri，没法统计这两部分。
+id见"VC0882_MAS_INTERCONNECT_V0.31.doc"mas p26。
+在系统不忙时latency平均小于100cycle。
+4), 最后是ddr class仲裁结果, 可以用于定性了解仲裁结果. 
+5), sarb
+每个sarb下面可以设置优先级. 效果没有marb明显. 
+6), 用途（计算公式）：
+rdata+wdata/总带宽 = 该模块的总线占用率。
+ddr axi带宽/bus总带宽 = bus效率。
+stall/latency cycle可以具体分析效率低的原因。
+7), \todo 是否需要深入模块分析? 例如分析de哪个layer的效率, 这样代码量会多很多. 而且软件要考虑多层. 最好不做. 
+3, 阅读performance monitor mas
+1), Visibility between Masters and Slaves
+master和slave的可见性. 
+
+4, ddr文档。
+1), 效率：
+0200H	ACTIV_CYC_P
+This counter used to calculate transfer time (clock cycle) of all AXI transactions from DDRC AXI Interface. This transfer time contain command request and acknowledge time, write/read data transfer time to/from external DDR SDRAM. This counter wills plus one if command queue is not empty at each clock cycle.
+0204H	RD_DSIZE_P
+This counter used to calculate read data size, that is to say, how many data are read from external DDR SDRAM. This counter will plus one when AXI Interface signal rvalid and rready are all set to 1.
+0208H	WR_DSIZE_P
+This counter used to calculate write data size, that is to say, how many data are written to external DDR SDRAM. This counter will plus one when AXI Interface signal wvalid and wready are all set to 1
+所以，DDRC efficiency = ( (rdata_size_p+wrdata_size_p) / active_cyc_p) *100%
+2), special id和age
+special id和"VC0882_MAS_INTERCONNECT_V0.31"里面的transaction id一样。设计上可能只有接moderm时，可能会设置emi burst。
+age：老化时间，如果一个命令等了8次就自己把优先级提高。
+3), class: 默认ddr不考虑class，如果考虑class，可能会对某个class提高，但是总体性能会有影响。
+4), mas里面FPGA部分的寄存器在ASIC中也是支持的。\todo 将来可以学习ddr用。
+(1), Queue active command number Counter
+8个队列里面每个队列的cmd统计。例如说3-7queue里面cmd很少说明ddrc不忙。
+不常用。
+(2), 读写转换次数。
+(3), prechange和no hiden prechange。后者/前者提示效率低。
+
+5, 其余问题讨论：
+1), DE默认配置8，是考虑到de fifo深度，如果BL=16也许DE为了凑足数据造成收发周期长，BL=8比较合适。
+2), audio？
+默认不高，如果希望更好保证audio，可以考虑提到audio。
+audio属于peri，和de，cif同属于class 1。
+见寄存器"VC0882_REG_INTERCONNECT_V0.30.xls"AR_CLASS, AW_CLASS。
+3), 软件优化
+(1), 少跳；
+(2), 如果一定要跳，尽量跳bank。
+(3), 除了前两点，可以bank和col remap，这样会减少page conflict。
+对于同步访问，可以考虑跳过当前行（2k），也就是以2k取模。
+开不开bank col remap效率差异在8%左右。
+注：page conflict是bank相同，行一样。
+4), 
+ddr3大约是lpddr1.5倍，但考虑到lp 32bit, ddr3 16bit，所以实际是3倍。
+ddr3 333: 600mw-800mw. 
+ddr3 self-refresh 6ma.
+halt功耗是2.6mw，加上ddr3(10mw)大约12.6mw。
+sleep功耗是0.28mw，加上10.28mw。
+5), 如何评价ddr效率。
+lp平均70%。ddr3平均65%。看bank remap，读写转换次数。调clock或优先级。
+
+6, zhangjian performance monitor软件功能需求:
+1), 全局config: enable/disable，周期(需要确认单位), read/write PWM.
+2), 每个marb master: read/write transaction id名称(例如DE Layer1 Read DMA0)或all; 模块单位带宽=模块*8/时间; 模块占带宽比例=模块/ddrc axi data, read/write latency, read/write class.
+注: 每个master一个目录.
+3), ddr: 效率(efficiency) = ddr数据/active cycle, 利用率(utilization) = active cycle/总cycle; bus利用率=bus ddr数据/bus clock.
+读写转换, page conflict.
+利用率可以用于ddr clkswitch.
+4), 提供脚本: 
+(1), 打印所有表项.
+
+9:36 2010-12-28
+时间管理
+0, 9:15-19:25
+
+1, 本日
+1), 10' 邮件. 杂. 
+2), 2h: 上午clk讨论; 未完成：zhangjian介绍了Linux和830部分。下午dongliang介绍598部分。
+3), 下午找zhaoyuan开会，结果他时间冲突，白跑了20'。
+4), 10' 整理android AE ddrc文档：根据12月24日讨论修改，参见"10:55 2010-12-24"。
+5), 1.5h: 讨论882 clock, dongliang 598; 讨论882任务。见"10:16 2010-12-28"5. 
+6), 100' 讨论android AE performance monitor, 软件工作见"17:27 2010-12-27"6.
+7), 下班后阅读了pmu文档，下一步需要看代码和FPGA验证情况。
+8), 总结: 今天基本都在开会，开会的效率本身还可以，考虑到sv前我的任务很重，希望以后能提高开会效率，减少总开会时间。
+
+10:16 2010-12-28
+VC0882, SV准备, clk, 方案讨论
+1, 模块是否能改变上一级时钟? 
+2, bamvor: 经过上午讨论，发现对于cpufreq，cpuidle机制还不清楚。有时间需要继续看。目前需要先看power部分。
+
+3, (14:20 2010-12-28)dongliang介绍598 clock:
+1), print clock
+2), clkswitch
+598是切频前保存频点，切频后恢复(也会round)。实际和830类似，只是830加入了频率范围和round限制。
+3), clock api：
+其实Linux/830的函数指针方式和598switch_case方式没有本质区别，只是前者便于管理更多的时钟，可以把数据和流程分开。
+4), 系统频点：
+598使用CLK_TPLL1Conf结构体。和830的system info类似。
+5), test cmd：顺序切频
+6), 是否运行设置模块时钟？
+
+4, 讨论
+1), 882 cpu, bus, ddr虽然独立，但是也会避免随意组合。
+2), clock
+clksrc
+enable
+divider
+clkswitch
+3), 模块时钟测试：
+由谁驱动？xiaotao只是提供API。不管测试。
+
+5, 邮件
+LiDongLiang邮件"882 clock 验证方案讨论"20101228_1610
+今天讨论的meeting minutes 如下：
+1. clock 功能测试需求
+1). cpu 独立切频api及测试程序。需AE提供频点列表。
+   - 考虑cpu的测试代码。
+2). bus 独立切频api及测试程序。需AE提供频点列表。
+3). ddr 独立切频api及测试程序。需AE提供频点列表。
+   - 考虑ddrc 参数变化，及系统稳定性测试。
+4). 提供各模块频率配置api，时钟源选择api，模块时钟gate/ungate 的开关api。
+5). 提供PLL 的配置api。
+6). 系统级切频，包括cpu，bus，ddr 及其它模块例如gpu，vdec，venc，storPer 等。
+7). 待补充。
+2. clkrst 重点测试cpu，bus，ddr 的切频及稳定性测试，但各模块在指定频率下工作是否正常（例如nfc在100MHz下能否正常工作）是由各模块(例如NFC)负责人根据模块测试需求而进行。clkrst需要提供相应的配置模块频率的api。
+3. 软件架构
+满足功能的前提下，架构尽可能简单清楚。
+4. 周三下午讨论软件方案
+
+12:47 2010-12-28
+软件, logAssistant, 改进
+1, 可以把keyword line和content两部分合并为一个部分搜索. 现在是分开的, 如果我只是要求section内任意字符组合出现就有问题. 测试case: wireless, vimicro. 
+2, 同义词, 近义词. 
+
+16:40 2010-12-28
+VC0882, Linux, clkswitch, cpufreq
+1, 
+cpu-omap.c
+
+9:27 2010-12-29
+时间管理
+0, 9:18-18:45
+
+1, 本日
+1), 9:29-9:35 绩效面谈要点. 见"9:29 2010-12-29".
+2), 9:36-10:48 报销.
+被3), 4)打断.
+3), 10' 和fandong讨论筛片程序. 
+4), 10' 和bianrongguang讨论clk, power, 得到omap3530 power网址. 见"10:46 2010-12-29".
+5), 10:50-12:15, 14:36-15:00 16:15- 了解AE开发环境，为开发performance monitor做准备。见"10:50 2010-12-29".
+被6)7)8)9)打断.
+6), 15' 和wangzhengwei讨论718 bootloader clk.
+7), 10' 考虑周五下午讨论882, 830, 598PMU, 7882. 和dongliang, wenlei,  zhengwei确认时间。<DONE：改在周四下午讨论>
+8), 30' 给大家发信, 周四下午讨论882 power. 见"11:54 2010-12-29".
+9), 15:00-16:11 VC0882 clock讨论。xiaotao会发meeting mintues。没有用Linux里面clock的框架，感觉还是比较遗憾，觉得switch case难以描述882复杂的时钟关系。见"16:20 2010-12-29". 
+10), 计划完成performance monitor Linux 部分driver,作为原型：
+bitfield方式访问寄存器，读出部分效率看是否正确。见"17:05 2010-12-29". 
+bamvor: 实在太困了, 睡到17:56. 后来去支持其他同事, 这个事情明天上午一定要做. 
+11), 和zhicheng讨论882 usb工具为什么需要reboot按钮, 我和不清楚.
+12), 支持wenlei调试gpu, 根据extenal abort和pc, lr怀疑是访问寄存器引起data abort, 关闭mmu实验: 的确没法访问gpu寄存器. 
+13), 总结：感觉一天给会议和同事讨论打乱了计划，到下午5点时还没有写一句代码，觉得自己难以静下心来写代码。但是我自己知道，今天不写，后面进度会难以保证。努力精心写，今天还是要完成计划的。
+
+9:29 2010-12-29
+(11:18 2011-1-10)
+项目, 考核, 绩效面谈, 要点
+1, zhangjian2aiguo邮件
+1), 职业规划. 
+(1), 希望有机会接触项目管理(之前说的882 sv), 看看自己是否适合. 
+(2), 专业发展: 希望在882里面深入做power(含clock)部分, 感觉这部分有潜力成为882的卖点(dvfs, 7882).
+2), 待遇. 基本工资+绩效这样的方式我觉得挺好.
+3), 团队建设, 团队文化. 
+(1), 企业文化离具体的工程师比较遥远, 团队文化是大家都能感受到的. 
+大家日常交流感觉还是不够. 目前的内部training经常限于相关人员. 
+(2), team里面, 包括我都不是计算机专业的. 希望能有coding and programming基础培训. 类似《系统程序员成长计划》这种方式就挺好. 
+4), 对我的评价, 总体和针对不同部分工作的. 
+
+2, aiguo回信: 
+好的，尽快安排，最近会议比较多，时间很快就过去了。
+关于你关系的几个问题，回答如下：
+1), 
+(1), 希望有机会接触项目管理(之前说的882 sv), 看看自己是否适合. 
+Aiguo: 你和AE和我们team的沟通桥梁，如何把这件事情做好，挑战很大，希望你能够承担起这样的角色！
+(2), 专业发展: 希望在882里面深入做power(含clock)部分, 感觉这部分有潜力成为882的卖点(dvfs, 7882).
+Aiguo: 这个没有问题
+2), 待遇. 基本工资+绩效这样的方式我觉得挺好.
+882的方式可能公司最近不会再做，不过待遇我最近会给你争取，能否搞定，需要一个过程。
+3), 团队建设, 团队文化. 
+(1), 企业文化离具体的工程师比较遥远, 团队文化是大家都能感受到的. 
+大家日常交流感觉还是不够. 目前的内部training经常限于相关人员. 
+Aiguo: team building确实应该经常搞，但经费是一个问题；
+(2), team里面, 包括我都不是计算机专业的. 希望能有coding and programming基础培训. 类似《系统程序员成长计划》这种方式就挺好.
+Aiguo: 有机会大家一起学习
+4), 对我的评价, 总体和针对不同部分工作的.
+Aiguo: 评价当面再谈
+
+3, (15:34 2011-1-13)
+下午和aiguo聊了一个半小时. 主要是aiguo在说. 
+有两点提醒我注意: 一个是帮助别人注意安排自己的时间; 另一个是注意项目总体情况, 有时技术要折中.
+
+10:05 2010-12-29
+VC0882, clkswitch, 测试组测试的CF code位置
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf\2FPGA\0601_to_0628
+vc0882_20100609_2000_fpgaClkswitch_a8_20100524_L1_32_L2_128_Neon_2fpga_noFd.ace；
+vc0882_20100617_2130_fpgaClkswitchNoFd_a8_20100617_L1_32_L2_128_Neon_48M_2fpga_noFd.ace
+自: D:\VC0882\document\testreport\VC0882_TESTREPORT_CLKRST_v0.10.xls.
+
+10:46 2010-12-29
+VC0882, power, OMAP3530参考, 网址
+这个网站有OMAP3530 power资料
+http://elinux.org/OMAP_Power_Management
+
+10:50 2010-12-29
+VC0882, android, AE, 了解AE开发环境; 见android下载方法
+1, ZhaoYuan邮件"开发守则"20101125_1103
+整个Android工程已经组织完成，请参考 http://10.0.12.160/documents/1
+强调几点:
+1．  Android项目代号为 Vortex
+2．  Kernel中新增代码请一定要按照苏新起草的Coding Style的要求做
+3．  Android新增代码要加放到vortex目录下，关于编译和修改Makefile的问题请询问Wang Weizhong.
+4.      请详细阅读 http://10.0.12.160/documents/1
+\\10.0.12.140\Project\VC0882\sw_design\dev\Kernel Coding Manual for VC088x.pdf
+\\10.0.12.140\Project\VC0882\sw_design\dev\Vortex Development Guidline.doc
+请打家在下周，把工作逐步提交到GIT上。
+
+2, Vortex开发守则
+自: http://10.0.12.160/documents/1
+
+用户文档
+11/25/2010
+
+1.Kernel的开发请一定按照苏新起草的\\10.0.12.140\Project\VC0882\sw_design\dev\Kernel Coding Manual for VC088x.pdf要求进行，如有疑问请直接与赵原沟通.
+2.Vortex为 VC0882 Android Pad 项目代号.
+3.有关项目编译环境的使用，请参考王渭中的文档\\10.0.12.140\Project\VC0882\sw_design\dev\Vortex Development Guidline.doc
+4.所有开发资源放到\\10.0.12.140\Project\VC0882
+\fpga_source：fpga验证代码
+\hardware:参考方案中其他外设的Datasheet
+\ic_doc:IC Design文档
+\sw_design:软件设计文档, 以及软件设计的参考资源(ref目录下)
+\system_design:原理图,硬件参考设计文档
+5.Redmine为管理项目平台,每位开发人员至少每周更新一次
+6.Design Review记录请参考Redmine项目新闻
+7.尽量避免直接修改大量Android原生代码，避免在Android原生目录中加入新模块和大量新代码
+8.新模块添加到vortex项目中vimicro目录下,关于编译问题请咨询王渭中
+9.device/vimicro/存放对应不同产品或者不用硬件平台的配置文件、toots和其他资源
+
+3, 阅读coding style, 由于都是基于kernel要求, 所以和zhangjian, zhicheng定义的差不多. 
+
+4, 阅读系统编译运行文档:
+"\\10.0.12.140\Project\VC0882\sw_design\dev\Vortex Development Guidline 1.3.doc"
+自该文档: WEB浏览android库
+在http://10.0.12.140/cgi-bin/gitweb.cgi
+中的每个android projects下面的vmc_f分支可以看到提交的修改
+
+bamvor: 和我有关的是:
+http://10.0.12.140/cgi-bin/gitweb.cgi?p=android/kernel-2.6.32.9/.git;a=summary
+这里可以看到2.6.32版本kernel当前修改. 
+
+5, 更新redmine. 
+
+6, 160我没有账号, 已经给zhaoyuan, wangweizhong发信.
+后来发现是zhumeng负责开通账号.
+
+7, 账号开通：
+ZhuMeng邮件"答复: 申请160服务器账号"20101229_1335
+zhangjian 您好,账户已经添加. 
+您在 10.0.12.140 和 10.0.12.160 服务器上的账户名和密码均为:
+Account: zhangjian
+Password: vimicro
+"12:51 2011-2-12"密码已改为zhangjian"12:51 2011-2-12"end
+ * 10.0.12.160配置更高, 请尽量使用. 在Putty 中设置 Session 参数如下. 
+注意只能从您告知的 IP 地址 SSH 连接这两个服务器!
+ * 您的个人家目录地址是 /home/zhangjian. 要在 Windows 下访问该目录请使用共享 \\10.0.12.160\lihongbo. 账户密码一样. 
+ > 
+* 运行 # df –h 命令能查看硬盘使用情况.如:
+Filesystem            Size  Used Avail Use% Mounted on
+/dev/sda3             829G  663G  125G  85% /
+10.0.12.140:/home     335G  269G   50G  85% /140home
+
+8, 下载代码。
+1), repo init -u git://10.0.12.140/android/platform/manifest.git -b vmc_f
+提示用户名有问题。设置了zhangjian后，再次运行repo init，通过。
+2), repo sync。
+
+9, (16:11 2010-12-29)wangweizhong邮件，更新到g分支。
+新的文档放在
+\\10.0.12.140\Project\VC0882\sw_design\dev\Vortex Development Guidline 1.3.doc
+以前所有涉及到vmc_f分支的命令，都可以用vmc_g替换
+新的2.6.35 kernel位于git://10.0.12.140/android/common.git中的vmc_g分支
+
+补充一点
+如果用lunch命令选择编译的产品，应该选择5而不是6，文档里面暂时没更新
+
+10, 根据文档提示先用repo init，再用repo sync：
+zhangjian@ubuntu:~/mydroid_f$ repo init -u git://10.0.12.140/android/platform/manifest.git -b vmc_g
+.repo/manifests/: manifest switched vmc_f...vmc_g
+.repo/manifests/: discarding 9 commits removed from upstream
+
+Your Name  [zhangjian]:
+Your Email [zhangjian@vimicro.com]:
+
+Your identity is: zhangjian <zhangjian@vimicro.com>
+is this correct [y/n]? y
+
+repo initialized in /home/zhangjian/mydroid_f
+zhangjian@ubuntu:~/mydroid_f$ repo sync
+Fetching projects:   8% (14/170)
+Initializing project device/samsung/crespo ...
+remote: Counting objects: 3302, done.
+remote: Compressing objects: 100% (1501/1501), done.
+Receiving objects:  74% (2452/3302), 100.71 MiB | 11365 KiB/s
+...
+
+从后面的log可以看到android已经更新到2.3(gingerbread)。
+
+11:54 2010-12-29
+VC0882, power, 讨论: VC0830, VC0598, pmu, dvfs
+882 power部分讨论
+send: lidongliang; zhangjian; wangwenlei; wangzhengwei
+cc: ai guo; fengbeizhan; liuxiaotao
+hi, all
+
+周四下午2:00, 第七会议室 882 power部分讨论. 
+882 pmu sv阶段由我负责, 考虑到这部分工作比较多, 我想多了解一下之前的经验. 
+请dongliang介绍一下830和598 power部分. 请zhengwei和weilei介绍一下882 pmu和7882关键功能, FPGA已经完成/未完成的工作. 
+最后会讨论一下882 sv power我的具体工作和安排.
+
+谢谢大家. 
+
+zhangjian
+
+12:46 2010-12-29
+VC0882, power, 阅读君正电源管理
+文档位置: \\10.0.2.36\sqmshare\Document\SOC\君正\君正Linux开发指南.pdf
+1, cpufreq用户空间工具
+cpufreqd, cpufrequtils, sysfsutil
+如xiaotao所说, 第十章对于cpufreq的使用介绍很清楚. 
+
+16:20 2010-12-29
+VC0882, SV准备, clk, 方案讨论, 续
+Liuxiaotao邮件"答复: 882 clock 验证方案讨论"today
+今天下午主要讨论了clkrst的接口定义
+meeting minutes 如下：
+1. timer pmu padc 时钟源的选择没有考虑进去
+2.  频率设置改成枚举类型的值
+3.  cpu bus ddr 的频率配置，要注意一次配完，不能分开设置
+4. 注意nfc 占空比的问题（模块的频率配置函数单独提供，用户自己根据div配）
+5. 注意某些模块时钟的 配置流程（有些模块有特殊要求）
+后续工作：
+1. ddrc switch 流程讨论
+2. nfc uart      cpu bus ddr 接口函数的具体实现
+ 3. 基本测试代码（cpu bus ddr） ，比如进行顺序切频接口等，  另外，要注意print clk freq。
+
+17:05 2010-12-29
+VC0882, android, AE, power, performance, performance monior
+1, 还不清楚在哪个模块写驱动，今天计划现在ICP 2.6.35 kernel上做。
+位置: /opt/share/zhangjian/development/Linux/kernel/linux-2.6.35/
+1), 预计在sys根目录显示. 但是需要注册class, 稍候. 应该是使用debugfs简单一些. 
+2), 今天只是"bitfield方式访问寄存器，读出部分效率看是否正确". 暂时不错ddr的. 只做marb里面的.
+看了下,rdata, wdata读整个寄存器就行, 不需要按照bitfield. 
+
+1), 全局config: enable/disable，周期(需要确认单位), read/write PWM.
+2), 每个marb master: read/write transaction id名称(例如DE Layer1 Read DMA0)或all; 模块单位带宽=模块*8/时间; 模块占带宽比例=模块/ddrc axi data, read/write latency, read/write class.
+注: 每个master一个目录.
+3), ddr: 效率(efficiency) = ddr数据/active cycle, 利用率(utilization) = active cycle/总cycle; bus利用率=bus ddr数据/bus clock.
+读写转换, page conflict.
+利用率可以用于ddr clkswitch.
+4), 提供脚本: 
+(1), 打印所有表项.
+
+9:41 2010-12-30
+时间管理
+0, 9:30
+
+1, 本日
+1), 9:00-9:20 10:23-11:39 阅读7882 design spec和各模块mas. 见"9:12 2010-12-30".
+2), 30' 邮件, 业内动态, 博客.
+3), 下午讨论power, meeting minutes见"19:02 2010-12-30".
+
+9:12 2010-12-30
+VC0882, 7882, 文档阅读, design spec, mas
+1, "VA7882_DesignSpec_100902.doc"
+dcdc 四个由I2C调整，一个电阻调for memory.
+每个ldo用途不同，多数都有四级电压可选。两个是外部可调(电阻分压？)。
+为什么dcdc或有些pad bonding是多个。
+后面的电流特性等没有细看. 最后MKxxx选择电压是什么意思? 不是通过I2C选择么? 
+2, "VA7882_MAS_POWER_CTRL_V0.20.doc"
+1), DC-DC和LDO从应用分类(具体包含看文档)
+自文档: 
+A  和vc0882的PMU domain同时上电/开启，software工作后可以控制其单独开关
+B  和vc0882的PSO domain(包括ARM)同时上电/开启，software工作后可以控制其单独开关
+C  默认处于关断状态，software工作后可以控制其单独开关
+C类DC-DC/LDO在默认情况下是关闭的，software起来之后可以根据系统应用场景来分别控制其开关。建议任何两个之间的开和关都错开250us.
+2), buslist. 
+这个信息很重要, 我理解是充电开机时如果很快充电器又拔出, 可能充电中断就丢失了. 
+自文档: Charger/VBUS插入开机之后，必须等882给7882的XCLK产生之后才能拔出，否则开机之后，software将查不到这个中断的产生。
+原因：Charger/VBUS的插入开机检测时间100us左右，这个插入事件没有保留。如果XCLK产生之前拔出，这个中断就没法产生，因为XCLK起来之后Charger/VBUS in信号上没有电平跳变。
+3), "VC0882_power_scheme_v0.71.xls"里面分别列出了A, B, C类.
+3, I2C, RTC mas只是简单看了一下. 
+4, "VA7882_REG_ALL_V0.38.xls", 7882寄存器列表. 
+1), dcdc寄存器列表里面有个cfg和uplimit, 前者设置电压, 后者设置最大调整范围, 这样就只能0.6v-xxxv范围调整. 也就是882 dvfs里面提到的电压范围. 
+因为每个dcdc都是在0.6-3.3调整的, 但是882 pso里面的四个power domain, 其实都不能工作在太高的频率, 所以设置uplimit这个还是很有必要的, 对于882 pmu software更为安全, 同时有保证了灵活性. 
+2), RTC_SW_REG0-3, 四个寄存器是软件保存在RTC域的. 将来如果pmu寄存器不够用, 可以用这个. 
+3), PWM和PFM? 后者不清楚. \todo. 
+5, zouweiran测试7882时使用水泥电阻模拟882. 
+
+19:02 2010-12-30
+VC0882, SV准备, power, 讨论: VC0830, VC0598, pmu, dvfs, 续, meeting minutes; power工作安排参考
+1, 经过下午的讨论, pmu主要是如下工作, 后面会细化. 
+1), 大家认为clk, clkswitch, ddr, pmu(含dvfs)有系统级case, 需要在sv阶段构造系统级case验证. 下次review xiaotao代码时会具体讨论.
+2), 模式转换。check 流程：cache lockdown(之前已经分配给yangxing做)，clkswitch(xiaotao api).
+wakeup source：完善API。
+(1), power on: 三种。软件是一样的。
+(2), idle:
+(3), halt:
+(4), sleep:
+3), dvfs。
+(1), I2C读写接口可能要修改或重写。
+(2), 软件方式API。
+(3), 硬件方式API。
+4), 改进代码。如果需要大的修改, 修改前会review. 
+5), 疑问, 会进一步确认. 
+(1), DVFS机制, 尤其是硬件调整电压方式. 
+(2), VA7882 boost1的短路中断在什么场景使用? owner: wangwenlei.
+(3), VC0882 PMU_MRST_N和PSO_RST_N何时起作用, 由谁提供?
+(4), PMU Mode Transition流程: VA7882是否根据off_mode判断给AP IO, AP PMU和DRAM的电源是否关闭? 参见PMU mas Figure 7-2, 7-3.
+(5), 如果使用ddr3, 流程中disable pll是否放在ddr进入self-refresh之后? 因为ddr3的bypass mode也许还要使用pll.
+(6), PMU halt模块: 为什么不支持ddr2? ddr2没有类似ddr3的bypass模式么? 
+(7), 未发邮件: PFM和PWM什么区别? 
+
+10:52 2010-12-31
+时间管理
+0, 9:45
+
+1, 本日
+1), 20' 支持wenlei: CVS在windows更新后, 被转化为windows回车符, 造成make menuconfig等出错: parser Kconfig格式错误. 
+2), 40' 和fandong讨论筛片程序: NEON在Cortex-A8的作用, 如何使用NEON; 882 dvfs.
+3), 40' 和xiaotao讨论882 clock. 切频相关时钟如何管理? 见"11:42 2010-12-31". 下次review xiaotao代码时要看这个讨论.
+4), 15'(-12:00) 杂, 博客.
+5), 25' 支持wenlei, xiekeyang. 修改CVS perference设置换行符为unix即可. 更新文档，发邮件"Linux cvs使用文档更新：解决windows下更新文件回车替换错误"。
+6), 50' 支持Bianyingfeng VC0718 PLE测试。
+7), 总结: 上午时间很快就过去了, 自己的工作都没有做. 其实在882过程中自己一直在思考, 如何支持其他同事? 我自己比较愿意把前因后果解释的很清楚, 但是这样时间长. 
+
+11:42 2010-12-31
+VC0882, clkswitch, 讨论, \todo
+1, 和xiaotao讨论882 clkswitch API应该由用户提供哪些clk. 我认为: 
+1), cpu_clk, aclk, ddrc_mclk由AE提供. 
+storperi_aclk, cpu_aclk: ICP和ICD讨论后由系统上面三个clk和模块clk决定. 
+pclk, pclkdbg, atclk: 也是ICP确定. 这些clk一般来说对于性能不敏感. 
+2), 系统clk分为三个层次: 
+system operation point
+cpu, bus, ddrc独立切频测试
+模块clk api: 这里面应该是每个clk都有配置api. 开关api可能按模块划分好一些. 
+3), \todo: 别忘了, fabric里面的clock. 
+
+17:34 2010-12-31
+(15:58 2011-1-4)
+VC0882, android, AE, power, performance, performance monior, 续, coding
+1, 所有寄存器都读出来. 
+最终结果是, 在树状结构上一个文件一个条目.
+performance_monitor
+2, 步骤:
+1), 先写目录结构.
+2), 希望定义为通用架构, 可以很容易加入新的表项. 
+所以需要所有performance monitor寄存器都要读出来. 
+目前表项如下: 
+[zhangjian@icp-desktop performance_monitor]$ tree
+.
+|-- cpu
+|-- ddrc
+|   |-- efficiency
+|   |-- page_conflict
+|   `-- utilization
+`-- marb
+    |-- cif
+    |   |-- rbandwidth
+    |   |-- rclass
+    |   |-- rdate
+    |   |-- rid
+    |   |-- rlatency
+    |   |-- wbandwidth
+    |   |-- wclass
+    |   |-- wdate
+    |   |-- wid
+    |   `-- wlatency
+    |-- core_sight
+    |   |-- rclass
+    |   `-- wclass
+    |-- cpu
+    |   |-- rbandwidth
+    |   |-- rclass
+    |   |-- rdate
+    |   |-- rid
+    |   |-- rlatency
+    |   |-- wbandwidth
+    |   |-- wclass
+    |   |-- wdate
+    |   |-- wid
+    |   `-- wlatency
+    |-- de
+    |   |-- rbandwidth
+    |   |-- rclass
+    |   |-- rdate
+    |   |-- rid
+    |   |-- rlatency
+    |   |-- sarb
+    |   |   |-- rclass
+    |   |   |-- rpwm
+    |   |   |-- wclass
+    |   |   `-- wpwm
+    |   |-- wbandwidth
+    |   |-- wclass
+    |   |-- wdate
+    |   |-- wid
+    |   `-- wlatency
+    |-- dmac
+    |   |-- rclass
+    |   `-- wclass
+    |-- efficiency
+    |-- emi_burst
+    |   |-- rbandwidth
+    |   |-- rclass
+    |   |-- rdate
+    |   |-- rid
+    |   |-- rlatency
+    |   |-- wbandwidth
+    |   |-- wclass
+    |   |-- wdate
+    |   |-- wid
+    |   `-- wlatency
+    |-- fd
+    |   |-- rclass
+    |   `-- wclass
+    |-- global
+    |   |-- enable
+    |   |-- trigger
+    |   |-- period
+    |   |-- statics_interval
+    |   |-- rpwm
+    |   `-- wpwm
+    |-- gpu
+    |   |-- rbandwidth
+    |   |-- rclass
+    |   |-- rdate
+    |   |-- rid
+    |   |-- rlatency
+    |   |-- wbandwidth
+    |   |-- wclass
+    |   |-- wdate
+    |   |-- wid
+    |   `-- wlatency
+    |-- peri
+    |   |-- rclass
+    |   `-- wclass
+    |-- stor
+    |   |-- rclass
+    |   `-- wclass
+    `-- vcodec
+        |-- rbandwidth
+        |-- rclass
+        |-- rdata
+        |-- rid
+        |-- rlatency
+        |-- wbandwidth
+        |-- wclass
+        |-- wdata
+        |-- wid
+        `-- wlatency
+3), 考虑还是加上sarb. 
+arbiter

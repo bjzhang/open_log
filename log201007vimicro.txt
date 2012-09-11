@@ -1,0 +1,2772 @@
+﻿
+09:28 2010-7-1
+(20:51 2010-7-2)
+VC0882, FPGA , memory, ddr3, 支持beihua做ddr3 debug; 测试软件: rvdebugger memory load store script, dmac normal transfer
+1, 支持可能不止3天了: 见"21:50 2010-3-5"4-6).
+2, (18:07 2010-7-4)支持方式反思, 既然上次已经发现开mmu可以运行, 就可以考虑让测试同事进入测试. 不应该等周末dr.yang问的时候才想到. 
+
+10:16 2010-7-1
+时间管理
+0, 9:50
+
+1, 本日
+1), VC0882 ICP sync up. 
+2), bootloader clock讨论和修改. 见"14:04 2010-7-1".
+3), 20' 支持: yangxing clkswitch in EMI sram; 
+3), mmu页表0x80000000改为non-cachable, 加编译选项设置为no access.
+4), bootloader strappin debug发issue. 
+5), cache总结, 分析: cif, uart. 见"21:12 2010-7-1"
+6), read "A3.5.3 Atomicity in the ARM architecture". 了解lingming performance monitor做什么用. p141. <未完, 继续>
+
+2, 次日
+1), 在panda_os中加入与bootloader配合生成pmu clkswitch寄存器的配置. 
+2), 记录cache解决状态，de到底什么问题如何解决的。nfc什么问题.
+3), 环境总结: 编译选项整理. 
+4), caijin perl脚本修改. 
+5), 整理"14:09 2010-7-1"待解决事项. 
+
+14:04 2010-7-1
+VC0882, bootloader, clkrst, nfc, usb, 时钟方案调整; strappin实验邮件(log见"23:18 2010-7-1")
+1, hi, all
+由于在bootloader里面nfc需要支持2MHz和12MHz两个频率, usb工作在48-100MHz. 而且nfc divider最大是64, 这样就没法和cpu, bus, ddrc共用一个pll6(480MHz), 所以计划bootloader中把pll4(96MHz)做为stor和peri的clock source. usb工作在48, 96两个频率. 
+大家看看这样配置有没有问题. 
+2, clock enable和ungate是否配置? 
+3, 发信给dongliang:
+1), usb 48 or 96MHz在什么地方配置? 提供了单独接口"VIM_CLKRST_SetUsbMclk()"
+2), ECC mclk在bootloader里面需要打开么?
+4, 发信给大家
+Strappin问题已经报issue(9227), 目前只要strappin[0][1]=b00情况下, 其余bit都设为1是正常的. 可能是boot sel默认为norflash对strapin配置有点影响. 
+台子: FPGA12
+Cf code: vc0882_rev0_01062904_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace
+
+今天clkrst代码修改如下
+1), 根据之前讨论, storage, peri pll从480MHz改为96Mhz. 所以修改StorPeriPLL480改为StorPeriPLL96. 影响nfc, sdio, usb三个模块clock. 请修改. 
+2), 加入模块clock enable, ungate.
+3), 修改cfg时需要查busy. 尤其是switch clock source和gate会慢一些. 
+4), 注: 目前配置sdio, uart时钟没有按照index配置.
+
+14:09 2010-7-1
+(23:06 2010-7-12)
+时间管理, 其余待解决事项
+一 0701
+2, 其它
+4), mmu默认开,加入L2 cache开关命令. 
+5), cif cache: 在不同阶段cache off, 看到底哪部分有一致性问题; 若不行, cache on, 不同阶段加delay. 保存环境心得.
+问一下fenglijun cif具体是如何修改的. 没看明白. 见"19:44 2010-6-17".
+
+clkswitch加压测试下周做。
+1), 有空回一下arm L2 cache邮件. 
+
+6), 要问一下aiguo yangxing工作如何安排. 我的工作有些可以分给yangxing做, 有些长远需要的工作(例如cache test)也需要做. 与yangxing讨论emi bootloader, sram编译, bootloader环境. 由yangxing给大家发邮件说明emi bootloader用法和sram用法. perl脚本要转为exe. 
+
+2), 给hanzhimin发performance monitor irq测试方法. 
+3), memcpy改为multi load/store. 提高效率. 比较速度差异. 
+5), 确认trace会不会影响中断, irq umonitor配置见"10:51 2010-6-7"
+其它: 
+6), bus switch和ddrc switch写复杂测试case. 
+7), 看cortex-a8 L2 cache的L2 Cache Auxiliary Control Register, 会不会是奇偶校验问题? 
+9), 关注256M ddr回绕问题, 见"16:12 2010-3-25"3.
+10), 查VC0882 FPGA CF接口和哪个sd share. 
+12), yinong邮件要回复一下. 
+0), 每天要了解一下yangxing的进度. 需要yangxing逐步了解arm和环境. 
+1), 如果L2 cache也没问题, 计划把mmu, cache, BTB改为默认关闭. 
+
+13), memcpy_test中改为通过"VIM_MMU_CacheGetAvailable()"获得最大可用memory比较合理. 
+
+3, 四象限
+1), 紧急, 重要
+(1), 如果有时间着手写clkswitch代码. <进行中>
+2), 不紧急, 但重要
+(0), 在panda_os中完成get cache info函数, 打印mmu, L1, L2状态和大小. 
+(1), 整理和caijin一起写的脚本. 
+(2), 解决"11:22 2010-5-6"2-4)问题. 
+(3), 根据nCTIIRQ arm回信见"17:33 2010-5-13"5实验. 
+(4), 整理最近huangwei与shilei的讨论邮件.  
+(6), 与huangwei继续memory barrior讨论.
+(7), 看Linux kernel memory barrior宏在Cortex-A8下是如何定义的. 
+3), 紧急, 不重要
+(1), 支持dangxiangfu调试emi bootloader.<取消>
+(2), dmac开cache. (可以由yuyang完成).
+4), 不紧急, 不重要
+(1), AHB-AP: 实验RVIahbload下载有时无法运行的问题.
+(2), 关注Kongyingqi ASIC仿真出错, 见"11:13 2010-5-7". 
+(3), 整理VC0882环境文档. 
+(4), irq加入一个随机优先级和触发测试. 
+(5), 用source insight宏写工具自动根据变量名称自动生成assp Input和Param.
+(6), VC0718 nucleus中断性能评估, 测试内容见"19:30 2010-6-8". 方法已发给lingming见"19:30 2010-6-8".
+
+4, 问题集:
+1), LEDA是什么意思? 自"10:15 2010-4-27".
+(19:59 2010-7-13)"什么是Waive?
+LiuJianBo邮件"答复: vc0882: pad_body_other.v, pad.v, power_pmu.v updated for Audio Codec IO"20100713_1824
+Leda rpt 出来了，请看下是否可以Waive，如果都可以Waive，加到Waive File里，就算LEDA通过了。修改Code话，还需要重新跑。
+19:59 2010-7-13"end
+2), 给arm邮件, 问使用Cortex-A8没找到invalidate到memory的命令, clean&invalidate而不是invalidate会不会影响效率. 
+3), 多周期总线(?), Cortex-A8 L2就是. 
+
+二, 0712
+2, 次日
+3), kongyingqi 64bit访问. 
+1), 整理环境文档. 趁热打铁, 今天要有初稿. 
+2), 清理剩余事项. 见"14:09 2010-7-1".
+3), 向zhicheng学习svn服务器建立. 
+0), 写上周总结, 本周计划/总结, 下周计划
+5), bootloader clkrst code改进. 见"21:57 2010-7-7"
+6), performance monitor irq.
+6), L2 cache lockdown.
+
+3, 其他:
+1), arm总结. for 718.
+2), trace实验.
+3), performance monitor irq调试. 
+4), 每周要了解两次yangxing和wangwenlei进度. 
+5), 关注beihua ddr3: bit28一直是1.<DONE> 见"21:50 2010-3-5"4-6)-(4).
+6), 看caijin perl脚本的修改. 
+7), 有空试一下RTSM能否跑Linux. 
+
+21:12 2010-7-1
+VC0882, arm, cortex-A8, cache, cif, fat, buffer没有做cache操作造成一致性错误;uart, buffer和size没对齐造成数据错误; venc: 纯硬件buffer没有做cache操作
+1, Shuyu邮件"答复: 882 cif cache 问题"20100630_1737
+今天和zhangjian在debug的过程中，发现ipp在调用fat_write的时候，ipp传入的是8开头的地址，这个地址是从IPP的寄存器里面get出来的。我们尝试把这个地址改为0开头的地址，抓图ok。
+2, Shuyu邮件"答复: 882 cif cache 问题"20100701_1804
+Cif 的问题现在可以肯定是8地址和0地址的数据不一致造成的。如果传入8地址，在fat里面做memcopy的时候，查看fat里面的mem，发现mem里面的数据已经不对了。
+3, Aiguo邮件"答复: 882 cif cache 问题"20100701_1841
+谢谢shuyu执着，debug到这步，问题基本搞清楚了，如果CIF用的0x800xxxx的地址给fat，那么第一次用0x800xxxx的地址，数据没有cache进来，因此就没有问题，但第二次用这个地址，因为已经cache进来了，因此copy给的数据是上次的数据（当然如果0x8000xxxx没有替换），如果幸运的是，替换出去了，那也没有问题，但实际很难。
+这也解释了我们，第一次没有错，第二次一定错。 
+另外，也能解释我们用窗口查看memory时没有问题，我记得当时调试的时候，发现一般仔细check memory就没有问题，实际上应该是，我们仔细check的时，memory的窗口很大，可能会引起0x8000xxxx的替换，这样再用就没有问题。
+这两个问题都应该得到解释，我也希望把这个没有debug过这个问题人，一起share一下，作为一个典型，shuyu你准备一下素材，给大家分享一下，你来定个时间吧！另外，shuyu，如果你有时间，我想再和你一起看看，把一些表现的奇怪的问题，最后统统证明是合理的！
+4, (11:18 2010-7-2)修改: 
+今天又和shuyu讨论了一下. 我现在也基本理解了. 同意aiguo的说法. 
+简单说: arm同时访问0, 8两个ddr地址, 造成数据一致性问题.
+每次fat从buffer copy数据时, 由于cif每次malloc buffer的地址是相同的(cif每次会free memory, 而且连续两次cif测试中没有其它模块malloc过数据), 所以fat第一次从0x8xxxxxxx地址搬移时数据进入cache, 第二次测试时fat从同样地址复制数据由于之前地址的数据已经进cache, 所以fat就不会再从memory读取, 只是从cache读取. 这样就出错了. 而且shuyu用纯色做了实验, 出错的横线就是上一次的纯色. 
+正常使用时, 每次给硬件之写memory之前都会做clean and invalidate. 这样就保证下次fat读数据时必定从memory取数. 但是这里的0x8xxxxxxx并没有做cache操作, 所以有错. 因此才计划以后把0x80000000地址改为软件不可访问的地址. 
+补充: 
+据shuyu说, 每次写256k数据时, 基本只在0x40000, 0x80000, 0xc0000, 0x100000出错. 这个区域正好是小于L2 cache的大小. 超过这个大小后, 再到同样的256k地址的数据, 数据可能已经被换出了. 所以没有问题.
+另外今天试了一下, 发现只开L1,关闭L2没看到错误, 原来是有错的. 应该是由于L1比较小(dcache只有16k). 而nucleus就有几百可k, 所以cache数据容易被换出因而不是必现错误. 
+5, (11:10 2010-7-2)uart, buffer和size没对齐造成数据错误(FanXiaoFan)
+uart中是循环buffer, 正常情况下每次到水位(50%)会来中断, 但每次具体从buffer搬移多少是从uart寄存器得到, 一般是超过50%的. 这样可能造成buffer或size没有cache line对齐, 因此造成个别byte错误. 昨天xiaofan先按照固定50%搬移, 没有错误. 今天会继续修改把offset做cache line对齐. 
+6, (16:07 2010-7-5)venc: 纯硬件buffer没有做cache操作
+venc出错直接原因(猜测,未验证)：每次ref frame buffer start address, size不同，可能本次ref frame与上次input或output重合。
+
+23:18 2010-7-1
+VC0882, bootloader, strappin, arm, cortex-a8, rvdebugger, csat; issue: 9227, 9228; arm, Cortex-A8, rvds, rvdebugger, issue9228: csat APB-AP access memory or register fail
+1, strap pin接高电平造成rvdebugger难以连接(issue9227)
+VC0882 bootloader版本strappin都接0时可以正常连接, 寄存器也正确. 如果有的pin接1, 就容易导致连不上arm. 如果能连接上, 且板子经过重新上电, strappin寄存器正确. 
+但是如果用csat连接arm, 通过ahb-ap读取strappin, 可以读到正确的strappin配置. 即使都接1也可以. 
+ACE版本: vc0882_rev0_01062904_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace
+csat连接过程见附加信息. 
+在命令行中输入"csat"启动: 
+%>con usb
+
+Attempting to connect to ...USB
+Connected to:ARM RealView ICE
+Base H/W: V1 Rev G-01
+TurboTAP Rev: 1.86
+LVDS Probe H/W: V50 Rev p-48
+Firmware: 3.3.0, Build 948
+%>chain dev=auto clk=1000000
+Jtag clock set to 1000000
+ID:0 ARMCS-DP
+%>dvo 0
+Open connection to device ID : 0x4BA00477, version 0x00000006
+Msg returned with RVMOpenConn: ARM-DP Template using Rv-Msg.
+%>dpe
+Enumerated 3 APs
+  0 : AHB-AP
+  1 : APB-AP
+  2 : JTAG-AP
+%>dmr 0 0x60051a00 1
+0x60051A00 : 0x0000FFFF
+%>dmr 1 0x60051a00 1
+RVMMemRead while reading memory from target failed: EMUERR_RWFAIL: general error
+ on memory operation
+%>
+%>
+
+RX ASYNC !*
+DAPERR_DP_COMMS_FAILED : Failure in communications between DAP-DP and connecting
+ vehicle.
+CSTTAP AP read memory incremented failed (nCont Stall on Read.. Exit[0x82] Excep
+tion[0x04].). [1 words @ 0x60051A00]
+
+*!
+%>%>
+%>dmr 0 0x60051a00 1
+0x60051A00 : 0x0000FFFF
+%>dmr 1 0x60051a00 1
+RVMMemRead while reading memory from target failed: EMUERR_RWFAIL: general error
+ on memory operation
+%>
+RX ASYNC !*
+DAPERR_AP_BUSY : AP busy - memory operation cannot continue.
+*!
+%>dcn
+Disconnected from device.
+Disconnected from vehicle.
+%>
+
+Issue注释(0018289): 
+后来进一步实验, 发现strappin[1:0]=b00时在FPGA12上面还算比较稳定. 怀疑是默认为norflash boot导致的问题. 麻烦jiajihua修改默认boot为rom试试. 
+
+2, csat中通过APB-AP访问寄存器/sram失败(issue9228)
+csat通过AHB-AP访问寄存器正常, 但通过APB-AP访问寄存器/sram都出错. 
+%>dmr 1 0x60051a00 1
+RVMMemRead while reading memory from target failed: EMUERR_RWFAIL: general error
+ on memory operation
+%>
+RX ASYNC !*
+DAPERR_AP_BUSY : AP busy - memory operation cannot continue.
+*!
+ACE版本: 
+vc0882_20100624_2130_CifEmi_fpgaAll_a8_20100624_L1_32_L2_128_Neon_48M_2fpga_all.ace
+vc0882_rev0_01062904_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace
+csat连接过程见issue9227的附加信息.
+
+0:00 2010-7-2
+VC0882, cache, mmu, ddr访问属性
+zhangjian2VC0882_ICP邮件
+修改ddr 0x80000000开始地址为ncnb区域. 另外可以通过"MMU_MAP_DDR_PHY_ADDR_NON_ACCESS"宏可以时该区域不可访问, 便于软件调试cache问题:
+如果为了调试cache问题, 建议在make target中加入”-define= MMU_MAP_DDR_PHY_ADDR_NON_ACCESS=1”, 这样0x80000000开始的ddr区域软件不可访问, 可以排除一些由于arm同时访问0x0和0x8000000地址导致的memory数据一致性问题. 
+
+对于软件必须要访问的0x80000000地址区域(例如uhost.里面可能需要)可以使用VIM_MMU_PageTable_Section_ChangeAccess(buffer, SIZE_1M, access)修改为arm可以访问的地址. 
+Buffer是要修改页表属性的memory buffer地址, 必须是1M对齐的. 
+第二个参数固定是1M. 
+Access是访问属性: 对于memory和寄存器默认的access属性是TTB_MODE_NOLIMIT(宏定义, 数值是3), 如果希望不能访问需要写入0, 
+
+00:39 2010-7-2
+(20:49 2010-7-2)
+(16:13 2010-7-5)
+(21:51 2010-7-7)
+VC0882, 环境总结, arm深入介绍, 文档, \todo
+1, 环境:
+1), 初始化代码：调用库的方式，进入c的方式直接调用main函数. 
+2), os支持：tick(64 bit continueus timer), irq(64bit), malloc(cache line对齐).
+3), mmu, cache：对a8的部分支持。mmu attribute的选择。page table attribute修改函数。
+建议VC0718使用device而不是strongly-ordered, 这样更接近实际情况, 有可能测出更多问题. \todo 加入ic bug, kongyingqi dsb 问题. 
+4), aasp改进. 
+5), emi bootloader, ddrc script.
+6), 实验性小环境: mini_c_env_base(含aasp), mini_c_env_nolib: data abort handler. 
+7), 脚本: regdef script.
+2, arm
+1), mmu page table与axi多通道
+2), cache: 
+(1), 结合"ARM_ARM_7AR"A3.9.2 Memory hierarchy: 从系统架构理解cache. Cortex-A8 dcache和L2是PIPT, icache是VIPT. 所以对于读数据来说, 看到的是物理地址的数据. 即使mmu映射一个物理地址到两个虚拟地址, 也不会有数据一致性问题. 指令是虚拟地址应该是因为取指不需要经过mmu, 另外一般修改下指令也不会修改. 但ARM9 trm又提到VIVT好处: The caches are virtual index, virtual tag, addressed using the Modified Virtual Address (MVA). This enables the avoidance of cache cleaning and/or invalidating on context switch.
+(2), "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf": L1 dcache与L2 dcache无关, 但L1 icache是L2 icache的子集. (bamvor: dcache互不包含就避免了更多的数据一致性问题.)
+(3), number of set = log2(cache size(16k) / cache line size(64byte)) - numberOfWay(4) = 6; 2^6=64
+for VC0830(arm926): 
+CSIZE 				EQU 14	;注意和CACHE_SIZE一致
+CLINE				EQU 5
+NWAY				EQU 2
+NSET				EQU (CSIZE-NWAY-CLINE)  ;7, 2^7=128
+所以目前理解Cortex-A8中tag[31:12], set[11:5], cacheline[4:0].
+way和set一个是纵向平面,一个是横向平面, 这样可以唯一选择一个cache line. 看来这个地方要做一些实验. 见"18:41 2010-7-5"
+3), sync, async data  abort
+thumbee
+neon与l2, PLE
+3, debug
+1), trace
+2), profiler: DUI0414C_rvp_user_guide.pdf
+
+10:46 2010-7-2
+时间管理
+0, 10:10
+
+1, 本日
+1), 加入performance monitor irq测试, 但是irq清不掉, 还需要继续调试. 
+2), 在panda_os中加入与bootloader配合生成pmu clkswitch寄存器的配置. \todo 未完成. 用脚本处理. 
+3), bootloader中加入sdio, uart按index初始化. <DONE: 完成一部分周六最终完成>
+4), 和huangwei一起看issue9228. csat无法通过APB-AP访问。
+5), 中午: read "A3.5.3 Atomicity in the ARM architecture". 了解lingming performance monitor做什么用. p141. <DONE: 完成一部分周六最终完成>
+6), 支持hanzhimin测试arm和coresight. 
+
+2, 次日:
+1), 环境总结;
+2), 报销. 
+
+10:59 2010-7-2
+VC0882, bootloader
+1, 计划
+1), sdio, uart按照index配置时钟. 
+2), 检查512info, pmu reg是否与代码对应. 
+3), panda_os加入生成pmu寄存器的配置. 
+
+12:52 2010-7-2
+VC0882, arm, cortex-a8, neon, openmax dl
+zhangjian2caijin邮件
+我下载的neon优化过的openmax dl库, 包括aac, mp3, jpeg, mpeg4, h264, 详见里面的pdf文档.  位置: \\10.0.2.36\sqmshare\Document\ARM\openmax_code\OX002-BU-00010-r2p0-00rel0.tgz
+
+17:03 2010-7-2
+VC0882, arm, Cortex-A8, 工具链: 编译器, rvct: armcc, Instruction intrinsics, c语言中读写pc, sp, lr, pld, pli等的接口, rvds4.0已经不允许在内嵌汇编中访问pc, DUI0348B_rvct_compiler_ref_guide.pdf, p241
+
+17:25 2010-7-2
+VC0882, arm, cortex-a8, performance monitor
+1, 发现在注册中断和配置target后, 再设置interrupt enable就直接来中断了. 奇怪. 
+VIM_ARM_PmuIntEnSet(0x80000000);
+暂时把这个语句移到注册中断前面. 
+2, (19:07 2010-7-2)调试发现中断mask后仍然会报中断. 晚上先完成bootloader, 明天继续查. 
+
+22:45 2010-7-2
+软件技巧, perl, 寄存器操作格式化, 寄存器读写转换
+
+open STDIN, $1;
+
+while(<>){
+#    print $_;
+    #define __PMU_CLKRST_GetDdrcMclkNdiv()  VIM_HAL_READ_UINT32_BITVAL(PMU_SW_REG23, 0, 5)
+    if ( /(.*)Get([^(]+)\(\)\ +(.+)READ([^\)]+)/ ) {
+#    if ( /(.*)Get(.+)/ ) {
+        printf "%s\\\n%25s%s\n", "$1Set$2(cfg)" , " ", "$3WRITE$4, cfg)";
+        printf "%s\\\n%25s%s\n", "$1Get$2()" ," ", "$3READ$4)";
+    }
+}
+
+15:39 2010-7-3
+时间管理
+0, 14:30
+
+1, 本日
+1), issue9227. 实验jiajihua最新版本. 见"16:04 2010-7-3"
+2), 完成pmu代码. 
+
+16:04 2010-7-3
+VC0882, FPGA, bootloader, strap pin, issue 0009227: strap pin接高电平造成rvdebugger难以连接
+1, old
+0xfffc pass, 0xffff fail(csat pass).
+2, 
+请用新版本进行测试：
+vc0882_rev0_01070307_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace（LCD_DATA[23:0]都配置为下拉）
+vc0882_rev0_01070313_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace（LCD_DATA[23:0]都配置为下拉）
+Code: tag “vc0882_20100623_2000” 
+FPGA2: a8_20100617_L1_32_L2_128_No_Neon_48M_USB.bit
+以上两个版本code和FPGA设置都完全相同。
+可选用其中任何一个进行测试。 
+1), 测试vc0882_rev0_01070313_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace
+试验结果和前面版本基本一致: d0, d1跳成1导致rvdebugger难以连接. 而且感觉感觉d3对d1有影响. 
+不连接video转接板, strappin默认值都是0. 
+连接video转接板, 
+strappin跳线是0xffff: rvdebugger没法连接, 用csat ahb-ap读到的数据正确. 
+strappin跳线是0xfffc, rvdebugger可以正常连接, 数据正确. 
+strappin跳线是0x0008, 实际读到的是0x000a. 
+strappin跳线是0x0004, 实际读到的是0x0004. 
+
+00:28 2010-7-4
+时间管理, 周一二计划
+1, 周一
+1), 上午开会, bootloader调试
+2), 记录cache解决状态，de到底什么问题如何解决的。nfc什么问题.
+3), 中午报销
+4), 提供cache lockdown api.
+5), 环境总结: 汇编重新看, __main, aasp和malloc改进,  页表属性建议, ncnb页表有问题, 编译选项整理. 其他环境工程 : 最小lib和nolib环境, 环境 相关文档总结: rvds, fpga等.
+6), 看caijin perl脚本的修改. 
+2, 周二
+trace bootloader, panda_os tick.
+arm总结.，重新看cache原理。
+整理"14:09 2010-7-1"待解决事项. 
+
+11:59 2010-7-4
+时间管理
+1, 本日
+1), 给arm发信. csat访问apb-ap fail. 见"12:06 2010-7-4".
+2), cache注意事项和记录cache解决状态. 见"18:21 2010-7-4".
+
+12:06 2010-7-4
+(20:24 2010-7-5)
+VC0882, arm, Cortex-A8, rvds, rvdebugger, issue9228: csat APB-AP access memory or register fail, 续
+1, mail to support-sw@arm.com
+hello,
+
+I got some problem while using csat. I can access memory and memory-map register with csat through AHB-AP, but fail with  APB-AP: access memory and memory-map register is fail; access Cortex-A8 Coresight ETM register is successful but value is wrong. 
+meanwhile rvdebugger works well, such as connectting to arm and debugging code.
+
+the csat access memory-map register log is as follows: 
+
+%>con usb
+
+Attempting to connect to ...USB
+Connected to:ARM RealView ICE
+Base H/W: V1 Rev G-01
+TurboTAP Rev: 1.86
+LVDS Probe H/W: V50 Rev p-48
+Firmware: 3.3.0, Build 948
+%>chain dev=auto clk=1000000
+Jtag clock set to 1000000
+ID:0 ARMCS-DP
+%>dvo 0
+Open connection to device ID : 0x4BA00477, version 0x00000006
+Msg returned with RVMOpenConn: ARM-DP Template using Rv-Msg.
+%>dpe
+Enumerated 3 APs
+  0 : AHB-AP
+  1 : APB-AP
+  2 : JTAG-AP
+%>dmr 0 0x60051a00 1
+0x60051A00 : 0x0000FFFF
+%>dmr 1 0x60051a00 1
+RVMMemRead while reading memory from target failed: EMUERR_RWFAIL: general error
+ on memory operation
+%>
+%>
+
+RX ASYNC !*
+DAPERR_DP_COMMS_FAILED : Failure in communications between DAP-DP and connecting
+ vehicle.
+CSTTAP AP read memory incremented failed (nCont Stall on Read.. Exit[0x82] Excep
+tion[0x04].). [1 words @ 0x60051A00]
+
+*!
+%>%>
+%>dmr 0 0x60051a00 1
+0x60051A00 : 0x0000FFFF
+%>dmr 1 0x60051a00 1
+RVMMemRead while reading memory from target failed: EMUERR_RWFAIL: general error
+ on memory operation
+%>
+RX ASYNC !*
+DAPERR_AP_BUSY : AP busy - memory operation cannot continue.
+*!
+%>dcn
+Disconnected from device.
+Disconnected from vehicle.
+%>
+2, arm回信
+Support-sw@arm.com邮件"Re: access memory or register fail with csat APB-AP (466757)"20100706_1141
+Are you using a FPGA implementation of Cortex-A8? Is 0x60051a00 a memory address?
+To investigate this issue, it is important for us to know how memory is connected to system bus and how the Coresight system is designed in your system. Can you provide us those information? A diagram would be great.
+Thanks.
+3, 回信(后来huangwei发了邮件, 我就没有发)
+附件: "D:\work\VC0882\arm\vimicro_Cortex-A8_Coresight.JPG"
+> Are you using a FPGA implementation of Cortex-A8? Is 0x60051a00 a memory 
+> address?
+Yes, it is a FPGA implementation of Cortex-A8. As I mentioned in the last mail, 0x60051a00 is a memory-map register. 
+> To investigate this issue, it is important for us to know how memory is 
+> connected to system bus and how the Coresight system is designed in your 
+> system. Can you provide us those information? A diagram would be great.
+> Thanks.
+The Coresight diagram in our system as attachment. 
+4, huangwei邮件"Re: access memory or register fail with csat APB-AP (466757)"20100706_1655
+Thanks for your reply. We inplememt this by our own. And 0x60051a00 is a coresight component address. 
+CoreSight is integrated as shown in the following figure.
+In this figure,  MARB is AXI fabric. And System APB is connected to debug APB bus via APB MUX to enable software running on CORTEX-A8 accessing ETM, CTI and DBG?inside CORTEX-A8 and CoreSight Components in CSSYS. 
+
+18:21 2010-7-4
+VC0882, arm, Cortex-A8, cache, panda_os中cache问题状态
+1, Aiguo邮件"礼拜一882会议内容"20100703_1818
+目前882到了最后冲刺阶段，大家需要最后的冲刺，除了我们平时sync up内容外，同时我们就目前遇到的问题，进行总结，完善和debug。
+1）cache相关的问题，我们尽快close，目前就882遇到的cache的问题，请zhangjian和相关的人介绍，包括shuyu在CIF遇到的问题，避免后续问题；
+2）最近在review大家code时发现，好多人的code style和软件架构不够清楚，包括对os的支持，因此这个需要加紧完善，我们在会上简单说一下；
+3）media系统code进行相应的review，目前系统测试中发现了一些问题，我们要尽快抓紧时间fix，礼拜一上午我们请相关的人参与讨论，yinxingjie,caijin,lingming,fenglijun都参加吧!
+2, cache已解决问题: de(cache操作问题?), cif(arm同时访问0, 8两个ddr地址, 造成数据一致性问题), venc(纯硬件buffer没有做cache操作).
+cache未解决问题: nfc, i2c(加delay可以绕过), uhost(加delay可以绕过).
+
+08:54 2010-7-5
+时间管理, 上周工作总结(2100年6月28日--2010年7月4日), 本周工作计划(2010年7月5日--2010年7月11日)
+1, 上周工作总结(2100年6月28日--2010年7月4日)
+1), bootloader coding: bootloader时钟方案调整。完成bootloader和panda_os driver层编程。
+2), cache问题debug：解决cif问题。
+3), 718环境支持。for liuxiaotao, bianyingfeng, lingming
+4), beihua ddr3支持.
+
+2, 本周工作计划(2010年7月5日--2010年7月11日)
+1), cache supports.
+2), bootloader clkrst代码debug和整理.
+3), vc0882 environment summary.
+4), arm讨论
+
+3, 下周工作计划(2010年7月12日--2010年7月18日)
+trace: next week.
+
+16:01 2010-7-5
+VC0882, realviewICE, 电源, 5V 5A
+RealviewICE原配电源是5v 5A的, 现在临时找了一个5v 3A的可以用, 上次领的那个是输出电流小. DuanXiaoHui明天会帮我买一个5V 5A的电源. 
+
+16:04 2010-7-5
+时间管理
+0, 9:35
+
+1, 本日
+1), 上午VC0882 cache讨论.
+2), 报销1h
+3), -18:43 arm cache学习. 见"00:39 2010-7-2"和"18:41 2010-7-5".
+4), -20:13 修正bootloader and panda_os clkrst编译错误, 自己简单review bootloader clkrst. (含丽华快餐30'). 见"19:03 2010-7-5".
+5), 给arm发信. csat访问apb-ap fail. 见"12:06 2010-7-4".
+6), 提供cache lockdown api. ple正确, 但是lockdown有问题. 
+7), arm training报名. <DONE>
+
+2, 次日
+4), 关注beihua ddr3: bit28一直是1.
+5), 吃饭时问yangxing环境进展。
+7), cache注意事项和记录cache解决状态. 见"18:21 2010-7-4".
+8), 环境总结: 汇编重新看, __main, aasp和malloc改进,  页表属性建议, ncnb页表有问题, 编译选项整理. 其他环境工程 : 最小lib和nolib环境, 环境 相关文档总结: rvds, fpga等.
+9), 看caijin perl脚本的修改. 
+
+18:41 2010-7-5
+VC0882, arm Cortex-A8, cache, tag ram, data ram实验
+Cortex-A8 trm p275. 
+LDR R1, =0x800000C0;
+MCR p15, 0, R1, c15, c2, 6; Read D-tag into data L1 Data 0 Register
+MRC p15, 0, R2, c15, c0, 0; Move D-L1 Data 0 Register to R2
+
+19:03 2010-7-5
+VC0882, bootloader, code review, clkrst
+1, 宏定义多一个括号导致:
+pmu/VIM_PMU_Driver.c(244,25) : error  #65: expected a ";"
+后来看预处理结果才看出来. 
+
+14:12 2010-7-6
+时间管理
+0, 9:50
+
+1, 本日
+1), 上午: pmu讨论; 给wangwenlei发clkrst, arm文档. 
+2), 之前看的interrupt return. 看ARM_ARM_7AR p1188的exception reture和p1198开始的exception详细描述. 
+3), 调试bootloader clkrst. fix部分bug. 
+4), 关注:
+(1), clockswitch版本问题. 
+
+2, 次日
+1), 清理所有事情. 
+
+14:14 2010-7-6
+VC0882, FPGA, pmu, clkrst, arm wfi在irq屏蔽的时候也可以通过irq唤醒
+1, arm wfi在irq屏蔽的时候也可以通过irq唤醒
+见"ARM_ARM_7AR p1197: B1.6.9 Wait For Interrupt", wfi可以由reset, irq, fiq, asynchronous dataabort, debug唤醒, 而且不受CPSR屏蔽位的限制.
+VC0882的设计中应该没法通过debug唤醒(\todo huangwei确认). 
+When a processor issues a WFI instruction it can suspend execution and enter a low-power state. It can remain
+in that state until the processor detects a reset or one of the following WFI wake-up events:
+ an IRQ interrupt, regardless of the value of the CPSR.I bit
+ an FIQ interrupt, regardless of the value of the CPSR.F bit
+ an asynchronous abort, regardless of the value of the CPSR.A bit
+ a debug event, when invasive debug is enabled and the debug event is permitted.
+When the hardware detects a WFI wake-up event, or earlier if the implementation chooses, the WFI
+instruction completes.
+WFI wake-up events cannot be masked by the mask bits in the CPSR.
+
+2, PMU halt2normal中: arm, bus, sram clock会由硬件自动放开.
+
+14:35 2010-7-6
+职业发展, 反思, arm
+1, 今天是aiguo问到唤醒arm时能否屏蔽irq, 我才去查的. 这样normal2halt, halt2normal流程简单很多, 我自己负责arm, 但是没有想到. 可能一方面是思考方法: 考虑问题时假设/想当然的问题太多了. 一方面是自己arm看的不够深入. 
+2, 中午去吃饭, 坐电梯在吃东西, 有个人说别在电梯里面吃, 应该包起来(态度没问题). 我当时挺郁闷的. 其实没必要. 
+
+16:02 2010-7-6
+环境, VC0882, rvds, arm, 自caijin
+1, File->New->RealView Project, 会在工程目录下建立rvd目录, 里面有个refcount.xml描述了switch_mode.inc, 这个脚本会在rvdebugger启动时执行。
+ZJ: 当初就是没找到这个, 所以没法直接用eclipse自动加载脚本和load映像. 
+2, Rvdebugger cortex-A8 ISSM似乎不支持NEON, 用开NEON的程序会跑飞. 
+
+11:08 2010-7-7
+VC0882, arm, cortex-A8, 工具, 环境, rvds, rvct
+1, linker user guide p32
+The term root region is used to describe a region that has the same load and
+execution addresses.
+2, panda_os没有指定root region是因为RO段必定是load和execution address相同的。
+Cached_CortexA8dhry里面把RO段分成了几部分，所以需要指定root region.
+    ROM_EXEC 0x20000
+    {
+        init.o (CortexA8, +First)           ; Startup Code, Translation Table generation
+        * (InRoot$$Sections)                ; We place the library sections in the root region
+        retarget.o (+RO)                    ; e.g. __main.o, __scatter*.o, * (Region$$Table) 
+    }
+
+    DHRY_CODE 0x30000                       ; Dhrystone and Library Code
+    {                                       
+        dhry_1.o (+RO)
+        dhry_2.o (+RO)
+        * (+RO)
+    }
+3, 详细解释, development guide p51
+3.4.2 Root regions
+A root region is an execution region with an execution address that is the same as its load address. Each scatter-loading description file must have at least one root region.
+One restriction placed on scatter-loading is that the code and data responsible for creating execution regions cannot itself be copied to another location. As a result, the following sections must be included in a root region:
+  __main.o and __scatter*.o containing the code that copies code and data
+  __dc*.o that performs decompression
+  Region$$Table section containing the addresses of the code and data to be copied or decompressed.
+Because these sections are defined as read-only, they are grouped by the * (+RO)
+wildcard syntax. As a result, if * (+RO) is specified in a non-root region, these sections must be explicitly declared in a root region using InRoot$$Sections.
+See Assigning sections to a root region on page 5-24 in the Linker User Guide for more information.
+
+4, axf反汇编时是否显示ZI大小是否与是否压缩有关？
+--datacompressor=opt
+The default is --datacompressor=on.
+这个没分析出来。\todo.
+
+11:49 2010-7-7
+时间管理
+0, 10:10
+
+1, 本日, 如果情况允许, 今天任务一定要完成, 否则一直没法释放.
+1), 20' VC0882 bootloader test plan review.
+2), 1.5h 与caijin讨论环境. 见"11:08 2010-7-7"
+3), 1h: VC0816: 定位是否是pclk和audio共用PLL2的问题. 见"21:33 2010-7-7".
+4), VC0882 bootloader clkrst:
+(1), code改进, 见"12:42 2010-7-7"
+(2), review 2h. 
+5), 20' 支持beizhan bootloader: 在bootloader一开始就打印. 
+6), 20' 与yangxing讨论clkrst storage peri aclk switch. 
+7), L2 performance, yangmin邮件"l2 performace"20100707_2036
+
+2, 次日
+1), 和xiaotao一起看Linux L2 cache问题. 邮件见FengBeiZhan, suxin"答复: Gpu 上海测试"20100707_1959, 2056
+2), bootloader clkrst code改进. 
+3), 清理剩余事项. 
+
+12:42 2010-7-7
+VC0882, bootloader, clkrst
+1, 每次进入switch by strappin, 512info, pmu时都清空pll配置. 
+也就是通过strappin切频后, 再通过512info切频时由用户自己保证如何使用pll. 这样对用户更灵活. 
+2, switch之后需要打印switch状态. 
+3, xclk情况下clock也需要enable和ungate.
+
+12:46 2010-7-7
+VC0882, FPGA, pmu, 文档
+wangzhengwei邮件"答复: 验证PMU wfi和中断处理"20100707_1027
+文档位置: D:\work\VC0882\pmu
+昨天下午测试halt和sleep已经通过了，外加逻辑分析仪，可以看到ddr的时钟停下、运行。
+1，IDLE使用，在ARM运行的时候，在一段短时间内没有程序执行，进入IDLE模式
+=>IDLE模式：配置相关中断源，运行WFI指令，ARM就处于挂起状态，程序停在WFI处，ARM进入低功耗状态
+=> 退出IDLE模式：有中断产生，ARM从WFI位置开始运行，ARM处于正常状态
+2，HALT使用，在ARM运行的时候，在一段较长时间内没有程序执行，进入HALT模式
+在DDR进入self-refresh状态，发送transition 命令，WFI，DDR退出self-refresh状态，需要保护该段代码的执行过程，不去执行中断部分（中断服务子函数在DDR中运行），只是完成唤醒wfi（避免产生data abort异常），回到ARM正常运行模式。
+3，SLEEP使用，在ARM运行的时候，在一段长时间内没有程序执行，进入SLEEP模式
+在DDR进入self-refresh状态，发送transition 命令，WFI，需要保护该段代码的执行过程，不去执行中断部分（中断服务子函数在DDR中运行），只是完成唤醒wfi（避免产生data abort异常），进入bootloader程序。
+完整文档在：
+\\10.0.2.36\sqmshare\share\wangzhengwei\PMU HALT & SLEEP NOTES.doc
+
+21:33 2010-7-7
+VC0816, 量产, clkswitch, autorun1, audio, video
+zhangjian2shuyu, fengbeizhan 
+我把pclk放到pll1 测试15分钟没有死, 正在继续测试(实验1000次). 
+
+具体过程: 
+1, 现象: 816测试中发现加入video, audio一起测试时有问题. 测试audio时板子会reset. 
+如果不加audio就没事. 
+2, 分析: 
+不清楚为什么会reset, 怀疑是pclk在pll2造成pclk和audio相互影响, 可能引起模块工作不正常, 所以板子reset, 但是这个会不会导致系统reset?  
+如果是wdt reset: 除非是切频是wdt配置有问题. 但是autotest中没有cpu,bus的切频. 
+3, 实验:
+1), panel_Open中设置pclk使用pll1(下面这句原本是注释的):
+Clkrst_TClk_SetParent(clkp,	PLL1_ID);
+2), 为了区分, 建立autorun3_VA, 包括video和audio.
+
+21:57 2010-7-7
+VC0882, bootloader, clkrst code review
+1, LiDongLiang邮件"答复: 882 bootloader testplan"20100707_2101
+Meeting minutes如下 
+1. 各种xclk 下测试一种nand boot 流程
+2. 一种clk 下测试各种的nand boot case
+3. zhicheng 定下来如何组合片子类型，ecc 类型，bbt&crc 等，告诉xuwenyan
+4. 造错case zhicheng 先给出来，提供工具，xuwenyan 再单独进行随机测试
+5. 512 infor clock 部分的完整信息, zhangjian提供
+6. bbt 管理文件及错误构造生成工具, beizhan, zhicheng
+7. nfc 文档, zhicheng
+8. watchdog reset -> pmu software reset                    beizhan
+9. strap pin 新版本             zhangjian
+10. usb 随机 pid, vid          mengfandong
+11. 问下huanglei 是否支持随机pid  me
+12. qiaowei提供usb bin文件接替bootloader运行usb,响应PC                 qiaowei
+13. 告诉测试密钥设置,xuwenyan 选择不同的密钥进行测试                   xuwenyan,me
+14. 告诉测试进入sleep,及pmu配置命令                    wangzhengwei
+15. timer 自测
+16. ddram 的testplan
+17. clkrst 的测试计划                                               zhangjian
+18. 做4个sdio, 每个sdio都要测试.
+19. uart在main最开始初始化
+20. clkswitch失败不退出，clkswitch加入更多打印。
+21. 配置module divider时是否需要gate module mclk。
+22. strap pin info中usb mclk不应该bypass. 应该是bypass usb phy. 
+VIM_BOOT_CLKRST_BYPASS_USB_MCLK
+改为
+VIM_BOOT_CLKRST_BYPASS_UPHYPLL
+23, 加入512info bypass
+    #define VIM_BOOT_CLKRST_BYPASS_PERI     (BIT11)
+    #define VIM_BOOT_CLKRST_BYPASS_USB_MCLK (BIT15)
+    #define VIM_BOOT_CLKRST_BYPASS_UPHY     (BIT16)
+    #define VIM_BOOT_CLKRST_BYPASS_UPHYPLL  (BIT17)
+24. check VIM_PMU_GetClkrstInfor和VIM_PMU_SetClkrstInfor bypass control
+25. ddrc是否用padc clock?
+26. VIM_CLKRST_GetTimerMclkCfg, VIM_CLKRST_GetUartBcrCfg等函数是从strappin读的配置。应该选择是strappin还是512info。  
+27. 目前timer直接使用xclk， 所以512info中clkPerTimerMclk无用。
+28. 完成VIM_CLKRST_GetStorPeriClk。
+29. gen_pll，加软件延时。_VIM_CLKRST_GenPll改为switch case.
+30. 下周一，二 IC review.
+31. 想一想clkrst工具.
+
+2, (21:53 2010-7-8)(23:02 2010-7-14)
+1), 512 infor clock 部分的完整信息, zhangjian提供
+ZJ: 见"D:\VC0882\882bootloader\tools\DfuPack\cfgFile\cfg_Clkrst_Info_for_xclk26Mhz_pll480_cpu240_aclk120_pclk60"
+2), strap pin 新版本
+ZJ: ? 忘了是什么意思. \todo
+3), clkrst 的测试计划
+ZJ: 已经与xuwenyan讨论.
+4), uart在main最开始初始化
+ZJ: 代码已加入, FPGA测试通过. 
+5), clkswitch失败不退出(后来讨论这点不修改)，clkswitch加入更多打印。
+ZJ: 已加入部分打印. 
+6), 配置module divider时是否需要gate module mclk。
+\todo 与huangwei和模块owner讨论. 
+7), strap pin info中usb mclk不应该bypass. 应该是bypass usb phy. 
+VIM_BOOT_CLKRST_BYPASS_USB_MCLK
+改为
+VIM_BOOT_CLKRST_BYPASS_UPHYPLL
+ZJ: 完成. 
+8), 加入512info bypass
+    #define VIM_BOOT_CLKRST_BYPASS_PERI     (BIT11)
+    #define VIM_BOOT_CLKRST_BYPASS_USB_MCLK (BIT15)
+    #define VIM_BOOT_CLKRST_BYPASS_UPHY     (BIT16)
+    #define VIM_BOOT_CLKRST_BYPASS_UPHYPLL  (BIT17)
+ZJ: 完成. 
+9), check VIM_PMU_GetClkrstInfor和VIM_PMU_SetClkrstInfor bypass control
+10), ddrc是否用padc clock? 
+ZJ: \todo 与zixi讨论. 明确padc作用. 
+11), VIM_CLKRST_GetTimerMclkCfg, VIM_CLKRST_GetUartBcrCfg等函数是从strappin读的配置。应该选择是strappin还是512info。  
+ZJ: 完成. 
+12), 目前timer直接使用xclk， 所以512info中clkPerTimerMclk无用。
+ZJ: 已删除. 
+13), 完成VIM_CLKRST_GetStorPeriClk。
+ZJ: 完成. 
+14), gen_pll，加软件延时。_VIM_CLKRST_GenPll改为switch case.
+ZJ: 完成. 
+15), 想一想clkrst工具.
+3, 整理(未发信):
+如下内容已经完成: 
+1), 512 infor clock 部分的完整信息, zhangjian提供
+2), clkrst 的测试计划
+3), uart在main最开始初始化
+4), clkswitch失败不退出(未修改后来讨论这点不修改)
+5), clkswitch加入更多打印(注: 已加入部分打印)
+7), strap pin info中usb mclk不应该bypass. 应该是bypass usb phy. 
+VIM_BOOT_CLKRST_BYPASS_USB_MCLK
+改为
+VIM_BOOT_CLKRST_BYPASS_UPHYPLL
+8), 加入512info bypass
+    #define VIM_BOOT_CLKRST_BYPASS_PERI     (BIT11)
+    #define VIM_BOOT_CLKRST_BYPASS_USB_MCLK (BIT15)
+    #define VIM_BOOT_CLKRST_BYPASS_UPHY     (BIT16)
+    #define VIM_BOOT_CLKRST_BYPASS_UPHYPLL  (BIT17)
+9), VIM_CLKRST_GetTimerMclkCfg, VIM_CLKRST_GetUartBcrCfg等函数是从strappin读的配置。应该选择是strappin还是512info。  
+10), 目前timer直接使用xclk， 所以512info中clkPerTimerMclk无用。
+11), 完成VIM_CLKRST_GetStorPeriClk。
+12), gen_pll，加软件延时。_VIM_CLKRST_GenPll改为switch case.
+未完成和需要讨论的: 
+1), check VIM_PMU_GetClkrstInfor和VIM_PMU_SetClkrstInfor bypass control
+2), ddrc是否用padc clock? 
+ZJ: \todo 与zixi讨论. 明确padc作用. 
+3), 想一想clkrst工具.
+4), strap pin 新版本
+ZJ: ? 忘了是什么意思. \todo
+5), 配置module divider时是否需要gate module mclk。
+\todo 与huangwei和模块owner讨论. 
+4, (11:40 2010-7-15)
+1), 加入g_Clkrst_UartIdx, g_Clkrst_SdioIdx记录switch by strappin之后配置的index. 用于512info切频时配置sdio, uart.
+2), (11:28 2010-7-16)ddrc与padc, 没找到zixi, 发信
+zhangjian2LiuZiXi
+题目: ddrc与padc疑问
+padc mclk起什么作用? 是否只有gpio模块操作padc才会用到这个clock? 
+ddrc用到的padc与padc mclk有关系么? 是不是不论padc_mclk配置为什么频率都不会影响ddrc读写ddr. 
+如果是其它模块, 可以选择gpio normal或function mode, 选择function mode时padc mclk也没影响. 
+zixi回信:
+(1) GPIO_INT/GPIO模块使用都会需要这个clock. 不访问padc register的情况下，可以允许padc_mclk工作在xclk频率下。
+(2) Padc_mclk频率不会影响ddrc读写ddr
+(3) Padc_mclk的频率只是应该GPIO的工作速度，logic没有什么影响。
+3), bootloader中加入"--callgraph": 见"21:21 2010-7-16". 
+4), \todo
+(1), 查 VIM_PMU_GetClkrstInfor和VIM_PMU_SetClkrstInfor
+(2), 确认模块时钟配置正确. 
+A, xclk时bypass有点问题: \todo 修改. 
+B, 需要确认上电时debug, trace clock是否可用. 
+(3), mmu, cache on函数. 
+(4), bootloader代码考虑用一个pll配置做为FPGA配置, core switch会失败, 但是storperi可以成功. 
+
+10:38 2010-7-8
+VC0882, code review, 环境, meeting minutes, 代码整理
+1, 除了注明只打开L1的target, 都打开了MMU, L1, L2.
+2, panda_addr去掉ddrc寄存器. 这个没有修改, 原来ddrc初始化方式可能还会使用.
+3, 删除环境code中不需要的代码. 
+4, 按命名规范如下修改函数名: Sys_Print_Ddrc_inc_version_string
+5, 编程规范加入aasp一级命令要求.
+6, REMAP_BITMASK加入编程规范. 
+7, 删除从VC0598继承的marb代码.
+8, 注释MINI_NUCLEUS宏. 系统aasp buffer和system small memory pool会变大. 
+9, 整理VC0882部分宏定义(已加入到"VC0882 environment freshman guide.doc"):
+1), MINI_NUCLEUS: 项目初期用于1M sram版本. buffer开的都比较小. 默认应该打开. 
+2), LIB_USING_USER_DEFINED_MEMCPY
+使用VIM_LIB_Memcpy(in_custom.c)做为VIM_HAL_MEMCPY, 避免非对齐问题.
+打开mmu时不定义, 这样提高系统效率. 
+3), MMU_FLAT_MAP: 表示打开MMU平映射.
+4), CACHE_L2_ON: 表示打开L2 cache
+
+14:14 2010-7-8
+时间管理
+0, 10:00
+
+1, 本日
+1), VC0882 code review: 环境. 见"10:38 2010-7-8"
+2), 和xiaotao一起看Linux L2 cache问题. 邮件见FengBeiZhan, suxin"答复: Gpu 上海测试"20100707_1959, 2056. 见"21:50 2010-7-8"
+3), 30' bootloader clkrst code改进. 见"21:57 2010-7-7", 时间关系只完成了一部分. 
+4), 2h: 和xuwenyan讨论bootloader clkrst testplan. <改进: 讨论的时候可以叫wangwenlei一起, 以后要注意>
+5), 30' 支持caijin neon jtag, 见"11:18 2010-7-9".
+
+2, 次日
+0), 写上周总结, 本周计划/总结, 下周计划. 了解一下yangxing的进展, 提醒wangwenlei每周要写总结和下周计划.
+1), 环境改进, 整理剩余文档.
+2), 清理剩余事项. 
+3), 向zhicheng学习svn服务器建立. 
+4), daplog: 叫yangxing一起实验. 
+5), bootloader clkrst code改进. 见"21:57 2010-7-7"
+
+16:02 2010-7-8
+同事信息, suxin, 18611406418
+
+21:51 2010-7-8
+VC0882, FPGA, Linux, GPU
+1, xiaotao和suxin实验结果相同: 在board_fpag.c中打开L2后kernel可以正常启动. 
+xiaotao文件系统有问题: 网卡初始化错误. 
+2, (11:32 2010-7-9)今天xiaotao在2FPGA实验网卡初始化正确. 
+
+10:32 2010-7-9
+时间管理
+0, 10:10
+
+1, 本日
+1), 了解yangxing, wangwenlei工作进展. 提醒wangwenlei每周要写总结和下周计划.
+2), daplog: 仍然不行. 已给arm回信. 
+3), 看caijin neon, 见"11:18 2010-7-9". 
+
+10:36 2010-7-9
+时间管理, 同事工作进展, yangxing, wangwenlei
+1, yangxing
+1), emi busy问题给仿真: arm访问内部sram的时间间隔和cs长短不容易知道. 担心umonitor对系统有影响. 
+2), stor peri aclk switch还没有做, 本周争取完成. 
+3), 下周任务:
+(1), audio, video clkswitch测试.
+(2), cache debug register: Linux L2 cache问题可能会用到. 
+2, wangwenlei
+1), 正在看clkrst文档. 
+2), 计划下周讨论一下, 看看看文档的进展. 
+
+11:18 2010-7-9
+VC0882, Cortex-A8, neon, jpeg
+1, Caijin邮件"882 neon测试"20100708_2101
+在\VC0882\document\arm\neon\下放了两个elf文件
+Jpeg_cmodel.axf          基于vc0816的cmodel实现的jpeg decoder, 使用-o3 –otime no_neon编译
+Jpeg_openmax.axf       基于arm提供的openmax ic(image codec)库的neon优化版本实现的jpeg decoder
+具体使用方法：
+用ddr初始化脚本初始化882, 通过rvdebugger load image, run!
+在rvdebugger的stdio窗口中会有测试结果，jpeg_openmax的cycle大约~575M, jpeg_cmodel的cycle大约~9500M。具体时间用arm的cpu clk换算一下，比如cpu clk = 48M，jpeg_cmodel大约需要200s才能跑完。
+2, zhangjian
+1), 用模拟器(ISSM还是RTSM?)的运行时间和板子上运行时间近似(相差10%左右).
+2), 遗留问题: 用openmax ic的质量差一些, 问题未知. 但是这个影响速度. 
+2, caijin邮件"答复: 882 neon测试"20100709_1203
+为什么解码结果有差异，需要一点点debug，Huffman解码那一步是没有问题的，这个我比对过。问题应该出在IDCT和反量化上
+效率不同的原因有多方面因素，比如，cmodel huffman decoding之前需要把jpeg stream中的0xFF 00转成0xFF，      Openmax的huffman decoding api不需要。
+我觉得openmax版本，在大量使用neon指令下能正确跑出结果，就能够达到882 arm neon功能的验证了。所谓正确跑出结果也不是和jpeg cmodel的输出比对，而是和armulator的结果比。
+有时间的话，还是应该查查为什么openmax结果不如cmodel。
+代码的工程稍微有点乱，等我整理了再上传。
+882 cvs上的axf能直接在ISSM上运行，在RTSM上不能运行。
+在RTSM上也跑过，当时定义的scatter file，使用的memory空间是从0-16M
+为了在882的fat方式下跑，我修改了scatter file, 改成了64M-80M，也就是现在提交的axf文件，这个版本就只能在ISSM上跑，而不能在RTSM上跑了。
+
+14:10 2010-7-9
+(15:29 2010-7-18)
+VC0882, Linux, svn, svn使用文档; ubuntu下安装软件的方法: apt-get
+原始版本不全, 参考liuxiaotao版本修改. 文档位置: \\10.0.13.101\share\linux\doc\svn\建立svn.txt
+其余参考svnbook.
+1, 修改文件目录所属组, 修改用户所属组
+1), 修改linux-2.6.29目录为zhangjian, icp组
+sudo chown zhangjian:icp linux-2.6.29
+2), 修改liuxiaotao为icp组
+sudo /usr/sbin/usermod -g icp liuxiaotao
+2, svn
+0), apt-get install subversion		//安装svn工具
+mkdir /opt/svn				//建立svn目录
+svnadmin create /opt/svn/linux-2.6.29	//创建svn数据库
+1), sudo svnadmin create /usr/local/svn/linux-2.6.29
+2), 建立svn标准目录:
+[zhangjian@centos svn]$ mv linux-2.6.29 linux-2.6.29_svn/
+[zhangjian@centos svn]$ cd linux-2.6.29_svn/
+[zhangjian@centos linux-2.6.29_svn]$ ls
+linux-2.6.29
+[zhangjian@centos linux-2.6.29_svn]$ mv linux-2.6.29 trunk
+[zhangjian@centos linux-2.6.29_svn]$ mkdir branches
+[zhangjian@centos linux-2.6.29_svn]$ mkdir tags
+svn import -m "" /home/liuxiaotao/src_dir file:///opt/svn/linux-2.6.29	//导入工程	
+3), svn checkout file:///usr/local/svn/linux-2.6.29/trunk linux-2.6.29
+但是没法用网络地址.
+4), 需要启动svn服务: 
+svnserve -d  -r /usr/local/svn/
+svn checkout file:///usr/local/svn/linux-2.6.29/trunk linux-2.6.29 //将服务器trunk目录下面的代码取到linux-2.6.29目录下面
+3, 其它: 
+svn commit -m "note"				//提交代码
+
+svn checkout --revision 2 svn://....
+svn log
+svn log --revision HEAD
+
+16:17 2010-7-9
+VC0882, FPGA, SV
+1, SV中ddr phy和mclk同频.
+2, FPGA中有一个200MHz clock给ddr phy使用的FPGA器件做校准. ddrc和phy主clock实际也是相同的. 
+
+16:40 2010-7-9
+软件技巧, CVS, 在网络硬盘或文件系统下载, 自Caijin
+CVS->preferences->Policy, 选择
+Permit sandboxes and repositories on network (remote) drivers
+Permit 
+
+17:28 2010-7-9
+软件技巧, outlook, 视图->阅读窗格->底端
+如何设置outlook阅读窗格的位置: 这个默认是在右侧, 我安装了xobni后, 右侧就有点不方便, 移到下面比较好.
+
+21:59 2010-7-9
+VC0882, uboot, 预研, gadget
+1, beagle board里面有usb gadget, 目前支持serial. 
+http://elinux.org/U-boot_musb_gadget_support#Next_steps
+2, uboot 201006版本里面有usb gadget, 暂时不清楚里面是否支持网络. 
+
+09:10 2010-7-12
+时间管理, 上周工作总结(2010年7月5日--2010年7月11日), 本周工作计划(2010年7月12日--2010年7月18日)
+1, 上周工作总结(2010年7月5日--2010年7月11日)
+1), bootloader clkrst, padc代码review和整理(未完成)。
+2), vc0882环境code review和代码整理。
+3), pmu流程讨论。
+4), arm neon jpeg decoder supportfor caijin.
+5), vc0816 clkrst debug.
+6), 与xuwenyan讨论vc0882 bootloader clkrst  testplan.
+7), cache support(很少).
+
+2, 本周工作计划(2010年7月12日--2010年7月18日)
+1), trace fpga演示和总结；
+2), neon结果整理，和caijin讨论解码不对的事情；
+3), bootloader clkrst代码修改完成；
+4), apb-ap访问出错的debug；
+5), strap pin 问题的debug；
+6), bootloader clkrst, padc文档, 与相关文档(strappin, 512info, pmu快速wake up)同步.
+
+3, 下周工作计划
+1), arm 总结；
+2), linux l2 debug；
+
+20:10 2010-7-12
+时间管理
+0, 9:40 
+
+1, 本日
+1), 2h: VC0882 ICP sync up, 见"20:32 2010-7-12"
+2), 30' yangxing 任务讨论, cache讨论. 
+3), 30' VC0882 clkrst 介绍 for xiaotao.
+4), 40' xuwenyan VC0882 bootloader clkrst testplan支持. 
+5), 50' mengfandong rvdebugger环境支持, VC0882启动和调试流程. 
+6), 40' VC0816 PLD, 见"20:14 2010-7-12"
+7), 50' wangwenlei VC0882和VC0830 clkrst讨论. 
+8), 30' 和fanzhijun讨论strappin问题.
+9), 1h: VC0882 csat APB-AP访问错误. 
+
+2, 次日:
+1), 和xiaotao讨论Linux L2 debug. 
+2), trace演示. 上午/中午要实验一下. 
+3), 测试同事测试spi boot时strappin是否正常. 
+4), bootloader代码整理. 
+5), arm performance monitor irq.
+6), L2 cache lockdown.
+
+3, 其他:
+1), (11:44 2010-7-12)关注: shuyu performance: master收发和ddr收发不相等. 关注进展. 
+(08:49 2010-7-23)根据大家的分析, 差异应该是arm通过apb访问寄存器造成的"08:49 2010-7-23"
+2), (15:57 2010-7-12)arm中断延时有多大. for yangxing emi busy问题. 
+
+20:14 2010-7-12
+VC0816, arm, dcache, PLD
+FengbeiZhan转发邮件Dongxin转发Huang xiaoming邮件"请教一下ARM的PLD指令"20100712_1737
+VC0816是Arm926ej-s, V5TEJ架构, V5TEJ完全包含V5TE, 应该支持PLD. 我们之前只用过cache lockdown和Prefetch ICache Line, 没有用过PLD. 说说我的思路: 
+1, PLD有没有起作用应该能从仿真看出来. 可以考虑把icache关闭, 程序除了PLD也不访问memory, 确定一下PLD指令本身有没有起作用. 
+2, 做cache lockdown要求lockdown区域是cachable的, 对PLD应该也是如此. 
+3, PLD应该只是对数据起作用. 预取指令是Prefetch ICache Line. 
+4, 如果cache已经用的很充分了, 会不会由于PLD把"常用数据"换出, 影响部分性能. 
+5, 可以把要使用数据紧挨着PLD使用, 保证不会再被换出. 
+
+20:32 2010-7-12
+VC0882, sync up, ICP, 时间管理
+希望1-6这些事情, 每天完成2个. 
+1, Fengbenzhan邮件"VC0882 software task list"20100712_1403
+zhangjian
+1）trace fpga演示和总结；
+2）neon结果整理，和caijin讨论解码不对的事情；
+3）bootloader clkrst代码没有改完；
+4）apb-ap访问出错的debug；
+5）strap pin 问题的debug；
+6）bootloader 的相关文档；
+7）arm 总结；
+8）linux l2 debug；
+
+zhiming
+1）辅助icd debug sd不稳定的情况；
+2）bootloader的相关文档；
+3）bootloader代码还没有改完；
+4）bootloader 协议层 review；
+5）有1个sd card在882上不能用要进行进行debug
+
+yuyang
+1）de and systeem code review；
+2）performance把优先级设置一定用起来；
+3）system de和cif的消息握手，包括中途修改size等参数；
+
+fandong
+1）bootloader 随机数问题的调试；
+2）bootloader 的相关文档；
+3）uhost 一个鼠标兼容性过不了，需要debug；
+4）uhost cache 继续 debug；
+5）bootloader software reset；
+
+shuyu
+1）cif done size issue debug
+2）cif and de system 调试；
+3）performance；
+
+qiaowei
+1）otg host 软件流程（detect） debug；
+2）issue debug
+3）bootloader otg 需要多次获取描述符才能成功问题的debug；
+
+yangxing
+1）cache debug 程序；
+2）clk switch 调试优先级进行aud、de测试；
+3）nandflash 程序、文档的熟悉；
+
+yangmin
+1）decode driver整理；
+2）system 总结完善；
+3）decode 总结；
+
+qingchao
+1）decode driver整理；
+2）system 总结完善；
+3）decode 总结；
+4）报错case的debug；
+
+wenlei
+1）7882 整理讲解；
+2）clkrst 继续熟悉，和上级调试；
+3）clkrst 工具的编写；
+4）参考830代码熟悉clkrst；
+5）ddr 调试和文档；
+
+zhengwei
+1）新加入sys wakeup 验证；
+2）pmu bootloader 代码的接手；
+3）pmu 3个新功能移交给测试；
+4）pmu driver调整；
+
+boxue
+1）iic 驱动的调整，包括编码风格，cache，delay；
+2）iic code review；
+3）aud架构的调整；
+4）aud code review；
+
+beizhan
+1）bootloader ddr调试；
+2）bootloader 相关文档；
+3）ddr、pmu、efuse code review；
+4）fat write 比较慢问题的debug，在aud recode时发现写跟不上；
+
+23:03 2010-7-12
+VC0882, arm, Cortex-A8, rvds, rvdebugger, issue9228: csat APB-AP access memory or register fail, 续
+1, zhangjian2support-sw@arm.com
+文中提到的log位置"D:\work\VC0882\code_backup\code\20100712_csat_apbAP_fail".
+Hi, Zenon
+
+I got the log with the cross-over Ethernet cable. Pls see attachment.
+Log_20100712_2238.txt is the rvi log captured by rvi_log_client.exe
+operation_log.txt is the tools(rvidaplog, rvi_log_client and csat) operation sequence log.
+
+Best regards
+zhangjian
+
+14:45 2010-7-13
+时间管理
+0, 9:42
+
+1, 本日
+1), 2h: 任务讨论.
+2), 30' strappin问题. 测试. 见"14:45 2010-7-13".
+3), 10' 和xiaotao讨论Linux L2 debug: 支持zhangpu使用L2; 对比suxin和zhangpu kernel. 
+4), 20' 支持yangxing调试FPGA环境问题, 见"20:07 2010-7-13"
+5), 30' 支持mengfandong调试: arm在-0x80000000(ddr)区域做非对齐memcpy造成unalign dataabort. 
+6), 1h: 实验trace, 发邮件. 今天或明天演示. with caijin openmax support. 见"18:40 2010-7-13".
+7), 1h: 和beizhan讨论Linux计划: android, device(三个). 见"15:32 2010-7-13"2
+8), 50' apb-ap问题: 回复arm邮件. 见"20:01 2010-7-13"
+9), 今日总结: 没有	完成计划，明天没有 会，希望能把进度追回来。
+
+2, 次日
+1), Linux机器要网线, 分IP地址, 做windows ghost, 与xiaotao讨论后安装Linux系统.
+2), 问题
+(1), 问下usb fat问题beizhan改了哪些代码. 
+(2), zhangpu gpu测试结果邮件没看懂. 
+3), 完成bootloader代码修改, 文档. 
+4), bootloader代码整理. 
+5), arm performance monitor irq.
+6), L2 cache lockdown.
+7), trace继续实验. 希望把arm profiler试通. 这个主要依赖与arm交流. 
+8), 路上看文档
+(1), arm profiler p33. 
+(2), neon
+A, 用法: DUI0204I_rvct_assembler_guide.pdf p277.
+B, 指令, 参考ARM_ARM_7AR, p838开始. 
+
+14:45 2010-7-13
+VC0882, FPGA, bootloader, strappin, [882 0009227]: strap pin接高电平造成rvdebugger难以连接
+Hi, xuelian, xiaofan
+USBFPGA的Strap pin在跳线为b01(spi boot)但没有接eerpom时没法连接arm, normal 2FPGA没有这个问题.
+现在想接上eeprom做同样实验, 具体测试内容可以问fanzhijun. 
+
+测试版本: 
+USBFPGA: vc0882_rev0_01070313_02061709_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100623_2000_RAM256K_ROM256K_utmi8mA.ace和vc0882_rev0_01071309_02071217_USB2FPGA_UOTG_noDeCifGpuEncDec_tag20100712_1500_RAM256K_ROM256K.ACE
+normal FPGA: IC code版本与上面一致的版本.
+注: strappin在video转接板上. 
+USB FPGA的video转接板接在J10, 
+normal 2FPGA的video转接板接在J11. 
+
+15:32 2010-7-13
+项目, Linux, 计划/规划, VC0882, VC0718
+1, \todo 了解一下zhaoyuan team人员分配
+Linux开发可以分为kernel, driver, middle ware, application. 
+ICP Linux主要工作应该放在driver. 同时需要兼顾kernel和middle ware. 
+在各种distribution中kernel和driver基本都是通用的. middle ware和application差异会比较大. 这个地方对开始学习影响不大, 后面会有影响. 
+2, (21:09 2010-7-13)和beizhan讨论Linux计划. beizhan希望sv回来android能跑起来, 希望能做一个Android MP4 demo. 另外希望调几个设备: 例如接口: uart, spi, sdio. 设备: wifi, gps, g-sensor, 电容屏等等. 
+3, (16:30 2010-7-19)
+Linux计划我一直没太想清楚, 这样会开始学习, 可能不会讲什么东西, 下面是我大致的想法, 要不找个时间咱们讨论一下. 
+上周xiaotao已经把Linux服务器建好,这周就可以开始学习, 计划下周讨论一次. 
+其实我感觉对咱们Linux开发来说主要是两块, 一个是porting, 一个是driver. 需要学习的有kernel, 中间件和application, kernel可以长线研究, 中间件也需要逐步了解, application简单了解就够了. 
+1), 人员安排(没列出来的, 都在driver和中间件上): 
+(1), porting: 主要是我和xiaotao. 如果zhicheng有时间希望, zhicheng帮忙一起整理文档. 
+(2), driver和中间件: 这两部分可能不容易分开, 我建议分模块去做.. zhangpu做过几个Linux项目, 对Linux应用比较熟悉, 可以多负责一些中间件的事情. 
+(3), kernel: 希望组里面能有经验比较丰富的人看kernel的一些问题. 将来调试driver, 如果问题深入肯定需要对kernel了解/熟悉. 例如aiguo等. 
+
+2), 具体学习计划:
+(1), 现在没想好driver和porting这两个事情如何安排. 我感觉目前driver开发更为重要, 后面VC0718 Linux能做到什么程度, 主要看drvier, porting本身难度不大(至少初期是这样).
+(2), driver: 可以先结合简单/常用的driver向大家介绍Linux驱动开发: 例如framebuffer(zhangpu 830和882都做过一些工作, 只是我不太了解zhangpu对framebuffer了解到什么程度, 需要和zhangpu聊聊才知道), keypad(我原来在VC0830写过一个keypad driver). 然后开始写VC0882所需driver. 
+下周可以介绍Linux driver基本框架. 然后后面2周, 分别介绍不同设备driver, 初步计划是keypad和framebuffer. 
+keypad是比较简单的driver, 可以用简单方式实现, 也可以用Linux input subsystem实现, driver实现中会用到部分kernel机制, 便于大家初步了解Linux driver开发.
+framebuffer是比较常用的driver, framebuffer实现上对于kernel的各种机制(同步方式, 中断处理, 调度等等)都会用到, 这样可以帮助大家进一步熟悉kernel机制. 
+(3), porting: 这个原来zhicheng和我做了很多工作, 但是一直也没有总结. 希望这次用2-3周时间分析整理, 然后给大家讲一讲, 这样xiaotao也就熟悉了. 
+(4), 大约1个月时间, 也就是8月底之前, 大家应该可以开始写Linux drvier code了. 后面可以和xiaotao一起做u-boot. 做u-boot的时候, 我希望也能有小部分时间做一个Linux设备驱动. 
+
+3), 另外, 我希望我自己的主要精力放在driver上面, 能多写一些code. 将来做深入了再多看一些kernel的东西. 
+
+18:40 2010-7-13
+VC0882, trace, 总结, 文档
+1, 注意事项
+1), trace: vref(traceA[12])一定要接1.
+2), 在我本级编译时提示APCS出错, 提示信息里面有"d:", "software", "mingW"等等信息, 在系统环境变量Path中删除mingW就可以正常编译了. 
+2, profiler的脚本和rvdebugger脚本不同. 问arm要sample. 
+3, openmax中脚本RW, ZI初始化没有过. 
+4, 给arm发信问Profiler用法. 
+(22:33 2010-7-13)
+Hi, 
+
+Is there a PB-A8 sample script and document for arm profiler? 
+I have already got the arm profiler result in RTSM Cortex-A8 EB, but fail in PB-A8. 
+Do i need to run a trace etm init script before run the arm profiler from arm workbench? If I run the init script, workbench say device in use. But if I do not run the init script, workbench download image fail(no error message) and no profiler result. 
+
+Thanks a lot.
+
+zhangjian
+
+20:01 2010-7-13
+VC0882, arm, Cortex-A8, rvds, rvdebugger, issue9228: csat APB-AP access memory or register fail, 续
+1, Support-sw@arm.com邮件"RE: access memory or register fail with csat APB-AP (466757)"20100713_1851
+[From Zenon Xiu - ARM Technical Support]
+
+Dear Zhang Jian,
+You wrote,
+> I got the log with the cross-over Ethernet cable. Pls see attachment.
+> Log_20100712_2238.txt is the rvi log captured by rvi_log_client.exe 
+> operation_log.txt is the tools(rvidaplog, rvi_log_client and csat) 
+> operation sequence log.
+
+Thanks for the log file.
+After looking at it, I found a timeout error 'timeout waiting for execution to complete' was reported when writing APB-AP's Control/Status Word Register(CSW). We are trying to find the reason.
+Meanwhile, we noticed that the address 0x60051a00 looks not in your CSSYS's memory map, and you said this is Coresight Component Register, please pay attention to zeros of the address.
+
+>
+>      CoreSight component
+>     Address
+>
+>      Cssys_debug_rom_table
+>     60004000 ~ 60004FFFH
+>
+>      Cssys_cti
+>     60005000 ~ 60005FFFH
+>
+>      cssys_tpiu
+>     60006000 ~ 60006FFFH
+>
+>      cssys_funnel
+>     60007000 ~ 60007FFFH
+>
+>      cssys_itm
+>     60008000 ~ 60008FFFH
+>
+>      cssys_swo
+>     60009000 ~ 60009FFFH
+>
+>      a8_etm
+>     6000A000 ~ 6000AFFFH
+>
+>      a8_cti
+>     6000B000 ~ 6000BFFFH
+>
+>      a8_dbg
+>     6000C000 ~ 6000CFFFH
+>
+
+Can you confirm this?
+
+2, 回信
+Hi, Zenon
+
+0x60051a00 is one of a module register in our Cortex-A8 system, not a coresight register. As I mentioned in the first email. access coresight and other module are both fail through APB-AP. I rerun the test again, pls see log in attachment. 
+note: access 0x6000af00 and 0x6000aff0 got the different result through apb-ap. 
+
+20:02 2010-7-13
+VC0882, FPGA, I2C, 多于的delay, 出错后的处理机制
+LvBoXue邮件"答复: I2C delay问题"20100713_1725
+现在I2C操作都没有DELAY了。
+100K no-trans init mode中加入了一个DELAY,是因为代码问题，TR_done会在最后一次传数过程中产生。再次初始化时CODE里没有清这个中断变量状态。谢谢AIGUO的帮忙。
+另外，目前我们芯片I2C操作出错操作策略是：
+当I2C操作设备时有问题时。I2C的策略是要重新INIT以恢复状态机，这个问题是IC确认过的，包括之前的830，816，598也是这样的策略。如果出错（如没有回ACK），因为这时I2C的状态机已不确定，即使是再次访问，也会有不稳定的情况出现。必须重新INIT i2c状态。
+在调试WM8753不稳定的时候，当I2C访问出错。解决方案是，当I2C操作出错时，重启I2C状态，再重新进行I2C操作访问，直至操作成功。
+当时830 I2C访问收音机芯片应用时，其它组的同事也有这样的不稳定问题，也是这样解决的，这次WM8753有这样的问题，还好想到了这个策略经验。
+
+20:07 2010-7-13
+VC0882, FPGA, 环境, 没有sd模块造成初始化出错, yangxing debug过程
+ZJ: Yangxing开始发现的出错位置本身没有错误, 和yangxing讨论: 出错有两种可能性, 一个是具体某条语句有问题, 一个是arm没法停不下来(例如yangmin遇到过vdec IC bug造成arm停不下来的问题). 需要详细debug. 如果跑死需要确定到具体哪条汇编出错, 后来yangxing通过对比两个CF code(一个正确, 一个错误), 汇编和c语言结合debug, 进一步定位了问题. 最后发现是在sd模块里面出错. 
+1, yangxing邮件"早上的那个程序死等在TCC_Suspend_Task"20100713_1415
+Hi,zhangjian
+我跟踪了一下上午guohaifeng说的那个程序，死在了Nuclear里面的下面这个函数，这个是由系统调度函数进来的。我再用SRAM试验一下。
+ VOID  TCC_Task_Shell(VOID)
+{
+NU_SUPERV_USER_VARIABLES
+    /* Call the task's entry function with the argc and argv parameters
+       supplied during task creation or reset.  */
+    (*(TCD_Execute_Task -> tc_entry)) (TCD_Execute_Task -> tc_argc,
+                                       TCD_Execute_Task -> tc_argv);
+    /* Switch to supervisor mode */
+    NU_SUPERVISOR_MODE();
+    /* Protect system data structures.  */
+    TCT_Protect(&TCD_System_Protect);
+    /* If the task returns, suspend it in a finished state.  Note that
+       the task cannot execute again until it is reset.  Therefore, this
+       call never returns.  */
+    TCC_Suspend_Task((NU_TASK *) TCD_Execute_Task, NU_FINISHED,
+                                NU_NULL, NU_NULL, NU_SUSPEND);
+    /* Return to user mode */
+    NU_USER_MODE();
+}
+2, yangxing邮件"早上的那个程序死等在TCC_Suspend_Task"20100713_1534
+经过跟踪发现，死在第五次执行这个函数，并且执行红色的一句话直接导致死掉。并且我对照了一下task = 0x522cc4这个值，正常情况也等于这个值。
+ TCC_Task_Shell
+    TCC_Suspend_Task((NU_TASK *) TCD_Execute_Task, NU_FINISHED,
+                                NU_NULL, NU_NULL, NU_SUSPEND);
+        /* See if the suspending task is the current thread. (SPR152) */
+        if (task == (TC_TCB *) TCD_Current_Thread)
+ 
+            /* Leave the task, transfer control to the system.  */
+            TCT_Control_To_System();
+3, YangXing邮件"答复: 早上的那个程序死等在TCC_Suspend_Task"20100713_1620
+Hi,guohaifeng
+经过跟踪发现，与SD模块有关系，和anzhiming讨论了一下，感觉好像是SD模块没有编进去，SD需要把SD0,SD1,SD2,SD3都编进去，麻烦您在仔细插一下。
+谢谢。
+
+12:31 2010-7-14
+时间管理
+0, 10:40
+
+1, 本日
+今天希望完成"20:32 2010-7-12"里面的3,6两项. 
+1), 40' 支持caijin openmax优化. 开L2 write allocate. 
+2), 40' VC0598 cache lockdown支持. 见"12:36 2010-7-14"
+3), 60' 和yangxing讨论cache debug regsiter. 看cache debug register文档. 
+4), 30' 完成bootloader代码修改, 文档. 见"21:57 2010-7-7"2.
+被打断. 
+5), 60' 和huangwei一起实验csat apb-ap问题. 见"20:00 2010-7-14", 目前基本确定这个不是问题. 
+6), 总结: zhangpu GPU性能发现是由于系统tick计时不准确造成的, 修改代码后数据与vivante正确. 这个我为什么没有想到呢? 这次VC0882 Linux porting我参与的实在太少了. 之前没有认真看数据, 如果看到是差2倍的关系, 应该想到可能是code问题. 因为已经知道开L2后性能提升不大了. 
+
+2, 次日:
+1), yinxingjie发的VC0882 aasp问题也抄送给xiaotao, lingming. 
+2), bootloader clkrst文档. switch加入完整打印信息. 
+3), Linux机器要网线, 分IP地址, 做windows ghost, 与xiaotao讨论后安装Linux系统.
+4), 问题
+(1), 问下usb fat问题beizhan改了哪些代码. 
+(2), zhangpu gpu测试结果邮件没看懂. 
+5), arm performance monitor irq.
+6), L2 cache lockdown.
+7), trace继续实验:
+(1), 单独构造一个dataabort case, 实验能否trace到汇编. 
+(2), 希望把arm profiler试通. 这个主要依赖与arm交流. 
+
+12:36 2010-7-14
+VC0598, 量产, 软件模拟usb, cache lockdown
+1, LiHongBo转发邮件"Fw: 答复: VIM598 USB status report"LiuShanTao邮件"答复: VIM598 USB status report"20100713_2346
+Dear Dr.Dai and HongBo：
+目前V598 SoftUSB的调试又向前前进了一小步，Host已经认识Device发送的ACK应答。但是面临的困难如下，请再次帮忙协调
+1、 计算CRC、NRZI译码的时间太长，这些代码都是在DRAM上，DAYO倾向的解决方案是LOCK 1K的Icache和1K的Dcache，
+但是上次拿回来的代码 Lock cache之后代码会跑飞，一些cache相关的参数DAYO无法确认，请贵司相关专家提供。
+CSIZE                EQU 12  ;注意和CACHE_SIZE一致
+CLINE                EQU 4
+NWAY             EQU 2
+   NSET             EQU (CSIZE-NWAY-CLINE)
+以上参数如何配置？附件中有我们都LockCache的全部改动，请帮忙找一下使用中的错误，谢谢！
+2、  NAK应答和发送数据调试异常艰难，NAK已经被协议分析仪识别，但是Host仍然不认为这是一个Device的NAK应答。
+发送一个8Bytes的数据会被协议分析仪识别为7Bytes，第8Bytes别识别为CRC。最有利的调试手段仍然是深度足够的示波器
+我一个人去贵司调试能力可能不够，很多现象需要XueYuan和其他USB专家的协助分析。贵司的示波器白天使用率高的话，
+能不能协调晚上或者周末给我们用一下。
+ 
+项目的完成还需要贵司帮忙推动，万分感谢！
+
+2, 自: LiHongBo转发邮件"Fw: 答复: VIM598 USB status report"
+xueyuan [mailto:xueyuan@dayomobile.com]邮件"VIM598 USB status report"20100710_2119
+Dear all:
+简单汇报一下VIM598的USB状态：
+现在已经能够完成USB packet的正确接收并发送ACK。按照原来MTK23D的调试经验，到这一步就完成了难度最大的PHY层软件，很快就可以完成USB功能。
+不幸的是现在出现了一个我们以前没有遇到过的情况：Host在我们发送了正确的ACK以后仍然对我们进行复位，也就是说HOST认为我们应答的不正确。从USB的协议分析仪上看报文内容和应答过程都没有任何错误，现在推测是也许线路上的电气特性有问题，因为我们的示波器采样深度不够，不能抓到完整的通信过程，所以Shantao会在周一带整套环境到VIM的Office，借用一下相关的仪表。他会同时携带一套MTK23D的软USB机器作为对照用机。届时还请戴博和Hongbo帮忙协调一下。
+BTW: 有另外一个小问题，暂时没有致命影响，但是可能对将来的完善和优化有一定的影响：没有CACHE的SRAM大约需要5个周期存取，代码执行速度偏慢，带CACHE的SDRAM在cache miss的情况下性能也很差，我们实际测试到CRC16的计算函数在首次调用的时候用了将近10us完成8字节的CRC计算，MTK23D只需要大约2us.
+USB 1.1 LowSpeed的规范是必须在收到Packet之后的18bit（12us）之内应答，为了满足要求我们已经把能抽离底层的计算都拿到上层了（比如发送时候的NRZI编码），对效率有一定的影响。
+
+3, zhangjian2LiHongBo邮件"答复: 答复: VIM598 USB status report"20100714_1256
+cache有没有lockdown只是影响arm从cache还是memory取数据/指令. 不应该会跑飞, 建议定位到跑飞的code. 
+CSIZE表示cache size是2^CSIZE=4096, 我记得598 cache size是4k, 这个没问题. 
+CLINE表示一个cache line有2^CLINE bytes, 598使用的arm926ej-s, 根据手册是32bytes per cache line. 所以这个应该是5. 
+对比了其它code, 和我提供的code是一致的, 未发现问题. 
+
+4, zhangjian2LiuShanTao邮件"答复: 答复: VIM598 USB status report"20100714_1425
+其实现在是两个问题, 一个是程序为什么跑飞, 一个是cache lock有没有成功. cache有没有lockdown只是影响arm从cache还是memory取数据/指令. 不应该会跑飞, 建议定位到具体跑飞的语句. 
+cache lockdown有一些注意事项, 例如进行lockdown过程中, 应该只有目标code(&Image$$SUSB_ICACHE_LOCK$$Base, &Image$$SUSB_DCACHE_LOCK$$Base开始的区域)是cachable的: 也就是执行lockdown的code(susb_cache_lockdown())要么是已经lockdown到cache, 要么non-cachable, lockdown过程中也不能有cachable的异常执行. 具体注意事项参考arm926ej-s TRM 2.3.10节的"Specific loading of addresses into a cache way". 
+cache lock是否正确建议在单独的小环境测试, 执行lockdown后, 在debugger中关闭mmu, 把数据写坏, 然后再打开mmu, 看数据/指令是否正确. 如果已经执行了lockdown, 数据/指令应该不受映像. 
+另外, address和size在lockdown程序时会分别做向下和向上cache line对齐. 
+
+20:00 2010-7-14
+VC0882, arm, Cortex-A8, rvds, rvdebugger, issue9228: csat APB-AP access memory or register fail, 续, 之前理解有误, csat的确不能访问系统寄存器/memory; 07-16(5-7): huangwei继续追查ETM个别寄存器不能访问的问题
+1, Support-sw@arm.com邮件"RE: access memory or register fail with csat APB-AP (466757)"20100714_1656
+Dear Zhang Jian,
+You wrote,
+> 0x60051a00 is one of a module register in our Cortex-A8 system, not a Coresight register.
+OK, Thanks. One engineer of your company said it was a Coresight Component register in previous email. Can you tell us whether the module with register 0x60051a00 is interfaced with APB-AP? If not, 'dmr 1 0x60051a00 1' can't be used to access the register, because 'dmr' command will directly access the register via APB-AP.
+> As I mentioned in the first email. access coresight and other module 
+> are both fail through APB-AP. I rerun the test again, pls see log in 
+> attachment.  note: access 0x6000af00 and 0x6000aff0 got the different result through apb-ap.
+Thanks, the error is different from what was reported when accessing 0x60051a00 via APB-AP.
+Can you try to set MSB bit of register of Coresight Component to one and run the test again?
+ dmr 1 0xe000af00 4
+And try to access other Coresight Components, like CTI, TPIU to see if the error is also reported.
+We will keep investigating why the error is reported.
+2, 1, Support-sw@arm.com邮件"RE: access memory or register fail with csat APB-AP (466757)"20100714_1755
+[From Zenon Xiu - ARM Technical Support]
+Dear Zhang Jian,
+Do you mind do another experiment for us?
+The procedure is,
+1. con TCP:xxxxxxx
+2. chain dev=auto clk=1000000
+3. dvo0
+4. dpe
+5. dmr 1 0x6000aff0 4
+Please log the messages for us. And do the experiment again except step 5 should be 'dmr 1 0xe000aff0 4'.
+This experiment should exclude any effect from accessing AHB-AP before.
+Thanks.
+3, 根据第一封邮件, 下午和huangwei讨论了一下. 
+1), 重新看了之前csat log, 通过csat APB-AP只访问过coresight寄存器. 
+2), csat直接使用APB-AP应该是只能访问Coresight component. rvdebugger能访问到整个memory应该是通过arm访问的. 
+3), huangwei说通过apb-ap访问时bit31不起作用, 今天实验也证明了bit31=0或1的访问结果相同. 
+4), 目前只是确认访问ETM的某些寄存器有错. 其余模块未发现错误. 
+4, 回复arm邮件:
+> Can you tell us whether the module with register 0x60051a00 is interfaced with
+> APB-AP
+No. This module connect to system apb, not debug apb. So, you mean that csat apb-ap can access the module which directly connect to apb-ap? 
+> Can you try to set MSB bit of register of Coresight Component to one and run
+> the test again?
+I do the simliar experiment before your last email. please see the attachment.
+The result access coresight component with MSB is the same as without MSB. From our IC designer, I know that bit31 of address is ignored while apb-ap access coresight componnet, isn't it? 
+All the access are successful exception the following Cortex-A8 ETM register: 0xe000a000, 0xe000a004, 0xe000a1e4. 
+5, (11:01 2010-7-16)Support-sw@arm.com邮件"RE: access memory or register fail with csat APB-AP (466757)"20100715_1700
+[From Zenon Xiu - ARM Technical Support]
+Dear Zhang Jian,
+Thanks for the tests.
+>> Can you tell us whether the module with register 0x60051a00 is interfaced 
+>> withAPB-AP
+> No. This module connect to system apb, not debug apb. So, you mean 
+> that csat apb-ap can access the module which directly connect to apb-ap?
+If the module is not interfaced to Debug APB-AP, then CSAT tool can't be used to access the module via APB-AP with 'dmr' command.
+'dmr' command with specified AP will only make use of DPACC, APACC of the AP registers directly.
+So the 'dmr 1 0x60051a00 1' command used APACC of APB-AP, but the module is not interfaced to APB-AP, this is the reason why it fails in previous tests.
+> I do the simliar experiment before your last email. please see the attachment.
+> The result access coresight component with MSB is the same as without MSB.
+> From our IC designer, I know that bit31 of address is ignored while 
+> apb-ap access coresight componnet, isn't it?
+Yes, The MSB bit should be set by HW for external access from debugger tools.
+> All the access are successful
+Great.
+> exception the following Cortex-A8 ETM register:
+> 0xe000a000, 0xe000a004, 0xe000a1e4.
+This is strange. Can you ask IC designers of your company to access those ETM registers through 'Cortex-A8->System APB->Debug APB' in simulation environment? And please also confirm with them that the address is decoded correctly in the Coresight system.
+6, 发信请meiping仿真, fail. 
+GeMeiPing邮件"答复: access memory or register fail with csat APB-AP (466757)"20100716_1002
+这几个地址访问不了，APB总线上报PSLVERR，我记得coresight有些component的寄存器不能直接访问，请确认一下这几个寄存器能不能直接访问。
+波形在：
+/work/gemp/project/vc0882/vrf/sim_fpga/log_jtag_etm
+7, 和huangwei讨论, huangwei会看一下A8 code, 必要时与arm讨论. 
+8, (15:28 2010-7-20)Huangwei问arm, arm回信.
+support-sw@arm.com邮件"Re: access memory or register fail with csat APB-AP (466757)"20100720_1921
+[From Zenon Xiu - ARM Technical Support]
+Dear Huang Wei,
+Thanks for the waveform. I talked with our cores support engineers about this.
+> From A8 TRM， ETM configuration code register (offset:0x004) should 
+> exist and can be read. But we failed to access through APB-AP using debug access, instead of software acess. The simulation waveform is attached.
+the ETM configuration code register <offset :0x004> is existed in A8’s ETM.
+We are not sure what you mean ' But we failed to access through APB-AP using debug access, instead of software access'. Do you mean that you can access those registers through system APB, but it fails through debug APB? Can you describe the test procedure in details?
+I'm afraid that the waveform does not contain enough information for us, because it is too short and does not includes entire address.
+> Moreover, i take a look at RTL file tig_db_main.v and found no address 
+> decode logic for this register. Does A8 TRM mismatch the RTL design?
+The tig_db_main.v might not be a good place to watch the ETM register related signals in A8. Our cores support engineer suggested you to read following RTL files,
+…/AT490-BU-98000-r3p2-00rel0/logical/tig_etm/verilog/ tig_et_defines.v …/AT490-BU-98000-r3p2-00rel0/logical/tig_etm/verilog/ tig_et_res_control.v
+
+10:53 2010-7-15
+VC0882, FPGA, aasp, issue 9225, 环境总结, 文档: aasp没有做溢出检测, 开始误认为是ddr不稳定造成, 看来我是有点过于倾向是环境不稳定原因了
+1, YinXingJie邮件"答复: ABOUT 9255 ISSUE"20100714_1744
+经过和beizhan的debug，发现这个问题是aasp在接受输入的命令进行分析匹配时，有个长度的限制，只能是31个字符，而我们的文件名字长度是40个字符，所以导致这样的问题。
+已经将那个长度限制改为100。
+请lixuelian再组织测试重新测试
+2, zhangjian2liuxiaotao, lingming, bianyingfeng
+Aasp有修改, 这个修改也加入718吧. VC0882环境代码都更新到718了吧. 
+这个问题开始怀疑是ddr问题, 查了很久, 其实如果aasp做了溢出检测就没事了. 
+可能718里面还会遇到其他问题, 
+具体修改的是aasp.c的: 
+//#define MATCH_STR_LEN       (31)
+#define MATCH_STR_LEN       (100)
+
+11:06 2010-7-15
+时间管理
+0, 9:40
+
+1, 本日
+1), 1h: VC0882 ICP sync up. 
+2), 10' yinxingjie发的VC0882 aasp问题也抄送给xiaotao, lingming. 见"10:53 2010-7-15"
+3), 40' bootloader clkrst文档. switch加入完整打印信息. 见"21:57 2010-7-7"4.
+含20'和dongliang讨论.
+4), arm cache memcpy_test, 见"20:30 2010-7-15"
+5), Linux服务器会由xiaotao安装ubuntu. 
+6), 有空看看OMAP3530时钟方案, p312.
+
+2, 次日
+1), bootloader代码考虑用一个pll配置做为FPGA配置, core switch会失败, 但是storperi可以成功. 
+4), 问题
+(1), 问下usb fat问题beizhan改了哪些代码. 
+(2), zhangpu gpu测试结果邮件没看懂. 
+5), arm performance monitor irq.
+6), L2 cache lockdown.
+7), trace继续实验:
+(1), 单独构造一个dataabort case, 实验能否trace到汇编. 
+(2), 希望把arm profiler试通. 这个主要依赖与arm交流. 
+
+20:30 2010-7-15
+VC0882, cache测试, 
+测试FPGA8.
+1, 开mmu的normal属性memory也会data abort. 
+追查.
+2, vc0882_20100713_1900_fpgaAll_a8_20100715_L1_32_L2_128_Neon_48M_2fpga_all.ace
+两次实验"memcpy_test 0 0 0x100000 1000 1":
+1), 测试到671次fail. dataabort.
+2), 第二次pass,
+3), 做100000次测试, 明天看结果. 
+3, 
+vc0882_20100713_1900_fpgaAll_a8_20100712_L1_32_L2_128_Neon_48M_2fpga_all.ace
+没法运行. 应该是软件问题, 实验4时重新编译了就没事了. 
+4, vc0882_20100712_2100_fpgaClkswitch_a8_20100712_L1_32_L2_128_Neon_48M_2fpga_NoFd.ace
+两次实验"memcpy_test 0 0 0x100000 1000 1"pass.
+
+21:20 2010-7-15
+VC0882, bootloader, 加密, aes; arm, Cortex-A8, neon, c instrincts, 不同c instrincts产生的neon代码有差异
+1, 这里是Aes_Decode函数源代码和反汇编, 命令目的是两对4word之间做异或. 
+如果没有写vector load, arm会VLDR load, 这样4个double word需要4条指令. 
+如果使用vector lood(VLD1.32), arm一次load2个double word, 这样只需要两条指令. 
+2, 
+1), 
+//4次VLDR, 2次VSDR
+//*(uint32x4_t *)temp = veorq_u32(*(uint32x4_t *)a, *(uint32x4_t *)(m_expandedKey[_MAX_ROUNDS]));
+//2次VLD1.32, 1次VSD1.32
+vst1q_u32((UINT32*)temp, veorq_u32(vld1q_u32(a), vld1q_u32(m_expandedKey[_MAX_ROUNDS])));
+0x001002fc:    e92d07f0    ..-.    PUSH     {r4-r10}
+0x00100300:    f4200a8f    .. .    VLD1.32  {d0,d1},[r0]
+0x00100304:    e24dd020     .M.    SUB      sp,sp,#0x20
+0x00100308:    e59f01a8    ....    LDR      r0,[pc,#424] ; [0x1004b8] = 0x240ec4
+0x0010030c:    e28d2010    . ..    ADD      r2,sp,#0x10
+0x00100310:    e59f31a4    .1..    LDR      r3,[pc,#420] ; [0x1004bc] = 0x102778
+0x00100314:    e1a0800d    ....    MOV      r8,sp
+0x00100318:    f4202a8f    .* .    VLD1.32  {d2,d3},[r0]
+0x0010031c:    e3a00000    ....    MOV      r0,#0
+0x00100320:    f3000152    R...    VEOR     q0,q0,q1
+0x00100324:    f4020a8f    ....    VST1.32  {d0,d1},[r2]
+2), vst1q_u32((UINT32*)temp, veorq_u32(vld1q_u32(b_tmp), vld1q_u32(m_expandedKey[r])));
+0x00100420:    ed9d0b00    ....    VLDR     d0,[sp,#0]
+0x00100424:    ed9d1b02    ....    VLDR     d1,[sp,#8]
+0x00100428:    ed9a2b04    .+..    VLDR     d2,[r10,#0x10]
+0x0010042c:    ed9a3b06    .;..    VLDR     d3,[r10,#0x18]
+0x00100430:    f3000152    R...    VEOR     q0,q0,q1
+
+10:36 2010-7-16
+时间管理
+0, 9:45
+
+1, 本日
+今天希望尽量把事情close, bootloader文档还没有开始写, 今天开始写.
+1), 40' 支持yangxing查media_L2编译错误. \todo 要求yangxing写日志总结, 等yangxing邮件. 
+2), 10' 关注csat apb-ap ETM寄存器不能访问问题. 见"20:00 2010-7-14"5,6,7.
+3), bootloader代码整理, 见"21:57 2010-7-7"
+被4)打断. 
+4), 30' 演示trace. 
+5), 40' 旁听arm speed sorting会议. 研发记录簿-2, p109
+6), 30' 支持yangxing调试cache debug register. 目前已经可以读出L2 tag数据, 初步看是正确的.
+7), 路上:
+(1), "DUI0205I_rvct_compiler_user_guide", p89 coding practice.
+
+12:48 2010-7-16
+公司, wireless, vimicro, 8711152005
+
+21:21 2010-7-16
+VC0882, rvds, rvct, linker, call graph
+1, 今天发现rvct里面也有静态调用关系分析, 用法: "--callgraph", 默认会在image目录生成imageName.htm.
+例如 VC0882 bootloader中"main"函数"VIM_Boot_Start()": 
+第一个stack size=40byte, 是VIM_Boot_Start自己使用的stack. 第二个stack size是528byte, 是从"VIM_Boot_Start()"开始, 调用到最大深度时最多使用的stack总size. 
+VIM_Boot_Start (ARM, 700 bytes, Stack size 40 bytes, VIM_Bootloader.o(.text)) 
+
+[Stack]
+
+Max Depth = 528 + Unknown Stack Size 
+Call Chain = VIM_Boot_Start => _VIM_Boot_SdioLoadImage => VIM_SDIO_Tryinfo => _VIM_EMMC_APP_Get512info => _VIM_EMMC_Change_Boot => VIM_SDIO_Init => VIM_SD_APP_Init_SD_SC => VIM_SD_PRO_InitMem => _VIM_SD_PRO_Preprocess => _VIM_SD_PRO_MemPreprocess => _VIM_SD_PRO_SendACmd => VIM_SD_SendACmd => _VIM_SD_SendCmdACmd => _VIM_SD_IntStatusInquireCmd => VIM_TIMER_GetNowTime => VIM_TIMER_GetCurrent 
+
+[Calls]
+>>   VIM_UART_SetBcr4bootloader 
+>>   VIM_UART_Init4bootloader 
+>>   VIM_TIMER_Init 
+>>   VIM_PMU_RemapAndJump 
+>>   VIM_PMU_IsWakeupFastBoot 
+>>   VIM_PMU_IsSetRebootForUsbDownload 
+>>   VIM_PADC_GetStrapPin 
+>>   VIM_HAL_PrintStr 
+>>   VIM_DBG_UartPrintEn 
+>>   VIM_DBG_PrintHex 
+>>   VIM_DBG_Print 
+>>   VIM_CLKRST_GetUartBcrCfg 
+>>   VIM_CLKRST_GetTimerMclkCfg 
+>>   VIM_CLKRST_ClkSwitchByStrappin 
+>>   _VIM_Boot_WakeupFast 
+>>   _VIM_Boot_NandLoadImage 
+>>   _VIM_Boot_SdioLoadImage 
+>>   _VIM_Boot_USBBoot 
+>>   _VIM_Boot_AesDecode 
+
+[Called By]
+>>   Reset_Handler 
+2, 文档: link ref
+This option creates a file containing a static callgraph of functions. The callgraph gives definition and reference information for all functions in the image.
+Usage
+The callgraph file:
+  is saved in the same directory as the generated image.
+  has the same name as the linked image. Use the --callgraph_file=filename option to specify a different callgraph filename.
+  has a default output format of HTML. Use the --callgraph_output=fmt option to
+control the output format.
+Note
+Any functions defined in the assembler files must have the appropriate PROC/ENDP and FRAME PUSH/POP directives if the linker is to calculate the function stack usage.
+For each function func the linker lists the:
+  processor state for which the function is compiled (ARM or Thumb)
+  set of functions that call func
+  set of functions that are called by func
+  number of times the address of func is used in the image.
+In addition, the callgraph identifies functions that are:
+  called through interworking veneers
+  defined outside the image
+  permitted to remain undefined (weak references)
+  not called but still exist in the image.
+The static callgraph also gives information about stack usage. It lists the:
+  size of the stack frame used by each function
+  maximum size of the stack used by the function over any call sequence, that is, over any acyclic chain of function calls.
+If there is a cycle, or if the linker detects a function with no stack size information in the call chain, + Unknown is added to the stack usage. A reason is added to indicate why stack usage is unknown.
+The linker reports missing stack frame information if there is no debug frame
+information for the function.
+For indirect functions, the linker cannot reliably determine which function made the indirect call. This might affect how the maximum stack usage is calculated for a call chain. The linker lists all function pointers used in the image.
+Use frame directives in assembly language code to describe how your code uses the stack. These directives ensure that debug frame information is present for debuggers to perform stack unwinding or profiling.
+
+21:33 2010-7-16
+VC0882, performance, ddrc分bank目的是避免page conflict
+1, yanglei, shuyu邮件"答复: 882 performance report", 20100716
+1), yanglei
+基本阅读了ICP performance结果，重点看了这次新测的 case7-11 。但场景实测偏松，最好能增大一些压力，因为效率统计在idle多的时候统计偏低。
+1 场景里关于latency统计还在分析，结果比rtl仿真的偏高较多。这个还在分析原因。
+2 关于带宽，FPGA希望设计的场景Video conferrance， 如下表
+但是此场景实测带宽只有68MB/s， 远低于设计预期的90MB/s
+1. 90MB是包含de capture的9MB/s , 但是fpga实测的时候，由于软件限制抓屏写sd卡时会把其他模块停住，反而造成抓屏时带宽很低（其他模块停了）。
+2. de带宽30MB/s 与设计的低了4MB/s
+3. codec 带宽29MB/s也比设计的低了8MB/s
+由于场景idle次数较多，所以结果的效率不高。建议增加压力,使得整体带宽在100MB/左右
+1. 可以考虑不做decapture，加一个layer。
+2. 把cif加快10-20%，这样enc也会跟着加快
+3. Decoder换大一些的尺寸，现在是24fps 640x480，改为 1280x720p的，这样可以用h264 high profile或者main profile。估计640x480的是baseprofile解码也会相对容易一些。
+
+2), shuyu
+Ok， latency偏高的原因是否是因为在实际应用中没有分bank所致？
+后面会加大带宽压力测试。
+3), yanglei
+应该不是，统计显示page conflict的概率并不高，为6.8%/ddr cmd . ， 27.2% / AXIreq。 分不分bank主要就是避免冲突过多，现在这个场景27%的 page conflict还好，并不高。
+
+17:08 2010-7-18
+时间管理
+0, 14:40-23:40
+
+1, 本日
+1), performance文档. 
+2), bootloader文档初稿. 
+
+18:01 2010-7-18
+VC0882, arch, clkrst, 
+一定要区分clock关系和物理连接关系. 
+例如storage, periphral:
+物理连接上, 二者是分别联到marb, 但在clock中clock source分出storage, 再从storage分出periphral.
+
+11:45 2010-7-18
+VC0882, arm, Cortex-A8, 文档整理, VC0882 arm文档说明
+1, 我学习中收集和阅读的VC0882 arm文档位置: "\\10.0.2.36\sqmshare\Document\ARM\arm体系结构"的Cortex和debug目录. "D:\VC0882\document\arm". 
+arm release完整文档位于"D:\VC1600WCVS\doc\module\Cortex-A8"和"D:\VC1600WCVS\doc\module\CoreSight"
+arm这块主要是Cortex-A8和Coresight(debug and trace)两部分. 
+
+2, Cortex-A8和Coresight introduction文档:
+36服务器: Document\Arm\arm体系结构\Cortex. "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf", "Cortex-A8 Processor Product Brief.pdf", "CortexA8_Tools.pdf"
+
+3, 详细文档:
+1), VC0882 arm设计文档是"D:\VC1600WCVS\doc\mas\VC0882\CPU_WRAPPER".
+2), ARM_ARM_7AR: "DDI0406B_arm_architecture_reference_manual_errata_markup_4_0.pdf", 
+这个文档是架构文档, 包括arm指令, memory系统架构等等, 附录D是cortex-a8去掉的feature, G和H是armv7与armv6, armv4/v5差异. 可以先看看. 
+3), Cortex-A8 TRM: "DDI0344J_cortex_a8_r3p2_trm.pdf".
+4), Coresight: "DDI0314H_coresight_components_trm.pdf"是coresight各模块的文档. 
+
+4, 项目过程中training和我的学习笔记见: "arm\笔记", "VC0882环境和Cortex-a8介绍.ppt", "arm\vc0882 Cortex-A8及环境调试笔记.txt"
+
+15:09 2010-7-19
+VC0882, arm, Cortex-A8, cache, POR
+系统上电后L1 dcache和L2 cache都会invalid. 只有L2 reset后才能执行L2操作. 
+During a power-on reset or soft reset, by default the processor clears the valid bits of both the L1 data cache and the L2 unified cache. Depending on the size of the L2 cache, this can take up to 1024 cycles after the deasserting edge of the reset signals. The L1 data cache reset can take up to 512 cycles, and occurs coincident with the L1 instruction cache reset. The processor does not begin execution until the L1 caches are reset. The L2 hardware reset occurs in the background and does not interfere with reset code. Any attempt to enable the L2 unified cache or perform any L2 cache maintenance operations stalls the processor until the hardware reset is complete.
+
+15:11 2010-7-19
+时间管理
+0, 9:35
+
+1, 本日
+1), 2.5h: 上午VC0882 AES讨论. 
+2), 1h: 整理VC0882 Cortex-A8文档并与xiaotao讨论. 
+3), 1h: Linux计划, 见"15:32 2010-7-13".
+4), 17:27-20:13 bootloader中提供打开mmu和dcache代码. 
+被晚饭(1h)打断. 
+5), 关注strappin问题. issue9227. 见"20:37 2010-7-19".
+
+16:44 2010-7-19
+VC0882, arm, Cortex-A8, cache, USB, mengfandong usb问题实际是禁止usb访问memory后没有查询status, 造成usb仍然访问了memory, 所以出错
+
+20:37 2010-7-19
+VC0882, bootloader, strappin, spi boot, issue 9227; VC0882 verilog HDL 代码位置
+目前看是spi clock的问题, 原来normal版本spi boot fail是因为spi clock给的96Mhz, 不是需要的24Mhz, ICD同事讨论如下:
+1, FanZhiJun邮件"答复: 882 spi boot"20100719_1941
+vc0882_20100713_1900_fpga_uotg_RAM256K_ROM256K_strappin_spiboot.ace版本，
+strappin设置为00，连接rvdebugger之后读到的0x30000000（spiboot ROM内容）为全0；
+在上版本基础上增加SPI模快的版本:
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf\2FPGA
+vc0882_20100713_1900_fpga_uotg_RAM256K_ROM256K_spi_spiboot.ace
+能运行DRAGON,串口;
+能连接RVDEBUGGER,LOAD 0x3000_0000..0x3000_0315和原文件能比对上.
+问题应该是解决了，但还不知道如何解释这个现象
+我的想法是，
+Spiboot的mclk来自spi0_mclk， spi为空时，spi0_mclk直接被优化掉了，导致spiboot mclk没有驱动。
+
+2, GuoHaiFeng邮件"答复: 882 spi boot"20100719_1946
+Hi, zhijun
+请看了一下clkrst里关于spi的code，如下：
+  // spi
+`ifdef FPGA_USB
+   assign spi0_mclk = spi0_mclk_pre;
+`else
+   BUFG SPI0_MCLK_BUFG (.I(spi0_mclk_pre), .O(spi0_mclk));
+`endif
+   assign spi1_mclk = spi0_mclk;
+   assign spi2_mclk = spi0_mclk;
+   assign spiboot_mclk = spi0_mclk;
+   在FPGA_USB宏打开的情况下spi0_mclk是没有加BUFG的，可能会导致spiboot_mclk变得比较差。
+
+3, Dr.yang提出"可以看看LOG文件里边SPI_BOOT_CLK的CLOK SKEW是多少。"
+1), FanZhiJun邮件"答复: 882 spi boot"20100719_2018
+HI Dr yang
+失效版本的参数为
+ /spiboot_mclk 
+Fan out : 131
+Skew   :   5.451
+Max delay: 8.051
+带spi版本的参数为
+spi0_mclk
+Fan out : 1911
+Skew   :   7.832
+Max delay: 10.484
+后者更恶劣一些。
+2), YangZuoXing邮件"答复: 882 spi boot"20100719_2033
+两个奇怪的地方：
+1）   两个的FANOUT差距很大
+2）   带BUFG的怎么有这个大的SKEW?
+能把LOG路径发一下么？
+3), FanZhijun邮件"答复: 882 spi boot"20100719_2037
+HI Dr Yang
+FANOUT可以理解，前者只驱动spiboot模块，后者驱动了spi和spiboot两个模块
+不带spi的
+/work/fanzhijun/project/vc0882/fpga_vc0882_20100713_1900/vc0882/fpga_uotg_RAM256K_ROM256K/runusb/ise_info.log
+以及top.log, top.vm
+带spi的
+/work/fanzhijun/project/vc0882/fpga_vc0882_20100713_1900/vc0882/fpga_uotg_RAM256K_ROM256K_spi/runusb/ise_info.log
+
+14:17 2010-7-20
+时间管理
+0, 9:42
+
+1, 本日
+1), 1h: 上午ICP骨干sync up.
+2), 1h: 718 arm testplan讨论. 
+3), 40' 整理882 bootloader自己代码中的warning. 
+4), 给xiaotao, lingming发718环境需要修改的代码. 见"14:18 2010-7-20"
+5), 下午: clkrst bootloader review.
+6), bootloader clkrst debug. 
+7), 实验L2 cache. 
+
+14:18 2010-7-20
+VC0882, VC0718, 环境, 
+1, zhangjian2liuxiaotao, lingming
+最近882 panda_os和bootloader里面有一些修改. 需要更新到718中.
+1, 环境代码整理(见附件), 见"10:38 2010-7-8".
+2, aasp 命令长度(见附件). 见"10:53 2010-7-15".
+3, pc, sp使用(见下面邮件).
+
+2, zhangjian邮件
+下面beizhan提到的pmu warning已经修改为: 
+__asm void _VIM_PMU_jumpToPhyAddr(UINT32 addr)
+{
+    mov r4, pc;
+    cmp r4, r0;
+    addcc lr, lr, r0;
+    bx lr;
+}
+原有code
+__asm void _VIM_PMU_jumpToPhyAddr(UINT32 addr)
+{
+    cmp pc, r0;
+    addcc lr, lr, r0;
+    bx lr;
+}
+这个提示是由于armv7中对于sp和pc的使用更为严格. 具体见ARM_ARM_7AR 附录D. 
+对于PC的使用只有” Table D-4 Non-deprecated uses of the PC in ARM instructions”中才允许. 
+
+23:56 2010-7-21
+(9:56 2010-7-23)
+时间管理,  0722计划
+补上周周报, 提醒wenlei, yangxing周报.
+建议beizhan882总结.<beizhan开会已经说了>
+回复huangwei arm测试邮件.
+了解huangwei .coresight邮件.
+fanzhijun strappin进展
+
+11:22 2010-7-22
+VC0882, sync up, meeting minutes
+1, zhangjian
+bootloader cache可能有问题. 
+issue尽快close.
+提一下下午linux讨论. 确认arm什么时候讨论.
+2, 其它: 
+vdec code coverage: 问830是如何做的?
+
+13:23 2010-7-22
+时间管理
+0, 9:15
+
+1, 计划
+1), 上午syncup.
+2), 20' yangxing audio问题.
+3), 中午1h: 和caijin一起讨论armcc -O3 -Otime优化出错. caijin会给arm发信. 
+4), bootloader代码修改: 加入"g_Clkrst_StorPeriClkEnum"避免const问题. 
+
+16:16 2010-7-22
+VC0882, bootloader代码修改, 
+1, 去除warning.
+2, ttb选择寄存器需要选择. 
+
+16:17 2010-7-22
+VC0882, arm, 总结
+1, mmu: section, page大小变化. 不建议使用FCSE, 推荐ASID方式. 两个ttb.
+2, cache: L1, L2基本属性. cache与integer和neon的配合. PLD, PLI, PLE.
+3, neon.
+4, coresight: apb-ap, ahb-ap, trace.
+
+18:12 2010-7-22
+VC0882, 总线
+1, X2X
+1), buffer: command 4个. 数据: 16个bus width(64bit).
+2), 如果宽度一样, burst不变. 宽度不同时burst会调整.
+2, bus到ddrc至少2拍. 
+3, arm到ddrc最快20个cycle. 
+
+9:55 2010-7-23
+时间管理
+0, 9:50
+
+1, 本日
+1), bootloader cache code debug.
+2), bootloader文档修改: 512info, strappin. 
+3), apb-ap问题需要抓一个单独的etm 0x004, 0x1e4 log给arm, 确认软件使用有无问题. <取消, huangwei已解决>, 见"18:16 2010-7-23"
+4), bootloader修正一些错误, 见"10:38 2010-7-23"
+5), 和caijin讨论jpeg. caijin基本完成. 原来问题是量化表输入格式错误, 应该是rastor. 
+
+10:38 2010-7-23
+VC0882, bootloader, fix一些错误, make依赖关系自动推导研究, 文档总结; makefile debug
+1, 错误编译规则导致源文件被删除
+现象: 每次编译后mmu.s, cache.s都会被删除, 修改makefile后正确: 
+1), 错误
+$(BUILD)/%.o: %.s
+	$(XAS) $(AS_CFLAGS) -o $@ $<	
+2), 正确
+$(BUILD)/boot/vectors.o: boot/vectors.s
+	$(XAS) $(AS_CFLAGS) -o $@ $<	
+
+$(BUILD)/cache/CACHE.o: cache/CACHE.s
+	$(XAS) $(AS_CFLAGS) -o $@ $<
+	    
+$(BUILD)/mmu/MMU.o: mmu/MMU.s
+	$(XAS) $(AS_CFLAGS) -o $@ $<
+3), make时加入"--debug=i", 发现错误的规则会多一个: 
+Removing intermediate files...
+rm cache/CACHE.s
+4), 最后发现是文件名大小写问题造成CACHE.s被当作中间文件删除(实际删除的是CACHE.S, make区分大小写. windows不区分)
+保存"--debug=i"log.
+修改后正确的推导过程:
+       File `build/cache/CACHE.o' does not exist.
+       Looking for an implicit rule for `build/cache/CACHE.o'.
+       Trying pattern rule with stem `cache/CACHE'.
+       Trying implicit prerequisite `cache/CACHE.s'.
+       Found an implicit rule for `build/cache/CACHE.o'.
+         Looking for an implicit rule for `cache/CACHE.s'.
+         Trying pattern rule with stem `CACHE'.
+         Trying implicit prerequisite `cache/CACHE.S'.
+         Trying pattern rule with stem `CACHE.s'.
+         Trying implicit prerequisite `cache/CACHE.s,v'.
+         Trying pattern rule with stem `CACHE.s'.
+         Trying implicit prerequisite `cache/RCS/CACHE.s,v'.
+         Trying pattern rule with stem `CACHE.s'.
+         Trying implicit prerequisite `cache/RCS/CACHE.s'.
+         Trying pattern rule with stem `CACHE.s'.
+         Trying implicit prerequisite `cache/s.CACHE.s'.
+         Trying pattern rule with stem `CACHE.s'.
+         Trying implicit prerequisite `cache/SCCS/s.CACHE.s'.
+         Trying pattern rule with stem `CACHE'.
+         Trying implicit prerequisite `cache/CACHE.S'.
+         Looking for a rule with intermediate file `cache/CACHE.S'.
+          Avoiding implicit rule recursion.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/CACHE.S,v'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/RCS/CACHE.S,v'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/RCS/CACHE.S'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/s.CACHE.S'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/SCCS/s.CACHE.S'.
+         No implicit rule found for `cache/CACHE.s'.
+      Must remake target `build/cache/CACHE.o'.
+armasm -I./include --cpu=cortex-a8 --debug --diag_style=ide  -o build/cache/CACHE.o cache/CACHE.s
+      Successfully remade target file `build/cache/CACHE.o'.
+修改前推导过程, 注意到推导中认为CACHE.S和CACHE.s不同, 且认为后者是中间文件. 
+       File `build/cache/CACHE.o' does not exist.
+       Looking for an implicit rule for `build/cache/CACHE.o'.
+       Trying pattern rule with stem `cache/CACHE'.
+       Trying implicit prerequisite `cache/CACHE.s'.
+       Trying pattern rule with stem `cache/CACHE'.
+       Trying implicit prerequisite `cache/CACHE.c'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.c'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.cc'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.C'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.cpp'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.p'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.f'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.F'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.r'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.s'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.S'.
+       Trying pattern rule with stem `CACHE'.
+       Trying implicit prerequisite `build/cache/CACHE.mod'.
+       Trying pattern rule with stem `CACHE.o'.
+       Trying implicit prerequisite `build/cache/CACHE.o,v'.
+       Trying pattern rule with stem `CACHE.o'.
+       Trying implicit prerequisite `build/cache/RCS/CACHE.o,v'.
+       Trying pattern rule with stem `CACHE.o'.
+       Trying implicit prerequisite `build/cache/RCS/CACHE.o'.
+       Trying pattern rule with stem `CACHE.o'.
+       Trying implicit prerequisite `build/cache/s.CACHE.o'.
+       Trying pattern rule with stem `CACHE.o'.
+       Trying implicit prerequisite `build/cache/SCCS/s.CACHE.o'.
+       Trying pattern rule with stem `cache/CACHE'.
+       Trying implicit prerequisite `cache/CACHE.s'.
+       Looking for a rule with intermediate file `cache/CACHE.s'.
+        Avoiding implicit rule recursion.
+        Trying pattern rule with stem `CACHE'.
+        Trying implicit prerequisite `cache/CACHE.S'.
+       Found an implicit rule for `build/cache/CACHE.o'.
+          Looking for an implicit rule for `cache/CACHE.S'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/CACHE.S,v'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/RCS/CACHE.S,v'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/RCS/CACHE.S'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/s.CACHE.S'.
+          Trying pattern rule with stem `CACHE.S'.
+          Trying implicit prerequisite `cache/SCCS/s.CACHE.S'.
+          No implicit rule found for `cache/CACHE.S'.
+      Must remake target `build/cache/CACHE.o'.
+armasm -I./include --cpu=cortex-a8 --debug --diag_style=ide  -o build/cache/CACHE.o cache/CACHE.s
+      Successfully remade target file `build/cache/CACHE.o'.
+       File `build/mmu/MMU.o' does not exist.
+完整log位置: D:\work\VC0882\code_backup\code\20100723_bootloader_make
+
+2, 发现bootloader打开icache情况下load bin文件运行可能出错. 
+原因是icache打开后0地址后指令进入cache, remap后0地址从rom数据改为ddr数据. 现在在load映像前关闭icache, 避免一致性问题. 
+
+3, cache导致程序跑回到0地址: 在关mmu之前做dcache一致性操作即可. 
+
+4, \todo 加入bootloader注意事项:
+有efuse时必须reconfig FPGA, 否则efuse状态不对. 
+使用emmc卡时必须重新插拔emmc卡, 否则emmc boot区选择有问题. 
+
+14:04 2010-7-23
+项目, Linux, 计划/规划, VC0882, VC0718, 续, 新增近期具体计划
+今天上午和xiaotao, zhicheng, zhangpu讨论了Linux计划. 近期Linux计划有两部分, 一个是大家可以逐步上手开发Linux device driver, 一个是Linux porting的总结. 一共6-7周左右. 从Linux驱动开发学习过程来说, 一般是从基本操作开始, 然后做driver开发, 再往后做porting. 同时考虑到882和718 porting剩余工作量不大, driver工作量大, 所以计划先介绍Linux环境和driver开发使大家尽量上手, 然后再做porting总结. 具体计划: 
+1, driver:
+1), 第一周: Linux环境介绍: 包括Linux开发参考资料, 常用命令, gcc工具链, kernel编译等等. 由zhangjian介绍. 
+2), 第二--三周: driver基础, 包括最简单的字符设备驱动, Linux driver开发中常用的API, platform bus等等. 由liuxiaotao, zhangjian介绍. 
+3), 第四周: 以framebuffer为例说明Linux中典型的驱动开发. 由zhangpu介绍. 
+2, porting(liaozhicheng, liuxiaotao, zhangjian):
+Linux porting包括kernel中machine description, timer, irq, uart. 还有建立最基本的filesystem. 大约需要3-4周时间. 
+zhicheng之前在830 porting上面做了很多工作, 希望zhicheng能逐步开始总结. 
+3, mengfandong逐步看Linux USB driver, xiaotao之前看过一些, 可以多和xiaotao讨论讨论. 
+
+经过上面6-7周时间, 大家应该可以开始做具体驱动了. 后面考虑做u-boot移植和具体设备驱动的讨论, 另外可以开始了解中间件. 
+这样安排u-boot可能在9月初才能开始, 这样会不会有点晚? 10月底完成可能有难度.
+
+18:16 2010-7-23
+VC0882, arm, Cortex-A8, rvds, rvdebugger, issue9228: csat APB-AP access memory or register fail, 续, <DONE>, 需要先unlock, 再访问PDSR
+1, huangwei邮件"Re: access memory or register fail with csat APB-AP (466757)"20100723_1749
+Hi zhangjian, 
+按下面的步骤做就可以正常访问：
+1. Unlock the ETM by writing 0xC5ACCE55 to the Lock Access Register.
+2. read PDSR (power down  status register in  ETM)
+然后就可以正常访问了ETM所有的寄存器了
+2, 与huangwei确认, ETM有两个时钟域: gclk(应该是cpu core clk)和pclk. coresight为了power management. 默认只有pclk域寄存器可以访问. 访问PDSR后才能访问gclk域. 
+具体log如下(0x6000a004和0x6000a1e4数值都是正确的):
+%>con usb
+
+Attempting to connect to ...USB
+Connected to:ARM RealView ICE
+Base H/W: V1 Rev G-01
+TurboTAP Rev: 1.86
+LVDS Probe H/W: V50 Rev p-48
+Firmware: 3.3.0, Build 948
+%>chain dev=auto clk=10000000
+Jtag clock set to 10000000
+ID:0 ARMCS-DP
+%>dvo 0
+Open connection to device ID : 0x4BA00477, version 0x00000006
+Msg returned with RVMOpenConn: ARM-DP Template using Rv-Msg.
+%>dpe
+Enumerated 3 APs
+  0 : AHB-AP
+  1 : APB-AP
+  2 : JTAG-AP
+%>dmw 1 0x6000afb0 0xc5acce55
+Wrote 1 words to memory via AP1
+%>dmr 1 0x6000a314 1
+0x6000A314 : 0x00000003 
+%>dmr 1 0x6000a004 1
+0x6000A004 : 0x8D294024 
+%>dmr 1 0x6000a1e4 1
+0x6000A1E4 : 0x410CF236 
+%>dmr 1 0x6000a000 1
+0x6000A000 : 0x00000441 
+%>dmr 1 0x6000a1e4 1
+0x6000A1E4 : 0x410CF236 
+%>dmr 1 0x6000a1e4 1
+
+18:19 2010-7-23
+项目经验, 调试, 板级问题, 查硬件问题, 电路, 总结, 文档
+1, 查连通性: 通断, 短路.
+2, 查供电, clock.
+3, 如果是高速电路, 考虑阻抗匹配, 串扰. 
+
+11:30 2010-7-24
+(22:37 2010-07-25)
+(17:51 2010-7-26)
+VC0882, arm, 总结, 文档, VC0882 arm使用总结, \todo 与CVS保持同步
+
+initial draft 2010-7-24 zhangjian
+update after arm discusion meeting 2010-7-26 zhangjian
+
+VC0882 Cortex-A8总结, 包括Cortex-A8和armv7A新feature的使用情况, 也包括VC0882中cpu子系统相比之前项目(主要是VC0830)的变化. 
+1, pipeline
+0), integer 13 stages, neon 10 stages, L2 cache 8 stages.
+1), interger是顺序执行的, neon可以乱序. 
+2), integer load/store miss会导致pipeline replay. neon中pipeline会stall.
+3), integer是双发射. NEON似乎也是双发射(确认).
+4), 分支预测: 预测错误的跳转会造成流水线flush, 这样会有13cycle的penelty. 打开对于循环性能的提升很大: \todo 实验memcpy速度(arm performance monitor计数). 
+另外, 在Cortex-A8中如果打开了分支预测, 就不能通过跳转来flush pipeline. 需要使用pipeline flush或isb. 
+
+3, mmu, cache变化
+1), memory sections or pages大小变化
+新增16MB的supersection, 取消了原来1kB的tiny pages:
+Supersections Consist of 16MB blocks of memory. 
+Sections Consist of 1MB blocks of memory.
+Large pages Consist of 64KB blocks of memory.
+Small pages Consist of 4KB blocks of memory.
+2), 两个translation table, 这样可以减少translation table切换的时间. 
+不建议使用FCSE, 推荐ASID方式.
+3), cache的变化.
+(1), Point of coherence, Point of unification:
+The points to which a cache maintenance operation can be defined differ depending on whether the operation is by MVA or by set/way:
+  For set/way operations, and for All (entire cache) operations, the point is defined to be to the next level of caching.
+  For MVA operations, two conceptual points are defined:
+Point of coherency (POC)
+For a particular MVA, the POC is the point at which all agents that can access memory are guaranteed to see the same copy of a memory location. In many cases, this is effectively the main system memory, although the architecture does not prohibit the implementation of caches beyond the POC that have no effect on the coherence between memory system agents.
+Point of unification (POU)
+The PoU for a processor is the point by which the instruction and data caches and the translation table walks of that processor are guaranteed to see the same copy of a memory location. In many cases, the point of unification is the point in a uniprocessor memory system by which the instruction and data caches and the translation table walks have merged.
+The PoU for an Inner Shareable shareability domain is the point by which the instruction and data caches and the translation table walks of all the processors in that Inner Shareable shareability domain are guaranteed to see the same copy of a memory location. Defining this point permits self-modifying code to ensure future instruction fetches are associated with the modified version of the code by using the standard correctness policy of:
+1. clean data cache entry by address
+2. invalidate instruction cache entry by address.
+The PoU also enables a uniprocessor system which does not implement the
+Multiprocessing Extensions to use the clean data cache entry operation to ensure that all writes to the translation tables are visible to the translation table walk hardware.
+
+(2), 架构上支持7级cache, 没有提供类似arm926ej-s中的一条指令清dcache的命令:
+Test and clean DCache - MRC p15, 0, <Rd>, c7, c10, 3
+Test, clean, and invalidate DCache - MRC p15, 0, <Rd>, c7, c14, 3
+
+If the cache contains any dirty lines, bit 30 is set to 0. If the cache contains no dirty lines, bit 30 is set to 1. This means that you can use the following loop to clean the entire DCache:
+tc_loop: MRC p15, 0, r15, c7, c10, 3 ; test and clean
+BNE tc_loop
+The test, clean, and invalidate DCache instruction is the same as test and clean DCache, except that when the entire cache has been cleaned, it is invalidated. This means that you can use the following loop to clean and invalidate the entire DCache:
+tci_loop: MRC p15, 0, r15, c7, c14, 3 ; test clean and invalidate
+BNE tci_loop
+
+注: 以上指令自ARM926ej-s TRM p52-p53.
+armv7A中要求按照cache层次, 从1级cache开始查询, 逐级做dcache或Unified cache的clean/invalidate操作, 例如对于有无L2 cache(即cache size是否为0)的情况可以使用一套code. 
+对于VC0882现有的配置, 可以从"c0, Cache Level ID Register"读出共有两级cache: L1是指令数据分离的cache, L2是unified cache. 
+对于每级cache, 可以通过"c0, Cache Size Selection Register"选择某一级cache, 并读取"c0, Cache Size Identification Registers"得到cache set, way, cache line size, 是否支持write allocate等等. 
+代码参见"dcache_intellectual_clean_and_invalidate".
+这里使用Cortex-A8 RTSM说明大致过程, 可以看出Cortex-A8 RTSM是256k L2 cache. 
+
+3), L1 icache是VIPT, L1 dcache和L2 cache是PIPT, (所以task切换时需要清TLB?). 这个和arm926ej-s不同. 
+L2最小latency是8cycles(ARM training 301v4p7).
+cache与integer和neon的配合. PLD, PLI(A8中实际是NOP), PLE.
+The L2 cache incorporates a dirty bit per quadword to reduce AXI traffic. This eliminates unnecessary transfer of clean data on the AXI interface.
+
+4), mmu页表属性的变化:
+(1), strongly-ordered, device, normal. 882中寄存器使用的是strongly-ordered属性, 实际更合理的是device属性, 否则可能隐藏IC bug(重要!). kongyingqi就因为这个属性发现了一个IC bug: 配寄存器的时候没有配完就返回ok了. 
+(2), sharable: 多核中才会用到. strongly-ordered都是shareable, device是否shareable由页表中TEX,C,B的组合确定, normal memory通过页表中S bit表示是否shareable. 
+(3), mmu: instruction是normal属性?
+(4), XN, 表示这个区域不能被预取或执行:
+Any region of memory that is read-sensitive must be marked as Execute Never, to avoid the possibility of a speculative prefetch accessing the memory region. For example, any memory region that corresponds to a read-sensitive peripheral must be marked as Execute Never.
+(5), nG: =0表示是OS kernel空间, =1表示是进程空间, for ASID.
+
+5), mmu, cache对系统的影响. 
+乱序. 一致性, 系统运行速度(例如gpu中原来不会timeout的会timeout). 
+
+6), 打开mmu和L1, L2 cache后, 
+(1), 会存在乱序访问. 最大26个Outstanding transactions(ARM training 301v4p19,p38,p39).
+因为AXI是多通道的, 而且支持Outstanding transactions.
+(2), memory barrior用于保证顺序. 
+
+4, A8与总线: VC0882使用AXI协议, A8能充分利用AXI的outstanding transaction来减小latency. 而之前的VC0830使用的是AXI lite(vimicro自己定义的一些, 不是amba3中的AXI lite), arm926ej-s只支持ahb bus. 
+multi load store被打断后的行为: 重新传输.
+
+5, neon.
+NEON默认不使用L1 dcache, 可以设置: 
+NEON L1 caching should be enabled for best performance when the L2 cache is off or not present.
+
+6, coresight: apb-ap, ahb-ap, trace.
+arm profiler可以使用trace2的数据, 暂时没有试通. caijin用profiler才RTSM分析数据. 
+
+7, performance monitor
+1), arm internal timer: cyle count
+2), cache miss.
+
+8, clock, reset和power control(Cortex-A8 TRM p360)
+1), arm cpu clk和AXI clk之间什么关系? 整数倍. \todo 查综合频率.
+2), arm reset: 共有5个reset, 包括单独reset debug logic, 其它logic, neon, 详见cortex-a8 trm p363.
+882设计简化为可以选择reset cpu时是否reset debug logic. 
+3), power control: 882中A8是一个power domain. 只能通过是否给clock控制功耗. neon, vfp, etm.
+4), wfi and power control.
+
+9, armv7A的其它新featue
+1), thumb2和thumb2-EE. 
+指令压缩技术, 16bit和32bit混合编程, 不需要切换时间, 减小code size, 性能几乎没有损失. 如果希望减小code size可以考虑使用thumb2. bootloader中是否使用? 
+thumb2-EE用于脚步或解释加速. android2.2 java性能提升. 
+
+10, 其他: 
+1), wfi唤醒与屏蔽irq无关.
+2), sum of absolute difference: USAD8, USADA8.
+USAD8, 2组4个byte, 先组间取差的绝对值, 再累计.
+USADA8, USAD8的结果再加一个word.
+3), 对多核有意义的: yield(表示该核空闲, OS可以用于任务负载平衡), ldrex, strex.
+
+11, cp15里面其它需要注意的寄存器
+1), "3.2.26 c1, Auxiliary Control Register"里面有一些高级控制选项. 
+(1), "speculative accesses"?  AXI
+2), "c12, Interrupt Status Register". fiq, irq, external abort.
+3), "c2, Translation Table Base Control Register"
+[5] PD1 Specifies occurrence of a translation table walk on a TLB miss when using Translation Table Base
+Register 1. When translation table walk is disabled, a section translation fault occurs instead on a TLB miss:
+0 = The processor performs a translation table walk on a TLB miss, with secure or nonsecure privilege appropriate to the current Secure or Nonsecure state. This is the reset value.
+1 = The processor does not perform a translation table walk. If a TLB miss occurs with Translation Table Base Register 1 in use, the processor returns a section translation fault.
+[4] PD0 Specifies occurrence of a translation table walk on a TLB miss when using Translation Table Base Register 0. When translation table walk is disabled, a section translation fault occurs instead on a TLB miss:
+0 = The processor performs a translation table walk on a TLB miss, with secure or nonsecure privilege appropriate to the current Secure or Nonsecure state. This is the reset value.
+1 = The processor does not perform a translation table walk. If a TLB miss occurs with Translation Table Base Register 0 in use, the processor returns a section translation fault.
+[3] - Reserved. UNP, SBZ.
+[2:0] N Specifies the boundary size of Translation Table Base Register 0:
+b000 = 16KB, reset value
+b001 = 8KB
+b010 = 4KB
+b011 = 2KB
+b100 = 1KB
+b101 = 512B
+b110 = 256B
+b111 = 128B.
+4), 分析系统出错寄存器: DFSR, DFAR, I...
+
+12, 工具
+1), rvct:
+caijin, -O3 -Otime --vectorize -cpu=cortex-A8(表示有neon)等四个参数在一起编译结果中loop unrolling(循环展开)有问题. 给arm发信. 
+
+13, 备用资料
+1), cache: 
+(1), 结合"ARM_ARM_7AR"A3.9.2 Memory hierarchy: 从系统架构理解cache. Cortex-A8 dcache和L2是PIPT, icache是VIPT. 所以对于读数据来说, 看到的是物理地址的数据. 即使mmu映射一个物理地址到两个虚拟地址, 也不会有数据一致性问题. 指令是虚拟地址应该是因为取指不需要经过mmu, 另外一般修改下指令也不会修改. 但ARM9 trm又提到VIVT好处: The caches are virtual index, virtual tag, addressed using the Modified Virtual Address (MVA). This enables the avoidance of cache cleaning and/or invalidating on context switch.
+(2), "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf": L1 dcache与L2 dcache无关, 但L1 icache是L2 icache的子集. (bamvor: dcache互不包含就避免了更多的数据一致性问题.)
+(3), number of set = log2(cache size(16k) / cache line size(64byte)) - numberOfWay(4) = 6; 2^6=64
+for VC0830(arm926): 
+CSIZE 				EQU 14	;注意和CACHE_SIZE一致
+CLINE				EQU 5
+NWAY				EQU 2
+NSET				EQU (CSIZE-NWAY-CLINE)  ;7, 2^7=128
+所以目前理解Cortex-A8中tag[31:12], set[11:5], cacheline[4:0].
+way和set一个是纵向平面,一个是横向平面, 这样可以唯一选择一个cache line. 看来这个地方要做一些实验. 见"18:41 2010-7-5"
+3), sync, async data  abort
+thumbee
+neon与l2, PLE
+3, debug
+1), trace
+2), profiler: DUI0414C_rvp_user_guide.pdf
+
+14, 2010-7-26 meeting minutes
+1), 修改, 实验
+(1), test L2 write allocate 对性能的影响.
+(2), 测试BTB(分支预测)对性能的影响. 
+(3), 882中寄存器从strongly-ordered改为device.
+2), 待确认问题
+(1), Cortex-A8 L2最多可以lockdown几路?
+(2), yanglei, yulijie: SOC designer.
+(3), A8 PLE burst 长度.
+(4), 什么情况必须用strongly-ordered?
+(5), A8里面的write buffer多大? 是否只有L2有write buffer? 
+(6), device属性里面是否严格保证read, write顺序: A8 write buffer中会不会对读写交替是的访问顺序影响. 
+我理解AXI中应该可以通过ID保证顺序.
+(7), ldrd, strd访问apb寄存器? 软件实验结果正确, 但designer(huangwei, jiangbo)认为有问题, 请ICV帮忙仿真.
+(8), 问atmic multi load store 被打断后重传. 如果是重传可能对硬件行为有影响.
+3), 其它: 
+(1), caijin, -O3 -Otime --vectorize -cpu=cortex-A8(表示有neon)等四个参数在一起编译结果中loop unrolling(循环展开)有问题. 给arm发信. 
+(2), check Linux cortex-A8 new features.
+(3), NEON最大运算宽度: 128? 
+(4), outstanding transactions: 能否结合一个例子看看, 到底什么地方出现的乱序, 感觉integer本身应该不会, 应该只在cache和NEON.
+(5), kongyingqi当时发现的问题为什么device属性有问题, strongly-ordered没问题? 
+
+15, (15:00 2010-7-30)
+arm, cache发现的问题.
+1), mengfandong, 非对齐dataabort.
+2), wangzhengwei, pmu normal->sleep, self-modify code.
+3), shuyu cif 0x8xxxxxxx cache,memory一致性问题. 
+4), yuyang dmac部分memory区域没有加cache操作. 
+
+16:11 2010-7-24
+VC0882, gpu, cache, performance
+performance分析gpu rotation+de display这个case.
+开dcache情况下marb抓到的数据比不开cache情况下少2/3左右. 后者数据量正常(640*480*2/13/8), gpu写memory).
+gpu开了cache后, cmdbuffer需要改为non-cachable.
+另外原有timeout过短, 造成没有等到返回就退出了, 增加timeout后正确. 
+
+13:17 2010-7-26
+VC0882, clkrst, pll, 请假huangwei问题
+1, zhangjian2huangwei邮件20100726
+请教个问题. 
+1 pll /1 output frequency不能小于等于240MHz. 除以其它od的输出频率还有最低限制么? 文档中没找到. 
+2 Clkrst mas里面这么这个参数什么含义? 
+	/1 output multiples of div. reference		1-4096
+2, huangwei邮件"Re: 请教pll参数含义"20100726_1408
+1 其实这个的意思就是 vco工作频率 不能小于等于240MHz, 和OD 没有关系
+2  就是CLKF （NF=CLKF+1）
+
+13:18 2010-7-26
+VC0882, bootloader, 仿真发现的clkrst问题, 总结, 文档
+目前的两个问题都是没法直接测出来的, 说明我写代码时还需要更注意. 
+1, kongyingqi, zhaoyan(Issue: [882 0009395]: 初始化后，修改const变量的值)
+修改const造成dataabort. FPGA上面的rom实际是sram, 所以测试没发现. 
+2, zhanyan邮件"PLL4工作异常"20100724_1800
+修改pll4配置为96Mhz溢出的问题. 目前改为384/4=96.
+3, (13:18 2010-7-28)
+1), ZhaoYan邮件"Uart模块无时钟"20100727_1714
+Uart模块没有时钟。
+需将寄存器CLKRST_STOR_PERI_SRC_CFG的Bit0置0，寄存器CLKRST_STOR_PERI_MCLK_CTRL的bit16和bit17分别置1，Uart模块才会有mclk。
+请查看
+2), Zhangjian邮件"答复: Uart模块无时钟"20100727_2213
+Hi, dr.yang, huangwei
+下午和zhaoyan确认, Uart没有时钟的原因是storage, peripheral clock source被gate(STOR_PERI_SRC_GT=1), 
+Zhaoyan仿真的case是xclk启动的case. Bootloader使用xclk启动(不使用pll和切频)是后备方案, 用于pll或切频出错的情况.
+如果配置STOR_PERI_SRC_GT就需要切频, 这样就不够安全, 不符合bootloader xclk 的初衷.
+希望修改这个默认值为ungate.
+想问一下为什么要把这个gate, 是否为了节省时钟树本身的功耗? 因为bootloader本身就是启动后会打开storage, peripheral clock. 所以默认打开这个clock对功耗影响应该不大.
+另外想确认一下, spiboot时STOR_PERI_SRC_GT是否等于0. 
+3), Huangwei邮件"Re: Uart模块无时钟"20100728_0958
+切频如果有问题, vc0882就没有使用价值了，所以不要因为有风险，bootloader就不能切频。任何设计都有风险，考虑到了，验证到了，就不是风险了。
+STOR_PERI_SRC_GT的reset值就是1， 因为spiboot的ACLK和MCLK分别是bus clock structure和 mem clock structure产生的，上电缺省是有clock的。
+4), Zhangjian邮件"答复: Uart模块无时钟"
+可能是我没有描述清楚, bootloader代码是写死的, 不会因为有风险而不切频, 只是把风险分散开. 希望做到尽量保险.
+之前830, 816切频都有问题, 882bootloader也是考虑到这些问题, 才在bootloader里面设计四个目标频率, 其中三个是使用pll的, 会做切频. 最后一个是xclk, 不配置pll,不切频,尽量少配置模块divider,少打开模块时钟. Xclk主要用于work around, 正常不会使用.
+因为pll的分支涉及到配置pll4(for storage ,peripheral), pll6(cpu,bus,rom,sram), 涉及到cpu,bus,rom,sram, storage, usb phy等切频和模块时钟配置, 这样涉及到的软件和硬件corner都会比较多. 相比之下xclkd的分支不需要等pll lock和switch这些硬件状态, 代码相对简单, 软硬件都corner少很多.
+5), HuangWei邮件"Re: Uart模块无时钟"21000728_1420
+其实打开STOR_PERI_SRC_GT, 虽然是走切频流程，但和切换clock source完全是不同的分支。 基本和module software gating bit的操作是一样的，当然这不等于说简单就没有风险。但这种case很单一，仿真就能说明问题。所以风险是可控的。
+830，816的切频有问题，具体原因我不清楚为什么在验证阶段没有暴露出来，也许是一个corner case下才出现问题，而上述问题case很单一，只要验证到就不会有问题。不能因此“一朝被蛇咬，十年怕井绳”·
+当然，也不是说不能修改这个bit的缺省值，做个ECO就可以，但这会影响到ASIC FLOW, 其实也是有风险的。
+具体再讨论一下吧。
+6), Zhangjian邮件"答复: Uart模块无时钟"20100728_1910
+下午Dr.yang, Fengbeizhan, huangwei, zhangjian讨论了这一问题. meeting minutes如下: 
+(1), STOR_PERI_SRC_GT的修改与switch没有关系, 但是timeout还是需要查的. 需要查time的原因是这个gate寄存器在pclk时钟域生效, 但是需要同步两个cycle到另一个时钟域生效后gate/ungate才实际生效. 需要重新check可以等busy状态的gate/ungate是否都等了busy bit.
+(2), 考虑clkrst模块里面的switch和个别gate需要等busy bit和timeout, 有可能timeout后硬件状态是正确的. 软件为了保险起见考虑在bootloader中使用一个strappin表示等busy bit timeout后如何处理: 直接退出或继续执行. 
+(3), clkrst模块其它的gate和enable也会跨时钟域, 因此bootloader中在每次enable和gate时都会做10cycle x 目标频率的delay. 
+(4), 考虑到clkrst时钟域较多, huangwei会对照寄存器列表重新check一下其它地方还有没有需要delay或等状态的情况. 
+7), huangwei邮件"Re: Uart模块无时钟"20100728_2000
+软件操作PLLx_CFG以及PLL_SW_RST需要查询PLL_STATUS
+软件操作DLL_SW_RST需要查询DLL_STATUS
+软件操作CPU_CLK_CFG,BUS_CLK_CFG,DDRC_MCLK_CFG需要查询 SYS_CLK_CFG_STATUS
+软件操作MEM_MCLK_CFG需要查询 MEM_MCLK_CFG_STATUS
+软件操作STOR_PERI_SRC_CFG需要查询 STOR_PERI_SRC_CFG_STATUS
+软件操作UPHY_CLK_CFG需要查询 UPHY_CLK_CFG_STATUS
+软件操作AUD_MCLK_CFG需要查询 AUD_MCLK_CFG_STATUS
+软件操作AUD_CODEC_MCLK_CFG需要查询 AUD_CODEC_MCLK_CFG_STATUS
+软件操作VENC_MCLK_CFG,VDEC_MCLK_CFG,GPU_MCLK_CFG,FD_MCLK_CFG 需要查询 VIDEO_MCLK_CFG_STATUS
+软件操作CIF_SRC_CFG需要查询 CIF_SRC_CFG_STATUS
+软件操作VOUT_MCLK_CFG需要查询 VOUT_MCLK_CFG_STATUS
+软件操作AVS_MCLK_CFG需要查询 AVS_MCLK_CFG_STATUS
+除上述情况，软件enable/disable clock divider, 或 gating or ungating clock 都需要按照zhangjian提到的做10cycle x 目标频率的delay.
+4, (14:32 2010-7-30)
+交换下面两个变量顺序, 以便和512info一致
+UINT32      periMiscCfg;//for peri, efuse cfg
+UINT32      perUartBcr; //uart bcr配置.
+
+16:54 2010-7-26
+VC0882, VC0718, Linux, 讨论
+本次主要讨论了Linux学习计划. 暂定每周一下午做Linux讨论. 
+8.1--10.1为第一阶段, 希望大家尽快熟悉Linux环境, 逐步开始driver开发. 
+
+任务分配:
+lidongliang:        porting, storage(nfc, sd memory, sdio).
+beizhan, shuyu:     video path: lcd, de, cif. 
+caijin, yangmin:    vdec, venc.
+zhangjian:          porting总结. audio, u-boot.
+zhangpu:            framebuffer移植总结和机制分析, android文件系统和应用程序, ds-5开发环境. 
+liuxiaotao:         porting, ethenet, u-boot, 文件系统(公版).
+mengfandong:        usb(host+device).
+liaozhicheng:       porting总结, porting以zhicheng为主.
+luohongyu:          pci-e. 
+aiguo, lingming.
+
+时间安排, 前四周左右时间向大家介绍Linux开发环境, driver开发基础, framebuffer driver介绍, Linux porting总结, 具体如下.
+1, 第一周, 介绍Linux环境:
+1)-3)由zhangjian负责, 4)-5): liuxiaotao. 
+1), Linux学习资料: 
+(1), Linux操作入门: 鸟哥私房菜.
+(2), Linux drvier开发入门: 嵌入式Linux系统开发技术详解(基于ARM)(华清远见教材), 
+嵌入式系统接口设计与Linux驱动程序开发(刘淼).
+(3), kernel入门: Linux内核设计与实现
+(4), 深入学习的参考书: Linux设备驱动第三版(ldd3), 深入理解Linux内核第三版(ulk3).
+2), Linux常用命令, 工具链(gcc, ld, gdb, readelf, objdump, objcopy).
+3), 模拟器: 基于qemu或RTSM的Cortex-A8模拟器使用介绍. 
+4), kernel driver开发流程演示
+(1), svn使用.
+(2), kernel checkout, 编译, commit. driver module. 设备节点.
+(3), kernel driver调试. 
+5), 如何看代码(liuxiaotao). 
+(1), samba+source insight.
+(2), SCP. 
+
+2, 第二周, driver开发基础
+1)-2)由liuxiaotao负责. 3): zhangjian
+1), 最简单的字符设备驱动: file_operation. 
+2), Linux driver开发中常用的API: malloc, 同步(信号量, 自旋锁), timer(按键去抖动), 注意事项.
+3), Linux设备模型. platform bus.
+
+3, 第三周, framebuffer driver开发和机制介绍. 
+
+4, 第四周, Linux porting总结:
+Linux porting包括kernel中machine description, timer, irq, uart. 还有建立最基本的filesystem.
+
+另外, 需要zhaoyuan team 826和882 Linux CVS(kernel, filesystem, application)账号. 
+了解一下Zhaoyuan team如何分析kernel代码, 是否用模拟器?
+
+16:56 2010-7-26
+时间管理
+0, 9:30
+
+1, 本日
+1), 上午, 3h: VC0882 arm总结, 文档和meeting minutes见"11:30 2010-7-24".
+2), 下午, 2h: Linux讨论, 见"16:54 2010-7-26".
+3), 10' VC0882 bootloader添加"-O3 -Otime"选项. 
+4), VC0882 arm总结, meeting minutes整理, 实验, 发信. 
+
+17:09 2010-7-26
+VC0882, VC0718, Linux, 讨论, usb, mengfandong
+Lingming邮件"转发: 下周一下午讨论Linux计划"20100726_1700
+Meng fandong: 
+对Uhost，你要关注一下以下几个设备：USB HDD硬盘，U盘，DVD(RW) ，鼠标，键盘。呵呵718 要求支持这些设备哦，争取直接上linux搞定。
+
+11:27 2010-7-27
+时间管理
+0, 9:50
+
+1, 本日
+1), bootloader代码整理. 
+14:14- cache.s整理.
+2), 根据1)整理VC0882 panda os相关代码并上传.
+
+2, 次日
+
+15:47 2010-7-27
+VC0882, VC0718, Linux, 学习, 第一周: 介绍Linux环境
+Linux内核设计与实现和 Linux设备驱动第三版(ldd3)在\\10.0.13.101\share\linux\doc\book. 
+嵌入式Linux系统开发技术详解(基于ARM)是xiaotao的书. 在他工位上. 
+另外"\\10.0.13.101\share\linux\doc\一周内学会linux系统管理PPT文档.rar"也是一个Linux入门资料, 内容不多, 供参考. 
+其余暂时没有电子书. qemu模拟器资料在"\\10.0.13.101\share\linux\host\tools\simulator\qemu".
+
+17:45 2010-7-27
+同事信息, zhaoyao, 12层, wangxin team, 暂时没有分机, 打8183找.
+
+13:26 2010-7-28
+时间管理
+0, 9:40
+
+1, 本日
+1), 2h: xiaotao DM9000 ethernet training. 
+2), 30': 讨论882 clkrst storperi clocksource gate默认是否打开, 见"13:18 2010-7-26"-3-4).
+
+16:29 2010-7-28
+VC0882, bootloader, clkrst, clkswitch, bus ddrc同步异步切换, <DONE: 已与beihua, huangwei确认>
+1, ddrc里面fifo bypass和bus的sync mode需要配合使用. 
+fifo bypass: bus和ddrc同步.
+2, 流程见ddrc mas
+7.14	FIFO Bypass Switch Flow
+3, 代码需要修改, 先想一想. 
+
+10:12 2010-7-29
+VC0830, VC0882, bootloader, icache为什么要关闭
+VC0830 bootloader是在go之前清icache.
+VC0882 bootloader是go之前关闭icache. 
+
+11:08 2010-7-29
+VC0882, arm, Cortex-A8, cache, 
+1, yangxing总结了使用L2 debug寄存器debug cache和memory不一致的文档.
+2, 回信, 改进建议. 
+谢谢yangxing, 以后分析cache和memory不一致的问题就方便了. 如果能继续改进一下就更好了: 
+1), 关于API:
+(1), API使用说明可以完善一下, 例如example位置, 参数含义说明(从代码看size是word地址, 并不是大家一般用的byte地址, 我感觉byte地址好些).
+(2), API放在test层感觉不太好, 因为咱们架构上不允许driver层调用test层的函数. 
+(3), 目前的API没有考虑L1 dcache.
+(4), 检查一致性的程序最好放在non-cachable区域(例如sram区域), 避免干扰. 
+2), 关于shuyu case:
+(1), "cache数据"保存了log这个挺好的, 可以进一步的保存完成的log, 从系统boot后开始初始化sensor开始到检查一致性结束. 这样便于其它人了解case. 
+(2), 从cache log上可以看到数据不一致, 最好能解释一下不一致数据的来源. 根据之前的分析不一致的数据应该是上一次capture的数据, 最好能证明这个分析. 
+(3), cache和memory数据都没有规律, 看起来不是key color的数据. 我感觉用单色去说明这个问题更清楚一些.
+
+12:39 2010-7-29
+时间管理
+0, 9:40
+
+1, 本日
+1), VC0882 ICP sync up. 
+2), 与huangwei, cuiyunfei, zhaobeihua, yanglei讨论ddrc, bus同步异步切换. 讨论时叫wangwenlei. 讨论后发信. 
+3), 和yangxing讨论cache. 
+
+18:21 2010-7-29
+VC0882, cache, self modify code
+1, wangzhengwei邮件"pmu 测试halt和sleep时发现的self_modify_code isuue"21000729_1806
+经过一个下午，我和zixi，zhangjian，beizhan一起努力，发现该问题，
+经过和jiangbo huangwei yanglei的讨论和确认，解决该问题。
+ 
+先描述一下问题：
+1，   pmu在模式转换测试的时候，发现先测试halt，再测试sleep，会失败。
+2，   如果单步只执行sleep，即不在其之前执行halt，sleep成功。
+3，   如果在执行halt之后，arm debug工具手动停一下，则再执行sleep成功。
+4，   Halt里面需要拷贝代码到sram中，再在sram执行该段代码，主要包含ddr进入自刷新，发送halt指令，wfi，退出自刷新。其中wfi之后需要中断才能退出arm的wfi状态
+5，   Sleep也需要拷贝到sram中，再去执行，主要包含ddr进入自刷新，发送halt指令，wfi。我们预期设计是sleep唤醒之后走bootloader。
+6，   目前，软件设计Halt和sleep拷贝到sram的起始地址是同一地址，即拷贝到同一块sram地址。
+ 
+问题一，
+默认编译选项，设置MMU和L2使能
+build -m=i2c,padc,pmu,sd,fat -dram=128M -define=XCLK_48MHZ=1 -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 -define=SD0_ONLY=1
+在mode transition 执行halt后，再执行sleep，sleep执行错误
+ 
+问题二，
+在WFI和mode transition之间加入memory barrier，目的为了确保mode transition 和wfi的顺序，保证进入到相应的halt和sleep状态
+    ;//memory_barrier
+    isb
+    dsb
+结论：memory_barrier没有效果，执行halt后，再执行sleep，sleep执行错误
+ 
+问题三，
+只使能register strongly ordered，即保证寄存器操作的顺序性，
+build -m=i2c,padc,pmu,sd,fat -dram=128M -define=XCLK_48MHZ=1 -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 -define=SD0_ONLY=1 -define=MMU_REGISTER_STRONGLY_ORDERED=1
+五次（一次成功,4次失败），不通过。
+ 
+问题四，在拷贝到SRAM函数之前，清dcache操作，避免dcache影响
+DCACHE_CLEAN_AND_INVALIDATE_RANGE
+结果:5次失败，不通过
+ 
+解决一，
+关掉mmu，cache，测试
+build -m=i2c,padc,pmu,sd,fat -dram=128M -define=XCLK_48MHZ=1 -define=SD0_ONLY=1 -define=CACHE_OFF=1
+五次：(全部成功)
+ 
+解决二，
+换个地方，即halt和sleep分别拷贝到不同的sram地址，测试5次，全部成功
+Halt：0x20000000
+Sleep：0x20002000
+ 
+解决三，设置sram的strongly ordered，5次测试，全部通过
+build -m=i2c,padc,pmu,sd,fat -dram=128M -define=XCLK_48MHZ=1 -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 -define=SD0_ONLY=1 -define=MMU_SRAM_STRONGLY_ORDERED=1
+ 
+解决四，
+在拷贝到SRAM函数之前，清dcache，清icache
+Halt和sleep拷贝到同一地址，0x20000000，测试5次，全部通过
+ 
+最后，定位该问题为：
+self_modify_code isuue:
+在拷贝代码, 需要清掉L1 icache, L1 dcache, 实际上,我们也把L2清掉
+解决方法为：解决四。
+
+2, wangzhengwei邮件
+D:\VC0882\document\arm\Cortex-a8\ DDI0406B_arm_architecture_reference_manual.pdf
+Self-modifying code
+Is code that writes one or more instructions to memory and then executes them. When using self-modifying
+code you must use cache maintenance and barrier instructions to ensure synchronization. For details see
+Ordering of cache and branch predictor maintenance operations on page B2-21.
+参看这一段：
+B2.2.7 Ordering of cache and branch predictor maintenance operations
+和一段注释：
+Two processes, P1 and P2, share some code and have separate virtual mappings to the same region of
+instruction memory. P1 changes this region, for example as a result of a JIT, or some other self-modifying
+code operation. P2 needs to see the modified code.
+As part of its self-modifying code operation, P1 must invalidate the changed locations from the instruction
+cache. For more information, see Ordering of cache and branch predictor maintenance operations on
+page B2-21. If this invalidation is performed by MVA, and the instruction cache is a VIPT cache, then P2
+might continue to see the old code.
+In this situation, if the instruction cache is a VIPT cache, after the code modification the entire instruction
+cache must be invalidated to ensure P2 observes the new version of the code.
+
+3, zhangjian回复fengbeizhan邮件
+工具还需要完善. 目前只能读L2 cache数据, 没有加L1 cache数据.
+出问题的原因是cpu copy走的是dcache和L2, 取指走的是icache和L2. 如果数据在dcache中, arm取指是看不到的. 
+
+18:45 2010-7-29
+VC0882, Linux, qemu, rvds
+1, 今天基于2.6.27的kernel的training内容xiaotao已经试通了. 
+2, 编译realview Cortex-A8(配置文件自versertile arm926)
+zhangjian@icp-desktop:~/development/Linux-2.6.29_for_882/trunk$ /opt/share/zhangjian/qemu4omap3530/maemo/compilebyZhangJian/qemu-system-arm -M realview -cpu  cortex-a8 -kernel arch/arm/boot/zImage --nographic
+Uncompressing Linux.................................................................................. done, booting the kernel.
+
+Error: unrecognized/unsupported machine ID (r1 = 0x0000033b).
+
+Available machine support:
+
+ID (hex)        NAME
+00000769        ARM-RealView PB-A8
+
+Please check your kernel config and/or bootloader.
+这个应该可以通过改qemu id解决. 
+另外可以试试rvds里面能不能运行这个kernel. 
+
+10:45 2010-7-30
+VC0882, Linux, 下一步
+1, 图形界面调试.
+2, xmanager远程登录. 
+
+10:58 2010-7-30
+VC0882, Linux, ubuntu, 服务器, 使用文档
+apt-cache search libname    //查询本地数据库中的名称是lib的库.
+apt-get install libname     //安装lib
+apt-get update              //更新本地数据库
+
+11:26 2010-7-30
+VC0882, arm, Cortex-A8, cache工具, 
+zhangjian回复yangxing邮件"答复: l2cache测试小工具"20100730_1137
+刚才讨论的工具需要的改进: 
+1), 关于API:
+(1), API使用说明可以完善一下, 例如example位置, 参数含义说明(从代码看size是word地址, 并不是大家一般用的byte地址, 我感觉byte地址好些).
+讨论结果: 取word地址, 比较word地址, 但是mask无用byte. 
+(2), API放在test层感觉不太好, 因为咱们架构上不允许driver层调用test层的函数. 
+讨论结果: 放在driver层. 
+(3), 目前的API没有考虑L1 dcache.
+讨论结果: 可能需要2-3天时间, 先做dcache, 再做icache. 希望都完成. 
+(4), 检查一致性的程序最好放在non-cachable区域(例如sram区域), 避免干扰. 
+讨论结果: zhangjian帮yangxing改. 
+2), 关于shuyu case:
+讨论结果: 重新做一遍, 改进文档. . 
+(1), "cache数据"保存了log这个挺好的, 可以进一步的保存完成的log, 从系统boot后开始初始化sensor开始到检查一致性结束. 这样便于其它人了解case. 
+(2), 从cache log上可以看到数据不一致, 最好能解释一下不一致数据的来源. 根据之前的分析不一致的数据应该是上一次capture的数据, 最好能证明这个分析. 
+(3), cache和memory数据都没有规律, 看起来不是key color的数据. 我感觉用单色去说明这个问题更清楚一些.
+
+12:19 2010-7-30
+VC0882, realview, rvds
+> connect "@system"
+Warning: 0x000b0108: Failed to lock the plugin database: Lockfile error trying to
+remove stale lockfile C:\Program Files\ARM\DSDB\libraries\carv\1.1\80\carv_plugindb
+.xml.lock errno: 13 - Permission denied
+解决: 重新安装rvds, 重新破解. 
+
+12:55 2010-7-30
+VC0882, arm, Cortex-A8, arm开发板, realviewEB, PB-A8
+1, 实验PB-A8
+修改SOC id
+qemu/hw/realview.c
+    if ( strcmp(cpu_model,"cortex-a8") == 0 ) {
+        printf("cpu is cortex-a8, set board_id to PB-A8 0x769\n");
+        realview_binfo.board_id = 0x769;
+    }
+发现timer有问题.
+2, 实验realviewEB+Cortex-A8
+Freeing init memory: 1076K
+Kernel panic - not syncing: Attempted to kill init!
+3, 看来文件系统有问题, 需要花时间看. 
+晚上有时间打算试一试OMAP3530虚拟机.
+4, 实验OMAP3530 qemu
+1), 编译gcc3.4.6
+./configure --prefix=/opt/share/zhangjian/usr --program-suffix=32 --mandir=/opt/share/zhangjian/usr/share/man --infodir=/opt/share/zhangjian/usr/share/info --enable-shared --enable-threads=posix --disable-checking --with-system-zlib --enable-__cxa_atexit --disable-libunwind-exceptions --enable-languages=c,c++ --disable-libgcj --host=i386-linux
+
+15:52 2010-7-30
+VC0882, cache
+1, 如果把section放在最后, 必定只有前11个word是正确的. 
+后来发现是clear bss时清掉的.
+所以把clear bss放后面. 
+2, 把特定*.o放到指定位置的方法
+1), 修改链接脚本:
+    MEM_CACHE 0x20000000
+    {
+       cache_test_api.o (+RO,+RW,+ZI)
+    }
+建议在链接脚本最后加入. 如果在中间加入要注意后面section起始地址会以此递增. 
+0x20000000是目标运行地址. 
+表示cache_test_api.o会运行在0x20000000开始的地址.
+2), Panda_Init.s中加入copy代码段, rw, zi段的代码, 这里以代码段为例:
+    IMPORT  |Image$$MEM_CACHE$$Base|
+    IMPORT  |Image$$MEM_CACHE$$Limit|
+    IMPORT  |Load$$MEM_CACHE$$Base|
+
+    LDR     a1,=|Image$$MEM_CACHE$$Base|               
+    LDR     a2,=|Image$$MEM_CACHE$$Limit|                 
+    SUB     a3, a2,a1 
+    LDR     a2,=|Load$$MEM_CACHE$$Base|
+    BL      Panda_Copy_Area 
+注: 原来panda_init.s中是先清rss后搬移rw. 如果每个section都在连续地址上没有问题. 但现在MEM_CACHE section在0x20000000运行, 所以系统bss区域(MEM_EXEC_ZI)的运行地址可能和MEM_CACHE的加载地址重合, 这样就必须先搬移ro,rw, 再清bss.
+3), 如此搬移后, armcc调转时为了避免bl跳转限制, 先跳转到一个区域, 再用ldr跳转到实际函数地址, 如下例子是调用"CACHE_TEST_Icache时", 先跳到0x4d90c, 再跳到20000000:
+
+0x0001e574:    eb00bce4    ....    BL       $Ven$AA$L$$CACHE_TEST_Icache ; 0x4d90c
+
+    $a
+    $Ven$AA$L$$CACHE_TEST_Icache
+        0x0004d90c:    e51ff004    ....    LDR      pc,[pc,#-4] ; [0x4d910] = 0x20000000
+    $d
+        0x0004d910:    20000000    ...     DCD    536870912
+4), 代码已上传(已经注释, 默认不起作用).
+
+17:25 2010-7-30
+时间管理
+0, 9:40
+
+1, 本日
+1), 15:30-16:30 把特定*.o放到指定位置的方法, 见"15:52 2010-7-30". 
+for yangxing cahe debug tool.
+2), 16:30-17:31 和xiaotao讨论周一内容. 见"17:27 2010-7-30"
+3), 17:31 L2 cache lockdown, 见"17:32 2010-7-30".
+
+17:27 2010-7-30
+VC0882, Linux, training, 1, Linux开发环境和驱动介绍
+1, 内容
+1), Linux参考资料.
+2), Linux基本操作: 基本命令, svn使用, check in, check out.
+3), 模拟器介绍, qemu和rtsm. 
+2, \todo
+1), zhangjian和xiaotao完善文档. 
+2), 周一把自己的书带过来: skyeye, 刘淼, 鸟哥.
+
+17:32 2010-7-30
+VC0882, arm, Cortex-A8, L2 cache lockdown, PLE
+1, 之前的版本PLE总是无效, 使用
+vc0882_20100713_1900_fpgaAll_a8_20100712_L1_32_L2_128_Neon_48M_2fpga_all.ace
+实验.
+仍然不行. 
+2, PLE
+1), 实验arm ple example code. 可以正确搬移. 
+2), 实验panda_os ple, 也正确. 
+3, 看来是lockdown问题. 
+1), 关闭tick.
+2), lockdown size不能超过一个way. 从原来的16384改为16000.
+这样可以看到PLE status 0x2. 
+3), 但是lock还是没有起作用. 
+难道不能用rvdebugger查看? 
+4), 突然发现前3Mbyte区域在cache lockdown是不进入cache的. 
+刚才的实验没有意义, 换地址实验.
+仍然不行.
+3, 看来还是要一步一步来:
+0), cache lock时, L1, L2需要清cache. 
+1), 构造case, PLE搬移后, 用dma修改memory区域数据, dma再读出, 确认修改成功. 然后PLE把数据搬出去, dma读出, 确认覆盖成功.
+4, (21:16 2010-7-30)(晚饭后)
+1), 重新看了L2 lockdown步骤, 要求被lock的数据没有不在cache中. 加入cache clean and invalidate. 
+2), 难道PLE不能这样用? 
+用ldr命令做lock.
+仍然不行. 
+3), 用arm给的最简单的ple代码做
+the ple code is from support-sw@arm.com.
+use ple copy data from memory to L2 cache. 
+start address is 0x200000.
+size is 0x3000. 
+
+the log is as follows: 
+PLE status: 0x0 
+Configuring PLE channel 0...
+Sending start command
+PLE status: 0x2 
+PLE status: 0x3 
+PLE error: 0x0 
+PLE Channels present: 0x3
+确认是可以的.
+4), 再次实验panda_os.
+(1), 之前用panda_os实验时, translation table是在ddr中的. 这样拔ddr肯定有问题. 
+(2), 把translation table放到sram(0x20000000)仍然不行. 下周再继续实验. 
+
+23:14 2010-7-30
+VC0882, bootloader, clkrst, clkswitch, bus ddrc同步异步切换, 续, 代码
+yanglei邮件"答复: async/sync switch流程- DDRC MAS update"20100730_0953
+Hi Zhangjian
+对应的参考代码：
+void ddrc_async2sync()
+{
+    unsigned int reg;
+    int i;
+    i = 0;
+    reg =GETREG32(DDRC_BASE+0x0000);
+    if( (reg&0x080) == 0x000 ) //now in async
+    {
+        #ifndef FPGA
+        //bus sync mode
+        reg = GETREG32(BUS_CLK_CFG);
+        reg = (reg | 0x010); //[4]  0 async, 1 sync
+        SETREG32(BUS_CLK_CFG,reg);
+        #endif
+        //config fifo bypass=1
+        reg =GETREG32(DDRC_BASE+0x0000);
+        reg = reg | 0x080 ; //fifo_bypass=1
+        SETREG32(DDRC_BASE+0x0000,reg);
+        //check result
+        reg = GETREG32(DDRC_BASE+0x0C);
+        while( (reg&0x10000000) == 0x0 )
+        {   reg = GETREG32(DDRC_BASE+0x0c);
+            i++;
+            if( i>200 )
+                printf("ddrc async2sync wait %d times\n");
+        }
+    }else
+    {
+        printf("Now already in sync mode 0x%x\n",reg);
+    }
+}
+void ddrc_sync2async()
+{
+    //ddrc use  PLL 2/6
+    //bus use PLL 1
+    unsigned int reg;
+    int i;
+    i=0;
+    reg = GETREG32(DDRC_BASE+0x0000);
+    if( (reg&0x080) == 0x080 ) //now in sync
+    {
+        #ifndef FPGA
+        //prepare bus clk pll_1 for later async use.
+        reg = GETREG32(BUS_CLK_CFG);
+        reg = (reg&0xFFFFFFFC)| 0x1; //[1:0]  src PLL
+        printf("BUS PLL_1 0x%x\n",reg);
+        SETREG32(BUS_CLK_CFG, reg);
+        while(GETREG32(SYS_CLK_CFG_STATUS) & 0x02);
+        #endif
+        //enable fifo
+        reg = GETREG32(DDRC_BASE+0x0000);
+        reg = reg&0xFFFFFF7F; //fifo_bypass=0
+        SETREG32(DDRC_BASE+0x0000,reg);
+        //check result
+        reg = GETREG32(DDRC_BASE+0x0C);
+        while( (reg&0x10000000) == 0x0 )
+        {   reg = GETREG32(DDRC_BASE+0x0c);
+            i++;
+            if( i>200 )
+                printf("ddrc sync2async wait %d times\n");
+        }
+        #ifndef FPGA
+        //set swtich  bus pll1 ->  pll2/6
+        reg = GETREG32(BUS_CLK_CFG);
+        reg = reg&0xFFFFFFEF;   //[4]    sync_mode = 0
+        printf("BUS ASYNC 0x%x\n",reg);
+        SETREG32(BUS_CLK_CFG, reg);
+        while(GETREG32(SYS_CLK_CFG_STATUS) & 0x02);
+        #endif
+    }else
+    {
+        printf("Now already in Async mode 0x%x\n",reg);
+    }
+}
+
+19:33 2010-07-31
+时间管理
+1, 本日
+1), OMAP3530虚拟机, 跑通标准kernel和文件系统. 见"21:08 2010-07-31"
+
+2, 次日
+1), 关注qiaowei halt->normal后nucleus delay不返回. 
+2), wangzhengwei pmu self-modify code问题需要用trace跟踪复现. 
+
+21:08 2010-07-31
+VC0882, Linux, qemu, OMAP3530虚拟机
+1, 	实验qemu-omap3, 用网站提供的image可以正确启动内核和文件系统.
+自己编译的2.6.29 beagle kernel运行中出错. 跟踪发现是到了rest_init后面死的. 值得调试一下. 
+2, (00:16 2010-8-2)
+maemo qemu-system-arm用gcc34编译uboot也是没法输入.
+用qemu-omap3写入environment信息再用maemo qemu-sysyem-arm, 这样会在kernel启动中死, gdb调试发现在calebrate中死, 跳过该函数后kernel, 文件系统正常.
+下一步注释calebrate实验, 请xiaotao实验ko. 写文档.
+3, (12:16 2010-8-2)
+似乎和host和编译器有关. 在FC10下面用arm2009_q1编译可以. 但是在ubuntu10.4下面不行. 

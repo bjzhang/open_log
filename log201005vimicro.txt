@@ -1,0 +1,3649 @@
+﻿
+11:34 2010-5-2
+VC0882, FPGA, ddr测试
+1, 用rvi通过arm做ddr全空间读写比较. 
+"CVS: VC0882\document\fpga\ddr_mem_test". 使用说明见readme.txt. 
+2, 在aasp命令行测试常用命令, 确认ddr基本可用. 
+编译"min". aasp下测试"he;vi;ver;ti;ex;nuc;st", 输入"yes"或"no", 屏幕显示"RG"RG"后, 输入"end".
+打印信息和测试步骤详见"http://10.0.2.208/mantis/view.php?id=8252".
+3, dmac测试. 
+使用sd_dmac_mmu映像, 输入: 
+icache -on
+dcache -on
+dmac
+directautorandtest 10 0
+详见"http://10.0.2.208/mantis/view.php?id=8782". 
+
+14:18 2010-5-2
+时间管理
+0, 10:33
+
+1, 本日计划和执行
+1), 给zhaobeihua ddr测试方法. <DONE: 完成, 需要加入到VC0882 CVS>, 见"11:34 2010-5-2". 
+2), 找lvhaifang要个串口板用于VC0882实验kgdb. 
+和830量产haifang用的串口子板是一样的. 需要单独供3.3v. 串口是直连线. 
+3), VC0882 A8 cache lockdown. <DONE>
+4), zhanglu sensor测试问题: FPGA7换成FPGA11. 有好转. 等zhaobeihua ddrfifo稳定时再测试(今天zhaobeihua ddrfifo只在一个台子跑通, zhanglu台子有问题). 
+5), 做ddrfifo所需的映像. 给renwei, lixuelian发信, 需要更新文档. 见"15:10 2010-5-2"2
+6), 问haifeng trace版本什么时候出.
+7), 本周总结和下周计划. 
+
+14:48 2010-5-2
+VC0882, FPGA, arm Cortex-A8, L2 cache lockdown, 参考VC0816/VC0830代码, for VC0882 PMU ddr lowpower mode test
+如下是我根据Cortex-A8 TRM和VC0816项目arm926 L1 cache lockdown code修改的Cortex-A8 L2 cache lockdown code, 供你参考(未经测试). 
+修改说见”VC0882”开头的注释. 
+
+;cache lockdown要求(1-4)和流程(5-7), 自Cortex-A8 TRM p225
+;1. Disable interrupts to ensure that no processor exceptions can occur during 
+;the execution of this procedure. If this is not possible, all code and data 
+;that any exception handlers can call must meet the conditions specified in step 
+;2 and step 3.
+;2. Ensure that all data that the following code uses, apart from the data that 
+;is to be locked down, is either:
+;• in a noncacheable area of memory
+;• in an already locked cache way.
+;3. Ensure that the data to be locked down is in a cacheable area of memory.
+;4. Ensure that the data to be locked down is not already in the cache, using 
+;either:
+;• cache clean
+;• invalidate
+;• cache clean and invalidate.
+;5. Enable allocation to the target cache way by writing to the Instruction or 
+;Data Cache Lockdown Register, with the CRm field set to 0, setting L to 0 for 
+;bit i, and L to 1 for all other ways.
+;6. Ensure that the memory cache line is loaded into the cache by using an LDR
+;instruction to load a word from the memory cache line, for each of the cache ;lines to be locked down in cache way i.
+;7. Write to the Instruction or Data Cache Lockdown Register, setting L to 1 for 
+;bit i and restore all the other bits to the previous values before this routine 
+;was started. 
+
+;Cache unlock procedure
+;To unlock the lock down portion of the cache, write to register c9, setting L 
+;to 0 for each bit.
+
+;以下定义仅用于CACHELOCKBYLBIT(含lockDCache, lockICache)
+;VC0882: L2 cache是128k(L1是32k).
+;CSIZE 				EQU 14	;注意和CACHE_SIZE一致
+CSIZE 				EQU 17	;注意和CACHE_SIZE一致
+;VC0882: Cortex-A8 L1, L2都是16word(64byte)
+;CLINE				EQU 5
+CLINE				EQU 6
+;VC0882: Cortex-A8 是8-way. 
+;NWAY				EQU 2
+NWAY				EQU 3
+;VC0882: way mask
+WAYMASK                         EQU 0xff
+NSET				EQU (CSIZE-NWAY-CLINE)
+
+adr       			RN 0    ; current address of code or data
+size      			RN 1    ; memory size in bytes
+tmp       			RN 2    ; scratch register
+tmp1      			RN 3    ; scratch register 
+c9f       			RN 12   ; CP15:c9 register format
+
+
+;====================macro and function definition=========================
+	;macro for cache lockdown, using lockDCache and lockICache instead of this macro
+	;save adr, size in stack 
+	;希望函数返回后adr, size不变, 所以不再返回"allocated way"
+	MACRO
+;	CACHELOCKBYLBIT $op
+	CACHELOCKBYLBIT
+;	str lr, [sp], #-4
+	stmda sp!, {adr,size,lr}
+	ADD     size, adr, size         ; size = end address
+	BIC     adr, adr, #(1<<CLINE)-1 ; align to CLINE
+	MOV     tmp,  #(1<<CLINE)-1     ; scratch CLINE mask
+	TST     size, tmp               ; CLINE end fragment ?
+	SUB     size, size, adr         ; add alignment bytes
+	MOV     size, size, lsr #CLINE  ; convert size 2 # CLINE
+	ADDNE   size, size, #1          ; add CLINE for fragment
+;	CMP     size, #(1<<NSET)-1      ; size to large ?
+	CMP     size, #(1<<NSET)      ; size to large ?
+	BHI     %FT1                    ; exit return victim base
+
+        ;VC0882: L2 是unify cache, 不区分是指令还是数据. 
+;	IF "$op" = "Icache"
+;		MRC     p15, 0, c9f, c9, c0, 1  ; get i-cache lock bits
+;	ENDIF 
+;	IF "$op" = "Dcache"
+;		MRC     p15, 0, c9f, c9, c0, 0  ; get d-cache lock bits
+;	ENDIF
+        MRC     p15, 1, c9f, c9, c0, 0
+
+        ;VC0882: Cortex-A8 L2 是8-way, 下面的test应该逐条test 8个way, 这里只做了
+        ;3个way. 
+;	AND     tmp, c9f, #0xf        ; tmp = state of Lbits
+	AND     tmp, c9f, #WAYMASK    ; tmp = state of Lbits
+	MOV     tmp1, #1              
+	TST     c9f, tmp1             ; test lock bit 0
+	MOVNE   tmp1, tmp1, LSL #1
+	TSTNE   c9f, tmp1             ; test lock bit 1
+	MOVNE   tmp1, tmp1, LSL #1
+	TSTNE   c9f, tmp1             ; test lock bit 2
+	MOVNE   tmp1, tmp1, LSL #1
+	BNE     %FT1                  ; ERROR: no available ways
+	CMP     size, #0                ; no lockdown requested 
+	BEQ     %FT1                    ; exit return size =0
+	
+	MVN     tmp1, tmp1            ; select L bit 
+	AND     tmp1, tmp1, #0xf      ; mask off non L bits
+	BIC     c9f, c9f, #0xf        ; construct c9f
+	ADD     c9f, c9f, tmp1
+
+        ;VC0882: L2 是unify cache, 不区分是指令还是数据. 
+;	IF "$op" = "Icache"
+;		MCR     p15, 0, c9f, c9, c0, 1 ; set lock I page
+;	ENDIF
+;	IF "$op" = "Dcache"
+;		MCR     p15, 0, c9f, c9, c0, 0 ; set lock D page
+;	ENDIF
+        MCR     p15, 1, c9f, c9, c0, 0
+
+5
+
+        ;VC0882: L2是unify cache, 使用ldr指令即可. 
+;	IF "$op" = "Icache"
+;		MCR     p15, 0, adr, c7, c13, 1    ; load code cacheline
+;		ADD     adr, adr, #1<<CLINE        ; cline addr =+ 1
+;	ENDIF	
+;	IF "$op" = "Dcache"
+		LDR     tmp1, [adr], #1<<CLINE ; load data cacheline 
+;	ENDIF
+	
+	SUBS    size, size, #1        ; cline =- 1
+	BNE     %BT5                  ; loop thru clines
+	
+	MVN     tmp1, c9f             ; lock selected L-bit
+        ;VC0882: Cortex-A8 L2 是8-way
+;	AND     tmp1, tmp1, #0xf      ; mask off non L-bits
+;	ORR     tmp, tmp, tmp1        ; merge with orig L-bits
+;	BIC     c9f, c9f, #0xf        ; clear all L-bits
+	AND     tmp1, tmp1, #WAYMASK  ; mask off non L-bits
+	ORR     tmp, tmp, tmp1        ; merge with orig L-bits
+	BIC     c9f, c9f, #WAYMASK    ; clear all L-bits
+	ADD     c9f, c9f, tmp         ; set L-bits in c9f
+	          
+        ;VC0882: L2 是unify cache, 不区分是指令还是数据. 
+;	IF "$op" = "Icache"
+;		MCR     p15, 0, c9f, c9, c0, 1 ; set lock I page
+;	ENDIF
+;	IF "$op" = "Dcache"
+;		MCR     p15, 0, c9f, c9, c0, 0 ; set lock D page
+;	ENDIF
+        MCR     p15, 1, c9f, c9, c0, 0
+
+1
+	;希望函数返回后adr, size不变, 所以不再返回"allocated way"
+	;MOV     r0, tmp1              ; return allocated way
+	;ldr	pc, [sp, #4]!
+	ldmib sp!, {adr,size,pc}
+	MEND
+
+15:10 2010-5-2
+VC0882, FPGA, ddr, ddrfifo, 修改norflash bootloader: 用perl脚本转换的rvdebugger ddr inc初始化ddr
+1, 今日fengbeizhan邮件
+新出的ddr fifo的版本可以使用，感觉比老的ddr 版本更稳定一些，请大家进行使用；
+请注意，脚本要和cf code对应起来；
+wenyan和zhanglu要用新的测试测试，其他人看情况使用；
+init_lpddr_micron_128M_fifo.inc
+vc0882_20100429_2100_notag_ddrfifo_fpgac0403_02041612_2fpga_vc0882_20100429_2100_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+
+2, 修改"create_ddrc_inc.pl. 
+1), 把脚本转为数组(地址, 数值), 包括注释. 希望原来调timing的脚本也支持. 
+(1), ldr r1, =XXX ;表示去XXX地址的数据, 和ldr r1, [r2]作用相同. 只是前者是伪汇编, 后者是arm指令. 
+2), 打印memory脚本名称和生成日期. 
+把文件名和日期加入到ddrc_inc. 在panda_init.s中加入Sys_Print_Ddrc_inc_version_string.
+利用"__2printf"打印. 传递r0是字符串首地址即可(别忘了\0结尾). 
+	IMPORT __2printf
+	EXPORT Sys_Print_Ddrc_inc_version_string
+Sys_Print_Ddrc_inc_version_string
+    push    {r0-r4, lr}
+    adrl    r0, STR_DDRC_INC_VERSION_STRING
+    bl      __2printf
+    pop     {r0-r4, pc}
+3), 保证新旧inc都可以使用. 
+
+3, 上传CVS:
+支持把任意ddrc脚本转为bootloader所需配置脚本. 
+1), 生成bootloader所需配置文件DDRC.inc
+D:\VC0882\panda_os\AppsEntry\init_src\asm> D:\VC0882\document\tools\create_ddrc_inc_v2.pl D:\VC0882\panda_os\init_script\RVD\init_lpddr_micron_128M.inc > DDRC.inc
+2), 编译bootloader
+emi_bootloader_nommucache
+build -m=fat,sd,tools,pmu,emi -dram=128M -define=SYS_ROMBOOT=1 -lds=ads_EMI_Boot.lds -define=XCLK_48MHZ=1 -define=CACHE_OFF=1 -define=DDRC_USING_DDRC_INC_ARRAY=1
+3), 启动时会打印DDRC.inc的原始文件名和生产日期. 
+DDRC INC sourcefile is D:\VC0882\panda_os\init_script\RVD\init_lpddr_micron_128M.inc, generate in Sun May  2 22:19:26 2010
+
+4, \todo
+1), 明天给renwei, lixuelian发信. 需要更新文档. 
+2), 整理调试经验:
+(1), GET DDRC.inc和Sys_Print_Ddrc_inc_version_string需要交换顺序: 如果把前者放后者前面会提示非对齐问题, 因为"DDRC.inc最后是一个字符串: "STR_DDRC_INC_VERSION_STRING"(非4byte对齐).
+A, 修改后的代码. 
+    IF :DEF:SYS_ROMBOOT
+    
+    IMPORT __2printf
+    EXPORT Sys_Print_Ddrc_inc_version_string
+Sys_Print_Ddrc_inc_version_string
+    push    {r0-r4, lr}
+    adrl    r0, STR_DDRC_INC_VERSION_STRING
+    bl      __2printf
+    pop     {r0-r4, pc}
+
+    GET DDRC.inc 
+    ENDIF ; IF :DEF:SYS_ROMBOOT
+B, 如果不修改, 提示: 
+armasm  --debug --keep --cpu=Cortex-A8.no_neon --fpu=None --predefine "SDRAM_FLAG SETL {TRUE}" --diag_style=ide  -c AppsEntry/init_src/asm/Panda_Init.S -o build/AppsEntry/init_src/asm/Panda_Init.o
+armasm : warning A3912:  Option 'c' is deprecated.
+AppsEntry/init_src/asm/Panda_Init.S(496) : romboot selected
+AppsEntry/init_src/asm/Panda_Init.S(1625) : warning A1581:  Added 1 bytes of padding at address 0x5e7
+armasm : 0 Errors, 2 Warnings
+armlink --map --no_remove --symbols --list=map.txt --scatter=./ld_script/ads_EMI_Boot.lds --entry=INT_Initialize --info=totals --datacompressor=off  -o ./build/VC0882.axf  (省略中间大量*.o文件)   ld_script/symtable_16M.txt build/AppsEntry/init_src/asm/Panda_Init.o
+Warning: L6304W: Duplicate input file ./build/Nucleus/Port/Nu_Tct.o ignored.
+Warning: L6304W: Duplicate input file ./build/Nucleus/Port/Nu_Tmt.o ignored.
+Warning: L6318W: Appstart.o(.text) contains branch to a non-code symbol Sys_Print_Ddrc_inc_version_string.
+Warning: L6307W: .text(Appstart.o) contains branch to unaligned destination.
+C, 修改: 要么是把字符串补齐为对齐. 或者把DDRC.inc放在最后. 
+(2), Sys_Print_Ddrc_inc_version_string(): 临时使用了__2printf, 这样不好. 将来需要改为合法额打印字符串函数. 
+(3), 其它: 写程序还是很慢, 需要多锻炼. 
+
+15:39 2010-5-2
+(11:42 2010-5-3)
+时间管理, 本周工作总结(2010年4月26日-2010年5月2日), 下周工作计划(2010年5月3日-2010年5月9日)
+0, 时间过的很快, 又是一周过去了. 
+
+1, 本周工作总结(2010年4月26日-2010年5月2日)
+1), 支持大家用mmu,cache: 部分模块cache无问题. venc有问题. 
+2), NEON: 尝试arm NEON代码, 开始编译错误, 与arm沟通后解决; 测试打开和指令. 运行未出错. 
+3), 测试Cortex-A8 Performance monitor irq, 可以正常报出. 
+4), irq提交测试并测试通过. 
+64bit irq同时触发用了arm的64bit写命令(ldrd). 
+5), AHB-AP访问ddr有错. 本周会继续实验, 必要时给arm发信. 
+6), 阅读TRACE文档. 
+7), 支持工作: 
+(1), 支持yangxing rvdebugger工具使用 for emi debug. 
+rvdebugger脚本中根据表达式计算写memory数据. 
+(2), 给guohaifeng提供工具测试arm mmu和L1 cache问题. 现在guohaifeng已近定位问题, huangwei与arm讨论中. 
+(3), 支持xiaofan spi boot所需的测试软件. 
+注: 本周没有开始的工作是trace. 下周会加速. 
+
+2, 下周工作计划(2010年5月3日-2010年5月9日)
+1), trace: 在PB-A8实验trace. 通过后在VC0882实验.
+2), clkswitch. huangwei给出reg table用1天时间完成代码.
+3), 提供VC0882 bootloader环境.
+4), 确认AHB-AP问题, huangwei会发邮件.
+5), A8 L2等FPGA出版本后测试. 
+6), A8 PLE和CTI interrupt等arm代码. 
+
+17:08 2010-5-2
+VC0882, FPGA, arm Cortex-A8 sub system review(by arm); mmu, L1 cache, 续, IC查A8何种修改导致cache无法使用, 续, DBGNOCLKSTOP造成mmu, cache访问出错
+1, "Ken Phua" <Ken.Phua@arm.com>邮件"RE: CORTEX-A8 & CoreSight review"20100414_0929
+> Hi Huang Wei
+> 
+> My Cambridge colleague has reviewed the sections, please see our comments below.
+> 
+> 5.1.3
+> =====
+> (1) CLKSTOPREQ - 1’b0 - CLKRST can clock gating the CLK input of CORTEX-A8. So don’t use CLKSTOPREQ to stop CLK inside CORTEX-A8
+> 
+> This input does more than just gate the clock - it waits for buffers to flush first, like the WFI.  So you may want to consider whether this behaviour is required.
+> 
+[huangwei] CLKRST is our clock management unit. It will only gated off CLK input of CORTEX-A8 after detection of STANDBYWFI high after WFI is executed. So we tied CLKSTOPREQ low. 
+> 
+> (2) DBGNOCLKSTOP - 1’b1 - 0 = debug disabled while in WFI low-power state; 1 = debug enabled while in WFI low-power state.
+> 
+> You wouldn't want to tie this off to 1, as it will prevent the clocks ever stopping on WFI.
+> 
+> From the TRM: If you implement the CoreSight Debug Access Port (DAP) in your system, ARM recommends that the DAP CDBGPWRUPREQ output is connected to the DBGNOCLKSTOP processor input.
+> 
+[huangwei] OK. i will connect it to CDBGPWRUPREQ.  My understanding on this is core clock "CLK" should be gated off if in WFI state even if DBGNOCLKSTOP is 1. 
+> (3) DBGPWRDWNREQ - 1’b0 - 0 = no request for processor power down; 1 = request for processor power down.
+> 
+> Are you never going to power down the A8?
+> And if you are, are you saying that there would never be any attempt to make a debug access into the A8 while it was powered down?
+> This signal should be driven by the power controller, which should wait for DBGPWRDWNACK before actually removing power.
+[huangwei] A8 is a separate power domain with its voltage capable of scaling . But it will never power down. 
+> 
+> (4) SILICONID [31:0] - 32’b0 - The purpose of the Silicon ID Register is to enable software to identify the silicon manufacturer and revision.
+> 
+> 0x17 for ViMicro (this goes in bits 31:24)
+[huangwei] Before this email, i don't know VIMICRO's id.  I will change it with 0x17.
+> 
+> 5.3.1
+> =====
+> (1) 'AHB interface' should be connected to a master port on the NIC-301 (or equivalent).
+> (2) 'ATB interface' is presumably A8 ETM output
+> (3) 'CTI interface' is presumably A8/ETM CTI i/f
+[huangwei] Yes, current connections are as you wrote. 
+> 5.3.3
+> =====
+> (1) Presumably the debugger view of the CSSYS address map is with the ROM table at 0x00000000 (0x80000000)?
+> 
+> It seems rather a strange choice to have the debug components mapped at 0x60004000 onwards in the system space, rather than a 64KB-aligned address, though.
+[huangwei]  The highest of 2GB space was occupied by DDR in our implementation. I will further study this issue and talk to you on this. 
+> 
+> (2)
+> `define DAP_TARGETID   32'h00000000
+> `define DAP_INSTANCEID 4'h0
+> 
+> The IK tests will fail with these settings.  They should either set them to real values, or a dummy value if they don't intend to use Serial Wire.  Suitable dummy values are:
+> 
+> `define DAP_TARGETID   32'h22222223
+> `define DAP_INSTANCEID 4'h2
+[huangwei] we will use SWJ-DP. In this case, i think a dummy value is not expected. But CoreSight Document never mention how to define these values. Could you help on this?
+> 
+> Best regards
+> Ken
+> 
+
+2, DBGNOCLKSTOP造成mmu, cache访问出错
+GuoHaiFeng邮件"答复: 关于新版的fpga L1若干问题"20100502_1706
+刚才和huangwei又check了一下，并且通过这几个版本的验证，
+基本可以确定cpu_wrapper中DBGNOCLKSTOP = 1’b1; 是有影响的。
+请黄维再研究一下DBGNOCLKSTOP吧。
+
+11:29 2010-5-3
+VC0882, FPGA, norflash bootloader, rvds, rvct, assembler, armasm, IF和ENDIF不配对造成error A1268:  Unmatched conditional or macro
+1, 修改norflash bootloader时发现如下编译错误
+armasm  --debug --keep --cpu=Cortex-A8.no_neon --fpu=None --predefine "SDRAM_FLAG SETL {TRUE}" --diag_style=ide  -c AppsEntry/init_src/asm/Panda_Init.S -o build/AppsEntry/init_src/asm/Panda_Init.o
+armasm : warning A3912:  Option 'c' is deprecated.
+AppsEntry/init_src/asm/Panda_Init.S(1633) : error A1268:  Unmatched conditional or macro
+提示的位置是一个"END" directive. 删除就可以了. 
+
+2, 分析:
+看了看代码, 原来每个汇编文件都是END结束的. 这个为什么不需要呢? 原来的版本删除END会出错. 查文档, 发现每个汇编都需要以"END"结束. 再仔细看提示, 看来是有没有配对的情况. 查代码发现是IF和ENDIF没有配对. 
+
+11:29 2010-5-3
+时间管理
+0, 9:45
+
+1, 本日计划和执行
+1), 上午2h: VC0882 ICP sync up, bootloader讨论.
+2), 上午-15:14(中午2h休息): 上周总结和本周计划
+3), 支持zhaobeihua ddr调试. 
+4), trace: 
+(1), 16:20- PB-A8 trace. 
+(2), guohaifeng如果出了VC0882 trace版本先试一下能否debug, 运行软件. <DONE, 已发邮件>
+5), 用30'写VC0882环境介绍文档: 目录和工具介绍, arm介绍(cache). 
+6), 实验csat访问AHB-AP. csat连接中到底会不会reset寄存器. 跟进上次arm RVIahbload回复. 
+
+2, 次日计划
+1), VC0882 bootloader环境.
+2), TRACE
+3), trace位宽. 
+
+16:51 2010-5-3
+VC0882, trace, 发信问是否支持32bit. 
+trace2的文档写了支持32bit, 但是随trace送的线只有16bit. 
+Support-sw@arm.com
+
+17:36 2010-5-3
+VC0882, FPGA, trace, jtag clk不是clkpin造成系统不稳定(见"1"); 实验PB-A8
+1, zhangjian邮件"VC0882 TRACE问题: connector 10号才能到会影响A8进度"20100503_1605
+刚才和zouweiran, laowan沟通, 说TRACE的connector要5月10日才能到, 这样留给我调试trace的时间就很少了. 
+我现在只能现在PB-A8上熟悉trace. 
+另外刚才实验guohaifeng的trace版本. 在FPGA7上连接arm无法停止. 在FPGA26上不开mmu开icache可以运行简单程序. 开mmu会跑死. 感觉这个版本不太稳定.
+
+2, 后来yangzuoxing和zouweiran, wanshuiming沟通, 发现trace 16bit是有的.
+
+3, guohaifeng修改jtag转接板: 
+将原来连接TRACE_CLKA和socket之间的连线掐断，
+连接socket的一头用飞线连接JTG_TCK，连接TRACE的一头用飞线连接TRACE_CLKB。
+
+4, 实验"3"的子板, 开mmu, cache dma "directautoranttest 10 0" pass. 3和1的不同是"1"的jtag clk不是clk pin. "3"是. 
+
+5, trace2由ICE供电, ICE初始化后trace PWE会亮.
+将原来连接TRACE_CLKA和socket之间的连线掐断，
+连接socket的一头用飞线连接JTG_TCK，连接TRACE的一头用飞线连接TRACE_CLKB。
+
+6, PB-A8 getting started(自PB-A8 user guide):
+1), 背面串口是右上是uart1. 38400 8n1.
+2), trace接口在机箱里面. J54是低位. 
+3), (16:06 2010-5-9)user switch.
+(1), config=off. =on表示烧写FPGA状态. 这种状态不会启动"ARM PBA8 Boot Monitor"
+(2), user switch: 默认都是off. 表示用uart作为输入输出设备等等. 具体参见PB-A8 user guide. 
+
+7, Tracing Tutorial
+> analyzer,connect
+Initialising Trace Support
+Warning: Not connected to the ETM
+Error V20017 (Vehicle): Logic Analyzer is not setup. See Output log for details.
+Error: [TA0003] Could not initialise ETM trace support
+
+8, 应该是需要配置寄存器. 
+
+11:45 2010-5-4
+时间管理
+0, 11:35
+
+1, 
+1), 请半天病假. 给laowan发邮件要PB-A8和trace联系方式. 
+2), 今天希望完成PB-A8 trace. 
+3), huangwei arm邮件明天再回.  
+
+2, 次日计划:
+2, 明日计划:
+1), PB-A8 TRACE. 由于TRACE之前没有用过, 进度受arm和亿道支持程度影响很大. 
+2), arm邮件. (上午完成).
+3), clkrst code.
+4), 下午training. 
+
+14:55 2010-5-4
+同事信息, dave秘书, 孙莹莹
+Aiguo邮件"转发: 中星微及中星电子项目统计（2010-4月下）"20100504_1451
+Wangyang要离职了，新来的秘书是孙莹莹。
+
+14:57 2010-5-4
+VC0882, arm support
+1, arm回信: Felix Liu [mailto:Felix.Liu@arm.com]邮件"转发: ARM support to Vimicro"20100504_1120
+Some responses for their issues below. I will tell ASD internally that Vimicro is freezing their RTL in May so that they can prioritize. However, we need to let Vimicro understand that they need to work with our support system. If they have an issue, send an email out to us early and respond to our emails so that we can help them. They have a habit of not responding to our emails and we don't know what happened after.
+I have also helped them to do a quick review of their A8+Coresight integration for free. Vimicro needs to know that we are helping but some things take time.
+
+>1. CoreSight Validation
+I don’t see any cases with regard to Coresight validation. During the training, we understood that they have not started Coresight validation and we presented the steps that they need to take to validate their Coresight system in the DK-A8. Have they started or passed any of the validation tests ? If yes, at which stage have they encountered a problem ? If there is a particular test failure, please describe the failure and send the information to support-cores@arm.com  so that we can help.
+>2. L2 cache implementation on FPGA
+Our AE based in the US is still working on this issue. I’ll check with him on progress.
+The issue is that our internal FPGA implementation is based on an old r2p0 version and not the most current r3p2 version. This means rework is necessary. In addition, implementing an A8 into a single fpga is a very challenging task.
+(INTERNAL: Normally, we don’t help customer do their fpga implementation. SDD doesn’t like the idea. We only offer guidelines. However our AE is trying to help Vimicro on his own with very little help from the A8 design team as they are very busy with Eagle at the moment. Progress has been slower than expected as A8 is a big design.)
+
+>3. PB-A8 support
+>6. RVIahbload download fail
+I see a case 463133 with regard to PB-A8 and our AE has replied and suggested something to try. There is no further reply from Vimicro so we don’t know if the information provided has resolved their problem.
+If not, please ask them to continue to respond to our AE to get their issue resolve. What other PB-A8 support ? Please ask them to use support-cards@arm.com .
+>4. AHB-AP access memory: sram pass but DDR fail
+Have they send an email in ? If yes, can we have the case number ? At the moment, I don’t know what the problem is. We had a discussion during the training about a rather similar problem and we have responded to that.
+>5. how to configure RVD to support ETM and trace
+Would Karl or Jason be able to help them out quickly ? Since Shanghai is out until Wednesday. If not, I would recommend that they send an email to support-sw@arm.com .
+>7. code examples for thumb2 & thumb2-ee, L2 PLE, etc
+Not sure if we have that, again support-sw@arm.com would be the best approach. Our SW AEs would know.
+
+2, 沟通技巧要逐步提高. 其实huangwei问问题把我的问题简化了很多, 我应该坚持的. 
+直接邮件问具体问题的确是比较正常的沟通渠道. 
+arm的邮件我只有RVIahbload问题和arm validation没有回复. 前者缺乏进一步实验. 后者暂时没有时间做. 
+
+3, 回复huangwei邮件(草稿, 未发送):
+1), 已经解决的邮件都已回复. RVIahbload问题和arm validation没有回复. 原因是这两个问题优先级略低, 暂时没有时间做进一步实验. 
+
+4, PBA8, trace邮件
+support-cards@arm.com 
+TRACE connection error on PB-A8
+
+hello mate,
+
+There is a TRACE connection error on PB-A8, my steps are as follows: 
+1, Power up RVI, TRACE2 and PB-A8. 
+wait PB-A8 boot monitor print the following message:
+ARM PBA8 Boot Monitor
+Version:    V4.1.3
+Build Date: Mar 10 2008
+Tile Site : Tile Not Fitted
+Endian:     Little
+>
+2, connect and configure Coresight resigter according to "DUI0322C_rvd_trace_guide" "B.3.1 Configuring your CoreSight development platform". only CSTFunnel_n is not configured.
+3, connect PB-A8.
+4, connect analyzer, the error messages are as follows: 
+> analyzer,connect
+Warning: Logic Analyzer by ARM for Cortex-A8_0 is not available.
+Error V20017 (Vehicle): Logic Analyzer is not setup. See Output log for details.
+
+5, (21:13 2010-5-5)
+support-cards [support-cards@arm.com]邮件"Re: TRACE connection error on PB-A8 (463399)"20100505_0020
+[From Gerard Staines - ARM Technical Support]
+Please quote reference number 463399 when referring to this issue.
+Jian,
+You wrote:
+> hello mate,
+Greetings!
+> There is a TRACE connection error on PB-A8, my steps are as follows:
+> 1, Power up RVI, TRACE2 and PB-A8.
+> wait PB-A8 boot monitor print the following message:
+> ARM PBA8 Boot Monitor
+> Version:    V4.1.3
+This is not the latest version; v4.1.7 is, but that shouldn't make any difference to trace.
+> 2, connect and configure Coresight resigter according to 
+> "DUI0322C_rvd_trace_guide" "B.3.1 Configuring your CoreSight 
+> development platform". only CSTFunnel_n is not
+> configured.
+I believe this is the cause of your problem. If you do not correctly configure the funnel, you won't get any trace. Please refer to and follow the specific PB-A8 instructions given in this FAQ:
+http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.faqs/ka11687
+.html
+Note that your debug FPGA probably won't need updating - the FAQ is quite old. However, if you have the latest Versatile family CD-ROM, it would be good to update all the FPGA/PLD images just in case.
+If and when you do get trace working, you might also want to read these FAQs about the relative clock speeds and trace bandwidth on this
+platform:
+http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.faqs/ka13408
+.html
+http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.faqs/ka13408
+.html
+
+16:19 2010-5-4
+VC0882, 项目总结, 经验
+1, VC0882有风险的内容应该提前准备:
+1), 实验Cortex-A8及其Coresight应该先行. 
+2), Virtex5 FPGA台子. 
+2, 为了保证项目进度, 资源要协调好. 例如RVI, TRACE2, ddr, 台子. 
+
+16:46 2010-5-4
+亿道, Trace, PB A8的支持可找深圳亿道的 陈吏宏， 0755-83142770-807, 13425121935, lihong.chen@emdoor.com.cn
+
+17:24 2010-5-4
+VC0882, trace, 
+1, IHI0014O_ETM_ArchSpec.pdf
+chapter3 Programmer’s Model
+
+19:22 2010-5-4
+VC0882, status track
+1, 今日计划:
+1), TRACE继续看文档和实验中. 目前还连接不上TRACE. 问题已经发给arm和亿道. 同时继续看文档. 
+2), 5月3日 FPGA trace版本不稳定问题在5月3日晚上已解决. 
+3), 今天继续email问arm问题, 所以clkrst暂时没有开始.
+2, 明日计划:
+1), PB-A8 TRACE. 由于TRACE之前没有用过, 进度受arm和亿道支持程度影响很大. 
+2), clkrst code.
+3), 下午training. 
+
+21:05 2010-5-4
+VC0882, FPGA, arm cortex-a8, PLE
+1, arm邮件
+twos issue on PLE and L2 cache
+1), can you give us an example preload data from memory to L2 cache using PLE and generate an interrupt after transmit is done. All the operation is in non-secure world.
+2), if L2 cache size 0k, what is the PLE transmit result. Undefined instruction or transmit fail or others? 
+
+notes:
+1), this is a cortex-a8 based system.
+2), In our Soc, Cortex-A8 L2 is 128K. L2 0k for test.
+
+2, PLE(Cortex-A8 TRM阅读):
+wfi会挂起ple, 如果不希望挂起需要软件保证: 
+If it is important for the PLE channels to complete the data transfer, software must poll each PLE Channel Status Register for a status of completion or error. When each channel has completed, software can then execute the WFI instruction.
+
+9:43 2010-5-5
+时间管理
+0, 9:15
+
+1, 
+1), 杂.
+2), 阅读memory barrior doc, 并与huangwei讨论.
+3), 阅读csat trace文档. 
+4), 下午training时, 可以把FPGA搬过去一个. 顺便演示下载编译等. 
+5), csat通过ap0访问ddr fail. 简单实验register是否reset就给huangwei发信. <DONE>
+
+2, 今日进展
+1), 阅读memory barrior doc, 并与huangwei讨论.
+2), 阅读csat trace文档. 
+3), 14:00-16:13 training.
+
+3, 次日计划:
+1), mem_test编译通过. 明天调试. 
+2), dmac开cache. 
+
+9:54 2010-5-5
+VC0882, arm cortex-a8, coresight, interrupt
+1, how to test cortex-a8 interrupt
+
+2, (17:57 2010-5-7修改)huangwei上次说的interrupt测试寄存器需要切换到integration mode才能测试. 
+地址见TRM 484.
+1), Management registers
+Management register是"Table 12-3 Debug memory-mapped registers"的一部分.
+Offset  Register number Access  Mnemonic    Power domain
+0xEF8   958             RW      ITCTRL-EOC  Core
+0xF00   960             RW      ITCTRL      Core
+根据"D:\VC1600WCVS\doc\arch\vc0882\VC0882 memory and register mapping.xls" Cortex-A8 Coresight dbg register: 0x6000c000.
+2), Cortex-A8 TRM p491: 
+12.5.5 Integration Mode Control Register
+The read/write Integration Mode Control Register enables the processor to switch from a functional mode which is the default, into integration mode, where the inputs and outputs of the device can be directly controlled for integration testing or topology detection. When the processor is in this mode, you can use the Integration Internal Output Control Register or the Integration External Output Control Register to drive output values. You can use the Integration Input Status Register to read input values.
+
+[0] Integration mode enable Integration mode enable bit:
+0 = normal operation, reset value
+1 = integration mode enabled.
+When this bit is set to 1, the processor reverts into integration mode to enable integration testing or topology detection.
+3), TRM p488: 
+12.5.3 Integration External Output Control Register
+When the processor is in integration mode, you can use the read/write Integration External Output Control Register to drive certain debug unit outputs to determine how they are connected to other parts of the system.
+
+[7] nDMAEXTERRIQ nDMAEXTERRIRQ. This signal drives the nDMAEXTERRIRQ output. If this bit is set to 1, the corresponding internal nDMAEXTERRIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[6] nDMASIRQ nDMASIRQ. This signal drives the nDMASIRQ output. If this bit is set to 1, the corresponding internal nDMASIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[5] nDMAIRQ nDMAIRQ. This signal drives the nDMAIRQ output. If this bit is set to 1, the corresponding internal nDMAIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[4] nPMUIRQ nPMUIRQ. This signal drives the nPMUIRQ output. If this bit is set to 1, the corresponding internal nPMUIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[3] STANDBYWFI STANDBYWFI. This signal drives the STANDBYWFI output. The reset value is 0.
+[2] COMMTX COMMTX. This signal drives the COMMTX output. The reset value is 0.
+[1] COMMRX COMMRX. This signal drives the COMMRX output. The reset value is 0.
+[0] DBGACK DBGACK. This signal drives the DBGACK output. The reset value is 0.
+
+3, 设置ITCTRL=1(寄存器数值无变化(仍是0)). ITCTRL-EOC中DMA irq写入1(寄存器数值仍是0). 而且irq模块没有报出中断. 根据文档, 需要结合"CoreSight_DKA8_r2p0_Integration_Manual.pdf", "DDI0344J_cortex_a8_r3p2_trm.pdf"查看. 
+
+10:06 2010-5-5
+VC0882, FPGA, arm cortex-A8, memory barrior, 
+1, zhangjian回复"答复: 再谈A8配置硬件寄存器"
+又详细查了文档, 大家可以参考"D:\VC1600WCVS\doc\module\Cortex-A8\doc\ARMv7_architecture\DDI0406B_arm_architecture_reference_manual.pdf". 
+我理解如下: 
+DSB是只保证memory access顺序, 也就是dsb前后的memory access顺序会保证. 例如
+ldr r0, [r1]
+dsb
+str r0, [r1]
+中str一定会在ldr后面执行. 另外DSB在之前架构中是DWB(Drain Write Buffer).
+DMB不仅保证memory access顺序, 也保证所有指令的顺序. 比如arm内部的一些操作.
+如果只是保证指令执行顺序, 可以用isb. 
+
+相关文档如下: 
+A8.6.41 DMB
+Data Memory Barrier is a memory barrier that ensures the ordering of observations of memory accesses, see Data Memory Barrier (DMB) on page A3-48.
+
+A8.6.42 DSB
+Data Synchronization Barrier is a memory barrier that ensures the completion of memory accesses, see Data Synchronization Barrier (DSB) on page A3-49.
+
+A8.6.49 ISB
+Instruction Synchronization Barrier flushes the pipeline in the processor, so that all instructions following  the ISB are fetched from cache or memory, after the instruction has been completed. It ensures that the effects of context altering operations, such as changing the ASID, or completed TLB maintenance operations, or branch predictor maintenance operations, as well as all changes to the CP15 registers, executed before the ISB instruction are visible to the instructions fetched after the ISB.
+2, 发信给huangwei, cc VC0882_ICD. 
+刚才对DMB的描述可能不太准确. DMB比DSB肯定功能强. 具体强在哪里我暂时没查清楚. huangwei你清楚么? 
+另外, 请大家不要通过先写后读这种方法保证寄存器正确写入. 因为:
+1), 这样可能掩盖IC bug. 如果寄存器在apb给出reponse后才生效. 先写后读也能保证不出错. 
+2), 如果是W1C或WO寄存器还是没法保证顺序. 
+3), 这样用不符合armv7的架构. 将来用户会按armv7手册使用. 
+
+3, Huangwei邮件""20100505
+DMB: 只是保证DMB前面的LOAD/STORE指令引发的 memory access 完成后 DMB后面的LOAD/STORE指令引发的memory access才完成，但不影响非 LOAD/SOTRE指令的执行顺序 
+DSB: 保证DSB前面的所有指令完成后DSB后面的指令才能执行
+所以DSB比DMB更严格一些
+另外，VC0882的 APB address space 应该要设置为 device memory.
+
+4, 谢谢huangwei.
+我之前理解有点问题. 
+Dsb比dmb强, 这个我理解了. 但具体强在什么地方我还是不太明白.
+我现在理解是dsb比dmb多了cache, tlb, 分支预测这个的barrior.  Arm汇编手册(DUI0204I_rvct_assembler_guide.pdf)p257: 
+
+DMB
+Data Memory Barrier acts as a memory barrier. It ensures that all explicit memory
+accesses that appear in program order before the DMB instruction are observed before any
+explicit memory accesses that appear in program order after the DMB instruction. It does
+not affect the ordering of any other instructions executing on the processor
+
+DSB
+Data Synchronization Barrier acts as a special kind of memory barrier. No instruction
+in program order after this instruction executes until this instruction completes. This
+instruction completes when:
+• All explicit memory accesses before this instruction complete.
+• All Cache, Branch predictor and TLB maintenance operations before this
+instruction complete.
+
+另外, Arm_arm_7AR p162 提到dsb和dmb都是只针对load/store:
+The DMB and DSB memory barriers affect reads and writes to the memory system generated by load/store
+instructions and data or unified cache maintenance operations being executed by the processor. Instruction
+fetches or accesses caused by a hardware translation table access are not explicit accesses.
+
+5, 上面邮件huangwei暂未回复.
+
+6, Kongyingqi邮件"Re: Re: 再谈A8配置硬件寄存器"20100505_1519
+根据最新的研究情况：
+对于中断控制器的寄存器和后面带有fifo的寄存器，都要保证数据的操作顺序。
+所以要把这种情况的寄存器设置为strongly ordered。
+否则如果设置成device，那么arm发出axi写请求时会把awcache置1，这样bvalid就不会等待pready而提前返回。
+这样就会出现前述问题。
+所以,目前看来这个问题的根源还是对于mem type的设置问题。只要设置正确，也不需要DSB等指令。如果设置不正确，
+DSB指令的判断依据应该也是bvalid。但这个信号也是不准确的，这指令只是会插入些延时把问题掩盖罢了。
+
+7, zhangjian回复kongyingqi上面邮件:
+1), 我的理解是如果要保证寄存器配置之前的顺序是应该用strongly-order. 否则Device就可以了. 
+2), 从文档看, dsb会保证memory access完成(Data Synchronization Barrier is a memory barrier that ensures the completion of memory accesses). 
+这和yingqi实验的结果不太一样. 担心以后软件使用有风险. 能不能请huangwei和kongyingqi一起分析一下? 
+
+8, 晚上Cortex-A8 sync up时.
+大家讨论认为, 还是要继续追查. 不论device还是strongly-ordered. 都应该可以. kongyingqi会继续仿真并于jiangbo, zhangxuejian讨论. 担心是bus的bug. 
+另外, 据gemeiping说, arm建议中断控制器和其它带fifo的设备用strongly-ordered. 但是VC0882配置寄存器没有fifo, 所以除了中断, 其它应该是配成device. 
+
+9:36 2010-5-6
+时间管理, 周进度(2010年5月2日-2010年5月9日), VC0882, bottleneck sync up
+0502 done::
+1. neon is ok
+2. prepare for trace debug
+3. provide the code for l2 lockdown
+4. irq for performance monitor is ok
+0503 todo:
+1. debug for trace on fpga
+2. use trace on pb_a8
+done:
+1. try trace on pb_a8
+2. environment/software support
+0504 todo:
+1. debug trace on pb_a8
+2. will debug trace for 882 after 1 is ok
+done:
+1. ask help from emdoor and arm for pb-a8 trace
+2. read trace document and test it on pb-a8
+0505: 
+todo:
+1. debug trace on pb_a8
+2. will try item4,6
+3. will ask arm about item7
+done:
+1. trace on pb_a8 is ok
+2. csat access ddr error because the register of ddr is changed
+3. send email about ple and get the response from arm
+4.  send email to arm about RVIahbload download fail
+0506 todo:
+1. give test code for ddr gate training(指搜参数).
+2. try trace on 882
+3. try csat access ddr
+4. wait the feedback from arm about  RVIahbload download fail.
+5. try ple code from arm (this Friday)
+
+10:16 2010-5-6
+时间管理
+0, 9:31
+
+1, 本日计划和执行
+1), wait the feedback from arm about  RVIahbload download fail. 见"14:28 2010-4-28"6
+2), give test code for ddr搜参数. <DONE: 整理代码, 修环境bug>
+
+2, 次日计划:
+1), try ple code from arm (this Friday)
+2), try RVIahnbload on VC0882 FPGA.
+3), dmac开cache. 
+4), VC0882: 加入barrior函数. 最好能区分是否A8, 如果不是A8做为nop(编译器是否支持?). 
+
+4, 四象限
+1), trace位宽. <已取出, DONE(似乎是前天查的)>
+2), "11:11 2010-4-27"suxin实验了一次系统调用时间需要200ms. 会问arm是否正常. 关注.  <DONE: 见"16:40 2010-4-29">.
+
+10:36 2010-5-6
+1, fengbeizhan邮件"fpga底板的电压问题"20100504_1439
+有个问题和大家讨论一下，目前beihua在调试ddr3时，把底板的电压改成1.5v了，但是最近几天beihua都没有调试ddr3，而其他人想用这套板子，由于电压的问题就不能用了，闲着了一套资源，现在fpga资源还是很紧张的；
+1）   有什么好办法可以通过跳线调整电压吗？
+2）   beihua的ddr3还要调试多长时间？以后是不是其他fpga地板也要修改成这样才能测试ddr3？
+2, Mike WX Chen"答复: fpga底板的电压问题"20100506_1035
+板子右上角的跳线J22可以选择I/O电压是否是1.8V还是1.2V.
+目前，我们只是将beihua使用的那个FPGA板由1.2V――改为1.5V，I/O电压还是可以选择成1.8V。建议插子板前，先测量对应插座的电压。如果不会，通知SV组吧。
+其他FPGA板也需要将1.2V――改为1.5V，才能测试DDR3。
+
+11:22 2010-5-6
+VC0882, FPGA, ddr搜参数
+1, vc0882_20100427_2200_ddrfifo0503_fpga_all_02041612_2fpga_vc0882_20100427_2200_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+2, 调dmac
+1), boot/bootloader.c:56: error: stray '\243' in program
+原因是括号是全角括号.
+2), 增加一个rvdebugger脚步. vector.S用链接脚本的符号确定是否需要搬移RW段. 
+3), dmac比较有错, 后来发现是一个要比较的地址, 在搬移后设置了断点. 
+4), 用默认优化时_s++会被优化, 不明白是为什么. 暂时改为"-O0". \todo
+VOID VIM_LIB_Memset(VOID *s, INT32 c, INT32 n)
+{
+    INT8 * _s = s;
+    while(n-->0){
+        *_s = c & 0xff;
+        _s++;
+    }
+}
+
+3, DDRC稳定性测试程序
+zhaobeihua邮件"DDRC稳定性测试程序"20100506_1057
+该程序的目的是要在DDR Controller的许多种可能的配置下，找到一个或者多个能够使DDR Controller在不同的FPGA底板，不同的应用情况下稳定工作的配置值。配置值搜索工作集中于DQ3_DLY这个寄存器（其地址为：0x6001_10B4）。DQ3_DLY这个寄存器是用来控制DDR PHY的input enable特性的，包括了两个控制域bit 7~4和bit 3~0。Bit 7~4用来将dqs input enable信号作延迟（以1/4 clk_0为单位），Bit 7~4的取值范围为0到7，如果将bit 7~4设为0，那么dqs input enable信号将保持原有的相位，如果将bit 7~4设为1，dqs input enable信号相位就会滞后1/4 clk_0，其它值依次类推。Bit 3~0用来将dqs input enable信号的持续时间延长（以1/2 clk_0为单位），bit 3~0的取值范围为0到7，如果将bit 3~0设为0，那么dqs input enable信号的持续时间将在原有的长度上再扩展1/2个clk_0的时间，如果将bit 3~0设为1，那么dqs input enable信号的持续时间将在原有的长度上再扩展1个clk_0的时间，其它值依次类推。
+ 
+对测试程序的建议。测试程序应当覆盖所有8 × 8这64种可能的配置。这里，我们建议的配置扫描流程是，首先固定一个DQS EN信号的延迟值（也就是固定bit 7~4），然后不断的加长DQS EN信号（也就是不断的增加bit 3~0），在每一种DQS EN信号延长值的条件下使用DMA测试DDRC的正确性，在所有8种DQS EN信号延长值都遍历以后，再使用一个新的DQS EN信号的延迟值，然后再遍历8种DQS EN信号延长值，依次进行下去直到64种配置都测试过。
+另外，如下两个寄存器的值需要修改，但修改后无需在每一次遍历测试中改变。这两个寄存器是：RD_SL（0x6001_1074）和DRAM_TIMING4（0x6001_1038）。寄存器RD_SL必须设置为0x0，而DRAM_TIMING4的bit 11~8设置为D
+
+3, dmac 
+burst length = 4 or 8.
+size = 0x1000000
+
+4, offset = 0, addon = 0, access ddr memory region lead to dataabort.
+
+5, (1:13 2010-5-7)中断处理费了半天劲. 后来google发现arm文档写了但是当时没有理解. 
+1), push	{r0-r3,lr}
+bl		data_abort_handler
+pop		{r0-r3,lr}
+movs	pc, lr	
+
+movs会同时恢复spsr到cpsr. 
+2), (17:52 2010-5-11)
+movs, 与前面日志合并
+movs中的s, 基本含义表示指令会影响cpsr. 
+如果"movs pc, rm"表示rm赋给pc时, spsr替换cpsr. 详见ARM_ARM_7AR p1583 "B6.1.13 SUBS PC, LR and related instructions"
+"17:52 2010-5-11"end
+6, (13:36 2010-5-7)beihua说由于ddr_phy fifo 指针问题, 每次搜索参数后都需要重新reset ddr phy. 于是我请教cuiyunfei, 为什么830里面不需要, cuiyunfei解释如下:
+CuiYunFei邮件"答复: DDRC稳定性测试程序"20100507_1335
+主要是有如下考虑：
+1. ddr phy目前是异步fifo结构和830不一样和最初的phy也不一样，这会导致在phy出错后一致错下去，即使timing窗口是对的也会出错，这个和ASIC 版本一样，所以在ASIC 版本的training里我们每training一此就会对phy中的itm元素复位一下，以便对异步fifo进行清零操作。所以reset phy是必要的。而830的读数据控制是由ddrc来控制的，而不是由异步fifo来控制的，所以不会有这样的问题。
+2. 为了防止由于training时的错误而使ddrc死掉，在ddrc里我们做了些机制，当多数或少数时会去掉多余的数或自动补偿少的数，已使bus不会死的，但数据肯定是错误的，同时ddrc的rddata error寄存器会置高。所以如果这个补偿逻辑没有问题的话，通常是不需要reset的ddrc的。
+如果beihua用异步fifo的架构测试过程中发现有arm死掉不动，或手动读memory执行不了的情况，说明arm已经死掉，补偿逻辑并未完全做补偿，因为补偿逻辑不在正常ddrc function测试 之列，所以估计杨磊也并未对此进行大量有针对性测试。
+如果没有发现这些情况，可以 认为补偿逻辑正常，这样只需reset phy就可以了，但reset phy最好只是reset 异步相关fifo逻辑。
+
+7, 与cuiyunfei讨论一下. 补偿逻辑是否需要仿真; ddrc mas中没找到reset ddr phy的寄存器.
+
+11:57 2010-5-6
+VC0882, FPGA, 调试经验
+1, fanxiaofan: jtag转接板插上跳线后D9, D11灭, 再插上RVI后d9, d11亮. RVI重新上电后, d9, d11灭. 
+注: 
+1), 这个RVI是从arm借来的. 没有使用差分线. 
+2), 当时用公司买的RVI(差分线)实验, 没有这个问题. 
+2, FPGA7 ACLK(FPGA左上角)晶振的左上引脚没有插上, 造成RVI连接VC0882 arm后无法停止. 
+
+14:35 2010-5-6
+软件技巧, editplus, TAB转为空格
+Windows->preference->C/C++->Code style. 自己新建一个, 我继承了K&R. 
+设置: Indentation->Tab policy为Spaces only. 
+
+11:13 2010-5-7
+VC0882, FPGA, arm Cortex-A8, mmu, L1 cache, 续, Kongyingqi ASIC仿真出错
+1, kongyingqi邮件"a8 mmu问题"20100507_1109
+现在的ASIC版，使能mmu后，程序会跑死，关闭mmu则正常。波形在：
+/work/kongyq/project/vc0882/vrf/sim_asic/log_x2x/
+打开mmu后的出错波形：verilog_000.fsdb
+关闭mmu后的正确波形：verilog_ok.fsdb
+
+11:14 2010-5-7
+时间管理
+0, 10:35
+
+1, 计划
+1), 整理fpga memscan程序. 
+2), 下午SDIO讨论. (中午看spec).<DONE>
+3), try trace on 882.
+4), try csat access ddr
+5), 实验"9:54 2010-5-5"2.
+6), 发信装双网卡. \todo: 见"11:24 2010-5-7".
+
+2, 次日计划:
+1), try ple code from arm (this Friday)
+2), try RVIahnbload on VC0882 FPGA.
+3), dmac开cache. 
+4), VC0882: 加入barrior函数. 最好能区分是否A8, 如果不是A8做为nop(编译器是否支持?). 
+
+11:24 2010-5-7
+VC0882 vivante GPU Linux driver porting, 需要双网卡.
+duanxiaohui, xuelian, wanshuiming, lvhaifang
+cc yangzuoxing, beizhan, aiguo
+
+Hi, duanxiaohui
+
+测试室10有台机器需要加一块网卡, 供VC0882 GPU driver移植时使用. 
+这个机器需要与VC0882 FPGA直连. 同时需要加入网络.
+
+17:10 2010-5-7
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM;RVI, trace2驱动; 文档, 总结
+1, 驱动
+如果提示trace2无法安装驱动, 可以手动选择如下目录安装驱动:
+C:\Program Files\ARM\RVI\Drivers\usb_driver\1.3\39\win_32-pentium
+注: 这个也是RVI的驱动. 
+2, vc0882_20100505_2230_fpgac0301_02041612_2fpga_vc0882_20100505_2230_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+3, 可以用script_trace_VC0882.inc配置coresight component regiser. analysis windows可以连接. 但是程序运行时trace不到数据. 
+4, GPIO_A14配置为output.
+GPIO_A_CFG(0x60051000)=0, 选择为normal function.
+GPIO_FS_SYS(0x60051040)=0. 选择trace control.
+
+18:29 2010-5-7
+时间管理, VC0882, arm cortex-A8, 今日进展, memscan, integration mode, irq, trace
+1, 今日进展: 
+1), 支持zhaobeihua使用FPGA memscan程序. 等待huangwei加入ddr reset后的新版本.
+2), 利用integration mode测试cortex-a8 5个irq. 无进展: 
+设置ITCTRL=1(寄存器数值无变化(仍是0)). ITCTRL-EOC中DMA irq写入1(寄存器数值仍是0). 而且irq模块没有报出中断. 需要继续看"CoreSight_DKA8_r2p0_Integration_Manual.pdf", "DDI0344J_cortex_a8_r3p2_trm.pdf". 
+3), 使用arm PB-A8 trace配置脚本测试VC0882 trace: 无法trace到数据:
+(1), 使用arm PB-A8脚本可以连接coresight component并且可以连接trace, 从PB-A8经验看说明trace通路寄存器配置正确. arm trace脚本附后. 
+(2), VC0882中已经设置了GPIO_A的模式是normal, 并设置FS_SYS为0(TRACE). 
+2, 明日计划:
+1), 阅读Cortex-A8文档实验VC0882 trace.
+2), 实验arm PLE example code. 
+3), csat访问ddr实验. 
+4), RVIahbload已有回信, 实验. 
+
+15:36 2010-5-9
+时间管理
+0, 14:16
+
+1, 本日计划和执行
+1), 发信问integration mode test. <DONE>
+2), 实验L2 cache和arm PLE example code. <DONE: PLE 查询pass, 确定有L2, PLE DONE中断正确>
+
+2, 次日计划:
+本日重点是trace, 但是先完成1)-3), 且一定要回复arm该回复的邮件. 
+1), 回PLE邮件. 说明希望测试PLE错误中断. 已经发了邮件问integration mode. 
+2), RVIahbload已有回信, 实验. 
+3), csat访问ddr实验. 
+4), 阅读Cortex-A8文档实验VC0882 trace.
+5), Cortex-A8 irq测试已经问arm, 等待回应. 
+
+15:43 2010-5-9
+VC0882, arm cortex-a8, coresight, interrupt, 续, Cross Trigger Interrupt, PLE interrupt
+1, Cortex-A8 integration test fail.
+hello mate
+
+I want to test whether Cortex-A8 irq is wired to corresponding interrupt line in irq module or not. So I try it in the Cortex-A8 integration mode. My steps are as follows: 
+1), Connect Cortex-A8 in rvdebugger.
+2), configure integration mode register
+(1), from DAP debug rom table and System memory map doc, I know that Cortex-A8 debug register base address is 0x6000c000 from A8 core view(0xe000c000 from debugger view).
+read 0x6000c000[31:16]=0x1514. right. 
+read 0x6000cd00=0x413fc082. right.
+(2), set A8 to integration mode.
+write 1 to 0x6000cf00(ITCTRL), but read as 0. The result is same both in rvdebugger memory and cli. The Cli commands are as follows: 
+> ce ((unsigned long*)S:0x6000cf00)[0]=1
+  Result is: 1  0x00000001
+> ce ((unsigned long*)S:0x6000cf00)[0]
+  Result is: 0  0x00000000
+(3), after these steps, i also try to set ITCTRL-EOC(0x6000cef8) to raise irq but There is not irq pendings in our irq module.
+
+16:08 2010-5-9
+trace
+1, 比较VC0882和PB-A8扫描链差异. 
+
+16:49 2010-5-9
+VC0882, debug, rvds, rvdebugger, 软件技巧, rvdebugger命令行读写memory, 总结
+可以用ce命令写/读: 
+写后读: 
+> ce ((unsigned long*)S:0x20000004)[0]=1
+  Result is: 1  0x00000001
+读: 
+> ce ((unsigned long*)S:0x20000004)[0]
+  Result is: 1  0x00000001
+
+17:47 2010-5-9
+VC0882, FPGA, arm cortex-A8, L2 cache, PLE, complete interrupt
+1, (1), vc0882_20100505_2230_fpgac0301_02041612_2fpga_vc0882_20100505_2230_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+vc0882_20100503_1830_fpgac0401_vc0882_20100503_1830_L1_Cache_Neon_bit2_2fpga_normal.ace
+read Cache Size Identify register, 没有二级cache. 
+(2), vc0882_20100422_2000_fpga_01042309_020050312_2fpga_Trace_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+是修改jtag走线的版本. 现在的jtag转接板无法使用. 
+2, 
+vc0882_20100427_2200_fpga_all_vc0882_20100429_L1_cache_Neon_bit2_2fpga_vc0882_20100427_2200_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+可以读到L2.
+\todo 需要在Cortex-A8 dhry中实验L2 enable. timing先设为最大. 
+3, 用2的ACE实验arm PLE代码, 
+1), 可以运行到结束, log如下: 
+PLE Channels present: 0x3
+
+PLE status: 0x0 
+Configuring PLE channel 0...
+Sending start command
+PLE status: 0x2 //running
+PLE status: 0x3 //end or error
+PLE error: 0x0 
+2), 从可以看出PLE运行正确没有报错. 
+PLE status: 0x3 
+PLE error: 0x0 
+3), PLE start address, end address
+(1), start address, 32byte对齐. 
+EXPORT get_ple_start_address
+  ; unsigned int get_ple_start_address(void);
+  ; Returns the value of the PLE Start Address register for
+  ; the currently selected channel
+get_ple_start_address PROC
+  MRC     p15, 0, r0, c11, c5, 0  ; Read PLE Internal Start Address Register
+  BX      lr
+  ENDP
+(2), end address, "PLE Internal End Address Register", 实际是配置size. 
+EXPORT set_ple_end_address
+  ; void set_ple_end_address(unsigned int);
+  ; Sets the PLE End Address register for the currently
+  ; selected channel
+set_ple_end_address PROC
+  BIC     r0, r0, #0x3F           ; Mask off reserved bits at bottom of register
+  MCR     p15, 0, r0, c11, c7, 0  ; Write PLE Internal End Address Registe
+  BX      lr
+  ENDP
+因为是读到cache line里面, 只能配置搬移多少个cache line. 
+一次最大可以传输一个way. 对于VC0882: 一个way是128k/8=16k.
+[31:N       N-1:6   5:0     ]
+reversed    lines   reversed
+N是一个way的最大line数-1+6. 例如VC0882: N=log2(16k/64byte)+6=8+6=14.
+低[5:0]是reversed正好是做了cache line对齐(2^6=64). 也就是说用户使用的时候直接写入cache line对齐的size即可. 
+4), 实验cache是否打开:
+把0x0-0xfffff映射到0x20000000-0x200fffff. 设为strongly-ordered. 即修改页表:
+0x100800从0x20000c0e改为0x00000c02. 
+PLE搬移后, cacheable区域和strongly-ordered区域数据相同. 用rvdebugger memory窗口或cli cexpresssion命令修改. 修改前者时两个对应word会同时变化. 修改后者时前者不变. 初步说明cache打开. 但是L2是否打开了呢? 
+5), 实验无L2时, PLE如何动作. 
+实验: 
+vc0882_20100505_2230_fpgac0401_fpga_L1_32_L2_0_bit2_2fpga.ace
+用Cortex-A8 dhry读取, 确实没有L2. 
+PLE搬移直接结束(没有打印PLE status=0x2的过程). 而且用rvdebugger memory窗口或cli cexpresssion命令修改两个地址是同时变化的. 
+6), 实验PLE中断.(15:50 2010-5-27修改部分描述)
+PLE control中打开完成后产生中断: PLE control[29]=1.
+0x60002018=1, 打开PLE中断. PLE结束后, 0x60002040=1, 说明产生了PLE中断. 
+运行"build_A8_with_irq"编译带ple irq的映像. 涉及到VC0882 irq module寄存器. 
+
+18:35 2010-5-9
+VC0882, arm cortex-a8, JIT, thumbEE
+1, http://osdir.com/ml/kernel-team/2010-02/msg00026.html
+As Dave Martin suggested, some ThumbEE based JIT code is to be merged into
+openjdk-6 for lucid.
+2, JDK, openjdk, icedtea? 
+
+10:55 2010-5-10
+VC0882, FPGA, bootloader, sd, 安全boot
+Daijin邮件"答复: 答复: 关于SD card Boot和安全Boot"20100510_0040
+感觉下面两个东西实现起来有困难: 阻断jtag; 如果解密过程中密钥在sram中不让用户访问sram. 
+
+12:54 2010-5-10
+VC0882, sd, Linux, 通过sdio_irq_thread()(driver/mmc/core/sdio_irq.c)等待sdio中断, 如果host不支持中断, 会采用查询模式
+
+14:30 2010-5-10
+时间管理
+0, 9:41-17:50
+
+1, 计划
+上周日已经完成了PLE和L2. 这周只要完成ETM就能到达60%. 
+1), 先完成1)-3), 且一定要回复arm该回复的邮件. <DONE>
+2), 回PLE邮件. 说明希望测试PLE错误中断. 已经发了邮件问integration mode. 详见"14:34 2010-5-10"2. <DONE>
+3), RVIahbload已有回信, 实验.  <转移至次日计划>
+4), csat访问ddr实验.  <转移至次日计划>
+5), 阅读Cortex-A8文档实验VC0882 trace. <DONE: 仍然不行, 已给arm发信, 详见"14:39 2010-5-10">
+6), Cortex-A8 irq测试已经问arm, 等待回应. <转移至次日计划>
+7), 等caijin给我发bash脚本. 写在日志中留做sample. <DONE: 等待邮件>
+8), 给guohaifeng发邮件, 出新的A8版本: 带L2和trace. <DONE>
+
+2, 次日计划
+如果出了新版本(L2=128k), 用该版本做所有arm实验. 
+1), trace.
+2), PLE代码.
+3), AHB-AP: 
+(1), csat访问ddr.
+(2), RVIahbload.
+4), 整理进入和caijin一起写的脚本. 
+5), Cortex-A8 irq测试已经问arm, 等待回应. 
+6), 等待PLE error irq和integration mode test邮件回应. 
+
+14:34 2010-5-10
+VC0882, FPGA, arm cortex-A8, L2 cache, PLE, 续
+1, Support-SW [mailto:support-sw@arm.com]邮件"RE: twos issue on PLE and L2 cache (463451)"20100505_1528
+[From Martin Weidmann - ARM Support]
+Please quote the following support case reference number in any response: 463451
+Dear Zhangjian,
+>
+> There are twos issue on PLE and L2 cache.
+>
+> 1), can you give us an example preload data from memory to L2 cache
+> using PLE and generate an interrupt after transmit is done. All the
+> operation is in non-secure world.
+>
+I have attached a basic example, based on the Versatile PB-A8 board.  The example does not include interrupt generation, but I think this will be a good starting point.
+>
+> 2), if L2 cache size 0k, what is the PLE transmit result. Undefined
+> instruction or transmit fail or others?
+>
+Please refer to section 3.2.65 of the Cortex-A8 TRM:
+"For a 0KB cache, the PLE setup code must read the Cache Size ID Register, see c0, Cache Size Identification Registers, before attempting PLE access. In a 0KB environment, the PLE does nothing."
+3.2.65 c11, PLE Internal End Address Register
+http://infocenter.arm.com/help/topic/com.arm.doc.ddi0344j/Bihfjhjb.html
+Regards,
+Martin
+2, 发邮件
+1), PLE及其complete中断正确. 
+问如何测试PLE另外两个中断. 
+2), 邮件:
+RE: twos issue on PLE and L2 cache (463451)
+hello, Martin
+
+Thanks to your example code. PLE with complete interrupt is ok in our cortex-A8 based system.
+
+Meanwhile, I want to test the PLE error interrupt. I have sent a email to support-sw for how to test Cortex-A8 interrupt in integration mode, but not response yet.
+
+thanks
+zhangjian
+3, PLE代码上传: "D:\VC0882\mini_env\preload_engine_test"
+
+14:39 2010-5-10
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续; PB-A8 trace
+1, 看arm Trace配置脚本
+注: 之前调试PB-A8 trace通过arm提供的"http://infocenter.arm.com/help/topic/com.arm.doc.faqs/ka11687.html"说明及脚本配置成功. 脚本内容如下(含注释). 
+connect  "@CSETM_0@PBA8"
+setreg @ETM_CS_TRACE_ID=0x00000001
+connect  "@CSTPIU_0@PBA8"
+//可以读一下支持的port size.
+setreg @CSTPIU_CURPORTSIZE=0x00008000
+connect  "@CSTFunnel_0@PBA8"
+//可以最大配置[11:8](minimum hold time)为0xe, 避免timing问题. 
+//VC0882:
+//ITM:    trace funnel channel 3
+//ETM:    trace funnel channel 0
+//所以配置为0xe09比较合适. 
+//setreg @CSTF_CTRL=0x301
+setreg @CSTF_CTRL=0x301
+wait=on
+connect  "@Cortex-A8_0@PBA8"
+analyzer,connect
+analyzer,set_size=0x3000
+2, 删除ITM试试. 
+1), 运行脚本, 运行后: DATA亮, TGT在闪. 
+TGT: The TGT LED (not available pre-version 2.0) indicates if there is a
+problem with the target. If the target present line is low, or if there is no
+clock, this LED flashes.
+2), 看来是没有clock导致的, 配置GPIO:
+GPIO_A_CFG(0x60051000)=0, 选择为normal function.
+GPIO_FS_SYS(0x60051040)=0. 选择trace control.
+运行程序, 停止后, DATA, FULL, TRIG三个亮, TGT等灭. 
+3), 运行中TRC会亮一下, TRIG会灭一下. 然后FULL会闪一下. 
+3, (22:06 2010-05-10)给arm发信:
+Re  TRACE connection error on PB-A8 (463399)
+
+hello
+
+thanks your reply and script, trace on pb-a8 is ok.
+currently, i try to trace on our cortex-a8 bases soc(fpga) but failed. 
+here is the script for configurating our soc hw including coresight. 
+
+//script start
+
+connect "@Cortex-A8_0@RVI"
+//configure gpio as trace io.
+
+connect  "@CSETM_0@RVI"
+setreg @ETM_CS_TRACE_ID=0x00000001
+connect  "@CSTPIU_0@RVI"
+setreg @CSTPIU_CURPORTSIZE=0x00008000
+connect  "@CSTFunnel_0@RVI"
+setreg @CSTF_CTRL=0x301
+wait=on
+
+connect "@Cortex-A8_0@RVI"
+
+//configure ddr register
+//...
+
+printf "Clear all breakpoints"
+printf "clearbreak all"
+cl
+
+load /pd/r 'axf_image_path_and_name'
+
+analyzer,connect
+analyzer,set_size=0x3000
+
+printf "Set PC to zero"
+cexpression @pc=0 
+
+printf "Let's GO!"
+//script end
+
+there is no error durning running the script. And axf image runs correctly. but there is not trace data in analysis windows. 
+
+LED status in arm running: TRC flash while TRIG is off. and then FULL is flash.
+LED status in arm stop: PWR, DATA, FULL, TRIG is on. others is off.
+
+15:28 2010-5-10
+VC0882, arm cortex-a8, coresight, STICKERR
+自: http://infocenter.arm.com/help/topic/com.arm.doc.faqs/ka12883.html
+What can cause a STICKYERR in a CoreSight Debug Access Port (DAP)?
+Applies to: CoreSight
+Answer
+STICKYERR can come from error signals returned from the Debug Bus or slave debug component to the Access Port (AP), or from the Debug Port (DP) trying to access an AP which is not present (for example, powered down or not present at that address), or from protocol errors in Serial Wire.
+To investigate  unexpected assertion of STICKYERR, consider the following:
+If the processor in the SoC design was delivered with a CoreSight Design Kit, ensure that any portable tests in the Integration Kit have been successfully ported to the SoC level and run in simulation. This is a good test of the basic hook-up of the Debug Port to the external pins of the SoC.
+Check that the correct handshake protocol has been performed for CDBPWRUPREQ -> CDBGPWRUPACK and for CSYSPWRUPREQ -> CSYSPWRUPACK, and that these signals have not subsequently been illegally deasserted while debug is in progress. Also, check that power and clocks have been restored to the Debug and System domains before the corresponding 'ACK' signal was asserted. Check that power or clock have not been illegally removed from the domain(s) being accessed during the debug session.
+Check that the DP was accessing an existing AP when the error occurred. Note that different variants of the DAP may have APs present at different positions on the DAP bus by default, and that implementations may have their own unique combination of APs on the DAP bus at arbitrary positions within the possible range of 0 - 255.
+Check the documentation of the processor or CoreSight component being accessed when the problem occurs - some components (such as Cortex-A8) document specific conditions under which an error will be returned on the Debug APB bus for an access to a debug register.
+Check for general issues with the target processor coming out of reset or power-down. Are all such signals timed correctly with regard to the clock and with regard to each other, and are they asserted for any relevant minimum duration? 
+
+15:30 2010-5-10
+VC0882, arm cortex-A8, Coresight, Coresight DAP不需要RTCK
+摘要: TCK can be run at any frequency up to the maximum operating frequency of your ICE unit + interconnect (wires, connectors, board traces) + TAP logic in the TCK domain.
+自: http://infocenter.arm.com/help/topic/com.arm.doc.faqs/ka8650.html
+Is RTCK needed on the JTAG connection to a CoreSight DAP?
+Applies to: CoreSight
+Answer
+The CoreSight DAP (SWJ-DP or JTAG-DP) has no need for an RTCK.
+RTCK is not a standard IEEE 1149 JTAG signal. It was created to allow the use of synchronized TAP controllers in ARM9 and ARM11 class of cores, where the JTAG inputs (TMS and TDI) have to cross an asynchronous boundary into the processor clock domain. RTCK has the effect of controlling the TCK from the emulator box (RVI, Multi-ICE, etc) to ensure correct JTAG-like behaviour across that clock domain boundary.
+The CoreSight implementation of the DAP uses a fully asynchronous TAP controller which does not require any local synchronization (hence no need for RTCK). It manages the asynchronous relationship between JTAG (TCK) and the DAP bus (DAPCLK/PCLKDBG) internally to the JTAG-DP or SWJ-DP.
+TCK can be run at any frequency up to the maximum operating frequency of your ICE unit + interconnect (wires, connectors, board traces) + TAP logic in the TCK domain. TCK frequency is not dependent upon the core clock frequency in a CoreSight system.
+
+10:02 2010-5-11
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 发信
+1, zhangjian邮件"VC0882 Trace debug"
+kongyingqi; huangwei; guohaifeng
+cc: yangzuoxing; wangxin; aiguo; fengbeizhan; zhangjian
+hi, kongyingqi
+
+我在FPGA上测试ETM时, rvdebugger trace不到数据. 
+现在coresight validation是什么状态, validation上遇到的问题与trace有关么? 
+
+hi, huangwei, guohaifeng
+
+如果给我做一个没有ITM的coresight, 需要多长时间? 去掉ITM后就和PB-A8的coresight一样了, 这样可以直接用PB-A8 trace配置脚本试验. 
+
+thanks
+zhangjian
+
+10:22 2010-5-11
+时间管理
+0, 9:42
+
+1, 本日计划和执行
+如果出了新版本(L2=128k), 用该版本做所有arm实验. 
+1), 发trace邮件. 杂.
+2), 10:23-11:05 上周总结和本周进度.
+3), 11:24-16:00 debug emi boot问题. 
+被4), 5)打断. 
+4), 午饭.
+5), 1h: 发arm进展邮件, 希望加快trace validation. 见"13:20 2010-5-11". 
+6), 上传PLE代码. 见"14:34 2010-5-10"3
+7), 查movs等指令. 见"11:22 2010-5-6"-5-2)
+8), AHB-AP<转移>: 
+(1), csat访问ddr.
+(2), RVIahbload.
+9), <转移>等arm邮件实验trace. 即使没有回应, 晚上也要继续实验, 给arm继续发信. 
+10), <转移>整理进入和caijin一起写的脚本. 
+11), <转移>解决"11:22 2010-5-6"2-4)问题. 
+
+2, 次日计划:
+由于事情较多, 明天开始每天计划有半天用于trace.
+1), trace重点看timing: 
+(1), 单沿还是双沿采数. 
+(2), trace频率. 
+(3), 逻分看clock和数据是否错开. 
+2), AHB-AP: 
+(1), csat访问ddr.
+(2), RVIahbload.
+3), 等arm邮件实验trace. 即使没有回应, 晚上也要继续实验, 给arm继续发信. 
+4), 整理进入和caijin一起写的脚本. 
+5), 解决"11:22 2010-5-6"2-4)问题. 
+6), 如果有时间着手写clkswitch代码. 
+7), Cortex-A8 irq测试已经问arm, 等待回应. 
+8), 等待PLE error irq和integration mode test邮件回应. 
+
+10:25 2010-5-11
+时间管理, 上周工作工作总结(2010年5月3日-2010年5月9日), 本周工作计划(2010年5月10日-2010年5月16日)
+1, 上周工作工作总结(2010年5月3日-2010年5月9日)
+1), (5月2日)测试NEON打开和简单NEON指令. 
+2), trace:
+(1), 与亿道和arm交流PB-A8使用. 
+(2), 在PB-A8实验trace通过.
+(3), 阅读cortex-a8和trace文档. 
+(4), 在VC0882实验trace, fail. 
+3), AHB-AP:
+(1), 用csat通过AHB-AP访问ddr, fail. 原因是csat连接后ddr寄存器配置变化. 下周会继续实验.
+(2), RVIahbload load映像到ddr fail. 已给arm发邮件. 
+4), L2 cache
+(1), L2 on OK.
+(2), PLE搬移数据成功. PLE完成中断正确. 
+4), sdio讨论(周五下午: 1.5小时)
+
+issue: 
+1), 与arm讨论cortex-a8 interrupt测试方法, 利用文档中提到的integration mode测试fail. 
+
+2, 本周工作计划(2010年5月10日-2010年5月16日)
+1), 实验VC0882 trace. 先调通ETM, 再调通ITM. 
+2), AHB-AP测试通过. 
+3), 根据arm回信, 测试Cortex-A8剩余三个irq. 
+4), PLE测试代码上传
+4), 建立bootloader环境.
+5), 编写clkrst代码.
+6), 如果前面工作暂时难有进展, 做下面两个工作
+(1), 实验L2 cache lockdown. 给wangfeihang发代码. 
+(2), 实验NEON编译某个算法(暂定jpeg). 
+
+10:44 2010-5-11
+VC0882, FPGA, arm cortex-A8, L2 cache, PLE, 续, 实验新ACE
+1, vc0882_20100505_2100_update05101200_fpgac0401_fpga_L1_32_L2_128_ecc_24M_128_bit2.ace
+882： 更新代码时间update05101200
+A8：fpga_L1_32_L2_128_ecc_24M_128_，带L2 cache
+
+11:34 2010-5-11
+VC0882, FPGA, EMI boot
+1, 实验
+vc0882_20100505_2100_update05101200_fpgac0401_fpga_L1_32_L2_0_No_Neon_bit2_2fpga.ace
+基于tag：vc0882_20100505_2100，5月10日12：00更新子模块
+2, FanZhiJun邮件"答复: vc0882: mas update"20100511_1125
+Hi zhangjian
+EMI的mas和寄存器表做了更新，
+1，增加了一组对master 下timing的控制（用默认值的话，可不改软件）。
+2，增加了对地址的re-mapping控制（需更新软件）。
+882通过EMI 从NOR flash boot，timing 参数数值可能是lidongliang调通了之后就没变了。
+需确认初始化时软件配了哪些寄存器，是否足够。
+Yangxing也可帮忙确认。
+3, fanzhijun提到的re-mapping寄存器
+0x60013000 EMIMST_CFG[15]	master_addr0_refer16bit	
+0:EMI_ADDR[0] refer to byte/8bit data in emi master mode;
+1:EMI_ADDR[0] refer to word/16bit data in emi master mode;"
+
+0x60013030 EMISLV_CFG[8]:slave_addr0_refer16bit
+0:EMI_ADDR[0] refer to byte/8bit data in emi slave mode;
+1:EMI_ADDR[0] refer to word/16bit data in emi slave mode;"
+4, 修改后访问norflash数据基本正常. 但是跑死, 读出对比发现是后面数据有错. 
+1), 换一个norflash试试. 一样.
+2), 数据不同可能是烧写了其它bootloader. 但是0x6f0地址的指令不正确. 
+memory窗口中是0xEB00F425, dissassembly中0xF425EB00. 所以这条语句后面就死了. 
+3), 大小端问题?! 但是程序开始运行时的结果都对, 而且后面的0x6f8和0x6fc却对. 
+感觉是timing问题. 
+5, 后来在FPGA23,26实验都没有这个问题. 只是FPGA18有这个问题. issue 8973:
+在FPGA18, 用vc0882_20100505_2100_update05101200_fpgac0401_fpga_L1_32_L2_0_No_Neon_bit2_2fpga.ace实验EMI boot.
+1), 含bootloader的norflash插在emi cs0.
+2), 配置0x60013000[8]=1. 
+3), 设置pc=0. 运行会出错. 其中一次在0x6f0出错. 这个地址的数据从rvdebugger memory窗口读取是0xEB00F425. 但是arm dissembly读到的是0xF425EB00. 
+FPGA23, 26无此问题. 
+6, 有一个EMI转接板有问题. 给yangxing发信. 
+
+13:20 2010-5-11
+VC0882, FPGA, bottleneck, arm cortex-a8, coresight, trace
+hi, dr.yang, aiguo, fengbeizhan
+VC0882 trace进展缓慢, 本周四arm到达60%有困难
+
+目前除了trace和A8的3个中断, 其余A8和coresight基本功能都覆盖到了, 其中周日调通了L2和PLE(包括PLE complete interrupt). 当前arn进度是50%. 
+
+1, 之前计划把trace中的ETM调通, 即使L2和PLE没过, 这样本周四进度也能到60%. 目前trace可以连接但抓不到数据(已经给arm发邮件). 
+2, Cortex-A8剩余3个中断interrupt问题已给arm发了邮件, 如果测试通过, 进度能增加5%. 
+3, 剩余10%包括. NEON上测试一个算法(例如jpeg); AHB-AP访问ddr; 测试thumb2, thumb-2EE.
+
+为了保证arm进度, 希望能把coresight validation优先级提高. 另外希望能出一个没有ITM的版本, 这样882的coresight配置和PB-A8是相同的, 更容易调试. 
+
+13:47 2010-5-11
+Arm architecture, armv7, Cortex-a8, 7级cache, clean和invalidate对MVA时要求cache line对齐
+1, 有些东西要从架构去理解, 比如看cortex-A8 trm时需要配置cache level时一般都是3bit. cortex-a8一共只有2级cache, 为什么要3bit呢? 因为armv7-A要求支持7级cache. 同理, cortex-a8中做clean和clean_and_invalidate都要查询方式处理两级cache, 也是为了支持armv7 7级cache架构. 当然如果代码仅仅是为了cortex-a8写的, 只考虑两级cache也可以. 
+2, clean和invalidate对MVA时要求cache line对齐.
+
+17:05 2010-5-11
+VC0882, FPGA, sd, mmu, cache, L1 cache, 续, IC查A8何种修改导致cache无法使用, 续, 按arm推荐方式可以使用, (15:38 2010-6-3)issue 8782据此关闭"15:38 2010-6-3"end
+1, GuoHaiFeng邮件"Test DBGNOCLKSTOP in cpu_wrapper"20100511_1652
+刚刚测试了两个版本：
+1.       STOP 接0
+1). NO BUFGCE in tig_clk_gate.v,
+2). wire                                             DBGNOCLKSTOP = 1'b0;
+Stopped on Memory access violation.
+Stopped at S:0x00000010: PANDA INIT S\ Line 181.
+ICACHE and DCACHE 测试失败。
+2.       BUFGCE
+1). WITH BUFGCE in tig_clk_gate.v, 
+2). wire                                             DBGNOCLKSTOP = DBGPWRUPREQ;
+ICACHE and DCACHE 测试通过。
+2, zhangjian: 
+"2"是把原来clock gate逻辑门改为BUFGCE, 这样没有毛刺. 
+3, guohaifeng根据上面修改出的新A8 FPGA bitfile:
+Guohaifeng邮件"答复: vc0882 RTL 60th tag : vc0882_20100511_2000"20100512_1003
+以后出2FPGA的CF CODE请用
+/work/guohf/project/vc0882/fpga_L1_32_L2_0_No_Neon_24M/output/bit/ vc0882_fpga2_L1_32_L2_0_No_Neon_Bufg.bit
+主要改动包括：
+1). WITH BUFGCE in tig_ck_gate.v, 
+2). WITH   DBGNOCLKSTOP = CDBGPWRUPREQ in cpu_wrapper.v.
+
+21:03 2010-5-11
+VC0882, ICV, coresight validation, APB lock, \todo关注进展; Cortex-A8 pc实际是个"假"的; 关于A8停在一条正确语句这个错误
+1, ICV coresight validation有很多问题, 其中一个问题是APB lock不住. 因为APB要先lock再访问.
+2, Cortex-a8中PC是多个状态综合的结果. 
+3, 关于A8停在一条正确语句这个错误
+zhangjian2kongyingqi邮件"关于A8停在一条正确语句这个错误"
+hi, kongyingqi
+
+我查了日志, 我原来遇到的A8停在一条正确语句不执行这个错误有两次, 一次停在加法指令一次停在store指令. 具体情况如下, 供你参考: 
+1), Issue track 882: 0008177. 这个问题出在软件进入c语言前的汇编代码(从VC0598继承), 在TI (OMAP3530)可以正常运行. FPGA版本是rev0_01020909_02020416, 对比发现在FPGA rev0_01022018_02020412 版本无问题. 多数情况停在"add a3, a3, a2". 当时实验另外一个单独测试uart的映像, 没有这个问题. 
+修改方法: 据guohaifeng说: rev0_01022018_02020412和 rev0_01020909_02020416 的A8部分相比较，做的改动是增加PADC_SYS 的pready信号.
+2), mmu cache问题: 开icache后停在一条正确语句(STMDB   sp!,{a1-a4}. 这条语句是进入irq异常的第一条语句.
+修改方法见GuoHaiFeng邮件"Test DBGNOCLKSTOP in cpu_wrapper"20100511_1652
+
+21:23 2010-5-11
+安全boot
+1, jtag, trace如何断掉. 如果无法断掉, 用于可以通过调试知道key在什么地方. 
+2, 如何保证key不被非法读取. 
+
+22:22 2010-5-11
+VC0882, FPGA, nfc, nand, 
+有一个nand芯片, 在830 ok. 在882上面, read时, 有一根数据线固定是2v左右. 后来去掉阻抗匹配的电阻(几十欧姆)就可以了. 去掉电阻的方法: 去掉电阻后没法直接短路, 是从飞了一根先直接到nand. 所以也许不是电阻本身的问题. 据其他同事(dr.yang?)说, 这个电阻很小, 不应该有这么大映像. 
+
+10:09 2010-5-12
+时间管理
+0, 9:32
+
+1, 本日计划和执行
+1), 上午.
+2), 下午: PB-A8实验TPIU test pattern. 见"14:11 2010-5-12".
+3), 2h: 支持4FPGA环境, 见"16:23 2010-5-12".
+4), 16:43- VC0882 TPIU test pattern. 见"14:11 2010-5-12"4
+5), RVIahbload, 见"14:28 2010-4-28"8,9
+
+2, 本日计划<DONE or 转移>: 
+由于事情较多, 每天计划有半天用于trace.
+1), trace重点看timing: 
+(1), 单沿还是双沿采数. 
+(2), trace频率. 
+(3), 逻分看clock和数据是否错开. 
+2), AHB-AP: 
+(1), csat访问ddr.<取消, 由于今天RVIahbload VC0882初步OK, 所以csat访问ddr不需要继续做. 因为两个用的是一个path>
+(2), RVIahbload.
+3), 等arm邮件实验trace. 即使没有回应, 晚上也要继续实验, 给arm继续发信. 
+4), 整理进入和caijin一起写的脚本. 
+5), 解决"11:22 2010-5-6"2-4)问题. 
+6), 如果有时间着手写clkswitch代码. 
+7), Cortex-A8 irq测试已经问arm, 等待回应. 
+8), 等待PLE error irq和integration mode test邮件回应. 
+9), 整理最近huangwei与shilei的讨论邮件. 
+
+10:49 2010-5-12
+同事信息, 秘书, 孙莹莹, WanLiNa
+
+14:11 2010-5-12
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern
+1, [From Gerard Staines - ARM Technical Support]
+Since this query is regarding trace on your custom FPGA system, rather than on the PB-A8 board, we have started a new case thread. Please quote reference number 463814 when referring to this issue.
+Jian,
+You wrote:
+> thanks your reply and script, trace on pb-a8 is ok.
+> currently, i try to trace on our cortex-a8 bases soc(fpga) but failed.
+> here is the script for configurating our soc hw including coresight.
+> 
+> //script start...
+It looks like your script uses the same settings as per the PB-A8, which may or may not work depending on how you have wired up your CoreSight system. If you copied what was done in our SMM-A8 code (which was in turn taken from dka8), then you probably have the ETM output connected to funnel input 0, which corresponds to the "> setreg @CSTF_CTRL=0x301"
+command. From the verilog that instantiates the CSSYS module:
+    // ATB port 0 - Output from  funnel to ETM11 
+  .ATREADYS0          (ATREADYM),
+  .AFVALIDS0          (AFVALIDM),
+    // ATB port 1 - Unconnected 
+  .ATREADYS1          (),
+  .AFVALIDS1          (),
+(Unfortunately, the first comment is erroneous - the output is from the ETM to the funnel, and it's not ETM11.) If your ETM connects to a different funnel input, you will need to enable that funnel input via the CSTF_CTRL register:
+http://infocenter.arm.com/help/topic/com.arm.doc.ddi0314h/Babhdcjb.html
+> connect "@Cortex-A8_0@RVI"
+> //configure gpio as trace io.
+* Are you using the "regular", parallel trace port configuration or are you using the SWO (Serial Wire Output) option?
+* Did you simulate the design before testing it in the FPGA?
+* Are you sure that RealView ICE's autodetected CoreSight ROM table matches the ROM table and device addresses that you defined in your RTL?
+If not, you may have trouble accessing and programming the Funnel, etc.
+* Are you sure that you are actually getting any trace output at all from your FPGA? Have you checked what comes out of the trace port with a logic analyzer, against the TRACECLK signal from the same connector?
+This would be the first thing to check. No trace data, or trace data incorrectly registered against TRACECLK = no recognizable trace in the RAM buffer and nothing in the RVD display window.
+It is possible to have the TPIU generate a test pattern, which will fill the trace port analyzer box with a known bit pattern. This is especially useful for testing the interface with a logic analyzer. You can also use a utility (an x86 executable) called CSAT to dump the raw contents of the TPA box to a DOS window on the host PC. This will tell you whether the physical connection between the TPIU and the trace box are working.
+I have attached an informal document that describes how to set up this test mode and extract the data from the TPA.
+If you need references for the TPIU setup, the following TRM sections describe the registers that declare capability and enable the test pattern generator:
+http://infocenter.arm.com/help/topic/com.arm.doc.ddi0314h/Cbagedec.html
+http://infocenter.arm.com/help/topic/com.arm.doc.ddi0314h/Cbabcgfd.html
+> there is no error durning running the script.
+This is to be expected. All the script is doing is poking values into registers. It will not tell you whether you programmed the registers correctly, or whether your trace output is working.
+> LED status in arm running: TRC flash while TRIG is off. and then FULL
+is
+> flash.
+> LED status in arm stop: PWR, DATA, FULL, TRIG is on. others is off.
+When tracing is enabled on the TPA, it will start to fill up the buffer
+- even if there is no data or junk data coming out of the trace port on the target. Provided there is a TRACECLK, the buffer will fill up.
+Please use the debug methods I outlined above and supply us with screen dumps of what you see happening on the trace port.
+Best regards,
+Gerard Staines
+
+2, 邮件信息整理
+1), 如果没有数据或数据不正确都会导致analysis window无数据. 这样情况下arm建议首先用TPIU test pattern测试TPIU与TPA的连通性. 
+2), TPIU setup可以参考"DDI0314H_coresight_components_trm.pdf"
+8.6.6. Supported Test Patterns/Modes Register, 0x200
+RO: 表示支持哪些test pattern.
+8.6.7.  Current Test Patterns/Modes Register, 0x204
+RW: 选择某个pattern.
+3), 详细测试过程可以参考arm文档(36: Document\Arm\trace\TPIU test patterns.pdf").
+TPIU产生的test pattern可以用csat抓取. 
+arm建议的测试方法是用Continuous mode测试四种test pattern. 
+
+3, 在PB-A8实验.
+1), CSTPIU_SUPTEST是0x3000F表示支持所有模式. 
+2), 四个pattern测试通过. 
+
+4, (16:44 2010-5-12)
+1), ACE
+(1), 使用fanzhijun5月11日版本测试.
+Fanzhijun邮件"答复: PLE和L2 cache测试通过, 需要新版本进一步测试"20100511_1043
+vc0882_20100505_2100_update05101200_fpgac0401_fpga_L1_32_L2_128_ecc_24M_128_bit2.ace
+882： 更新代码时间update05101200
+A8：fpga_L1_32_L2_128_ecc_24M_128_，带L2 cache
+(2), bit:
+guohaifeng邮件"答复: PLE和L2 cache测试通过, 需要新版本进一步测试"20100511_1029
+Hi, zhijun & zhangjian:
+用/work/guohf/project/vc0882/fpga_L1_32_L2_128_ecc_24M_128/output/bit/vc0882_fpga2_bit
+给zhangjian做一个带L2 cache的code吧。
+2), VC0882 
+ddr: 
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc0000 77fc0000 00000000 00000000
+TD00000001: 77fcffff 77fc8000 00000000 00000000
+TD00000002: 77fc0000 77fc0000 00000000 00000000
+TD00000003: 77fcffff 77fc8000 00000000 00000000
+TD00000004: 77fc0000 77fc0000 00000000 00000000
+TD00000005: 77fcffff 77fc8000 00000000 00000000
+TD00000006: 77fc0000 77fc0000 00000000 00000000
+TD00000007: 77fcffff 77fc8000 00000000 00000000
+TD00000008: 77fc0000 77fc0000 00000000 00000000
+TD00000009: 77fcffff 77fc8000 00000000 00000000
+TD0000000a: 77fc0000 77fc0000 00000000 00000000
+TD0000000b: 77fcffff 77fc8000 00000000 00000000
+TD0000000c: 77fc0000 77fc0000 00000000 00000000
+TD0000000d: 77fcffff 77fc8000 00000000 00000000
+TD0000000e: 77fc0000 77fc0000 00000000 00000000
+TD0000000f: 77fcffff 77fc8000 00000000 00000000
+
+sdr: 
+%>trace setconfigitem CLOCK_MODE Clock_SDR
+%>trace commitconfig
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc0000 77fcffff 00000000 00000000
+TD00000001: 77fc0000 77fcffff 00000000 00000000
+TD00000002: 77fc0000 77fcffff 00000000 00000000
+TD00000003: 77fc0000 77fcffff 00000000 00000000
+TD00000004: 77fc0000 77fcffff 00000000 00000000
+TD00000005: 77fc0000 77fcffff 00000000 00000000
+TD00000006: 77fc0000 77fcffff 00000000 00000000
+TD00000007: 77fc0000 77fcffff 00000000 00000000
+TD00000008: 77fc0000 77fcffff 00000000 00000000
+TD00000009: 77fc0000 77fcffff 00000000 00000000
+TD0000000a: 77fc0000 77fcffff 00000000 00000000
+TD0000000b: 77fc0000 77fcffff 00000000 00000000
+TD0000000c: 77fc0000 77fcffff 00000000 00000000
+TD0000000d: 77fc0000 77fcffff 00000000 00000000
+TD0000000e: 77fc0000 77fcffff 00000000 00000000
+TD0000000f: 77fc0000 77fcffff 00000000 00000000
+
+0x2004, sdr: 
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc5555 77fc5555 00000000 00000000
+TD00000001: 77fcffff 77fc7f55 00000000 00000000
+TD00000002: 77fc5555 77fc5555 00000000 00000000
+TD00000003: 77fc5555 77fcffff 00000000 00000000
+TD00000004: 77fc7f55 77fc5555 00000000 00000000
+TD00000005: 77fc5555 77fc5555 00000000 00000000
+TD00000006: 77fcf5dd 77fcffff 00000000 00000000
+TD00000007: 77fc5555 77fc7f55 00000000 00000000
+TD00000008: 77fc5555 77fc5555 00000000 00000000
+TD00000009: 77fc5555 77fcffef 00000000 00000000
+TD0000000a: 77fc5555 77fc7f55 00000000 00000000
+TD0000000b: 77fc5555 77fc5555 00000000 00000000
+TD0000000c: 77fc555d 77fcffff 00000000 00000000
+TD0000000d: 77fc7f55 77fc5555 00000000 00000000
+TD0000000e: 77fc5555 77fc5555 00000000 00000000
+TD0000000f: 77fcffff 77fc7f55 00000000 00000000
+0x2004, ddr: 
+TD00000000: 77fcffef 77fc5555 00000000 00000000
+TD00000001: 77fc5555 77fcffff 00000000 00000000
+TD00000002: 77fcffff 77fcffff 00000000 00000000
+TD00000003: 77fc5555 77fc7f55 00000000 00000000
+TD00000004: 77fc7f55 77fc5555 00000000 00000000
+TD00000005: 77fcffff 77fcffff 00000000 00000000
+TD00000006: 77fc5555 77fc7f55 00000000 00000000
+TD00000007: 77fc7f55 77fcf5dd 00000000 00000000
+TD00000008: 77fc7f55 77fc7f55 00000000 00000000
+TD00000009: 77fc5555 77fcbfaf 00000000 00000000
+TD0000000a: 77fc5555 77fc5555 00000000 00000000
+TD0000000b: 77fcffff 77fc7f5d 00000000 00000000
+TD0000000c: 77fc7f55 77fcffff 00000000 00000000
+TD0000000d: 77fc7555 77fcffff 00000000 00000000
+TD0000000e: 77fc7f55 77fc5555 00000000 00000000
+TD0000000f: 77fcffff 77fcffff 00000000 00000000
+
+16:09 2010-5-12
+VC0882, FPGA, 稳定性, Issue 8980
+http://10.0.2.208/mantis/view.php?id=8980
+0510两个都不能用, xuwenyan会发邮件. 
+一个是ddr, 一个是ddrfifo. ddrfifo这个zhaobeihua过来调了参数也不行, ddr很不稳定. 
+
+16:23 2010-5-12
+VC0882, FPGA, 资源
+现在有5套板子没有配齐子板. 如果要配齐需要2个jtag转接板. 2个串口转接板. 配齐后ddr还富裕一个. 
+
+14:41 2010-5-13
+VC0882, FPGA, sync up
+1, 要求我的进度:
+自: FengBeiZhan邮件"VC0882 icp 下周进度要求（2010-5-13____2010-5-20）"20100513_1301
+arm: 55%->70%. 测试20%->50%.
+clkrst: 0%->20%.
+2, 回信: 
+如果仿真进展顺利, 我可以到达预期进度: 
+Arm方面, 如果coresight validation通过, 我调通trace中的ETM, 进度就能到70%. 
+Clkrst方面, 这部分软件很难调试, 仿真通过后才能开始. 计划测试cpu和ddr的clock source switch. 
+
+15:26 2010-5-13
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续
+1,
+1), Guohaifeng邮件
+关于TRACE的，只有以下的信号可以通过UMONITOR引出去：
+1.       GPIO_A14 – TRACE_CLK
+2.       GPIO_A15 – TRACE_CTRL
+3.       TRACE_DATA[15:0]。
+在UMONITOR中的顺序同上，请确认！
+我先把code改了，然后需要跑FPGA FLOW，估计得下午3点左右可以出来。
+2), bitfile, guohaifeng邮件:
+Hi, zhijun
+Zhangjian要的将TRACE通过UM引出来的A8 BIT做出来了。
+/work/guohf/project/vc0882/fpga_bit/output/bit_fpga2/a8_20100513_L1_32_L2_0_No_Neon_Trace.bit
+请你给他出一个CF CODE吧。
+谢谢~
+3), ACE, fanzhijun邮件 
+Hi haifeng，zhangjian
+对应的2FPGA版本是
+5）vc0882_20100512_2000_fpgac0402_a8_20100513_L1_32_L2_0_No_Neon_Trace_2fpga_noFdTv.ace
+882：vc0882_20100512_2000
+ddr：cvs
+a8：a8_20100513_L1_32_L2_0_No_Neon_Trace
+“将TRACE通过UM引出来的A8 BIT”
+2, 实验"vc0882_20100512_2000_fpgac0402_a8_20100513_L1_32_L2_0_No_Neon_Trace_2fpga_noFdTv.ace".
+1), 接逻分信号线时(逻分没有抓数据)trace到数据除了bit15都是1. clock正常. 
+逻分抓到的数据是clock正确, ctrl=1, data[0]=1, 其余是0. 除了clock, 其余信号不一致. 
+2), 去掉逻分, 现象一样. 
+3, 实验昨天的"vc0882_20100505_2100_update05101200_fpgac0401_fpga_L1_32_L2_128_ecc_24M_128_bit2.ace".
+1), 和昨天也不太一样. 但是能看到数据有变化. 
+2), (22:33 2010-5-13)后来发现可能是CURTEST误写成了0x2008造成结果不对. 再次实验, dr. yang. 提醒用示波器看, 发现信号形状基本是对的. 只是质量很差. 
+发信. 
+
+hello Gerard
+
+thanks your replay
+
+>If your ETM connects to a
+different funnel input, you will need to enable that funnel input via
+the CSTF_CTRL register:
+ETM@0, ITM@3. what is the influence on coresight configuration while the ITM is added?
+> * Are you using the "regular", parallel trace port configuration or are you using the SWO (Serial Wire Output) option?
+parallel trace, not SWO.
+> * Did you simulate the design before testing it in the FPGA?
+the simulation is running by my colleague.
+>* Are you sure that RealView ICE's autodetected CoreSight ROM table matches the ROM table and device addresses that you defined in your RTL?
+If not, you may have trouble accessing and programming the Funnel, etc.
+yes. the RVI found the right Coresight ROM Table.
+>* Are you sure that you are actually getting any trace output at all from your FPGA? Have you checked what comes out of the trace port with a logic analyzer, against the TRACECLK signal from the same connector?
+according your suggection, i test TPIU on both PB-A8 and our customize cortex-a8 FPGA system. On PB-A8, the trace result is the same as your doc.
+but the reult in our customize cortex-a8 FPGA system is not good, the logs are as follows(and I capture the signal from the oscilloscope, see attachment): 
+> setreg @ CSTPIU_CURTEST=0x00020008 // FFFF/0000
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc7fff 77fcffff 00000000 00000000
+TD00000001: 77fc7fff 77fcffff 00000000 00000000
+TD00000002: 77fc7fff 77fcffff 00000000 00000000
+TD00000003: 77fc7fff 77fcffff 00000000 00000000
+TD00000004: 77fc7fff 77fcffff 00000000 00000000
+TD00000005: 77fc7fff 77fcffff 00000000 00000000
+TD00000006: 77fc7fff 77fcffff 00000000 00000000
+TD00000007: 77fc7fff 77fcffff 00000000 00000000
+TD00000008: 77fc7fff 77fcffff 00000000 00000000
+TD00000009: 77fc7fff 77fcffff 00000000 00000000
+TD0000000a: 77fc7fff 77fcffff 00000000 00000000
+TD0000000b: 77fc7fff 77fcffff 00000000 00000000
+TD0000000c: 77fc7fff 77fcffff 00000000 00000000
+TD0000000d: 77fc7fff 77fcffff 00000000 00000000
+TD0000000e: 77fc7fff 77fcffff 00000000 00000000
+TD0000000f: 77fc7fff 77fcffff 00000000 00000000
+
+> setreg @CSTPIU_CURTEST=0x00020004 // AAAA/5555
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc5555 77fc5555 00000000 00000000
+TD00000001: 77fcffff 77fc5555 00000000 00000000
+TD00000002: 77fc7f55 77fc5555 00000000 00000000
+TD00000003: 77fc5555 77fcf5fd 00000000 00000000
+TD00000004: 77fc5555 77fcffef 00000000 00000000
+TD00000005: 77fc7f55 77fc5555 00000000 00000000
+TD00000006: 77fc5555 77fc5555 00000000 00000000
+TD00000007: 77fcffff 77fc7f55 00000000 00000000
+TD00000008: 77fc5555 77fc5555 00000000 00000000
+TD00000009: 77fc5555 77fcffff 00000000 00000000
+TD0000000a: 77fc7f55 77fc5555 00000000 00000000
+TD0000000b: 77fc5555 77fc5555 00000000 00000000
+TD0000000c: 77fcffff 77fc7f55 00000000 00000000
+TD0000000d: 77fc5555 77fc5555 00000000 00000000
+TD0000000e: 77fc5555 77fcffff 00000000 00000000
+TD0000000f: 77fc5555 77fc7f55 00000000 00000000
+
+> setreg @CSTPIU_CURTEST=0x00020001 // walking ones
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Triggered
+ BufferState = Trace Buffer Not Empty, Not Full, Stopp
+
+%>trace stop
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Triggered
+ BufferState = Trace Buffer Not Empty, Not Full, Stopp
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc0070 77fc0040 00000000 00000000
+TD00000001: 77fc0040 77fc0040 00000000 00000000
+TD00000002: 77fc0080 77fc0300 00000000 00000000
+TD00000003: 77fc0180 77fc0100 00000000 00000000
+TD00000004: 77fc0300 77fc0400 00000000 00000000
+TD00000005: 77fc0e00 77fc0400 00000000 00000000
+TD00000006: 77fc1c00 77fc1000 00000000 00000000
+TD00000007: 77fc1800 77fc1000 00000000 00000000
+TD00000008: 77fc3000 77fc4000 00000000 00000000
+TD00000009: 77fc6000 77fc4000 00000000 00000000
+TD0000000a: 77fc8000 77fc0003 00000000 00000000
+TD0000000b: 77fc0001 77fc0001 00000000 00000000
+TD0000000c: 77fc0007 77fc0004 00000000 00000000
+TD0000000d: 77fc0106 77fc0004 00000000 00000000
+TD0000000e: 77fc000d 77fc0010 00000000 00000000
+TD0000000f: 77fc0010 77fc0010 00000000 00000000
+
+> setreg @CSTPIU_CURTEST=0x00020002 // walking zeros
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fcfff7 77fcffef 00000000 00000000
+TD00000001: 77fcffef 77fcffdf 00000000 00000000
+TD00000002: 77fcffbf 77fcffff 00000000 00000000
+TD00000003: 77fcffbf 77fcffff 00000000 00000000
+TD00000004: 77fcfeff 77fcffff 00000000 00000000
+TD00000005: 77fcfeff 77fcffff 00000000 00000000
+TD00000006: 77fcfbff 77fcffff 00000000 00000000
+TD00000007: 77fcfbff 77fcffff 00000000 00000000
+TD00000008: 77fcefff 77fcffff 00000000 00000000
+TD00000009: 77fcefff 77fcffff 00000000 00000000
+TD0000000a: 77fcbfff 77fcffff 00000000 00000000
+TD0000000b: 77fcbfff 77fc7fff 00000000 00000000
+TD0000000c: 77fcfffe 77fcffff 00000000 00000000
+TD0000000d: 77fcfffe 77fcffff 00000000 00000000
+TD0000000e: 77fcfffb 77fcffff 00000000 00000000
+TD0000000f: 77fcfffb 77fcfff7 00000000 00000000
+%>
+
+
+3), 用逻分测得clock是15.625MHz.
+
+17:33 2010-5-13
+VC0882, arm cortex-a8, coresight, interrupt, 续, Cross Trigger Interrupt, PLE interrupt, 续, 根据arm回信实验: PLE两个错误中断正确, nCTIIRQ没测通(已给arm发邮件); unlock access: LockAccess register, access key: 0xC5AC_CE55; arm integration mode; 参见Cortex-A8 TRM chapter 12
+1, Support-SW [support-sw@arm.com]邮件"RE: 答复: Cortex-A8 integration test fail (463672)"20100513_0525
+[From Ralph Fulchiero - ARM Technical Support]
+Please quote reference number 463672 when referring to this issue.
+Dear Zhangjian -
+Revisiting your first email you wrote:
+> (2), set A8 to integration mode.
+> 
+> write 1 to 0x6000cf00(ITCTRL), but read as 0. The result is same both 
+> in rvdebugger memory and cli. The Cli commands are as follows:
+> 
+> > ce ((unsigned long*)S:0x6000cf00)[0]=1
+> 
+>   Result is: 1  0x00000001
+> 
+> > ce ((unsigned long*)S:0x6000cf00)[0]
+> 
+>   Result is: 0  0x00000000
+The fact that you can not enter Integration Mode is a problem.  
+We suspect that Integration Mode is protected by the LockAccess register to prevent one from accidentally enabling this mode.  
+Have you unlocked CoreSight accesses through the LockAccess register at offset 0xFB0?  The access key is 0xC5AC_CE55.  Once you write the key, you can confirm that it is unlocked by checking bit 1 of the Lock Status Register at offset 0xFB4.  
+Please let us know if unlocking access makes a difference.
+2, Lock registers可以看coresight arch的"3.6.4 Lock registers"
+3, 在VC0882实验. 向0x6000cfb0写入0xC5ACCE55. 读0x6000cfb4[1], 0表示可以访问coresight debug register. 
+1), 向0x6000cfb0写入0xC5ACCE55前, 0x6000cfb4=3, 写入后是1. 说明[1]从1->0.
+2), 0x6000cf00写入1, 这次的确变为1. 说明原来写入不进去是lock住了. 
+3), 触发中断:
+[7] nDMAEXTERRIQ nDMAEXTERRIRQ. This signal drives the nDMAEXTERRIRQ output. If this bit is set to 1, the corresponding internal nDMAEXTERRIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[6] nDMASIRQ nDMASIRQ. This signal drives the nDMASIRQ output. If this bit is set to 1, the corresponding internal nDMASIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[5] nDMAIRQ nDMAIRQ. This signal drives the nDMAIRQ output. If this bit is set to 1, the corresponding internal nDMAIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[4] nPMUIRQ nPMUIRQ. This signal drives the nPMUIRQ output. If this bit is set to 1, the corresponding internal nPMUIRQ signal is asserted, that is, cleared to 0. The reset value is 0.
+[3] STANDBYWFI STANDBYWFI. This signal drives the STANDBYWFI output. The reset value is 0.
+[2] COMMTX COMMTX. This signal drives the COMMTX output. The reset value is 0.
+[1] COMMRX COMMRX. This signal drives the COMMRX output. The reset value is 0.
+[0] DBGACK DBGACK. This signal drives the DBGACK output. The reset value is 0.
+4), 测试了bit7,6,4. 都可以产生中断.  7,6都是对应中断0. 但是没法确定到底是谁引起的中断0.
+5), nCTIIRQ不能这样测试. 在CTI中的寄存器实验不行. 
+4, 给arm回信:
+hello, Ralph
+
+thanks your reply. 
+After unlocked CoreSight accesses and switched on integration mode, I can test nDMAEXTERRIQ and nDMASIRQ using ITCTRL-EOC. 
+Meanwhile, I also want to test nCTIIRQ. Could I test it with ITTRIGOUT? 
+I try to use ITTRIGOUT in the same way, but no reponse.
+
+thanks in advance.
+zhangjian
+5, Support-SW [support-sw@arm.com]邮件"RE: 答复: 答复: Cortex-A8 integration test fail (463672)"20100514_0732
+[From Ralph Fulchiero - ARM Technical Support]
+Please quote reference number 463672 when referring to this issue.
+Dear Zhangjian,
+You wrote:
+> After unlocked CoreSight accesses and switched on integration mode, I 
+> can test nDMAEXTERRIQ and nDMASIRQ using ITCTRL-EOC.
+Good - we're glad that unlocking the CS block allowed you to do this.   
+> Meanwhile, I also want to test nCTIIRQ. Could I test it with ITTRIGOUT? 
+> I try to use ITTRIGOUT in the same way, but no reponse.
+The TRM suggests that you can use ITTRIGOUT to stimulate nCTIIRQ.  
+What type of setup have you done with the CTI?  At the very minimum, you will likely have to enable it through the CTICONTROL register.
+When you do this, do you observe a change in the TRIGOUTSTATUS register?  
+Where have you routed nCTIIRQ in your design?
+If you continue to have problems, please tell us the exact steps you are performing.
+
+20:17 2010-5-13
+软件技巧, CVS, 建立CVC目录, "Make New Module": 也就是svn中建立仓库. 右键单击要建立为仓库的目录, 选择CVS->"Make New Module". 
+
+20:29 2010-5-13
+VC0882, FPGA, 系统级验证, Fengbeizhan邮件"系统级验证item和进度"20100513_2028, \todo 思考自己在系统级验证中需要和能承担哪些工作
+
+20:37 2010-5-13
+时间管理
+0, 9:50
+
+1, 本日计划和执行
+1), 上午: 1h例会.
+2), 下午: PLE二个中断测试pass. 见"17:33 2010-5-13", CTI irq问题已给arm发信. 
+3), trace: 用逻分抓数据, fail, 感觉是CF版本问题. 见"15:26 2010-5-13"
+4), 给arm发RVIahbload问题邮件, 见"14:28 2010-4-28"10.
+
+2, 本日计划: 
+由于事情较多, 每天计划有半天用于trace.
+1), trace重点看timing: 
+(1), 单沿还是双沿采数. 
+(2), trace频率. 
+(3), 逻分看clock和数据是否错开. 
+2), AHB-AP: 实验RVIahbload下载有时无法运行的问题.
+3), 等arm邮件实验trace. 即使没有回应, 晚上也要继续实验, 给arm继续发信. 
+4), 整理进入和caijin一起写的脚本. 
+5), 解决"11:22 2010-5-6"2-4)问题. 
+6), 如果有时间着手写clkswitch代码. 
+7), 整理最近huangwei与shilei的讨论邮件. 
+
+3, 四象限
+0), 如果有时间, 把NEON和Performance monitor irq提交测试. 
+1), dmac开cache. 
+2), VC0882: 加入barrior函数. 最好能区分是否A8, 如果不是A8做为nop(编译器是否支持?). 
+3), 关注Kongyingqi ASIC仿真出错, 见"11:13 2010-5-7". 
+4), 写ICP环境training文档. 
+5), 整理VC0882环境文档. 
+6), irq加入一个随机优先级和触发测试. 
+7), 与huangwei继续memory barrior讨论.
+
+4, 问题集:
+1), LEDA是什么意思? 自"10:15 2010-4-27".
+2), 给arm邮件, 问使用Cortex-A8没找到invalidate到memory的命令, clean&invalidate而不是invalidate会不会影响效率. 
+
+10:06 2010-5-14
+时间管理
+0, 9:41
+
+1, 执行
+1), trace timing分析与调整. 
+(1), trace频率. 逻分看clock和数据是否错开. 见"16:31 2010-5-14"
+
+2, 本日计划: 
+0), 以后发给arm的信要cc给yinong.
+由于事情较多, 每天计划有半天用于trace.
+1), trace重点看timing: 
+(1), 单沿还是双沿采数. 
+2), AHB-AP: 实验RVIahbload下载有时无法运行的问题.
+3), bootloader环境
+4), 整理进入和caijin一起写的脚本. 
+5), 解决"11:22 2010-5-6"2-4)问题. 
+6), 如果有时间着手写clkswitch代码. 
+7), 整理最近huangwei与shilei的讨论邮件. 
+8), 根据nCTIIRQ arm回信见"17:33 2010-5-13"5实验. 
+
+16:31 2010-5-14
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续, 分析时序
+1, 今天arm邮件
+Support-SW [mailto:support-sw@arm.com]邮件"Re: 答复: Problems tracing on custom Cortex-A8 FPGA platform (463814)"20100514_0251
+[From Gerard Staines - ARM Technical Support]
+Jian,
+You wrote:
+> according your suggection, i test TPIU on both PB-A8 and our customize
+> cortex-a8 FPGA system. On 
+> PB-A8, the trace result is the same as your doc.
+> but the reult in our customize cortex-a8 FPGA system is not good, the logs
+> are as follows(and I 
+> capture the signal from the oscilloscope, see attachment): 
+I cannot tell anything from the scope traces - all I see is a very noisy waveform, with no idea of which signal this is, and no idea how it relates to the trace clock.
+Ideally you should use a logic analyzer to capture ALL of the TRACEDATA[15:0] signals and TRACECTL against TRACECLK, to ensure that you are meeting the setup/hold times specified in the RVT user guide. 
+Failing that, you would need to use your scope to measure at least 2 signals at once: TRACEDATA[?] and TRACECLK. From the memory dump of your trace buffer, it is evident that the TPA is capturing garbage:
+> TD00000000: 77fc7fff 77fcffff 00000000 00000000
+7's and C's are almost F's (only one wrong bit in each case). However, the other trace patterns are worse. A good logic analyzer trace would help you debug this, but I would suggest checking the following items in any case:
+* Did you apply the required 90° phase between TRACECLK and TRACEDATA/TRACECTL - so that the trace signals change state half-way between the TRACECLK edges? This is mentioned in the SMM-A8 verilog comments:
+// The TPIU has a note that the TRACECLK output must be delayed with reference
+// to TRACEDATA and TRACECTL to make sure there is plenty of setup and hold
+// margin.  All of these signals come from flops clocked by REFCLK, with
+// TRACECLK being a divide by 2 version of REFCLK.  Putting a negedge flop
+// clocked by REFCLK on TRACECLK will put it's rising and falling edges right
+// in the middle of TRACEDATA and TRACECTL
+always @ (negedge REFCLK_buf) begin
+  TRACECLKA <= TRACECLK;
+  TRACECLKB <= TRACECLK;
+end
+* Did you ensure that you are driving the VTREF input to the Trace probe header to the same I/O voltage as the FPGA? If this is not done, the trace probe header's logic 0/1 transition reference voltage will be floating, and any noise or ground bounce will cause false transitions on the trace signals and clock. In our FPGA, this is done as a signal assignment, since all the trace Mictor pins come direct from the FPGA:
+  assign YU[1]=TRACECLKA;       //  YL179         6
+  assign YU[2]=TRACEDATA[15];   //  YL176         23
+  assign YU[4]=TRACEDATA[13];   //  YL174         27
+  assign YU[5]=TRACEDATA[14];   //  YL175         25
+  assign YU[6]=TRACEDATA[11];   //  YL172         31
+  assign YU[7]=TRACEDATA[12];   //  YL173         29
+  assign YU[8]=TRACEDATA[9];    //  YL170         35
+  assign YU[9]=TRACEDATA[10];   //  YL171         33
+  assign YU[11]=TRACEDATA[8];   //  YL169         37
+  assign YU[12]=1'b1;           //  YL166         12  VTRef
+  assign YU[14]=TRACEDATA[7];   //  YL164         16
+  assign YU[15]=1'b1;           //  YL165         14  VSupply
+  assign YU[16]=TRACEDATA[5];   //  YL162         20
+  assign YU[17]=TRACEDATA[6];   //  YL163         18
+  assign YU[18]=TRACEDATA[3];   //  YL160         24
+  assign YU[19]=TRACEDATA[4];   //  YL161         22
+  assign YU[20]=TRACEDATA[1];   //  YL150         28
+  assign YU[21]=TRACEDATA[2];   //  YL159         26
+  assign YU[22]=1'b0;           //  YL156         32?
+  assign YU[23]=1'b0;           //  YL157         30?
+  assign YU[24]=TRACECTL;       //  YL154         36
+  assign YU[25]=1'b1;           //  YL155         34
+  assign YU[27]=TRACEDATA[0];   //  YL153         38
+Please let us know if either of these fix the problem. If not, we will need to see proper logic analyzer traces of the trace port output.
+Best regards,
+Gerard Staines
+2, 测试用ACE: vc0882_20100505_2100_update05101200_fpgac0401_fpga_L1_32_L2_128_ecc_24M_128_bit2.ace
+中午找zouweiran一起看了看, 发现原来是量错信号了, 实际数据信号还可以, 只是clock不太好(低电平不是0). 
+可以看到clock是12MHz, 这个看起来比较正常. 
+huangwei说90度相位是设计保证的. 但从波形看, 实际是180度0度的相位差(后面邮件已问arm)
+3, 给arm发信:
+hello, Gerard
+
+thanks your reply. 
+
+> I cannot tell anything from the scope traces - all I see is a very noisy waveform, with no idea of which signal this is, and no idea how it relates to the trace clock.
+I am sorry for the wrong scope trace. Yesterday, my scope connect to the wrong pin on the PCB. 
+So i recapture the waveform from oscilloscope, see the attachment. the signal is trace_clk, trace_data0, trace_data1. 
+
+> * Did you apply the required 90° phase between TRACECLK and TRACEDATA/TRACECTL - so that the trace signals change state half-way between the TRACECLK edges? 
+yes, the designer comfirm it.
+But from the waveform, it looks like 180° phase. How to check it?
+
+additionally, I try the ajust the trace clk delay to 525 in RVI configuration. but it not work.
+
+What does the vcc in trace port[34] mean? Today, I connect it to our FPGA system 3.3v power supply. 
+
+zhangjian
+
+11:18 2010-5-15
+时间管理
+0, 10:40
+
+1, 执行
+1), 11:34-12:47 trace timing, clock和data要有90度相位. 见"11:39 2010-5-15"
+14:30-16:07
+2), 给linan, huangwei发信讨论clkswitch测试, 计划测试cpu, ddr change clksource switch. 
+3), 本周总结<DONE>
+
+2, 次日计划:
+1), 回复yinong邮件.
+2), 给aiguo, beizhan邮件, 希望仿真能完成coresight validation, 并在882环境中pass.
+
+11:39 2010-5-15
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续, 分析时序, 续
+1, fanzhijun
+Hi haifeng，zhangjian
+6）vc0882_20100514_1800_fpgac0402_a8_20100513_L1_32_L2_0_No_Neon_Trace90_2fpga_noFdTv.ace
+882：tag vc0882_20100514_1800
+ddrphy：cvs
+a8：a8_20100513_L1_32_L2_0_No_Neon_Trace90，“将TRACE CLK 做成90相位”
+
+2, zhangjian2huangwei
+hi, huangwei, guohaifeng
+
+使用修改后的ACE, timing有改善, 大约是45度的相位. 因为信号本身质量不好, 45度的相位差可能不足以保证timing(波形见上封邮件), 现在只是一种情况下(0x20008)csat抓到数据是对的.
+从arm 5月14日回信看(见下), 90度相位延迟是用比TRACE快一倍的REFCLK的低电平采数得到的, 和目前直接delay的方式不一样, 麻烦huangwei再确认一下: 
+* Did you apply the required 90° phase between TRACECLK and TRACEDATA/TRACECTL - so that the trace signals change state half-way between the TRACECLK edges? This is mentioned in the SMM-A8 verilog comments:
+// The TPIU has a note that the TRACECLK output must be delayed with reference
+// to TRACEDATA and TRACECTL to make sure there is plenty of setup and hold
+// margin.  All of these signals come from flops clocked by REFCLK, with
+// TRACECLK being a divide by 2 version of REFCLK.  Putting a negedge flop
+// clocked by REFCLK on TRACECLK will put it's rising and falling edges right
+// in the middle of TRACEDATA and TRACECTL
+always @ (negedge REFCLK_buf) begin
+  TRACECLKA <= TRACECLK;
+  TRACECLKB <= TRACECLK;
+end
+
+thanks
+zhangjian
+3, 与huangwei讨论. huangwei说trace clock只有12M, 可能DCM锁不住(huangwei印象中DCM要想锁住需要19MHz). 考虑用快时钟拍数. 
+4, 给arm发信. 
+hello, Gerard 
+
+thanks your reply
+
+> * Did you apply the required 90° phase between TRACECLK and TRACEDATA/TRACECTL 
+We are trying to adjust the phase between TRACECLK and TRACEDATA/TRACECTL. 
+Rightnow, the FF/00 Pattern is right. but others is wrong. 
+
+Is it must be 90° phase? or we just need to meet the setup and hold time requirement. 
+
+how to do the single edge data sample? I set CLOCK_MODE as Clock_SDR and commit config: 
+trace setconfigitem CLOCK_MODE Clock_SDR
+trace commitconfig
+but it is not work. do i need to set TPIU register? 
+
+16:36 2010-5-15
+时间管理, 本周工作总结(2010年5月10日-2010年5月16日), 下周工作计划(2010年5月17日-2010年5月13日)
+1, 本周工作总结(2010年5月10日-2010年5月16日)
+1), trace: 根据arm建议实验TPIU test pattern. 目前一个(共四个)pattern正确. 
+2), Cortex-A8剩余三个irq中的两个PLE中断测试通过. 目前只差一个nCTIIRQ. 
+3), AHB-AP已经可以访问ddr, 但有时运行出错, 需要继续查. 
+4), 上传了PLE测试代码. 目前是独立工程, 将来会加入到Panda_os中. 
+5), clkrst: 本周集中精力调试trace, 尚未开始coding. 
+6), 阅读cortex-A8, trace相关文档: 约100页. 
+
+2, 下周工作计划(2010年5月17日-2010年5月13日)
+本周主要目的是meet code freeze的schedule. 
+1), arm
+(1), 功能到70%: 调通ETM trace能到70%. 再调通ITM能到80%.
+(2), 测试到50%: Cortex-A8 L2(含PLE, 共占20%)和ETM trace提交测试(15%). 
+2), clkswitch进度到20%. 计划调通两个switch.
+3), 如果有时间建立bootloader环境. 
+
+10:58 2010-5-17
+时间管理
+0, 9:41
+
+1, 计划
+1), trace
+2), clkswitch: huangwei已修改. 请fanzhijun出版本. 给linan邮件. 
+
+11:15 2010-5-17
+"D:\VC1600WCVS\doc\FPGA\882_fpga\fpga_scheme\vc0882_fpga_clkrst_scheme_clkswitch.xls"
+Clock For ICP
+
+18:00 2010-5-17
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续, 分析时序, 续
+1, 逻分结果正确.
+2, 串电阻: clk和data0,1都改为22, 改为47.
+data0改为68: 这次有较大改善. 
+clk改为68, 有改善.
+3, 与dr.yang讨论, 
+1), 认为信号质量可以接受. 会不会是PCB画错了? 
+2), 电源是否接? 
+3), ctrl信号是否变化? 目前未观察到变化. 
+4), 目前只连接了trace_clk, ctrl, data, 其中clk和data正确. ctrl未量到有用的信号. 还有哪些信号需要连接. 
+4, 发信:
+hello, Gerard 
+
+According to your suggestion, the phase between TRACECLK and TRACEDATA is right, clock and data captured by logic analysis is right. But the trace data captured by csat is wrong. 
+So, we want to know that whether the trace schematic is right or not. Attachment is our schematic, could you do us a favor to review it?
+What does tracectr mean? There is no useful signal on it in our FPGA. 
+We connect TRACE_CLKA, TRACECTL, TRACE_D with our FPGA, and pin34 to Vcc3.3v. the others is not connected. Is it right? What do other pins mean?
+
+20:46 2010-5-17
+同事信息, 周明, 韩志敏
+加盟中星微IC-2任测试工程师的周明，直接向测试经理李雪莲汇报工作。周明女士毕业于燕山大学电子信息工程专业；加盟中星微之前曾在德信无线、希姆通、比德创展任职；她的办公电话是：010-68948888-7357 E-mail：zhouming@vimicro.com
+加盟中星微IC-2任测试工程师的韩志敏，直接向测试经理李雪莲汇报工作。韩志敏女士毕业于郑州轻工业学院通信工程专业；加盟中星微之前曾在郑州威科姆科技、北京诚嘉永欣科技任职；她的办公电话是：010-68948888-7358 E-mail：hanzhimin@vimicro.com
+
+10:04 2010-5-18
+时间管理
+0, 9:37
+
+1, 计划
+1), trace
+2), 给大家发arm debug邮件. (回复beizhan邮件).
+
+2, 次日计划:
+1), L2提交测试.
+2), 回复yinong邮件.
+3), 给aiguo, beizhan邮件, 希望仿真能完成coresight validation, 并在882环境中pass.
+4), 测试clkrst寄存器默认值.
+
+10:09 2010-5-18
+VC0882, GPIO, sleep下wifi和BT(bluetooth)
+Liuzixi邮件"答复: VC0882:  PAD&PADC MAS Review, Round 5 for v0.30"20100518_1018
+zixi和WeiYunLong讨论, 确定在sleep状态wifi(32k)和BT(26M)都需要工作: 增加XCLK_OUT1/XCLK_OUT2的bypass通路, 运行在sleep时wifi和BT从32k或xclk获得时钟. 
+驱动能力由pad保证: 8mA. 
+
+10:31 2010-5-18
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续, 回复arm邮件
+1, Support-SW [support-sw@arm.com]邮件"Re: 答复: 答复: 答复: Problems tracing on custom Cortex-A8 FPGA platform (463814)"20100518_0136
+[From Gerard Staines - ARM Technical Support]
+
+Jian,
+You wrote:
+> According to your suggestion, the phase between TRACECLK and TRACEDATA 
+> is right, clock and data captured by logic analysis is right.
+I disagree. In all of your scope traces, the TRACECLK and TRACEDATA change at the same time. It is hard to see exactly the relationship between the clock and data, since the scope traces are of quite poor quality and have not enough zoom in both X and Y directions.
+> But the trace data captured by csat is wrong.
+Unless you can prove on the 'scope that there is enough setup/hold time, I suspect this to be the culprit.
+> So, we want to know that whether the trace schematic is right or not.
+> Attachment is our schematic, could you do us a favor to review it?
+Unfortunately, we don't do a free design review service as part of tech support. This would normally be handled as a separate support contract. However, I have had a quick look at your Trace connector pinout and it seems to agree with the ETMv3 spec. I notice that you have not connected any of the JTAG pins - presumably they are connected somewhere else to the ICE unit.
+> What does tracectr mean? There is no useful signal on it in our FPGA. 
+Where do you see "tracectr"? I am not aware of this signal.
+ 
+> We connect TRACE_CLKA, TRACECTL, TRACE_D with our FPGA, and pin34 to Vcc3.3v.
+> the others is not connected. Is it right? What do other pins mean?
+Your schematic shows that you have connected the VTRef and VSUPPLY pins on the trace connector to the big QSH connector. Where do they go after that? You implied in the last paragraph that they are not connected. VSUPPLY doesn't need connecting to anything because the Trace probe header is powered by the RVT box. The VTRef is critically important though, because this is how the RVT probe decides what's a "0" and what's a "1". If you leave this unconnected you will get garbage trace. I asked you about this in my email of the 13th, but you did not answer that question.
+> Is it must be 90° phase? or we just need to meet the setup and hold 
+> time requirement.
+It doesn't need to be 90°. You only need to satisfy the Ts/Th. However, it is so easy to add the 90° phase shift (with a -ve edge FF) and thereby giving yourself as much setup/hold time possible into the bargain that you may as well just do that. Once you have it working, you can then play with the exact timing if you need to.
+I talked to my colleague Ralph, who concentrates on debug tools support. Apparently, if you have an RVT2 unit, you may be able to use that signal delay mechanism to adjust the clock back far enough to give enough setup time. Again, this only works with the newer RVT2 unit and probe header, not the original RVT hardware. Which RVT hardware do you have?
+The disadvantage of relying on the TPA hardware to correct the timing is that your target board will only then work with that type of Trace tool. If you correct the timing on the target board, it will work with anybody's Trace tools.
+> How to do the single edge data sample?
+This is not possible with ETMv3, which is what you should have on your Cortex-A8 system. ETMv1 defaulted to single-edge clocking and you could change to double-edged to increase trace bandwidth. With today's fast CPUs it is assumed that you will always want the fastest trace throughput, hence there is no option for single-edged trace clocking.
+Please answer ALL of my questions to progress this case to a conclusion.
+Best regards,
+Gerard Staines
+2, 根据arm回复和自己的分析, 今天做如下实验:
+1), 逻分和示波器抓图. 给arm看下, setup/hold是否满足. huangwei也不清楚这个timing. 
+2), 直接用csat抓PBA8实际的trace, 与882逻分结果对比. 
+3, 实验:
+vc0882_20100516_0800_fpgac0402_a8_20100517_L1_32_L2_0_No_Neon_Trace_Drive4_2fpga_noFdTv.ace
+1), 感觉用这个弱驱动的波形有好转. 
+2), arm_um的trace_data[15]没有数据. 
+4, 
+1), 0x20008:
+%>trace start
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fcffff 77fc80fb 00000000 00000000
+TD00000001: 77fc0000 77fcffff 00000000 00000000
+TD00000002: 77fcffff 77fcd8ff 00000000 00000000
+TD00000003: 77fc0000 77fcffff 00000000 00000000
+TD00000004: 77fcffff 77fcf8ff 00000000 00000000
+TD00000005: 77fc0000 77fcffff 00000000 00000000
+TD00000006: 77fcffff 77fc98fb 00000000 00000000
+TD00000007: 77fc0000 77fcffff 00000000 00000000
+TD00000008: 77fcffff 77fc88fb 00000000 00000000
+TD00000009: 77fc0000 77fcffff 00000000 00000000
+TD0000000a: 77fcffff 77fcd8ff 00000000 00000000
+TD0000000b: 77fc0000 77fcffff 00000000 00000000
+TD0000000c: 77f4ffff 77fcf8ff 00000000 00000000
+TD0000000d: 77fc0000 77fcffff 00000000 00000000
+TD0000000e: 77fcffff 77fcd8ff 00000000 00000000
+TD0000000f: 77fc0000 77fcffff 00000000 00000000
+%>
+2), 0x20004:
+%>trace start
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fcffff 77fc5555 00000000 00000000
+TD00000001: 77fcffff 77fc5555 00000000 00000000
+TD00000002: 77fcffff 77fc5555 00000000 00000000
+TD00000003: 77fcffff 77fc5555 00000000 00000000
+TD00000004: 77fcffff 77fc5555 00000000 00000000
+TD00000005: 77fcffff 77fc5555 00000000 00000000
+TD00000006: 77fcffff 77fc5555 00000000 00000000
+TD00000007: 77fcffff 77fc5555 00000000 00000000
+TD00000008: 77fcffff 77fc5555 00000000 00000000
+TD00000009: 77fcffff 77fc5555 00000000 00000000
+TD0000000a: 77fcffff 77fcffff 00000000 00000000
+TD0000000b: 77fcffff 77fc5555 00000000 00000000
+TD0000000c: 77fcf7fd 77fc5555 00000000 00000000
+TD0000000d: 77fcf7fd 77fc5555 00000000 00000000
+TD0000000e: 77fcffff 77fc5555 00000000 00000000
+TD0000000f: 77fcffff 77fc5555 00000000 00000000
+%>
+3), 0x20002:
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fcfffd 77fcffff 00000000 00000000
+TD00000001: 77fcffff 77fcfff7 00000000 00000000
+TD00000002: 77fcffff 77fcffff 00000000 00000000
+TD00000003: 77fcffdf 77fcffff 00000000 00000000
+TD00000004: 77fcffbf 77fcffff 00000000 00000000
+TD00000005: 77fcff7f 77fcffff 00000000 00000000
+TD00000006: 77fcfeff 77fcffff 00000000 00000000
+TD00000007: 77fcfdff 77fcffff 00000000 00000000
+TD00000008: 77fcfbff 77fcffff 00000000 00000000
+TD00000009: 77fcf7ff 77fcffff 00000000 00000000
+TD0000000a: 77fcefff 77fcffff 00000000 00000000
+TD0000000b: 77fcdfff 77fcffff 00000000 00000000
+TD0000000c: 77fcbfff 77fcffff 00000000 00000000
+TD0000000d: 77fc7fff 77fcffff 00000000 00000000
+TD0000000e: 77fcffff 77fcfffd 00000000 00000000
+TD0000000f: 77fcfffd 77fcffff 00000000 00000000
+%>
+4), 0x20001
+%>trace start
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+%>trace stop
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full, Stopped
+
+%>trace read 0x10 0x10 raw
+TD00000000: 77fc8000 77fcffff 00000000 00000000
+TD00000001: 77fc0001 77fc0003 00000000 00000000
+TD00000002: 77fc0002 77fcffff 00000000 00000000
+TD00000003: 77fc0004 77fc000c 00000000 00000000
+TD00000004: 77fc0008 77fcffff 00000000 00000000
+TD00000005: 77fc0011 77fc0030 00000000 00000000
+TD00000006: 77fc0020 77fcffff 00000000 00000000
+TD00000007: 77fcffff 77fc00c0 00000000 00000000
+TD00000008: 77fc0080 77fcffff 00000000 00000000
+TD00000009: 77f40300 77fc0200 00000000 00000000
+TD0000000a: 77fcffff 77fc0c00 00000000 00000000
+TD0000000b: 77fc0800 77fcffff 00000000 00000000
+TD0000000c: 77fc3000 77fc2000 00000000 00000000
+TD0000000d: 77fcffff 77fcc000 00000000 00000000
+TD0000000e: 77fc8000 77fcffff 00000000 00000000
+TD0000000f: 77fc0001 77fc0003 00000000 00000000
+%>
+
+
+5, 给arm发信:
+1), setup/hold time具体数值.
+2), 问huangwei trace_ctrl名称. 
+3), 有时没有提示trace full. 是否不正常? 
+4), 发示波器和逻分结果. 说明串电阻和驱动能力. 
+5), 好像落了一个什么问题. 
+
+6, 
+hello, Gerard 
+thanks your reply.
+I will assign VTRef to 1 and try it again. 
+
+>> According to your suggestion, the phase between TRACECLK and TRACEDATA 
+>> is right, clock and data captured by logic analysis is right.
+>I disagree. In all of your scope traces, the TRACECLK and TRACEDATA change at 
+>the same time. It is hard to see exactly the relationship between the clock and 
+>data, since the scope traces are of quite poor quality and have not enough zoom 
+>in both X and Y directions.
+>> But the trace data captured by csat is wrong.
+>Unless you can prove on the 'scope that there is enough setup/hold time, I 
+>suspect this to be the culprit.
+Sorry for confusion, please see the attachment "vimicro_to_arm.zip" for the phase relationship and signal quality. I capture the four test pattern from logic analyzer including clk, control and data. 
+>> So, we want to know that whether the trace schematic is right or not.
+>> Attachment is our schematic, could you do us a favor to review it?
+>Unfortunately, we don't do a free design review service as part of tech support. 
+>This would normally be handled as a separate support contract. However, I have 
+>had a quick look at your Trace connector pinout and it seems to agree with the 
+>ETMv3 spec. I notice that you have not connected any of the JTAG pins - 
+>presumably they are connected somewhere else to the ICE unit.
+Yes, the JTAG pins are connected to the ICE unit from dedicated jtag connector.
+>> What does tracectr mean? There is no useful signal on it in our FPGA. 
+>Where do you see "tracectr"? I am not aware of this signal.
+I mean TRACECTL(trace control singal), We find the following discription in coresight document, but we do not understand it:
+trace control "Used to indicate nonvalid trace data and triggers. TRACECTL is required unless a new TPA is used that is aware of the formatter protocol which can remove extra packets used to expand data sequences. For Normal and Bypass modes, TRACECTL must be present."
+Do we need connect it? In your May 14th mail, it is  connected to trace connector pin 36.
+>> We connect TRACE_CLKA, TRACECTL, TRACE_D with our FPGA, and pin34 to Vcc3.3v.
+>> the others is not connected. Is it right? What do other pins mean?
+>Your schematic shows that you have connected the VTRef and VSUPPLY pins on the 
+>trace connector to the big QSH connector. Where do they go after that? You 
+>implied in the last paragraph that they are not connected. VSUPPLY doesn't need 
+>connecting to anything because the Trace probe header is powered by the RVT box
+>The VTRef is critically important though, because this is how the RVT probe 
+>decides what's a "0" and what's a "1". If you leave this unconnected you will 
+>get garbage trace. I asked you about this in my email of the 13th, but you did 
+>not answer that question.
+I am sorry for this. I just focus on phase in your May 14th mail. Currently, the VTRef is float. Maybe it is the reason why i could get the right signal in logic analyzer but the wrong data in csat. So, I will assign VTRef to 1(right?) and try it again. 
+Meanwhile, do i need to connect pin 34 to vcc3.3(I/O power supply)?
+>> Is it must be 90° phase? or we just need to meet the setup and hold 
+>> time requirement.
+>It doesn't need to be 90°. You only need to satisfy the Ts/Th. However, it is 
+>so easy to add the 90° phase shift (with a -ve edge FF) and thereby giving 
+> yourself as much setup/hold time possible into the bargain that you may as 
+> well just do that. Once you have it working, you can then play with the exact > timing if you need to.
+Thanks. Do you also suggest that add the 90° phase shift in ASIC logic? It might be hard to design. 
+>I talked to my colleague Ralph, who concentrates on debug tools support. 
+>Apparently, if you have an RVT2 unit, you may be able to use that signal delay 
+>mechanism to adjust the clock back far enough to give enough setup time. Again, 
+>this only works with the newer RVT2 unit and probe header, not the original RVT 
+>hardware. Which RVT hardware do you have?
+RVT2.
+>The disadvantage of relying on the TPA hardware to correct the timing is that 
+>your target board will only then work with that type of Trace tool. If you 
+>correct the timing on the target board, it will work with anybody's Trace 
+>tools.
+got it, thanks.
+>> How to do the single edge data sample?
+>This is not possible with ETMv3, which is what you should have on your 
+>Cortex-A8 system. ETMv1 defaulted to single-edge clocking and you could change 
+>to double-edged to increase trace bandwidth. With today's fast CPUs it is 
+>assumed that you will always want the fastest trace throughput, hence there is 
+>no option for single-edged trace clocking.
+Ok, got it.
+>Please answer ALL of my questions to progress this case to a conclusion.
+thanks your patient .
+
+* Currently, the signal quality is poor in our FPGA system.
+We connect series Resistance(68ohm) between FPGA and trace connect, the result is driver4_0x20001_scope_clk.jpg in attachment. Is it necessary? Is the signal quality acceptable? 
+
+* Assume I can get the right test pattern in csat from the TPIU. How to configuration the coresight component in real trace scene? Can I use the same configuration as PB-A8 as follows? 
+connect  "@CSETM_0@RVI"
+setreg @ETM_CS_TRACE_ID=0x00000001
+connect  "@CSTPIU_0@RVI"
+setreg @CSTPIU_CURPORTSIZE=0x00008000
+connect  "@CSTFunnel_0@RVI"
+setreg @CSTF_CTRL=0x301
+wait=on
+
+connect "@Cortex-A8_0@RVI"
+
+//configure ddr register
+//...
+
+printf "Clear all breakpoints"
+printf "clearbreak all"
+cl
+
+load /pd/r 'axf_image_path_and_name'
+
+analyzer,connect
+analyzer,set_size=0x3000
+
+printf "Set PC to zero"
+cexpression @pc=0 
+
+printf "Let's GO!"
+//script end
+
+note: in our FPGA system, there is a ITM compare with PB-A8. "after_Exit_from_Trace_Associations.jpg" is the coresight scheme after exit from trace associations. 
+
+* Do I need to configuate ITM while I only want to use the ETM? 
+
+* Sometimes, I can not get the full BufferState in csat, after execute the "trace start" command, what does it mean? 
+%>trace start
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change...
+ TriggerState = Triggered
+ BufferState = Trace Buffer Not Empty, Not Full, Stopp
+In my opinion, only the following log is right after execute "trace start" while TPIU test pattern has been generating:
+%>trace start
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Not Empty, Not Full
+
+%>
+Async Notification of RVT internal state change..
+ TriggerState = Not Triggered
+ BufferState = Trace Buffer Full
+
+0:38 2010-5-19
+软件技巧, VC0882, FPGA, arm cortex-a8, debug, 写坏vector table导致奇怪问题
+1, zhangjian2yinxingjie"答复: Report status"20100519_0052
+当arm出现undefined instruction, prefetch abort, data abort等错误时, 可以通过分析如下寄存器确定出错具体原因:
+1), arm register: lr, lr说明了从何处跳转此处. 可以用于定位在哪里出错. 如果lr没有对应任何代码, 可能是程序先跑飞到其它地址, 然后跑死的. 
+2), rvdebugger register选项卡的control页有DFSR, DFAR, IFSR, IFAR. 这四个寄存器作用在"D:\VC0882\document\arm\Cortex-a8\DDI0344J_cortex_a8_r3p2_trm.pdf"有详细说明. 
+它们分别说明在data或intruction出错时的具体错误. 
+例如查TRM, 可以知道, DFSR[11]=0表示是read data出错. =1表示write data出错. 
+[12][10][3:0]这5个bit可以知道具体错误类型. 例如b000001是alignment fault.
+DFAR: The purpose of the Data Fault Address Register (DFAR) is to hold the Modified Virtual Address (MVA) of the fault when a precise abort occurs.
+在VC0882里面, DFAR通常就是产生data abort时读写的地址. 
+3), 如果跳回0地址, 也可以做类似分析. 有时系统不稳定会导致跳回0地址. 
+2, (14:48 2010-5-24)mengfandong问题
+1), mengfandong问题:
+给未初始化指针赋值, 这个赋值正好把0x18赋值为0. 这样发生irq时(从道理上说这个时候只有tick), 执行0这条指令(ANDEQ r0, r0, r0). 这不是跳转语句, 这条语句执行完成后只能继续执行FIQ的ldr语句. fiq执行又出错, 跳到其它错误. 
+调试时: 发现出错点不是第一现场, 于是看fiq的lr地址, 感觉不应该进入fiq. 而且这时发现单步似乎没有问题, 直接执行才会出错, 这其实合理, 因为直接执行前已经停了一段时间, timer中断肯定会来, 所以在认为出错的地方直接执行实际是直接执行timer irq了. 
+2), 转发mengfandong邮件:
+如果程序跑死可以查看一些arm寄存器: lr, cpsr, DFSR, DFAR, IFSR, IFAR等等, 详见我5月19日邮件(见附件).
+如果确实难以debug, 可以考虑用trace. Trace咱们组只有一个, 需要时找我拿. 
+Fandong的问题是程序中给没有初始化的指针赋值, 所以修改了vector table. 
+这个问题我在830也出过, 当时害的lingming debug了很久. 
+
+10:23 2010-5-19
+时间管理
+0, 9:49
+
+1, 执行
+1), trace等huangwei确认, haifeng修改后实验. 如果huangwei暂时没有进展, 下午直接飞线实验. 见"10:33 2010-5-19"
+Gerard出差, arm邮件明天再发. 
+2), 整理现有任务给aiguo,beizhan, dongliang发信, 见"15:57 2010-5-19".
+3), L2提交测试.
+4), 回复yinong邮件.
+5), 测试clkrst寄存器默认值.
+6), memory参数的事情要问一下beihua: 看5月17日 cuiyunfei邮件. 
+
+2, 
+(1), 给arm发邮件. "10:33 2010-5-19"4
+
+3, 四象限
+1), 紧急, 重要
+(1), 如果有时间着手写clkswitch代码. 
+(2), bootloader环境
+2), 不紧急, 但重要
+(1), 整理进入和caijin一起写的脚本. 
+(2), 解决"11:22 2010-5-6"2-4)问题. 
+(3), 根据nCTIIRQ arm回信见"17:33 2010-5-13"5实验. 
+(4), 整理最近huangwei与shilei的讨论邮件. 
+(5), 如果有时间, 把NEON和Performance monitor irq提交测试. 
+(6), 与huangwei继续memory barrior讨论.
+3), 紧急, 不重要
+(1), dmac开cache. (可以由yuyang完成).
+4), 不紧急, 不重要
+(1), AHB-AP: 实验RVIahbload下载有时无法运行的问题.
+(2), VC0882: 加入barrior函数. 最好能区分是否A8, 如果不是A8做为nop(编译器是否支持?). 
+(3), 关注Kongyingqi ASIC仿真出错, 见"11:13 2010-5-7". 
+(4), 写ICP环境training文档. 
+(5), 整理VC0882环境文档. 
+(6), irq加入一个随机优先级和触发测试. 
+
+4, 问题集:
+1), LEDA是什么意思? 自"10:15 2010-4-27".
+2), 给arm邮件, 问使用Cortex-A8没找到invalidate到memory的命令, clean&invalidate而不是invalidate会不会影响效率. 
+
+10:33 2010-5-19
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续, TRACE接口信号分析, VTRef=1, ETM trace初步可用; trace调试总结
+1, CoreSight_Architecture_Specification.pdf Chapter Physical Interface说明了coresight对外接口. 其中p143-p144:
+1), Table 13-2 Single target connector pinout
+Pin Signal name                 Pin Signal name
+38 TRACEDATA[0]                 37 TRACEDATA[8]
+36 TRACECTL                     35 TRACEDATA[9]
+34 Logic 1                      33 TRACEDATA[10]
+32 Logic 0                      31 TRACEDATA[11]
+30 Logic 0                      29 TRACEDATA[12]
+28 TRACEDATA[1]                 27 TRACEDATA[13]
+26 TRACEDATA[2]                 25 TRACEDATA[14]
+24 TRACEDATA[3]                 23 TRACEDATA[15]
+22 TRACEDATA[4]                 21 nTRST
+20 TRACEDATA[5]                 19 TDI
+18 TRACEDATA[6]                 17 TMS
+16 TRACEDATA[7]                 15 TCK
+14 VSupply                      13 RTCK
+12 VTRef                        11 TDO
+10 No connection, was EXTTRIG   9 nSRST
+8 TRIGOUT, was DBGACK           7 TRIGIN, was DBGRQ
+6 TRACECLK                      5 GND
+4 No connection                 3 No connection
+2 No connection                 1 No connection
+2), 根据support-sw@arm.com最近几天的邮件和coresight arch spec. VTRef应该从内部输出1. 
+(1), 5月14日: 
+Did you ensure that you are driving the VTREF input to the Trace probe header to the same I/O voltage as the FPGA? If this is not done, the trace probe header's logic 0/1 transition reference voltage will be floating, and any noise or ground bounce will cause false transitions on the trace signals and clock. In our FPGA, this is done as a signal assignment, since all the trace Mictor pins come direct from the FPGA:
+(2), 5月18日:
+The VTRef is critically important though, because this is how the RVT probe decides what's a "0" and what's a "1". If you leave this unconnected you will get garbage trace. I asked you about this in my email of the 13th, but you did not answer that question.
+(3), p150: The VTRef signal is intended to supply a logic-level reference voltage to enable debug equipment to adapt to the signalling levels of the target board.
+Note VTRef does not supply operating current to the debug equipment.
+Target boards must supply a voltage that is nominally between 1V and 5V. With ±10% tolerance, this is minimum 0.9V, maximum 5.5V. The target board must provide a sufficiently low DC output impedance so that the output voltage does not change by more than 1% when supplying a nominal signal current, 0.4mA. Debug equipment that connects to this signal must interpret it as a signal rather than a power supply pin and not load it more heavily than a signal pin. The recommended maximum source or sink current is 0.4mA.
+3), logic 1, logic 0:
+p151:
+13.6.5 Logic 1 input
+This is a signal pin that is at a voltage level and interpreted as logic 1, typically a resistor pull up to VTRef.
+13.6.6 Logic 0 input
+This is a signal pin that is at a voltage level and interpreted as logic 0, typically a resistor pull down to GND.
+4), 看来VTRef必须要改, haifeng感觉直接飞线就可以. 
+2, 和huangwei, dr.yang, zouweiran讨论, 直接给pin12(VTRef)从板子分一个Vcc3.3
+1), 还是用driver4的ACE实验. 四个pattern都过了. 
+2), 用脚本实验, 可以抓到uart接收函数, 但是没有tick
+3, 发信(忘了抄送给yinong)
+VC0882 ETM trace初步可用
+Hi, all
+
+把VTRef是参考电平(pin12)接逻辑1后, TPIU test pattern正确, etm trace初步可用. 
+ACE: vc0882_20100516_0800_fpgac0402_a8_20100517_L1_32_L2_0_No_Neon_Trace_Drive4_2fpga_noFdTv
+考虑到ASIC和FPGA有差异, 希望仿真能完成在882 FPGA和ASIC环境的coresight validation.
+
+后续工作:
+1), 确认etm trace抓到的数据是否完整.
+2), 使用ITM.
+
+trace调试总结:
+1), trace clock和data/control之间要保证足够的setup, hold time. arm提供的一种参考方法是用快1倍的时钟拍数, 保证clock和data/control之间相差90度相位. FPGA是这样实现的. 
+2), trace connector连接: 
+(1), VTRef是参考电平(pin12)需要接逻辑1. 
+(2), logic 1(pin34)接逻辑1, arm建议通过上拉电阻连到VTRef. 
+(3), logic 0(pin30, pin32)接逻辑0, , arm建议通过下拉电阻连到GND.
+3), gpioA的trace pin需要设为默认是trace. 这样才能支持trace系统复位后的执行过程. 
+即0x60051000和0x60051040对应bit为0. 麻烦haifeng修改一下. 
+
+附件是trace调试中使用的脚本:
+1), tpiu_test_pattern.inc: 生成tpiu test pattern, 用csat执行"tpiu_test_pattern_csat.txt"脚本抓取pattern. 详见coresight component trm. 
+"tpiu_test_pattern_PBA8.inc"是PB-A8中测试tpiu test pattern的脚本. 与vc0882脚本的区别是没有trace gpio的设置. 
+2), init_lpddr_micron_128M_etm.inc: 用于ETM trace数据, 包括初始化VC0882 coresight, ddr, 连接rvdebugger到RVT2. 
+
+4, 给arm发信, 问ITM用法
+(20:23 2010-5-25)修改
+hello, Gerard 
+
+After connect VTRef to Vcc through a resistor. I get the right TPIU test pattern in csat. And I get the trace data from the Analysis window in rvdebugger with the script i sent to you in May 10th. 
+Now, I study the rvdebugger trace. and we want to probe some trace signal, but in our FPGA board it is hard to do this, can you give us the trace subboard sch? 
+Here is a question about the script:
+setreg @ETM_CS_TRACE_ID=0x00000001
+What does the ETM_CS_TRACE_ID mean? Is it 0xFC8 DEVICE ID register, 0xFC8 is a read-only register. 
+Meanwhile, I want to use the ITM. There is no trace output in analysis windows or csat at all. Analysis windows and csat is not used at the same time.
+
+At first, I init ITM in the script: 
+connect  "@CSITM_0@RVI"
+setreg @CS_LOCKACCESS=0xC5ACCE55
+setreg @CSITM_CTRL=0x7
+setreg @CSITM_TRCEN=0x1
+setreg @CSITM_TRCTRIG=0x1
+
+//connect  "@CSETM_0@RVI"
+//setreg @ETM_CS_TRACE_ID=0x00000001
+connect  "@CSTPIU_0@RVI"
+setreg @CSTPIU_CURPORTSIZE=0x00008000
+connect  "@CSTFunnel_0@RVI"
+//ITM at funnel 3rd channel. ETM at funnel 0th channel.
+setreg @CSTF_CTRL=0x309
+wait=on
+
+connect "@Cortex-A8_0@RVI"
+//set other module register in our FPGA
+
+//load axf file
+
+//connect to analyzer while csat is not used. 
+//analyzer,connect
+//analyzer,set_size=0x3000
+
+Secondly, I open the lock access while system boot up.
+//0x60008000 is the ITM register base address. 
+set 0x60008fb0=0xC5ACCE55
+
+thirdly, write to the situmulas. Here I have several questions: 
+A, is ITM will automatic generate timestamp whenever SWIT packet is generated? 
+B, in DDI0314H_coresight_components_trm.pdf p303:
+SWIT byte 0: B[4:0] = 5 bits of address, PADDRDBG[7:2]
+what does it mean? 
+
+Do you have a brief configuration and example code like the ple example I get from arm support. 
+
+thanks a lot. 
+
+11:35 2010-5-19
+VC0882, L2 cache
+1, enable_L2_cache将来还是改为和L1 cache的函数风格.
+现在只有cache默认打开时才打开L2 cache. \todo 稍候修改.
+2, 实验dmac, sd, lcdif. 
+1), L2默认是打开的. 所以不需要加enable l2. 
+2), dmac测试fail. \todo分析.
+3), copy正确(300k1次, >1M文件两次). 但是speed测试 multi的结果不太对. single看起来正常. 
+sd  SD1:/>speed 1
+[SD_MODULE]->do_sd_speed()
+[43m[37m[SD   MSG][0m	do_sd_speed arg input succeed!
+[43m[37m[SD   MSG][0m	time1-time0(us)=0
+[43m[37m[SD   MSG][0m	total=403432
+[43m[37m[SD   MSG][0m	Multi Read Speed is: 403432 bytes/second
+[43m[37m[SD   MSG][0m	time1-time0(us)=1258
+[43m[37m[SD   MSG][0m	total=5242880
+[43m[37m[SD   MSG][0m	Multi Write Speed is: 4167631 bytes/second
+[43m[37m[SD   MSG][0m	Speed test over!
+[SD_MODULE]<-do_sd_speed() with 1
+sd  SD1:/>speed 0
+[SD_MODULE]->do_sd_speed()
+[43m[37m[SD   MSG][0m	do_sd_speed arg input succeed!
+[43m[37m[SD   MSG][0m	time1-time0(us)=5467
+[43m[37m[SD   MSG][0m	total=5242880
+[43m[37m[SD   MSG][0m	Single Read Speed is: 959004 bytes/second
+[43m[37m[SD   MSG][0m	time1-time0(us)=14501
+[43m[37m[SD   MSG][0m	total=5242880
+[43m[37m[SD   MSG][0m	Single Write Speed is: 361552 bytes/second
+[43m[37m[SD   MSG][0m	Speed test over!
+[SD_MODULE]<-do_sd_speed() with 1
+sd  SD1:/>exit
+
+13:37 2010-5-19
+VC0882, FPGA, nand, liaozhicheng, 以为是类型转换问题, 后来发现是函数指针和函数指针指向的函数的形参不一致. 
+
+15:08 2010-5-19
+outlook技巧, 搜索文件夹, arm support
+outlook的搜索文件夹里面可以添加"来自或发送给特定人员的邮件", 条件中写入邮箱全部或部分名字, 例如写入support. 这样可以把所有包括support的字符都找到, 目前我的邮箱中只有arm support邮件包含support这个字符串. 
+
+15:52 2010-5-19
+VC0882, FPGA, PMU, ICV wangfenghai代码
+1, WangFeihai邮件"答复: PMU会议记录(201-05-19 AM, room 6)"20100519_1330
+我们ICV现在的bootloader路径：project/vc0882/vrf/firmware/bootloader
+现在pmu模式切换的流程已经做了一些工作，wangzhengwei可以参考一下代码，路径在：
+ /work/wangfh/project/vc0882/vrf/firmware/pmu/pmu_api.c
+2, (13:31 2010-6-2)后来又从wangzhengwei这边拿到代码, 位置"D:\work\VC0882\pmu\WangFengHai_pmu仿真代码".
+
+15:57 2010-5-19
+VC0882, FPGA, 我剩余任务
+hi, aiguo, beizhan
+
+我目前剩余任务和状态如下, 下一阶段计划把bootloader环境和clkswitch优先级提高. 
+1, trace
+882中trace source有etm和itm. 目前etm可以trace到数据. ITM需要编写软件, 还没有调试
+1), 在panda_os中实验etm
+(1), 抓从系统复位到VIM_MMU_Init的过程, 粗看是正确的. 
+(2), 但是开trace时tick工作不正常. 
+2), 后面计划:
+1), trace了解还很浅, 需要继续学习trace使用, 1-2周时间. 
+2), 使用ITM.
+2, L2 cache
+1), sd copy cmp正确. 但是dmac出错. 
+2), 需要继续实验模块开L2的效果. 下一步实验DE, LCDIF. 
+3, bootloader环境: 这个优先级计划提到最高. 
+4, 切频代码: 先调通一个最简单的case: bus切频. 
+另外, 已给fanzhijun, guohaifeng发信, 需要L2和trace都OK的2FPGA和4FPGA ACE.
+
+16:13 2010-5-19
+VC0598, bug, aiguo转发lidongliang邮件"转发: 598 SV bugs"20100518_1124
+1, aiguo邮件:
+882 ICP team, 718 ICP team
+目前598 SV基本测试完了，下面是我们发现了一些IC的bug，虽然这些bug都不是critical path，而且都有walk around的方法，但每一个bug都应该值的我们反思，到底为什么在FPGA阶段没有发现，是因为FPGA的原因还是其他原因。
+Hi，Dongliang
+根据早上的review，我们把下面的bug做一个详细的说明，分析其原因。
+
+2, lidongliang邮件
+目前我们发现的598 SV的bug 总结如下：
+BUG编号 所属模块 问题描述 原因分析 解决方案
+1 IPP
+1), 问题描述
+在做preview 通道正常工作时，如果配置软件reset所有capture/display通道上的寄存器时，preview通道出错
+2), 原因分析
+配置sizer1_dxy的值时，ICD拷贝的sizer0_dxy的代码，在做软件reset的时候，没有改到sizer1_reset上去，用的sizer0_reset。
+3), 解决方案
+当时设计软件reset的时候，ICD和lingming讨论主要是为了debug使用，也做应用中万一遇到不能解释的情况是备份使用。
+每个通道有两种软件reset，一个是寄存器reset（即上面出错的这种），另一种是通道状态机和地址clear。
+在验证和debug阶段，我们用后一种比较多。前一种确实没大用过。
+1. 使用第二种reset方法即可。
+2. 我认为这个通道寄存器reset应该作为每种分支条件的最后一个条件，即当做capture时，如果遇到time out时，可以采用
+先disable sizer1，然后reset capture path寄存器，然后再配一下sizer1_dxy，再enble sizer1。最后重新配置sizer0的寄存器，
+再做capture。
+ 
+2 DE
+1), 问题描述
+双屏显示时，发现DPI显示的hwc在左上角，左下角，右下角显示时错位
+注意：这个双屏不是指的显示两个DBI的那种双屏显示应用，而是指DPI和TV同时工作的双屏，TV正常刷图的同时DPI屏显示HWC和背景色。
+2), 原因分析
+ICD取misc的timing的时候，取到了非misc的tv的timming。导致出错
+另外，该问题会导致串行屏，ccir656的屏因为时序不对而不能使用双屏模式
+3), 解决方案
+软件使用ccir656屏或者双屏模式时，TV上显示不会有错，但要避免在屏上显示内容
+在该双屏模式下，使用其它屏时，不要使得hwc 处于屏的角上
+ 
+3 RV
+1), 问题描述
+解码某些RV 文件会出现stream err 中断，有时会等不到中断
+2), 原因分析
+RTL硬件，需要先把码流从SDRAM搬入自己的Buffer中，然后才能解码。一次搬取64x32的码流。在搬取期间，码流的供给机制停止，不能给RealVideo的码流解析硬件模块提供有效的码流数据。但是如果此时正好解码到一个slice的最后一个Byte，剩余数据全部为零，硬件就会判断为该Slice解码完毕，丢掉相应的数据bit。因此造成后继解码的失败，最总导致了两种结果：Stream Error或码流解码状态死机。
+3), 解决方案
+软件绕，但无法保证完全绕过去
+如果一个slice的最后一个BYTE满足以下两个条件：就需要调整。
+1. 该BYTE所在WORD是64 word的整数倍，如第64个word、128个word、192个word；
+2. 该BYTE是BYTE1， 若码流WORD的byte排列为byte3,byte2,byte1,byte0
+调整方案:
+1. 将rv_frame的所有slice的最后一个byte的地址对256（=64word）取余数，并保存为pSliceEnd[i], 如果所有pSliceEnd[i]都不满足调整条件，直接正常方式解码。否则，进入如下调整流程
+2. 从小到大排列pSliceEnd[i]
+3. 以offset为1，步长为1，开始搜索合适的offset，保证将所有slice的buffer地址整体往后偏移offset后，新的pSliceEnd[i]达到调整目标。只要总的slice个数小于256，总是能搜索到这个offset的。
+4. 在确定offset后，重新分配slicebuffer, memcpy当前帧的slice data。
+5. 继续正常的解码流程
+ 
+4 ABI
+1), 问题描述
+操作ABI_CHIP_CTRL 寄存器的bit0，不能reset lcd 屏，不论是在bypass 还是normal
+2), 原因分析
+abi_lcd_rstn 优先级最高无论是什么模式，但仅在 BYPASS_LCD 为高时才起作用，也就是BYPASS_LCD模式下该bit才起作用，但BYPASS LCD 模式下，Baseband 不能访问ABI 寄存器。
+这个 code 是继承过来的。830 应该也有
+3), 解决方案
+通过ABI 控制 IO 的状态，请使用 abi_pad_oen[7] abi_pad_i[7] 来控制这个 IO
+ 
+5 IPP
+1), 问题描述
+OV5642连续挖框后编码有问题，需要加较长延时(mi2010没问题） 
+2), 原因分析
+IPP的所有寄存器的都是采用的shadow寄存器。即软件配置完所有的寄存器后，再配置update寄存器。而这些寄存器真正允许生效的时间为IPP中最后一级一帧的frameend到IPP输入下一帧的vsync来之前。
+IPP preview和capture path的源zoom control模块负责进行挖框处理，这个模块输出的frameend是在挖框之后自己算出来的。这个就有可能在SIF输出的frameend之前。
+在这种情况下如果软件重新配置挖框参数，就会出现参数生效了，而sif的数据还没有结束。此时zoom control会根据新的参数有可能继续输出数据，而write sizer模块实际已经接收完一帧数据了，如果继续往FIFO里写，就会出现我们遇到的write FIFO full的情况。
+3), 解决方案
+方案1：停码流
+如果需要重新配置挖框参数，需要先停一下码流，在配置完参数之后再开码流。
+方案2：结合SIF和IPP的两个模块的挖框功能
+SIF模块可以从原点开始挖框。只要保证IPP的挖框输出为SIF输出给IPP的图像的右下角既可。
+ 
+6 LCDIF
+1), 问题描述
+使用I2C 配置DPI 屏时需要在寄存器操作之间加延时
+2), 原因分析
+DPI panel I2C配置寄存器需要软件加延时，在连续的写数之间必须要加延时以保证在这个写的数据之间不会干扰
+最小延时=(data_bit_num + command_bit_num + 1)* sck_width * period of lcdif_pclk
+3), 解决方案
+软件加延时，保证满足最小延时
+
+22:14 2010-5-19
+技巧, VC0882, FPGA, 修复无法使用的CF卡, 用"mkdosfs L:"格式化. "L:"是盘符. 
+\\10.0.26.99\share\zhangjian\software\mkdosfs.exe
+
+10:50 2010-5-20
+时间管理
+0, 9:48
+
+1, 计划
+1), 出一个能用的emi bootloader.
+
+2, 次日计划: 
+1), clkrst和interrupt刷寄存器列表. 
+2), clkrst实验bus change clock source switch. 
+
+11:26 2010-5-20
+VC0882, clkrst
+1, 根据最新FPGA寄存器列表更新panda_os和dragon.
+1), de\VIM_Panel_Driver.c:
+新寄存器列表中"CLKRST_DE_MCLK_CTRL"改名为"CLKRST_VOUT_MCLK_CTRL"
+882没有"CLKRST_FUNC_MUX_SEL"这个寄存器, 删除. 
+
+17:06 2010-5-20
+代码阅读, Linux, qemu, ramdisk, initrd, arm qemu load ramdisk的过程和目的地址分析
+会把ramdisk load到物理地址+0x00800000的地址. 物理地址由arm_boot_info.load_start定义. 在realview中是0.
+1, main()(vl.c), 获得initrd的参数, 并传给machine init: 
+machine->init(ram_size, vga_ram_size, boot_devices,
+              kernel_filename, kernel_cmdline, initrd_filename, cpu_model);
+2, machine init由QEMUMachine定义, 例如 hw\realview.c: 
+QEMUMachine realview_machine = {
+    .name = "realview",
+    .desc = "ARM RealView Emulation Baseboard (ARM926EJ-S)",
+    .init = realview_init,
+    .ram_require = 0x1000,
+    .use_scsi = 1,
+};
+在 realview_machine.init 中 initrd_filename会赋值给arm_boot_info struct realview_binfo, realview_binfo会传给"arm_load_kernel()".
+
+3, arm_load_kernel()(hw\arm_boot.c)会把ramdisk读入0x00800000地址.
+#define INITRD_LOAD_ADDR 0x00800000
+arm_load_kernel()
+{
+    loader_phys = phys_ram_base + (pd & TARGET_PAGE_MASK) +
+            (info->loader_start & ~TARGET_PAGE_MASK);
+    //...
+    if (info->initrd_filename) {
+        initrd_size = load_image(info->initrd_filename,
+                                 loader_phys + INITRD_LOAD_ADDR);
+}
+1), "phys_ram_base"是在main.c(vl.c)中malloc的: 
+phys_ram_base = qemu_vmalloc(phys_ram_size);
+2), "loader_start"是struct arm_boot_info realview_binfo定义的. 看了看qemu中arm soc的定义, 要么是0地址要么是memory物理地址(例如OMAP定义"loader_start"到0x80000000).
+
+另: "qemu_register_reset"应该是注册了系统reset的函数和参数. 
+
+18:04 2010-5-20
+VC0882, FPGA, emi, booloader
+1, dangxiangfu板子跑不起来是因为tick太快. 
+2, 修改, 统一tick.
+1), g_nucleus_tick_clock_addon提示R_ARM_LDR_PC_G0. 
+不清楚原因, 用函数代替. 
+2), nucleus计时不准确. 
+3), 测试timer0本身是否准确:
+0x60051c00[29]=1, 0x60051c0c[29]=1. 
+0x60051c04[29]=test_pattern
+测试到的波形是11.02ms, 90.74Hz. 说明tick快了. 因为是两个tick翻转一次. 
+设置为20ms时周期是20.96ms, 47.76Hz. 
+都是mmu开, cache关的情况. 
+
+后来zhicheng提醒是否线性, 发现了其余开销是0.5ms, 详见下面邮件. 
+3, 发信
+为了便于norflash, sram等慢速memory使用, 加入"SYS_TICK_IN_MS_CUSTOMIZE", 
+允许用户自定义tick时间. 例如在make target中加入"-define=
+SYS_TICK_IN_MS_CUSTOMIZE=10". 表示tick是10ms. 
+这样可以避免慢速memory由于tick太快导致无法执行实际的任务. 
+基于此新作了norflash bootloader:
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\bin\20100520_emi_bootloader_for_newClkrst48MHz_newDDRParm_10msTick_zhangjian2user
+
+另外今天实验时发现tick不准确. 和zhicheng讨论后, 发现: 
+设置tick是1ms时: 实际约1ms, 开cache后0.8ms. 
+设置tick是2ms时: 1.5ms
+设置tick是10ms时: 5.5ms
+设置tick是20ms时: 20.96/2=10.5ms
+说明tick比预期快1倍, 且tick处理开销是0.5ms. 
+麻烦zhicheng继续debug. 
+
+00:31 2010-5-21
+VC0882, trace, 总结
+1, 2010-5-18: 说是trace有难度，但是也是对自己解决问题能力的检验。今天发现15号arm邮件提到的供电问题。
+2, 2010-5-21: trace信号分析。逻分能抓对csat抓不对时，可以想一想逻分是怎么抓数的。应该可以想到是域值问题。
+这次对什么信号是可以接受的信号有了了解。这些抓图要保留。
+arm的一些事情如果更早的沟通，更好规划，效率还可以提高。这样可能就有时间做pmu了。
+
+11:10 2010-5-24
+时间管理, 上周工作总结(2010年5月17日-2010年5月23日), 本周工作计划(2010年5月24日-2010年5月30日)
+1, 上周工作总结(2010年5月17日-2010年5月23日)：
+1), 调通除了itm外的trace通路。
+2), clkrst开始写代码. 
+3), 测试l2, 在sd通过. 
+
+2, issue：etm trace对系统tick有影响。
+
+3, 本周工作计划(2010年5月24日-2010年5月30日)
+本周计划要meet VC0882 icp schdule: arm 80%, arm test 60%, clkrst 50%. 
+1), arm:
+(1), 调试ITM.
+(2), 测试: 
+A, L2 on时DE可以正常使用. 
+B, trace在venc实验。
+C, ple和performance monitor中断提交测试. 
+2), clkswitch 调通bus切频。
+3), emi bootloader：支持测试和dangxiangfu使用。
+4), 建立bootloader环境。
+
+4, 其他: pmu需要clkswitch，bootloader。
+
+11:18 2010-5-24
+时间管理
+0, 9:44
+
+1, 本日
+1), 上午VC0882 sync up, bootloader工作分配. 
+2), 在编程规范中加入cache, mmu, 及系统抽象函数使用. 见"13:12 2010-5-24", 这个晚上继续完成. 
+3), 15:15- 看看ITM是否好做, 一时没有结果就做bootloader启动环境. 
+被4)打断. 
+被5)打断. 
+4), 1h: nucleus thread互斥, 见"17:47 2010-5-24"
+5), 提供bootloader启动环境, 如果时间紧可以先做一个没有完全去掉库的. 见"21:16 2010-5-24".
+被6)打断. 
+6), VC0882 bottleneck sync up.
+
+2, 次日计划
+1), 继续1-2). 
+2), clkrst实验bus change clock source switch. 
+3), 支持dangxiangfu调试emi bootloader
+4), arm简单实验ITM; 给arm发邮件. "10:33 2010-5-19"4
+5), 请假
+6), 给测试发emi bootloader使用方法. perl脚本需要转为exe. 
+7), clkrst和interrupt刷寄存器列表. 
+8), arm 四个中断提交测试. 
+9), 领VC0882 FPGA转接板.
+
+3, 四象限:
+1), 紧急, 重要
+(1), bootloader环境.<进行中>
+
+13:55 2010-5-24
+VC0882, FPGA命名规则
+vc0882_20100523_1730_fpgac0401_a8_20100512_L1_32_L2_0_No_Neon_Bufg_2fpga_noFdTv
+"vc0882_20100523_1730"表示vc0882这个FPGA(FPGA01)的版本, fpga0401表示在0401这个服务器跑的这个版本. 
+"a8_20100512_L1_32_L2_0_No_Neon_Bufg"表示A8版本. 
+
+17:47 2010-5-24
+VC0882, nucleus, liuxiaotao, TCP/IP协议栈移植, thread互斥
+1, TCT_Protect保护结构体, 会与当前thead关联. TCT_Unprotect解除保护. 
+DMC_Delete_Memory_Pool()(nucleus\os\src\dmc.c)
+
+/* Protect against access to the list of created memory pools.  */
+TCT_Protect(&DMD_List_Protect);
+
+/* Release protection against access to the list of created memory
+   pools. */
+TCT_Unprotect();
+2, \todo 查.
+/* Modify current protection.  */
+TCT_Set_Current_Protect(&DMD_List_Protect);
+3, 查如何获得当前线程. 
+
+20:08 2010-5-24
+(13:09 2010-5-25)
+VC0882, FPGA, ITM
+1, Before disabling the ITM, tools must ensure the FIFO is not full before writing a dummy packet to a Stimulus Register to flush out any overflow information. They must then wait for the ITMBUSY bit to go LOW again, before finally clearing the ITMEn bit.
+It is recommended that the ITMEn bit is cleared and waits for the ITMBusy bit to be cleared, before changing any fields in the Control Register, otherwise the behavior can be unpredictable. See Overflow packet on page 12-4 for information about disabling the ITM overflow packets.
+1), 寄存器地址
+VC0882 Coresight ITM 0x60008000.
+Control Register, CR, 0xE80
+2), 如果设置en=0, 需要等待busy=0再操作. 
+CR[0](ITMEn)=0
+等待CR[23](ITMBusy)=0.
+3), 系统运行起来实际看CR.ITMEn, 默认是0. 
+LOCKACCESS(0xfb0)=0xC5ACCE55 //解锁
+CR=7.
+2, 根据huangwei之前邮件, ITM连接到trace funnel 3. ETM@0.
+3, 只给ITM timestamp看来不行, 需要写入数据. 
+1), 从下面文档看, timestamp只在正常的包后面生成. 所以需要有正常的数据包. 
+The timestamp counter zeroes on a successful write. Timestamps are appended after the source, SWIT. The exception is if a synchronization packet is transmitted after the SWIT or the timestamp counter has overflowed, so the timestamp is preceded by an OVERFLOW or if a full timestamp reference, two million, is reached and a packet is emitted.
+
+4, 给arm邮件, 见"10:33 2010-5-19"4.
+
+21:16 2010-5-24
+VC0882, FPGA, bootloader环境
+1, 发信: 
+1),VC0882 bootloader编译环境建立完成, 可以编译, 运行可以回显uart输入的字符. 
+这个环境建立的比较仓促, 肯定有很多不完善的地方, 我会逐步完善. 
+另外大家还有什么需求, 希望尽快给我邮件. 谢谢
+bootloader环境与panda_os环境基本一致, 栈顶地址是"0x20008000-256-256", 大家觉得有问题什么麻烦给我发信, 我会及时修改. 
+目前已封装如下函数:
+Memory操作函数: 
+VIM_LIB_Memcmp, VIM_LIB_Memset.
+Print函数: 
+HALPrint(打印字符串, 不支持参数), HALPrint_DecNum(打印10进制无符号整数).
+寄存器操作函数: 
+VIM_HAL_READ_MEM, VIM_HAL_WRITE_MEM, VIM_HAL_WRITE_UINT32_MASK, VIM_HAL_WRITE_UINT32_BITVAL, VIM_HAL_READ_UINT32_BITVAL, VIM_HAL_READ_UINT32_BITCHECK.
+
+下一步工作是: 
+(1), 做RW段的搬移和ZI段的初始化. 
+(2), 封装必要的库函数.
+
+2), 新增文件需要修改Makefile.arm: 
+在VC0882\bootloader\Makefile.arm的C_SOURCES加入包含目录的文件名即可: 例如clkrst目录下新增了clkrst\VIM_CLKRST_Driver.c, 
+C_SOURCES := \
+boot/bootloader.c 	\
+uart/VIM_UART_Driver.c	\
+padc/VIM_PADC_Driver.c	
+改为
+C_SOURCES := \
+boot/bootloader.c 	\
+uart/VIM_UART_Driver.c	\
+padc/VIM_PADC_Driver.c	\
+clkrst/VIM_CLKRST_Driver.c
+
+22:22 2010-5-24
+时间管理, VC0882, code freeze, arm, clkrst尚未完成的任务: 见今日yangzuoxing邮件
+1, arm
+1). test itm 
+2). use RVIahbload  to download
+3). continue to test l2 for other module
+4). debug for tick issue for trace etm
+5). mas review
+2, clkrst
+1). test clock switch for bus (async and sync, change src and divider)
+2). test software reset
+
+22:24 2010-5-24
+VC0882, FPGA, clkrst, divider
+发信: yangzuoxing; huangwei; pengxiaoming
+cc: wangxin; aiguo; fengbeizhan; zhangjian; liaozhicheng; Zhou Zhi Tao
+VC0882 FPGA上没法测试clock divider不是1:1的情况
+刚才和zhicheng讨论得知, 目前FPGA上nand没法支持占空比非1:1的clock, 之前有些版本是可以配置占空比. 
+所以在最新FPGA上没法测试clock divider不是1:1的case. 如果需要测试, 请提供其它测试方法. 
+
+12:59 2010-5-25
+时间管理
+0, 10:40
+
+1, 计划
+1), ITM希望能由csat抓到数据; 给arm发邮件. "10:33 2010-5-19"4. 
+见"20:08 2010-5-24"-2
+2), clkrst实验bus change clock source switch. 见"20:58 2010-5-25", 暂无结果. 
+3), arm 四个中断提交测试. <DONE>
+4), bootloader环境需要解决rw, zi初始化和debug问题. 
+5), 领VC0882 FPGA转接板.
+
+2, 次日计划
+1), 继续"11:18 2010-5-24"-1-2). 
+2), 请假
+3), clkrst和interrupt刷寄存器列表. 
+
+16:16 2010-5-25
+VC0882, FPGA, GPU
+VDK会封装EGL, 不过想直接用EGL需要关闭VDK. 
+
+20:57 2010-5-25
+VC0882, FPGA, timer, 前面发现的timer快一倍问题原因是: timer是由于默认用的xclk(48MHz). 虽然DCM分出的是24Mhz, 但是timer默认不选这个通路. huangwei已经修改了clock scheme. 
+
+20:58 2010-5-25
+VC0882, FPGA, clkrst, clkswitch, bus switch
+1, 今天至少要完成bus clock source switch或divider swtich中的一个. 
+2, bus switch
+1), 用umonitor看bus aclk
+um_ctrl(0x600510f0)=0x100 //设置umonitor输出为clkrst. 
+UM_SEL(0x60000120)=0x8b //um_out_31_30 = {uart0_aclk, uart0_arst_n};
+2), 看到一条直线, 和huangwei, fanzhjun讨论发现没有这个版本. fanzhijun会给我单出一个版本. 
+2, 只能先实验ddrc switch了:
+1), vc0882_20100506_2200_fpgac0301_fpga_L1_32_L2_0_No_Neon_bit2_2fpga.ace
+以下自fanzhijun"version description.doc"
+882：vc0882_20100506_2200_fpgac0301
+A8：fpga_L1_32_L2_0_No_Neon
+因为是normal固定的不包括gpu，video codec，usb，nfc，暂不再带后缀。
+注：此版本带define CLOCK_SWITCH,即带clock switch功能。使用之后请反馈给huangwei。
+fanzhijun"version description.doc"end
+2), 0x6000004c=0x10100(默认值是0x10000), 预期ddrc_mclk=24/2=12MHz. 0x60000054一直是0x4, busy. 难道频率太低了? 
+3), 0x6000004c=0x10101, 预期ddrc_mclk=108/2=54MHz. 但0x60000054一直是0x4, busy, huangwei说可能是ddrc switch流程没有完成. 
+4), 看了看ddrc mclk switch guideline和clkrst ddrc_mclk switch guideline, 二者不太一致. 
+3, 和大家讨论这个问题(明天再发)
+发信: cuiyunfei; zhaobeihua; lilizhao; huangwei
+
+23:24 2010-5-25
+VC0882, FPGA, bootloader环境
+1, 修改
+1), 加入调试信息, 加入调试信息后可以用rvdebug调试c源码
+--debug
+2),  --brief_diagnostics 表示输出简要编译信息
+3), copy RW, clear ZI, 参考VC0882方式处理. 详见vectors.s, ads.lds
+
+2, \todo memory静态分配
+
+3, 发信: VC0882 bootloader环境更新
+
+10:56 2010-5-26
+时间管理
+0, 9:40-22:40
+
+1, 计划
+1), bus switch.
+2), ITM暂时没法测试, 发信. 同时发clkswitch没有仿真. 
+3), 请假
+4), VC0882 环境文档: A8 cache变化; cache使用; 库函数("11:18 2010-5-24"-1-2))等等.
+
+2, 次日计划:
+1), cache问题. 对比PB-A8. 主要是排除是否硬件问题. 
+2), clkrst和interrupt刷寄存器列表. 
+
+10:57 2010-5-26
+VC0882, FPGA, clkrst, clkswitch
+1, clkrst umonitor有两部分. clkrst的umonitor和module clock. 
+想看uart0_aclk需要padc um_ctrl选择uart0. 
+2, 
+um_ctrl(0x600510f0)=0x4300 //选择uart0.
+UM_SEL(0x60000120)=0x8b //um_out_31_30 = {uart0_aclk, uart0_arst_n};
+还是一条直线. 和fanzhijun讨论, 今天fail那个版本就是31,30没有的版本. 
+3, huangwei再修改. 会出一个能单独引出bus_aclk的. 
+
+16:40 2010-5-26
+VC0882, FPGA, Cortex-A8, Arm提交测试: NEON, PLE三个中断, Performance monitor irq
+1, 上传NEON和PLE中断代码. 
+2, Performance monitor irq需要做脚本或写代码. 今天只是用integration mode测试的. 
+
+17:43 2010-5-26
+VC0882, FPGA, PMU
+1, 实验normal->idle->normal, 执行wfi后arm没有停住, 后来wangzhengwei把除了wake up source以外的中断都关闭就没问题了. 估计原来是tick中断把arm唤醒了. 
+
+19:05 2010-5-26
+VC0882, FPGA, sd, sd速度慢是因为sd module内部有一个分频, 把24MHz分成了12MHz, sd卡在24MHz clock下读约10Mbyte, 写约5Mbyte. 
+
+19:07 2010-5-26
+VC0882, FPGA, Cortex-A8, cache, liaozhicheng发现cache clean操作中少clean了一部分
+
+19:44 2010-5-26
+(19:59 2010-5-27)
+(10:58 2010-5-28)
+(11:12 2010-6-17)
+VC0882, FPGA, 环境, VC0882 environment freshman guide, 与CVS保持同步; VC0830, aasp; memory barrior
+
+VC0882 environment freshman guide
+
+20106-17 添加aasp和memory_barrior函数说明. zhangjian
+
+1	notes:
+1.1	FPGA硬件环境
+见"D:\VC0882\document\fpga\VC0882_FPGA注意事项.txt"
+1.2	调试工具使用
+见"D:\VC0882\document\arm\debug"文档. 
+1.3	CVS更新提示: 
+如果CVS更新了.cproject等以"."开头的问题, 需要关闭后重新打开VC0882_OS工程. 否则这些文件不会生效. 
+
+2	库函数
+注1: bootloader环境中, memory静态分配, 打印函数有变化. 
+注2: 要求大家调用抽象后的函数目的有两个: 避免Cortex-A8 unalign access feature造成系统运行出错. 便于dragon调用panda_os的一些函数. 
+2.1	内存分配
+VIM_MMU_Driver.h
+void* VIM_MMU_Malloc(VIM_MMU_MODULEID id,unsigned int size)
+void* VIM_MMU_CacheMalloc(VIM_MMU_MODULEID id,unsigned int size)
+VIM_RESULT VIM_MMU_Free(void *pBuf);
+2.2	memory操作
+libc中memcpy, memset, memcmp, memalign需要使用: 
+VIM_HAL_MEMCPY
+VIM_HAL_MEMSET
+VIM_HAL_MEMCMP
+VIM_HAL_MEMALIGN
+宏在"VIM_SYS_Driver.h"定义. 
+"#include VIM_Driver.h". 
+
+2.3	寄存器操作
+(1), #include "VIM_DRIVER.h"
+(2), 原型在"VIM_HAL_Driver.h"定义. 
+(3), 32位读写
+VIM_HAL_READ_REG32( _register, _value_ );
+VIM_HAL_WRITE_REG32( _register_, _value_ );
+value = VIM_HAL_READ_REG(_register_);
+VIM_HAL_WRITE_REG( _register_, _value_ );
+(4), UINT32 VIM_HAL_WRITE_UINT32_MASK(UINT32 addr, UINT32 mask, UINT32 val);
+修改addr对应地址的数据的mask比特为val中对应mask位置的值
+(5), UINT32 VIM_HAL_WRITE_UINT32_BITVAL(UINT32 adr, UINT32 sbit, UINT32 ebit, UINT32 val)
+修改adr对应地址的数据从sbit到ebit的比特val. 与mem_write_mask函数不同之处在于本函数中val为对应sbit(含)到ebit(含)的几个比特的值.
+(6), UINT32 VIM_HAL_READ_UINT32_BITVAL(UINT32 adr, UINT32 sbit, UINT32 ebit)
+参见VIM_HAL_WRITE_UINT32_MASK.
+(7), UINT32	VIM_HAL_READ_UINT32_BITCHECK(UINT32 adr, UINT32 bit)
+检查adr内存(或reg)处的bit是否为1.
+
+2.4	文件操作，
+(1), #include "VIM_DRIVER.h"
+(2), 原型: "fat\fat\VIM_FAT_API.h"
+(3), 文件操作常用函数都有定义, 不再一一列举. 个别用法有差异. 
+fat_open, fat_read, ...
+
+2.5	打印，如print
+1), driver层:
+XXX_DBG, XXX_MSG, XXX_ERR.
+由module owner在"VIM_DRIVER_Debug.h"定义. 
+2), test层用"HALPrint()".
+
+2.6	rand函数(hal\VIM_HAL_Driver.h)
+VIM_HAL_RAND(): 产生0-1之间的随机数. 
+VIM_HAL_SRAND(seed): 设置随机数种子, 如果不设置种子每次随机的结果都相同. 一般用timer做为种子, 每次取的timer时间不同, 种子不同, 所以随机序列不同. 
+VIM_HAL_SRAND_SYS_MS(): 用系统tick timer的ms时间做为种子. 
+VIM_HAL_RAND_INTEGER(min,max): 产生min-max之前的整数随机数.
+
+3	mmu, cache
+开mmu, L1, L2 cache方法: 在make target中加入"-define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1", 原有"-define=CACHE_OFF=1"(关闭icache, dcache). "-define=ICACHE_ON=1"(在aasp脚本中打开icache)都删除. 
+3.1	mmu, cache简介:
+mmu映射, normal memory区域支持非对齐访问(VC0882 arm新feature, 与arm9不同).
+cache在CPU subsystem内部的高速memory, cpu可以根据需要读入若干个words, 提高cpu和bus效率.
+介绍一下cortex-a8 mmu, cache新feature. mmu dcache attribute: c b两个bit变为tex c b五个bit。
+非对齐访问造成data abort。
+882memory 映射0,0x60000000.
+normal, device, strongly ordered. 只有normal支持非对齐访问。注意: 如果编译选择没有开mmu时打开dcache必定会死. 
+vc0882 cache分l1,l2. 32k, 128k.
+3.2	打开mmu, cache
+3.2.1	mmu:
+目前打开mmu只能通过修改编译参数打开. eclipse make target中加入"-define=MMU_FLAT_MAP=1"表示打开mmu平映射. 
+3.2.2	打开L1 cache
+1, 命令打开: 
+icache -on  //打开icache
+icache -off //关闭icache
+dcache -on  //打开dcache
+dcache off  //关闭dcache
+2, 修改编译参数使cache默认打开
+在make target中删除"-define=CACHE_OFF=1"即表示在系统启动时打开cache. 
+修改"-define=CACHE_OFF=1"为"-define=CACHE_OFF=0", 没有作用, 仍然不会开icache. 
+3, 修改编译参数使icache默认打开
+在make target中加入”-define=ICACHE_ON=1”表示icache默认打开. 
+3.2.3	打开L2 cache
+系统默认状态下L2关闭。
+在make target中加入”CACHE_L2_ON”表示打开L2，若未定义此宏，L2关闭。 
+另外，可以在菜单View->register->Control的"Accessary Control Register"[bit1]表示L2 cache enable. Bit1=1表示L2打开, =0表示L2关闭. 
+3.3	cache使用
+cache用法可以参考"sd\VIM_SD_Driver.c": VIM_SD_ReadOneBlk()和VIM_SD_WriteOneBlk()
+调用的VIM_SD_CacheInvalidateM2C()/VIM_SD_CacheCleanC2M(). 
+API如下: 
+DCACHE_IS_ENABLED: 判断dcahe是否打开. 
+DCACHE_CLEAN_RANGE(): 把cache数据写回memory. e.g. DMA读memory前要把cache数据写回
+memory. 
+DCACHE_INVALIDATE_RANGE(): 使cache数据无效, 一般用于DMA写memory后, 使cache数据无
+效, 保证arm下次从memory直接取数, 而不是从cache取数. 
+DCACHE_CLEAN_AND_INVALIDATE_RANGE(): clean+invalidate. 
+参数: 
+addr: cache操作起始地址. 
+size: cache操作size, byte单位. 
+注意: 在VC0882架构中, 单独的invalidate只能invalidate到L2 cache. 所以这里的DCACHE_INVALIDATE_RANGE实际是DCACHE_CLEAN_AND_INVALIDATE_RANGE. 建议只使用DCACHE_CLEAN_RANGE和DCACHE_CLEAN_AND_INVALIDATE_RANGE. 
+3.4	确保操作顺序
+Cache一致性操作(clean, invalidate, clean and invalidate)后系统会做memory_barrior命令保证cache一致性操作及其之前的memory, 指令访问都完成. 
+如果仅仅需要保证操作顺序, 可以直接调用memory_barrior()命令.
+
+4	AASP
+aasp用法参见"D:\VC0830\VC0830\document\AASPxxx"
+do_de_panel_open()和do_de_displayAfat()分别说明了两种风格参数输入方式(直接按顺序输入和"-vxxx".
+
+5	调整tick快慢
+为了便于norflash, sram等慢速memory使用, 加入"SYS_TICK_IN_MS_CUSTOMIZE", 
+允许用户自定义tick时间. 例如在make target中加入"-define=
+SYS_TICK_IN_MS_CUSTOMIZE=10". 表示tick是10ms. 
+这样可以避免慢速memory由于tick太快导致无法执行实际的任务. 
+基于此新作了norflash bootloader:
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\bin\20100520_emi_bootloader_for_newClkrst48MHz_newDDRParm_10msTick_zhangjian2user
+
+6	编译. 
+1), -m后面加入要编译的模块. 
+
+7	出错时要看哪些寄存器:
+当arm出现undefined instruction, prefetch abort, data abort等错误时, 可以通过分析如下寄存器确定出错具体原因:
+1), arm register: lr, lr说明了从何处跳转此处. 可以用于定位在哪里出错. 如果lr没有对应任何代码, 可能是程序先跑飞到其它地址, 然后跑死的. 
+2), rvdebugger register选项卡的control页有DFSR, DFAR, IFSR, IFAR. 这四个寄存器作用在"D:\VC0882\document\arm\Cortex-a8\DDI0344J_cortex_a8_r3p2_trm.pdf"有详细说明. 
+它们分别说明在data或intruction出错时的具体错误. 
+例如查TRM, 可以知道, DFSR[11]=0表示是read data出错. =1表示write data出错. 
+[12][10][3:0]这5个bit可以知道具体错误类型. 例如b000001是alignment fault.
+DFAR: The purpose of the Data Fault Address Register (DFAR) is to hold the Modified Virtual Address (MVA) of the fault when a precise abort occurs.
+在VC0882里面, DFAR通常就是产生data abort时读写的地址. 
+3), 如果跳回0地址, 也可以做类似分析. 有时系统不稳定会导致跳回0地址.
+
+8	VC0882 FPGA环境介绍补充文档
+D:\VC0882\document\arm\Cortex-a8\DDI0344J_cortex_a8_r3p2_trm.pdf, p384.
+D:\VC1600WCVS\doc\arch\vc0882\Visio-VC0882 Chip Block Diagram 1.0.pdf, 结合"VC0882 memory and register mapping.xls"
+
+20:06 2010-5-26
+VC0882, FPGA, arm进度
+1, 之前要求arm到达80%, arm test 60%, clkswitch 50%.
+但是有困难, 所以发信.
+2, Arm和clkswitch sw都没法到达预期进度
+1), Arm这边的ITM rvds不支持. 据arm说keil uVision支持, 如果实验需要另一套工具. 
+2), clkswitch这边LiNan尚未开始仿真. Try的结果是bus可以切频(由于bus aclk没有拉出来, 没法验证频率是否正确, huangwei今天已修改, 在做版本).
+Ddrc switch出错(切频未完成): ddrc和clkrst mas的software guideline有矛盾的地方. 需要和designer进一步讨论. 
+
+20:20 2010-5-26
+VC0882, 例会
+1, sync up.
+arm ITM也可以用csat抓, 但是需要自己手动分析.
+
+2, VC0882环境介绍.
+
+3, 问问大家bootloader环境还有没有问题. 
+
+14:42 2010-5-27
+时间管理
+0, 9:40
+
+1, 计划
+1), 上午sync up. VC0882环境介绍. 文档位于"D:\VC0882\document\VC0882 environment freshman guide.doc"
+2), 上传mmu, cache状态表. 请大家更新, 见"14:56 2010-5-27".
+3), 上传PLE代码. 见"17:47 2010-5-9"2
+4), 上传NEON代码, 见"21:14 2010-5-27"
+5), 总结: 今天有些环境支持工作. 讨论了FPGA clkswitch, 拿到ASIC clkswitch代码. 
+
+2, 次日计划
+1), mmu映射为non-cacheable空间. 这个mengfandong需要用, 一定先做. 另外已经与vivante讨论过, vivante在Linux中把command buffer也是设为non-cachable空间. 
+2), cache问题. 对比PB-A8. 主要是排除是否硬件问题. 
+3), clkrst和interrupt刷寄存器列表. 
+4), clkswitch见"21:22 2010-5-27".
+
+3, 四象限
+2), 不紧急, 但重要
+(5), 如果有时间, 把NEON和Performance monitor irq提交测试. <DONE>见0527日志.
+4), 不紧急, 不重要
+(4), 写ICP环境training文档. <DONE>见1-1).
+
+14:56 2010-5-27
+VC0882, FPGA, Cortex-A8, mmu, cache, L1 icache, dcache, L2 cache, 使用状态
+在zhangjian邮件"关于VC0882 mmu, cache使用"20100430_1834后续回复基础上回复:
+zhangjian邮件"请大家更新VC0882 mmu cache使用状态"20100527_1523
+
+17:59 2010-5-27
+VC0882, FPGA, 环境介绍, 补充文档
+D:\VC0882\document\arm\Cortex-a8\DDI0344J_cortex_a8_r3p2_trm.pdf, p384.
+D:\VC1600WCVS\doc\arch\vc0882\Visio-VC0882 Chip Block Diagram 1.0.pdf, 结合"VC0882 memory and register mapping.xls"
+
+21:14 2010-5-27
+VC0882, FPGA, Cortex-A8, NEON
+1, hi, hanzhimin
+NEON测试代码我已上传CVS,. 编译arm target. 编译前用D:\VC0882\panda_os\config_neon.ads.mk替换D:\VC0882\panda_os\config.ads.mk
+2, (22:48 2010-7-13)arm_neon编译出的neon code
+
+21:22 2010-5-27
+VC0882, FPGA, clkrst, clkswitch, 
+1, ddrc switch可能是没有设置合适的self-refresh时间
+2, yanglei ASIC切频代码, yanglei邮件"答复: 需要VC0882 clkswich代码"20100527_2129
+这是一个ＤＤＲＣ从ＰＬＬ２　２００ＭＨｚ切频到ＰＬＬ６　１２５ＭＨｚ的例子。　供你参考，流程应该是一样的。
+//switch to PLL6 125MHz
+void ddrc_clkswitch_125(int de_mode)
+{   
+    unsigned int apb_rdata;
+    unsigned int ddrc_cfg;
+    
+    //[17:8] DDRPHY_DLL state xclk cycle 5.12us
+    //[7:0] DDR{HY_DLL srst xclk cycle  100ns
+    SETREG32(DLL_RST_CFG,0x07F0F);
+    
+    printf("open PLL6\n");
+    ddrc_cfg = GETREG32(PLL_CTRL);
+    //printf("PLL_CTRL 0x%x\n",ddrc_cfg);
+    ddrc_cfg = ddrc_cfg& 0xff0fffff;
+    SETREG32(PLL_CTRL,ddrc_cfg);
+    
+    //step 1
+    //config DE_VBLANK_MODE
+    if(de_mode == 1){
+        printf("clk_switch with DE vblank\n");
+        SETREG32(DDRC_MCLK_CFG_MODE,1);
+    }
+    
+    //step 2
+    //config ddrc refresh
+    ddrc_cfg = 0x03000FFF;//exit self with nothing
+    //ddrc_cfg = 0x03200FFF;//exit self with mrs
+    //ddrc_cfg = 0x03600FFF;//exit self with emrs + mrs
+    //ddrc_cfg = 0x03700FFF;//exit self with dllrest + emrs1 + mrs
+    SETREG32(DDRC_BASE+0x0018,ddrc_cfg);
+ 
+    //step3
+    //config ddrc enable shadow register write 
+    apb_rdata=GETREG32(DDRC_BASE+0x0000);
+    ddrc_cfg = (apb_rdata | 0x4); //clock_switch
+    //printf("set ddrc reg 0x0000 0x%8x\n",ddrc_cfg);
+    SETREG32(DDRC_BASE+0x0000,ddrc_cfg);
+    //set RD_SL 
+    SETREG32(DDRC_BASE+0x0074,0x00);
+    //set DQS_EN_SEL
+　SETREG32(DDRC_BASE+0x0078,0xffff);
+ 
+   //step4
+    //config target freq's timing
+    //DRAM TIMING2 0x30     
+    //[13:8]    tRC 
+    //[7:4]     tRRD
+    //[3:0]     tRP  
+    //for testing shadow update 
+    //SETREG32(DDRC_BASE+0x0030,0x06000B23);        
+    SETREG32(DDRC_BASE+0x0030,0x06000F34);
+ 
+    //step5
+    //config ddrc disable shadow
+    apb_rdata=GETREG32(DDRC_BASE+0x0000);
+    ddrc_cfg = (apb_rdata&0xFFFFFFFB); //clock_switch
+    SETREG32(DDRC_BASE+0x0000,ddrc_cfg);
+ 
+    //step6
+    //config target PLL
+    //PLL_CLKR = 0x06 PLL_CLKOD = 0x0 PLL_CLKF = 0x62 792M
+    //SETREG32(PLL6_CFG, 0x620002);   
+    //PLL_CLKR = 0x02 PLL_CLKOD = 0x0 PLL_CLKF = 0x7c 1G
+    SETREG32(PLL6_CFG, 0x7c0002);
+ 
+    //step7`
+    //wait PLL stable
+    printf("wait PLL stable...\n");
+    //[5:0] PLL6--PLL1 stable 
+    apb_rdata = GETREG32(PLL_STATUS);
+    while( (apb_rdata & 0x020)  == 0x0 )
+        apb_rdata = GETREG32(PLL_STATUS);
+ 
+  　printf("CLK_RST.ddrc_mclk_cfg\n");
+    //step8
+    // config clk_rst.ddrc_mclk_cfg
+    //[16] phy_dll_bp 
+    //[13:8] div
+    //[2 :0] pll_sel
+ 
+    //apb_rdata = 0x00012706;// PLL2->6 , ddrcmclk 198->25MHz, PHY_DLL_BYPASS
+    //apb_rdata = 0x00011306;// PLL2->6 , ddrcmclk 198->50MHz, PHY_DLL_BYPASS
+     apb_rdata =  0x00000706;// PLL2->6 , ddrcmclk 198->125MHz, PHY_DLL_enable
+    SETREG32(DDRC_MCLK_CFG, apb_rdata);
+ 
+    //hardware do clkswitch automatively
+    while(GETREG32(SYS_CLK_CFG_STATUS) & 0x04);
+    printf("switch done\n");
+}
+
+21:28 2010-5-27
+VC0882, FPGA, 环境, 今天qiqingchao arm workbench4.0编译有问题出错, 后来发现是esde runtime的工具无法正常使用造成的
+
+09:25 2010-5-28
+时间管理
+0, 9:55-23:30
+
+1, 本日计划和执行
+1), icache默认打开. 在所有make target中加入"-define=ICACHE_ON=1".
+1), mmu映射为non-cacheable空间. 这个mengfandong需要用, 一定先做. 另外已经与vivante讨论过, vivante在Linux中把command buffer也是设为non-cachable空间. 
+
+2, 次日计划
+1), L2 cache邮件. kongyingqi仿真, guohaifeng实验新版本问什么不行. 
+2), cache问题. 对比PB-A8. 主要是排除是否硬件问题. 
+3), clkswitch: 实验新出版本bus aclk能否引出. 加入yanglei切频代码并实验. 
+之前进展见"21:22 2010-5-27".
+4), clkrst和interrupt刷寄存器列表. 
+5), 关注anzhiming cache进展, 见"10:47 2010-5-28"
+
+10:47 2010-5-28
+VC0882, FPGA, Cortex-A8, mmu, cache, sd: cache测试
+1, anzhming用0525 L2 128 48MHz, 开dcache后, 进入sd模块会死. 
+要看一下是否开L2才会死. 如果开L2会死也要查, 原来我试过sd开L2是可以的. 
+2, 刚才咱们一起测试的vc0882_20100525_2000_fpgac0406_a8_20100524_L1_32_L2_128_Neon_48M_2fpga_noFdTv和vc0882_20100525_2000_fpgac0406_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv开L2 cache时sd都有问题. 
+但是前者hanzhimin单独测试L2 cache是正确的. 需要确定一下最新版本和如下ACE mmu, cache工作是否正常. 
+vc0882_20100427_2200_fpga_all_vc0882_20100429_L1_cache_Neon_bit2_2fpga_vc0882_20100427_2200_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+测试mmu, mmu+icache, mmu+icache+dcache, mmu+icache+dcache+L2 cache下sd basetest和copy文件是否正确. 
+测试后把测试结果发出来, 咱们再讨论一下. 
+3, anzhiming测试结果
+anzhiming邮件"答复: 关注cache测试"20100528_1514
+vc0882_20100527_2000_fpga05272200bak_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+mmu                                copy ok     fatspeed ok   basetest ok
+mmu+icache                    copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche      copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche+l2  fail
+
+vc0882_20100527_2000_fpga05272124_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+mmu                                copy ok     fatspeed ok   basetest ok
+mmu+icache                    copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche      copy ok     fatspeed fail(第一次fail, 第二次pass)   basetest ok
+mmu+icache +dacche+l2  fail
+
+vc0882_20100527_2000_fpga05272200_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+mmu                                copy ok     fatspeed ok   basetest ok
+mmu+icache                    copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche      copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche+l2  fail
+
+vc0882_20100427_2200_fpga_all_vc0882_20100429_L1_cache_Neon_bit2_2fpga_vc0882_20100427_2200_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+mmu                                copy ok     fatspeed ok   basetest ok
+mmu+icache                    copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche      copy ok     fatspeed ok   basetest ok
+mmu+icache +dacche+l2  copy ok     fatspeed ok   basetest ok
+4, 担心这个版本L2有问题, 但是hanzhimin PLE测试没有问题:
+hanzhimin邮件"A-8版本验证结果"20100528_1723
+PLE中断在各个版本的验证结果
+vc0882_20100527_2000_fpga05272200bak_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+测试结果：pass
+vc0882_20100527_2000_fpga05272124_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+测试结果：pass
+vc0882_20100527_2000_fpga05272200_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+测试结果：pass
+vc0882_20100427_2200_fpga_all_vc0882_20100429_L1_cache_Neon_bit2_2fpga_vc0882_20100427_2200_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+测试结果：pass
+5, 但是zhangpu Linux(含GPU 2D, 3D测试)可以进行. 虽然也会死, 但是没法知道是否是L2问题. 
+1), zhangpu实验L2关闭. 但是没法评估稳定性有没有改善. 
+6, (22:49 2010-5-28)
+vc0882_20100526_2000_03051809_04051809_01052709_02052409(L2_48M)_4fpga_normal_Dec+Enc_NoGpuSpiPwmAudifTpiUsbNfc.ace
+不开l2 fatspeed正常, 开了fatspeed会死. 
+
+0528两个L2版本在4FPGA-4无法连接arm, memory是hynix.
+
+7, (11:16 2010-5-29)
+VC0882 L2 cache测试fail
+发送: huangwei; kongyingqi; guohaifeng; fanzhijun
+cc: yangzuoxing; wangxin; ai guo; fengbeizhan; zhangjian
+hi, huangwei, haifeng, zhijun, kongyingqi
+
+使用5月28日出的三个版本(见后)开mmu, L1, L2 cache时 sd测试(初始化,读写)会跑死, 但L2的DMA PLE测试(从memory搬移16k数据到L2)通过. 
+如果关闭L2, 只开mmu和L1 cache, sd测试通过.
+对比测试vc0882_20100427_2200_fpga_all_vc0882_20100429_L1_cache_Neon_bit2_2fpga_vc0882_20100427_2200_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+开mmu, L1, L2的sd测试和PLE测试都通过. 
+
+这两个版本之间的A8有没有改动? 希望kongyingqi仿真一下最新代码. 附件是PLE测试代码. 
+
+测试的版本如下: 
+vc0882_20100527_2000_fpga05272200bak_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+vc0882_20100527_2000_fpga05272124_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+vc0882_20100527_2000_fpga05272200_a8_20100524_L1_32_L2_128_Neon_2fpga_noFdTv.ace
+
+注: 该问题已提交issue: 9050. 
+
+best regards
+zhangjian
+
+17:15 2010-5-28
+VC0882, FPGA, cache进展, 
+1, audio
+boxue单独开icache, dcache都没问题. icache, dcache都开有问题. 最后定位到是I2C配置时如果i/dcache都开会有问题. 开始感觉是memory同步问题, 但加入memory_barrior没有效果. 后来实验把延时改为系统延时(VIM_SYS_HwDelayUs)就没问题了. 
+boxue会继续查. 看看为什么延时没有影响. 
+
+23:06 2010-5-28
+VC0882, FPGA, Cortex-A8, mmu, cache
+1, 5月28日mmu, cache调试进展
+hi, mengfandong
+我加入了VIM_MMU_PageTable_Section_ChangeAttr()可以满足你的要求, 如下可以把addr开始的size大小的memory区域改为none cachable的.
+ret = VIM_MMU_PageTable_Section_ChangeAttr(addr, size, MMU_NORMAL_NO_CACHE);
+这个non-cachable区域是normal属性, 简单说是允许arm乱序访问的区域, 所以在给uhost硬件使用前需要调用"memory_barrier()"保证arm访问这个memory区域读写完成. 
+VIM_MMU_PageTable_Section_ChangeAttr()函数用法见MMU_TEST_SectionAttr()(mmu\test\mmu_test_api.c). 该函数支持运行时修改page table属性, 目前只支持修改一个section的属性(VC0882 ddr page table都是这种属性). 
+
+hi, all
+今天boxue audio开cache遇到问题, 把原来用软件delay的函数改为硬件delay(VIM_SYS_HwDelayUs)就正常了. 
+
+23:18 2010-5-28
+VC0882, FPGA, timer
+Liaozhicheng邮件"882 tick和timer计时已修正"20100528_1957
+现在timer的mclk是直接从XCLK出来的48M，而代码设计时用的是PLL分频出来的24M，所以现在FPGA上的延时都快了一倍。现已修正，请各位更新代码，谢谢！
+补充说明一点：由于现在TICK采用的是continue模式，这种模式需要每次重新配置下一次中断时间，即有一个读取，计算，写回的动作，需要耗费少许时间，所以tick的时间是有小小的误差，经测量，打开cache后，每个tick会多用15us左右；关闭cache为115us。所以如果用tick计时可能有小小误差。但是timer模块提供的计时函数不走tick计算，所以是比较准确的，这些函数如HALGetNowTime，VIM_TIMER_DelayMs等都是准确的，大家可以放心用。
+
+10:42 2010-5-29
+时间管理
+0, 10:23
+
+1, 本日计划和执行
+1), L2 cache邮件. kongyingqi仿真, guohaifeng实验新版本问什么不行. 
+已发邮件, 报issue, 见"10:47 2010-5-28"7.
+2), 和mengfandong讨论OHOST中non-cachable问题. 见"12:16 2010-5-29".
+3), cache问题. 对比PB-A8. 主要是排除是否硬件问题. 
+4), clkswitch见"21:22 2010-5-27".
+5), 关注anzhiming cache进展, 见"10:47 2010-5-28"
+
+2, 次日计划:
+1), 给hanzhimin调整bus aclk的命令.
+2), 在panda_os中完成get cache info函数, 打印mmu, L1, L2状态和大小. 
+3), clkrst和interrupt刷寄存器列表. 
+
+3, 四象限
+1), 紧急, 重要
+(1), 如果有时间着手写clkswitch代码. <进行中>
+(2), bootloader环境.<进行中: 初步完成>
+
+12:16 2010-5-29
+VC0882, FPGA, Cortex-A8, mmu, cache, non-cachable, uhost, mengfandong
+1, bitmask不是系统提供的.
+2, 寄存器操作用的是结构体不是VIM_HAL宏. 这样就不能用dragon直接调用uhost driver里面的函数了. 
+
+10:54 2010-5-31
+时间管理, 上周工作总结(2010年5月24日-2010年5月30日), 本周工作计划(2010年5月31日-2010年6月5日)
+1, 上周工作总结(2010年5月24日-2010年5月30日)
+1), itm: rvds不支持, 需要用uvision测试. 暂缓.
+2), 4个中断, neon提交测试.
+3), clkrst bus switch可以切, 未验证频率.
+4), bootloader环境初步建立.
+5), 环境支持. 
+
+2, 本周工作计划(2010年5月31日-2010年6月5日)
+如果希望到达arm 90%, 需要去掉itm, cti irq这两个测试项.
+1), bus,ddrc switch, 本周一定要完成. 
+2), Cortex-A8 L1,L2 cache on. 估计需要1-2周完成. 
+3), emi bootloader交给yangxing维护. 
+
+3, 下周工作计划(2010年6月6日-2010年6月12日)
+1), Cortex-A8 L1,L2 cache on.
+2), 使用ETM: 确认ETM能否完整trace系统执行过程. 在panda_os中实际使用(ETM full time需要1周完成)
+
+11:03 2010-5-31
+时间管理
+0, 9:45
+
+1, 本日计划和执行
+1), 写weekly report. 需要看上周日志后更新. 
+2), 支持hanzhimin使用ICE.
+3), bootloader环境支持: 修正rw段size不对齐的问题. 
+4), -16:51 计算迟到时间, 请假
+5), -17:04 回复icp进度, 见"16:53 2010-5-31".
+6), 回复dongliang bootloader邮件. 见"11:28 2010-5-31". <取消>
+7), 支持beizhan, zhengwei调试bootloader. 加入bootloader elf生成bin的规则. 
+
+2, 次日计划:
+1), 给hanzhimin调整bus aclk的命令.
+2), clkrst和interrupt刷寄存器列表. 
+3), 在panda_os中完成get cache info函数, 打印mmu, L1, L2状态和大小. 
+
+11:28 2010-5-31
+VC0882, bootloader, strappin info
+1, LiDongLiang邮件"882 bootloader 中infor 信息和strap pin的问题"20100531_1127
+882 bootloader 需要大家定一下strap pin 和 infor信息
+大家考虑一下自己的模块，是否需要这两个部分的内容，以及需要什么信息
+我会与大家讨论
+尽快先定下来一版
+2, 切频这块是否需要strappin. 要看module时钟方案. 可能可以自动切, 也可以通过info给出是否切. module默认频率肯定是info给出. 
+
+16:53 2010-5-31
+VC0882, FPGA, ICP进度, Cortex-A8, clkswitch
+1, fengbeizhan邮件"VC0882 ICP 下周进度计划"20100529_1454
+1), arm 90%, test 80%.
+2), clkrst 60%, test 50%. 
+2, 回复邮件
+Arm进度需要少调两个function才能满足要求, clkrst需要IC支持才能完成. 
+1), arm:
+arm进度到达90%需要不调试ITM和CTI interrupt两个function.
+不调的原因是trace中的ITM目前rvds不支持, CTI interrupt只有在多核中才会用到.
+2), clkrst计划是调通ddrc切频, 目前此功能有问题. 调通需要ICD, ICV配合, 暂时没看到linan仿真通过的消息.
+
+17:28 2010-5-31
+VC0882, FPGA, clkswitch
+1, yanglei讨论, yanglei认为只有enable selfrefresh和ddrc_mclk_cfg是必要步骤. 
+ddrc_cfg = 0x03000FFF;//exit self with nothing
+VIM_HAL_WRITE_REG(DDRC_BASE+0x0018,ddrc_cfg);
+
+apb_rdata =  0x00000701;// CLK24->CLK108
+VIM_HAL_WRITE_REG(CLKRST_DDRC_MCLK_CFG, apb_rdata);
+2, 5月25日和5月27日两次实验的现象似乎不同, 重新实验一下. 
+另外huangwei建议测量ddrc mclk, 看看clock是否变化. 
+
+18:40 2010-5-31
+Linux, Porting WG7310 wifi driver with Android on beagle board
+http://blog.xuite.net/chienhsu/gossip/26643358
+
+20:42 2010-5-31
+VC0882, FPGA, WinCE, Linux, 今天dangxiangfu找我看板子问题, 跑winCE时出现0x10中断, 当时以为是用panda_os程序实验发现开mmu, cache会出错. 但是后来dangxiangfu说其实中断都是正常的. 想想也是, OS里面用到dataabort和SVC都是正常的. 最近没怎么摸Linux, 都忘干净了. 
+
+21:42 2010-5-31
+VC0882, FPGA, clkswitch 
+1, vc0882_20100526_2000_fpgaClkUmSwitch_a8_20100524_L1_32_L2_128_Neon_2fpga_noDeFdTv.ace
+um_ctrl(0x600510f0)=0x1100 //ddrc
+umonitor[31], [30]都是24MHz.
+2, busswitch
+24下可以切. 
+3, xuwenyan程序:
+1), 一定要改为bus和ddrc的同步模式. 
+2), 如果busy超时就返回.

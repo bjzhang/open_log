@@ -1,0 +1,2730 @@
+﻿
+9:35 2010-3-1
+VC0882, 最小环境, FPGA, 下一步计划, 稳定性讨论
+1, zhangjian下一阶段任务安排
+1), ZhangJian邮件"主题: 答复: vc0882: fpga plan from 1th of March to 6th of March"20100227_1457
+Hi, aiguo, dongliang
+我这边情况见下面蓝色文字
+我这边的计划是:
+1, 测试time0 irq 模式
+2, 测试nucleus线程调度.
+3, 加入mmu平映射code, 打开L1: 代码已在VC0882 semihost下测试. 
+4, 测试稳定性. 如果没问题开始debug sd. 
+2), Aiguo邮件"答复: vc0882: fpga plan from 1th of March to 6th of March"20100228_1056
+Hi，zhangjian
+ARM的MMU，Cache，我们要等Wangxin他们仿过了我们才开始，先不着急开始，具体任务，我们要根据实际情况来调整，目前阶段的主要任务是，尽快找出FPGA不稳定的原因，这个我想主要是IC team来完成，我们主要是辅助debug，不过，我们要构建case来自动测试，也就是我们上周开会的宗旨，这个是最高优先级。
+接下来，我们一定要保证interrupt和timer能够正常使用，如果os测试不太方便，可能要放在非os的环境下，这个下礼拜一讨论。另外，我们要开始sd的调试，这个从时间上有冲突，可能要加入beizhan完成。
+
+2, FPGA稳定性讨论
+1), LiDongLiang邮件"答复: vc0882: fpga plan from 1th of March to 6th of March"20100227_1524
+觉得老杨可能对fpga 还不够重视
+Fpga稳定性问题已经报出来很久了
+但问题一直没有解决，IC人力投入也不大
+按照老杨的schedule 
+很多模块都要调试了，fpga现在不稳定，数量也不够
+882的fpga 调试起来就很困难
+所以觉得IC必须要重视fpga的问题
+加大人力投入才行
+2), Aiguo邮件
+这个上周例会已经告诉过laoyang了，他们下周会加大力度在FPGA上，我们这边也要加快进度，首先几件事情要做：
+1）尽快测试interrupt和timer，使os尽快稳定下来；
+2）尽快把ddr运行的程序跑起来；
+3）尽快开始调试sd，这个是其他模块的基础
+4）多块FPGA的稳定性测试，需要xuelian安排一个测试工程师一起配合测试，包括实验室的环境等；
+上面的计划主要是zhangjian，dashan，dongliang和beizhan，你们四个人来完成。我们希望要加速，前面的速度还是有点慢。
+
+3, zhangjian邮件
+我这边报的FPGA稳定性bug可以用rvdebugger脚本自动测试: 
+现在每次的单独测试都是脚本自动完成的: 连接, 下载映像, 设置断点, 运行, 停止后继续运行. 只要脚本能执行完就说明FPGA正常. 
+脚本中应该可以加上复位. 只有板子断电上电要手工做. 
+
+4, 上午和dongliang一起又发现一些新现象. 给大家发信, 下午讨论. 
+
+上午和dongliang做了一些实验, 同一块FPGA实验, 50%以上次数都无法正常使用. 今天新发现的问题是"1)-(1)". 我按照现象重新整理了已有问题. 
+现在最严重的问题是cortex-a8无法停止, a8寄存器无法读写. 这样我们完全没法debug. 
+另外插串口子板和串口线不仅影响连接cortex-a8, 还影响系统稳定性(见”1)-(1)”).
+
+1), rvdebugger错误: Error: 0x02410100: The run control operation could not be completed : .
+(1), 程序正常运行后, 插串口子板(已连接串口线)后, 一直重复提示此错误. 此时串口打出部分信息. 不清楚是串口子板插入前还是插入后出错. 
+此时sram可以读写, 但cortex-a8寄存器无法读写. 根据ADI调试协议, 读写bus上的module可以通过AHB-AP也可以通过APB-AP, 读写cortex-a8通过APB-AP. 现在这个现象至少说明DP是好的. 
+结合huangwei coresight框图说明(D:\work\VC0882\Documentation\A8_and_CS_FPGA新问题)
+(2), issue 0008114: rvdebugger连不上Cortex-a8
+(3), issue 0008252: 程序跑飞后arm无法停止.
+
+2), 程序跑飞: 指程序没有运行到预定位置, 且串口无输出.
+(1), prefetch abort: 这两天新发现问题, 系统运行一段时间后(用户无输入), 会出现prefetch abort(异常地址: 0xc). 暂时不清楚是软件问题还是硬件问题. 
+(2), 00082852: 跑飞后无法停止. 
+(3), 0008177: 跑飞后可以停止, 但是无论step还是run都无法运行过当前指令. 
+
+3), 写入sram失败(0008113)
+
+4), 非对齐访问导致dataabort. 
+
+下一步我们要测试timer, irq, 需要把sram映射到0x0, 否则必须修改向量表到0x20000000, 但这样sram代码就和ddr代码不统一了. 
+
+5, 看一下openocd halt协议. 
+1), openocd cortex-a8 halt:
+static int cortex_a8_halt(struct target *target)
+{
+	int retval = ERROR_OK;
+	uint32_t dscr;
+	struct armv7a_common *armv7a = target_to_armv7a(target);
+	struct swjdp_common *swjdp = &armv7a->swjdp_info;
+	uint8_t saved_apsel = dap_ap_get_select(swjdp);
+	dap_ap_select(swjdp, swjdp_debugap);
+
+	/*
+	 * Tell the core to be halted by writing DRCR with 0x1
+	 * and then wait for the core to be halted.
+	 */
+         //DRCR: Debug Run Control Register
+	retval = mem_ap_write_atomic_u32(swjdp,
+			armv7a->debug_base + CPUDBG_DRCR, 0x1);
+
+	/*
+	 * enter halting debug mode
+	 */
+         //Debug Status and Control Register
+	mem_ap_read_atomic_u32(swjdp, armv7a->debug_base + CPUDBG_DSCR, &dscr);
+	retval = mem_ap_write_atomic_u32(swjdp,
+		armv7a->debug_base + CPUDBG_DSCR, dscr | DSCR_HALT_DBG_MODE);
+
+	if (retval != ERROR_OK)
+		goto out;
+
+	do {
+		mem_ap_read_atomic_u32(swjdp,
+			armv7a->debug_base + CPUDBG_DSCR, &dscr);
+	} while ((dscr & DSCR_CORE_HALTED) == 0);
+
+	target->debug_reason = DBG_REASON_DBGRQ;
+
+out:
+	dap_ap_select(swjdp, saved_apsel);
+	return retval;
+}
+
+#define DSCR_HALT_DBG_MODE	(1 << 14)
+1), 通过开源的openocd协议看了halt cortex-a8的过程: 通过apb-ap读写cortex-a8 cp14 debug寄存器使a8 halt, 具体如下(DBGEN=1时):
+(1), 写cp14 DRCR[0]=1(含义如下, 自cortex-a8 trm, 下同), 这样当"debug state entry"发生时就会进入halt.
+[0] Halt request Halt request. Writing a 1 to this bit triggers a halting debug event, that is, a request that the processor enters debug state. This request is held until the debug state entry occurs. The debugger must poll DSCR[0] to determine when this request succeeds. This bit always reads as zero. Writes are ignored when the processor is already in debug state.
+(2), 写cp14 DSCR[14]=1, 这样触发了一个"debug state entry", 所以a8会进入halt状态, 所以(3)中要查询确定已经进入halt.
+[14] Halting debug-mode
+The Halting debug-mode enable bit. This is a read/write bit.
+0 = Halting debug-mode disabled, reset value
+1 = Halting debug-mode enabled.
+If the external interface input DBGEN is LOW, DSCR[14] reads as 0. If DBGEN is HIGH, then the read value reverts to the programmed value.
+(3), 最后通过查询DSCR[0]是否等于1, 判断是否halt:
+[0]a Core halted Core halted bit:
+0 = The processor is in normal state. This is the reset value.
+1 = The processor is in debug state.
+The debugger can poll this bit to determine when the processor has entered debug state.
+(4), 注: cortex-a8 trm Table 12-52 Processor behavior on debug events
+DBGEN DSCR[15:14] Debug mode Action on software debug event
+Action on halting debug event
+0 bxx Debug disabled Ignore or Prefetch Aborta Ignore
+1 b00 None Ignore or Prefetch Aborta Debug state entry
+1 bx1 Halting Debug state entry Debug state entry
+1 b10 Monitor Debug exception or Ignoreb Debug state entry
+
+6, 等YangZuoXing meeting minutes. 
+YangZuoXing邮件"答复: 程序跑飞, arm无法停止, 58%概率fail. "20100301_1728
+Action items for the meeting of this afternoon:
+1. fanzhijun will try to increase the voltage of fpga core.
+2. guo haifeng will change the reset scheme for dcm
+3. huang wei will study the non align issue from arm’s document
+4. meiping will study the waveform about non align issue
+5. zhang jian will try to use ddr
+6. zixi and huangwei will change the rtl to support the remap of sram
+pls reply this email if you have make some progress.
+
+16:59 2010-3-1
+VC0882, 最小环境, FPGA, OS, 移植nucleus到VC0882, 续, 支持tick, 续
+1, 计划
+1), 实验ddr运行程序(这样就不用修改异常向量的地址), 
+2), 实验timer0 irq. 
+3), 修改perl脚本, 支持不同memory, 不同容量. 
+2, 在ddr中运行程序. 
+1), FPGA: "D:\work\VC0882\code\20100301\对应FPGAcode_自CuiYunFei"
+2), FPGA2, 用着用着 config灯会灭. 
+3), reset异常跳转地址不正确, VC0882_panda_os是
+LDR     pc,INT_Initialize
+这样编译出来是"ldr pc,[INT_Initialize]", 等于把"INT_Initialize"的指令放到了pc里面. 
+VC0598_panda_os是
+LDR     pc,Initialize_Addr
+这样是"ldr pc, [Initialize_Addr]", 把"Initialize_Addr"地址上的数据写入pc, 也就是把INT_Initialize给pc赋值. 
+4), 运行中出现未定义指令. 
+有时进入main后的applicaton_initialize, 有一次时没进入main.
+memory比较: 的确有错. ddr1, 2, 3都有错.
+
+9:59 2010-3-2
+时间管理
+0, 9:23-
+
+1, 计划
+\todo 填加班记录: 3月1日, 3月2日
+1), VC0882最小环境:
+(1), 验证ddr是否可用. <DONE>
+(2), 测试timer0 irq. 这个已经严重delay了, 今天一定要搞定. <DONE>
+(3), 下次测试时，教会xiaofei具体工具和程序的使用(先写文档).<DONE: issue8252已有文档, 不需要再写>
+2), VC0882 FPGA ace文件下载权限. 等yangzuoxing处理. 
+3), cortex-a8和VC0882环境介绍, 本周四前必须完成. 
+
+2, 执行
+1), VC0882最小环境, "1-1)-(1)", 见"10:02 2010-3-2".
+
+3, 次日计划
+1), 和dongliang讨论irq. 
+
+4, 其他
+
+10:02 2010-3-2
+VC0882, 最小环境, FPGA, OS, 移植nucleus到VC0882, 续, 支持tick, 续
+1, timer0 irq debug, 测试所有irq是否都能产生. 用链接脚本控制memory大小和基址. 
+2, 没有中断产生
+1), irq, fiq都打开了. 
+2), INT_IRQ_Vectors中timer0中断位置写错了, 应该是6, 写成了18.
+这个应该没影响. 
+3), timer0没有start? 0x60052004[0]=1后timer0开始计数. 
+3, 突然发现机器串口坏了. 郁闷...
+4, 昨天FPGA2掉电好像是电源问题, 今天FPGA1也有这个问题. 
+5, 下午看timer初始化和中断处理. 
+1), timer0应该是先读高后读低.
+2), VIM_TIMER_Init: "target = VIM_TIMER_GetTarget(VIM_TIMER_0);"有问题: 
+ldrd后, r0是0xffffffff, r1=0, 因为实际没有移位, 直接写入0:
+--- VIM_TIMER_DRIVER\#127         value = (valueh << 32) | valuel;
+   S:00014F5C E3A01000  MOV      r1,#0
+   S:00014F60 E58D1004  STR      r1,[sp,#4]
+   S:00014F64 E58D8000  STR      r8,[sp,#0]
+>>> VIM_TIMER_DRIVER\#128     return value;
+   S:00014F68 E1CD00D0  LDRD     r0,r1,[sp,#0]
+强制转为UINT64
+3), liaozhicheng: 应该是VIM_TIMER_GetCurrent不是VIM_TIMER_GetTarget.
+4), 修改后中断触发正常. 
+\todo 问zhicheng有没有timer计时测试程序. 
+5), 但是打印如下错误提示: 
+[INT   ERROR]   Error Becuase g_Lisrcallback NULL vector=0
+g_Lisrcallback[6]是空的. 查中断注册?
+按理说timer0 irq不应该有什么lisr啥的.
+看"INT_IRQ"发现在0x040000跳转到timer0 irq. 但是VC0882是6（0x20).
+而且并不是按照“INT_IRQ_Vectors”查询的. 
+6), 详细分析nucleus irq处理过程. 
+sourcepend不正确. VC0882中irq是64位的, 相关代码都要改.
+(1), LDRD a2,a3,[a1]        ;write 1 clear
+编译错误:
+AppsEntry/init_src/asm/Panda_Init.S(1114,13) : error A1516:  Bad symbol 'IRQ_INTPND', not defined or external
+但是"LDRD     r0,r1,[sp,#0]"没有错误, 开始以为是不能用AAPCS里面的a1, a2等等.
+后来发现需要2word对齐.
+(2), 修改后编译通过, 运行中mmu部分dataabort. 后来发现是清中断时使用了a3(first_available_memory)造成的. 
+
+6, 发信:
+Zhangjian邮件"答复: VC0882最小环境今日进展"20100302_2258
+1), 从今天开始在ddr上调试环境. 暂时没发现不稳定. 明天qiuxiaofei测试ddr上运行aasp以及FPGA稳定性. 
+2), timer0 irq正常. 但是开了timer0后, aasp无法输入, 明天继续查. . 
+3), 感觉VC0598的中断处理没有VC0830清楚, 明天和dongliang讨论.
+4), VC0882 irq基本都是64位的, 原有代码是按32位考虑的, 修改中. 
+
+7, ARM_ARM_7AR导读. "B2.4 Pseudocode details of general memory system operations"(p1263)是指令涉及到伪操作的说明.
+
+10:39 2010-3-2
+(21:31 2010-3-5)
+VC0882, 最小环境, FPGA, 稳定性, 整理FPGA稳定性问题, 总结见"21:49 2010-3-5"
+1, 没有上报issue的问题. 
+1), 非对齐访问. 
+2, 其余问题见issue. 
+3, (11:36 2010-3-5)报issue, 确认是否与apb timeout是一回事. 
+rvdebugger读为初始化的ddr区域(0x80000000), 感觉是timeout. 然后所有memory区域就都不能写了.
+如果在读ddr之前(0x80000000)rvdebugger访问了0x0等地址, 访问ddr后再访问, 会提示:
+> ce ((unsigned long *)S:0x20000004)[0]=0x123444
+Error V2801C (Vehicle): Failed to read the requested number of bytes to memory
+Error: E000E: Invalid expression format/type for this operation.
+4, 问fanzhijun: 时钟方案在什么地方
+5, (14:52 2010-3-5)现有问题: ddr, 掉电, uart线的影响, 见"19:57 2010-3-4"7开始的内容. 
+
+10:52 2010-3-2
+VC0882, FPGA, 待测外设, vc0882_device_list_for_fpga_test.xls
+位置: "D:\VC0882\document\fpga"
+SDIO:
+CMMB,ISDB-T,DVB-H
+WIFI
+8BIT MMC CARD
+SD CARD (32G/64G/128G, HIGH SPEED)
+EMMC NAND
+
+14:24 2010-3-2
+VC0882, 最小环境, FPGA, 稳定性, 修改时钟方案后稳定性有改进
+1, FanZhiJun邮件"答复: 程序跑飞, arm无法停止, 58%概率fail. "20100302_1337
+Haifeng更新了2fpga的clkrst方案，根据tag“vc0882_20100226_1930”做了一版，
+10.0.13.27\share\ace\rev0_01022619_02022619.ace
+用这个版本做了实验
+1, 3#FPGA板，
+程序：rev0_01022619_02022619.ace
+核电压：1.07V
+重复上电30次，都成功；
+2, 2#FPGA板，
+程序：rev0_01022619_02022619.ace
+核电压：1.00V
+重复上电50次，都成功；
+注：这块是zhangjian昨天发现有电流异常的板子，今天的实验中也出现了掉到1.7A然后马上回到2.3A的现象；
+但没有影响连接和程序运行。
+这版tag的DDR时钟有问题并在后面做了更新，正在用今天的代码跑一版（gemeiping仿过了），如果测试正常，可请zhangjian基于今天的版本做测试。
+2, qiuxiaofei测试.
+连接前: 不插串口子板和串口线, 插串口子板和不插串口线, 插串口子板和串口线. 三种情况各测试50次. 
+(20:13 2010-3-2)分析QiuXiaoFei测试结果:
+1), rev0_01022619_02022619.ace是修改时钟方案后的版本. 不连接串口线时系统稳定性有很大提高. 原来常见的arm无法停止的错误"Error: 0x021d0102: Error Could not determine target state from target : Cortex-A8_0. "140次中只出现了一次. 
+2), 只插串口子板不接串口线还是有错, 担心将来连接子板多了出错次数也会增多. 
+3), 插串口线情况基本都是FPGA连接正常后, sram不能写入. 原来这个错误比arm无法停止("Error: 0x021d0102"), 现在是最多的. 明天会实验ddr有无串口线时ddr能否正常读写. 
+4), FPGA掉电这个问题, 这两天也发生了几次.比较随机, 在两个板子(不同电源)上都遇到过. 下次出现时会请fanzhijun, guohaifeng会详细分析. 
+5), 今天还出现另外两个问题, 原来基本没遇到过:
+(1), Error V2801C (Vehicle): 0x021d0102: Error Failed to read value from register = 'CPSR' from target : Cortex-A8_0.
+(2), connect "@Cortex-A8_0@RVI"
+Error V2801C (Vehicle): 0x05090002: Timeout on memory operation.
+
+明天上午会做测试今天下午fanzhijun出最新版(rev0_01030214_02030214: ddr和时钟方案都经过修改)
+
+15:07 2010-3-2
+VC0882, 最小环境, FPGA, 稳定性, unalign access
+1, GeMeiPing邮件"答复: 程序跑飞, arm无法停止, 58%概率fail. "20100302_1445
+Hi，all
+我试了一下unaligned data access，结果为：
+a) 不打开MMU，unaligned data access fail
+b) 打开MMU，unaligned data access success
+
+我看ARMv7的文档，上面描述关于data abort是与memory的属性有关系的，具体什么关系还需要仔细研究一下。
+我这个MMU的page table是以前参考ARM1176文档写的，A8的文档没有时间仔细看，page table这块应该差不多。Page table的设置参考附件。
+
+跑的C 代码如下：其中GPU_2D_DRIVER_BASE＝0x87005000，对其偏移1 2 3都有读写，没有出现data abort，读写的结果完全一样。
+value = 0x13572468;
+SETREG32(GPU_2D_DRIVER_BASE+1, value);
+result = GETREG32(GPU_2D_DRIVER_BASE+1);
+printf("addr = %x, value = %x, result = %x\n", GPU_2D_DRIVER_BASE+1, value, result);
+
+value = 0xabcdef12;
+SETREG32(GPU_2D_DRIVER_BASE+2, value);
+result = GETREG32(GPU_2D_DRIVER_BASE+2);
+printf("addr = %x, value = %x, result = %x\n", GPU_2D_DRIVER_BASE+2, value, result);
+
+value = 0x3456789a;
+SETREG32(GPU_2D_DRIVER_BASE+3, value);
+result = GETREG32(GPU_2D_DRIVER_BASE+3);
+printf("addr = %x, value = %x, result = %x\n", GPU_2D_DRIVER_BASE+3, value, result);
+
+汇编代码如下：红色的几条汇编都是unaligned access
+0x00000e08:    e92d4010    .@-.    PUSH     {r4,lr}
+0x00000e0c:    e28f0074    t...    ADR      r0,{pc}+0x7c ; 0xe88
+0x00000e10:    ebfffd61    a...    BL       printf ; 0x39c
+0x00000e14:    e59f407c    |@..    LDR      r4,[pc,#124] ; [0xe98] = 0x87005000
+0x00000e18:    e5941000    ....    LDR      r1,[r4,#0]
+0x00000e1c:    e28f0078    x...    ADR      r0,{pc}+0x80 ; 0xe9c
+0x00000e20:    ebfffd5d    ]...    BL       printf ; 0x39c
+0x00000e24:    e59f207c    | ..    LDR      r2,[pc,#124] ; [0xea8] = 0x12345678
+0x00000e28:    e5842000    . ..    STR      r2,[r4,#0]
+0x00000e2c:    e5943000    .0..    LDR      r3,[r4,#0]
+0x00000e30:    e1a01004    ....    MOV      r1,r4
+0x00000e34:    e28f0070    p...    ADR      r0,{pc}+0x78 ; 0xeac
+0x00000e38:    ebfffd57    W...    BL       printf ; 0x39c
+0x00000e3c:    e59f208c    . ..    LDR      r2,[pc,#140] ; [0xed0] = 0x13572468
+0x00000e40:    e5842001    . ..    STR      r2,[r4,#1]
+0x00000e44:    e5943001    .0..    LDR      r3,[r4,#1]
+0x00000e48:    e1841e42    B...    ORR      r1,r4,r2,ASR #28
+0x00000e4c:    e28f0058    X...    ADR      r0,{pc}+0x60 ; 0xeac
+0x00000e50:    ebfffd51    Q...    BL       printf ; 0x39c
+0x00000e54:    e59f2078    x ..    LDR      r2,[pc,#120] ; [0xed4] = 0xabcdef12
+0x00000e58:    e5842002    . ..    STR      r2,[r4,#2]
+0x00000e5c:    e5943002    .0..    LDR      r3,[r4,#2]
+0x00000e60:    e0441f42    B.D.    SUB      r1,r4,r2,ASR #30
+0x00000e64:    e28f0040    @...    ADR      r0,{pc}+0x48 ; 0xeac
+0x00000e68:    ebfffd4b    K...    BL       printf ; 0x39c
+0x00000e6c:    e59f2064    d ..    LDR      r2,[pc,#100] ; [0xed8] = 0x3456789a
+0x00000e70:    e5842003    . ..    STR      r2,[r4,#3]
+0x00000e74:    e5943003    .0..    LDR      r3,[r4,#3]
+0x00000e78:    e1841e42    B...    ORR      r1,r4,r2,ASR #28
+0x00000e7c:    e8bd4010    .@..    POP      {r4,lr}
+0x00000e80:    e28f0024    $...    ADR      r0,{pc}+0x2c ; 0xeac
+0x00000e84:    eafffd44    D...    B        printf ; 0x39c
+
+2, 上面附件"page table.s"放到了"D:\work\VC0882\arm\gemeiping_20100302_邮件_unalign_access"
+给GeMeiPing发了arm cortex-a8 CortexA8dhry和我修改的Init.s和scatter文件. 
+
+18:49 2010-3-2
+VC0882, libc, 文件操作, caijin增加了ferror, F_FILE中reverse[0]改为flag, 在fat_read返回前判断是否成功, 如果不成功flag中写入IO error.
+
+21:32 2010-3-2
+VC0882, 最小环境, FPGA, cortex-a8和VC0882环境介绍
+准备cortex-a8和VC0882环境介绍.
+计划介绍如下内容, 已上传部分文档到VC0882 CVS\document\arm, fpga目录. 
+1, 开发环境(主要介绍不同点, 相同点带过): 
+1), FPGA介绍.
+2), rvds4.0安装, 破解. 
+3), RealviewICE使用. 
+4), arm workbench4.0(eclipse)使用. 
+5), 与598环境共存.
+2, cortex-a8 ecosystem, cortex-a8新feature, coresight debug架构(强调架构差异, 即使arm停不下来也可以写memory, 一定注意)
+3, TI OMAP3530介绍, 三个主芯片(OMAP3530, PMIC, MCP(ddr+flash). android1.6和winCE6.0 demo.
+
+9:52 2010-3-3
+时间管理
+0, 9:41-
+
+1, 计划
+\todo 填加班记录: 3月1日, 3月2日, 3月3日.
+1), VC0882最小环境:
+(1), 与dongliang讨论VC0882 irq.<DONE>
+(2), debug开timer0 irq后, aasp无法工作的原因. 感觉是调度问题. <DONE: 是中断处理问题>.
+3), cortex-a8和VC0882环境介绍, 本周四前必须完成. 
+
+2, 执行
+1), 9:56- VC0882最小环境, "1-1)-(2)". 见"10:02 2010-3-3"
+
+3, 次日计划
+
+4, 其他
+
+10:02 2010-3-3
+VC0882, 最小环境, FPGA, OS, 移植nucleus到VC0882, 续, 支持tick, 续, 有tick后aasp无法启动
+1, dongliang感觉可能是timer中断过于频繁, 所以aasp没法启动. 跟踪有无timer情况的aasp启动过程. 
+2, 使用中发现FPGA掉电问题, 请fanzhijun, lvhaifang, mike chen. 
+1), 今天这次是从2.2降到1.9(done没有灭), 过了不到1s又降到1.5(done灭). 
+2), 电源输出电压是5.6, FPGA过插头和反向二极管后只有4.7v. 讨论后先去掉二极管试试. 
+3, 去掉二极管后继续debug. 
+1), VIM_SYS_GetAllTaskReady起什么作用? 感觉VC0882中没用啊. 
+2), 看cyg_user_start调用过程.
+TCC_Task_Shell()-> (*(TCD_Execute_Task -> tc_entry)) (TCD_Execute_Task -> tc_argc, TCD_Execute_Task -> tc_argv);
+task_aasp_func
+4, (已发信)
+一次写入读出2M文件到0x0(ddr已映射), 在0x7ab90写入0x0读出0xff, 实验两次都是如此. FPGA cf code是"rev0_01030214_02030214". FPGA1号板. 脚本和映像见issue track 8252附件(lpddr.inc, VC0882_ddr_axf). 
+5, (20:49 2010-3-3)可能是没有清中断. 
+1), 清一级中断
+一级中断在VIM_INT_IrqHandler()(interrupt\VIM_INT_Driver.c)清. 然后调用应用程序自己的lisr. timer中断需要自己清. 
+VIM_INT_IrqHandler是通用的lisr, 在VIM_INT_Init()通过"NU_Register_LISR"注册. 
+NU_Register_LISR就是TCC_Register_LISR, 它会把lisr注册到TCD_Registered_LISRs.
+2), arm可以清, rvdebugger没法清. 
+3), 原来认为timer中断可以连续来是因为没有清中断. 现在timer中断只来一次. 
+6, 发信
+今天简单实验了interrupt debug register: 手工触发中断后pnd会置位, 可以正常产生清楚irq中断. 希望明天能把nucleus正常跑起来. 
+昨日问题进展如下: 
+1), 从今天开始在ddr上调试环境. 暂时没发现不稳定. 明天qiuxiaofei测试ddr上运行aasp以及FPGA稳定性. 
+Ddr问题已发信, cuiyunfei暂时没有解决. 下次qiuxiaofei测试FPGA时会加入ddr测试. 
+2), timer0 irq正常. 但是开了timer0后, aasp无法输入, 明天继续查. . 
+原来认为的正常其实是因为没有清timer0一级中断, 只清了二级中断.  现在timer中断只来一次, 应该是timer中断处理问题, 明天继续查. 
+3), 感觉VC0598的中断处理没有VC0830清楚, 明天和dongliang讨论.
+已讨论, 会抽空修改. 
+4), VC0882 irq基本都是64位的, 原有代码是按32位考虑的, 修改中. 
+修改中. 
+7, FPGA稳定性实验时实验reset和重新上电有无区别. ddr要用dashan工具测试. 
+
+10:43 2010-3-4
+时间管理, VC0882, \todo, 
+1, 如何设置outlook exchange server. 这样可以做邮件姓名检查, 展开VC0882_ICP等等. 
+BJ-MAIL-04.vimicro.com
+D:\work\Documentation\outlook设置补充说明.doc
+2, qiuxiaofei测试新cf code. 在sram中测试.<转移: 3月5日继续测试FPGA稳定性>
+测试内容:
+1), uart移到J11, 避免信号share. 看看能否改善FPGA稳定性.
+2), 测试ddr读写是否正常. 
+3), 其它变化:
+(1), sram remap到0x0. 
+(2), FPGA用复位代替重新上电. 
+4), 后来发现串口有的板子会丢数(串口子板相同).
+3, aiguo: 明天下午换到6会议室. <DONE: 已修改到周一上午>.
+4, nucleus timer0 irq. <DONE: 已上传代码>
+5, 问题都放到issue上面. <转移>
+6, 问fanzhijun: 
+1), 时钟方案在什么地方. <转移>
+2), LED灯: 右上三个是红灯, 输入LED红绿皆可. 从5.2,5.3开始调, 输入电压太高也会fail. <DONE: 已加入FPGA注意事项>
+7, 报issue<转移>
+rvdebugger读为初始化的ddr区域(0x80000000), 感觉是timeout. 然后所有memory区域就都不能写了.
+如果在读ddr之前(0x80000000)rvdebugger访问了0x0等地址, 访问ddr后再访问, 会提示:
+> ce ((unsigned long *)S:0x20000004)[0]=0x123444
+Error V2801C (Vehicle): Failed to read the requested number of bytes to memory
+Error: E000E: Invalid expression format/type for this operation.
+8, beizhan发现最新代码没法跑. 在task_aasp_func里面死. 查与我之前版本的差异. 机器: test11. 一定保证最新代码可以. <DONE: memory方案问题, 见"19:57 2010-3-4"-2>
+9, 8完成后调timer问题. <DONE: 见"19:57 2010-3-4">
+10, 硬件同事拿了jtag子板和cf卡. 如果今天没还, 明天问一下. <转移: 还差CF卡>
+11, 今日进展:
+VC0882实验室6个FPGA板子, qiuxiaofei在测试arm, ddr和uart. 
+beizhan发现最新代码会出现prefetch abort正在解决. 
+
+12, 次日计划:
+1), 完成上面内容. 测试irq. 
+2), 写周一上午training资料. 
+
+19:57 2010-3-4
+VC0882, 最小环境, FPGA, OS, 移植nucleus到VC0882; FPGA稳定性; ddr测试结果; "7": VC0882 FPGA稳定性测试文档2
+1, 今天晚上主要是做两个事情:
+1), 查为什么最新代码运行nucleus会出现0xc异常.
+2), 上报未上报的issue. 更新必要issue. 做必要合并. 
+2, "1-1)"
+1), aiguo提醒是堆栈设置问题, 后来发现不是. 
+2), memory方案:
+SDRAM_BSS_End_Ptr=0x40f04
+NCNB_SDRAM_BSS_End_Ptr=0x40f04
+g_nocache_addr=0xc8000
+g_nocache_size=0x20000
+g_cache_large_pool_addr=0x4600c
+g_cache_large_pool_size=0x81fe4
+g_cache_small_pool_addr=0xe8000
+g_cache_small_pool_size=0xfff0
+(1), 计算得到的SDRAM_BSS_End_Ptr是0x0002ece8+74268=0x40f04. 
+g_first_available_memory=0x46004
+(2), small_pool_end = 0xe8000 + 0xfff0 = F7FF0
+(3), 现在的memory方案没问题. 先上传的代码. 然后上报其余issue. 
+3, 上传代码. 
+修改nucleus初始化部分代码以正确产生tick. 目前aasp在无tick下运行正常. 
+FPGA版本: rev0_01030214_02030214_uartJ11.ace
+1), 修正reset异常跳转地址. 
+2), 中断: 修正timer0中断handler INT_Timer_Interrupt到vector 6. 修正一级中断跳转地址. 修改中断处理部分代码为VC0882 64位一级中断的模式, 未完成.
+3), 添加链接脚本"ads_dram_1M.lds"
+4), 修改init_sram.inc: 把sram映射到0x0地址. 从rev0_01030214_02030214.ace支持此功能. 
+5), 注释"VIM_SYS_GetAllTaskReady"函数. 
+6), \todo
+(1), dashan修改memory寄存器名称. 
+(2), 修改rvds4.0或cortex-a8不推荐的编译参数, 修改Nu_Tct.s中cortex-a8不推荐的指令用法. 
+4, 修改timer代码后tick工作正常.目前memory方案:
+[MMU   MSG]     start_memaddr=0x4619c
+[MMU   MSG]     SDRAM_NCNB_BSS_End_Ptr=0x4109c
+[MMU   MSG]     SDRAM_BSS_End_Ptr=0x4109c
+[MMU   MSG]     g_nocache_addr=0xc8000
+[MMU   MSG]     g_nocache_size=0x20000
+[MMU   MSG]     g_cache_large_pool_addr=0x461a4
+[MMU   MSG]     g_cache_large_pool_size=0x81e4c
+[MMU   MSG]     g_cache_small_pool_addr=0xe8000
+[MMU   MSG]     g_cache_small_pool_size=0xfff0
+5, 上传代码, 打tag(nucleusTickOK@sram1M@0x0
+nucleus用nucleus\start_thread测试通过. 
+FPGA版本: rev0_01030214_02030214_uartJ11.ace
+1), 没有清timer0中断. timer0下次tick计算错误(把offset加在了高32位).
+2), 用dongliang在VC0598建立的start_thread测试线程调度, 信号量互斥, 系统定时正常. 
+(1), 在"NUCLEUS_TEST_StartThread()"的malloc后面加入memset 0. 否则使用sram时会造成assert失败, 例如NU_Create_Semaphore由于'semaphore -> sm_id == SM_SEMAPHORE_ID"失败. 
+6, 发信. 
+nucleus初步OK, 用dongliang测试程序测试了线程调度, 信号量. 
+代码已上传, 打了tag"nucleus_tick_semaphore_schedule_OK"
+
+运行需要修改CPU和SCATTER为: 
+CPU = Cortex-A8.no_neon
+SCATTER = $(LDSDRIPT_PATH)/ads_dram_1M.lds
+
+环境方面还需要做:
+1), 链接脚本: 使用perl脚本根据参数选择脚本(不区分sram, dram, 只区分容量), 由链接脚本决定memory大小. 
+2), 提交未提交bug到issue track
+3), 测试irq. 
+4), 修改nucleus汇编部分不符合cortex-a8方式的代码.
+5), 测试开mmu时unalign access(仿真通过后)
+6), 调整nucleus irq处理部分代码(已经与dongliang讨论).
+
+hi, dashan 
+
+我把ddr参数上传到了"D:\VC0882\panda_os\init_script\init_lpddr_micron.inc", 里面ddr寄存器地址和名称不对应, 麻烦dashan修改, 谢谢. 
+
+7, (14:52 2010-3-5)给FanZhiJun, QiuXiaoFei发信
+添加VC0882_nucleus.axf用于测试FPGA稳定性. 
+0016345方法测试aasp(console)工作是否正常(包括uart是否丢数). 
+增加nucleus线程调度, 信号量测试:
+AASP :/>nucleus
+NUCLEUS :/>start_thread
+输入后, 每隔1s系统会打出"RG". 输入"end_thread"后停止. 
+
+8, (15:19 2010-3-5)fanzhijun发现(确定后会发邮件)
+1), 掉电是电源芯片问题, #9换了就可以. 
+2), 插串口先是有高速做保护芯片才有问题. #11去掉可以. 在#1实验.
+(21:22 2010-3-5)qiuxiaofei测试, FanZhiJun邮件"vc0882: FPGA板 高速socket限流芯片"20100305_1803
+谢谢Qiuxiaofei！
+1#~6# 板是春节前出一批板，焊接了高速socket的限流芯片(防止电流超过2A)；
+7#~12# 板是年后出的，仅11#板焊了上述芯片，其他板因为芯片缺货没有焊；
+ 
+此前的测试结果
+1#，2#，3#，11#板有“带UART,带串口线,上电，UART不通”
+6#,8#,12#，及还未交付的9#，10#，则都允许带UART带串口线上电。
+ 
+推测高速socket保护芯片的限流和本issue有关
+下午先对11#，1#进行重复试验，有本issue描述现象；
+然后将11#，1#的该芯片去掉，该现象即消失。
+经过qiuxiaofei的重复试验，确认去掉socket限流芯片可解决本issue问题。
+ 
+另一方面去掉该限流芯片，对FPGA有一定风险。
+特别的，6#是焊接了限流芯片也能带板带线工作。
+
+建议暂先不焊接。
+
+"21:22 2010-3-5"end
+3), ddr问题: 5个里面2个坏的. 
+(1), 另外xiaofei发现串口好坏与FPGA底板有关, ddr与底板无关. 串口好的板子, ddr是坏的. 
+(2), zouweiran说ddr需要跳线, ddr子板的JP1 2-3需要跳线. 
+(3), zouweiran: ddr电阻错了: 应该是57,59,61, 焊成了58,60,62.
+(4), qiuxiaofei测试结果
+qiuxiaofei邮件"DDR Memory R/W Test Result"20100305_2100, "Re: DDR Memory R/W Test Result"20100305_2110
+在对DDR子板补跳线帽、改电阻位置之后，我和谈家梁把实验室的八套DDR测试+对比测试，全部过了一遍，测试结果如下：
+Pass的DDR子板 1#、2#、8#、10# 
+Pass的DDR颗粒板 3#、2#、8#、9#、11#、12# 
+Fail的DDR子板 7#、9#、12#、11# 
+Fail的DDR颗粒板 7#、10# 
+还要请zouweiran解决一下这个问题。
+
+补充说明一点：
+Fail的两个DDR颗粒板中，10#做比对时数据大片的不一致；而7#做比对时是个别bit不一致导致数据错得有些规律。
+Fail的DDR子板中，7#也是个别bit不一致，其他几块没有详细比对。
+
+10:55 2010-3-5
+时间管理
+0, 10:10
+
+1, 计划
+1), 支持qiuxiaofei测试FPGA稳定性.<DONE: 阶段性解决>
+2), 问题都放到issue上面.<DONE>
+3), 硬件同事拿了cf卡. 今天得找回来. <DONE>
+4), 清理昨日工作. <DONE>
+5), 修改nucleus irq代码: 去掉无用函数, 支持64位一级中断. <转移>
+6), 写周一上午training资料. <转移>
+7), 加班记录: 3/1-3/5<转移>
+
+2, 执行
+1), 上午: 支持FPGA稳定性测试, 整理昨日问题. 
+
+3, 次日计划:
+1), VC0882 clkrst mas review. 
+2), cortex-a8和VC0882环境training完成后. 想一想最近计划. 
+
+4, 其它:
+
+17:06 2010-3-5
+VC0882, 最小环境, FPGA, OS, nucleus, sd, beizhan问题, 没有进入aasp就跳回0x0地址
+1, g_task的顺序需要和VIM_SYS_TASKID枚举顺序一致, 否则create task会assert fail.
+2, aasp放在最后.
+3, VIM_SD_APP_Init.
+4, 发信
+hi, all
+大家在VIM_SYS_driver.c中新增task时要符合如下规则: 
+1), g_task的顺序需要和VIM_SYS_TASKID枚举顺序一致, 否则create task会由于task id不正确assert fail.
+2), task_aasp_func放在最后, 这个是aasp的task, task_aasp_func会直接启动aasp, 所以要求放在最后. 
+
+21:50 2010-3-5
+(19:56 2010-3-10)
+(19:16 2010-3-11)
+(21:09 2010-7-2)
+(10:49 2010-7-15)
+VC0882, 最小环境, FPGA稳定性, 目前进展, VC0882 FPGA环境稳定性总结, \todo 继续跟踪总结; 文档
+VC0882 FPGA环境稳定性总结
+
+initial             2010-3-5    zhangjian
+完善ddr调试经验     2010-7-2    zhangjian
+ddr3 bit28恒1       2010-7-15    zhangjian
+
+经过一个月的调试, 目前FPGA稳定性问题有很大改善, 概要如下, 具体测试结果请参考"D:\VC0882\document\fpga\VC0882 FPGA环境稳定性测试简要报告.xls". 
+另: 当初报的issue是从现象看的, 这里是按照原因总结的. 另参考YangZuoXing邮件(附后)
+1, cortex-a8无法停止: GuoHaiFeng修改时钟方案后, 在不插任何子板时Cortex-a8工作正常. 测试版本"rev0_01022619_02022619.ace".
+issue: 8114, 8177
+1), 无法停止包括连接后无法停止(显示connected)还包括程序运行中没有运行到预计指令且arm无法停止. , 提示都是"Error: 0x02410100: The run control operation could not be completed : .". 
+2), 另外早期FPGA版本还出现过程序运行到某条正确指令无法继续执行的问题. 只在"rev0_01020909_02020416"出现, 从"rev0_01022018_02020412"开始包括修改时钟方案后都未重现. 
+
+2, uart对FPGA稳定性的影响, 测试版本"rev0_01030214_02030214_uartJ11".
+issue 8252. 
+1), uart子板: 信号share影响系统稳定性(测试报告basic sheet), 移走share signal后, 这个问题已经解决. 
+2), 串口线对FPGA稳定性的影响: 问题1解决后, 该问题极易造成sram无法写入(issue 8113). 问题2-1)解决后, 该问题造成插串口线会造成串口输出丢数或无法输出. 经过FanZhiJun和QiuXiaoFei3月5日实验两个FPGA板子, 去掉高速座限流芯片后问题解决. 
+
+3, 供电问题
+1), FPGA电源输入处大幅度压降(1v), FPGA电源输入处插座和反向保护二极管总共有1v压降, 暂时只能靠调高电源输出电压解决. LvHaiFang/ZouWeiRan在考虑更换插座. 
+2), 意外掉电: FPGA工作一段时间会掉电, 电流从正常的2.2A降到1.1-1.6A. FPGA config DONE LED灭. 这个问题是FPGA电源处电源芯片问题, 两个板子更换电源芯片后正常. 
+
+4, ddr转接板和子板问题(3月10日有9套ddr)
+ddr问题(除了第一个问题, 其余都是上2FPGA时发现的, 现象描述只针对micron(init_lpddr_micron_128M.inc)): 
+1), 转接板和子板接触不好导致个别bit出错. (CuiYunFei, ZhouDaShan).
+2), JP1[23]跳线. 这个是供电. 如果没有插这个跳线, 读出数据是以某种pattern重复的数据. 
+3), 电阻焊接错误, 正确是57,59,61. 之前有的板子焊成了58,60,62. 
+4), 阻抗匹配. 
+(1), 开始ddr子板转接板的地址和数据线都是焊0欧姆电阻. 稳定性不好, 表现为挑板子很严重, uart频繁收发会大量乱码或undefined instruction或data abort. 
+后来转接板全面0欧姆换成22欧姆稳定性有很大提高. 但仍有挑板子和个别byte偶尔错两个问题. 
+(2), 3月11日把3月10日, 3月11日发现有问题的3个ddr(1,9,13), 子板0欧姆换成22欧姆后效果很好. 
+5), vdec出现过0xff问题, GuoHaiFeng把ddr驱动能力从12ma改为8ma就解决了. 当时也试验过2ma, 4ma效果都不好. 
+6), lpddr测试方法:
+(1), VC0882早期没有dma时主要用两种方法测试ddr: 
+A, rvdebugger load/store文件到ddr并比较数据. 这个实际是arm访问ddr, 能发现大量板级问题(例如虚焊).
+B, 用dragon刷寄存器, 例如refresh默认模块的寄存器列表, 或做某个模块的寄存器读写测试. 这个测试是反复访问某个区域的ddr(uart收发), 当时发现的阻抗匹配问题用这个方法测试效果很好.
+(2), 有dma之后, 做了sram小环境测试dma的, 考虑到memory访问可能出错, 加入了dataabort handler. 目录"D:\VC0882\memscan\fpga_in_sram". 环境说明见该目录的readme.txt
+7), 2010年6月底-7月初, zhaobeihua ddr3调试中遇到的问题:
+注: ddr3只能用BL=8, lpddr可以用BL=4, BL=8.
+(1), twr. rvdebugger memory load store script. twr是指写操作后precharge的最小间隔, 如果不满足会导致后面的数据没有写进去. 
+(2), tccd: command to command cycle过小. 这个 是在小环境测试 dma，连续发命令时看到的。ddr3要求至少需要空三个上升沿, 也就是第四个上升沿才能再发写操作.
+(3), mmu二级页表有问题.  修改后死在设置页表中, 关mmu正确。
+(4), bit28一直是1: 后来发现是板级过孔导致短路, 把线割断就没问题了.
+
+5, unalign access. 
+arm只有在normal memory才支持unalign access, gemeiping在mmu仿真已经证明这点. 咱们最小环境暂时还没有时间加入mmu代码, 稍候实验. 
+
+6, 访问APB无效寄存器后无法访问其余正确寄存器. 这个ZhangXueJian说是配置问题. 已经改为默认是访问错误寄存器会timeout. 我还没有测试. 
+
+7, csat工具交替访问AHB-AP和APB-AP会出错. 这个HuangWei已确认, 一直没有解决. 目前看对咱们没什么影响. csat是arm提供的coresight lowlevel debug工具. 
+issue 8115
+
+附:
+YangZuoXing邮件"答复: 答复: 程序跑飞, arm无法停止, 58%概率fail."20100303_2228
+Thanks to the test result from xiaofei.
+Till now, we found three issues about the stability of fpga platform:
+1.  the reset for dcm
+this is proved by the experiment from xiaofei and zhijun. It is one code error.
+2.  the connection of axi bus to the connecter of uart boards
+this maybe has influence on axi bus. Zhijun has changed ucf. And wait the result on tomorrow.
+3.  the -10v power from pc via uart cable
+Hi, weiran and haifeng,
+请将PC到882的两条UART的输入线上串上10K电阻，试一试行不行。
+如果不行，再请将PC 与882 FPGA地线的那个磁珠上再串一个10OHM电阻。
+请大家再辛苦一下，我们就要搞定了！
+
+23:02 2010-3-5
+时间管理, 绩效, 882工作时间和参与度
+AiGuo邮件"882工作时间和参与度"20100305_1023
+时间是1.15---2.15，yingxingjie的时间不够，没有在内。
+部门	        姓名	工时	参与度	882时长
+IC-2-ICP	艾国	221.3	70%	154.91
+IC-2-ICP	冯备战	222.58	100%	222.58
+IC-2-ICP	张健	240.32	100%	240.32
+IC-2-ICP	范晓凡	197.25	60%	118.35
+IC-2-ICP	廖志城	180.99	100%	180.99
+IC-2-ICP	蔡进	238.74	70%	167.12
+IC-2-ICP	舒予	212.97	70%	149.08
+IC-2-ICP	凌明	204.24	70%	142.97
+IC-2-ICP	周大山	217.83	60%	130.7
+IC-2-ICP	杨敏	186.78	50%	93.39
+IC-2-ICP	吕博学	176.02	50%	88.01
+IC-2-ICP	张浦	179.37	40%	71.75
+IC-2-ICP	李栋梁	172.56	10%	17.26
+
+23:14 2010-3-5
+VC0882, FPGA, uart, uart dma方式传输，one buffer模式
+LiDongLiang邮件"uart dma方式传输，one buffer 模式"20100304_1414
+关于882的uart dma one buffer传输的问题
+我跟weiyunlong 和 guohaifeng 都沟通过
+机制如下，以接收为例
+1. 非 wrap mode的dma 传输
+UART_RXWRAP设为0，配置dma buffer起始地址(UART_RXADDR)， 要接收的数据长度(UART_RXSIZE)，启动dma传输，接收完数据后报 UART_RXDON 中断
+2. wrap mode 下的dma传输
+UART_RXWRAP设为1，配置dma buffer起始地址(UART_RXADDR)， 设置dma buffer长度(UART_RXSIZE)，启动dma传输，当dma buffer接收数据满了
+会自动绕回到dma buffer的起始处继续接收数据。 
+在接收数据的过程中，按照threshold 的设置（UART_RXTHD）产生中断UART_RXTHD，当中断产生时，软件负责把接收buffer中指定区间段数据读走
+当发送方停止发送数据的时候，接收方产生一个timeout 的中断(类似以前pdma 中flush 中断)，以此来判断发送接收
+这个模式跟以前598 中的 uart 类似，利用one buffer 的dma来实现ping-pang
+同样有一个不足之处
+那就是不能准确的知道什么时候接收到了需要的数据，例如要接收 17K 数据， 而dma buffer 是16K，发送方连续发送了18K数据，4K的threshold 设置
+当rx 接收了16K之后绕回，在一共接受了17K数据后，接收方没有中断能知道现在已经接收到了足够的数据，而是在下列两种情况下停止
+1). 发送方停止发送， rx 产生了timeout中断
+2). 下一个wrap 中断产生的时候，软件通过自己的记录得知现在接收到得数据量已经符合需要
+3. uart 里面的fifo只能使用在dma 模式下，不能在apb 方式下使用
+4. 带硬件流控时，使用 非 wrap mode的dma 传输方式，通过小buffer，分次接收大批量的数据.
+例如一共接收1M的数据，而dma buffer大小只有100K，分10次接收
+在发送方不间断的传输时，接收方每次通过dma接收100K，
+在两次接收的间隙里，收到的数据会存放在dma fifo 中，软件需要及时启动下次的dma传输
+如果在下次dma传输启动前，fifo full了，在有硬件流控时，CTS信号会自动生效，通知发送方停止发送，在fifo 有空间了以后，CTS信号通知发送方继续发送
+如果没有硬件流控，fifo full 时，就会丢失数据
+
+23:24 2010-3-5
+VC0882, 最小环境, FPGA, OS, 移植nucleus到VC0882, \todo 实验
+GeMeiPing语句"答复: 程序跑飞, arm无法停止, 58%概率fail. "20100302_2044
+使用你提供的Init.s，我试了一下unaligned access，结果如下：
+1、读写堆栈区的地址，unaligned access success。下面是打印的结果，地址0x0006500，0x0006501，0x0006502，0x0006503都可以正确写读。
+2、非堆栈区的地址，aligned access success，unaligned access failed，地址0x87005000，但是0x87005001读写出现data abort。
+所以前面的分析是正确的，memory的属性与unaligned access是相关的，你可以看看Init.s中关于page table的设置，堆栈区与非堆栈区应该是不一样的属性。
+我们的环境如果出现data abort会重新run一遍，所以才有下面的重复打印结果，从波形上看在访问地址0x87005001data abort。
+波形在：
+/work/gemp/project/vc0882/vrf/sim_fpga/log_cortexa8
+
+13:02 2010-3-7
+时间管理
+0, 12:35
+
+1, 计划
+1), 写3月8日上午training资料.
+2), 加班记录: 3/1-3/5,3/7<DONE>
+
+2, 执行
+1), 1.5h, 写(3月8日-3月14日)工作计划. 
+2), 14:13-23:14 VC0882 Cortex-a8学习资料总结. training包: "\\10.0.2.36\sqmshare\Document\Training\arm\VC0882环境和Cortex-a8介绍.rar"
+
+3, 次日计划:
+1), VC0882 clkrst mas review. 
+2), cortex-a8和VC0882环境training完成后. 想一想最近计划. 
+
+4, 四象限:
+
+13:40 2010-3-7
+VC0882, 最小环境, FPGA, debug, coresight, rvdebugger, issue[882]0008320, 已指派给HuangWei
+0008320: rvdebugger无法清irq source pend寄存器 
+在rvds4.0 rvdebugger memory窗口中写irq source pend寄存器置一的bit, 该bit不会清0. 同样情况下由arm写入就可以清0. 
+调试时经常会从rvdebugger窗口直接读写寄存器, 这样很影响调试效率. 
+
+14:00 2010-3-7
+时间管理, VC0882, 工作任务, 周工作计划(ICP_status_track(3月8日-3月14日, W02)), 总体工作计划
+1, 总体工作计划
+1), FPGA最小环境稳定. W02周完成. 
+2), 调试sdio module:
+(1), 首先调通mmc/sd初始化和single, multi read/write. 然后调试LLI; 再次调试sdio初始化和寄存器读写(CMD52, CMD53). W04周完成. 
+(2), Linux下sdio设备. W06周完成. 
+3), VC0882 Linux环境. W07.
+
+2, ICP_status_track(3月8日-3月14日)
+13,14家里有安排. 要赶在平时完成. 
+Status: 
+1), VC0882 FPGA稳定性有很大改善, 预计已知问题本周都能解决. 
+2), VC0882 irq代码修改和测试. 
+3), 接替FengBeiZhan调试VC0882 Sdio module. 
+4), VC0882最小环境文档整理.
+5), 整理Cortex-a8资料. 
+
+Issue:
+1), cortex-a8非对齐访问造成dataabort. 仿真已证明开MMU设置正确memory属性可以解决这个问题, 软件环境中没有开MMU代码, 暂时无法试验. 
+2), rvdebugger无法清irq source pend寄存器. arm可以清.(issue[882]0008320)
+
+Plan
+1), 改进VC0882FPGA稳定性: 目前已经稳定性问题都有办法解决, 本周主要是支持QiuXiaoFei测试. 1天. 
+2), VC0882 nucleus irq代码修改: 支持64bit一级中断; 去掉无用, 冗余代码; VC0882 irq一级中断测试. 1.5天
+3), 调试VC0882 Sdio module: 首先调通mmc/sd初始化和single, multi read/write. 然后调试LLI; 再次调试sdio初始化和寄存器读写(CMD52, CMD53). 预计熟悉Beizhan代码和调通读写需要3天. 
+4), 利用零散时间整理最小环境文档和cortex-a8资料. 共3天(本周1天). 
+
+3, 学习计划
+1), 882W02暂时没有新的学习计划, 全力整理cortex-a8学习资料. 
+2), 882W03开始利用业余时间移植Linux到VC0882. 计划两周完成. 
+3), 882W05计划研究block device, 看"跟我一起写块设备驱动文档". 为调试sdio做准备. 
+
+16:11 2010-3-7
+Linux, android, cortex-a8, OMAP3530
+参考"\\10.0.2.36\sqmshare\Document\SOC\TI OMAP3530\BeagleBoard\android\embinux\Android-Eclair porting guide to BeagleBoard.txt".
+1, 编译android
+1), 下载安装jdk1.5(IE可以直接访问):
+http://java.sun.com/javase/downloads/index_jdk5.jsp, 填表后链接会发到邮箱. 
+我之前装过jre-1.6.0-openjdk, 需要把新装java设置PATH最前面, 否则编译android时会提示jdk版本不符.
+PATH=/usr/java/jdk1.5.0_22/bin:$PATH
+2), 安装gperf
+从fedora10官网"http://archives.fedoraproject.org/pub/archive/fedora/linux/releases/10/Everything/i386/os/Packages/", 下载了"gperf-3.0.3-4.fc9.i386.rpm.
+3), make
+比较费memory, 网上有人说小于1G没法编译. 我这边也发现虚拟机memory是256M时半天没动. 设成1G就可以了. 
+
+2, 编译kernel
+1),PATH=/usr/src/embedded_dev/android/embinux/embinux_eclair/prebuilt/linux-x86/toolchain/arm-eabi-4.4.0/bin:$PATH
+2),
+[dec@localhost kernel]$ make ARCH=arm omap3_beagle_android_defconfig
+[dec@localhost kernel]$ make ARCH=arm CROSS_COMPILE=arm-eabi- uImage
+
+3, 
+1), Android Eclair Porting for Devkit8000
+自: http://fred-zone.blogspot.com/2009/12/android-eclair-porting-for-devkit8000.html
+36: \Document\SOC\TI OMAP3530\DevKit8000_天漠, patch: devkit8000-android-kernel.patch
+2), http://planet.debian.org.tw/, March 04, 2010, fred.
+Add Devkit8000 and SBC8100 initial support to 0xdroid
+
+14:29 2010-3-8
+VC0882, 最小环境, FPGA, OS: nucleus, ddr, timer
+1, 查昨天问题
+dongliang建议做arm读写测试. 下午和beizhan一起调试.
+2, 每次都死在do_help->show_help中:
+iprintf("%s\n  %s %s\n", cmd->help, pre, cmd->str);
+在iprintf中单步没事. 直接运行就会跳到0x0. 
+此时lr=0x0000039C, 在INT_Timer_Interrupt中. aiguo建议关闭timer. 
+关timer后可以. FPGA版本"rev0_01030703_02030411_2fpga_normal_noUsbTpiGpuEncDec.ace". 代码已上传.
+映像放到了"\\10.0.2.36\sqmshare\share\zhangjian\projects\VC0882\code\2010308_最小环\VC0882_nucleus_noTick.axf".
+
+16:03 2010-3-8
+VC0882, 最小环境, FPGA稳定性, ddr, 串口收发导致armdataabort或undefined nstruction
+1, ddr9套. 最后三个也是焊接问题.  \todo 问zouweiran具体原因. 
+2, 实验室现在有8套. 需要10套. 
+3, 右下OSC7是xclk给模块供clk. 
+4, FPGA稳定性问题, Issue Track[882]0008329
+摘要: 串口连续读写导致data abort或undefined instruction
+说明: 今天使用dragon测试寄存器读写时发现8个板子中. 只有FPGA1, FPGA11串口收发无问题, 其余6个串口读写中都会出现dataabort或undefined instruction. 
+6个FPGA板子分别是6,7,8,9,10,12. 
+也就是第二批的FPGA只有11号是串口测试通过的. 
+另外6是带限流芯片的, 先前小压力串口测试无问题, 看来这个板子的限流芯片也要摘掉. 
+
+这样我们没法测试模块寄存器, 会严重影响我们的进度. 
+原来串口问题是丢数或不通, 与本次不问题不同. 
+
+22:02 2010-3-8
+VC0882, 最小环境, FPGA, OS: nucleus; cif
+1, yinxingjie的程序注释sd初始化时就会在__rt_entry中的freopen中跳回0x0. Aiguo认为是堆栈问题导致. 调试暂无结果.
+2, 这个问题和我的问题类似都是跳回0x0地址.
+3, 在fanxiaofan uart测试通过的FPGA11上测试, 问题相同. 只是在help第一个命令cache后面就返回了.
+这个时候timer中断已经触发了很多次.
+4, (21:28 2010-7-2)上面yinxingjie的问题印象中是系统不稳定, 很可能是ddr不稳定造成的.
+
+22:25 2010-3-8
+时间管理
+3, 次日计划:
+1), 实验trace;
+2), OMAP3530 android eclair.
+
+10:12 2010-3-9
+VC0882, 最小环境, FPGA稳定性, 串口收发导致armdataabort或undefined nstruction, 续, \todo 加入FPGA稳定性总结; 文档
+1, ZouWeiRan建议互换FPGA和串口子板试试. 
+2, 在test7机器测试. 
+其中昨天FPGA1,11昨天正常. 今天FPGA1 fail两次pas三次.
+6,7,8,10,12昨天fail, 今天正常. 只有FPGA9可以复现昨天问题, 更换好的ddr后解决. 
+另外昨天, 今天两天发现程序会跑到0x0地址. 
+一个程序是在sram中运行正常的nucleus环境, 在ddr中会跳到0地址. 
+一个是下面1), 2)测试中使用ddr(转接板11, 子板8)会导致跳到0地址, 更换ddr后运行正常. 
+另外昨天YinXingJie也遇到程序跳回0地址问题. 
+综合看, 感觉ddr有问题. 所有ddr都是经过QiuXiaoFei, TanJiaLiang测试通过的. 
+
+1), FPGA11
+uart6+ddr1 pass. 
+uart6+ddr(转接板11, 子板8) fail after Application_init return: 0.
+2), FPGA7
+uart6+ddr(转板11, 子板8) fail after Application_init return: 0.
+uart6+ddr1 pass. 
+3), FPGA12 uart6+ddr1 pass.
+4), FPGA8+uart3+ddr1 pass
+5), FPGA6+uart7+ddr2 pass. 昨天在test11fail. 
+6), FPGA10+uart12+ddr1 pass. 昨天fail.
+7), FPGA1
+(1), uart2+ddr(转接板7+子板11). fail(一次dragon死, 一次串口丢数). 昨天在test15 paas.
+(2), uart2+ddr1. fail(串口丢数).
+(3), uart6+ddr1 pass.
+实验3)后, 1), 2)无法复现.
+8), FPGA9+uart11+ddr9 fail(串口丢数). 
+uart11+ddr1 pass.
+
+3, 下次fanzhijun给板子时ddr调电压拨码开关. 
+
+4, 下午实验发现代码有变化会影响, 在一个板子上beizhan编译的sd可以, min的不行. 另一个板子运行min可以. 感觉很奇怪. 后来zouweiran提议把0欧姆换成22欧姆. 效果很好. 
+\todo 加入FPGA稳定性总结. 
+
+5, 明天如果2FPGA没问题, qiuxiaofei发信时同时说明nucleus tick时也没问题. 试试4FPGA.
+
+10:13 2010-3-9
+时间管理
+1, 计划
+1), 实验trace;
+2), OMAP3530 android eclair. ubuntu下编译uboot得到mkimage.
+
+3, 次日计划
+1), 2FPGA ddr更换后实验. 主要是支持qiuxiaofei测试. 
+2), 4FPGA实验. 
+3), irq修改.
+4), OMAP3530 android eclair.
+5), 文档: 更新FPGA稳定性总结文档, 整理memory不稳定会出现的问题(830, 816, 882等)也加入前者. 问zhaoyuan830android进展. 昨天memory阻抗问题是猜出来的还是查出来的, 希望如何查阻抗是否匹配.
+
+17:59 2010-3-9
+VC0830, SV, 量产, youhai, cuiyunfei
+1, vdec: 播rm必死. 
+2, 切频: 切频240_120->288_144死. cpu? 切到切频频率会不会死?
+1), 试验240_120->144_144. 
+2), 步近切频: 缩小切频频率间隔, ddr产品公司说跨度大的时候需要reset dll?
+
+14:32 2010-3-10
+VC0882, 最小环境, FPGA稳定性; FPGA资产: ddr转接板, ddr子板
+1, 今天新焊三个ddr子板,  现在共有7套ddr. (19:35 2010-3-10)到下午已经有9套ddr, 见6QiuXiaoFei邮件"19:35 2010-3-10"end
+实验4FPGA发现供电很不稳定(实验10次只有一次连接成功), 需要都换成好的电源座并且固定后再实验. 
+2, 下午刷padc reglist会data abort. 发现是访问了未定义的寄存器. 修改后可以. 
+3, 版本"rev0_01030703_02030411_2fpga_normal_noUsbTpiGpuEncDec". 
+FPGA11+ddr(8+8)刷reglist dataabort. 
+FPGA110+ddr(转接板10+子板9)不稳定, aasp无法正常启动. 
+4, 改电源的FPGA1挑DDR. 有的连不上, 有的uart乱码. 用ddr1没问题. 
+5, 组内发信: 新ghost两台机器. 
+6, QiuXiaoFei邮件
+Hi, all
+今天下午对更换了新电源的FPGA1进行稳定性测试，发现对DDR比较挑剔。
+用实验室和旧电源搭配没有问题的四块DDR与FPGA1搭配，进行上电后设备连接、刷reglist操作测试；
+四块中有两块很稳定，另外两块每次操作都有问题：
+DDR 10& DDR 14
+（五次重新上电，五次reset）
+全部PASS
+DDR13
+第一次
+设备连接好以后FPGA板突然掉电，电流变为1.7A；
+第二~五次RV跑停：
+> go
+Stopped on Reset of Target
+Stopped at S:0x00000000: PANDA_INIT_S\ Line 171
+DDR 
+第一次和第二次  刷reglist时UART打印乱码
+第三次：
+刷reglist时有乱码，且RV跑停：
+> go
+Stopped on Memory access violation
+Stopped at S:0x00000010: PANDA_INIT_S\ Line 178
+另外我和谈家梁已经对11测试室所有FPGA环境进行了接收，目前可用的有11套2FPGA板和9套DDR。
+还有多余的两块DDR转接板（5#和10#），其中10#转接板比较不稳定，昨天和今天上午还可以正常使用，今天下午就连不上设备了，需要修复。
+1), 注: 上面的9是新编号的01.
+2), SVteam: 13子板换到15转接板也有问题(aasp启动脚本死或刷reglist死). 说明13子板有问题. 去掉双排插针后没有明显改善. 
+7, 经beizhan提醒, FanZhiJun今天release的板子有两个版本, 后者virtex5_02(reset)有修改, 我白天没有注意. 
+这版对应的2 FPGA在，沿用3月4日的A8 FPGA
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf\ rev0_01030920_02030411_2fpga_vc0882_20100309_2040_normal_noUsbTpiGpuEncDecNfc.ace
+更新了A8 FPGA的版本做了少量更新：
+1. Add xrst_n for padc_sys
+2. Delete apb_penable from padc_sys
+另一个ace是
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf\rev0_01030920_02030921_2fpga_vc0882_20100309_2040_normal_noUsbTpiGpuEncDecNfc.ace
+8, QiuXiaoFei总结的FPGA资产, ddr转接板, ddr子板. 
+D:\VC0882\document\fpga\VC0882实验室资产编号.xls
+DDR		
+No.	转接板	颗粒板
+1	80100301012	80100203014
+8	80100301010	80100301018
+10	80100203013	80100122053
+11	80100211030	80100211031
+12	80100301009	80100301016
+13	80100122054	80100301019
+14	80100301013	80100301017
+15	80100203012	80100203015
+8, ShuYu问题(已发信).
+调试中发现有一个变量执行中数值意外变化:
+for循环, i++: 从0x0006变为0xff06, 从0x0009变为0xff09. 
+第三次正常. 感觉ddr稳定性虽然有很大提高还不够好. 这种个别byte出错的问题会严重影响调试进度.
+9, FanXiaoFan问题(\todo 发信).
+单步调试中没有停在下一条语句, 而是跳出整个函数. 例如如下函数中
+在"switch(genMode)"单步会跳过整个函数. 如果在"uartChannel->baudRate = baudRate;"设断点后从"switch(genMode)"单步就会进入case 0. 如果条件是进入case1单步就正常. 
+switch(genMode)
+{
+        case 0:
+        {
+                uartChannel->brdivMode = UART_BAUDRATE_CLOCK_16;
+                break;
+        }
+        case 1:
+        {
+                uartChannel->brdivMode = UART_BAUDRATE_CLOCK_8;
+                break;
+        }
+        case 2:
+        {
+                uartChannel->brdivMode = UART_BAUDRATE_CLOCK_4;
+                break;
+        }
+        default:
+        {
+                uartChannel->brdivMode = UART_BAUDRATE_CLOCK_16;
+                break;
+        }
+}
+uartChannel->baudRate = baudRate;
+
+VIM_UART_SetBaudRate(uartChannel->channelIndex, uartChannel->baudRate, uartChannel->brdivMode);
+
+10, 修改nucleus irq处理, 使其支持64bit一级中断. 
+停在VIM_INT_SetPro()(vector = IRQ_DMAC_VECTOR, pro=0x10):
+DRV_ASSERT(Pro < 16);
+这个不太合理啊. 查598. 
+//从代码看是根据VIM_INT_Init(): temppri=2+(totalpri-3)/2;
+//"max = 2 + (29 - 3) / 2 = 15"得到的.
+所以882里面: "max = 2 + (49 - 3) / 2 = 25", 改为
+DRV_ASSERT(Pro < 25+1);
+调用"VIM_INT_Attach()"才会使用g_priority定义的priority.
+11, 上传CVS:
+修改nucleus irq处理, 使其支持64bit一级中断. 手工触发bit 32中断, 可以正确进入VIM_INT_IrqHandler.
+1), 修改panda_init.s代码使其64bit中断处理. 
+2), 修改VIM_INT_GetMaskModule为获取mask而不是setmask. 原有代码有误. 
+3), 修改panda_init.s中INT_IRQ为VC0830OSadsinit.s方式, 原来没有利用INT_IRQ_Vectors获得中断处理函数, 而是单独为tick timer走不同分支. 
+4), 修改VIM_INT_SetPro()"DRV_ASSERT(Pro < 16);"为"DRV_ASSERT(Pro < 25+1);"
+调用"VIM_INT_Attach()"才会使用g_priority定义的priority.
+5), 修改nucleus.h的NU_MAX_VECTORS,NU_MAX_LISRS为49.
+
+19:52 2010-3-10
+时间管理
+1, 计划
+1), 2FPGA ddr更换后实验. 主要是支持qiuxiaofei测试. 
+2), 4FPGA实验. 
+3), irq修改.
+4), OMAP3530 android eclair.
+5), 文档: 更新FPGA稳定性总结文档, <DONE>
+6), 整理memory不稳定会出现的问题(830, 816, 882等)也加入前者. 问zhaoyuan830android进展. 昨天memory阻抗问题是猜出来的还是查出来的, 希望如何查阻抗是否匹配.
+
+2, 执行
+1), 断断续续用了2小时ghost两台机器. 
+
+4, 其他(太长了, 需要整理)
+
+11:33 2010-3-11
+VC0882, 最小环境, FPGA, 稳定性, ddr, 阻抗匹配(原理见4)
+1, 改进思路, 昨天发信后(见"14:32 2010-3-10"6,8), ICD和SV的思路如下. 
+1), SV:
+YangHuiGang邮件"答复: 答复: FPGA稳定性测试"20100311_0935
+我们讨论了一下，今天会进一步跟进看能不能有所改善：
+1、将DDR颗粒板上的0R排阻也更换成22R；
+2、更换DDR颗粒板上的电源芯片减小纹波；
+另外，我个人有一个想法不知道是否可行：事实上我们FPGA背面有一个插DDR的插槽，这样无需通过转接板，稳定性应该可以提高。
+2), ICD:
+YangZuoXing邮件"答复: 答复: FPGA稳定性测试"20100311_1126
+另外，还有两个可能的方案：
+1. 22->47
+2. 使用50OHM DCI版本。
+注: 后来此方法在一个FPGA上搭配ddr(转接板和子板都无22欧姆电阻)实验. 只是与ddr转接板22欧姆子板0欧姆实验, 效果没有1)好. 所以没有大量测试. 
+
+2, ddr: 子板加电阻(22欧姆, 47)或FPGA50欧姆或其他试验.
+1), 子板22+转接板22+FPGA0, 1/10. 
+2), 1,9,13换成22欧姆都没有遇到错误. 详见tanjiangliang邮件
+TanJiaLiang邮件"答复: FPGA稳定性测试"20100311_1635
+使用带输出阻抗（50欧）的CF code：
+测试用了0欧姆DDR颗粒板和22欧姆转接板,测试了5次重新上电：
+1)   Pass；
+2)   测nucleus时dragon打印乱码，RV跑停；
+3)   刷RegList时dragon打印乱码，再刷一次RegList时RV跑停；
+4)   Data abort；
+5)   Data abort；
+2.    使用不带输出阻抗的CF code：
+测试用了22欧姆DDR颗粒板和22欧姆转接板，测试了30次（20次重新上电，10次Reset）
+28次pass，2次Data abort（一次发生在重新上电后，一次发生在reset后）。
+在更换了新电源的FPGA 9（PC 01）上测试（使用的是不带输出阻抗的CF code）
+1.    DDR 09（0欧姆DDR颗粒板和22欧姆转接板）：
+测试了30次（15次重新上电，15次reset）
+均pass，但是每次测试，dragon都会打印很多多余的空格，在刷完寄存器列表之后，按下回车，dragon又恢复正常，原因未知。
+2.    DDR 13（22欧姆DDR颗粒板和22欧姆转接板）
+测试了30次（15次重新上电，15次reset），均pass
+3.    DDR 01（22欧姆DDR颗粒板和22欧姆转接板）
+测试了30次（15次重新上电，15次reset），均pass
+同时zhangjian 在FPGA 15上对DDR 08进行了测试：
+1.    加电阻前，DDR 08是0欧姆颗粒板和22欧姆转接板，测试了20次：
+1)9次data abort；
+2)2次程序跳到了0x0地址；
+3)6次dragon打印的空格很多以致跑死；
+4)2次发生小错误，但并未跑死；
+5)1次pass；
+2.    加电阻后，DDR 08是22欧姆颗粒板和22欧姆转接板，测试了20次，均pass。
+测试结果显示：DDR使用22欧姆颗粒板和22欧姆转接板，对于FPGA的稳定性有较大的提高。
+
+3, 4FPGA 新arm有问题: FPGA config后d9, d11没有灭. 
+guohaifeng在查.
+
+4, ddr稳定性讨论
+1), WanShuiMing邮件"答复: FPGA稳定性测试"20100311_1820
+在DDR颗粒板上串22ohm电阻可以让DDR 芯片发出的信号到达FPGA 没有大的反射；转接板上的22 ohm对DDR和FPGA两者发出的信号都有抑制作用，但作用弱一些。
+带输出阻抗(50 ohm) 的CF code ，用的是LVDCI_18 的IO标准？ 这需要对应的FPGA bank上的VRN VRP 焊接50 ohm电阻到VCCO和GND，但是我们的板子因为IO pin不够用，这些pin都当普通IO用了，没有焊接电阻。所以这个code 可能没有起作用。
+建议试试LVCMOS18 的IO标准，同时把默认的driver strength 12mA改成6或8mA。
+2), YangZuoXing邮件"答复: FPGA稳定性测试"20100311_1856
+HI, LAOWAN,
+已经是LVCOMS18了。
+HI, ZHIJUN,
+你试试控制DRVIER STRENGTH.
+3), FanZhiJun邮件"答复: FPGA稳定性测试"20100311_1921
+带输出阻抗(50 ohm)是LVDCI_18
+“不带的”即LVCMOS18
+
+5, (10:42 2010-3-12)昨天今天使用FPGA13+ddr13仍然会不稳定. 有时dataabort. 换成FPGA13+ddr9, FPGA9+ddr13简单测试可以. 
+
+17:02 2010-3-11
+时间管理
+1, 计划
+1), VC0882 irq测试. 
+2), OMAP3530 android eclair.
+3), 整理memory不稳定会出现的问题(830, 816, 882等)也加入前者. 问zhaoyuan830android进展. 昨天memory阻抗问题是猜出来的还是查出来的, 希望如何查阻抗是否匹配.
+
+2, 执行
+
+3, 次日计划
+1), irq基本test.
+2), 加入mmu代码. memory部分设为normal. 目的: 担心IP模块内部代码没有考虑不对齐访问. 例如vdec. 
+
+4, 其他(太长了, 需要整理)
+
+20:02 2010-3-11
+(12:05 2010-5-10)
+VC0882, FPGA, sd/sdio, \todo 调试经验总结, 卡容量不对, 速度不正确, sdio cmd52无法读到数据
+1, 卡容量不对
+0), 发现从CSD读到的C_SIZE不正确. 
+1), CSD版本
+CSD ver1.0
+device size C_SIZE 12 xxxh R [73:62]
+CSD ver2.0
+device size C_SIZE 22 00 xxxxh R [69:48]
+1.0, 2.0的card command classes都是一样的: 
+card command classes CCC 12 01x110110101b R [95:84]
+2), 注意: VC0882 sd CID,CSD没有存低7bit CRC和bit[0]. 数据低bit对齐.  所有软件需要修改. 
+
+2, Anzhiming
+1), mmc卡容量不对. 原因是mmc初始化中调用函数时结构体参数传递错误. 
+2), 速度不正确. 计算问题. \todo cache对这个有没有影响? 
+3), sdio cmd52无法读到数据. 原因是没有进入传输状态, 进入传输状态读写就正确了. 
+
+10:48 2010-3-12
+VC0882, 最小环境, FPGA, 4FPGA
+1, 实验4FPGA(GuoHaiFeng, Zhangjian):
+1), GPU接收的地址不正确. ICE发的0x80收到的是0x180. 
+2), 换了4FPGA上下两层连接插座后读GPU寄存器没问题. 但是ddr和sram无法写入.
+另外今天新拿到的4FPGA都无法使用(cf code下载失败). 
+3), 昨天拿的4FPGA把5个高速座转接口更换后可以.
+4), 4FPGA还有最新arm无法连接的问题. 
+5), zhangjian测试:
+(1), venc+gpu(rev0_03030921_04030922_01030613_02030613_4fpga_normal_Enc+Gpu_NoUsbDec.ace): gpu, venc默认值正确. 
+(2), vdec+gpu(rev0_03030819_04030922_01030613_02030613_4fpga_normal_Dec+Gpu_NoUsbEnc.ace): 3/5 无法使用(连接后或运行时arm无法停止). 2/5 寄存器默认值都为0.
+2, 2FPGA: FPGA12+ddr12, regtest乱码. 可能是ddr问题, 等yuyang不用的时候改22欧姆电阻试试. 
+3, shuyu memory load很容易死, memory子板加22欧姆.
+
+12:58 2010-3-12
+时间管理
+1, 计划
+1), VC0882最小环境
+(1), 开cache, mmu.
+(2), 一级中断触发测试. 
+2), VC0882环境支持: 4FPGA, 2FPGA(注意ddr稳定性).
+3), VC0882_FpgaProgress.xls加入稳定性进展. 给beizhan发信. 另外建议一天一个sheet. 
+4), 帮dongliang加norflash测试代码.
+
+3, 次日计划:
+1), 修ddr15和FPGA13. 
+2), panda_os加入搬移.
+3), 定下周计划, 可能需要与aiguo, beizhan讨论. 
+4), 一定要试一下omap3530. 拖时间太长了. 
+
+12:49 2010-3-13
+VC0882, 最小环境, FPGA, issue状态
+1, 回信
+刚才看了issue, 如下三个issue据我所知没有解决: 
+0008320(rvdebugger无法清irq source pend寄存器), 0008148(使用Rvdebugger单步调试中DSCR无法访问), 0008115(csat访问dap fail)
+其它issue希望详细写出解决过程, 除了8252以外, 都是只有现象. 这样对以后没什么帮助. 
+
+12:50 2010-3-13
+VC0882, 最小环境, FPGA, remap ddr讨论
+1, LingMing邮件"答复: ddr remap疑惑"20100313_1848
+关于830支持将sdram/ddr空间映射到0地址的好处，我以前给楼下AE的人解释过，这里就献丑再解释一下了：
+
+830 的remap 能将rom 0x10000000和spi 0x30000000 以及sdram/ddr 0x40000000中间的一个映射到0x00000000地址。
+
+其中映射rom 和spi，是为了bootloader使用（万一rom的不满足需求，我们可以自己写一个spi norflash的）；而映射sdram 到0x00000000的意义见下面的解释：
+
+“
+
+把DDR的地址映射到0呢（即sdram0x40000000映射为0x00000000）：
+
+这个对于高级操作系统来说意义不大。因为比如Wince会启动mmu，将一块地址映射到0xffff0000,然后在那里实现自己的异常处理，所以AE可以不用将sdram0x40000000映射为0x00000000；但是一样可以处理异常。
+
+如果对于低级操作系统，或者没有操作系统的应用，就比较有意义了。因为arm的异常向量表有两种方式：1.低端，0x00000000处0x00000000-0x0000001C；2.高端，0xffff0000处0xFFFF0000-0xFFFF001C；一般的SOC系统在0xffff0000处是不会有实际的mem对应的，就只能使用低端0x00000000处，除非我们启用MMU 映射一块sdram/ddr空间过去，但是很多情况我们又不想使用mmu。
+
+如果不支持重新映射，那么0x00000000处就是rom或者norflash等等东西的程序，一般就是Bootloader（因为上电就要执行的），而Bootloader那里面的异常处理就是固定死了，不一定满足日后应用程序的要求。应用程序使用起来会很不方便，没办法想怎么处理就怎么处理，就比如当年的s3c44box，那种情况下就要写一个配套的bootloader才行。而一旦支持重映射，就能在不启动mmu表的情况下，将0x00000000处放置我们应用程序自己的异常处理程序（因为将sdram映射过去了），想怎么用就怎么用，所以还是很方便的。
+
+2, ZhangJian邮件"答复: ddr remap疑惑"20100313_1305
+CPSR.V=0时Cortex-a8支持把向量表放到任意位置(见下, 详见ARM_ARM_7AR), TI cortex-a8(OMAP3530)异常向量默认放在0x0014000. 不一定要映射ddr到0地址.
+
+Determines the location of exception vectors, see c12, Secure or Nonsecure Vector Base Address Register on page 3-152. The primary input VINITHI defines the reset value of the V bit:
+0 = Normal exception vectors selected, reset value. The Vector Base Address Registers determine the address range.
+1 = High exception vectors selected, address range = 0xFFFF0000-0xFFFF001C.
+
+1), Vector Base Address Register
+The Secure or Nonsecure Vector Base Address Register is:
+• a read/write register banked in Secure and Nonsecure states
+• accessible in privileged modes only.
+(1), bit[4:0]无效. 
+(2), privileged mode: 是除了user mode以外的其余7个mode(含monitor mode). 
+
+13:08 2010-3-13
+时间管理
+0, 11:59-
+
+1, 计划
+0), FPGA稳定性加入FPGA进展
+1), VC0882最小环境
+(1), 开cache, mmu. MPW要测一下cache, mmu. 
+(2), 一级中断触发测试. 
+2), 修ddr15和FPGA13. 
+3), panda_os加入搬移.
+4), 定下周计划, 可能需要与aiguo, beizhan讨论. 
+5), 一定要试一下omap3530. 拖时间太长了. 
+
+2, 执行
+1), VC0882最小环境, "1-1)-(1)", 见"13:38 2010-3-13"
+
+3, 次日计划
+1), 完成mmu_cache, irq, OMAP3530 android后, 清剩余bug. 
+
+4, 四象限:
+0), 希望每天工作时间一小时, 做有利于长远工作的事情. 每天上下班时间和午休时间做公司工作以外长远事情.
+1), 重要紧急:
+(1), 修改nucleus irq代码: 去掉无用函数, 支持64位一级中断. <DONE>
+(2), VC0882 FPGA ace文件. <DONE: \\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf>. 
+2), 重要不紧急:
+(1), 每天用1小时修改perl脚本: 改进logAssistant, 支持查找section keywords. 并输出. 
+(2), 接替Beizhan调Sd卡. 总时间预计需要2-3周. 
+(3), 整理cortex-a8学习内容. 计划2月26日内完成. 
+(4), 移植nucleus完成后, 总结VC0882最小环境: rvds4.0初始化, aasp, nucleus等. 计划3月5日前完成. 
+(5), 实验trace.
+(6), 入职中星微以来总结: 具体项目, 软件技巧. 提高工作效率(时间管理, 工具软件ediltplus, logAssistant).
+3), 紧急不重要
+4), 不重要不紧急
+(1), test plan review.
+(2), VC0882加入irq test.
+(3), 把cache ID reg那个bug报上Issue. 
+(4), 把最近两周的时间管理和重要邮件看一下. 
+(5), 解决"14:21 2010-2-24"问题. 
+
+13:38 2010-3-13
+VC0882, 最小环境, FPGA, 稳定性, aasp
+1, 给fanzhijun 1Msram测试程序. 用这个程序接收.
+dragon不用给, ddr不够.
+2, 13,14,15是一批的. 把13开关拨成15看看行不行.
+拨完用ddr还是不稳定, 可能是挑ddr. 下一批FPGA好的时候一起测试ddr兼容性.
+3, 昨天ddr一是电容焊接有问题, 修好后800多k只有一个byte是bit7错误. zouweiran点了一下这个bit. 800多k比较就对了. 
+4, 调试第二个4FPGA, GuoHaiFeng拨些开关后勉强可以用, GPU读寄存器正确, Vdec个别寄存器读写时对时错. GuoHaiFeng会重跑一版timing margin更大的版本(给4FPGA互连留出足够的margin), 并且去掉vdec无关模块(降低AXI, APB bus load). 预计周一出. 
+5, aasp热键经过FanXiaoFan修改LiaoZhiCheng测试可用. 代码已上传. 
+6, 使用"rev0_vc0882_20100311_2130_1m_02030921_2fpga_vc0882_20100311_2130_normal_onlyUartTpiTimerIrqSpiSd.ace", 无论是否插串口转接板连接后都是arm无法停止, 提示:
+Error: 0x02410100: The run control operation could not be completed : .
+使用"rev0_01031220_02030921_2fpga_vc0882_20100312_2000_normal_noUsbTpiGpuEncDecNfcDe.ace", 5次实验都pass. 
+不行的这个映像是专门调试小模块的的版本(无ddr, 1M sram), 这样充分利用FPGA台子. 这样会影响ICP进度. 所以此bug无法关闭. 
+7, 总结, VC0882_FpgaProgress.xls:
+1), 2FPGA: 3月13日 1M sram版本无法连接arm, 详见Issue8114注释0016531. 
+2), 4FPGA: 拿到第二个4FPGA: GPU读寄存器正确, Vdec个别寄存器读写时对时错. Vdec勉强在用. GuoHaiFeng会重跑一版timing margin更大的版本(给4FPGA互连留出足够的margin), 并且去掉vdec无关模块(降低AXI, APB bus load). 估计周一能拿到. 
+
+16:22 2010-3-13
+VC0882, 最小环境, debug宏, 编译错误: error  #127: expected a statement
+像TIMER_MSG这类print宏, 用do,while实现比较合理. 现在这个写法即使if语句里面只有这样一条语句也要加大括号. 否则编译时提示:
+timer/test/timer_test_api.c(48,2) : error  #127: expected a statement
+
+if (g_bTimerSymbol % 2 == 0)
+{
+        TIMER_MSG(".");
+}
+
+#if DRV_MSG_TIMER_ON
+#define TIMER_MSG(...)		{   printf("\x1b[40m\x1b[37m");      \
+                         printf("[TIMER   MSG]\x1b[0m\t");       \
+                         printf(__VA_ARGS__);\
+   				printf("\n");}
+#else
+#define TIMER_MSG(...)		
+#endif
+
+16:35 2010-3-13
+时间管理
+FengBeiZhan邮件"请大家从今天开始填写Vc0882周末加班记录表"20100313_1623
+从今天开始，请大家填写882 周末加班记录，单位是小时，最小到0.5小时，请大家认真填写；
+以后882项目的到休假等，将根据这个表格进行统计安排；请大家认真填写这个表格；
+\\10.0.2.36\sqmshare\Share\fengbeizhan\Vc0882\VC0882_周末加班记录情况.xls
+
+17:02 2010-3-13
+VC0882, 项目建议, 流程改进, \todo 总结
+1, 项目模块优先级需要通盘考虑. debug和FPGA(时钟方案, 电源, 互连等等, 关系到系统是否稳定)应当优先. 在VC0882 ICP开始进入的阶段, 这两个是bottle neck. 
+2, 模块分配, 重要模块应该分开. 
+
+18:30 2010-3-13
+VC0882, FPGA, storage, sd
+JiangBo邮件"答复: sd的设计"20100313_1825
+因为error只在done之前，中间都发生错误了为何还要传完？
+答：AXI总线协议是这样的，中间即使发生了Error Response，但是对于“已经发起的读写访问请求”，必须依旧正常完成（写数据继续发送，读数据继续接收），如果在总线系统上有任何残留，都会导致系统总线部分或者全部挂死。如果要求SDIO停止传输，那么它的State Machine就需要为此增加一个分支，走一套DMA Template的Terminate Flow，使得DMA Template停止发送新的访问请求，并且全部处理完毕“已经发起的访问请求”，这样才能真正停止。这就是所说的增加State Machine复杂度。
+
+实际上咱们这里提到的error，唯一可能导致的原因就是软件配错了Memory地址，而这种情况基本上只在刚刚接触芯片的初级阶段才会发生。大家熟悉Memory Mapping以后，肯定不会再出现这样的问题。
+
+10:19 2010-3-15
+VC0882, ICP sync up; 时间管理: 本周工作计划(3/15-3/21), 下周工作计划(3/22-3/28)
+0, 会议记录: 研发记录簿p20
+1, FengBeiZhan邮件"答复: vc0882 icp sync up meeting，3-15，room6，9：50开始"20100315_1244
+meeting minitues：
+以fpga调试为第一优先级；
+以准备第二阶段的code为第二优先级；如果fpga调试不能进展下去，赶快会到座位准备第二阶段的事情；
+如下是第二阶段要准备的事情：
+zhangjian： 1）arm mmu等
+            2）linux总结
+lingming：1）usb host的熟悉；
+xiaofan：1）熟悉device，wifi（spi 接口的）
+zhangpu：1）构造2d的case；
+         2）3d调试；
+         3）linux的下driver；
+caijin、yangmin、liying:1）对照标准，在多准备一些写得测试case；
+xingjie：1）video架构；
+yuyang、shuyu：de调试和接手；
+zhicheng：1）nfc driver；
+          2）linux总结；
+boxue：1）audio、tip的调试和完善；
+beizhan：1）接手emi
+dashan：1）memory的调试；
+MPW中fd, dmac, nfc三部分不做.
+2, 3/5-4/10是第一阶段. 
+3, zhangjian任务:
+1), arm: cache, mmu等. 其中cache, mmu希望在MPW测过. 
+2), debug: trace. MPW要测试. 
+3), irq. 
+4), Linux总结. 下周任务. 
+4, 本周工作计划(3/15-3/21)
+1), irq test
+2), Cortex-a8 L1 cache开关. mmu平映射. 
+3), trace. 第一次用, 时间不一定来的及. 
+
+5, 下周工作计划(3/22-3/28)
+
+14:12 2010-3-15
+资产, VC0882
+1, OMAP3530
+2, RealviewICE;
+3, SD卡, 五张(其中一张借给了boxue). 3个2G, 1个.
+
+15:09 2010-3-15
+时间管理
+0, -0:28
+
+1, 计划
+1), 查ddr还有几块没改. 
+2), 问dongliang EMI bootloader总结. 
+
+3, 次日计划:
+0), tanjialiang测试memory. 加入dashan原有测试命令. 
+1), irq测试. 
+2), 在linux-2.6.29.6运行VC0830 kernel: 白天提前checkout出来. 在27上实验通过. 
+3), ddr还有几个没改. 
+4), 问thumb-2, thumbEE是否仿过. 
+
+15:48 2010-3-15
+VC0882, 最小环境, FPGA, 稳定性, ddr
+1, zhangpu 16M memset有问题. 
+[882 0008376]
+摘要  0008376: memset操作大量内存,会导致reset或者Undefined Instruction
+说明  gpu调试中,发现memset清除一个buf时,会导致reset或者Undefined Instruction.
+注: ddr mem 128M  
+2, tanjialiang测试 #17 1/20 dataabort:
+TanJiaLiang邮件"答复: vc0882: fpga to ICP"20100315_1816
+刚刚测试了新交付的17#、18#两套FPGA，测试结果如下：
+测试室11          PC 10       DDR 09
+CF code：rev0_01031220_02030921_2fpga_vc0882_20100312_2000_normal_noUsbTpiGpuEncDecNfc.ace
+FPGA  17#         测试了20次，12次重新上电，8次reset，第5次fail，刷Reg List时报Data Abort，其余19次均pass；
+FPGA 18#          测试了20次，10次重新上电，10次reset，均pass；
+
+16:03 2010-3-15
+VC0882, 现有arm cortex-a8问题
+1, unalign access.
+2, thumb-2, thumbEE测试code. 
+
+19:20 2010-3-15
+VC0882, ddr burst length
+YiNong邮件"答复: fpga遇到问题多的模块（cif、de等）的讨论结果"20100315_1407
+另外，没有什么原因不要低于4.   DDR2在4以下无法做burst transaction,   multiple transaction command phase和data phase之间的bubble无法完全消除，对效率影响很大。
+
+20:52 2010-3-15
+VC0882, 最小环境, FPGA, bootloader
+1, LiDongLiang邮件"EMI Norflash boot"2010315_1959
+我在调试EMI Norflash boot
+发现一个问题
+我把boot的代码烧写到 Norflash 芯片中
+设置 strap pin 到 norflash boot
+Reset 板子
+在rv-ice 连接到fpga的情况下
+程序可以从norflash 中boot起来，表现在aasp 测试界面出现
+在rv –ice 与 fpga 断开时
+程序不能boot，表现在串口终端没有信息输出
+目前发现882 fpga中只有第 9 块fpga可以boot
+其它 fpga 均不能
+还请尽快解决一下这个问题
+目前rv-ice 有限，仅够 SW 使用，还需要share
+norflash boot 对于测试很重要
+测试人员只能通过norflash boot的方法进行测试，可以不用rv -ice
+2, LiDongLiang邮件"答复: EMI Norflash boot"20100315_2037
+谢谢guohaifeng
+该问题解决: 
+Reset n信号上跳线，相当于加了上拉电阻
+目前lcd 板子不多，为了测试用起来方便
+与fanzhijun协商, 在fpga 的现阶段
+暂时将 emi norflash boot 做为默认boot
+这样的好处在于可以省掉lcd 板子
+因为要在lcd 板子上做strap pin的跳线
+Hi, zhijun
+Emi norflash boot
+Strap pin
+LCD_D[1] :        1
+LCD_D[0]:         0
+3, zhangjian: dongliang说的跳线是JP7[0]-JP8[0].
+
+22:38 2010-3-15
+VC0882, Linux kernel porting, 在OMAP3530运行成功
+1, 下载linux-2.6.29.6
+http://www.kernel.org/pub/linux/kernel/v2.6/
+\\10.0.2.36\sqmshare\share\Linux\kernel\linux-2.6.29.6.tar.bz2
+2, 工具链:
+\\10.0.2.36\sqmshare\share\Linux\toolchain&lib\arm-2009q3-67-arm-none-linux-gnueabi-i686-pc-linux-gnu.tar.bz2
+3, OMAP3530
+1), 编译
+export ARCH=arm
+export CROSS_COMPILE=arm-none-linux-gnueabi-
+make omap3_beagle_defconfig
+make uImage
+2), 启动OMAP3530开发板到u-bootconsole, 用rvdebugger连接并load uimage到84000000; u-boot下输入"bootm 84000000". 从kernel版本和编译时间可以看出是我编译的. 可以启动到挂载文件系统(?). 
+
+9:38 2010-3-16
+时间管理
+0, 9:25-
+
+1, 计划
+1), ddr:
+(1), 下午如果tanjialiang实验fanzhijun新做的版本仍然不行, 就赶快找人查. 
+(2), 查ddr还有几块没改. 
+2), 问dongliang EMI bootloader总结. 
+3), tanjialiang测试memory. 加入dashan原有测试命令. <取消>
+4), irq测试. 
+5), 在linux-2.6.29.6运行VC0830 kernel: 白天提前checkout出来. 在27上实验通过. 
+6), 问thumb-2, thumbEE是否仿过. <CURRENT: 已发邮件给huangwei, 等待回复>
+
+2, 执行
+1), -10:10 杂, 邮件, FPGA环境支持. 
+2), 10:10-(30') VC0882 FPGA irq test.
+后来与dongliang讨论EMI norflash boot. dongliang写出总结文档后, 后面由我做. 
+
+3, 次日计划:
+1), irq;
+2), 给arm发邮件. arm死的时候coresight能否正常工作. 如果arm死coresight就不能用, 不合理. 
+
+16:19 2010-3-16
+VC0882, 最小环境, FPGA, 稳定性: 4FPGA, sd, ddr
+1, SD, yangmin原来有问题, 用新CF code(rev0_03031517_04031305_01031615_02031305_4fpga_normal_Enc+Gpu_NoUsbDec)没发现问题. caijin用rev0_03031609_04031305_01031615_02031305_4fpga_normal_Dec+Gpu_NoUsbEnc不行(有个100多k的case必定出错). 
+2, ddr: 昨天报Zhangpu GPU 3D trigger(?)后arm无法停止; memset 16M出错. 
+1), 今天FanZhiJun发现ddr A13原来没有连接. 可能读写某两段地址时实际写入到了同一位置. 修改后. 
+2), zhangpu rvdebugger问题没有复现. (单次memset大小也有减小)
+3), tanjialiang ddr测试: 2FPGA仍然有问题(已单独发邮件). 
+(21:31 2010-3-16)YangZuoXing担心memory全写0有sso问题. 建议代码在1M sram实验.
+(1), sram中测试. 16Mx2, 16Mx3 pass.
+(2), 与ddr对比. 都执行"memset_test 0x81000000 0 0x1000000 3", ddr fail. sram pass. 两次fail都是reset. 感觉是memory被写坏.
+(3), 把0x80000000开始到0x82000000地址都写为0x55aa55aa, 代码在sram中运行. 确认memory是否被写坏. \todo明天继续.
+
+"21:31 2010-3-16"end. 
+3, 4FPGA vdec读寄存器不稳定. GuoHaiFeng发现是APB timing不好. PengXiaoMing原有设计考虑ASIC timing是可以的. 但是4FPGA互连走线较长, GuoHaiFeng参考Venc, Gpu, 加上一级Lock. 明天出版本. 
+4, 2FPGA OTG 1M sram问题: JiaJiHua把三个没有lock的pin都加上就可以了:
+1), JiaJiHua邮件"答复: 1MSRAM的VC0882 FPGA USB版本ace文件生成了"20100316_1053
+现在已经找到没锁定的3个port：DDR_A[13] 、LCD_RST1N  、EMI_BUSY1N。
+这个问题年前出现过，就是同样的3个port没锁定。
+2), JiaJiHua邮件: 
+快速查找未锁定port的方法：
+在ise/下的*_pad.txt文件中，搜索UNLOCATED关键字，就能找到未锁定的端口。
+5, Coresight稳定性: 给huangwei发coresight图. 
+6, \todo 后天给出bootloader供测试使用. 保留dongliang EMI总结. 
+
+20:49 2010-3-16
+VC0882, 最小环境, FPGA, bootloader, EMI norflash bootloader: 代码修改, norflash烧写, 启动(boot)
+1, LiDongLiang邮件""20100316_
+EMI Norflash可以正常boot了，期间遇到了一些问题
+我小结了一下期间遇到的问题，形成了一个文档，放在CVS上面了
+D:\VC0882\document\EMI\EMI Norflash Boot 小结.TXT
+目前通过文档中的方法可以将程序烧写到norflash中，boot起来运行
+Zhangjian 会进一步做一个bootloader，大家用起来会更加方便
+感谢zhicheng 与 zhangjian的支持
+
+2, EMI Norflash Boot 小结：
+使用Norflash Boot 与一般的通过rv-ice 下载代码运行，在软件环境上面有一些变化，主要体现在RW，ZI段运行地址不同，进而影响到内存管理方案。
+对原环境的改变如下:
+1. 修改ads.lds
+-- 更改  MEM_EXEC_RW +0 为 MEM_EXEC_RW 0x80500000
+原本由于代码是下载到内存中运行，所以RW 段的运行地址紧按着RO段存放，这里更改为0x80500000, 指定RW 段运行地址到0x80500000.
+0x80500000 是估计RO段的区间不超过5M,为了便于代码环境的切换
+2. 修改config.ads.mk
+-- 在连接选项中加上了 --datacompressor=off
+RVCT为了减小RW段的区域,加了压缩RW段的功能,并且默认RVCT 会使能该项,这里由于我们要在代码中自己搬移RW段,自己做压缩太复杂,故关掉该项
+3. 修改 panda_init.s
+-- 添加了DDRC的初始化代码:		VC0882_DDRAM_Initilize
+-- 添加了RW 段的搬移代码, 将RW段从load 地址搬到 EXEC 地址
+-- 添加了一些变量,例如 SDRAM_RW_Load_Start_Ptr
+4. 修改 panda_addr.inc
+-- 添加了 DDRC 寄存器地址的定义
+5. 增加了 DDRC.inc
+-- 保存了 DDRC 具体的寄存器配置value		
+6. 修改了 VIM_SYS_Driver.h
+-- 修改了 MEM_ADDR 的宏定义, rv-ice时该项设置为0,因为dram 做过影射,这里修改为0x80000000, dram的实际地址
+上述相关的代码以及提交到CVS,但默认配置都是RV-ICE使用的,如果要编译烧写到Norflash 中的bin程序,方法如下
+编译要烧写到norflash 中去的VC0882.bin :
+1. 使用连接脚本 ads_EMI_Boot.lds, 备份原连接脚本, 改名
+2. 修改VIM_SYS_Driver.h 中的MEM_ADDR为
+#define MEM_ADDR		(0x80000000)
+3. 修改 panda_init.s, 不要注释下面语句
+;BL		VC0882_DDRAM_Initilize
+4. Clean, 编译,生成VC0882.bin, 注意该镜像是用来烧写到norflash中去的,不能通过rv-ice下载运行
+
+EMI Norflash 烧写:
+0. 编译生成可以烧写到norflash 中的882程序 VC0882.bin, 将该文件拷贝到SD 卡中
+1. 编译EMI
+2. 运行进入EMI模块
+3. 执行 39vf6401_chiperase, 擦除整个norflash 芯片
+4. 执行 39vf6401_writefile 0x40000000 VC0882.bin, 将文件写入到EMI CS0 处的norflash,从头写入,0x40000000是针对882的绝对地址.该命令执行完后会进行校验,并打印信息,如果信息提示成功,则烧写完成.
+
+EMI Norflash 启动:
+1. LCD 子板跳线设置strap pin, 设置从EMI norflash 启动
+JMP11  1-2, JMP5  2-3
+2. JTAG 子板: 跳线: JP7-1 连接 JP8-1, 给resetn 信号加上拉电阻
+
+10:20 2010-3-17
+时间管理
+0, 9:51-
+
+1, 计划
+1), ddr(主要是支持):
+(1), 前天zhangpu报的ddr问题邮件已发, follow. 
+(2), tanjiangliang在测试新ddr. 会修好有问题的. 
+(3), 查ddr还有几块没改. 
+2), EMI norflash boot, 这个看起来可以很快完成. 今天要先做这个. 详细内容见昨日与dongliang讨论(研发记录簿P23).
+3), irq测试. 
+4), 开cache, mmu. (估计得明天了) 
+5), 在linux-2.6.29.6运行VC0830 kernel: 白天提前checkout出来. 在27上实验通过. 
+6), 问thumb-2, thumbEE是否仿过. <CURRENT: 没有仿真; 考虑是否发信要求仿真>.
+确认NEON是否加入. 
+
+3, 次日计划:
+1), 给arm发邮件. arm死的时候coresight能否正常工作. 如果arm死coresight就不能用, 不合理. 
+2), 整理四象限. 
+
+10:45 2010-3-17
+VC0882, 最小环境, FPGA, bootloader, EMI norflash bootloader, 续
+1, 加入宏, 修改Makefile, config.ads.mk. 确认没问题后作为perl参数加入. 
+2, 地址相同时不搬移, 提高速度. 
+3, 把define定义同时加入到macro.h和macro.inc
+1), perl转为exe: 
+进入cmd, 输入：
+C:\Documents and Settings\lingming.VIMICRO>"C:\Program Files\ActiveState Perl Dev Kit 6.0\bin\perlapp.exe" D:\VC0830\VC0830\build.pl
+会在C:\Documents and Settings\lingming.VIMICRO下面找到build.exe
+Perl Dev Kit 
+2), 转为exe后, macro.inc总是没有写入, 估计是文件写入方法有问题. 明天查. \todo 问问caijin.
+4, 修改do_sd_Read为了支持写入到0地址且go. 计划把do_sd_Read核心部分移到api: SD_TEST_Read. 增加两个参数: 目的地址由用户设置地址或malloc; read后是否go. 
+搞错了: 应该是修改do_fat_loadfile2mem(读文件到memory). "do_sd_Read"是把sd上一些block读到memory. 
+5, 测试: 提示写入成功, 但是写入的并不是VC0882.bin. \todo 明天查原因. 
+6, 总结: 今天修改perl脚本用了太多时间. 没有考虑后面实验norflash启动都很慢这个问题. 还是时间管理问题. 
+7, (20:56 2010-3-18)注释FAT_TEST后. pass. 明天加入: 
+1), 默认文件加入启动脚本. 
+2), build.pl生成build.exe. 
+3), 实验zhangpu3d映像. 
+4), sd卡读文件时打出".", 避免用户认为死机: 大于500k时, 每100k打一个点.
+
+17:01 2010-3-17
+VC0830, SV, 量产, sdram, 客户问题
+具体问题见: "D:\work\VC0830\Documentation\ddr问题list.doc"
+YouHai邮件"发送电子邮件: ddr问题list.doc"20100317_1503
+目前状态：
+1．客户的板子是做的有些问题，比如没有差分走线，但大多数板子都可以工作，部分芯片不可以。客户不怎么听理论解释，只觉得直觉上这个我们做的有问题。
+2．客户需要低成本和稳定供货，但新的芯片调试难度很大，即使ic 设计人员来都束手无策。
+
+17:10 2010-3-17
+VC0882, FPGA, GPU, vivante, 3D, bug: 能出图但不完全正确
+现在3D能出结果, 但是结果不对. 感觉是每行都错位了. 
+查原因可能是3D发出的不同buffer请求是用不同ID的. DDRC会重排序, 3D又没有interleave(啥东东?)所以结果不对. 
+之前怀疑是DDRC_CFG[16]=1造成的. 实际是0.
+reorder_en: 1=Enable command queue reorder.
+
+20:28 2010-3-17
+软件技巧, c语言, 汇编语言, RVCT, armcc, armasm
+1, c的宏定义在armasm汇编中用GBLL, GBLS, GBLA, LCLL, LCLS, LCLA, SETL, SETLS, SETA代替, 例如
+        GBLL SYS_ROMBOOT
+SYS_ROMBOOT SETL {TRUE}
+	END
+详见"DUI0204I_rvct_assembler_guide.pdf"chapter 7 Directives Reference.
+
+13:00 2010-3-18
+时间管理
+0, 9:41-00:19
+
+1, 计划<DONEor转移>
+1), 提供两套FPGA给AE. 已给一套, 还差一套.
+2), Linux porting:
+(1), 27合并并入29.6
+(2), 建立29svn.
+3), 整理之前时间管理. 
+4), 今天要完成norflash boot. 
+5), 整理今天VC0882 sync up meeting minutes. 
+
+2, 执行
+1), 上午: VC0882 sync up; 实验FPGA9给AE(同时向YangXing介绍FPGA稳定性测试流程). 
+
+3, 次日计划
+1), 今天修的三个ddr, xuelian的memory子板应该没给我. 
+
+17:51 2010-3-18
+VC0882, FPGA, 稳定性, \todo 加入FPGA进展, 2,3合并发信. 
+1, sd: beizhan降频后可以正常. 24->12Mhz.
+2, zhangpu: ddr移到0x5000000后, 效果好很多. 
+3, caijin: 出错时bit28固定为1, 后来发现是r7=r7+1出的错.
+huangwei建议开cache试试. 如果开cache后错误次数少, 可以怀疑是memory问题. 
+4, 发信(0:17 2010-3-19). 
+FPGA稳定性对ICP进度影响很大. 加Zhangpu, Guye, Mike WX Chen
+题目: FPGA不稳定严重影响ICP调试/测试
+
+Hi, Dr. Yang
+
+经过大家1个多月的努力FPGA稳定性有很大提高, 但是仍然不能满足ICP调试/测试需要. 目前较大问题有ddr稳定性和sd稳定性. 
+1), ddr稳定性: 随着ddr稳定性的提高, ddr/FPGA不稳定造成的影响也越来越隐蔽. 
+2FPGA上ddr仍然挑台子. 4FPGA上ddr仍然不稳定, Gpu(3D)和Vdec都是在绕: 
+(1), Gpu(3D)的buffer地址移到0x85000000后, 3D结果有明显改善(仍有错). 
+(2), Vdec中发现arm寄存器r7自增一操作结果有时出错. 现在是通过修改代码绕过. 如果其它地方出现这个问题, 可能很难查. 
+我们现有的测试方法没法测出这个问题. 需要更有效的测试方法. 
+
+2), sd稳定性: 现在只能降速到12M clk使用, 而且仍然挑卡挑台子. ICP验证的数据需要从sd卡读入并写回sd卡, 提交测试后测试同事是从sd卡load映像运行. sd卡的稳定性和速度会影响进度. 
+
+3), 目前所有FPGA中, 只有5套2FPGA可以正常使用, 4FPGA目前只有2个不稳定的台子. 第三个台子已经返给SV两次, 现在仍然不能用. 详见下表: 
+台子编号	2010年3月18日状态
+8,10,11,12,15	可以使用
+1	ddr不稳定(for OTG 1M sram)
+7	插video转接板后D9,D11亮
+6,17	不稳定, 待维修
+14,16	维修中
+19-21	SV调试中
+9	可以使用(已给AE)
+4FPGA-1	ddr不稳定
+4FPGA-2	ddr, sd不稳定
+4FPGA-3	SV维修中
+注	sd不稳定是普遍问题, 还有一套给AE
+
+目前这种情况只有GuoHaiFeng, FanZhiJun两个人搞FPGA稳定性有点没法满足ICP需要. 
+
+10:02 2010-3-19
+时间管理
+0, 9:46
+
+1, 计划
+0), 昨天修的三个ddr, xuelian的memory子板应该没给我. <DONE>
+1), EMI romboot已经改好, 明天会实验zhangpu 3D映像看能否正常启动(目前最大的映像). 把build.pl转为build.exe(昨天生成的build.exe和build.pl运行结果不同). <DONE: 由于SD不稳定, 且3D映像较大, 暂时放弃>
+然后上传EMI romboot未上传代码. <DONE>
+2), 完成irq测试代码. 
+3), 开始加cache/mmu(预计需要1.5天).
+4), 提供一套FPGA给AE.<DONE> 
+5), Linux porting:
+(1), 27合并并入29.6. <DONE by LiaoZhiCheng>
+(2), 建立29svn.<DONE: 见"10:17 2010-3-19">
+6), 整理之前时间管理. 
+7), 整理昨天VC0882 sync up meeting minutes. <DONE: 见"10:06 2010-3-19">
+8), FPGA稳定性: 跟踪zhangpu,caijin进展, 提醒发信. (15:09 2010-3-19)目前zhangpu换ddr无效. caijin换ddr有效. <DONE>
+
+2, 执行
+
+3, 次日计划
+
+10:06 2010-3-19
+VC0882, ICP sync up(3月18日), 时间管理
+1, MPW一是为了测试analog, 二是为了给AE一个初步可用的系统. 
+详细MPW计划见研发记录簿p26
+
+10:12 2010-3-19
+VC0882, Linux移植, svn
+LiaoZhiCheng邮件"svn已经好了"20100319_1008
+Hi,zhangjian:
+SVN已经好了，这次按照SVN规范的目录结构建立的，参考的下面这个文章的规范：
+http://www.svn8.com/svnpz/20090114/2021.html
+checkout地址：
+svn checkout svn://10.0.26.35/linux-2.6.29.6/trunk linux-2.6.29.6
+现在服务器空间不够，我checkout时，还没完就报空间不够了。
+
+13:11 2010-3-19
+VC0882, 最小环境, FPGA, bootloader, EMI norflash bootloader, 续, 最后收尾上传代码
+1, 收尾
+1), sd卡load文件后, 运行前忘了加ddr重映射. 
+2), 默认文件加入启动脚本. 
+3), build.pl生成build.exe. 
+4), 实验zhangpu3d映像. 
+5), sd卡读文件时打出".", 避免用户认为死机: 大于500k时, 每100k打一个点.
+2, 重映射: 
+1), pmu寄存器没有加. 加入后需要修改dragon. <DONE: dragon中没有加入pmu选项, dragon不需要修改).
+2), armv7除了load指令, bxx跳转指令, add, sub指令以外, 不建议直接访问pc. 
+3), 在内嵌汇编(asm, __asm)中不能写pc, lr, sp. 只能在embedded asembler使用:
+__asm void jumpToPhysicalAddr(UINT32 addr)
+{
+    cmp pc, r0;
+    addcc lr, lr, r0;
+    blx lr;
+}
+3, 代码基本改好了. 明天一定完成. 
+
+12:04 2010-3-20
+VC0882, 最小环境, FPGA, bootloader, EMI norflash bootloader, 续, 最后收尾上传代码, 续
+1, vc0882_20100318_2100_24m_02030921_2fpga_vc0882_20100318_2100_normal_noDeNfcUsb.ace
+1), FPGA7, 插ddr, jtag, uart, sd, emi, video后, 连接后arm无法停止. 报Issue[882 0008461]:
+摘要: 2FPGA连接多个子板时RVI连接arm失败(arm无法停止), 造成测试同事无法测试.
+说明: FPGA7, FPGA12使用vc0882_20100318_2100_24m_02030921_2fpga_vc0882_20100318_2100_normal_noDeNfcUsb.ace时, 
+插ddr, jtag, uart, sd, emi, video这5个子板后, 连接后arm无法停止, 提示:
+Error: 0x02410100: The run control operation could not be completed : .
+上面这些子板是测试同事要使用的最小系统. jtag转接板有个跳线使D9,D11正常亮灭. video转接板用于选择norflash boot. emi转接板接的norflash是bootloader. 
+这个错误一直都有(另见Issue0008114, 0008252, 0008367), 每次都是从板级解决的, 总觉得不太合理, debug通路应该更稳定才对, 为什么每次都是debug通路有问题? 
+
+2), 发现norflashboot时strap pin也是0. 报issue[882 0008460]:
+摘要: norflash启动时, strappin寄存器是0
+说明: 在video转接板跳线设为norflash启动. 程序可以从norflash正常执行, 但是0x60050a00[0:1]是0. 这样软件没法判断到底从哪个memory启动, 影响软件功能. 
+FPGA版本: vc0882_20100318_2100_24m_02030921_2fpga_vc0882_20100318_2100_normal_noDeNfcUsb.ace
+
+2, 用FanZhiJun今天版本无法使用. 报issue[882 0008459]:
+摘要: 2010年3月20日 2FPGA两个版本都无法使用
+说明: 2010年3月20日的(vc0882_20100319_1850_peri_02030921_peri2fpga_vc0882_20100319_1850_normal_withSdAudioSpiUartEmiI2cPwmKpd.ace)在所有可用的2FPGA实验(FPGA7,8,10,11,12,15)是load cf code后. D9亮. 按softreset时D11亮, 松手D11灭. D9不变. 
+FPGA12用vc0882_20100319_1850_video_02030921_video2fpga_vc0882_20100319_1850_normal_noDmaFdUsbAudSpiPwmKpdTvenc.ace也是同样现象. 
+所以今天的2FPGA版本都没法使用(另一个是ddr稳定性测试版本, 没有使用). 
+D9, D11在cf初始化后亮这个问题也是老问题了, 希望尽快解决. 
+另外FPGA7在前几天还发现过接video转接板后D9亮的问题. 
+(22:10 2010-3-22)
+解决: 需要新版本需要xclk=48MHz. 
+注: D9指示ddr phy clock状态, D11指示cortex-a8 clock状态. 
+
+11:47 2010-3-22
+VC0882, \todo 
+1, 改clock;
+2, 改不搬移代码. 
+3, 上传emi bootloader代码. <DONE>
+
+12:05 2010-3-22
+VC0882, FPGA, 稳定性, coresight, cortex-a8, TPI(boxue)
+0008469: FPGA11插Video子板时难以连接arm 
+FPGA11用rev0_01032001_02031919_USB2FPGA_DCM270_BUFG31_48Mmclk_Sd_noDeCifGpuEncDec版本, 插video转接板时很难连接成功: arm无法停止, 提示"Error: 0x02410100: The run control operation could not be completed : .". LiuBoXue的TPI需要用这个版本才能测试, 现在只能先连接在插video转接板. 
+这个问题出现很多次了, 每次都是从系统稳定性角度解决的. 会不会是系统功能问题在不稳定时暴露出来的, 能不能review一下debug和a8相关代码看看有没有什么问题.
+
+20:11 2010-3-22
+VC0882, FPGA, 稳定性
+1, 3月22日 video FPGA版本(vc0882_20100320_1950_video_sd_NoMux_NoCe_02031919_video2fpga_vc0882_20100320_1950_normal_noDmaFdUsbAudSpiPwmKpdTvenc)sd不能用.
+3, 给tanjialiang邮件. 
+今天和Dr. yang讨论了FPGA使用和测试. 他建议下电需要等2分钟再上电保证FPGA状态正确. 
+以后测试5次重新上电, 15次复位. 测试报告中需要写明是重新上电还是复位. 
+今天测试1/20 fail的23,24明天测完待测FPGA后, 需要如此重新测试. 
+
+21:24 2010-3-22
+VC0882, FPGA, clkrst, FPGA新时钟方案
+发信: caijin; zhuliying; zhangpu; yangmin; VC0882_ICP, 抄送: aiguo; fengbeizhan; lixuelian
+Hi, all
+
+根据FPGA新时钟方案我修改了代码, 以后FPGA都会使用这个时钟方案. 右下角Xclk需要插48MHz晶振. 请大家使用新时钟方案版本调试, 如果时钟方案修改后FPGA不稳定或有其他问题请及时发信报Issue. 
+
+修改见VIM_CLKRST_Init()(clkrst\VIM_CLKRST_Driver.c), 各个模块clock都已初始化为24MHz. 大家可以根据自己需要在clkrst模块加入clock配置函数. 
+同时我在Arm workbench 4.0的每个编译规则中加入"-define=XCLK_48MHZ=1"表示这一修改. 如果大家使用都没有问题, 会去掉这个宏. 
+
+注: 
+1, 新时钟方案见
+D:\VC1600WCVS\doc\FPGA\882_fpga\fpga_scheme\VC0882_REG_CLKRST_FPGA.V0.1.xls, vc0882_fpga_clkrst_scheme.vsd
+2, 从3月20日下午三点开始的2FPGA cf code都是新时钟方案. 
+
+Hi, caijin, zhuliying, zhangpu, yangmin
+
+4FPGA新时钟方案版本见GuoHaiFeng邮件"New ACE For 4 FPGA"20100322_1745. 下次出4FPGA时会使用新时钟方案版本. 
+
+thanks
+zhangjian
+
+21:25 2010-3-22
+时间管理
+1, 计划
+1), 整理时间管理.
+2), 填本周计划和上周状态. 
+
+22:55 2010-3-22
+VC0882, FPGA, EMI bootloader; FPGA稳定性, ddr稳定性
+1, 发信, 报Issue(0008485):
+摘要: VC0882 FPGA ddr不稳定(2010年3月20日 FPGA新时钟方案)
+说明: 今天FPGA7,12,20使用
+vc0882_20100321_02030921_2fpga_vc0882_20100320_1950_normal_noNfcUsb.ace不稳定. 
+FPGA20单步调试中发现64bit变量某一个或两个高位有时会置一. 换"vc0882_20100318_2100_24m_02030921_2fpga_vc0882_20100318_2100_normal_noDeNfcUsb.ace"没问题. 
+FPGA7是使用中容易出现dataabort. FPGA12容易出现大量空格, 或刷reglist时跑死. 
+结合原来FPGA问题, 应该是ddr不稳定导致的. 
+但用RVI做ddr部分区域(46Mbyte)做读写测试未发现问题. 
+换新的是时钟方案后ICP一直没有很稳定的版本. DE等模块需要最新cf code继续调试, DE等新版本已经三天了(from 3月20日).
+
+刚才与Dr. yang讨论, 从如下三方面尝试: 
+1), 把两个ddr改47欧姆. 
+2), fanzhijun调delay参数.
+3), FPGA input, output都加约束, 减小每版FPGA timing差异. 
+
+2, FPGA20也有FPGA7问题. 加注释, 发信. 
+
+3, 总是出现arm停不下来这个问题. 
+后来发现是自己访问了只读的norflash(已添加Issue注释). 再看发现build.pl是CVS的, 不是我修改的. 
+修改后仍然不行, 后来完全恢复到原来代码就可以了. 
+
+4, 上传代码.
+EMI bootloader初步完成.
+1), 用SYS_ROMBOOT区分是否走romboot流程. 宏通过-define设置到macro.h(for c)和macro.inc(for armasm)
+2), ld_script\ads_EMI_Boot.lds: 
+zhangjian: 担心被搬移的bin覆盖, 放到更高的地址(96M). 
+MEM_EXEC_RW从0x80500000改为MEM_EXEC_RW 0x86000000.
+3), 利用fat loadfile2mem把bin搬移并执行. 
+FAT  SD0:/sd/>loadfile2mem vc0882.bin 0x80000000 1 0
+4), remap地址通过strappin或pmu remap读取. 但目前norflash启动时strappin寄存器也是0, 软件没法判断. 所以直接固定为norflash, 将来IC修正此bug后修改VIM_PMU_GetCurRemapAddr的"#if 1"宏为"#if 0". 
+
+5, 发信
+emi bootloader ok, 发映像.
+FAT  SD0:/sd/>loadfile2mem vc0882.bin 0x80000000 1 0
+
+写pc串口测试程序. 
+
+6, (15:55 2010-3-23)EMI小修改
+1), 默认文件加入启动脚本. <DONE>
+2), build.pl生成build.exe. 
+3), 实验zhangpu3d映像. 
+4), sd卡读文件时打出".", 避免用户认为死机: 大于500k时, 每100k打一个点.<DONE: 但文件小效果不明显>
+5), 注册perl dk 8.0 重新生成build.exe. 
+
+6, 上传CVS. 
+
+7, 发信: 
+Hi, all
+
+添加针对新48MHz时钟方案的EMI_bootloader程序. 
+"\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\bin\20100323_emi_bootloader_for_newClkrst48MHz_Zhangjian2Tester".
+bootloader启动后会自动load sd卡根目录的"vc0882.bin"到ddr运行. 如果未找到该映像需要参考RenWei"EMI bootloader使用方法.txt"手动load映像. 
+FPGA版本: vc0882_20100322_2115_videoonly_02031919_video2fpga_vc0882_20100322_2115_normal_noFdDmaUsbNfcSpiKpdPwmTpi.ace
+
+如果烧写后无法boot可以用rvdebugger读出norflash内容(地址: 0x40000000)与烧写的bin比较是否相同, 具体方法可以问TanJiaLiang或QiuXiaoFei. 
+
+Hi, Qiuxiaofei
+我在FPGA20实验此映像, de通过dragon显示颜色, 在aasp下批量显示图片均正常. 
+测试时de映像: "\\10.0.2.36\sqmshare\share\zhangjian\projects\VC0882\code\20100323_EMIbootloader_newClkrst48MHz\de"
+
+14:05 2010-3-23
+VC0830, clkrst, clkswitch, to LiDongLiang
+clkrst\notes.txt
+1, Clkrst_SwitchPll12Pll1Base_Wdt
+Clkrst_SwitchPll12Pll1Base: Clkrst_SwitchXclk: pll1->xclk, Clkrst_SwitchPllFull: xclk->pll1. 
+Clkrst_SwitchXclk和Clkrst_SwitchPllFull类似:
+Clkrst_Switch_CfgMem: 配置memory参数到shadow寄存器.
+
+Clkrst_SwitchGenPll: 产生pll.
+Clkrst_SwitchGenCpuBus: 配置cpu,bus divider.
+
+2, Clkrst_app_module_clock.c (clkrst\app)
+
+3, Clkrst_Switch: 总切频API. 
+
+15:42 2010-3-23
+时间管理
+0, 10:02-
+
+1, 计划
+1), 完成irq测试代码. 
+2), 开始加cache/mmu. 希望今天mmu实验通过. 
+3), 整理之前时间管理. <DONE: 3月13日后已完成>
+4), Linux porting: 看zhicheng代码. 
+5), 填本周计划和上周状态. <DONE>
+
+3, 次日计划
+1), 开mmu, 需要看cortex-a8 translation table与arm926ej-s变化. 明天一定要完成mmu平映射. 
+
+4, 四象限:
+
+19:34 2010-3-23
+VC0882, FPGA, FPGA稳定性, ddr稳定性, 续"22:55 2010-3-22"
+0, 结论: 
+1), ddr改47欧姆. 
+一个ddr转接板改为47欧姆, 第一次实验发现焊接问题, 后面还没有实验. 
+2), 调delay参数.
+新时钟方案中, 如果ddr不稳定, 可以微调DQS和DQ的关系
+3), FPGA input, output都加约束, 减小每版FPGA timing差异. 
+fanzhijun正在加, 暂时没有成功. 
+
+1, ZhouDaZhou邮件"答复: 2010年3月22日 FPGA稳定性进展"20100323_1754
+1) 这个问题现在微调了DQS 和DQ的关系,再原有的基础上delay 了5个counter 数值,发现稳定了,没有出现问题
+2) 在原有的基础上delay 了10个counter 数值,则FAIL
+3) 在今天的版本上进行尝试,不用delay ,也是稳定的
+结论:
+1) DDRC 的timing 会随着CF CODE 的版本,有变动,各个不同版本之间,会有差异.
+2) 目前DDRC 的测试pattern ,发现内存全空间扫描对于DDRC验证强度<RV load 大文件到内存写入读出<部分实际程序程序(EMI,VDEC)
+3) 我们将积累这样的case ,做为我们memory 的测试pattern 
+4) 发现微调这个参数比较的麻烦,有63个数值,每天都出好几版code,每个板子每个code 都需要每个人尝试这样的微调,每天有2-3个小时耗费在这个上面,希望IC 加一下严格的FPGA timing 约束条件.
+
+2, ZhouDaShan邮件"FPGA DDRC 稳定性"20100323_1811
+Hi ,all 
+在目录D:\VC0882\panda_os\init_script\RVD
+增加了3个微调的脚本,当怀疑是DDR 不稳定造成的问题是,可以使用这几个微调脚本
+init_lpddr_micron_128M_10.inc,在原有的基础上 DQS,DQ的基础上delay 10个counter
+init_lpddr_micron_128M_5.inc , ,在原有的基础上 DQS,DQ的基础上delay 5个counter
+init_lpddr_micron_128M_5_decrease.inc在原有的基础上 DQS,DQ的基础上超前5个counter
+jialiang :
+今天发现EMI 模块对于测试FPGA 稳定性和DDRC 的稳定性比较好,请将这个case 做为我们验证FPGA 稳定性测试的一项.
+
+10:39 2010-3-24
+VC0882, arm architecture, cortex-a8, debug, wfi, power management, armv7与armv5(arm926ej-s)差异; wfe, spin-lock
+1, wfi
+armv7不再使用cp15 c7 wfi, 而是单独加入了wfi指令. 如下是wfi wake up事件: 
+这里面无论是否打开中断, 都会唤醒. 同步abort不会唤醒, 异步abort会唤醒. 只有调试事件是有条件的: 允许调试事件且允许侵入式(invasive)调试: 
+an IRQ interrupt, regardless of the value of the CPSR.I bit
+an FIQ interrupt, regardless of the value of the CPSR.F bit
+an asynchronous abort, regardless of the value of the CPSR.A bit
+a debug event, when invasive debug is enabled and the debug event is permitted.
+arm926ej-s是: "MCR p15, 0, a1, c7, c0, 4"
+2, WFE. 硬件spinlock. 
+
+14:55 2010-3-24
+VC0882, FPGA, mmu, panda_os中开mmu
+1, 计划
+1), mmu, panda_os中加入mmu平映射;
+2), 设置memory属性为normal, 测试非对齐访问. 
+3), mmu有关的MINI_NUCLEUS改为MMU_FLAT_MAP宏. MINI_NUCLEUS宏要逐步去掉. 去掉后打tag.
+
+2, 看panda_os mmu(继承自VC0598)架构. 
+1), MINI_NUCLEUS中mmu有关宏改为MMU_FLAT_MAP. 
+2), 发现"_cpu_mmu_map_memory()"映射中, 不论大小每次都是"size -= SIZE_1M". 是在__cpu_mmu_create_section, __cpu_mmu_create_large_page, __cpu_mmu_create_small_page, __cpu_mmu_create_tiny_page函数中按照实际大小映射的. 
+cortex-a8中有16M supersection(armv5te是可选的), 这样处理就不好了. 另外从armv6开始不在支持1k的tiny page. 
+3), armv4, armv5与armv7 virtual memory差异见"ARMv4 and ARMv5 Differences" "H.6.3 Virtual memory support"
+4), \todo 需要参考Linux处理. 
+
+14:56 2010-3-24
+时间管理
+0, 10:02-
+
+1, 计划
+1), 完成irq测试代码. <推到周五3月26日>
+2), 开mmu, 需要看cortex-a8 translation table与arm926ej-s变化. 明天一定要完成mmu平映射. 
+3), Linux porting: 看zhicheng代码; 实验关cache后能否使用. 
+
+2, 执行
+1), "1-2)", 见"14:55 2010-3-24"
+
+3, 次日计划
+
+4, 四象限:
+0), 希望每天工作时间一小时, 做有利于长远工作的事情. 每天上下班时间和午休时间做公司工作以外长远事情.
+1), 重要紧急:
+(1), 修改nucleus irq代码: 去掉无用函数, 支持64位一级中断. <DONE>
+(2), VC0882 FPGA ace文件. <DONE: \\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf>. 
+2), 重要不紧急:
+(1), 整理VC0882最小环境文档. 
+(2), 每天用1小时修改perl脚本: 改进logAssistant, 支持查找section keywords. 并输出. 
+(3), 接替Beizhan调Sd卡. 总时间预计需要2-3周. <CURRENT: beizhan storage基本调通, 后面只有lli和兼容性; sdio未调试>
+(4), 整理cortex-a8学习内容. 计划2月26日内完成. 
+(5), 移植nucleus完成后, 总结VC0882最小环境: rvds4.0初始化, aasp, nucleus等. 计划3月5日前完成. 
+(6), 实验trace.
+(7), 入职中星微以来总结: 具体项目, 软件技巧. 提高工作效率(时间管理, 工具软件ediltplus, logAssistant).
+3), 紧急不重要
+4), 不重要不紧急
+(1), VC0882加入irq test.<取出>
+(2), 把cache ID reg那个bug报上Issue. <DONE: 目前没有问题> 
+(3), 把最近两周的时间管理和重要邮件看一下. 
+(4), 解决"14:21 2010-2-24"问题. 
+(5), EMI bootloader: 稳定性; sd卡稳定后实验zhangpu映像. 
+(6), 问thumb-2, thumbEE是否仿过. <CURRENT: 没有仿真; 考虑是否发信要求仿真>.
+确认NEON是否加入. 
+
+21:27 2010-3-24
+VC0882, 最小环境, FPGA, sd, DMA只能看到ddr0x80000000地址
+LingMing在1M sram里面用sd卡不能用, 后来FengBeiZhan想到是sd DMA搬运时直接把malloc的地址设为0x8xxxxxxx地址. 由于没有ddr, 所以dma搬移会有问题. 
+
+10:52 2010-3-25
+时间管理
+0, 9:42
+
+1, 计划
+1), 开mmu, 需要看cortex-a8 translation table与arm926ej-s变化. 明天一定要完成mmu平映射. 
+2), Linux porting: 看zhicheng代码; 实验关cache后能否使用. 
+3), 上次zhaoyuan哪个问题还是要问问是什么原因? 
+4), 下午问问suxin kernel对应android哪个git版本. 从kernel/.git能看到么? <DONE: 原始版本已放到36>
+
+2, 执行
+1), "1-2)", 见"14:55 2010-3-24"
+被FPGA环境打断.
+2), FPGA环境.
+3), 15:16- VC0830切频程序测试. 
+
+3, 次日计划
+1), 疑似ddr timing不好的用dashan微调脚本实验. 
+
+4, 四象限:
+0), 希望每天工作时间一小时, 做有利于长远工作的事情. 每天上下班时间和午休时间做公司工作以外长远事情.
+1), 重要紧急:
+(1), 修改nucleus irq代码: 去掉无用函数, 支持64位一级中断. <DONE>
+(2), VC0882 FPGA ace文件. <DONE: \\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf>. 
+2), 重要不紧急:
+(1), 整理VC0882最小环境文档. 
+(2), 每天用1小时修改perl脚本: 改进logAssistant, 支持查找section keywords. 并输出. 
+(3), 接替Beizhan调Sd卡. 总时间预计需要2-3周. <CURRENT: beizhan storage基本调通, 后面只有lli和兼容性; sdio未调试>
+(4), 整理cortex-a8学习内容. 计划2月26日内完成. 
+(5), 移植nucleus完成后, 总结VC0882最小环境: rvds4.0初始化, aasp, nucleus等. 计划3月5日前完成. 
+(6), 实验trace.
+(7), 入职中星微以来总结: 具体项目, 软件技巧. 提高工作效率(时间管理, 工具软件ediltplus, logAssistant).
+3), 紧急不重要
+4), 不重要不紧急
+(1), VC0882加入irq test.<取出>
+(2), 把cache ID reg那个bug报上Issue. <DONE: 目前没有问题> 
+(3), 把最近两周的时间管理和重要邮件看一下. 
+(4), 解决"14:21 2010-2-24"问题. 
+(5), EMI bootloader: 稳定性; sd卡稳定后实验zhangpu映像. 
+(6), 问thumb-2, thumbEE是否仿过. <CURRENT: 没有仿真; 考虑是否发信要求仿真>.
+确认NEON是否加入. 
+
+13:55 2010-3-25
+VC0882, FPGA, Linux porting, timer编译错误
+后来发现是配置文件不同造成的. 我用的是OMAP3530改的. \todo 继续分析. 
+  CC      arch/arm/mach-vc0882/timer.o
+arch/arm/mach-vc0882/timer.c: In function 'vc0882_timer_interrupt':
+arch/arm/mach-vc0882/timer.c:35: error: dereferencing pointer to incomplete type
+arch/arm/mach-vc0882/timer.c:36: error: dereferencing pointer to incomplete type
+arch/arm/mach-vc0882/timer.c: At top level:
+arch/arm/mach-vc0882/timer.c:53: warning: 'struct clock_event_device' declared inside parameter list
+arch/arm/mach-vc0882/timer.c:53: warning: its scope is only this definition or declaration, which is probably not what you want
+arch/arm/mach-vc0882/timer.c:73: warning: 'struct clock_event_device' declared inside parameter list
+arch/arm/mach-vc0882/timer.c:73: warning: 'enum clock_event_mode' declared inside parameter list
+arch/arm/mach-vc0882/timer.c:72: error: parameter 1 ('mode') has incomplete type
+arch/arm/mach-vc0882/timer.c: In function 'vc0882_timer_set_mode':
+arch/arm/mach-vc0882/timer.c:76: error: 'CLOCK_EVT_MODE_RESUME' undeclared (first use in this function)
+arch/arm/mach-vc0882/timer.c:76: error: (Each undeclared identifier is reported only once
+arch/arm/mach-vc0882/timer.c:76: error: for each function it appears in.)
+arch/arm/mach-vc0882/timer.c:77: error: 'CLOCK_EVT_MODE_PERIODIC' undeclared (first use in this function)
+arch/arm/mach-vc0882/timer.c:79: error: 'CLOCK_EVT_MODE_ONESHOT' undeclared (first use in this function)
+arch/arm/mach-vc0882/timer.c:81: error: 'CLOCK_EVT_MODE_UNUSED' undeclared (first use in this function)
+arch/arm/mach-vc0882/timer.c:82: error: 'CLOCK_EVT_MODE_SHUTDOWN' undeclared (first use in this function)
+arch/arm/mach-vc0882/timer.c: At top level:
+arch/arm/mach-vc0882/timer.c:125: error: variable 'vc0882_clockevent' has initializer but incomplete type
+arch/arm/mach-vc0882/timer.c:126: error: unknown field 'name' specified in initializer
+arch/arm/mach-vc0882/timer.c:126: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:126: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:127: error: unknown field 'features' specified in initializer
+arch/arm/mach-vc0882/timer.c:127: error: 'CLOCK_EVT_FEAT_ONESHOT' undeclared here (not in a function)
+arch/arm/mach-vc0882/timer.c:127: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:127: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:128: error: unknown field 'max_delta_ns' specified in initializer
+arch/arm/mach-vc0882/timer.c:128: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:128: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:129: error: unknown field 'min_delta_ns' specified in initializer
+arch/arm/mach-vc0882/timer.c:129: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:129: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:130: error: unknown field 'mult' specified in initializer
+arch/arm/mach-vc0882/timer.c:130: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:130: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:131: error: unknown field 'shift' specified in initializer
+arch/arm/mach-vc0882/timer.c:131: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:131: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:132: error: unknown field 'rating' specified in initializer
+arch/arm/mach-vc0882/timer.c:132: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:132: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:133: error: unknown field 'set_next_event' specified in initializer
+arch/arm/mach-vc0882/timer.c:133: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:133: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c:134: error: unknown field 'set_mode' specified in initializer
+arch/arm/mach-vc0882/timer.c:134: warning: excess elements in struct initializer
+arch/arm/mach-vc0882/timer.c:134: warning: (near initialization for 'vc0882_clockevent')
+arch/arm/mach-vc0882/timer.c: In function 'vc0882_timer_init':
+arch/arm/mach-vc0882/timer.c:169: error: implicit declaration of function 'clockevents_register_device'
+make[1]: *** [arch/arm/mach-vc0882/timer.o] Error 1
+make: *** [arch/arm/mach-vc0882] Error 2
+
+16:12 2010-3-25
+VC0882, FPGA, ddr, 地址环绕(回绕)
+1, 昨天DangXiangFu发现地址有环绕, 今天实验发现至少2个2FPGA, 2个4FPGA都是
+0x8000_0000-0x81ff_ffff和0x8200_0000-0x83ff_ffff相同, 0x8400_0000-0x85ff_ffff和0x8600_0000-0x87ff_ffff相同. 
+2, ZhouDaShan等同事debug发现需要: 
+setmem /W 0x60011008 = 0x2843
+改为
+setmem /W 0x60011008 = 0x2a43
+DRAM_CFG(0x60011008)[9:8]表示
+DRAM I/O Width. The I/O width of the DDR SDRAM chips used. Valid values are: 
+00 = x16  
+01 = x8  
+10 = x32  
+11 = x32s (special LPDDR1 1G density x32 device)  When density_sel set to 3'b100,ddr_mode set to 011,if you want to use x32 LPDDR Device, then this register filed is used to select which type of device of  address mapping 
+10 = Select Device of Column Address using A0-A12, Row Address using A0~A9
+11 = Select Device of Column Address using A0-A13, Row Address using A0~A8
+原来是16bit, 现在改为32bit. 
+3, (13:32 2010-6-2)ICP和AE dangxiangfu用256M ddr也发现回绕.
+1), 开始是32M回绕. dangxiangfu改了 row_map, 就变成128M回绕了. 
+0x60011008(DRAM_CFG)[11] row_map 1'b0 "Address Mapping: Specifies how host addresses are mapped to SDRAM rank, bank, 
+row, and column addresses. Valid settings are: 
+1 = {rank, bank, row, column} = host address  
+0 = {rank, row, bank, column} = host address  "
+2), (10:50 2010-6-3)yanglei说可能是连线问题:
+YangLei邮件"答复: 256M ddr 环绕的问题"20100602_1743
+2Gbit的仿针是没有问题的。这种32MByte回绕很有可能是  板子或者哪里连线有问题。
+Check了一下子板的， 2Gbit 的 memory addr 是 14bit的， 如果只接了13bit， 露接14bit就会出现 32MByte的回绕现象，   子板的原理图刚好是A13悬空。1Gbit只有13bit addr，所以不会有问题。
+
+18:43 2010-3-25
+VC0882, FPGA, cortex-a8和coresight 验证需求, "D:\work\VC0882\Documentation\cortex-a8和coresight_需求.xls"
+
+22:32 2010-3-25
+VC0882, FPGA, Linux porting, lowlevel debug
+1, senduart(arch/arm/mach-vc0882/include/mach/debug-macro.S), 如下写法会有问题. 
+strb    \rd, [\rx, #(UART_TDR)] 
+dataabort, 改为str可以, 费解:
+str     \rd, [\rx, #(UART_TDR)]
+\todo 写个测试程序在OMAP3530和VC0882的internal sram实验. 
+
+11:47 2010-3-26
+VC0882, FPGA, 稳定性
+1, ddr +6 video版本sd比原来挑卡. 
+2, 今天三个版本都无法读写ddr(peri, nfc, otg)
+1), FanZhiJun ddr变动:
+FanZhiJun邮件"答复: vc0882 RTL 28th tag : vc0882_20100325_2000"20100326_1626
+1)，cuiyunfei增加逻辑延时
+2)，我把delay tap的默认值从50改为56
+这两处改动最多只影响数据错误率，不至于操作进行不下去。
+YangZuoXing建议Ddr先退回3月24日出新版. CuiYunFei查问题. 
+
+14:29 2010-3-26
+VC0830, SV, 量产, ddr, pcddr, etron: 32Mbyte, 16bit
+1, 打包512 info和BatchSwitch info不一致. 
+2, EMRS用法可能有变化, 目前看: 高->低: 发. 低->高: 不发. 高->高: 不发.
+高>=120.
+3, CuiYunFei正在实验: 在切频后的sram设断点, 手动配置ddr. 
+4, 实验后流程如下:
+1),0x60011018=0, 
+2), 0x60011004 = 0x33
+3), 0x60011000[bit9]=0
+4), 0x60011014 = 0x3
+5), 0x60011014 = 0x6
+6), 0x60011014 = 0x7
+5, 在原有sram流程上修改. 只是把原来退出自刷新(0x60011014 = 0x3)和修改sdrc_mode(0x60011004 = 0x33)交换. 
+代码未上传CVS: 见'D:\work\VC0830\code\20100326_VC0831_新PCDDR_切频debug\VC0830.rar"
+6, 实验48,120,144三个频点, 据CuiYunFei说在144切死. 
+7, 给CuiYunFei发信:
+从今天下午和晚上实验结果看只是把原来退出自刷新命令和修改sdrc_mode两句交换, 并且切频后不打开auto entry self-refresh, 就可以在pll1的384_192_48, 480_120_120, pll2 288_72_3切频. 
+附件中” batchSwitch_48_120.txt”是去掉144频点只保留48,120频点的batchswitch info文件. 打包后会自动切频10000000次. 
+“batchSwitch_48_120_144.txt”是修改前的文件供你对比. 
+切频后DMA次数可以修改”dmaTimes = 0”这句. 具体说明见” batchswitch_info_SV_sdramSamsung.txt”. 
+8, (16:34 2010-3-27)今天CuiYunFei发现手动修改寄存器时不交换推出自刷新和set sdrc_mode也可以. 后来两人继续debug发现原来认为关闭自刷新的代码是没关闭的. 不知道是打包错了还是什么问题. 
+9, 关于VC0830 bug
+切频时没有考虑到. 但正常发EMRS命令时, 还是有200cycle的. 
+\todo 这个bug需要理解. 
+10, 另外发现代码有bug: 
+Clkrst_App_PrintAllCpu()没有考虑cpu freq array以0结束需要多一个word. 原来没问题是因为频点中会有中介频点参数, 搜pll1 cpu频率时正好比实际频点少一个. 今天用的时候切频频点里面没有中介频点只有48,120两个频点, 所以出错.
+
+16:30 2010-3-26
+VC0882, FPGA, power estimation
+1, Huangwei邮件
+> We use TSMC cln65lp-1p6mT1 process, libray is tcbn65lpbwp12t. Configuration
+> is as follows:
+> 
+> Level 1 Cache Size : 32
+> Level 2 Cache Size : 128
+> Level 2 Parity : 1
+> ETM : Yes
+> Neon : Yes
+> IEM : none
+> Split L2 Hierarchy : No
+
+21:14 2010-3-26
+时间管理, 考核
+Aiguo邮件"转发: 882 0220-0315 考核"20100326_1107
+IC-2-ICP 张健 234.05  100% 234.05  
+应该从2月16日开始算. 
+
+10:43 2010-3-27
+VC0830, VC0816, VC0598, VC0882, 开发工具, 软件安装
+1, 安装顺序: rvds3.0, ESDE(含java5.0), rvds4.0.
+2, 配置rvds3.0, ESDE与rvds4.0共存: D:\VC0882\document\arm\debug\与VC0598环境共存.
+
+10:56 2010-3-27
+时间管理
+0, 10:25-
+
+1, 计划
+1), 开mmu, 需要看cortex-a8 translation table与arm926ej-s变化. 明天一定要完成mmu平映射. 
+2), Linux porting: 看zhicheng代码; 实验关cache后能否使用. 
+3), 上次zhaoyuan哪个问题还是要问问是什么原因? 
+
+2, 执行
+
+3, 次日计划
+1), FPGA18无法上电, 周一找ZouWeiRan维修. 维修后给大家发信. FPGA有问题时及时维修, 我们直接拿过去不好修. 
+2), 理解"14:29 2010-3-26"9.
+
+4, 四象限:
+0), 希望每天工作时间一小时, 做有利于长远工作的事情. 每天上下班时间和午休时间做公司工作以外长远事情.
+1), 重要紧急:
+(1), 修改nucleus irq代码: 去掉无用函数, 支持64位一级中断. <DONE>
+(2), VC0882 FPGA ace文件. <DONE: \\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\fpga\cf>. 
+2), 重要不紧急:
+(1), 整理VC0882最小环境文档. 
+(2), 每天用1小时修改perl脚本: 改进logAssistant, 支持查找section keywords. 并输出. 
+(3), 接替Beizhan调Sd卡. 总时间预计需要2-3周. <CURRENT: beizhan storage基本调通, 后面只有lli和兼容性; sdio未调试>
+(4), 整理cortex-a8学习内容. 计划2月26日内完成. 
+(5), 移植nucleus完成后, 总结VC0882最小环境: rvds4.0初始化, aasp, nucleus等. 计划3月5日前完成. 
+(6), 实验trace.
+(7), 入职中星微以来总结: 具体项目, 软件技巧. 提高工作效率(时间管理, 工具软件ediltplus, logAssistant).
+3), 紧急不重要
+4), 不重要不紧急
+(1), VC0882加入irq test.<取出>
+(2), 把cache ID reg那个bug报上Issue. <DONE: 目前没有问题> 
+(3), 把最近两周的时间管理和重要邮件看一下. 
+(4), 解决"14:21 2010-2-24"问题. 
+(5), EMI bootloader: 稳定性; sd卡稳定后实验zhangpu映像. 
+(6), 问thumb-2, thumbEE是否仿过. <CURRENT: 没有仿真; 考虑是否发信要求仿真>.
+确认NEON是否加入. 
+
+10:59 2010-3-29
+VC0882, Linux porting, AE porting
+1, 发信
+Suxin Linux porting位于: "\\10.0.2.36\sqmshare\share\Linux\AE porting\VC0882\kernel", 
+kernel-2.6.29-android-org.tar: 移植前kernel
+kernel-2.6.29-vc0882.FPGA.fix_irq_err.tar: 可以启动到mount nfs.
+init_lpddr_micron_128M_android.inc: load脚本
+工具链位于上一级目录: arm-eabi-4.4.0.tar.bz2. 
+2, 反思工作方法
+拿到kernel后应该及时给大家发信. 
+
+11:03 2010-3-29
+时间管理
+0, 9:44
+
+1, 计划
+1), rom boot： 2FPGA, 4FPGA
+2), 开mmu.
+3), 晚上看suxin Linux porting. 明天与suxin讨论. 这周要看GPU Linux driver.
+4), 整理时间管理.
+5), 整理会议记录. 
+6), 重新生成build.exe.
+
+11:12 2010-3-29
+VC0882, FPGA, EMI, bootloader
+1, 解决有些版本cf code上2FPGA cf code无法使用的问题. 
+1), QiuXiaoFei周六版本(vc0882_20100326_1800_video_02031919_video2fpga_vc0882_20100326_1800_normal_withFd_noAudifDmaUsbNfcSpiKpdPwmTpi.ace)能否使用.
+2), 今天新版(vc0882_20100325_2000_newddr2_02031919_peri2fpga_vc0882_20100325_2000_normal_noDeTvLcdifCifFdDmaUsbNfcTpi.ace和其它)能否使用.
+3), strap pin不正确. 解决完bootloader后解决: 问zixi. 
+2, ddr参数问题. 
+1), 对比参数, 实验.
+2), 看看ddr参数能不能写在单独区域.
+3), 启动阶段加入ddr自检和sram uart. 
+3, (16:39 2010-3-29)
+1), 用"vc0882_20100320_1950_peri_sd_NoMux_NoCe_02031919_peri2fpga_vc0882_20100320_1950_normal_withSdAudioSpiUartEmiI2cPwmKpd.ace"更新norflash. 
+4, (17:57 2010-3-29)实验norflash bootloader. 
+5, (22:02 2010-3-29)加5这个还得改panda_init.s的ddr初始化部分. 明天接着改.
+既要考虑perl脚本的灵活性又要考虑汇编调用方便(当然是循环方便).
+
+14:47 2010-3-29
+软件技巧, perl, 获取时间, localtime(), time();
+my $now = localtime(time());
+print "convert from $in_file($now).\n";
+
+15:27 2010-3-29
+VC0882, FPGA, dragon, dragon写寄存器丢数, 可以CUartChannel()(UartChannel.cpp)中加大延时
+
+16:24 2010-3-29
+VC0882, 时钟, ddrc_mclk是48M分出来的24M
+
+22:00 2010-3-29
+VC0882, FPAG, ddr, deley, timing调整. 
+Ddr delay调法:
+0x6001_10C8地址
+1）先写入0x22,再写66，表示delay加1
+2）先写入0x0，在写0x4，表示delay减1
+如需加2，则重复两次1）的操作，写0x22，写0x66，写0x22，写0x66
+Delay的default是50，最大能加到63，最小能剪刀0.
+
+9:52 2010-3-30
+时间管理
+0, 9:40
+
+1, 计划
+0), 发三个issue: cortex-a8运行时RVI访问memory; 4FPGA EMI无法使用; strap pin读不到. 
+1), rom boot： 2FPGA, 4FPGA
+2), 开mmu.
+3), 晚上看suxin Linux porting. 明天与suxin讨论. 这周要看GPU Linux driver.
+4), 整理时间管理.
+5), 整理会议记录. 
+6), 重新生成build.exe.
+7), 晚上zhangpu GPU Linux driver.
+
+2, 执行
+1), VC0882切频. 
+
+9:59 2010-3-30
+(15:37 2010-3-31)
+VC0882, VC0830, VC0816, clkrst, ddrc, 切频验证
+1, ZhouDaShan邮件"882 FPGA 切频 流程与DDRC模块的流程验证的讨论"20100329_1757
+882 FPGA 切频的流程和DDRC 模块的是否需要做?如何来做,大家讨论一下把
+我们830FPGA 是做个切频的,当时问题也出了不少.
+特别是和DDR 交互这块,刚和yunfei 讨论了一下,882 FPGA 如何做?IC 出个流程,可能多的验证我们DDR 的相关功能和切频的流程
+
+2, CuiYunFei邮件"答复: 882 FPGA 切频 流程与DDRC模块的流程验证的讨论"20100329_2022
+目前切频流程相关的模块有clkrst ，ddrc和ddr phy，FPGA上无法验证clkrst和ddr phy，但可以简单测试一下ddrc的切频，即一个假的切频流程，频率未变只是走一下相关流程。这样做只能简单测试一些feature，如ddr burst length重新配置是否生效，整个切频流程是否畅通等等，但需要修改clkst模块的fpga version。
+个人建议，仅供参考。 
+
+3, 回复YangZuoXing邮件"答复: 882 FPGA 切频 流程与DDRC模块的流程验证的讨论"20100329_2347
+含YangZuoXing邮件"答复: 882 FPGA 切频 流程与DDRC模块的流程验证的讨论"20100331_1744
+882切频验证/测试我感觉得考虑如下几个方面: 
+
+1), VC0882中切频涉及东西很多, 希望尽可能验证. Cpu, bus三种切频方式希望都能验证(只改div, 只改clock source, 二者都改).
+[YANG ZUOXING] 应该都需要测到，HUANGWEI考虑一下在FPGA上的实现方案
+2), 830切频bug之一是sdrc_mode不是shadow寄存器, 这样切频时如果需要修改sdrc_mode就要走sram切频流程. 这个VC0882中已经加入了, 问题是有没有遗漏? 
+[YANG ZUOXING]这个应该能测到
+3), 在任何memory中走切频都应该保证ddrc是gate住的. 830是只有代码运行在sdrc切频时才gate sdrc. 这样在sram中切频时需要软件自己检查memory是否OK. 
+[YANG ZUOXING]
+4), ddrc review: 前几天YunFei调试830 etron pcddr, 发现830在有些地方不符合ddr spec. 感觉这个主要得靠review. 另外882在FPGA阶段如果有时间实验小厂的ddr也许能测出部分问题. 
+[YANG ZUOXING]这个属于DDRC本身的测试了。这次一定要在兼容性方面做更多的工作。
+5), 尽量减少切频corner. 882支持bus和ddrc异步, 如果不支持MP4, 这个是否可以去掉? 
+[YANG ZUOXING] 可以就当成同步的使用好了。
+6), 切频不能影响刷屏等AE应用. 
+[YANG ZUOXING] HI, LINAN, DE里边有FRAME START, FRAME END中断么？
+不过这是一个问题，OS里边对中断响应是挺慢的，VBLANK这点时间可能不太够。 HI, YUNLONG, SUXIN你们如何看待这个问题？
+[WEI YUNLONG] 最好能在DE的FIFO发生empty的时间之内做完频率切换，这样DE就感觉不到。就是说DDR不可访问的时间短到DE不会把它FIFO中的数据用完
+7), glitch free: clkrst模块里面的glitch free逻辑如何保证没有问题? 
+[YANG ZUOXING] HUANGWEI, 来回到一下这个问题吧。
+8), VC0816切频bug只有大量切频时才会出问题. 类似这种问题在882中有没有好的测试/验证方法?
+[YANG ZUOXING] 816是有GLITCH，所以有这个问题。 不过882依然需要大量的切频实验。
+
+4, YangLei邮件"答复: 882 FPGA 切频 流程与DDRC模块的流程验证的讨论"20100401_1109
+DDRC clock switch目前 流具体如下，其中最大的两块时间是，
+DDR PHY  PLL  reset 到lock 的时间5.12 us
+CLK_RST 中的用于产生dest clk 的PLL  reconfig 到lock的时间5us ，其中CLK_RST PLL 的时间 ，可以提前用back up PLL准备好dest clk，从而节省下这个5us 时间。
+所以目前流程中DDRC 切频，大概会有6us时间不能访问DDRC。DE  VBLANK 时间在100us左右，所以利用VBLANK时间可以做到切频不影响DE刷屏。
+利用VBLANK切频采用硬连线的方式更及时准确，现在DDRC 开始block  memory access是由 clk_reset模块拉高 signal clock_switch 开始的， 改进可以考虑 DE 输出vblank给clock reset模块， clock reset 模块处理后仍然通过clock_switch信号通知ddrc 开始clock switch 的流程。请Huangwei,Cuiyunfei,Linan考虑一下这样做是否有问题。
+1. Set “DRAM_REFRESH.pwdn_selfref_en” to 1’b1 and “DRAM_REFRESH.pwdn_selfref_sel” to 1’b1;
+2. Set “DDRC_CFG.clock_switch” (xxx) to 1’b1;
+3. Set Frequency Related Registers (FRR) like “DRAM_TIMING” to match dest_clock. Now these value is stored in mirror registers of these FRR(see chapter 6 for more details about mirror register) and do not take effect immediately;
+4. Set “DDRC_CFG.clock_switch” (xxx) to 1’b0;
+5. clk_rst module pull up the clock_switch signal; After clock_switch is pulled up, DDRC will do the following things automatically:
+a. Command Queue output is disable by stopping responding cmd_queue request;
+b. wait commands in processed done;
+c. issue a precharge all command;
+d. enter self-refresh;
+e. pull up lock signal to inform clk_rst module that DDRC is ready for clock switching;
+f. FRR are replaced with its mirror registers after lock signal is pull up for one clock cycle. 
+6. After lock signal is pulled up clk_rst module can stop orig_clock and then switch to dest_clock;
+7. When dest_clock is stable, assert dll_sreset_n for a minimum of 50ns to ensure proper reset of the PHY DLL, then de-assert dll_sreset_n;
+8. Waiting for lock of DDR PHY DLL ( this wait counter is implemented in CLR&RST Module);
+9. clk_rst module pull down clock_switch signal;
+10. DDRC will issue exit self-refresh command automatically.
+11. If DRAM_REFRESH.mrs_after_selfref is 1'b1, then an MRS command is issued by hardware automatically.
+12. If DRAM_REFRESH.emrs_after_selfref is 1'b1, then an EMRS command is issued by hardware automatically.
+13. DDRC pull down the lock signal automatically after clock_switch is pull down;
+14. Command Queue output is enabling.
+15. Command can normally access DDR-SDRAM.
+
+5, Zhangjian回复Yangzuoxing邮件
+加个问题. 
+切频时能保证声音不会断么? 
+刚才和boxue算了一下极限情况(96k 32bit)最快160us fifo会空. 
+如果用下面vblank方式切频, 会不会对audio有影响? 
+
+11:18 2010-3-30
+VC0830, SV, clkrst, clkswitch, notes, 切频API, 切频打包工具, divider计算, 与CVS: notes(D:\VC0830\VC0830\clkrst)保持同步
+目录:
+一, 切频API
+二, 切频打包工具
+三, divider计算
+
+一, 切频API
+目前对于pcddr sram切频的支持仅限于"dram32M_4bank_dynamic.lds"这个链接脚本: 
+ * notes: 如果调试pcddr sram切频, 使用"调试代码如果用于rvdebug调试"部分链接脚本, 如果用于生成bin使用
+ * "非调试代码. 用于生成bin"部分链接脚本, 默认使用后者
+
+这里描述了切频API和memory参数配置. pcddr切频必须选择pll1->pll2->pll1这个流程. 
+sdram切频建议使用pll1->xclk->pll1流程. 
+1, API原型: int Clkrst_Switch(PTSystemInfo sysInfop, UINT32 clkSrc, UINT32 delay): 
+clkrst\app\clkrst_app_switch.c,
+#include "clkrst\app\clkrst_app_switch.h"
+
+2, 
+*     完成pll1->xxx->pll1切频流程, cpu, bus必须处于xclk或pll1, 没有考虑处于pll2
+*	的情况. 
+*	  必须在"clkrst_Init"之后调用
+
+3, 参数
+*	  sysInfop: 提供系统切频需求, 包括: xclk, pll_ckd,cpu_bus_div,vclk_div. xclk
+*	必须给出, 目前可以使用XCLK_FREQ宏获得. 可以参考system_info.c定义的TSystemInfo, 
+*	例如g_SystemInfo_12_672_168_168_168是pll672, cpu=bus=vdec=168MHz的配置. 
+*	  clkSrc: 选择切频流程. XCLK_ID: pll1->xclk->pll1; PLL2_ID: pll1->pll2->pll1, 
+*   对于pcddr, 会强制选择PLL2_ID.
+*	  delay: 切频后是否delay, 目前没有delay没法发现不稳定, 建议delay=0.
+
+e.g. 切频到pll, cpu, bus, vdec: 576_288_144_192
+TSystemInfo g_SystemInfo_12_576_288_144_192 = 
+{
+    .xclk		 = XCLOCK_12M,
+	.cpu_bus_div = (CPU_BUS_VDEC_DIVIDER_4<<8)|CPU_BUS_VDEC_DIVIDER_2,//288:144
+	.vclk_div 	 = VDEC_DIVIDER_N11_3,		//192
+	.pll_freq	 = 576,
+	.pll_ckd	 = 0x1401e0,
+	.clksource_index = PLL1_ID,
+};
+Clkrst_Switch(&g_SystemInfo_12_576_288_144_192 , PLL2_ID, 0);
+
+4, 切频中memory的配置(旧, 即将修改):
+1), 切频使用的memory在clkrst\app\memoryType_config_memoryVendor.c中定义.
+memory参数一般分为min-60, 60-120, 120-max三组. 边界包括与否见TSdramInfo.sdrc_min_freq, sdrc_max_freq.
+例如三星sdram参数在sdram_config_samsung.c中定义. 181BGA内部的32bitsdram在sdram_config_181BGAInternal.c (clkrst\app)定义. 现代pcddr在"ddr_config_hynix.c (clkrst\app)"定义.
+2), 不同参数通过在include\sys.h中定义"MEM_TYPE_VENDOR"选择, 目前支持: 
+SDRAM_SAMSUNG, PCDDR_HYNIX, SDRAM_181BGAINTERNAL三种. clkrst\app\sdram_config.h中根据"MEM_TYPE_VENDOR", 选择上述xxx_config_xxx.c中定义的memory参数.
+
+5, 自动计算sysInfop
+SysInfo_GetOnePllCpuBusFreq()(clkrst\app\sysinfo.c)函数可以根据cpu频率, cpu:bus, vdec:bus等参数返回PTSystemInfo. 函数说明:
+*  \brief
+*     根据cpu, bus, vdec等频率, 比例要求返回PTSystemInfo.
+*	  必须在"clkrst_Init"之后调用
+*
+*  \parameter
+*	  cpu: 预期cpu频率.
+*	  busCond: 用condFunc表示的bus频率要求. 一般用cpu:bus ratio. 目前支持cpu:bus
+*	=1:1, 2:1, 3:1, 4:1. 对应cpuBus11, cpuBus21, cpuBus31, cpuBus41. 如果为NULL, 
+*	表示无要求, 会返回第一个合理的bus频率
+*	  vdecCond: 用condFunc表示的vdec频率要求. 一般用vdec:bus ratio. 目前支持
+*	vdec:bus=1:1, 3:2, 4:3, 2:3, 3:4, 如果为NULL, 表示无要求, 会返回第一个合理的
+*	bus频率
+*	  clkSrc: cpu, bus在那个pll上. 目前只支持pll1. clkSrc=PLL1_ID.
+*	  rangeArrayp: pll, cpu, bus, vdec频率最大值. 只搜索小于最大值的组合. 
+*
+*	  condFunc: bus, vdec都通过condFunc判断是否是符合要求的频率. 返回1表示符合要求.
+*	原型: "typedef INT32 (*condFunc)(void *p);", 在SysInfo_GetOnePllCpuBusFreq中
+*	参数p是当前搜索到的systemInfo.
+
+6, 测试命令:
+1), svclk(do_clkswitchSV_cpurate()(clkrst\test\clkrst_test.c):
+切频命令
+*	Usage		:	1, 输入cpu频率, 程序会列出所有符合g_PreferedMax的pll,cpu,
+*					bus组合; 
+*					2, 选择pll, cpu, bus列表index. 
+*					3, 选择vdec divider
+*					4, 切频
+2, autoswitch(do_clkswitchAutoSwtich()(clkrst\test\clksrt_test.c):
+自动切频测试命令. 
+
+7, clkrst模块文件层次说明
+1), app层
+(1), clkrst_app_public.h: clkrst以外模块只需要include这一个头文件.
+(2), clkrst_app_switch.c/h(clkrst_app.c/h中提取切频相关函数): cpu,bus切频API, 完成cpu,buspll1<->xclk, pll1<->pll2切频流程. 
+(3), operation_point_iterator.c/h -> clkrst_app_operation_point.c/h: 工作点切换, 目前只用于连续切频测试. 希望将来用于场景切换, 加入根据用户需要和/或系统负载切换工作点的功能, 参考clkrst.c中相关代码. 
+依赖: sysinfo.c, driver, basefunc
+(4), module_clock_info.c/h -> clkrst_app_module_clock.c/h
+管理830内部所有时钟(目前没有考虑vdec, audio, video). 提供时钟操作函数.
+其中的TDivider和TFreq移到driver层.
+module_clock_info.h允许其它几个文件include.
+
+2), memory配置目录(属于app层, 但是目录独立).
+sdram_config.c/h -> clkrst_app_memory_config.c/h: 提供memory配置通用接口.
+
+3), driver层;
+(1), clkrst_driver.c/h: .c保存无法归类的driver操作函数: TFreq.
+.h是driver层对外接口, 上层只需要include这一个头文件. 
+(2), system_info.c -> clkrst_loapp_systeminfo.c
+核心是TSystemInfo结构体, 描述了系统切频(场景转换)时所需的最少参数(cpu,bus,vdec divider, cpu bus clock source及配置). 提供的get函数, 搜索组合函数, 将来也要提供set函数. 
+把divider本身的操作独立出来放到driver层clkrst_drv_divider.c/h
+(3), clkrst_drv_divider.c/h(新建): 负责所有divider的操作. 包括divider value和divider register转换. 维护divider列表(目前是静态表, 将来可能是动态计算的).
+ratio也放到这层, radio是根据div计算的. 用频率计算可能有误差. 
+
+4), basefunc层;
+clkrst_basefunc.c/h: 提供clkrst模块和sdrc模块全部寄存器操作函数. 
+
+
+二, 切频打包工具
+切频打包工具文档
+1), 介绍: 切频打包工具"SpiScanMemPack"把用户配置的频点和memory信息与bin打包为新的bin供bootloader打包工具使用. 同时生成pakinfo供rvdebug调试使用. 
+切频方法与原来相同(clksv). clkrst新增了batchswitch命令用于批量切频测试, 测试按用户指定的type(默认是1, 表示随机)对所有指定频点做times次(默认是10000000次)切频. 
+
+2), 原理: "SpiScanMemPack"实际是把info写入memory的CLKRST_CLOCK_SWITCH_INFO_OFFSET(0x200000)偏移处, 作为bin运行时, 系统在clock_init中会把打包的info从CLKRST_CLOCK_SWITCH_INFO_OFFSET(0x200000)复制到clkrst模块的g_clkrst_batchSwitchp变量中. 系统启动后使用g_clkrst_batchSwitchp包括的频点和memory参数进行切频.
+
+2), 使用
+(1), 切频打包工具"SpiScanMemPack"位于"D:\VC0830\vc0830_sv_memscan_use_spi_eeprom\SpiScanMemPack", 编译后在"D:\VC0830\vc0830_sv_memscan_use_spi_eeprom\SpiScanMemPack\Debug"目录生成"SpiScanMemPack"
+
+(2), 打包为bin
+A, 使用切频打包工具打包(参见图1):
+cfg file: 频点和memory配置信息, 例如D:\VC0830\vc0830_sv_memscan_use_spi_eeprom\SpiScanMemPack\batchswitch_info_SV_sdramSamsung.txt, batchswitch_info_SV_sdramSamsung.txt是范例文件, 详细说明了如何填写频点和memory参数信息. 
+Core bin file: D:\VC0830\VC0830\build\VC0830.bin
+Pack file: 输出文件, 即新的bin文件. 例如 D:\work\batchswitch.pak
+单击"Switch Convert"(不是convert按键, 别点错了)生成打包pak和pakinfo文件(batchswitch.pakinfo). batchswitch.pakinfo可以用于后面rvdebug调试. 
+B, 上一步生成的batchswitch.pak同样是bin, 用bootloader打包后即可用usb下载. 使用方法与原有bootloader打包工具相同, 参见图2.
+
+(3), rvdebug调试. 
+A, 使用rvdebug调试时, 需要在CLKRST_CLOCK_SWITCH_INFO_OFFSET(0x200000)位置放入频点和memory参数info(即前面的batchswitch.pakinfo), 需要在运行完rvdebug脚本后, 程序运行前执行此步骤. 
+具体方法: 
+rvdebug菜单: Debug -> "Memory/Register Operation" -> "Upload/Download file from/to Memory", 
+rawb模式格式与bin相同, 如果采用rawb模式load文件"D:\work\batchswitch.pakinfo"到memory 0x200000处, 对应命令如下:
+readfile,rawb,gui "D:\work\batchswitch.pakinfo"=0x200000
+B, 如果希望调试sram切频流程, 可以如下修改链接脚本(ld_script\dram32M_4bank_dynamic.lds)
+注释
+/* 非调试代码. 用于生成bin */
+.sram ALIGN (0x4) :
+{
+        __clkrst_sram_switch_start = ABSOLUTE (.); 
+        *(.sram.text)
+        *(.sram.data)
+        __clkrst_sram_switch_end = ABSOLUTE (.); 
+}  > rom
+打开注释:
+	/* 调试代码如果用于rvdebug调试 */
+	/* 用于rvdebug调试pcddr切频代码, 直接放入sram中(sram段) */
+/*
+	.sram :
+	{
+		*(.sram.text)
+		*(.sram.data)
+	} > sram
+	__clkrst_sram_switch_start = 0x20000000;
+	__clkrst_sram_switch_end = 0x20000f00;
+*/
+这样sram切频代码直接load到sram中, 会有符号表. 便于调试. 
+
+(4), 注意事项:
+目前只有"dram32M_4bank_dynamic.lds"(默认脚本)支持sram切频流程, 如果不使用此脚本需要注释sys.h的"CLKRST_SRAM_SWITCH_FUNC_SUPPORT"关闭sram切频流程. 
+
+(5), 相关宏定义:
+CLKRST_SRAM_SWITCH_FUNC_SUPPORT: 打开sram切频流程. 
+CLKRST_AUTOSWITCH_BATCH_RUN_BEFORE_AASP: 进入aasp前按照batchSwitchInfo进行切频测试.
+CLKRST_AUTOSWITCH_BATCH_DEBUG: 用g_Clkrst_BatchSwitchInfo4Debug代替打包的batchSwtichInfo, 借以调试batchSwtich流程. 
+
+三, divider计算
+1, pll
+1), Clkrst_DrvPllCkd2Freq()(clkrst\driver\Clkrst_drv.h): 把pll ckd转为频率. 
+2), Clkrst_DrvPllDiv2Ckd()(同上): 把pll input divider和main divider合并为寄存器pll_ckd.
+2), module: g_Clock[]描述了VC0830中clock tree. 切频时计算模块divider是从叶子到根的递归计算. 
+
+11:30 2010-3-30
+VC0882, FPGA, Linux porting, 看suxin有何修改
+1, Y:\kernel\linux-2.6.29_android_AE\arch\arm\boot\Makefile
+#\todo zj: why change the dependency? check uimage calls. 
+#$(obj)/uImage:	$(obj)/zImage FORCE
+$(obj)/uImage:	$(obj)/Image FORCE
+	$(call if_changed,uimage)
+	@echo '  Image $@ is ready'
+
+2, Y:\kernel\linux-2.6.29_android_AE\arch\arm\kernel\head.S
+/*zj: disable L2 cache while enable mmu, code in "#if defined( CONFIG_CPU_ICACHE_DISABLE ) || defined( CONFIG_CPU_DCACHE_DISABLE )" is new. */
+#define C1_L2EN		(1 << 1)	/* L2 Cache Enable */
+/*
+ * Enable the MMU.  This completely changes the structure of the visible
+ * memory space.  You will not be able to trace execution through this.
+ * If you have an enquiry about this, *please* check the linux-arm-kernel
+ * mailing list archives BEFORE sending another post to the list.
+ *
+ *  r0  = cp#15 control register
+ *  r13 = *virtual* address to jump to upon completion
+ *
+ * other registers depend on the function called upon completion
+ */
+	.align	5
+__turn_mmu_on:
+	mov	r0, r0
+	mcr	p15, 0, r0, c1, c0, 0		@ write control reg
+#if defined( CONFIG_CPU_ICACHE_DISABLE ) || defined( CONFIG_CPU_DCACHE_DISABLE )
+	mrc p15, 0, r0, c1, c0, 1		@ Read Auxiliary Control Register
+	bic	r0, r0, #C1_L2EN			@ Disable L2 Cache
+	mcr	p15, 0, r0, c1, c0, 1		@ Write Auxiliary Control Register
+#endif
+	mrc	p15, 0, r3, c0, c0, 0		@ read id reg
+	mov	r3, r3
+	mov	r3, r3
+	mov	pc, r13
+ENDPROC(__turn_mmu_on)
+
+3, Y:\kernel\linux-2.6.29_android_AE\arch\arm\tools\mach-types
+mach-types加入vc088x: 
+vc088x			MACH_VC088X		VC088X			2690
+
+4, Y:\kernel\linux-2.6.29_android_AE\arch\arm\Kconfig
+change GENERIC_TIME, GENERIC_CLOCKEVENTS default value from n to y.
+add VC088x config and sub Kconfig
+
+config ARCH_VC088X
+	bool "Vimicro VC088X"
+	select GENERIC_TIME
+	select GENERIC_CLOCKEVENTS
+	help
+	  Support for Vimicro's VC088X platform (VC0882).
+
+source "arch/arm/plat-vc088x/Kconfig"
+source "arch/arm/mach-vc0882/Kconfig"
+
+5, Y:\kernel\linux-2.6.29_android_AE\arch\arm\Makefile
+add vc088x platform make target and vc0882 machine make target.
+ machine-$(CONFIG_ARCH_VC0882)	   := vc0882
+    plat-$(CONFIG_ARCH_VC088X)	   := vc088x
+
+15:15 2010-3-30
+VC0882, testplan, arm, Coresight, Cortex-a8 test plan
+1, TRACE要测试ETM, ITM. 了解ITM有什么限制.
+2, 访问任何非法地址都不会出错(包括AXI, APB).
+3, Cortex-a8中断基址: 低位可以放在任意位置(默认是0), 高位是0xffff0000.
+
+15:45 2010-3-30
+软件技巧, perl, logAssistant, find_keyword.pl
+1, 修改脚本支持网络路径, e.g. "\\10.0.2.36\sqmshare\share\zhangjian\log\log201003vimicro.txt"
+2, 具体修改
+1), 把"\"替换为"\\"
+$cur_file =~ s/\\/\\\\/g;
+print "searching $cur_file.\n";
+if(!open STDIN, $cur_file){
+die "Cannot open $cur_file: $!";
+}
+2, (11:43 2010-6-1)每次都fluash, 这样能更早看到搜索结果. 
+use IO::Handle;     #for autoflush
+autoflush STDOUT 1;
+
+
+17:02 2010-3-30
+VC0882, 运行中访问0x80000000, 0x40000000地址数据都是0, 与OMAP3530对比
+发Issue
+
+17:36 2010-3-30
+VC0882, EMI, norflash可以烧写, 重启后读不到数据. 在2FPGA上可以读到. 
+需要找一个原来能用的4FPGA版本对应. 
+dongliang建议对比EMI寄存器配置.
+
+19:03 2010-3-30
+VC0882, gpu
+1, 用4.4.1编译VC0882_AE_android porting.
+compiler: arm-2009q3-67-arm-none-linux-gnueabi-i686-pc-linux-gnu.tar
+可以运行到mount nfs
+2, 实验helloworld文件系统
+没有启动起来. 
+
+11:41 2010-3-31
+(18:19 2010-4-9)
+VC0882, FPGA, arm, cortex-a8验证, 回复HuangWei邮件"Re: Re: A8 concerns"20100330_2047, arm回复
+下文没有特殊说明都是Huangwei转发"Fw: A8 support list (461647)"20100407_1803
+1, cortex-a8
+Q(zhangjian): There are lots of new features and modifications in Cortex-a8. So, it is hard to verify the full cortex-a8 in software. We will test the following features after IC verification is passed. is it enough?
+1), arm instruction: Dhrystone.
+2), thumb2: generate the thumb2 from armcc, and run it on A8.
+3), thumbEE: We cannot find the thumbEE test code. Do we need test both JIT and AOT? 
+4), NEON: run c Intrinsics.
+5), vector: normal vector address(0x0 and another address), high vector address(0xffff0000).
+6), mmu: flat map. 
+7), L1, L2 cache: enable and disable test.
+8), cortex-a8 integer and NEON pipeline is tightly integrated with cache. Do we need test it? 
+9), wfi.
+A(arm): There is Configuration Guidelines (Chapter 3 in Cortex-A8 r3p2 CSG) which you can refer to configure and verify your RTL generation. If you follow this guideline and your checksum file is verified by ARM, the RTL of Cortex-A8 is correctly generated. You don’t need to consider additional verification for ARM Cortex-A8 processor. So I think what you concern is the verification strategy of the integration of Cortex-A8 to your SOC. For that, I am afraid there is no standard verification list that we can offer. The verification mainly depends on your system functions. All the points you listed are fine to verify, but you need to think of it by yourself. 
+In the bundle of AT490-BU-98000-r3p2-00rel0, some functional source code and a mini testbench can be used as the reference. Please see them in the directory 
+AT490-BU-98000-r3p2-00rel0/logical/tiger/vectors
+
+2, debug
+1), Q(zhangjian): As we know, ITM is a software trace module, is there any restriction while use it? 
+A(arm): The CoreSight ITM block is a software application driven trace source. Supporting code generates SoftWare Instrumentation Trace (SWIT). In addition, the block provides a
+coarse-grained timestamp functionality. The main uses for this block are to:
+• support printf style debugging
+• trace OS and application events
+• emit diagnostic system information.
+Besides such the application, I can’t see other restriction on it. If you can tell us  your implementation, we can talk about more on it.
+
+2), According to coresight architecture, RVI can access memory through AHB-AP while A8 is running. Right now, memory read as zero, what's wrong? 
+(17:58 2010-4-9)
+1), A(arm). 自Huangwei转发邮件"Fw: A8 support list (461647)"20100407_1803
+Yes, RVI can access memory through AHB-AP while A8 is running. We need to know more about it, e.g. what is your AHB-AP connection.
+2), Huangwei说明了AHB-AP连接, arm回复如下. 
+Support-cores@arm.com邮件"Re: A8 support list (461647)"20100409_1748
+Hello Huang,
+Thanks  for the information which you provided.
+Did you do the test on the FPGA board?  If yes, have you validate your A8+CSSYS design in the DK-A8 environment?
+I’m not sure whether or not the IPs<e.g HMX, X2X.etc> connected correctly and work normally. 
+Also, from the limited information which you provided, I can’t tell you whether or not you integrated the coresight components correctly.
+Would you please try the below to narrow down your problem?
+1, connect a piece of SRAM with AHB interface to the AHB-AP port directly, this mean that the HMX and later bridge/interconnect will not be used, then re-try the test. This should be ok because there is no any logics on this path.
+2, After you finish the above step, make sure that the DAP work well, then move the SRAM block to the X2X bridge, finally, test the memory blocks connected to the interconnect.
+3, I recommend you to debug your issues using the DK-A8 bundle, in which the coresight design can be fully verified.
+Hope this can be helpful on you.
+Best regards,
+Shi Lei( 石　磊)
+"17:58 2010-4-9"end
+
+3), Q(zhangjian): how to test cross trigger.
+A(arm): We can test cross trigger with CoreSight™ Design Kit for Cortex-A8. If you have any problems when using it, please tell us.
+
+3, power mangement
+(Huangwei转发"Fw: A8 support list (461647)"20100407_1801)
+Q(zhangjian): 
+power management CORTEX-A8文档提到的major function gating(NEON, ETM and so on)在实际系统中如何使用? 例如一个多线程OS, 有的进程使用NEON指令, 有的不使用. 如果gate NEON, 使用NEON线程会出错么? 因为将来可能会有很多库是针对NEON优化的, 我们不可能改这些库, 如果这些库不查询NEON是否gate就直接使用的, 我们就没法通过关闭NEON来降低功耗. 其它major function gating同理.
+A(arm): In Cortex-A8, NEON/VFP can be enabled/disable by CP15 register and VFP register. Below is an example of enabling access to NEON/VFP.
+; Enable access to NEON/VFP by enabling access to  Coprocessors 10 and 11.
+; Enables Full Access .ie in both priv and non priv modes        
+MRC     p15, 0, r0, c1, c0, 2     ; read CP access register
+ORR     r0, r0, #(0x3  <<20)      ; enable access CP 10
+ORR     r0, r0, #(0x3  <<22)      ; enable access CP 11                 
+MCR     p15, 0, r0, c1, c0, 2     ; write CP access register back
+; Switch on the VFP and NEON Hardware
+MOV     r0, #0                    ; Set up a register
+ORR     r0, r0, #(0x1 << 30)      ; Enable NEON/VFP  
+MSR     FPEXC, r0                       ; Write FPEXC register, EN bit
+If you disable NEON and the processor execute a NEON instruction, the Cortex-A8 will regard it as a undefined instruction and enter undefined exception mode. In the undefined exception handler, you can judge the cause and identify it is NEON instruction. Then, you can enable NEON by the steps above. This is only an example. At most case, I believe the OS or libraries will do these things. 
+In summary, Cortex-A8 hardware only offer the way to gate different major functional units. It is OS / application that decide how to control the gating.
+
+4, Q(Huangwei, 原邮件Support-cores@arm.com邮件"Re: A8 support list (461647)"20100409_1748): 在调试过程中，发现在测试某些模块或模块的某些功能的时候，有时rvdebugger无法连接ARM, 有时无法停止，报如下错误 “Error: 0x02410100: The run control operation could not be completed ” 
+我的问题是，如果某些模块的硬件logic有问题而出现的logic error，传播后会不会导致ARM 出现上述错误？换个角度，如果被测试的硬件logic没有bug, 会不会出现上述错误?
+A(arm): Trying to connect to target with connect mode ("Reset/ Stop") from RVD will reset the target, force the ARM core to enter debug state and gives back the control to RVD. After this you should be able to load your code on to the target and debug it. But in your case, it appears like the RVD is unable to force the core to debug state. Below are few possible reasons that might be causing this issue. Could you please try the suggestions below and see if that helps resolve the issue you are facing.
+- On connecting to target, the RVI will not be able to place the target into debug mode if the processor is busy attempting a memory access that does not complete for some reasons [for e.g. the memory may not be valid]. This leads to a bus lockup as the memory doesn't acknowledge the transfer and the core wouldn't respond to the debug request. Please check if this is causing the issue in your system.
+- On reset the processor tries to fetch instruction from location 0x00, please ensure there is valid instruction available a this location, on reset. Also if there is an image that you are loading from RVD, ensure the image has a valid entry point and make sure the PC is pointing to this location before attempting to execute.
+- See if you are able to connect to the target using a different "connecting mode". The procedure to set up the connecting mode is explained in detail in Section 3.6.1: "Configuring connect mode" in the document "RealView Debugger Target Configuration Guide". You can download this guide from the ARM website:
+http://infocenter.arm.com/help/topic/com.arm.doc.dui0182i/DUI0182I_rvd_target_config.pdf
+
+13:44 2010-3-31
+时间管理
+
+1, 计划
+1), caijin帮我修改了. 看看原因. 可能是系统用了"@INC"造成的. 
+2), cortex-a8 testplan. <DONE>
+3), 882 切频. <DONE>
+4), 发三个issue: cortex-a8运行时RVI访问memory; 4FPGA EMI无法使用; strap pin读不到. 
+5), rom boot： 2FPGA, 4FPGA
+6), 开mmu.
+7), 晚上看suxin Linux porting. 明天与suxin讨论. 这周要看GPU Linux driver.
+8), 整理时间管理.
+9), 整理会议记录. 
+10), 继续看zhangpu GPU Linux driver.
+
+2, 执行
+1), VC0882 Cortex-a8 软件方面疑问和需要arm支持的东西. 上午1h, 中午1h.
+2), VC0882 Cortex-a8 and Coresight test plan. 30'
+3), 15:05-17:15 VC0882切频. 见"9:59 2010-3-30"
+
+16:19 2010-3-31
+VC0882, FPGA, bottleneck, vc0882_a8_action_items, testplan
+1, VC1600WCVS\doc\status_track\882\vc0882_a8_action_items
+2, D:\VC0882\document\testplan\arm
+
+18:25 2010-3-31
+VC0882, FPGA, 稳定性, rvdebugger
+1, 下午帮YuYang调试FPGA video问题, 替换后发现程序跑飞, 替换ddr可以解决. 可能是FPGA7挑ddr造成的. 
+2, 直接在memory窗口向0x60022318写入0, 无反应. 在命令行用"setmem /w 0x60022318=0"可以. 
