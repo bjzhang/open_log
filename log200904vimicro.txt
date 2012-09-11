@@ -1,0 +1,2324 @@
+﻿10:39 2009-4-1
+VC0830, SV, <TODO>合并任务</TODO>
+0, zouweiran需求, 132-148频率支持1:1, 1:3. 可以通过修改后的命令实现.
+1, 切频. 
+1), 用户输入bus频率和cpu:bus比例. 今天做完.
+<TODO>CLKRST_BUS_RATE</TODO>
+(1), 本来想是按bus频率排序, 后来发现cpu:bus=3:1的情况通过bus算cpu不好算. 可能需要改pll. 目前数据内部实际是先确定pll频率后确定cpu, bus, vdec, module频率. 
+可以先列出所需cpu频率, 根据cpu算出pll频率, 默认结构体是pll:cpu:bus=4:2:1.
+<TODO></TODO>发现如果切频到pll2容易一些. pll2的cpu, bus都支持6位divider. 12*64=768. 这样pll的组合可以比pll1少. 可以考虑测试就用pll2. 这样外设在pll1连divider都不用改了. 目前结构体还不支持, 也没有切到pll2的流程.
+(2), 
+<TODO></TODO>加上限制条件: cpu不能超过500MHz, sdram 不能超过200MHz. 当cpu超过400, sdram超过180时提示用户.
+
+2), 切到pll2;
+2, 明天: 测试测sd卡, support;
+3, 应用场景. 负责切频; 原来在fpga下nucleus有自动切频程序, 一个线程统计cpu负载(软件统计), 一个线程读取sdrc寄存器得到sdrc负载. <TODO>看pxa3xx pm方案;看原有VC0830 FPGA方案</TODO>
+4, ap下pmu测试.
+5, 整理今天会议记录, 重点是进度计划. 
+1), aiguo希望lingming, zhicheng和zhangjian研究wince. 
+bamvor: 其实大家一起看看wince也可以, 学习时可以和linux对比. 
+6, <TODO>任务, 合并任务</TODO>
+pmu: normal -> sleep 会给片外pmu芯片写en_vdd_core=1, 片外pmu芯片会停止输出1.2v电压.
+测试VC0830是否确实没有了1.2v供电.
+
+15:45 2009-4-1
+<TODO></TODO>
+1, yangzuoxing: 低频也需要支持. 
+bamvor: 直接改为cpu从12->444每8MHz一个频点.
+今天给zouweiran之后, 有些函数改为宏.
+2, 完成昨晚sd任务后测上面任务6(pmu)
+3, get_cpu_bus_div():
+zhangjian: 既然用了枚举, 应该不会越界吧. <TODO>确认</TODO>
+4, <TODO>总结, 经验</TODO>
+1), 发现下午困的时候写的代码不好, 而且有问题, 还不如先睡呢:(
+2), 输入了全角＆, 造成的编译错误:
+clkrst/clkswitch_new/clk_switch.c:606: error: stray '\241' in program
+5, 之前为了便于修改, 在"TSystemInfo"内部加const. 现在这样不行了. 所以需要
+6, 加入malloc TClockSwitchInfo. 现在为了简单是直接声明的全局变量.
+7, get_bus_freq改为了全局
+8, 加入cpu divider选项
+9, 切到cpu132(4:1)死, 查问题. 
+Usage:
+1), 输入clkrst
+2), 切频命令改为clksv.回车会列出支持的cpu频点, 选择cpu频点的index, 然后软件会列出bus频点index, 选择后切频.
+这次软件内容有调整, 增加了很多组合, 时间关系只测试了sdram在132,136,140,144,148频率下cpu:bus=1:1或2:1的case.
+3), 原有clockswitchsv命令仍然可用, 只是频点不全. . 
+10, <TODO></TODO>频点尽量合并, 例如396_132,132_132可以合并;同一个pll频率只给出一个默认频点. 合并后需要修改cpu频率显示方式, 软件根据pll频率自动算出cpu的频率, 排序后显示. 用户输入cpu频率. 切频前回显频率是否正确. 
+11, "print_all_cpu_freq()"需要修改, 目前没有排序. 定义全局的XCLK_FREQ
+12, 
+//TODO
+int pll1_xclk_switch_by_index(UINT32 index)
+{
+	return 0;
+}
+13, 对xclk还是没有与pll1统一的处理方法.
+为了便于输出频率, 把xclk配置单独放在"g_ClockSwitchInfo_cpurate_xclk". 只有"get_xclk_info()"需要调用. 
+14, 调试通过, 明天整理一下几个细节. 
+
+11:15 2009-4-2
+<TODO></TODO>
+1, bug
+528 132 132 132切频不对. 528 132 132 66. 没这个问题了?! 还是有问题.
+cpu切不到288. print函数问题?
+2, 用户选择pll.cpu,bus index
+3, (16:47 2009-4-2)
+加入"check_clk_switch_succeeful"后发现切频后AASP提示符不正确, 后来发现check_clk_switch_succeeful()中把读CLOCKRST_PLL_SWITCH, 写成了写CLOCKRST_PLL_SWITCH, 等于是又做了一次切频, 切频到xclk.
+至于为什么会出错, 暂时没想明白. <TODO>查</TODO>
+(17:35 2009-4-2)感觉是堆栈溢出了, 
+加入"pll1_xclk_switch_by_index()"后, pll1_xclk_switch_by_index调用pll1_xclk_switch, 也出现AASP提示符不正确这个问题. 
+目前代码: "clkrst_200904021735_stack_maybe_over_flow.rar".
+把一些底层函数改为宏:
+get_xclk_freq, get_sdrc_refresh, make_cpu_bus_div
+仍然不行, 删除"pll1_xclk_switch_by_index", 直接在用户空间得到pll1, cpu, bus频率.
+仍然不行, 注释掉"check_clk_switch_succeeful"就没事了.
+<TODO>查check_clk_switch_succeeful</TODO>
+(20:06 2009-4-2)
+"AASP"字符号是在aasp_shell()打出的. 没有使用变量, 那应该是放在在常量区. VC0830的常量区在哪里呢?
+另有'#define DBGSTR_PREFIX "AASP: "', 但未使用.
+(21:04 2009-4-2)
+发现注释了"check_clk_switch_succeeful()"中读cpu,bus,vdec的命令就没事了. 难道使用pll1时不能读pll1的div?
+HAL_READ_REG32(CLOCKRST_CKD_CPU_BUS_SDRC_CONFIG, regSystemInfo->cpu_bus_div);
+HAL_READ_REG32(CLOCKRST_CKD_VCLK_CONFIG, regSystemInfo->vclk_div);
+但是用memread读这两个寄存器却没事, 后来怀疑是延时问题.
+当时没有修改timer_base, 用timer delay us延时了1000000. 没有问题. 后来这样延时后又有这个错误了. 目前没时间查这个bug了, 注释"check_clk_switch_succeeful()"和timer的延时. <TODO>解决, 重要</TODO>
+"20:06 2009-4-2"end
+4, (19:46 2009-4-2)bug: 
+切到24MHz lliautotest 5000 pass, 选择cpu 36MHz时菜单不正确:
+index pll cpu bus
+ 0  144  36  36
+ 1  144  36  18
+ 2  288  36  36
+ 3  144  36  36
+ 4  144  36  18
+切频后死. 重启后选择cpu 36MHz时菜单:
+index pll cpu bus
+ 0  288  36  36
+ 1  144  36  36
+ 2  144  36  18
+
+bamvor: 看来真是有bug, 必须得查下. 
+5, <TODO>任务</TODO>: 加入clock_info命令.
+能否做一个CLOCK_INFO的命令？
+敲完该命令能将830的时钟频率打印出来。
+例如：
+         CLK                            FREQUENCY
+         XCLK                          12MHZ
+         PLL1_CLK                 672MHZ
+         PLL2_CLK_DIV2      XXX
+         PLL2_CLK_DIV5      XXX
+         PLL3_CLK_DIV2      XXX
+         CPU_CLK                  336MHZ
+         BUS_CLK                           168MHZ
+         VDEC_CLK                168MHZ
+         ICLK                                     80MHZ
+         LCD_PCLK                40MHZ
+         .
+         .
+         .
+         PMU_CLK                  64KHZ
+         RTC_CLK                  1KHZ
+该命令在将来系统调试的时候应该用得比较多。
+
+6, <TODO>任务</TODO>: 周五完成clock switch.
+
+7,TODO: Uart_Init4Clkrst改为只修改波特率
+
+8, bootloader\bootloaderscript.c保存了启动脚本. 
+
+9, 今日进展:
+代码: clkrst_200904030024.rar
+zhangjian clock clkswitch
+1, modify clk switch function.
+2, add svclkinfo to print clock info. (not finished)
+CLK frequency
+XCLK 12
+PLL1 592
+PLL2 DIV2 120
+PLL2 DIV5 48
+PLL3 DIV2 240
+
+CKD_ICLK 42.3
+CKD_VCLK 37.0
+CKD_SNR 11.8
+CKD_PER 24.7
+CKD_NFC 24.7
+CKD_SDIO 24.7
+CKD_LCDP 29.6
+CKD_AUDC  4.0
+CKD_AE 14.8
+CKD_AUDS  8.0
+CKD_SPI 24.7
+
+
+13:00 2009-4-2
+VC0830, <TODO>整理现有任务</TODO>
+1, sdio, clk, pmu. 
+2, 282 pmu最急.
+3, sd将来要加入3share, 不share的auto/manual.
+没找到哪里设只是nand,sd sahre. 是不是lcd"GPIO_D17 - GPIO_D0"都配成normal funciton后, 就自动是两个share了.
+4, pclk使用pll3, 是shuyu自己配置的.
+
+16:11 2009-4-2
+公司, 报销
+zhangmin提醒我:
+财务制度要求报销单击不能用钉书钉, 应该粘贴. 
+bamvor: 呵呵, 自己本来知道的, 忽略了:(
+(14:13 2009-7-1)而且应当是把一侧短边都贴上, 不能只贴一角. 
+
+10:22 2009-4-3
+<TODO>今天任务</TODO>
+1, 修改clkrst结构, 改为用户给出cpu程序自动计算cpu,bus,vdec
+2, 1完成后, 完成clock_info命令
+
+10:26 2009-4-3
+VC0830, SV, clock, clkswitch
+修改clkrst结构, 改为用户给出cpu程序自动计算cpu,bus,vdec
+1, 分为basefunc,driver,app,test四个目录, 先不管CVS. 
+
+11:15 2009-4-3
+VC0830, SV, 封装
+zouweiran 282cpu板问题, 换成别人282cpu板没问题.
+Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+Init cmd
+Fail,please try another sdram configure
+
+11:36 2009-4-3
+VC0830, SV, clock, clkswitch, bug
+1, clkrst_200904030024.rar有bug:
+1), 第一次clock switch如果不用rvdebug跟踪会死. 
+2), 有时pll,cpu,bus列表不正确, 有冗余项. 
+3), clkrst_200904021140_new_clksv_user_friendly__maybe_include_bug.rar
+没有问题1, 问题2有无未知.
+4), 进一步验证发现通过rvdebug下载到ram没问题, 做成bin从nand启动就有问题.
+<TODO>这个bug暂缓, 下午找人讨论</TODO>
+(13:54 2009-4-3)
+比较异同:
+(1), undef USING_INDEX. 无效;
+(2), comment Timer_TimerbaseSet. 无效.
+现在发现编译这两个code都不行了, 而且链接脚本这两天没有改过. 但是用"clkrst_200904021140_new_clksv_user_friendly__maybe_include_bug.rar"的timer_sv.pak是没问题的. 经过比较两个vc0830.elf除了编译日期不同没有其它不同. 
+怀疑是写入nand时bbt有问题?! 用ftl format后问题一样.
+(3), 实在是没办法, 暂时放下这个问题. 先整理代码加入自动计算pll算法. 
+(4), 保险起见保留log和全部代码.
+log_20090403143604.log是用bin出错的日志
+log_20090403144516.log是用rvdebug正常的日志.
+
+5), 完成"10:26 2009-4-3"
+(1), 文件变动:
+bclkrst.h -> basefunc\clkrst_basefunc.h
+(2), pll_freq2div需要支持其它xclk频率
+(3), 基本功能过<TODO></TODO>
+module divider也需要自动计算
+pll, bus list有时不正确
+
+15:26 2009-4-3
+VC0830, SV, pmu
+ap: dongliang 上午282 pmu rtc sleep回来打不出vimicro. 后来发现是282封装支持uart2, 目前我们板子的uart0直接是借助uart2的232电平转换芯片输出的. dongliang把uart2引脚设为gpio输入后就没问题. 
+cp模式仍有问题.
+
+9:50 2009-4-6
+VC0830, SV, dmac, bug, 系统繁忙时dmac优先级低引发的bug, <TODO>经验总结</TODO>
+关于830 DMAC  bug总结：
+1. 问题：
+在系统比较繁忙的时候（400*240 MPEG4 VDEC解码、LCDC显示、B层显示，DMAC拷贝数据），如果DMAC优先级低，DMAC会一直没有响。
+2. IC  check:
+ 这的确是dmac的一个bug，当sdrc对dmac响应不及时时，dmac发出的读申请会在某一时间突然收到大量数据，以至于dmac的fifo发生溢出，丢失数据，从而导致dmac进入死循环。虽然我在dmac中加入了防溢出的处理，但这种情况大大超出了32word的限制，所以导致fifo无法判断而出错。
+3. 为什么FPGA上没有测试出来：
+在FPGA上的确没有测试这种情况。在测试压力时，我们只是使用了DMAC来加压，看看高优先级的vedec, video有没有正常工作。而没有去检测，低优先级的DMAC是否自己会死掉。该项测试计划在SV test plan review时才补上去的。
+4. 和软件商量的解决方法：
+a) 软件把握，在VIDEO，VDEC不繁忙的时候，才抽空启用DMAC，并将DMAC优先级设置为最高,且长度不要太长（几个ms能完成）
+b) 使用DMAC的lli方式来绕过这个问题，但是需要每32个words一次lli，lli表需要4个words，也就是需要多1/8的lli表空间。
+c) 使用软件memcpy；使用burst4,8的方式，进行优化。 
+d) IC  看能不能修这个bug（830，816上）。
+
+10:05 2009-4-6
+VC0830, SV, clock, 今天主要是定好module clock
+1, 所有时钟源, 所有模块
+1), pmu域: pmu_clk, 
+可用时钟源: rtcclk, xclk
+
+2), rtc域: rtc_1k_clk
+可用时钟源: rtcclk, xclk
+
+3), pso域:
+名称                    可用时钟源          divider范围     ckd_en      clk_gt
+cpu_clk                 xclk, pll1, pll2
+sdrc_adjx_clk(x=1,2,3)  xclk, pll1, pll2
+sdrc_clk                xclk, pll1, pll2
+pclk                    xclk, pll1, pll2
+rtc_pclk				xclk, pll1, pll2
+pmu_pclk				xclk, pll1, pll2
+udc_pclk				xclk, pll1, pll2
+vdec_pclk				xclk, pll1, pll2
+ipp_hclk				xclk, pll1, pll2
+lcdc_hclk				xclk, pll1, pll2
+nfc_hclk				xclk, pll1, pll2
+sdio_hclk				xclk, pll1, pll2
+pdma_hclk				xclk, pll1, pll2
+dmac_hclk				xclk, pll1, pll2
+stor_hclk				xclk, pll1, pll2
+biu_hclk				xclk, pll1, pll2
+marb_hclk				xclk, pll1, pll2
+cpu_hclken				xclk, pll1, pll2
+
+sif_iclk				pll1
+ipp_iclk				pll1
+lcdc_iclk				pll1
+vdec_vclk				pll1
+
+...
+
+2, 已实现的clk
+CKD_ICLK
+CKD_VCLK
+CKD_SNR
+CKD_PER
+CKD_NFC
+CKD_SDIO
+CKD_LCDP
+CKD_AUDC
+CKD_AE
+CKD_AUDS
+CKD_SPI
+
+3, 需求:
+1), 在AASP中用命令显示当前各模块时钟, 目前已经有了雏形"print_sys_clock_info()", cpu, bus, video等未加入.
+2), 用户需要切频时软件根据pll自动算出模块时钟.
+根据每个模块的时钟范围和divider范围计算divider. 如果不能得到模块所需时钟, 模块状态设为DISABLE.
+3), pm中suspend和resume需要按顺序开启时钟. clk需要组成树型结构. 
+比如uart需要按照pll1->per_clk->uart_clk顺序开启. 利用clk->parent找到树根, 并按顺序开关. 
+
+4, 定义结构体
+结构体用于维护从xclk,pll1开始到模块输入clk的时钟树, 模块内部的时钟暂时不管理. 将来如果必要可以多加一级child.
+以0或NULL表示无效或未初始化, 所以结构体使用前一定要memset 0, 保证状态正确. 
+变量: 
+//加入新模块要加入g_Clock[], g_ModuleClock[]中!
+typedef struct tag_TClock {
+    //define variable
+    //name不为0!!!
+    char name[CLKI_NAME_LEN];//模块名称. 命名规则: 一般以寄存器名称为准. module_clk: 一般情况以m_clk_gt_ctrl寄存器为准. 
+    //pll1-pll3=0-2, xclk=3
+    //cpu,bus等core clk: offset 0x10;
+    //module offset: M_CLK_ID_OFFSET
+    UINT32 id;
+    //目前无用, 为pmu留作扩展. 区分不同的电源域. 系统不同状态时(idle, sleep等)域的电源可能会开关. 
+    UINT32 reversed1;	//domain: enum clk_domain {PMU, RTC, PSO};
+    // 状态. [7:0]表示enable相关. [15:8]表示是否最新. [31:16] reversed
+    //目前每8位内部的状态是互斥的. 以后可能不同.
+    UINT32 status;
+    //目前divider由表格读出, 暂时不手工计算, 手工计算可能处理不好占空比. 单独列出divider结构体主要是便于用户查看divider设置是否正确. 
+    TDivider div;		//pll使用div1表示indiv和maindiv
+    TClk_enable enable;
+    TFreq freq;
+    struct tag_TClock *parent;	// parent时钟. 对于xclk, PLL1, PLL2, PLL3是NULL
+    //define function
+    //这里的get,set都指get,set到数据结构中对应变量. 
+    //读取diviver寄存器返回divVal. 只是对于pll, 返回divReg.
+    UINT32 (*get_div)(struct tag_TClock *clock);//, enum get_div_type type);
+    //根据clk和clk->parent的prefered_freq确定divider.
+    //用于时钟初始化或切频前根据clock source和prefered_freq确定divider.
+    //to be removed
+    //UINT32 (*get_prefered_div)(struct tag_TClock *clock);
+    //设置div结构体divider到寄存器. 
+    INT32 (*set_div)(struct tag_TClock *clock);
+    UINT32 (*get_freq)(struct tag_TClock *clock);//, enum get_freq_type type);
+    //本意是支持模块自己修改clock. 目前xclk,pll在TSystemInfo已有描述, 这个
+    //函数用于设置xclk,pll频率. 
+    UINT32 (*set_freq)(struct tag_TClock *clock);
+    //1: enable, 0: disable. 判断时需要判断是否是0或1. 如果将来需要其它编
+    //号, 便于扩展. 用户调用enable要检查返回值以确定是否成功.
+    //设置时要注意状态是否有违反, 例如要enable disable的模块, 如果div不合法,
+    //就不能enable. 
+    INT32 (*set_enable)(struct tag_TClock *clock, UINT32 en);
+    //reversed:
+    UINT32 reversed2;//list; 加入到链表中. 要看是否需要遍历所有clock.
+    //引用计数. pm时可能有用. 如果需要按顺序关闭时钟. 例如关闭uart时钟, 需
+    //要先按uart->per->pll1顺序, 对于per和pll1, 如果ref_count!=0, 不能disable.
+    UINT32 reversed3;//ref_count;
+    //设置parent. 对cpu,phy_src_sel, aud_src_sel, lcdp_src_sel几个来说可以
+    //选择不同的pll. 暂时不需要.
+    UINT32 reversed4;//set_parent(): 
+    UINT32 reversed5;//锁
+    //tag_TClock完善后再多保留3个UINT32 reversed, 用于以后扩展. 到时会使用
+    //传统c语言struct赋值方法. , 因为axd不支持".name=xxx"的赋值方式.
+}TClock, *PTClock;
+
+函数: 
+get_div;//读取diviver寄存器, 并更新div1, div2
+set_div;//根据clk和clk->parent prefered_freq确定divider.
+get_freq:
+    if clk及clk->parent都是UPTODATE, 直接返回freq.
+    else if clk或clk->parent是DISABLE, 返回INVALID_FREQ
+    else 从不是UPTODATE的clk开始计算clk.
+set_freq();//本意是支持模块自己修改clock. 目前xclk,pll在TSystemInfo已有描述, 这个函数用于设置xclk,pll频率. 
+enable(): 1: enable, 0: disable. 
+    判断时需要判断是否是0或1. 如果将来需要其它编号, 便于扩展. 
+
+reversed:
+list; 加入到链表中. 要看是否需要遍历所有clock.
+ref_count: 引用计数. pm时可能有用. 
+    如果需要按顺序关闭时钟. 例如关闭uart时钟, 需要先按uart->per->pll1顺序, 对于per和pll1, 如果ref_count!=0, 不能disable.
+set_parent(): 设置parent. 
+    对cpu,phy_src_sel, aud_src_sel, lcdp_src_sel几个来说可以选择不同的pll. 暂时不需要.
+reversed: 3个字节.
+(16:43 2009-4-6)
+增加的内容太多了. 继续完成"c_clk_pll1"和update_module_divier中涉及到的.
+完成后更新log上面的TClock.
+(1:14 2009-4-7)
+其实目前只需要get_prefered_div和set_div两个函数. 应该还是用最近的方法: 先写顶层函数, 再写底层函数. 今天又是反着写的.
+希望明天上午能完成coding和compile, 并且能完成基本通路. 
+
+10:13 2009-4-6
+软件技巧, 正则表达式, editplus, 提取函数参数, 搜索关键字, project搜索
+1, 提取函数参数
+查找: "[^(]*\((.*)\);"(不含引号, 下同).
+替换: "\1"
+可以把
+"    HALPrint("PLL3 DIV2\t %d\n", get_pll_clk_from_reg(PLL3)/2);"
+替换为:
+""PLL3 DIV2\t %d\n", get_pll_clk_from_reg(PLL3)/2"
+
+2, editplus中搜索工作日志搜索关键字(每个条目中日期下面的是关键字), 表达式中keyword是要搜索的关键字: 
+([0-9][0-9]*:[0-9][0-9]* [0-9][0-9][0-9][0-9]-[0-9][0-9]*-[0-9][0-9]*\n.*keyword)|(\([0-9][0-9]*:[0-9][0-9]* [0-9][0-9][0-9][0-9]-[0-9][0-9]*-[0-9][0-9]*\)\n.*keyword)
+
+3, (10:14 2009-12-7)project搜索
+菜单Project->Edit project可以新建工程加入目录和文件. 原来是加入文件, 但是如果新增了文件还要手工加入, 现在我直接添加目录. 但是这样必须保证目录中所有文件都是需要搜索的, 原来editplus自动生成的bak文件利用"Tools->Preference->backup options"选择另一个目录"D:\Personnal\editplus_backup", 同时勾选包括目录. 不要勾选包括时间, 否则每次保证都会生成新文件, 反而不方便. 
+project建立完成后, 就可以在Find in Files中勾选"Current Project"搜索工程中的文件了. 计划将来把搜集的资料也放在某个目录中, 这样将来搜索会更方便. 
+
+10:09 2009-4-7
+VC0830, clock, clk switch, <TODO>继续</TODO>
+1, get_div,get_freq之前功能定义的不清楚, 现在加入一个type变量;
+enum get_div_type {G_DIV,G_DIV_REG,G_DIV_SYSINFO,G_DIV_FREQ,G_DIV_PREFERED};
+enum get_freq_type {G_FREQ,G_FREQ_REG,G_FREQ_SYSINFO,G_FREQ_FREQ,G_FREQ_PREFERED};
+删除get_prefered_div. 用get_div(clk,G_DIV_PREFERED)实现.
+在TOSWITCH状态下, 如果type是G_DIV/FREQ_SYSINFO或G_DIV/FREQ_PREFERED, 修改后设为SWITCHING. 这样叶子module就不会重复更新parent的div或freq.
+总结来说: get_div,get_freq中只是根据type进行操作. 
+切频流程:
+1, 配合用户输入合法pll,cpu,bus,vdec频率. 
+2, 更新clock的divider和freq:
+1), 更新pll,cpu,bus,vdec频率到systemInfo.
+2), 更新g_clock的divider和freq
+(1), 设置所有clock status为"TOSWITCH";
+(2), 修改clock source divider freq: (xclk,pll1,pll2,pll3)
+get_div(clk,G_DIV_SYSINFO),get_freq(clk,G_FREQ_SYSINFO),
+(3), 修改core clock divider freq: (cpu,bus,vdec)
+get_div(clk,G_DIV_SYSINFO),get_freq(clk,G_FREQ_SYSINFO)
+(4), 修改module clock divider freq: 
+get_div(clk,G_DIV_PREFERED),get_freq(clk,G_FREQ_PREFERED), 
+(5), 设置所有clock status为SWITCHING;
+3, 配置寄存器
+1), gating ungating module
+2), switch to xclk or pll2
+3), pll,cpu,sdram...
+4), module divider:
+set_div(), 同时更新状态为UPTODATE.
+5), switch to pll.
+6), ungating module in step 1). 
+目前1),6)的save_clk_m_gating_status和restore_clk_m_gating_status没有使用clock结构体的enable函数, 这两个步骤还是直接统一修改方便. 如果以后有gating顺序要求, 可能用clk->enable函数就很方便了.
+
+-----<TODO></TODO>:
+0, <TODO>整理思路!!</TODO>
+1, 代码初步完成后当定义"CLKRST_NEW_CLK_STRUCT"时, "g_ClockSwitchInfo_cpurate"只保留几个最常用的频点. 
+2, "get_newclockSwitchInfo"用于得到当前正在更新的clockSwitchInfo, 有点别扭, 改
+
+15:55 2009-4-7
+VC0830, SV, clock, clkswitch, <TODO>新任务</TODO>
+!!!要求明天下班之前完成!!!
+做一个自动切频程序, 用户输入start freq, end freq, step, 按指定顺序扫描(目前是低->高, 高->低, 将来可能加入随机测试), 切到每个频率后做一定次数dma测试.
+
+16:12 2009-4-7
+VC0830, SV, <TODO>经验,技巧</TODO>
+周五提交的代码编译不过去, 可能是因为提交前的编译没有clean.
+以后提交代码前: 
+1, 先clean后compile;
+2, 别忘了加入新文件;
+3, 提交后更新, 看有无未知文件, 有无冲突文件等.
+
+18:07 2009-4-7
+VC0830, SV, EVB板
+zouweiran EVB, lingming可能拨错了bootloader strap pin. 发现uart就不好用了. 按复位很多次, 只有一次能在终端看到信息. 用示波器看232芯片rx引脚, 有波形, 说明给232芯片的数据应该没问题.
+zouweiran去换232芯片, 如果不行, 就得用逻辑分析仪看输出的数据是否正确了.
+
+18:38 2009-4-7
+VC0830, SV, clock, clk switch
+写代码晕了, 经liaozhicheng提醒才看出来.
+	typedef struct tag_TModuleClockInfo
+	{
+	    PTClock m_clk[NUMBER];
+	    UINT32 m_gt_status;
+	}TModuleClockInfo, *PTModuleClockInfo;
+改为
+	typedef struct tag_TModuleClockInfo
+	{
+	    PTClock m_clk;
+	    UINT32 m_gt_status;
+	}TModuleClockInfo, *PTModuleClockInfo;
+否则:
+PTClock g_ModuleClock[] = 
+{
+	&m_clk_per,
+	&m_clk_uart0,
+	&g_DummyClock,
+};
+	
+TModuleClockInfo g_ModuleClockInfo = 
+{
+	.m_clk = g_ModuleClock,
+};
+有warning.
+这样有问题, 目前是
+typedef struct tag_TModuleClockInfo
+{
+    PTClock *m_clk;
+    UINT32 m_gt_status;
+}TModuleClockInfo, *PTModuleClockInfo;
+在运行时赋值:
+	newInfo->moduleClockInfo->m_clk = g_ModuleClock;
+
+20:45 2009-4-7
+VC0830, SV, Storage, sd/mmc, <TODO></TODO>
+1, mmc需要使用8bit数据线时, 如果插在sd插槽高4位无法使用. 所以mmc卡无法正常挂载. 这时如何使用udc挂载mmc到PC, 会有问题, 例如优盘未格式化, 盘符不正确等. 
+2, zhanglu测试6张mmc卡, 只有1个mmc在VC0830 SV板上能用. 但这六个mmc卡在PC上都没问题. <TODO>周四解决!!!!, Issue: [830 0007541]: 有部分MMC卡及SD卡不识别</TODO>
+
+22:16 2009-4-7
+VC0830, SV, clock, clkswitch, <TODO>修改</TODO>
+1, 使用XCLK_FREQ宏, 可能终归还是不好, 以后修改. 
+<TODO></TODO>: xclk还是设成变量, 由strap pin读取好.
+2, 进展:
+代码: "VC0830_clkrst_200904072324_new_clk_struct_done-simple_test_pass_clkswitch_fail.rar"和"clkrst_200904072324_new_clk_struct_done-simple_test_pass_clkswitch_fail.rar"
+测试132_132_132, 240_80_80参数计算正确, 目前只加入了uart, 明天完成测试命令后再加入其它. 明天先加入测试命令, 借用测试命令验证数据产生是否正确. 完成后再查看为什么切频会死, 不行就用"clkrst_200904021140_new_clksv_user_friendly_maybe_include_bug.rar"的切频程序.
+3, <TODO>per频率不是整数是不是不好?</TODO>如果是, 需要修改get_module_div函数.
+4, <TODO>freq单位?</TODO>: 使用Hz的好处是计算divider时没有小数问题. 但是对于很多本来以MHz单位能除尽的情况, 这样增加的计算量很大. 当前比float还是好些. 暂时没有想到很好的办法, 希望是能在计算量和灵活性之间取得更好的平衡. 目前编程时, 尽量考虑支持不同的频率单位. 
+
+13:58 2009-4-8
+VC0830, SV, clock, clkswitch, 自动切频命令, 用于筛片子
+自"15:55 2009-4-7"
+1, 接口:
+1), 用户: 输入start freq, end freq, step; 测试次数, 每次切频后dma测试次数(默认10次).
+2), 频点的选择, 利用结构体:
+typedef struct tag_TOperationPointIterator
+{
+    TFreq user;
+    TFreq actual;
+    ...
+}TOPIterator, *PTOPIterator;
+2, tag_TOperationPointIterator用到的pll,cpu,bus,vdec频率, 开始是新增的结构体, 后来发现用tag_TSystemInfo就可以. 目前改为:
+	typedef struct tag_TOperationPointIterator
+	{
+		char name[OP_IT_NAME_LEN];
+		INT32 status;
+	    //TFreq userCpu;//是否需要?
+	    TFreq pll;
+	    TFreq cpu;
+	    TFreq bus;
+	    TFreq vdec;		
+        PTSystemInfo curSystemInfo;
+		//设置到初始状态, 准备重新变量. reset后status是OPITOR_INIT
+		//一定要先setMinMaxStep, 再reset.
+	    INT32 (*reset)(struct tag_TOperationPointIterator* itor_p);
+		//设置用户输入的cpu最大,最小频率, step
+	    INT32 (*setMinMaxStep)(struct tag_TOperationPointIterator* itor_p,
+	    					UINT32 min, UINT32 max, UINT32 step);
+		//得到下一个Operation point item, 返回NULL表示结束. 
+		//结束时status是OPITOR_END
+		PTOPItem (*next)(struct tag_TOperationPointIterator* itor_p);
+		//返回当前operation point. 返回NULL表示结束.
+		PTOPItem (*get)(struct tag_TOperationPointIterator *itor_p);	
+		UINT32 (*getPllFreq)(struct tag_TOperationPointIterator* itor_p);
+		UINT32 (*getCpuFreq)(struct tag_TOperationPointIterator* itor_p);
+		UINT32 (*getBusFreq)(struct tag_TOperationPointIterator* itor_p);
+		UINT32 (*getVdecFreq)(struct tag_TOperationPointIterator* itor_p);
+		//指向下一个op itor, 为用户需要多个operation point iterator做准备.
+		struct tag_TOperationPointIterator *nextIt;
+		char *help;
+	}TOPIterator, *PTOPIterator;
+
+14:32 2009-4-8
+项目, 编程风格, 
+"D:\work\Documentation\Dragon code style-final.doc"
+1, 函数名称一般是"模块名_函数名", 单词首字母大写.
+2, 不要使用UINT32? VC0830里面都用, 这个应该可以用.
+3, enum不要typedef? 不理解, 暂时不用.
+
+15:36 2009-4-8
+VC0830, SV, 文档, databook
+地址: "ftp://10.0.13.13/", 用户名: guest,密码: guest.
+另: <TODO></TODO>perl练习: 写脚本自动根据变量名称生成Input xxx, Param arguments等.
+
+16:04 2009-4-8
+VC0830, SV, rom bootloader
+aiguo实验.
+VC0830可以在不重新产生pll情况下, 修改cpu,bus divider. 与目前切频流程的差异只是去掉了gen_pll()函数. 
+测试的目的是如果bootloader 在240/80启动失败时,可以启动到较低频率. 
+aiguo是用spi boot实验的.
+
+23:30 2009-4-8
+VC0830, SV, clock, clk switch
+1, 调试
+1), src->xclk设成了13:
+是随机值. 原因是xclk没有赋值;
+2), pll_freq是0.
+改代码改错了, 把cpu_div给了pll_ckd
+3), SysInfo_GetOnePllCpuBusFreq的输入参数cpu=0: 原因是getPllFreq时Itor->pll.freq没有*MHZ.
+2, 目前完成从低到高每4MHz一个step的遍历, 明天加入从高到底遍历. 顺便测试计算module频率的函数. 需要加入nfc, usb.两个模块. usb主要是考虑频率不合要求是disable.这种情况下gating,ungating函数也需要修改. 对于div不存在造成的disable, 不应该ungating.
+
+11:33 2009-4-9
+VC0380, clock, clkswitch, <TODO>总结</TODO>
+1, 目前给Uart_Init4Clkrst传入的module clk是0. 查.
+发现是get_freq函数实现不正确. 
+如果"!is_status(clock->status,SWITCHING )"会直接返回INVALID_FERQ(0). 
+2, #8+#10+蓝sdram=156切频后很快死.
+3, #8+#8:
+1), 测试环境: #8底板+#8cpu板(176封装)+蓝sdram板子+rvdebug
+144     lliautotest 100 pass
+148     lliautotest 100 pass
+152     lliautotest 100 pass
+156     lliautotest 100 pass
+160     lliautotest 100 pass
+164     切频后很快死(3次相同)
+168     lliautotest 100 pass
+172     lliautotest 100 pass
+176     lliautotest 100 pass
+180     lliautotest 100 pass
+184     lliautotest 100 pass
+188     lliautotest 100 pass
+192     lliautotest 100 pass
+196     lliautotest 100 pass
+200     lliautotest 5000 pass
+2), 上传CVS
+###################CVS_COMMENT_START#######################
+zhangjian: clock, clkswitch
+1, add algo for clock switch cmd: "clksv"
+calculate pll,bus,vdec from cpu freq and calculate module divider from pll freq. only the following case is test right now: 
+144     lliautotest 100 pass
+148     lliautotest 100 pass
+152     lliautotest 100 pass
+156     lliautotest 100 pass
+160     lliautotest 100 pass
+164     fail: 切频后很快死(3次相同)
+168     lliautotest 100 pass
+172     lliautotest 100 pass
+176     lliautotest 100 pass
+180     lliautotest 100 pass
+184     lliautotest 100 pass
+188     lliautotest 100 pass
+192     lliautotest 100 pass
+196     lliautotest 100 pass
+200     lliautotest 5000 pass
+2, add auto switch comamnd. support min to max frequency switch. 
+but there is bug in dma test.
+cmd: "autoswitch". 
+###################CVS_COMMENT_END#######################
+
+4, 
+1), 选择prefered index时cpu,bus也要考虑. 可以用systemInfo保存prefered system info.
+2), 修改sdram最高频率? 
+3), 使用lliautotest时忘了释放内存, 所以第二次dma测试就失败了. 
+4), index不明显;
+5), caijin 映像切频死. zhangjian实验映像, 会死, 这个问题一直存在, 今天要解决这个问题. 
+6), TODO: autoswitch 加入maxMin. 允许minMax, Maxmin. 完成后调试5.
+
+5, debug问题4-4):
+两次都死在"1a0bc":
+HAL_WRITE_REG32(CLOCKRST_PLL_CTRL, reg|0x1);	 //power down pll1
+1a0b0:	e3a02206 	mov	r2, #1610612736	; 0x60000000
+1a0b4:	e59d3008 	ldr	r3, [sp, #8]
+1a0b8:	e3833001 	orr	r3, r3, #1	; 0x1
+1a0bc:	e5823000 	str	r3, [r2]
+也就是power down pll处.
+提示: Stopped on Memory access violation
+先改成:
+		HAL_WRITE_REG32(CLOCKRST_PLL_CTRL, reg|0x421);   //power down pll1, pll2, pll3
+		//HAL_WRITE_REG32(CLOCKRST_PLL_CTRL, reg|0x1);	 //power down pll1
+试试, 不行就找到一版可用的代码再做比较.
+
+15:54 2009-4-9
+VC0830, SV, 键盘(kpd)和jtag复用, 测试键盘时需要拔掉jtag
+
+15:55 2009-4-9
+VC0830, SV, clock, clkswitch
+caijin: 240_120_120->240_120_120, ls死.
+
+17:26 2009-4-9
+VC0830, SV, clock, clkswitch, video, snr
+1, 找shunyu拿来senor和lcd
+1), sensor右对齐
+JP13-JH3
+1-9,2-7
+2), lcd左对齐
+JMP2[1,2], JMP1[2,3]
+
+2, 修改代码:
+1), INT32移动到common_def.h. 否则boxue在vc下编译v830clkrst模块时出错.
+2), <TODO></TODO>
+(1), 类型定义尽量定义在xxxtype.h中
+(2), sdio: 修改sd代码使其更好支持nucleus: 利用信号量支持多任务.
+
+3, 先保证主要频点切频可用(含240_120_120), 再保证映像中也不会死.
+1), (18:57 2009-4-9)
+发现vdec频率没有切, 原来是在update_module_divier写的divider, 改update_module_divier函数后, 由于vclk不再g_ModuleClock, g_Clock中, 所以没有切.
+暂时临时加入到while前:
+	//vdec divider在前面已经算过, 暂时直接写入. TODO: vclk加入g_Clock, g_ModuleClock
+	HAL_WRITE_REG32(CLOCKRST_CKD_VCLK_CONFIG, \
+		clockSwitchInfo->systemInfo->vclk_div);
+	while( '\0' != (*clk_pp)->name[0] ) {
+
+4, 测试vdec:
+vdec:>rvplay -f xxx.rm -dn 100
+
+5, 现有代码:
+更新了代码:
+vdec:>rvplay -f run_rv8.rm -dn 100
+pass as 144, 168 and 172MHz (1:1:1).
+fail at 164(1:1:1): no response.
+144,168,172下lcd和snr也可以使用: video,open,preview.
+CVS log:
+zhangjian: clock clkswitch 
+modify update_module_divier: set vclk divider in it.
+vdec:>rvplay -f run_rv8.rm -dn 100 pass as 144, 168 and 172MHz (1:1:1).
+fail at 164(1:1:1): no response.
+代码: clkrst_200904091909_vdec_snr_lcd_pass_at_simple_test.rar
+
+9:15 2009-4-10
+<TODO></TODO>
+打印考核表给aiguo. 打印: 7255,7193
+
+9:25 2009-4-10
+VC0830, SV, clock, datebook, Yinong notes及建议, Yangzuoxing回信
+自: 
+1, "Yinong"邮件"答复: a good document to help you understand the clock and reset of 830", 2009年4月10日 6:51
+2, "Yangzuoxing"邮件: "答复: a good document to help you understand the clock and reset of 830", 2009年4月10日 16:04
+bamvor: 下文把Yinong回信和Yangzuoxing回信编在一起:
+
+Yinong: 
+我仔细读了一下姜博这篇文档，的确写的非常好,注重细节，格式严谨，图文并茂。看得出来，姜博是花了很多心血认真去写的, 读者读完后，也是能读懂很多东西的。总的来说，830 design team这次的文档工作做得挺好，比以前前进了一大步。
+ 
+读的过程当中，我也写了一些notes, 提出来让所有这次要写文档的人看一看，不知是否有共性的东西？请 Zuoxing的team在reivew其它文档时也follow 这些原则。
+
+Yangzuoxing:
+非常感谢你在如此繁忙的情况下，还仔细看了这个DATABOOK,并提出了如此多的宝贵意见。与JIANGBO, ZIXI讨论后，对你意见的答复如下（请参见蓝色部分）：
+ 
+-
+ A design goal of clkrst module, in addition to its function,  needs to be specified clearly at the beginning,  so that people may know overall what goals we want to achieve.  
+ 
+[YANGZUOXING]: 在OVERVIEW的开头，往往会介绍设计的目标.但这块可能没有作为一个重点，强调得还不太足，可以继续改进。
+ 
+-
+ For Vimicro’s team in particular, which all have some experience with 820,  a brief introduction of difference to 820’s implementation would be very helpful.
+ 
+[YANGZUOXING]:在下一个项目的MAS里，可以在BACKGOUND这章里，增加一节，介绍原来的模块用于新项目的不足之处。但这部分内容是否要加入到DATABOOK,我们还可以再讨论一下。
+ 
+-
+ At the earlier sections, put a a brief introduction of what each clock is used for, why there is a PMU power domain and why there is a PSO power domain,  which blocks will be impacted in idle mode, etc. Otherwise, first time readers in the software/application team may still have a tough time to understand what each clock is used for.  Even after finishing reading the entire document, they may only  知其然而不知其所以然。  If these topics is already introduced somewhere else,  please give a pointer here. 
+ 
+[YANGZUOXING]:各模块的时钟在对应模块的DATABOOK中有详细描述。JIANGBO会加一个REFERENCE TO MODULE’S DATABOOK.
+POWER DOMAIN在POWER MANAGEMENT一章中有详细描述。JIANGBO会加一个REFERENCE.
+ 
+-
+ Marketing, or system team, may have raised some requests during the course of design, it is very valuable to include them here.  For example, Weimin’s words below are worthwhile to be reflected in. 
+ 
+[YANGZUOXING]: 可以考虑在下一个项目的MAS中，在BACKGOUND一章中加一节：MARKETING REQUIREMENT. 是否要加入到DATABOOK中，我们可以再考虑。
+ 
+-
+ Not only cover what has been done, but "why" a decision is made to implement things in such a way.  Provide reader the train of the thoughts, so that they can follow up easier. 
+ 
+[YANGZUOXING]:这个意见很好。这将作为我们写文档的一个重要指导原则。
+ 
+-
+ Please add a revision history table.
+ 
+[YANGZUOXING]:我们将在所有DATABOOK中加上这一部分。
+ 
+Details
+-
+ Corners encountered in the FPGA, ie., cache alignment issues while switching clocks,  needs to be emphasized.  Since this is a FPGA specific problem, it may not help system team much, but for sure it will be very helpful for future projects
+ 
+[YANGZUOXING]: 在下一个项目的MAS中，要加入这一部分内容。由于ASIC没这个问题，就不打算加到DATABOOK中了。
+ 
+-
+ When a particular implementation is discussed, the assumption should be addressed very clearly.  The assumption is equally as important as the actual implementation, because software/system guys are suppose to follow design team’s assumptions when they write applications. For example, when discussing the clock switch, the following assumptions need to be added:
+1.
+ We never change the clock frequency in the middle of an application / scenario.  Typically, the frequency scaling happens when users switches from GUI to an application, or from an application to GUI;  
+2.
+ The only thing that needs to have audio play uninterruptedly is playing MP3 and then entering dark screen mode;   
+3.
+ Clock switch is never intended to be supported while in the middle of playing a video.   Software is supposed to pre-parse the input bit stream and decide what frequency level to use up in the front, based on resolution.
+4.
+ No need to maintain audio/video synchronization in the clock switch process,  in general. 
+5.
+ ….
+ 
+[YANGZUOXING]:JIANGBO会在CLOCK_SWITCHING中加入这部分内容。
+ 
+Related topics
+-
+ How clock is set up in FPGA is also encouraged to be described here, so that other projects can have a template to follow after reading this document, rather than inventing something from scratch.
+ 
+[YANGZUOXING]:下一个项目的MAS中要包括FPGA上的时钟方案。
+ 
+-
+ What are the potential improvements after the 830 practice, if the corresponding designers, eg. Lv Pin, Jiangbo and Zuoxing,  ever thought about this topic?
+ 
+[YANGZUOXING]:CLKRST这个模块，到目前为止没有发现什么大问题，因此也谈不上期望的大改进。但很多模块都加上了LIMITATION AND ERRATA, 这在一定程度上记录了改进意见。
+
+9:33 2009-4-10
+VC0830, SV, clock, <TODO>任务</TODO>
+1, 今天
+1), 保证切频程序稳定性:
+(1), 解决烧映像切频死的问题;
+(2), 切240_120_120死
+2), 加入原有update_module_divider支持的模块
+2, sd bug
+3, 整理p62 VC0830 例会笔记. Shuyu lcd相关
+
+11:03 2009-4-10
+VC0830, SV, clock, 解决"9:33 2009-4-10"问题1-1)
+1, 逐一比较函数
+1), clk_pll_switch
+(1), xclkClockSwitchInfo获取方式不同, 现在是直接给指针xclkClockSwitchInfo赋值, 原来是使用get_xclk_info获取.
+(2), 切频后打出回车后, 现在比原来多打出:
+HALPrint("CLOCK SWITCH PROGRESS FAILED. the following operation point is not valid:\n");
+总结: 流程一致, 查下面的函数;
+2), clk_switch_to_xclk
+原来是
+HAL_WRITE_REG32(CLOCKRST_PLL_CTRL, reg|0x1);	 //power down pll1
+现在是
+HAL_WRITE_REG32(CLOCKRST_PLL_CTRL, reg|0x421);   //power down pll1, pll2, pll3
+现在这个是为了调试才改的, 原来就是上面的写法, 而且上面写法也更好.
+3), cfg_sdrc, 相同;
+4), 比较sdram参数. 相同. 
+至此, 与切频到12M死有关的部分都已经排查了. 
+
+2, 怀疑函数调用太多? 
+把
+	pll1_xclk_switch(pll1_freq, cpu_freq, bus_freq, vdec_freq);
+拆成两步:
+	clockSwitchInfo = clkrst_MakeClockSwitchInfo(pll1_freq, cpu_freq, bus_freq, vdec_freq);
+	clk_pll_switch(clockSwitchInfo);
+仍然不行.
+
+3, 会不会是其它模块的影响?
+sdram配置脚本都是新脚本
+    项目        clkrst              结果
+1), 今天        zhangjian04021140   fail
+2), 0401        今天                fail
+
+4, 这样的结果, 意外.
+先查case 2).
+sdram配置脚本都是旧脚本
+    项目        clkrst              结果
+1), 今天        今天                pass
+2), 0401        今天                pass
+
+5, 说明是sdram配置脚本问题.
+1), 先保存代码, 为了以防万一, 把VC0830和VC0830_bootloader(rom bootloader)都打包保存了. 
+旧工程+旧clkrst代码:
+20090401_clkrst_project+zhangjian200904021140clkswitch_including_vc0830+rom_bootloader.rar
+新工程+新clkrst代码:
+20090401_clkrst_project+zhangjian200904021140clkswitch_including_vc0830+rom_bootloader.rar
+2), 脚本共四处不同:
+(1), addr_off[1]         = 0x60011004
+name: SDRC_MODE
+新: register_value[1]   = 0x00000023		//32M must changed 
+旧: register_value[1]   = 0x00000033		//32M must changed 
+差异: [6:4]CL (CAS Latency), 前者是2, 后者是3.
+sdram_config.c是2.
+(2), addr_off[4]         = 0x60011020
+name: RD_PATH_CTRL
+新: register_value[4]   = 0x00000022
+旧: register_value[4]   = 0x00000032
+差异: [6:4]Tcas, 前者是2, 后者是3.
+目前sdram_config.c用的是3, 可能有影响. 修改后死在bootloader的"Go".<TODO>继续</TODO>
+(3), addr_off[9]         = 0x60011048     //adj_2
+新: register_value[9]   = 0x00000078
+旧: register_value[9]   = 0x00000060
+sdram_config.c是0x78.
+(4), addr_off[10]         = 0x6001104c    //ADJ_3
+新: register_value[10]   = 0x000000a0
+旧: register_value[10]   = 0x00000078
+sdram_config.c是0xa.
+3), 同时修改CL(->3)和tcas(->3)后切频正常. 
+4), 虽然能跑了, 但是让人觉得费解, 详细查代码:
+(1), 原来0-60, 60-200都没有写SDRC_MODE: 
+HAL_WRITE_REG32(SDRC_MODE, sdramInfo->sdrc_mode);	//cas
+可能是原来改代码时改错了, 把SDRC_MODE贴成了紧挨着它的SDRC_RD_PATH_CTRL.
+HAL_WRITE_REG32(SDRC_RD_PATH_CTRL, sdramInfo->sdrc_rd_path_control);	//tcas
+(2), sdrc_rd_path_control在0-60,60-120都没有配成Lingming推荐值.
+改为推荐值后仍然不行. (17:58 2009-4-10)调了半天发现改的是旧sdramInfo参数, 为了以后避免类似问题, 干脆删除. 以后sdramInfo都在sdram_config_xxx.c/h中.
+5), <TODO>解决</TODO>: 暂时没有找到问题原因, 高度怀疑sdram低频参数或流程有问题. 
+暂时把CL, Tcas改为3, 并上传至服务器.
+
+16:27 2009-4-10
+VC0830, SV, sensor, <TODO>有时间看sensor原理图</TODO>
+25,22断了, 造成sensor切屏, Shuyu保存图片后, 用YUVViewer看到是sensor保存的图片由四个相同的图片组成的. 
+
+17:34 2009-4-10
+VC0830, SV, clock, clkswitch, bug
+1, 用户输入480_240_120_120, 但实际切的是960_240_120.
+发现程序中没有比较pll是否相同, 只比较了cpu,bus.
+2, 删除:
+CLKRST_NEW_MODULE_CLOCK_INFO
+CLKRST_NEW_CLK_STRUCT
+get_module_clk
+INVALID_DIV
+INVALID_DIVIER
+3, 目前支持的模块有:
+	&m_clk_per,
+	&m_clk_uart0,
+	&m_clk_sdio,
+	&m_clk_snr,
+	&m_clk_iclk,
+	&m_clk_nfc,
+	&m_clk_spi,
+	&m_clk_phy_udc,
+4, 测试:
+1), rvdebug: 测试典型频率主要外设是否工作正常.
+240_120, 288_144, 160_160, 168_168
+a,  切频到12后 data abort, 
+sdrc_rd_path_control = 0x10 -> 0x20. 正常;
+sdrc_rd_path_control = 0x22 -> 0x32. 正常
+b, 120_60_60, dataabort. 
+用0-60的sdram参数实验.fail
+c, 96_96_96, lcd,snr不能用.
+
+2), 映像, 批量测试:
+(1), cpu: 12->296, step 4, ratio 2:1, dma 10次
+120_60 fail
+(2), cpu: 144->200, step 4, ratio 1:1 dma 50次, 共测试5次. pass
+(3), cpu: 12->116, step 4, ratio 2:1, dma 10次, 共测试5次, pass
+(4), cpu: 144->280  step 4, ratio 1:1 dma 20次, fail at 第一次 276:138:138. 手动做lliautotest 100 pass.
+(5), cpu: 144->280  step 4, ratio 2:1 dma 1次, fail at 第一次 268:134
+(6), cpu: 144->260  step 4, ratio 2:1 dma 10次, fail at 第一次 256:128, 手动做lliautotest 100 pass.
+(7), 可能是切的太快了, 切频后加了0.5秒延时.
+有所好转(04110032):
+a, cpu: 144->296 step 4, ratio 2:1 dma 10次, fail at 第一次 292:146
+b, cpu: 144->292 step 4, ratio 2:1 dma 10次, fail at 第一次 288:144
+b, cpu: 144->292 step 4, ratio 2:1 dma 10次, fail at 第一次 280:140
+发现每次都死在倒数第二次, 每次都是dma测试后.
+(8), 改成1s试试(04110038):
+问题依旧.
+5, 进展;
+1), svclkinfo: 显示模块频率, pass.
+2), clksv: 手动切频
+(1), cpu 144->196 cpu:bus=1:1 step 4M: pass; 
+(2), cpu 240->288 cpu:bus=2:1 step 4M: pass
+(3), fail: 
+a, bus=60. 但116:58, 120:60, 124:62, 56:56, 64:64都pass. 怀疑是60参数有问题?
+b, cpu,bus=292:148
+3), autoswitch, 目前只支持从低到高扫描, 用户可以输入min,max,step,cpu_bus_ratio等.
+每次都是dma测试后死在倒数第二个测试点.
+<TODO>估计autoswitch的问题用rvdebug调试就能解决</TODO>
+
+16:06 2009-4-11
+VC0830, SV, clock, clkswitch, bug, 续
+解决"17:34 2009-4-10"5-3)bug
+1, 昨天已经实验, minMax切频完成后出的错. 可能是新加的对多个Itor处理的影响. 
+2, <TODO></TODO>: 加入更好支持多个Itor的代码, 给出常用Itor组合, 同时也允许用户自定义Itor组合. 
+3, <TODO></TODO>:
+1), #define MIN_PREFERED_PLL_FREQ (500) 根据databook改为(480).
+2), 加入spi0,spi1,uart0-3很容易.
+目前切频前计算clock div后设置status为TOSWITCH, 计算div后设置为SWTICHING, 切频后"update_module_divier()"设置UPTODATE. 
+SWTICHING改为SWITCHREADY更合适. 只计算不切频含义也没错.
+
+16:16 2009-4-11
+VC0830, SV, databook, clkrst
+1, 
+1), pll
+(1), VCO Frequency (Fvco) 480MHz ~ 900MHz. 
+(2), Jitter < 300ps cycle to cycle, <TODO>查实测jitter; 查jitter含义和影响</TODO>
+(3), 稳定时间:　Settling Time < 300us
+2), pmu和rtc可以使用xclk或32.768k, 在pmu_ctrl[0](pmu_clk_sel), rtc_ctrl[10](rtc_clk_sel)选择. 
+发现模块定义是有共性的, 第一个寄存器一般是ctrl(00h或04h), 第二个寄存器是ckd(04h或08h). 好像在什么地方看到过模块寄存器定义的建议, <TODO>查找这个寄存器定义规范</TODO>
+3), en_xclk
+databook说的比mas清楚很多.
+AP模式: en_xclk_reg: pmu_ctrl[1]. en_xclk由en_xclk_reg和VC0830工作模式共同决定. 只有进入sleep且en_xclk_reg=0, xclk才会关闭. 
+CP模式: xclk_disable: abi_ctrl[4]. en_xclk直接由xclk_disable控制, 注意逻辑是反的.
+<TODO>看到databook clkrst p10, 争取周一看完</TODO>
+
+9:12 2009-4-13
+VC0830, SV, clkrst, clkswitch, <TODO>今天任务</TODO>
+1, clkrst
+1), autoswitch支持min to max, max to min, 及组合.
+(1), 解决"17:34 2009-4-10"5-3)bug
+OpIt_NextOpItor中把nextItor写成了next. next是取Item的. 
+(2), ItorGroup. 
+(3), 会弹出: Marb apb bridge time out,Error Addr:80201000. 
+跟踪发现是运行update_module_divier后i++出现的. <TODO>注释了i也是一样, 恢复到原来代码尝试!!!重要</TODO>
+(4), 切频后sensor不能用, 真可能是程序的问题. 我的映像给beizhan板子烧问题同样.
+用"shuyu: me_090413_120.pak"可以.(D:\work\VC0830\SV\image\shuyu)
+(5), <转移>caijin需求: 切频时列出所有可能的vdec频率. 见"17:19 2009-4-13"
+(6), 实验:
+a, cpu: 24->196, step: 24MHz, Itor min to max to min, times: 5. dma times: 10. PASS.
+b, cpu: 168->288, step: 4MHz, Itor min to max to min, times: 5. dma times: 20. PASS.
+(7), <TODO>自动切频首先找到在MIN_PLL_FREQ和MAX_PLL_FREQ之间的解, 然后查找有无在MIN_PREFERED_PLL_FREQ-MAX_PREFERED_PLL_FREQ之间的解.
+2), svclkinfo改为读取寄存器和读取当前值. 
+(8), 解决"20:47 2009-4-13". 需要gating, ungating时根据module freq是否INVALID_FREQ, INVALID_DIV分别操作. 
+(1), pll频率不正确.
+读取寄存器时, 设置为OUTOFDATE, clock 模块的OUTOFDATE表示需要从寄存器更新数据到TClock结构体.
+(2), 加入cpu,bus,vdec
+2, sd/mmc初步结论. 
+
+16:06 2009-4-13
+VC0830, SV, clkrst, debug板子
+beizhan的板子烧入影响后死在Go处. 问题原因是memory板不好, 更好篮sdram板问题解决. 
+注: 目前用的sdram芯片都是samsung的K4s561632e(32M)
+1, 先替换cpu板和memory板: 替换后无问题.
+2, 只替换memory板(蓝sdram板). 通过. 说明是memory板问题. 
+
+17:16 2009-4-13
+VC0830, SV, clkrst, bug问题, <TODO>整理</TODO>
+1, 目前60M, 164M切频问题
+caijin, 176封装(#5+#3)切到164没有死.
+2, autoswitch 256MHzDMA后死;
+3, 切频中出现marb apb time out 0x60201000.
+
+17:19 2009-4-13
+VC0830, SV, vdec, support, caijin需求: clkrst切频时列出所有vdec频率, 重点是vdec比bus高30%的情况. 
+1, 目的: 
+实验vdec比bus快30%左右时能否正常工作. 
+
+2, 具体情况见邮件: 
+Wally:
+Yajing and Fengxiang,
+刚才Zuoxing告诉我，目前830 DDR的时钟调到166MHz比较困难，目前只能到133MHz，由于我们以前VDEC设计中我们缺省认为HCLK是要比VCLK快的，这样就会导致VCLK也上不去，因而解码速度也比较慢。希望我们跑一两个VCLK比HCLK快的case，但是也不要太快，比如10%, 20%, 30%等等，看看我们当时在设计时是否考虑到这方面的问题，重点看看FIFO, control register synchronization, interrupt synchronization等。谢谢。
+
+Zhang Ya Jing:
+Hi.all
+我ｒｕｎ了几个ｃａｓｅ，跑完５帧，没有问题，
+Case1
+Vclk=105M      hclk=88M       vclk比hclk 快了近20%
+Case2
+Vclk=173M      hclk=133M       vclk比hclk 快了近30%
+Case3
+Vclk=133M      hclk=88M       vclk比hclk 快了近50%
+所以，针对“重点看看FIFO, control register synchronization, interrupt synchronization等”，这几个设计应该是没问题的。不过我都ｒｕｎ的一个码流，我可以再多跑几个码流。
+
+Yang Zuo Xing:
+不错呀。
+HI, FENGXIANG,
+在设计上能保证这一点吗？
+HI, CAIJIN,
+能否在SV上试一下YAJING仿的这三种频率？
+
+Ma Feng Xiang:
+VDEC写数据时都有握手机制，因此VDEC快于BUS是没有问题的
+(输出中断的同步也没问题？)这里也做了异步处理,没有问题。
+
+Caijin: 200904014
+今天在176封装下，跑了如下几种case
+cpu     bus    vdec       over rate
+264    88      132        50.0%
+192    96     128        33.3%
+120     120    160        33.3%
+80     80     106.7      33.3%
+每种case下，都将D1以下的rv test cases（共20个）跑了一遍，正常解码，没有问题。
+
+18:07 2009-4-13
+VC0830, SV, clkrst, vdec, 测试vdec比bus高的情况
+完成"17:19 2009-4-13"需求
+1, 加入手动切频命令;
+(1), 删除: CLKRST_ALGO_CPU2PLL
+2, 加入autoswtich命令, 现有autoswtich只实现了bus:vdec是1:1的情况. 
+
+19:27 2009-4-13
+VC0830, SV, 频率与IR-Drop, VC0830 CPU最高频率
+附件: D:\work\VC0830\SV\IC\vc0830_PrimeRail_analysis_0812SP1_090412.xls
+Yangzuoxing今日邮件: 
+题目: about cpu frequency issue of 830
+根据WANGJUN的结果，ARM上的IR DROP,如下表所示：
+Max IR DROP                               LQFP176                             BGA282
+On VDD(mV)                                 190.9                                    126.7
+On VSS(mV)                                 40.7                                      40.0
+Sum(mV)                                      231.6                                    166.7
+Sum/1.2V                                      19.3%                                   13.8%
+该数据基本能解释我们以前的困惑：
+1) BGA282与LQFP176的频率差别
+根据以前的测试结果，BGA282,LQFP176的平均频率分别为：301MHz,317MHz.频率相差5.3%.
+而电压与频率的系数为：24.4Mz/100mV, 如果以301MHZ和1.2V为标准，那就是电压提高10%，频率提高9.7%。基本上可以认为两者提高的比例系数为1.
+从上表可知，两种封装的IR DROP之差为5.5%，与5.3%的频率之差是非常接近的。
+2) 830 LQFP176与SOCLE TEST CHIP的频率差别
+SOCLE TEST CHIP的平均频率为345MHz,与830 LQFP176的差别为：（345-301）/301=14.6%
+而SOCLE TEST CHIP的IR DROP大概为5%，与830 LQFP176的差别为：19.3%-5%=14.3%
+这个数据又是如此之接近，以至于我都有点怀疑这些数据是不是造出来的。
+基于上面的分析，个人认为830 CPU 频率的问题应该基本算是找到了：片内的IR DROP偏大。
+感谢WANGJUN数个礼拜的辛勤工作，感谢众多为DEBUG这个问题作为出努力的同事们！
+
+bamvor: 从图上看, 176的vss ir-drop是一颗红心, 这么烂的vss怎么能不出问题呢?
+<TODO></TODO>: 希望知道VC0830后端的标准. 为什么后端做的这么差呢? 
+"SOCLE TEST CHIP"频率高的主要原因估计是后端做的好. 我本来就很奇怪, VC0830用这么少的电源pin(<TODO>电源pad是多少呢</TODO>), 感觉就挺悬的. 
+
+20:47 2009-4-13
+VC0830, SV, clkrst, udc, 如果phy不是24M需要gate phy.
+1, 自"Yangzuoxing""about usb phy clk issue"邮件. 
+前两天在测试功耗时，发现了一个怪异的现象，步骤如下：
+1）   ROM BOOT,进入UART CONSOLE，此时BUS频率为120MHz, 测得此时USB_1.2V的电流为3.3mA。
+2）   切频到168MHZ, USB_1.2V的电流骤升至12mA。GATE USB_PHY_CLK,该值没有变化
+3）   从新RESET,ROM BOOT,先GATE USB_PHY_CLK,USB_1.2V电流变为0.46mA, 然后切到168MHz, 该值不变
+
+我们怀疑，切频过程中导致USB_PHY_CLK频率发生变化，而该变化导致PHY内的PLL工作出现异常。为了证明这个猜想，我们作了如下几个实验：
+TEST         USB_PHY_CLK(MHz)                 Current for USB_1.2V(mA)
+1                24                                                             3.282
+2                40                                                             6.217
+3                24                                                             3.281
+4                60                                                             11.8
+5                24                                                             11.8
+实验顺序是1 -> 2 -> 3 -> 4 -> 5
+可见当USB_PHY_CLK为60MHZ后，USB_1.2V的电流就回不来了。
+ 
+由这个实验，我们认为，USB_PHY_CLK的频率设为任意值，为了安全起见，请将USB_PHY_CLK设为0 或24MHz.
+在切频之前，最好GATE USB_PHY_CLK，切频后在确认USB_PHY_CLK=24MHZ后，再UNGATE USB_PHY_CLK.
+
+2, (9:14 2009-4-14)
+Huanyongguang 2009年4月14日邮件
+For 830’s phy, 24M is for right function, but for any input frequency,
+the output frequency is the input frequency multiply 30/24
+"9:14 2009-4-14"
+
+3, 修改代码
+如果通过, 有空把pll1_xclk_switch改为make_clockSwitchInfo不同名的使用SystemInfo的函数. 
+
+4, 
+case3: vclk: 133, hclk: 88
+测试case: cpu: 264, hclk 88, vclk 132.
+
+5, <TODO>4月14日计划</TODO>
+1), <DONE>udc, 得不到24M时, gating
+2), udc得不到24M时, freq不是0. 需要改为状态是disable时不能读寄存器.
+3), 查pll3频率是否正确
+4), autoswitch切到256死, 难道还是需要延时? 
+代码: 20090414_clkrst.rar
+
+9:25 2009-4-14
+VC0830, SV, clkrst, clkswitch, <TODO>任务</TODO>
+1, 
+1), vdec加入不是1:1的情况
+2), caijin也发现是切频后再open有问题. 如果先open再切频没问题.
+可能是切频影响了模块初始化?
+(1), iclk, i2c(per)都配置了.
+(2), <TODO>继续</TODO>
+
+2, 
+1), run_rv8.rm, run_rv9.rm
+120_120_144, fail
+2), D:\work\VC0830\SV\vdec\Caijin Vdec测试文件
+960_120_120_160, PASS
+
+14:57 2009-4-14
+VC0830, SV, Storage, sd/mmc, 解决zhanglu测试问题
+1, "16:52 2009-4-7", "13:58 2009-4-8"
+VC0830, SV, udc
+zhanglu测试udc时有时选择的sd会弹出nand优盘, sd/mmc不可用时也会弹出不是sd/mmc的优盘(怀疑是nand优盘). <TODO>关注</TODO>
+2, "20:45 2009-4-7"2, sd/mmc兼容性问题.
+1), transcend, 8G, SDHC, cmp fail
+FAT  SD:/>mount
+[FAT_MODULE]->do_fat_mount()
+Please select drv type(sdcard/nandflash)/[sdcard]
+Response start time out: 55.
+Response start time out: 42.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 5.
+Mount disk  success!
+[FAT_MODULE]<-do_fat_mount() with 1
+FAT  SD:/>
+FAT  SD:/>ls
+a                      9432063
+[FAT_MODULE]<-do_fat_ls() with 1
+FAT  SD:/>cp a b
+[FAT_MODULE]->do_fat_cp()
+the file a has been copy as b!
+[FAT_MODULE]<-do_fat_cp() with 1
+FAT  SD:/>ls
+a                      9432063
+b                      9432063
+[FAT_MODULE]<-do_fat_ls() with 1
+FAT  SD:/>cmp a b
+[FAT_MODULE]->do_fat_cmp()
+They have 900 chars different!!
+FAT  SD:/>
+
+2), transcend miniSD, pass
+FAT  SD:/>mount
+[FAT_MODULE]->do_fat_mount()
+Please select drv type(sdcard/nandflash)/[sdcard]
+Response start time out: 55.
+Response start time out: 42.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 5.
+Response start time out: 8.
+Response start time out: 8.
+Mount disk  success!
+[FAT_MODULE]<-do_fat_mount() with 1
+FAT  SD:/>
+FAT  SD:/>ls
+a                      9432063
+[FAT_MODULE]<-do_fat_ls() with 1
+FAT  SD:/>cp a b
+[FAT_MODULE]->do_fat_cp()
+the file a has been copy as b!
+[FAT_MODULE]<-do_fat_cp() with 1
+FAT  SD:/>cmp a b
+[FAT_MODULE]->do_fat_cmp()
+They are the same!!
+FAT  SD:/>
+
+3, PNY, 1G MMC, PASS
+udc下复制到优盘, 再从优盘复制一个备份到优盘. 用读卡器在PC上比较PASS.
+
+4, zhanglu上次测试通过的一张512M的三星mmc卡. 
+另外上次zhanglu未测试的kingmax MMC mobile 512M, Apacer MMC mobile 512M都PASS.
+呵呵, 都是512M的. 
+
+5, 单步调试
+1), 会不会和SetDefaultTimeout有关?
+2), 波形占空比很差. 估计是这个原因
+(1), 初始化时400k时钟占空比很差. 
+(2), 顺便修改GetSdioInputClk, 从g_ModuleClock读取sdio clk.
+
+11:19 2009-4-15
+VC0830, SV, clkrst, clkswitch, sdio, 解决大量mmc卡初始化不过第二位问题
+0, 总结: 有两个方法
+1), clk不反向. device_sel[4]=1, 原来是0.
+2), 初始化时尽量设置sd input clock为最小clock.
+
+1, <转移>//目前算法写的不好, 只支持从2-80的diVal. 
+static UINT32 get_module_prefered_div(PTClock clock)
+2, 
+//使用clkrst_app_public.h代替
+#include "../../clkrst/app/module_clock_info.h"
+
+3, 需要改的地方不少, 
+clkrst_init中, make_clksource_TClock没有正确配置pll
+需要先设置current system info
+
+4, 测试
+sd close open, fat mount, udc下复制一个9M文件, 用读卡器读出(或直接在udc优盘下)用ultraedit比较是否相同. 测试用的文件"D:\work\VC0830\SV\sdio\0414测试用文件"
+原来6个没过的SD卡都PASS, 原来PASS的samsung 512M MMC mobile也pass. miniSD, PASS.
+新加入的5个MMC mobile(apacer 512M, kingmax 512, kingston 1GB, pny 512, SAMSUNG 1G)也PASS. 只是SAMSUNG 1G开始4次都在sd初始化或fat mount时出错. 后来正常. 
+8G SDHC. udc init后能在PC下看到优盘, 但无法打开. 先提示请插入磁盘, 后来就打不开, 终端下是:
+[UDC]ERROR:reset
+[UDC]ERROR:reset
+[UDC]MESSAGE:Mass Cfg
+[UDC]ERROR:reset
+[UDC]ERROR:reset
+[UDC]MESSAGE:Mass Cfg
+代码: "20090415_1525_skip_sdio_divider_bug.rar"
+
+5, 
+clock_cnt   clock   高      低
+0           532     266     266
+4           2932    2400    266
+只有高电平被分频.
+
+6, 问IC, 发现设计如此. 
+SD协议规定最小时间是20ns, 当sd input clock是24M时, 时间是22ns, 符合要求但需要修改: sdiodrv.c: g_sdClkEdge = 1(device_sel[4], clk不反向, 0:反向), mmc卡都可以初始化.
+这说明mmc卡是下降沿采数.
+
+9:43 2009-4-16
+VC0830, SV, <TODO>今日计划</TODO>
+1, 整理一个月内所有待做;
+2, 整理近一个月的标有后续标志邮件.
+3, 整理所有vimicro待做和邮件.
+
+10:01 2009-4-16
+VC0830, SV, <TODO>目前所有的任务</TODO>
+<TODO>继续, 已整理至"14:57 2009-4-14", 先需要完成支持sd前两个工作</TODO>
+根据"11:19 2009-4-15", 15:30 2009-4-15"(已删除), "9:43 2009-4-16"(已删除)整理. 
+1, clkrst
+0), 从现在开始新加入代码要符合命名要求, 保证层次清晰.
+1), 切到60MHz死. (9:39 2009-4-24)与板子有关"9:39 2009-4-24"end
+2), 512info设为CL, Tcas=3, 切频到xclk死
+3), pll1->pll2->pll1
+4), 切频后I2C频率变化造成snr不能用.
+5), svclkinfo的pll2, pll3频率可能不正确;
+6), pll wait 时间不够. 按bus clk计算, pll wait clk 在bus=168M时必定不够300us, 理论上pll不稳定, 这时切频可能出错. 现在是pll->xclk->pll, 不会涉及这个问题. 需要先完成切频到pll2.
+(1), 大量测试pll 168及附近切频. 100次.
+(2), 故意pll wait配低, 看有无问题. 
+7), set freq要支持round. 因为设置sd为50M时, 可能只能得到48M,
+8), 有空可以写自动计算divReg的程序, 有可能需要.
+目前算法写的不好, get_module_prefered_div只支持从2-80的diVal. 对于大于80的情况, 只能是加入到g_m_div_array末尾. 但是g_m_div_max, M_DIV_MAX仍是80, 这样get_module_prefered_div只找到80. 一般来说divider是80是足够的.
+9), 通过strap pin读取xclk
+10), 目前TClockSwitchInfo和TClock都只支持__SV__. 如果需要回到FPGA版本, clkrst及使用这些结构体的函数可能编译不过, 临时的解决办法是如果除了clkrst以外的模块使用这些结构体, 都用__SV__保护.
+
+2, sdio
+(1), <DONE>zhanglu报的8G问题很可能是底层驱动只能访问4G空间造成的, 等Zhanglu测试结果.
+完成后更新"14:57 2009-4-14".
+(2), <DONE>支持OS: 用信号量等读写完成.
+(3), 测试282封装sd与nand, lcd不share能否使用.
+(4), 需要加入switch cmd(cmd), 这样才能切频到高速模式.
+CMD6_SWITCH_FUNC是类似与read single block的命令, 加入read single block like命令.
+(5), 如果sd卡支持高速模式, 利用CMD6_SWITCH_FUNC切换到高速模式. 可能需要修改的地方: MemPreprocess和m_clk_sdio.
+(6), <TODO>阅读</TODO>: "SD CARD的硬件结构和工作原理.doc"
+
+3, video
+
+4, 已解决需要整理到文档
+1), clkrst
+2) sdio
+(1), "11:19 2009-4-15"VC0830, SV, clkrst, clkswitch, sdio, 解决大量mmc卡初始化不过第二位问题
+
+5, 没法重现的问题:
+1), clkrst:
+前天切频后, updateModuleDivider时出现marb apb time out at 0x60201000.
+大约出现了一天. 当时好像其它人切频也如此(Shuyu?). 跟踪发现是i++的问题, 注释后, 仍然有, 估计是i++后面的clk_pp++造成的.
+昨天下午调sdio问题时又没这个问题了.
+3), video:
+前几天我的板子lcd, snr突然不能用, (240_120)下启动就不能用. 用shuyu的pak映像就问题, 今天想解决这个问题时, 发现自己编译的也能用了.
+
+17:56 2009-4-16
+VC0830, storage, sdio, sd/mmc, mmc的最大速度
+除了MMCA 20MHz, MMCplus和MMC mobile都支持26MHz, 可选52MHz
+MMCplus is defined as normal size R/W or ROM cards that supports 2.7-3.6V operation, x1/x4/x8 bus
+widths, minimum of 2.4MB/s read/write performance and 26MHz (52MHz optional)
+• MMCmobile is defined as reduced size R/W or ROM card that supports 1.70-1.95V and 2.7-3.6V operations,
+x1/x4/x8 bus widths, minimum of 2.4MB/s read/write performance and 26MHz (52MHz optional)
+Both implementations are backwards compatible with MMCA System Specification versions 3.xx in max20MHz clock frequency mode.
+
+18:05 2009-4-16
+项目, 工具, rvds(rvdebug)
+rvdebug启动时提示找不到rvd_ide license. 
+查license server能否正常start, stop, reread license file. 并查看license server的MAC地址是否正确. 如果不正确, 可能是网卡被关, 或者license本身配置错误. 
+
+20:20 2009-4-16
+VC0830, SV, sdio, 改为8G后还是有问题.
+1, 现在是mount, ls对. 写不正确. 而且出现undefined instruction或data abort.
+2, (0:17 2009-4-17)可能写和读一样, buf+=ret_len, 应改为buf+=ret_len<<9.
+如果修改后通过, 找Zhanglu拿8G卡. 以后要每天备份代码.
+3, (16:26 2009-4-17)
+1), fat下显示Fedora-10-i386-DVD.iso大小不正确:  -632393728. 应该是
+3.41 GB (3,662,573,568 字节). 需要改为无符号32位或64位整数.
+2), 问题都出在改代码时blk,byte的addr,len赋值时单位搞错了. 
+现在kingmax, Adata的8G sd卡fat下和udc下都pass. transcend有问题.
+测试流程: sd卡已用容量大于4G, 在fat, udc下分别复制一个200M左右的文件, 复制后, 用ultraedit与原始文件比较. 
+打出sdio中读写地址和len, 发现是反复读取下列数据. 
+[SDIO]DBD: R: addr len
+[SDIO]DBD: R: 0 8
+[SDIO]DBD: R: 0 1
+[SDIO]DBD: R: 40 4
+[SDIO]DBD: R: 0 8
+[SDIO]DBD: R: 20 8
+....
+[SDIO]DBD: R: 3e8 8
+[SDIO]DBD: R: 3f0 8
+[SDIO]DBD: R: 3f8 8
+[SDIO]DBD: R: 0 8
+[SDIO]DBD: R: 0 1
+[SDIO]DBD: R: 40 4
+[SDIO]DBD: R: 0 8
+[SDIO]DBD: R: 20 8
+这个卡格式化时显示容量是6.8G.
+
+这个问题已经转给了Sunguangyue.(Transcend创志, SDHC 8G, class6. guangyue一直没有时间查)
+#zhangjian.add.for support SDHC(>4G).temporaly, delete after test pass
+#SDIO_SDHC修改只针对sd_xxx函数, 对于不使用的mmc_xxx函数和注释的代码都没有修改. 
+#修改后, app层保留读写blk和读写byte的函数. test层根据需要调用blk或byte. 
+#prt层只提供blk函数, 删除byte函数.
+CCFLAGS += -DSDIO_SDHC
+同时加入了"do_sdio_enable_debug"命令, 定义SDIO_DEBUG时, 通过这个函数开关debub信息, 默认关闭. 目前debug信息用于观察是否访问了超过4G的sd地址.
+
+4, 关issue, VC0830 0007541, 添加注释:
+所有mobile MMC由于setup violation造成初始化失败, 把device_sel[4](sd_clk_edge_sel)从1设为0使输出的clk不再反转, 问题解决. 
+transcend SD 8G卡怀疑是卡损坏, windows下格式化容量只有6.5G. 测试Adata和Kingmax 8G sd卡, udc/fat写读写大于4G地址都pass 
+其它MMC, SD卡问题未重现. fat/udc下皆可以正常使用.
+
+18:34 2009-4-17
+VC0830, clkrst, clkswitch
+实验lingming新参数, 282和176的电阻不同, 参数要区分.
+1, autoswitch到72会死, 检查后发现是vdec配成288造成的, 手切72_72_72正常.
+168也是, 切成168_168_168时正确, 168_168_252死.
+2, 	//切频到1008_168_168_168死, 所以修改最高pll为1000.
+	#define MAX_PLL_FREQ (1000)
+3, <TODO></TODO>
+//为了保险, 这里应该限制pll, cpu, bus, vdec频率, 目前仅仅判断pll是否不大于MAX_PLL_FREQ.
+//这不够. 另外获得bus, vdec的算法是查找, 效率低. 其实可以直接根据ratio计算. 
+static PTSystemInfo SysInfo_GetOnePllCpuBusFreq(UINT32 cpu, condFunc busCond,
+4, 
+代码: 20090417_1950_clkrst_fix_autoswitch_bug_bad_vdec_freq.rar
+log: "log_20090417162915.log", 176封装从43797行开始. 282封装从46759
+282封装下168M切频后dma 10次fail.
+
+10:19 2009-4-20
+VC0830, SV, <TODO>本周任务</TODO>
+1, sd卡
+1), zhanglu发信, 测试SDHC
+Sd卡添加一个测试项: 访问大于4G的sd卡地址. 
+测试流程: 
+保证8G sd卡已用容量大于4G, 在udc下复制一个200M左右的文件, 复制后, 用读卡器读出后用ultraedit与原始文件比较. 一定要用读卡器读, 这样才能知道读写数据是否正常.
+2), 支持OS;
+3), 整理sd代码
+_Sd_ReadMultSector的下面代码可能用于清cache, 可能对任务4)有帮助.
+//#ifdef CACHE
+//	//检查是否打开了dcache	
+//	HAL_DCACHE_IS_ENABLED(dcacheState);
+//	if(dcacheState)
+//	{
+//		//使用这块内存之前，将目的地址invalidate	
+//		_cpu_dcache_invalidate_range((int)data,cnt*512);
+//	}
+//#endif
+4), 不用memcpy;
+
+2, 切频
+1), 测试168M sdram参数
+用Shuyu 282CPU板:
+Marb apb bridge time out,Error Addr:80201000
+用我的板子也如此.
+编译udc不论是否使用lingming参数都没有marb apb time out.
+编译me_sv_bin就有.
+
+2), 支持切频到xclk
+(1), bypass pll1, 配置模块clk;
+(2), svclkinfo根据pll 是否power down显示pll状态. 根据clocksource正确计算频率.
+为了支持这个需求, 加入set_parent函数. 
+目前svclkinfo在autoswitch下显示不正确. 手动切频后正确. 似乎svclkinfo写的不严谨. 
+
+3), vdec不是1:1时, 配3, 没有写入? 自caijin
+
+4), 切频后sd卡不能重新mount
+
+5), 设置i2c clk
+(1), <TODO>delay起什么作用</TODO>? g_i2c_drv_data.delay = 0x10000; 好像各模块还会自己配置. 不用管.
+(2), 
+//zhangjian: 为了符合24M 400k下speed_cfg=9, 做的修改. 可能不必要, 与boxue讨论
+if(speed_sel == I2C_SPEED_400K){
+    speed_cfg += 2;
+}
+(3), i2c可以支持各种频率, 重写i2c_drv_init及i2c TClock. 不使用TClock时使用原有i2c_drv_init.
+
+6), lidongliang测试时, 切频到12M死. 检查发现是gating padc clk后,切频的. 而我的代码配uart波特率时也配置了padc, 其实可以不配置的: 
+//尽量少修改无关寄存器: 注释了padc相关. 否则如果padc clk gating, 运行到这里会死.
+int Uart_Init4Clkrst(int channel, int baud, int uartcontrol, int divider, int module_clk)
+bamvor: 如果是uart正常等待用户输入, 应该是停在uart_rx_char的
+while ( (!(Read_reg(base + ULSR) & 0x00000008))&&(UART_POLL_REGISTER==channelFlag ));	
+如果没有停在这里, 应该怀疑是uart配置(包括padc)有问题. 
+
+5), 支持720p测试
+
+16:30 2009-4-20
+VC0830, SV, sdio, zhanglu mmc bug
+1, 给zhanglu的信
+代码已修改, zhenglu正在测.
+估计还是由于初始化时timing不好导致的,换个方法. 
+在sys.h定义了” SV_FIX_MMC_INIT_FAIL”宏(默认打开), 这个宏打开时, sd/mmc卡初始化时会设置sd input clk为最低频率, 例如pll是480M时, 设置sd input clk是1.875M, 这样timing容易满足, 
+这个宏打开时, g_sdClkEdge = 0或1应该都可以初始化成功, 目前g_sdClkEdge = 0. 
+具体的说: 
+1, mmc卡初始化失败的原因是, sd模块内部count分频时只对高电平分频,  所以分频后占空比不对.  原来在820上sd clk低所以没有问题. 
+2, 之前zhanglu测试时的解决办法时设置g_sdClkEdge = 1使clk不反向(sd device_sel[4]). 这样可以改善timing. 在我的板子上这样所有mmc卡都可用. 
+2, 发现有时udc中mmc init fail, 但是进入sd模块后init成功, 这时挂udc, 可以正确挂载. 如果sd init fail udc会怎么处理? 会不会两个初始化流程有区别? 
+<TODO>如果是这样, 发信</TODO>
+
+10:05 2009-4-21
+VC0830, SV, <TODO>clkrst, clkswitch</TODO>
+1, 修clkswitch bug
+0), Uart_Init4Clkrst写写58时没有mask. 清掉了phy
+1), get_sys_i2c_div有问题.
+2), marb apb timeout.
+(1), i2c_drv_init的i2c_dev_set_ctrl_en会产生marb apb timeout.
+不用这个后,仍然产生2个marb apb timeout.
+经查是"i2c_dev_set_ctrl_scl5f"打出的.
+(2), timer 一个.
+3), 没有选择i2c时, 编译过不了. 于是把所有和module_clock_info.c中与i2c有关的都用"#ifdef I2C"包围. 其它模块也应如此. 支持其它模块没有涉及到clkrst以外的函数, 所以未报错. TIMER是因为必须要编译, 所以也不会报错.
+4), 目前代码:
+zhangjian clkrst:
+1, add i2c timer to g_Clock, g_ModuleClock
+2, support vdec clk high:low not 1:1
+3, fix some bug in clkswitch
+
+2, 
+1), 加入vdec:bus是3:2, 4:3的autoswitch.
+3, 
+1), TClock, 的get/set div/freq有点混乱, review一下. 
+2), 删除了CLKRST_SWITCH_ITERATOR
+3), 把systemInfo, sdram, ddr, 等移动到driver层
+4), TClock加入print_freq.
+目前是在clkrst_PrintModuleClk中根据频率大小print
+
+16:39 2009-4-21
+<TODO>今日任务</TODO>
+测试282封装下, sd卡与nand不share时能否正常公族.
+
+18:09 2009-4-21
+VC0830, SV, vdec, me测试, <TODO>关注</TODO>
+152频率vdec性能好, 可能与不同频率下iclk配置不同有关. 
+
+19:25 2009-4-21
+1, <TODO>加入2:3, 3:4, 1:1, 4:3, 3:2</TODO>
+2, sdram参数:
+1), rvd脚本或512info中CL=2, 动态切频切到xclk死. 
+2), 切到60MHz死;
+3, 改iclk.
+(1), 整理代码
+(2), 注释: 
+int Uart_base_set_baudrate_with_divider(int channel, int divider)
+	//zhangjian: 如果不写这两个寄存器, configure baud时出错.
+	HAL_WRITE_UINT32_BITVAL(CLOCKRST_CKD_EN_CTRL, 6, 7, 3);
+	HAL_WRITE_UINT32_BITVAL(CLOCKRST_M_CLK_GT_CTRL, 5, 8, 0);
+4, 超频后切频测试
+1), 132,等很多昨天caijin可以跑的频率有问题.
+caijin用不超频的电源板也不行, 说明是代码问题. 
+把"update_sub_module_divier(clockSwitchInfo);"放到"restore_clk_m_gating_status(clockSwitchInfo);"前面就没事, 放到后面会死. 
+目前只有172 dma 100 fail(出错未死)
+3), 
+vdec_sv_test_clkswitch_1443_gate_sub_module_before_set_div.pak
+
+5, 只编译timer, run后uart打出乱码. 
+
+6, sd问题. OS下写入文件失败:
+caijin今日邮件: 有时间看看sdiodrv,在os机制下，写文件有问题
+
+7, timer: 可用时, 总是0Hz. 而且必现"Marb apb bridge time out,Error Addr:80201000."
+
+8, 现在切到60MHz无问题.
+
+9, 如果停在:
+void uart_tx_char(int channel, char cc)	
+
+		while ( !(Read_reg(base + ULSR) & 0x00000020) );	
+一般是uart配置有问题. 
+
+10, timer需要不gating时修改. 
+
+11, 目前timer正确. autoswitch有bug.
+明天重点用autoswitch扫描.
+
+12, <TODO>总结, 经验</TODO>: 切频"死"的几种可能:
+1), 死在pll switch后: 不论当时clksource是xclk还是pll, 一般都是这个clksourcesdrc配置有问题造成的.
+2), 死在print语句后, uart_tx_char函数中, 说明uart配置有问题, 造成print语句出错. 
+
+11:31 2009-4-23
+VC0830, SV, clkrst, 切频, timer不准
+1, Param错误, 总是马马虎虎
+昨天min不正常的等于0以及"vdec bus ratio: [CLKRST_MODULE]ERROR:"-*1" Unkown input type"原因:
+arguments_vdecBus[0].type = &vdecBusRatioI_input;
+写成
+arguments[0].type = &vdecBusRatioI_input;
+所以arguments_vdecBus[0]没有配置. 
+
+2, 今天用73 176cpu板子测试autoswtich和timer:
+1), 切死: 
+(1), 60M
+(2), 120M: auto有时死, 手动一般pass. 手动切频后dma fail: 5/1000. 120M参数不好?
+(3), 124M: auto死(992_124_124_124), 手动pass. dma 1000死在0次之后. 
+手动(pll=744), dma fail = 4/1000, 手动(pll=496), dma fail 1/1000. <TODO>确定: pll1在480-900范围内, 越低越稳定么, 需要做大量实验才知道</TODO>
+2), per, timer不是整数MHz的有, (pll_cpu_bus_vdec_per)
+(1), 28: 224_28_28_28_22.4
+224 = 2 * 2 * 2 * 2 * 2 * 7, 应该可以用244/14=16. 为什么没有算出来? 
+发现是算法有问题, 只是parnetFreq%divVal, 应该是(parnetFreq/divVal)%MHZ, 这样才能保证是整数MHZ. 修改后, 大部分问题解决. 
+(2), cpu是4的倍数时, 
+a, 164分不出. 
+164 = 2 * 2 * 41. 
+164/41=4不行: 41是质数.
+164/82=2 <= 82=2*41 <= 41 - 2 = 39. per第一级是4位, 最大是15. 15+15=30. 所以不行. 
+b, 148, 172也不行.
+148 = 2 * 2 * 37
+172 = 2 * 2 * 43
+(3), 123: per是, timer配置正确, 但svclkinfo计算的timer频率不正确.
+(4), 2:1
+244, 268, 284, 292, 296, 316, 
+
+3, "15:17 2009-4-23"
+1), 先修改TIMER_GET_NOW_TIME()和HALGetNowTime()宏. 如果timerbase不是1us, 进行跳转.
+怎么发现240_120下, timer 1分钟慢2-3s呢? 
+切频, 下面120都是切频后的120.
+148: 15:26:05. 3分钟. 15:29:00, 快5s
+120: 15:29:35. 3分钟. 15:32:35, 准.
+148: 15:33:15. 3分钟. 15:36:10, 快5s
+搞了半天, 是我相反了. 原来是cur = cur * scale. 
+scale = actualPerFreq / ( timerfreq * timerDivVal )
+应该是cur = cur / scale. 因为scale表示
+重新修改, 显示timer1 count, 下面的120都是切频后的120.
+148: 16:45:15. 3分钟. 16:48:12.
+148: 16:48:35. 3分钟. 16:51:33
+no scale:
+148: 18:00:35, 10分钟, 18:10:26
+scale: 
+148: 18:16:50, 10分钟, 18:26:50, 准确.
+244_122: 19:47:00, 3分钟, 19:50:00, 准确. 
+
+2), 为了概念清楚, 并于mas一致, 使用timerbaseT, (单位us, 即1/scale). timer1计数*T就是实际us数. 
+
+4, 在zhanglu底板+CPU8#板子, 如果直接切288_144会死. 如果从272_136逐步上升确可以. 
+为什么呢? <TODO>看原来代码有无问题, 重要!!!</TODO>
+
+5, 代码: 
+zhangjian clkrst, timer
+定义TIMER_SCALE_AT_GET_NOW_TIME. 有效时, 如果切频时发现timerbase不是1us, 计算timerbaseT(unit: us). 调用HALGetNowTime()和TIMER_GET_NOW_TIME()宏时, 用timer1count*timerbaseT, 得到实际的us数.
+为了便于测试在timer_test.c中加入了delayus命令. 
+
+17:52 2009-4-23
+VC0830, SV, uart, 串口
+今天确实很晕了, 和boxue换板子时, 把uart线插反了.
+不过也再次证明dragon有bug, 在某些机器上用dragon看不到串口输出, 用其它串口工具例如putty, 先做些串口操作, 再关闭putty打开dragon就行了. 很奇怪. 
+郁闷的一天:(
+
+20:36 2009-4-23
+VC0830, SV, clkrst, 改进svclkinfo, 测试autoswtich
+1,  改进svclkinfo:
+svclkinfo中(即OUTOFSWITCH中)如果频率溢出, 仅仅提示, 不设置模块为UNUSABLE. 
+但切频时模块频率溢出, 关模块. 
+
+2, 测试autoswitch, 首先测试autoswitch代码本身正确性, 由于autoswitch引入的不稳定, 暂时跳过. 
+image: 2212_timer_sv_176_autoswitch_print_vdec_bus_ratio.pak.
+1), 使用升压后的TI电源板, 
+a, cpu:bus:vdec=2:1:1, cpu=24->292, step=4M, dmaTimes=10, 共5次. pass.
+b, cpu:bus:vdec=2:2:3, cpu=12->168, step=4M, dmaTimes=10, 共5次. pass.
+
+22:02 2009-4-23
+VC0830, SV, clkrst, <TODO>ddr参数</TODO>
+1, 经过比较,pcddr与sdram的sdrc_cfg不同. 其余不同频段不同的点都与sdram相同. 
+在TClockSwitchInfo中加入memory type, 用不同位表示类别(sdram,pcddr,mobileddr), 厂商和容量. 都是一组参数一个文件. 文件名标出厂商, 容量, 类别等等. 
+2, 明天上午用1小时写完代码. 争取上午60-120可切. 
+
+9:38 2009-4-24
+<TODO></TODO>
+1, ddr"22:02 2009-4-23"
+2, "10:19 2009-4-20"
+3, "10:01 2009-4-16"
+4, 128封装下sd卡:
+光跃要周一要在128封装下使用video功能，蔡进,备战帮忙试一下看可行吗。
+如果哪个相关模块功能过不了，到时候相关人士处理一下。
+128封装没有JTAG，只能使用bootloader下载bin。内存只有16M。
+在编译选项里面加上 -sdram16，以生成16M memsize 的bin。
+build  -m=timer,clkrst,dmac,cache -sdram4driver -sv -sdram -sdram16
+打包的时候使用bootloader_sdram16_120M_16Msize 文件进行打包，暂时不支持切频，因为参数可能有和176不一样的地方。
+谢谢了。
+1), Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+Init cmd
+Find BBT
+Env init done
+Load.
+GoCard Event.
+Card Remove.
+data abort
+当时实验timesv 也是, 后来发现是没有加-sdram16.
+2), 编译参数中加"-sdram16",
+AASP :/>sd
+Card Event.
+Card Insert.
+Response start time out: 52.
+3), dma lliautotest有问题
+(1), <TODO>发信</TODO>:
+128封装, 16M: 需要修改sys.h
+#define _SV128_	
+#define 	SYS_MEMORY_SIZE_16M
+(2), 修改dma_test.c和dma.c的lliautotest函数, 把原来2M的size改为1M, random的模由1M改为0.5M. 具体是增加了:
+#ifdef _SV128_
+	//128封装使用16M sdram时malloc只有3M空间. 见"ld_script\SV_general_sdram16M.lds"
+	const unsigned int addrSize = 0x100000;//dma size
+	const unsigned int randRange = 1024 * 1024 / 2;//通过AASP_RAND取dma起始地址范围
+#else 
+	const unsigned int addrSize = 0x200000;//dma size
+	const unsigned int randRange = 1024 * 1024;//通过AASP_RAND取dma起始地址范围
+#endif // _SV128_
+
+4), 修改dma后也没有sd上面那个问题了. (不过2)是用的shuyu的板子, 现在是博学的板子)
+现在用我自己的底板加lingming 128cpu板, 
+cmp fat sd复制的文件不对:
+FAT  SD:/>cp Xming-20050705.exe 1.exe1
+[FAT_MODULE]->do_fat_cp()
+the file Xming-20050705.exe has been copy as 1.exe1!
+[FAT_MODULE]<-do_fat_cp() with 1
+FAT  SD:/>cmp Xming-20050705.exe 1.exe1
+[FAT_MODULE]->do_fat_cmp()
+They have 6 chars different!!
+FAT  SD:/>ls
+a                      9432063
+Xming-20050705.exe                      9911606
+code_image                      <DIR>
+1.exe                      9911606
+1.exe1                      9911606
+[FAT_MODULE]<-do_fat_ls() with 1
+FAT  SD:/>cp Xming-20050705.exe 1.exe22
+[FAT_MODULE]->do_fat_cp()
+the file Xming-20050705.exe has been copy as 1.exe22!
+[FAT_MODULE]<-do_fat_cp() with 1
+FAT  SD:/>cmp Xming-20050705.exe 1.exe22
+[FAT_MODULE]->do_fat_cmp()
+They have 8 chars different!!
+
+5), 用"1519_udc_sv_128_sdram16.pak", 
+切频到72M时可以. 再切回120, 把sd卡fat写坏了.
+重启, fat写读写正确, 拿到pc下比较, 也正确.
+
+6), 重启, 用"1506_sdio_sv_128_sdram16.pak"
+连续实验5次, 1次正确, 错误时一般是错误8-12个字符. 
+看了看错误地址: 一般是xxe0, 例如63e0等等. 
+
+7), 重启, 用"1608_sdio_sv_128_sdram16.pak". 还是有问题.
+
+8), 用full_test测试
+"1615_sdio_sv_128_sdram16.pak"
+full_test. 3次, pass
+再实验复制文件. 一次正确, 其余四次错. 情况类似, 一般是xx3ea, xxfea开始的2-5个字节有错.
+
+9), 比较udc_sv_bin_sdram16与sdio_sv_bin_sdram16差异
+(1), udc独有: udc,,nandflash
+(2), sd独有: dinterrupt
+(3), 删除sd中interrupt: 1637_sdio_sv_128_sdram16_no_interrupt.pak
+a, 去掉interrupt后, 5个文件2个错误. 
+b, 降频到72_72_72_sdio24后, 5个文件都正确. 
+
+10), 感觉是cpu频率高.
+2007_sdio_sv_128_sdram16_no_interrupt_setsdiofreq.pak, 切到120_120_sdio24.
+5个文件都相同.
+
+13:28 2009-4-24
+VC0830, SV, fat_cmd.c编译失败
+问题解决. 出错提示:
+undefined reference to `TIMER_GET_NOW_TIME'
+
+出错直接原因是我把hal_io.h"的
+"#define HALGetNowTime()	Timer_Timer1CurrentValueGet()"
+改为
+"#define HALGetNowTime()	TIMER_GET_NOW_TIME()"
+使用了timer.h宏,  但hal_io.c没有include”../timer/timer.h”. 加入include ”../timer/timer.h”后问题解决. 
+
+其实修改前没有include”../timer/timer.h”时加-Wall编译有warning"implicit declaration of function ". 只是timer模块肯定编译, 所以没报错. 
+
+感觉我们代码很多地方不严谨, 如果开-Wall, 有很多warning, 会有些潜在问题.
+
+14:35 2009-4-24
+VC0830, SV, timer, 悲惨世界
+//全局变量默认初始化为0. g_ClkrstTimer1us和g_ClkrstTimerT都等于0会造成
+//Timer_DelayUs死循环.
+影响到4个人. 
+
+14:54 2009-4-24
+VC0830, SV, timer
+有空一定把timer0和wdt timer都校准. 保证计时准确. 
+
+17:29 2009-4-24
+VC0830, SV, uart, getuart命令显示波特率不正确
+可能是我修改了:
+//zhangjian: 把从divider到baud的计算分离.
+int Uart_base_get_baudrate(int uart)
+{
+	int reg					= 0;
+	reg = Uart_base_get_baudrate_from_divreg(uart, reg);
+	return reg;
+}
+造成的. 以后暂时不要修改别人代码了. 或者先用宏区分. 
+
+21:09 2009-4-24
+VC0830, SV, clkrst, 支持pcddr
+1, 改了inc脚本, 加入了sdram参数, 但是load脚本在0x0处失败. 
+一会儿实验静态切频. 
+2, 用axd静态切, bus是120M, 但是串口打出error.
+3, 用映像打包可以, 切频
+480_240_120_120 lliautotest1000 pass
+xck12   fail
+192_24_24_24    lliautotest1000 pass
+798_133_133_133 lliautotest1000 data abort at 6th dma
+744_124_124_124 lliautotest fail. 大量错误.
+cpu,bus=1:1, 132,136,140,144 fail
+60-116M没有找到能切的频率. 
+4, 修改rvdebug脚本
+按照lingming512info改写, 文件名"D:\VC0830\VC0830\SV_init_script\VC0830init_for_fpga_pcddr.inc".
+1), 启动后dma lliautotest 1000, pass
+2), 再跑脚本却不行, 在load映像时0x0地址不可写. 
+先跑映像再跑脚本可以. 可能脚本还是有问题. 
+5, 暂时不考虑rvdebug脚本, 
+1), pcddr_hynix参数与512info对比, 发现60-120参数差异很大. 对照512info(bootloader_pcddr16_120M)修改.
+2), 用"0001_timer_sv_176_pcddr.pak"实验.
+效果和原来一样. 
+
+22:46 2009-4-24
+VC0830, SV, Yinong邮件2234
+Thanks for the update,  Ling Ming. 
+Based on what we learned recently,  I suggest to add to tab in your spreadsheet for two new  categories of tests:
+1) Performance Limit: which includes the max fps  for 720P,  max frequency for key modules,  max data rate for those interface whose bandwidth is a variable etc.
+2) Apple to apple subjective comparison with competitor’s boxes.  Through comparison,  we will quickly have new quality & performance  problems to solve.
+
+0:29 2009-4-25
+VC0830, SV, clkrst, autoswitch
+Hi, aiguo
+切频进展
+1, 自动切频命令(176封装, 未升压)
+1), cpu: 12->144->12, step=4, cpu:bus=1:1, vdec:bus=4:3, dma times=10, pass
+2), cpu: 120->168->120, step=2, cpu:bus:vdec=1:1:1, dma times=10, 除"158, 162, 170, 172 dma fail", 其余pass.
+3), cpu: 240->288->240, step=4, cpu:bus:vdec=2:1:1, dma timers=10, 共测试5次, pass.
+其中自动切频中pll,cpu,bus最大值由"clkrst\app\system_info.h"的MAX_PREFERED_PLL_FREQ, , "MAX_PREFERED_CPU_FREQ", "MAX_PREFERED_BUS_FREQ"确定, 目前分别是900, 290, 200. 
+这三个宏在clksv命令中用于帮助用户选择合适的pll_cpu_bus index.
+
+2, ddr切频, 
+1), 使用512info(bootloader_pcddr16_120M)打包, 情况如下
+pll_cpu_bus_vdec
+480_240_120_120 lliautotest1000 pass
+192_24_24_24    lliautotest1000 pass
+798_133_133_133 lliautotest1000 data abort at 6th dma
+744_124_124_124 lliautotest fail. 大量报错.
+cpu,bus=1:1, 132,136,140,144 fail
+另外60-116M没有找到pass dma lliautotest 100的频率. 
+60-120分别使用了512info参数和vc0830_sv_memscan(定义PCDDR)时参数. 结果都不好. 
+
+2), rvdebug脚本对照512info改写, load image时出错, 应该是ddr没配好. 
+现在用rvdebug时是先运行nand 映像, 再启动rvdebug脚本并load映像. 
+先用axd配置ddr应该也可以, 我没来得及试了.
+
+10:27 2009-4-27
+VC0830, SV, sd, <TODO>加入任务</TODO>
+beizhan用pqi mmc 1G卡, 降频后仍然不行, clk反向后就可以. 
+这个牌子原来没有实验过. <TODO>加兼容性测试</TODO>
+
+11:00 2009-4-27
+VC0830, SV, clkrst, ddr切频
+<TODO>核对切频流程</TODO>
+1, 用vc0830_sv_memscan中参数做启动脚本也不行. 
+
+11:32 2009-4-27
+VC0830, SV, 176封装, 电源, 串口
+今天dashan用我的8#板, 和他的2.5电源板, 上电后灯亮的不正常, d9-d11好像只亮了一个. jtag找不到这个板子. 找zou weiran, 测量电源板本身没问题, 先拔串口再上电再插串口就没问题. zou weiran说是PC串口问题, 有的PC有问题. 
+我去查的时候没有考虑换电源板, 虽然看到电源板灯亮的不正常但没有继续分析. 现在反应不好, 一定要定期review log, 注意休息. 
+
+13:15 2009-4-27
+multiice与塞缪尔·莫尔斯
+刚才鼠标无意中放在multiice某个位置, 发现提示信息是"萨缪尔莫尔斯诞辰", 奇怪, 也忘了这人是谁, google一下:
+塞缪尔·莫尔斯(萨缪尔.莫尔斯)Samuel Finley Breese Morse（1791-1872)，
+塞缪尔·莫尔斯是一名享有盛誉的美国画家。1791年4月27日出生在美国马萨诸塞州.
+1844年5月24日，莫尔斯坐在华盛顿国会大厦联邦最高法院会议厅中，用激动得发抖的手，向40英里以外的巴尔的摩城发出了历史上第一份长途电报。 
+位置: "bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\综述_嵌入式开发等"
+塞缪尔·莫尔斯(萨缪尔.莫尔斯)介绍
+1, 自: http://baike.baidu.com/view/1221130.htm
+2, 自: http://www.dfkpw.com/Article/ShowArticle.asp?ArticleID=2924
+
+13:46 2009-4-27
+VC0830, SV, clkrst, ddr切频
+1, socket(80090311036), ddr, sdram都用不了, 打出信息类似: 
+Clk,Uart init Done
+Icache
+AP Mode...
+reset
+reset
+Mass Cfg
+rd_sec end
+Init cmd
+No BBT
+Env init done
+reset
+wr failed
+reset
+Mass Cfg
+Init cmd
+No BBT
+Env init done
+reset
+wr failed
+reset
+Mass Cfg
+Init cmd
+No BBT
+Env init done
+reset
+wr failed
+reset
+Mass Cfg
+Init cmd
+
+2, 11#(73) 176板子
+266_133很不稳定: 
+切到266_133, dma lliautotest 1000, 30%fail. 完成后,exit, clkrst后出现未定义指令错误. 实验两次, 都是如此. 
+133_133, 一般切频后, 执行svclkinfo死, 或执行lliautotest, 打出的信息不正确. 
+后来找dashan, 发现是CPU板问题, 我的电阻由47换成了22. zouweiran说是当初实验用的. 
+找xuelian更换. 
+
+3, 更换后, 133_133 dma错误很多. 
+266_133 lliautotest 1000 pass.
+实验bus=72M, 切72_72死, 切到144_72 dma中data abort.
+请dashan帮忙实验, dashan没问题. 
+
+4, 
+1), 720_120_120切死, 480_120_120 dma lliautotest 1000 pass.
+2), bus144(dashan: 144不能用):
+(1), 576_144_144: dma lliautotest fail: 6/100.
+(2), 576_288_144: 6/10切频成功. 某次切频成功后: dma lliautotest fail: 10/100.
+(3), 864_144_144: dma lliautotest 1000, 做了三次: 第一次, 第二次直接返回(没有正常的number提示, 也没有报错), 第三次死.
+第一次, 第二次:
+DMA  :/>lliautotest 1000
+[DMA_MODULE]->do_dmac_lli_auto_test()
+[DMA_MODULE]MESSAGE:Random test over
+
+5, 现在有种感觉, 在480-900之间, pll频率越低越稳定. 
+1), feng yaya测试时, 发现cpubus 144, 148不稳定. 她测试时如果是cpu:bus:vdec是1:1:1, 输入cpu频率后会一路回车. (D:\work\VC0830\SV\vdec\)vdec stability.xls
+这样144, 148选择的pll分别是864, 888. 是很高的pll频率. 
+2), sunguangyue: 测试时, 要求选择pll低者, 主要为了降低功耗.  其它人也没有类似感觉. 
+3), (18:44 2009-4-27)zhanglu测试似乎也有这个结论"18:44 2009-4-27"
+
+6, bus=96:
+1), 384_96_96, lliautotest 1000. pass
+pll=768, 576各5次, 都切死了. 
+
+7, 目前代码:
+*		rename getBusVdecRatio to SysInfo_GetVdecBusRatio,
+*		rename get_cpu_bus_ratio to SysInfo_GetCpuBusRatio
+*		rename bus_vdec_ratio to vdec_bus_ratio
+*       rewrite clkrst_SysInfoCheckRatio using SysInfo_GetVdecBusRatio and SysInfo_GetCpuBusRatio
+
+14:41 2009-4-27
+(14:47 2009-6-10)
+资产, zhangjian, 项目830SV
+完整资源参见: FengYaYa邮件"830资源统计"2009619_1532.
+1, 母板:
+80090316050, #8; 
+(16:49 2010-1-5)底板在dashan实验室做学生BGA181测试"16:49 2010-1-5"end
+2, CPU 176: 80090319073(11#板), 176: 80090319071. 282: 80090428112.
+3, memory: 三星60, 32M 蓝: 80090402014; 三星60, 32M 绿: 80090325104.
+memory片子6月10日: 三星蓝, 绿, hynix pcddr, 双片32bit 32M sdram. 上面两片没找到. 
+4, video: 一个标准屏, 一个标准sensor(在wangke处测试用)
+5, (14:31 2009-6-11)一个cp电源板(借给了dashan). 
+#001电源板: core=1.2, 1.5, bus=1.8, 2.5; #102电源板(cp电源板, 需要按电源板power on上电), core=1.2, 1.5, bus=2.5,3.3"14:31 2009-6-11"end
+6, (15:12 2009-6-10)借还
+1), 3091底板还给了lingming, 原来是lingming->fengyaya->wangke测试用的.
+2), "80090319070", 10#板(IC). 由zhoudashan负责, 现在给wangke测试. 
+7, (15:29 2009-6-16)#102被LingMing拿走. 
+8, 全组830资源"D:\work\VC0830\SV\830资源统计.xls", 自Fengyaya邮件"830资源统计"20090619
+9, (18:56 2010-1-5)
+Zhangjian至LingMing邮件. 
+Guangyue的底板有问题. 我现在的底板是5015, 176 cpu是9073, 282 cpu是8112.
+001, 201两个电源板分别是mddr和pcddr的. 都给我把. 
+
+14:53 2009-4-27
+VC0830, SV, 经验, uart有输出没有输入
+最大可能是uart跳线接触不好.
+
+15:50 2009-4-27
+VC0830, SV <TODO></TODO>
+1, 整理TODO
+1), pll1->pll2->pll1要实验, 难保没问题. 
+2, 给dongliang发目前剩余问题. 
+
+16:33 2009-4-27
+公司, 同事信息, lv pin7028, Zhaogang: 8027
+
+18:31 2009-4-27
+VC0830, SV, clkrst, clkswitch, iclk切频新需求
+尽量切频iclk到bus/3. iclk最高频率改为60M.
+
+18:47 2009-4-27
+VC0830, SV, <TODO>今日, 明日两日任务</TODO>
+1, Shuyu"18:31 2009-4-27"
+1), 加入get_prefered_freq
+//根据clkp配置返回最合适的divider. 如果符合round频率的找不到, 会返回支持最高频率. 
+//如果都找不到, 返回NULL.
+//CAUTION: 如果成功得到div, 函数会修改clkp->status的[24,16], 设置freq
+//是否是round的结果(UNUSABLE,OVERFLOW,CLKRST_NOTROUND). 
+//clkp其余数据不能修改. 由调用者(一般是get_div)把返回的div写入clkp->div.
+2), 
+//这里临时利用了SysInfo_GetBus_Hz.
+//感觉把cpu,bus,vdec等core clock都加入到g_Clock中, 通过clock tree便利查找bus 
+//clock更合适. 希望与切频, 设置频率, 查看频率, enable(ckd, gate)等相关者都通过
+//TClock组成的clock tree解决, 这结构更清楚. 
+3), get_xxx_freq改名为SysInfo_GetXxx_MHz, 加入SysInfo_GetXxx_Hz.
+
+4), 测试: 
+1247_timer_sv_sdram_divIclk2Busdiv3_renameSomeFunc.pak
+log_20090428124920.log
+
+5), <TODO>问shuyu</TODO>如果分不到bus/3, 是取最大值, 还是取bus/2
+
+2, zhanglu测试的结果也是. pll1=144*4比144*6文档很多. 
+1), beizhan, zhangjian找lvpin讨论:
+beizhan邮件, 答复: 830稳定性测试, 14:46
+刚才和lvpin、zhangjian讨论了一下，据lvpin介绍，由于pll 分频器的限制，目前830的pll divider 最高只支持168 * 4 = 672m的分频，所以pll的理论推荐区域是 480M – 672m之间，如果最低480m不够用，我们会考虑再降低一些，但是不会升高；
+现在zhangjian再修改程序，等会儿我们更新code继续测试。
+
+2), 代码
+zhangjian, clkrst, clkswitch
+key improvement:
+1, pll prefered max frequency change from 960 to 672 because the pll divider synthesize frequency is 672 MHZ. (from lvpin). 
+这个修改应该能改善稳定性.
+2, rewrite get_module_prefered_div(rename to get_module_prefered_div_base) for TClock.get_prefered_div. it is convience to support different prefered frequency 
+requirement. 
+e.g. iclk need snr <= iclk <= bus/3 or bus/2 or bus. ( 16 <= iclk <= 60MHz ).
+
+detail: 
+system_info.c
+*		rename get_xclk_freq, get_pll_freq, get_cpu_freq, get_bus_freq, 
+*	  get_vdec_freq to SysInfo_Getxxx_MHz. add SysInfo_Getxxx_Hz.
+*		pll prefered max frequency change from 960 to 672. 
+
+module_clock_info.c
+*		set get_div, get_prefered_div, set_div, get_freq, set_enable, set_parent
+*	  default function in id range [M_CLK_ID_OFFSET, SUB_M_CLK_ID_OFFSET)
+*		rewrite get_module_prefered_div(rename to get_module_prefered_div_base)
+*	  for TClock.get_prefered_div.
+
+clock_switch_info.c
+*		to be removed: ddr_config.h, TDdrInfo, PTDdrInfo
+*		using Clkrst_ClkSwitchGet() instead of get_newclockSwitchInfo in 
+*	module_clock_info.h
+
+clock_app.c
+*		to be removed: get_xclk_info
+
+3), 测试cpu: 12->168, step=2, cpu:bus:vdec=1:1:1, dmatimes=10, times=5, doing. 
+发现bus=38M时, iclk被关闭. 
+iclk的get_prefered_div算法不好, 38/3找不到后, 就返回了. 改为
+	UINT32 busDiv[]={3,2,1};
+	UINT32 i;
+
+	for ( i = 0; i < sizeof(busDiv)/sizeof(busDiv[0]); i++ ) {
+		if ( bus / busDiv[i] <= clkp->freq.max
+			&&  bus / busDiv[i] >= clkp->freq.min ) {
+			prefered =  bus / busDiv[i];
+			status = clkp->status;
+			divp = get_module_prefered_div_base(clkp, clkp->round, prefered, &status);
+			if ( NULL != divp ) {
+				clkp->status = status;
+				break;
+			}
+		} 
+	}
+cpu: 12->168, step=2, cpu:bus:vdec=1:1:1, dmatimes=10, times=5, doing.
+修改后iclk的分配正确. 
+代码: 
+zhangjian clkrst, iclk
+*		improve get_iclk_prefered_div to fix get iclk div fail @ bus=38M. 
+
+3, 了解dashan扫ddr进展. 
+1), PC DDR  80m 参数调好了 D:\VC0830\vc0830_sv_memscan\下面
+2), dashan 邮件, "转发: 133不稳定", 14:40
+PC DDR  48M 参数调好了 D:\VC0830\vc0830_sv_memscan\下面
+PC DDR 60M 以下切频需要如下规律：
+在60M以下初始化的时候，需要先把 0x60011004的bit 16配成0
+在向其它60M频率以内的参数切的时候，（在切的动作完成）需要0x60011004的bit 16配成1
+在向高于60M频率切的时候，不用关心这个参数
+
+4, 解决rvdebug pcddr启动脚本问题.
+
+5, 816 sd问题:
+luopengyu(7116), "答复: VC0816_FPGA_Test_Report", 2009年4月28日 17:05
+vc0816_09041318_09041318.ace版
+创见SD 8G的有问题（SD卡本身估计有问题，用不同读卡器读出来的空间容量不一致）、金士顿MMC 2G的卡，在从PC拷贝某个文件时，有异常，文件大小253M，格式RM。（拷贝400M RM文件Pass，拷贝160M RM文件Pass，唯独这个253M文件报错，用读卡器都能正常拷贝）
+
+6, 新切频流程: <TODO></TODO>
+1), cpu, bus在pll2上工作.  其它模块(包括vdec)在pll1工作. 
+
+10:34 2009-4-29
+VC0830, SV, clkrst, ddr切频
+1, 用我的两个176和282板子
+1), 0424参数, 切频很不稳定, 容易出现data abort.
+2), dashan新参数, 没法切频. 
+2, 4月24日之后我都改了什么?!!?
+3, (20:48 2009-4-29)在dashan那边120M也有问题. dashan在重新扫参数. 
+4, (21:41 2009-4-29)从133->12->133, svclkinfo死. 
+试验: 启动是266_133, clksv切频到133_133, 然后133->12->133->12... 共10次, 每个频率dma 20000次. 明天看结果. 
+log从"log_20090429093931.log"的4634017行开始. 
+
+10:55 2009-4-29
+找zhanglu拿了一张8G, 背后点了黑点. 
+(20:47 2009-4-29)已还给zhanglu.
+
+13:01 2009-4-29
+VC0816, storage, sdio, 测试问题(luopengyu)
+自:"18:47 2009-4-27"5
+1, transcend 8G SDHC, 卡有问题, 容量不正确. 
+<TODO>是否fat下可以, udc下不行?</TODO>
+
+2, kingston 2G mmc
+编译的是udc, "build -m=fat,udc,sdio,nandflash,timer,cache  -rvdebug  -sdram4driver -sdram".
+Selected Modules: fat udc sdio nandflash timer cache aasp bootloader interrupt memory uart pdma padc
+
+两张kingston 2G mmc都是在fat下cp可以, udc下使用容量超过900多M时, 对优盘操作(复制, 查看所有文件容量等)都出现:
+[UDC]ERROR:reset
+[UDC]ERROR:reset
+[UDC]MESSAGE:Mass Cfg
+怀疑是超过这个容量有问题. 
+实验beizhan的4G micro SD卡, 目前已用1.3G, 
+复制"dongjiaopiaoyou_720p_9m.rmvb"(150M),  pass
+复制"dixinyouji_720p.rmvb"(855M), pass
+复制"dongjiaopiaoyou_720p_9m.rmvb"(150M)x2,  pass
+复制"dongjiaopiaoyou_720p_9m.rmvb"(150M)x4,  pass
+复制"dongjiaopiaoyou_720p_9m.rmvb"(150M)x4,  pass
+复制"t720p_1_dither.rm"x2, pass
+已复制到3.79G, (总容量3.81G) 
+仍然无法证实是否与卡有关. 
+
+3, 为了分析是否与卡有关, 继续测试多张不同容量sd/mmc卡:
+从zhanglu处拿了:
+mmc: kingston mobile 1G, mobile 2G, kingmax 1G mobile
+sd: kingmax 2G, kingston 2G, kingmax 1G mobile
+1), 实验kingston 2G Mobile MMC.
+这张卡没问题. 
+
+4, 转到VC0830 SV测试
+1), 测试步骤:
+a, 格式化为fat32或fat16, 不使用快速格式化. 
+b, 复制3份a960x544.rm. 每个文件大小是253M.
+c, 分别在udc, fat下再次复制这个文件. 
+2), kingston 2G mobile mmc:
+
+[SDIO]DBD: W: 1e4140 80
+[SDIO]DBD: W: 1e41c0 80
+[SDIO]DBD: W: 1e4240 80
+[SDIO]DBD: W: 1e42c0 80
+[SDIO]DBD: W: 1e4340 80
+[UDC]ERROR:reset
+
+[UDC]ERROR:reset
+
+[UDC]MESSAGE:Mass Cfg
+[UDC]ERROR:reset
+
+[UDC]ERROR:reset
+
+[UDC]MESSAGE:Mass Cfg
+[UDC]ERROR:reset
+
+[UDC]ERROR:reset
+
+[UDC]MESSAGE:Mass Cfg
+[UDC]ERROR:reset
+
+[UDC]ERROR:reset
+
+[UDC]MESSAGE:Mass Cfg
+[UDC]ERROR:reset
+
+[UDC]ERROR:reset
+
+[UDC]MESSAGE:Mass Cfg
+[SDIO]DBD: W: f8 1
+[SDIO]DBD: W: 2e0 8
+[SDIO]DBD: W: 2e0 8
+[SDIO]DBD: W: 159 7
+[SDIO]DBD: W: 24c 7
+[SDIO]DBD: W: 160 8
+[SDIO]DBD: W: 253 8
+[SDIO]DBD: W: 168 8
+[SDIO]DBD: W: 25b 8
+[SDIO]DBD: W: 170 8
+[SDIO]DBD: W: 263 8
+[SDIO]DBD: W: 178 1
+[SDIO]DBD: W: 26b 1
+[SDIO]DBD: W: fa 1
+[SDIO]DBD: W: 1ed 1
+[SDIO]DBD: W: f8 1
+[SDIO]DBD: W: fa 1
+[SDIO]DBD: W: 1ed 1
+
+3), guangyue发现是_Sd_Getphy返回的容量不正确. 
+发现是kingston MMC卡 block大小是1024byte.
+_Sd_Getphy():
+	phy->number_of_sectors = g_SdioAppInfo.capacity;
+Sdio_Protocol_GetCardInfo:
+	if(g_CardInfo.CardType == MMC_CARD)
+	{
+		mult = (1 << (g_CardInfo.CSD.C_SIZE_MULT + 2));
+		blocknr = mult * (g_CardInfo.CSD.C_SIZE + 1);
+		blocklen = (1 << (g_CardInfo.CSD.READ_BL_LEN));
+		p->capacity = blocknr * blocklen / 512;
+	}
+
+并添加注释:
+//fat中以512为一个sector
+//MMC, SD1.1: 根据CSD寄存器计算p->capacity = blocknr * blocklen / 512; 
+//sd2.0: 固定512byte为一个block, 计算公式为:
+//memory_capacity = (C_SIZE+1) * 512K byte
+//So, p->capacity = memory_capacity / 512 = (C_SIZE+1) * 1024
+
+5, 代码
+zhangjian, sdio
+1, fix bug from luopengyu email, "答复: VC0816_FPGA_Test_Report", 20090428_1705
+in _Sd_Getphy()
+if(g_CardInfo.CardType == MMC_CARD)
+p->capacity = blocknr;
+to
+p->capacity = blocknr * blocklen / 512;
+
+2, add sdio endebug cmd. from VC0830 SV code 20090429 code
+
+6, 结论, 
+1), 回信 "答复: VC0816_FPGA_Test_Report", 20090429_1823
+创见SD 8G的有问题（SD卡本身估计有问题，用不同读卡器读出来的空间容量不一致）、
+sd卡本身损坏
+
+金士顿MMC 2G的卡，在从PC拷贝某个文件时，有异常，文件大小253M，格式RM。（拷贝400M RM文件Pass，拷贝160M RM文件Pass，唯独这个253M文件报错，用读卡器都能正常拷贝）
+
+这个错误是软件bug: sdio提供fat容量函数有bug. mmc卡容量都是按block_size==512byte计算共有多少个sector. 实际应该是sector=blocknr * block_size / 512.
+kingston 2G MMC卡block_size=1024byte. sdio提供给udc的容量是968M. 当pc请求大于968M数据时udc会给pc报错. 
+
+2), 测试文件:
+D:\work\VC0830\SV\sdio\0429测试文件_自luopengyu_见200904291301
+
+14:30 2009-4-29
+VC0830, SV, VC0816, 会议, 830QA_816QA全体会议
+(VC0830 SV 16th会议, 研发记录簿p74
+1, VC0816任务
+1), bootloader
+2), sd+udc: luopengyu sd问题
+3), 红外. 
+
+2, VC0830任务
+1), dither: 评估不同算法. 
+另外现在RGB888->YUV420->RGB888效果不好, 理论上应该是无损失的.
+2), TV
+(1), 支持1014分辨率
+(2), 微调
+3), zhanglu: 测试176LQFP升压到1.4v后稳定性.
+4), bootloader
+5), 128封装: lidongliang. 
+目前storage简单测试过. 现在试验video(vdec, DPI8bit(zhangpu)).
+注: 编译不同封装的830工程, 记得修改sys.h中封装定义. 
+6), DDR/SDRAM. dashan, zhangjian
+即"18:47 2009-4-27"3
+7), 切频. cpu,bus切到pll2, vdec等module在pll1. 这样是否可行?
+即"18:47 2009-4-27"6.
+
+21:49 2009-4-29
+<TODO>看"10:34 2009-4-29"4</TODO>
+
+9:45 2009-4-30
+VC0830, SV, clkrst, ddr clkswitch
+1, ddr 133M切频:
+不论延时100ms, 1s, 2s都是必现的在第四次切频时, 死在
+     snr_clk   11.5 MHz
+undefined instruction
+去掉"print_sys_clock_info"后, 是必现在第二次切频后的PASS后data abort. 
+2, ddr和sdram自刷新参数一致. 
+3, 确认ckdsdrc是否是0xe98e, 0xe98d有问题.
+4, (15:55 2009-4-30)
+"16:04 2009-4-30"的sdram参数没问题了. 实验ddr.
+240_120参数的0xe98d改为0xe98e后, axd静态切频到240_120成功. 
+这是240_120使用的是more_120参数. 
+5, 实验xclk, fail: axe打出error.
+实验72_24, fail: axe打出error. 修改: 
+    unsigned int ckdSdr=0xe98e;//zhangjian. old: 0xe98d
+dma lliautotest 1000, pass. 
+另外, 24M情况下切频到48M, 死在切到xclk之后, 也说明是sdrc配置或流程有问题. 
+
+11:24 2009-4-30
+VC0830, SV, clkrst, sdram clkswitch, 176LQFP
+CPU板11#(80090319073)+母板(boxue, 无编号), sdram(三星, -60, 蓝板)
+1, cpu=144->152->144, step=4MHz, cpu:bus:vdec=1:1:1, dma=10次, times=5, pass.
+2, cpu=144->152->144, step=4MHz, cpu:bus:vdec=1:1:1, dma=5000次, times=1, pass.
+3, 代码:
+zhangjian, clkrst, sdram clkswitch
+dma\dmac.c
+*	  2009-04-30:
+*		add errorCnt in Dma_Lliautotest.
+
+clkrst\test\clkrst_test.c:
+*	  2009-04-30:
+*		add clkswitch delay and error count in do_clkswitchAutoSwtich and 
+*	  do_clkswitchSV_cpurate
+
+clkrst\app\clock_switch_info.c:
+*	  2009-04-30:
+*		remove: ddr_config.h, TDdrInfo, PTDdrInfo. using TSdramInfo as ddr 
+*	  memory info.
+
+clkrst\app\sdram_config.c:
+*	  2009-04-30:
+*		add the following in sdram_config.h:
+*	select specified mem type and vendor from sys.h. include TYPE_config_VENDOR,
+*	define SYS_MEM_TYPE_VENDOR, define CALCULATE_SDRC_REFRESH or not, define
+*	MIN_SDRC_FREQ, MAX_SDRC_FREQ and MAX_PREFERED_SDRC_FREQ.
+
+clkrst\app\sdram_config_samsung.c:
+*	  2009-04-30:
+*		add 176LQFP sdram=144, 152M to more_120 sdram info. from zhoudahan.
+
+commit log:
+cvs commit: warning: unrecognized response `stty: standard input: Invalid argument' from cvs server
+Checking in clkrst/app/clkrst_app.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.23; previous revision: 1.22
+done
+Checking in clkrst/app/clkrst_app.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.h,v  <--  clkrst_app.h
+new revision: 1.10; previous revision: 1.9
+done
+Checking in clkrst/app/clock_switch_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.c,v  <--  clock_switch_info.c
+new revision: 1.7; previous revision: 1.6
+done
+Checking in clkrst/app/clock_switch_info.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.h,v  <--  clock_switch_info.h
+new revision: 1.4; previous revision: 1.3
+done
+Checking in clkrst/app/ddr_config_hynix.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_hynix.c,v  <--  ddr_config_hynix.c
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/app/sdram_config.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.h,v  <--  sdram_config.h
+new revision: 1.5; previous revision: 1.4
+done
+Checking in clkrst/app/sdram_config_samsung.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_samsung.c,v  <--  sdram_config_samsung.c
+new revision: 1.4; previous revision: 1.3
+done
+Checking in clkrst/app/system_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.c,v  <--  system_info.c
+new revision: 1.17; previous revision: 1.16
+done
+Removing clkrst/app/ddr_config.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config.c,v  <--  ddr_config.c
+new revision: delete; previous revision: 1.1
+done
+Removing clkrst/app/ddr_config.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config.h,v  <--  ddr_config.h
+new revision: delete; previous revision: 1.1
+done
+Checking in clkrst/basefunc/clkrst_basefunc.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+new revision: 1.10; previous revision: 1.9
+done
+Checking in clkrst/subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.18; previous revision: 1.17
+done
+Checking in clkrst/test/clkrst_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.14; previous revision: 1.13
+done
+Checking in dmac/dmac.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/dmac/dmac.c,v  <--  dmac.c
+new revision: 1.41; previous revision: 1.40
+done
+Checking in include/sys.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/include/sys.h,v  <--  sys.h
+new revision: 1.32; previous revision: 1.31
+done
+
+4, 补充测试;
+1), cpu=12->168->12, step=4MHz, dma=0(直接跳过, 不进行dma),  times=5. pass. 说明目前176LQFP sdram参数稳定. 
+log: "log_20090430105845.log", 23285行开始.
+2), cpu=12->168->12, step=12MHz, dma=10, times=5, pass.
+log: "log_20090430105845.log", 40824行开始. 
+
+5, 这个参数是dashan为稳定性测试重新扫描的, 只针对176封装, 所以memory稳定性好很多. zhanglu邮件, "答复: 830稳定性测试", 2009-4-30 18:11
+1), 将电源升压到1.4V,测试 cpu:bus:vdec=1:1:1 测试了11片,其中10片在168M下vdec播放稳定,1片在160M下vdec播放稳定
+2)  对于升压的电源,vclk 极限能够达到181.3M
+3). 对于1.2V的电源,测试了10款芯片,1:1:1的在152M下稳定
+bamvor: 看来稳定性提高很多. 
+
+14:12 2009-4-30
+同事信息, linchuan 8358.
+
+16:02 2009-4-30
+VC0830, SV, video, <TODO>关注</TODO>
+1, Tv out绕过dither问题.
+<TODO>问下shuyu 3拍发一个数具体什么意思</TODO>
+2, upsizer算法不好.
+
+16:26 2009-4-30
+VC0830, SV, ddr测试进展, mp4方案
+计划core升压1.4后, ddr 133, vdec=177. 
+如果测试没问题, 会建议steven(深圳, mp4, marketing)用这个方案.
+
+17:32 2009-4-30
+VC0830, SV, clkrst, <TODO></TODO>
+1, main.c中需要根据用户xclk_pll_cpu_bus_vdec配置, 为下面所有模块做初始化. 所以需要修改所有模块相关时钟函数. 目前重点是uart和timer. 因为用axd脚本时, 如果uart, timer的input clock不是24M, VC0830启动时仍然按24M配置, uart会打出乱码, timer不准. 
+注: vc0830_sv_memscan中当定义272_136时, 调用uart_Init配置波特率. 直接copy VC0830_SV code链接时提示超过容量. 去掉除法, 直接给出div integer和factor后问题解决. 
+
+15:20 2009-8-5
+项目, 工作总结, 4月工作总结
+1, 在3月份基础上完善切频代码, 修bug, 加入自动切频命令(autoswitch)
+2, sd卡初步速度测试.

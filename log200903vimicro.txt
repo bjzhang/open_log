@@ -1,0 +1,3369 @@
+﻿11:19 2009-3-2
+项目, VC0816会议, 研发记录簿P37
+SD卡要在周三前调通:
+1), 用逻辑分析仪看时许, 解决Read one block没有response问题. (查询模式测试, 中断模式可能有问题, 因为Audio的I2C的中断没有).
+2), SD Detect能否和Keypad复用. 配SD Detect中断时可以监测到SD卡插拔, 未配SD Detect中断时不出现SD Detect中断. keypad不使用时应该恢复SD Detect中断. 
+看逻辑分析仪接哪几个引脚; "VC0816\Panda\document\board\VC0816-Video-Storage-and-Peripheral-Board-SCH-V0.9.pdf", 最后一页, 逻辑分析仪框内. 
+
+16:46 2009-3-2
+VC0816, 存储, sd/sdio/mmc, 调试
+找Lvpin, 看波形, read one block的SD命令和DMAstart后clk被gating, 说明816中DMA未启动, 在RVD中手工启动DMA, 可以读回数据. 
+后来发现是sd卡dma代码"SdioBase_DmaStart()"没有(只有老padc没有新padc代码). 加入代码后问题解决. 
+经验: 其实应该跟踪没有函数的. SD初始化命令可以过, 读块没过, 就应该比较两种情况有何区别. 当时只是考虑到有DMA中断, 查询模式, 所以就认为是中断没来或查询模式下DMA状态位没有置位. 其实当时如果把DMA整个都查了, 就能查到问题了. 
+<TODO>整理相关代码修改</TODO>.
+
+16:46 2009-3-2
+VC0816, 存储, sd/sdio/mmc, 调试计划, 代码修改, 完成见"11:06 2009-3-10"
+1, sd detect 
+2, sd interrupt:
+sdiodrv.c:
+static int g_sd_test_
+mode = INT_MODE;
+
+3, 1bit
+4, 代码改进:
+1), 
+void SdioBase_SetSdioInputClk_50M()
+{
+//...
+	HAL_WRITE_UINT32_MASK(CLOCKRST_CKD_EN_CTRL, BIT12, BIT12);
+	HAL_WRITE_REG(0x60000064,div);
+//...
+}
+两句改为clk中的函数;
+2), SdioBase_DmaStart
+	#ifdef NEW_PADC
+		if (state == 1)
+		{
+			break;
+		}
+1应该和原来一样定义为枚举. 另外"Sdio_Drv_SendCmd()"中代码需同样修改. 
+
+10:13 2009-3-3
+项目, VC0830/VC0816, 判断FPGA是否启动正常
+1, 查晶振和电源
+1), 查晶振是否正确: 只有OSC2, 3, 8不正确;
+2), 底板左侧电源都选择3.3v(最左边的)
+
+2, FPGA上F_DONE和CF_status都亮说明FPGA配置完成, 可以使用.
+如果done没有亮, 可以按reset(sw15, 板子上面中间)等cf_status灭后松reset, 让FPGA重新配置. 
+FPGA灯亮的不正常:
+1), 右下角Power LED是否亮; 不亮可能是电源接的不对, 需要接电源盒子, 用multiICE的电源不行(实验结论, 看起来MultiICE的是5V 3A, 应该是够用. FPGA电源一般是5v 1A多点, 1.14等)
+2), 上面一排灯都不亮, 可能是板子短路, 排查没有子板;
+3), 上面一排最左的灯(路灯)闪, cf卡没插.
+
+10:42 2009-3-4
+VC0816学习, 模块, 深入了解, 存储器, sd/sdio/mmc, 设置数据总线宽度
+SD:
+ACMD6设置dat bus为1, 4bit宽, 上电或CMD0后默认是1bit. 修改dat bus必须是处于transfer模式, 而且卡没有lock.
+
+11:25 2009-3-4
+VC0816, 存储, sd/sdio/mmc, 调试, 测试不同总线宽度下读写速度
+4bit和1bit差异大, 8bit和4bit差异不大, <TODO>邮件中写平均值</TODO>
+MMC: 
+8bit, multi-block
+平均: 
+Multi Read Speed is: 2869258 bytes/second
+Multi Write Speed is: 1622430 bytes/second
+第一次：
+Multi Read Speed is: 2855975 bytes/second
+Multi Write Speed is: 1440266 bytes/second
+第二次：
+Multi Read Speed is: 2892280 bytes/second
+Multi Write Speed is: 1826223 bytes/second
+第三次：
+Multi Read Speed is: 2859520 bytes/second
+Multi Write Speed is: 1600802 bytes/second
+
+4bit, multiblock
+平均: 
+Multi Read Speed is: 2633517 bytes/second
+Multi Write Speed is: 1777269 bytes/second
+第一次：
+Multi Read Speed is: 2633117 bytes/second
+Multi Write Speed is: 1777269 bytes/second
+第二次：
+Multi Read Speed is: 2633714 bytes/second
+Multi Write Speed is: 1566135 bytes/second
+第三次：
+Multi Read Speed is: 2633719 bytes/second
+Multi Write Speed is: 1565277 bytes/second
+
+1bit, multi-block
+第一次：
+Multi Read Speed is: 1611859 bytes/second
+Multi Write Speed is: 1379189 bytes/second
+第二次：
+Multi Read Speed is: 1612072 bytes/second
+Multi Write Speed is: 1245719 bytes/second
+第三次：
+Multi Read Speed is: 1612077 bytes/second
+Multi Write Speed is: 1244527 bytes/second
+
+8bit, single-block
+第一次：
+Single Read Speed is: 1228157 bytes/second
+Single Write Speed is: 155889 bytes/second
+第二次：
+Single Read Speed is: 1221876 bytes/second
+Single Write Speed is: 156143 bytes/second
+
+4bit, single-block
+第一次：
+Single Read Speed is: 1165644 bytes/second
+Single Write Speed is: 156230 bytes/second
+第二次：
+Single Read Speed is: 1165826 bytes/second
+Single Write Speed is: 155996 bytes/second
+
+1bit, single-block
+第一次：
+Single Read Speed is: 910832 bytes/second
+Single Write Speed is: 156250 bytes/second
+第二次：
+Single Read Speed is: 911024 bytes/second
+Single Write Speed is: 155772 bytes/second
+
+SD:
+4bit, multi-block
+第一次：
+Multi Read Speed is: 2518544 bytes/second
+Multi Write Speed is: 1869893 bytes/second
+
+1bit, multi-block
+第一次：
+Multi Read Speed is: 1604089 bytes/second
+Multi Write Speed is: 1451247 bytes/second
+
+4bit, single-block
+第一次：
+Single Read Speed is: 1023905 bytes/second
+Single Write Speed is: 234200 bytes/second
+
+1bit, single-block
+第一次：
+Single Read Speed is: 822673 bytes/second
+Single Write Speed is: 227322 bytes/second
+
+12:42 2009-3-4
+VC0816, 存储, sd/sdio/mmc, 调试, 设置总线宽度, do_sdio_SetBusWidth
+bus: 用我自己的函数设置sd卡总线宽度没问题, 设置mmc卡造成读写错误. <TODO>查MMC卡设置总线宽度的状态要求</TODO> 已更新代码, 注明了"do_sdio_SetBusWidth"只支持SD卡.
+
+14:37 2009-3-4
+VC0816, 存储, sd/sdio/mmc, "MMCV42SysSpecFinal"阅读, switch bus width
+MMC data bus宽度切换通过CMD6(SWITCH_FUNC)修改EXT-CSD寄存器完成.
+EXT CSD寄存器包括两部分: a Properties segment(192-511byte) and a Modes segment(0-191byte). The Properties segment contains information about the card capabilities. The Modes segment reflects the current selected modes of the card.
+host通过CMD8(SEND_EXT_CSD)读取EXT-CSD, 读取reserver和wo位是0.
+
+CMD6的参数: 
+[31:26] Set to 0
+[25:24] Access
+[23:16] Index
+[15:8] Value
+[7:3] Set to 0
+[2:0] Cmd Set
+
+0, CMD6可以修改EXT CSD(cmd set域无效), 也可以修改command set(index, value域无效).
+
+1, access mode有四种, 这里应该使用11, SD代码中切换bus width是01, 如果是运行时切换可能导致slave切换不成功, 但host切换肯定是成功的. 这时读写就会出错了. <TODO>修改代码</TODO>
+00 Command Set The command set is changed according to the Cmd Set field of the argument 
+01 Set Bits The bits in the pointed byte are set, according to the ‘1’ bits in the Value field.
+10 Clear Bits The bits in the pointed byte are cleared, according to the ‘1’ bits in the Value field.
+11 Write Byte The Value field is written into the pointed byte.
+
+2, index, 0-255中只有0-191是有效的, 如果host发送192-255, slave会设置SWITCH_ERROR(Card status[7], Card status包括response r1中)位. 
+从Table44: Extended CSD可以看到BUS_WIDTH是[183], WO. 
+
+3, value: 
+对于bus width来说: 0表示1bit bus, 1表示4bit bus, 2表示8bit bus.
+
+15:38 2009-3-4
+VC0816, 存储, sd/sdio/mmc, 代码修改
+1, 用自己的set bus width函数"do_sdio_SetBusWidth()"设置mmc bus width失败, 修改
+Sdio_Drv_SendCmd(CMD6_SWITCH_FUNC, (1<<24)|(183<<16)|(g_BusWidth<<8), &g_SdioResp);
+为
+Sdio_Drv_SendCmd(CMD6_SWITCH_FUNC, (11<<24)|(183<<16)|(g_BusWidth<<8), &g_SdioResp);
+如果仍然不行, 可以借机会加入read one block like函数"Sdio_Drv_ReadOneBlk_Like()"借此实现CMD8(SEND_EXT_CSD). 用CMD8读回EXT CSD判断是否设置是否正确. 
+
+16:53 2009-3-4
+VC0816, 存储, sd/sdio/mmc, 调试
+1, 更新代码
+bootloader\main.c里面的sd_init, fat_init有时被注释, 很奇怪, 我并没有注释. 以后commit代码后update一下, 确认代码是否正确.
+2, sd不稳定:
+和昨天板子一样, 都是第二次Sdio_Drv_ReadOneBlk出错. 
+但是今天还发现第一次"Sdio_Drv_ReadOneBlk"crc错误:
+"ret_len != tmp_len":
+tmp_len = (total_len <= _64K_MEM_) ? total_len : _64K_MEM_;
+ret_len = Sd_Mem_Read(addr_b,tmp_len,g_ncnb_buf);
+
+19:28 2009-3-4
+VC0816, 存储, sd/sdio/mmc, 代码修改
+修改了下面的代码
+Clkrst.c (clkrst)://zhangjian.0304.ifdef
+Clkrst.c (clkrst)://zhangjian.0304.1_line
+Padc.c (newpadc):	//zhangjian.0304.2_line
+Sdiobase.c (sdio\src)://zhangjian.0304.move
+Sdioprt.c (sdio\src):		//zhangjian.0304.1_line
+Sdioprt.c (sdio\src)://zhangjian.0304.1_line
+其中:
+void padc_switch_func_sdio(void)
+{
+	//GPIO_C27 - GPIO_C20 for SD_DATA7 - SD_DATA0
+	padc_set_func_mode(PADC_PORTA, 0x07f10000);
+	//GPIO_E0~GPIO_E5 for SD CTRL pin
+	padc_set_func_mode(PADC_PORTB, 0x0001A010);
+
+	//zhangjian.0304.2_line
+	Padc_Set_FS_KEYPAD_SD_DETECT();	
+	Padc_Set_FS_NF_SDIO();
+}
+的Padc_Set_FS_KEYPAD_SD_DETECT, 应该明天查sd文件前加入, 对pin share有影响.<TODO></TODO>
+
+9:12 2009-3-5
+VC0816, 存储, sd/sdio/mmc, 调试
+上电后
+sd_clk: 1.6M, 占空比1:9.
+sd_lock有个600k, 占空比是1:2的时钟.
+cmd, data, detect高
+初始化:
+初始化后: sd_clk: 24M
+读单块: data0离cmd 299.418us.
+
+9:43 2009-3-5
+VC0830/VC0816, 存储, sd/sdio/mmc, Lv haifang
+
+9:43 2009-3-5
+VC0830/VC0816, 存储, sd/sdio/mmc, 调试
+FPGA cf: vc0816_09030419_09030419.ace
+I, F, K三个板子SD有问题.
+1, SD1, read data crc error
+
+2, 
+修改代码
+//zhangjjian.modified.func
+void padc_switch_func_sdio(void)
+{
+	//GPIO_C27 - GPIO_C20 for SD_DATA7 - SD_DATA0
+	padc_set_func_mode(PADC_PORTA, 0x07f10000);
+	//GPIO_E0~GPIO_E5 for SD CTRL pin
+	padc_set_func_mode(PADC_PORTB, 0x0001A010);
+
+	//zhangjian.0304.2_line
+	Padc_Set_FS_KEYPAD_SD_DETECT();	
+	Padc_Set_FS_NF_SDIO();
+}及相关宏.
+后:
+1), SDK板子可以用. 但速度很慢. 速度见"SD2_不同总线宽度读写测试"
+1)-1, (14:23 2009-3-5)
+怀疑是代码有问题或者cf code有问题. 
+用SDK"vc0816_09030319_09030319.ace"重做实验. 4bit multi 速度同上. 
+1)-2, 实验SDK"vc0816_09030123_09022719.ace", 仍然慢. 
+
+2), SDI, 
+2)-1, read data crc error
+2)-2, 改用"vc0816_09030419_09030419.ace", 第二次read one block cmd没有response.
+2)-3, 改用"vc0816_09030123_09022719.ace", 同上. 
+改总线宽度为1bit, 停在了"uart_dma_poll_rx_char". 费解.
+同时发现我这个板子的OSC1是5M, 看了别的几个板子都是12M的. 会不会有影响? 没有影响.
+呵呵, 上面进入"uart_dma_poll_rx_char"是在等待用户输入aasp命令. 
+改为1bit后读写没有问题. 用setw改为4bit, speed 0过(其实还是1bit, 见下文):
+Single Read Speed is: 76613 bytes/second
+Single Write Speed is: 136041 bytes/second
+speed 1:
+第一次:
+Multi Read Speed is: 356689 bytes/second
+Multi Write Speed is: 353316 bytes/second
+第二次:
+Multi Read Speed is: 356656 bytes/second
+Multi Write Speed is: 352167 bytes/second
+bit1: 
+speed 1:
+Multi Read Speed is: 356653 bytes/second
+Multi Write Speed is: 352251 bytes/second
+speed 0:
+Single Read Speed is: 246985 bytes/second
+Single Write Speed is: 135861 bytes/second
+不过切为4bit时, 80寄存器的值是0x00000340. 不太对. 最后应该是4才对. 而且速度关系不太对. 后来才想起这是在没有定义"BUSWIDTH"下测试的, 所以上面测试的都是1bit情况. 
+
+3), SDF
+发送CMD7时没有response: 从present_state[31:28](sd_ctrl_current_state)=2(0x0010)看, 处于等待command response状态. 自己和Lv haifeng分别查了连通性, 没有问题. Lv haifeng建议用逻辑分析仪看逻辑, 可能是焊接造成的串扰. 
+
+3, A, J板子速度慢, 读写multi read 386k, write 362k; single read 202k, write 115k.
+
+4, "padc_gpio_int_register()"是否没有编译? 
+
+5, (10:43 2009-3-6)
+定义BUSWIDTH, 并且用最新的cf code(0305中午). SDI 4bit测试, 先用命令测试, 再看波形. SDF看CMD7 command和response波形. 二者都要和正确的A/J对比. 
+找Xue lian帮忙补焊. 
+
+6, VC0830 SD问题.
+Xia Kai [xiakai@vimicro.com] 2009年3月6日邮件
+详见"我们在开发WinCE下830 SD驱动时遇到些问题，特总结告知。". 位置: "work\VC0830\module\sdio"
+1)．Pad switch使用auto方式，在SD频率比较高时，会造成SD模块不工作的情况。
+2)．Pad switch使用manual方式，使用中断方式，在SD频率比较高时，会出现不断出现marb中断的情况（此现象不排除中断模块软件实现错误的可能）。
+3)．Pad switch 使用manual方式，使用查询方式，SD卡可正常工作在24M频率下。
+
+14:17 2009-3-5
+VC0816, 存储, sd/sdio/mmc, 代码, padc_gpio_int_register与Sd无关
+padc_gpio_int_register中sd相关并没有使用. 
+
+18:05 2009-3-5
+项目, VC0816, keypad(KBD), padc
+Dongliang编译keypad出错, 发现用的是padc, 不是newpadc. 把规则中的padc去掉即可, 目前newpadc默认就会编译.
+
+19:00 2009-3-5
+项目, VC0816, FPGA上电后再按下reset, 这样系统状态和ASIC状态更加接近. 
+Han Jing Fei [hanjingfei@vimicro.com]
+816 strap pin的latch机制跟830不同。
+原因是830的padc用的clock是pclk，在FPGA版本上是始终存在的，但是816的padc 的clock是reset之后才产生的。
+所以strap pin的latch不能像830一样依赖于padc 的clock，而是采用latch cell实现的。
+这样跟asic的情况更加一致。
+另外，希望各位同事在做FPGA测试的时候，手动按一下fpga上的reset，虽然多一个步骤，但是比起依靠FPGA芯片的上电初始化，用外部reset更可靠稳定，更接近ASIC的情况。
+thanks
+Regards
+Han Jingfei
+Vimicro
++86-10-68948888x8114
+
+11:10 2009-3-6
+项目, VC0816, SPI, <TODO>补充完整</TODO>
+Liao zhicheng SPI 模块在四种工作模式中的两种(默认低电平)有问题, 表现为如果master不接slave, 工作正常. 接slave后有线被不正常的拉低. 不同模式下接不同上拉/下拉电阻后问题解决, 当时我曾认为是驱动能力问题.  后来Liao zhicheng和IC一起查, IC把FPGA内核信号引出同时观察外部信号, 发现有有规律的毛刺, 拔掉对应的线就恢复正常, 所以认为串扰造成的毛刺. 这是在老padc下测试的, newpadc下无此问题. 
+<经验>: 以后查信号错误: 
+1, 先看连线/跳线/CPLD(用CPLD切换连接关系)是否正确, 包括连接是否正确, 万用表测连通性;
+2, 排除软件配置问题;
+3, 硬件可能是驱动能力, 串扰等问题. 如果是串扰, 去掉出错的那根线就应该没问题了. 
+
+15:28 2009-3-6
+项目, VC016, SD目前任务
+自: Fengbeizhan 2009年3月4日 邮件
+zhangjian
+1), new padc 下，验证1bit； 完成
+2), new padc 下，sd detect 的调试: 需要与keypad和I2S联调.
+3), sd读写速度慢的调试. 未完成!!!
+4), 新板子的调试；已经补焊, 继续实验.
+5), bamvor: sel pin
+
+14:10 2009-3-9
+VC0816, 存储, sd/mmc/sdio, 调试, Sd_Detect, Xia kai test case
+1, 用"vc0816_09030622_09030519.ace"cf code出错:
+inc> load/pd/r 'D:\VC0816\Panda\build\VC0816.elf'
+Loading file D:\VC0816\Panda\build\VC0816.elf...
+Error: Readback verify error in Program memory at 0x0000
+Error S0025 (Server): Unable to write memory at specified addr while Loading File.
+inc> 
+inc> printf "Clear all breakpoints"
+Clear all breakpoints
+inc> printf "clearbreak all"
+clearbreak all
+inc> cl
+inc> 
+inc> printf "Set PC to zero"
+Set PC to zero
+inc> cexpression @pc=0 
+  Result is: 0  0x00
+inc> 
+inc> breaki 0x0 
+inc> breaki 0x4 
+inc> breaki 0x8 
+Warning: No unreserved watchpoints (1) available
+Warning: Failed to set Software Break - attempting to use Hardware Break instead (read-only memory, or running target?).
+Warning: No unreserved watchpoints (1) available
+Error B0018 (Board): H/W Breakpoint limit reached
+Quitting include file VC0816init_for_fpga_sdram_16M_NewPadc.inc: Error in command
+Include file failed on line 409
+
+"vc0816_09030521_09030519.ace"也是同样问题.
+
+"vc0816_09030419_09030419.ace"可以. 后来发现是配置文件用错了
+Zhou dashan 2009年3月6日发过邮件:
+ 3.6号的CF code（今天的） 改好了，用 VC0816init_for_fpga_sdram_16M_NewPadc_3_6.inc脚本来引导。 
+<TODO>查两个脚本有何不同</TODO>. Zhou dashan负责VC0816 rvdebug 脚本.
+
+2, 发现Sd_Detect配错了, 应该是
+b16,15,13,7
+1, 10100000, 10000000
+1, a0, 80
+0x0001a080, 原来是0x0001a010
+目前由于没有别的模块使用GPIOB, 且初始化都是0, 所以并没有影响sd_detect功能. 如果将来做复杂case测试就难说了. 
+
+3, 查SD插入中断:
+无SD卡时SD_Detect应当上拉. (从上往下数7, 从下往上数4).(从1开始计数).
+上拉由rp5[2]提供上拉.(从1开始计数).
+B,C: SD_Detect好: 软, 硬, rp5[2](板子从上往下数)电阻正常(10k, 5k, 没有把板子拆下来测试, 阻值可能不准确). 
+H的SD_Detect没有上拉: 继续查发现rp5[2]电阻为0, 估计是击穿了. 
+<TODO>板子已修, 中午实验</TODO>
+经验: 本来是应该先查连通性, 上拉是否正确的. 又忘了, 呵呵, 恢复的很慢:(
+
+4, 按Xia kai测试过程搭建测试环境. 
+参考"work\VC0830\module\sdio\Block API Test.txt"写test case:
+1), 基本读写测试: 测试1block, 8block, 32block的: write, read, comparing at 1, 3, 7, .. SD卡一半容量;
+write_read_compare(UINT32 start_sector, UINT32 num_of_sector, unsigned int totalCardSector)
+    ->write_read_compare_step(UINT32 num_of_sector, UINT32 sector_number)
+2), 1, 2, ...,128block写读测试. 目前Xia kai是在这个测试的第一次读时出错, 或者是cmd not complete或者是cmd no response. 是必现bug!
+目前实现测试case1就可以测出Xia kai的bug. 后面的case暂不实现. 
+"22:20 2009-3-9"测试通过. 从写代码到测试完成共用了2个小时, 实在太慢了. 
+代码修改: 加入宏"SD_FULL_TEST", 表示与Xia kai test case有关的代码.
+测试结果见"sd_full_test.txt"("work\VC0830\module\sdio\Xia kai bug\测试\3月9日测试").
+
+9:39 2009-3-10
+VC0816, 模块, sensor
+自: Feng beizhan 2009年3月10日邮件
+再强调一下，sensor 的data pin 我们一共用8个，bit0-bit7，对应video storage 子板是bit2-bit9；mas上是正确的。存在这个限制是因为我们目前用的sensor是以前项目继承下来的，sensor子板限制目前必须用bit2-bit9，否则就得改sensor子板，目前决定是不用修改sensor子板，所以大家使用时要引起足够的重视。
+
+11:06 2009-3-10
+VC0816, 存储, sd/sdio/mmc, 调试计划, 代码修改, 续"16:46 2009-3-2"
+1, 修改的文件, <TODO>完成Xia kai bug, 速度慢和SD_Detect share后, 更新代码</TODO>
+1), D:\VC0816\Panda\.cdtproject:
+这个文件保存编译规则, 下面这个target是sdio的, 我加入了clkrst模块:
+<target name="sdio" path="" targetID="org.eclipse.cdt.make.MakeTargetBuilder">
+<buildCommand>build</buildCommand>
+<buildArguments>-m=timer,sdio,fat,interrupt,clkrst  -rvdebug -sdram4driver -sdram -force</buildArguments>
+<buildTarget>all</buildTarget>
+<stopOnError>false</stopOnError>
+<useDefaultCommand>false</useDefaultCommand>
+</target>
+
+2), D:\VC0816\Panda\Makefile
+
+3), D:\VC0816\Panda\clkrst\clkrst.c
++//zhangjian.0304.ifdef
++#ifdef __FPGA__
++static UINT32 g_SdioInputClk = 0;
++void SdioBase_SetSdioInputClk_50M()
++{
++   UINT32 div, div_h, div_l, aim = 24 * 1000 * 1000;
++   
++   div = SDCLK_BEFORE_CLKRST / aim;
++   if(div * aim != SDCLK_BEFORE_CLKRST)
++   {
++      div += 1;
++   }
++   if(div < 2)
++      div = 2;
++   
++   g_SdioInputClk = SDCLK_BEFORE_CLKRST / div;
++   
++   div -= 2;
++   div_h = (div / 2) & 0xf;
++   div_l = (div - div_h) & 0xf;
++   //div = (div_h << 12) | (div_l << 8);
++   div = (div_h << 4) | (div_l << 0);
++   // 0x60000060 is the address of clkrest for sdio .
++   //HAL_WRITE_REG(0x60000060,div);
++//zhangjian.0304.1_line
++//   HAL_WRITE_REG(0x60000064,div);
++   HAL_WRITE_REG(CLOCKRST_CKD_SDIO_CONFIG,div);
++}
+ 
++UINT32 GetSdioInputClk()
++{
++   return g_SdioInputClk;
++}
++#endif
+
+4), D:\VC0816\Panda\clkrst\clkrst.h
++   //zhangjian.0304.3_line
++   #define SDCLK_BEFORE_CLKRST      96000000      
++   void SdioBase_SetSdioInputClk_50M();
++   UINT32 GetSdioInputClk();
+
+5), D:\VC0816\Panda\include\common_def.h
+-enum PADCSTATEenum
+-{
+-   PADCSTATE_IDLE   = 0,
+-   PADCSTATE_LCDC   = 1,
+-   PADCSTATE_NF   = 2,
+-   PADCSTATE_SD   = 3
+-};
+-
++//zhangjian.移动PADCSTATEenum到padc和newpadc目录.
+ #endif
+
+6), D:\VC0816\Panda\newpadc\padc.c
+@@ -956,8 +956,8 @@
+    //GPIO_E0~GPIO_E5 for SD CTRL pin
+    padc_set_func_mode(PADC_PORTB, 0x0001A010);
+ 
+-   Padc_Set_FS_SDIO();   
+-   Padc_set_SD_Detect();
++   Padc_Set_NF_PINSHARE();   
++   Padc_set_KPD2_PINSHARE(PADCSTATE_KPD2_SD_DETECT);
+
+7), D:\VC0816\Panda\newpadc\padcbase.h
+@@ -273,10 +273,6 @@
+ 
+ #define  Padc_FsNf_Cent0()                        HAL_WRITE_UINT32_BITVAL(PADC_FS_NF, 0,1 , 0) 
+ 
+-//zhangjjian.add.2_line
+-#define Padc_Get_SD_PADC()              HAL_READ_UINT32_BITVAL(PADC_FS_NF, 16, 17)   //2'b10: LCD Interface, 2'b01: SD Interface, 2'b00: Nand Flash Interface,
+-#define Padc_set_SD_Detect()            HAL_WRITE_UINT32_BITVAL(PADC_FS_KEYPAD, 8,9,1)
+-
+ #define Padc_SwitchMode_Lcdc7to0_NandSdDataShare15to8()  HAL_WRITE_UINT32_BITVAL(PADC_SWITCH_MODE, 0,0 , 0) 
+ #define Padc_SwitchMode_LcdcNandSdDataShare15to8()    HAL_WRITE_UINT32_BITVAL(PADC_SWITCH_MODE, 0,0 , 1) 
+ 
+@@ -456,11 +452,12 @@
+ //#define Padc_Set_FS_JTAG_I2C()      HAL_WRITE_UINT32_BITVAL(PADC_FS_JTAG, 0, 3, 0x5)
+ 
+ //#define Padc_Set_FS_NS(x)         HAL_WRITE_REG(PADC_FS_NS, (x))
+-//zhangjian.comment.1_line
+-//#define Padc_Set_FS_LCD()         HAL_WRITE_REG(PADC_FS_LCD, 0x0)         
+-//zhangjian.modified.1_line
+-//#define Padc_Set_FS_SDIO()      HAL_WRITE_UINT32_BITVAL(PADC_FS_NS, 7, 13, 0x0)
+-#define Padc_Set_FS_SDIO()      HAL_WRITE_UINT32_BITVAL(PADC_FS_NF, 31, 31, 0x0)   //new padc name's FS_NF not FS_NS
++//zhangjian.0304.4_line
++#define Padc_Get_NF_State()         HAL_READ_UINT32_BITVAL(PADC_FS_NF, 16, 17)
++#define Padc_Set_NF_PINSHARE()      HAL_WRITE_UINT32_BITVAL(PADC_FS_NF, 31, 31, 0x0)   //new padc name's FS_NF not FS_NS
++#define Padc_Get_NF_PADC()        HAL_READ_UINT32_BITVAL(PADC_FS_NF, 16, 17)   //2'b10: LCD Interface, 2'b01: SD Interface, 2'b00: Nand Flash Interface,
++#define Padc_set_KPD2_PINSHARE(sel)   HAL_WRITE_UINT32_BITVAL(PADC_FS_KEYPAD, 8,9,(sel))
++
+ 
+ //#define Padc_Set_FS_NF()      {HAL_WRITE_UINT32_BITVAL(PADC_FS_NS, 0, 6, 0x0);HAL_WRITE_UINT32_BITVAL(PADC_FS_NS,13,13, 0x0);}
+ 
+@@ -496,8 +493,23 @@
+ 
+ #define Padc_Get_Gpio_Int_Mask()   HAL_READ_REG(PADC_GPIO_INTMASK)
+ 
+-#define Padc_GetPadCState()         HAL_READ_UINT32_BITVAL(PADC_FS_NF, 16, 17)
+-
++//zhangjian.0304.2_enum
++//enum value for VC0816 pin share, currently only used by sdio
++enum PADCSTATE_KPD2_enum
++{
++   PADCSTATE_KPD2_KPD2      = 0,
++   PADCSTATE_KPD2_SD_DETECT= 1,
++   PADCSTATE_KPD2_RESERVERD= 2,
++   PADCSTATE_KPD2_I2S      = 3
++};
++
++enum PADCSTATE_NFD_enum
++{
++   PADCSTATE_NFD_NF      = 0,
++   PADCSTATE_NFD_SD      = 1,
++   PADCSTATE_NFD_LCD      = 2,
++   PADCSTATE_NFD_CodecDBG   = 3
++};
+
+8), D:\VC0816\Panda\padc\padcbase.h
+@@ -319,6 +319,14 @@
+ 
+ #define Padc_GetPadCState()         HAL_READ_UINT32_BITVAL(PADC_SWITCH_STATE, 0, 1)
+ 
++//enum value for VC0816 pin share, currently only used by sdio
++enum PADCSTATEenum
++{
++   PADCSTATE_IDLE   = 0,
++   PADCSTATE_LCDC   = 1,
++   PADCSTATE_NF   = 2,
++   PADCSTATE_SD   = 3
++};
+
+9), D:\VC0816\Panda\sdio\src\sdiobase.c
+@@ -18,6 +18,8 @@
+ #endif
+ 
+ #include "../../interrupt/interrupt.h"
++//zhangjian.0304.1_line
++#include "../../clkrst/clkrst.h"
+ 
+ #ifdef  NUCLEUS
+ //get Mutex
+@@ -33,10 +35,12 @@
+    RESP_LEN_48_BUSY
+ };
+ 
++//zhangjian.0304.move
++//移动g_SdioInputClk, SdioBase_SetSdioInputClk_50M()到clkrst.c, 今后所有clk相关函数都在
++//clkrst.c中实现.
+ #if 1
+ #ifdef __FPGA__
+ 
+-static UINT32 g_SdioInputClk = 0;
+ //UINT32 GetSdioDiv_Fod()
+ //{
+ //   // aim is 400KHz.
+@@ -73,36 +77,6 @@
+ //   return div;
+ //}
+ 
+-void SdioBase_SetSdioInputClk_50M()
+-{
+-   UINT32 div, div_h, div_l, aim = 24 * 1000 * 1000;
+-   
+-   div = SDCLK_BEFORE_CLKRST / aim;
+-   if(div * aim != SDCLK_BEFORE_CLKRST)
+-   {
+-      div += 1;
+-   }
+-   if(div < 2)
+-      div = 2;
+-   
+-   g_SdioInputClk = SDCLK_BEFORE_CLKRST / div;
+-   
+-   div -= 2;
+-   div_h = (div / 2) & 0xf;
+-   div_l = (div - div_h) & 0xf;
+-   //div = (div_h << 12) | (div_l << 8);
+-   div = (div_h << 4) | (div_l << 0);
+-   // 0x60000060 is the address of clkrest for sdio .
+-   //HAL_WRITE_REG(0x60000060,div);
+-   HAL_WRITE_UINT32_MASK(CLOCKRST_CKD_EN_CTRL, BIT12, BIT12);
+-   HAL_WRITE_REG(0x60000064,div);
+-}
+-
+-UINT32 GetSdioInputClk()
+-{
+-   return g_SdioInputClk;
+-}
+-
+ #endif
+ #endif
+ 
+@@ -234,15 +208,15 @@
+    #endif
+ }
+ 
++//zhangjian.func.0304
+ void SdioBase_DmaStart(void)
+ {
+    int state = 0;
+-   //#ifndef NEW_PADC
+    #ifdef NEW_PADC
+       while (1)
+    {
+-      state = Padc_GetPadCState();
+-      if (state == 1)
++      state = Padc_Get_NF_State();
++      if (state == PADCSTATE_NFD_SD)
+
+10), D:\VC0816\Panda\sdio\src\sdiobase.h
+@@ -185,10 +185,10 @@
+    // 送给sd的clk,在Clk_Rst模块前的值为24MHz * 4 = 96MHz
+ 
+ #if 1
+-   #define SDCLK_BEFORE_CLKRST      96000000
+-   
+-   UINT32 GetSdioInputClk();
+-   void SdioBase_SetSdioInputClk_50M();
++   //zhangjian.0304.comment.3_line
++//   #define SDCLK_BEFORE_CLKRST      96000000   
++//   UINT32 GetSdioInputClk();
++//   void SdioBase_SetSdioInputClk_50M();
+
+11), D:\VC0816\Panda\sdio\src\sdiodrv.c
+@@ -229,10 +230,8 @@
+       while (1)
+       {
+       #ifdef NEW_PADC
+-      //zhangjian.1_line
+-//        val = Padc_Get_LcdHigh8Pin();
+-        val = Padc_Get_SD_PADC();
+-         if (val == 1)     //sd use
++        val = Padc_Get_NF_PADC();
++         if (val == PADCSTATE_NFD_SD)     //sd use
+
+12), D:\VC0816\Panda\sdio\src\sdioprt.c
+@@ -387,9 +387,13 @@
+       // MMC use SWITCH cmd and re-write Ext_CSD.
+       //cmd6(switch), arg6,r1b
+       // arg6[24:25] access mode -- 0b11 for write byte
+-      // arg6[16:23] index(0~192valid) -- 183 for bus width
++      //zhangjian.0304.1_line
++      //// arg6[16:23] index(0~192valid) -- 183 for bus width
++      // arg6[16:23] index(0~191valid) -- 183 for bus width      
+       // arg6[15:8]  value -- 0 for 1bit ; 1 for 4bit ; 2 for 8bit
+-      Sdio_Drv_SendCmd(CMD6_SWITCH_FUNC, (1<<24)|(183<<16)|(g_BusWidth<<8), &g_SdioResp);//改用set bits
++//zhangjian.0304.1_line
++//      Sdio_Drv_SendCmd(CMD6_SWITCH_FUNC, (1<<24)|(183<<16)|(g_BusWidth<<8), &g_SdioResp);//改用set bits
++      Sdio_Drv_SendCmd(CMD6_SWITCH_FUNC, (11<<24)|(183<<16)|(g_BusWidth<<8), &g_SdioResp);//改用set bits
+
+15:00 2009-3-10
+项目, VC0816, 发邮件需要抄送给谁, 重要!!
+发SD_LOCK邮件发给: Lvpin@vimicro.com; hanjingfei@vimicro.com
+抄送给: wally@vimicro.com; dongxin@vimicro.com; lishujie@vimicro.com; aiguo@vimicro.com; fengbeizhan@vimicro.com
+
+15:04 2009-3-10
+项目, VC0816, 项目沟通注意事项
+Hi，all
+强调一下，为了项目进度和有效的沟通，以下事项希望大家特别注意：
+1）发mail 时，一定要抄送给ic manager/ verifaction manager及相关模块负责人，即：wally/dongxin/lishujie/aiguo/fengbeizhan……以下对应的模块负责人；
+2）实验室的电源/fpga board/电脑，在不用的时候，一定要关掉，特别是fpga board；
+3）目前fpga board比较紧张，大家写程序最好在工位进行，要合理利用fpga board；
+4）我们要分给3块fpga board 给测试使用，为了项目的质量有所保证，请大家在debug时，不要占用测试的台子进行；（目前fpga 的台子分配：3个给测试 + 4个给软件 + 1个给yonggang）
+5）自己的程序，走的时候要及时提交，以免被其它人删除；
+6）有问题一定要提交 issue tracking，并把发信讨论的过程和结果也附加到issue 的注释里，这样才便于项目的总结和借鉴；
+这些事情，已经说过很多次了，希望以后再不要让我们重复说这些事情了；
+
+17:27 2009-3-10
+VC0816, 存储, sd/sdio/mmc, 修板子
+目前是F, H, I, K四个板子SD不能用. 已经发了信, 并更新了"VC0816\Panda\document\board\NewPadcNotice.txt"文件. 
+
+19:33 2009-3-10
+<TODO>下一阶段任务</TODO>
+1, VC0830 SV. 目前分配给我的是3月22日-3月29日 SD模块调通. 明天下午的会议可能会加入830SD一些新test case.
+之前的项目计划里面Aiguo写了我6个人月, 估计还有别的事情安排给我.
+2, 598FPGA: 完成589基础开发平台. 这是Aiguo在我转正表中填写的.
+3, VC0830 SV Linux内核的移植:
+这个是自己的计划, 为了配合这个计划, 多关注Ling ming为VC0830建立基本系统的工作.
+
+19:57 2009-3-10
+VC0816, 存储, sd/sdio/mmc, SD_Lock
+cf code: vc0816_09030924_09030922.ace
+1, 单独测试Sd_Lock:
+1), 引脚: sd[1](从上往下数). 
+运行rvdebug脚本后:
+不插卡: 1;
+插卡写保护: 1;
+插卡无写保护: 0;
+
+2), "zhangjian.sd_lock"表示新增代码, <TODO>mmc卡写保护未测试!!!</TODO>
+发现sd处理的一个bug:
+如果系统上电时没有插卡, 或sd卡正常open后再次插卡时瞬间拔出都可能造成以后SD卡插入后没有做初始化. 
+修改:
+SD_CARD_EVENT_BUG_FIX
+(1), func Sdio_Drv_SetNotifyCallBack ( SD and MMC ) move from Test_Flags/Init_MMC to  Sdio_Protocol_SetNotifyCallBack
+(2), 注释了Sdio_Protocol_ResetAll中的Sdio_Drv_SetNotifyCallBack.
+
+3), VC0816/VC0830调试经验, 串口无信息: <TODO>总结</TODO>
+看清是816还是830的dragon: 刚才又出现串口无输出, 但是程序可以正常运行, SD卡插卡检测也正常. 后来发现是打开的是830的dragon.
+
+4), 本来完事了. 最后完整测试时发现除了初始化, 读写都会失败. 换成CVS上正确代码也不行. 后来发现是audio子板的问题, 拔了audio子板就正确. 
+
+最终代码: sdio_20090310.rar.
+位置: "work\VC0816\sdio_test"
+
+2, using uart1:
+uart_base.h
+	#define STD_UART_NUM	0
+   ->
+   	#define STD_UART_NUM	1
+
+10:08 2009-3-11
+VC0816, 存储, sd/sdio/mmc, SD_Detect pin share
+cf code:vc0816_09031020_09031020.ace
+1, 用Audio I2S clk和Sd_Detect测试pin share.
+aud_test()
+    aud_init_test()
+        aud_sys_init()
+            aud_ienvir_padc_init()
+                aud_drv_padc_set_codec_2()
+Sd_Open()
+    ->Sdio_Drv_GetCurSocketSelect()
+        ->Sdio_Drv_SetCurSocketSelect()
+            ->padc_switch_func_sdio()
+                ->Padc_set_SD_Detect()
+aud_drv_padc_set_codec_2()执行后, SD_Detect降到1.9v(估计是I2S clk), 然后触发SD_Detect中断(这是pin share是11, I2S clk), 在"padc_switch_func_sdio()"中用"Padc_set_SD_Detect"宏把pin share切到sd_Detect, 这是pin share才是01(sd_detect).
+经实测是4.8M, 1.96v. 这个CLK会连续触发Sd_Detect事件.
+为了便于测试定义"DEBUG_SD_DETECT_PINSHARE"宏, 当宏有效时padc_switch_func_sdio()函数不执行"Padc_set_SD_Detect()"宏. 这样检测到Sd_Detect中断后, 不会把pin切到Sd_Detect. 如果I2S clk一直变化且pin share有问题, 应当一直触发Sd_Detect中断.
+实验结果:
+定义"DEBUG_SD_DETECT_PINSHARE"宏时, 输入audio命令, Sd_Detect一次也没有. 
+所以目前的现象是: 使用audio前pin切给sd_detect, 输入audio命令audio初始化时切到audio I2S clk, 此后立刻会引起sd_detect中断. 
+SD卡插入后, sd_detect pin被拉低, L8[12](keypad2)可以检测到4.8M, 峰值同上的上下脉冲. 这样的clk I2S也能正常工作么?!与Beizhan讨论, <TODO>需要发信!!!</TODO>
+
+2, 今天学到的小经验: <TODO>整理经验</TODO>
+1), 查看CVS是哪个用户的, 看CVS\ROOT文件中用户名即可(@前面那个).
+阶段代码: "sdio_200903111254_not_commit.rar", 位置: "work\VC0816\sdio_test". 尚未更新代码. 
+2), VC0816/VC0830编译选项(尤其是给测试人员的宏)都放在include\sys.h中.
+
+14:16 2009-3-11
+项目VC0816/VC0830, 存储, sd/sdio/mmc, <DONE>
+1, <DONE>830测速度. 速度慢问题, 见"16:31 2009-3-11", "14:16 2009-3-11", "11:13 2009-3-14"这些带有"(Issue [816 0007408])"关键字的日志. 和"16:40 2009-3-14"memcpy对Cache影响的实验.
+2, <DONE>SdioBase_SetSdioInputClk_50M改名SdioBase_SetSdioInputClk(). 830代码已修改并提交.
+3, <转移>830代码修改: switch or not; auto, manual.
+4, <DONE>Xia kai bug 发信.
+5, <DONE>lock 不考虑pin share. 
+6, <DONE>detect 发信IC仿真. 已解决, 见"21:50 2009-3-11", (Issue [816 0007407])
+
+16:31 2009-3-11
+项目VC0816/VC0830, 存储, sd/sdio/mmc, 读写速度慢(Issue [816 0007408])
+816 SD卡读写速度很慢, 具体情况如下:
+1, 816 SD卡读写速度(使用今天的cf code, (20:27 2009-3-12)查看, 应该是"vc0816_09031020_09031020", "20:27 2009-3-12"end)
+1), fat下用cp命令复制一个11541k文件(from sd to sd), 时间76秒, 读写平均速度304k/sec;
+2), 用SD speed命令测试: multi read: 377k/sec, multi write: 358/sec;
+                        single read:194k/sec, single write: 112k/sec;
+
+2, 对比830:
+1), fat: 命令同上. 时间33秒, 读写平均速度699k/sec; 
+2), 用SD speed命令测试: multi read: 912k/sec, multi write: 776k/sec;
+                        single read:485k/sec, single write: 180k/sec;
+816大约相当于830速度的一半.
+
+17:15 2009-3-11
+项目VC0816/VC0830, 存储, sd/sdio/mmc, SD_Detect bug, 
+<DONE>已解决,  见"21:50 2009-3-11"
+总结自"10:08 2009-3-11", cf code:vc0816_09031020_09031020.ace. 
+Sd_Detect pin share bug test case:
+1, 功能测试:
+与Sd_Detect share pin的module不使用, 测试Sd_Detect是否正常.
+测试结果: Sd_Detect中断正常.
+
+2, pin share测试1:
+SD卡不插卡. 初始状态pin切给Sd_Detect, audio初始化时pin 切给audio I2S clk, 测试切给Audio是否误报Sd_Detect中断.
+测试结果: 切给Audio后, audio初始化产生的I2S clk会误报一次Sd_Detect中断(Card Insert). 此后和audio工作时没有误报Sd_Detect中断.
+
+3, pin share测试2:
+进一步测试, 如果初始状态直接切给Audio, audio使用时是否会误报Sd_Detect中断.
+测试结果: 没有误报. 
+
+17:53 2009-3-11
+项目VC0816/VC0830, 存储, sd/sdio/mmc, Sd_Detect对audio的影响.
+另外有个疑问: Sd_Detect pin是未插卡时高电平, 插卡后变为低电平. 这样sd卡插入且使用audio测试时, 与Sd_Detect pin share的I2Sclk波形会失真. 具体从示波器上看, 未插入Sd卡时I2S clk正常(4.8MHz, 平均值1.96v), 插入后, 频率不变(4.8MHz)但波形像是被积分了. <DONE>测试有无声音: 不需要测了, 见"21:50 2009-3-11"
+
+19:53 2009-3-11
+(10:27 2009-3-12)
+VC0830, 存储Storage, sd/sdio/mmc, <TODO>加入总结文档</TODO>
+0, 准备
+0), VC0830 SV: 电源是内正外负(电源上有标识)5V 3A，千万别用错了！！！！
+1), 参考"VC0830SV测试须知.doc"配置fpga 串口, 增加for sv编译target.
+2), 如果rvdebug中串口无输出, 首先检查不连接multiICE时板子复位后(记得按复位按键, 上电复位可能有问题), dnw有无正确输出, 有无弹出优盘. 如果正常再连接multiICE, 启动rvdebug.
+3), 串口无输出检查:
+(1), 跳线<TODO>补充</TODO>:
+uart0 SDO接到JP17[3]; uart0 SDI接到JP17[1]; uart2开关1,3on; 
+(2), 插上usb线后有无U盘弹出, 如果有说明rom bootloader启动成功;
+(3), VC0830\uart\uart_define.h中选择串口0;
+#define STD_UART_NUM	0
+(4), 串口线是否是好的.
+
+1, 修改代码:
+1), CLK
+2), gpioe input.
+
+2, 编译
+1), Makefile有问题:
+(1), make:  makefile:  line 77:  Error -- Expecting macro or rule defn, found neither
+后来发现是"make -v"显示不正确(正确的make是gnu make 3.8, 当时是显示了4行error信息, 错误信息:
+C:\Documents and Settings\zhangpu>make -v
+make:  Error -- No target
+make:  Infering prerequisite(s) and recipe for [makefile.mk]
+make:  Time stamp of [makefile.mk] is 0
+make:  Infering prerequisite(s) and recipe for [makefile]
+make:  Time stamp of [makefile] is 0
+, 这个是因为windows环境变量设置不对, eclipse没有找到正确的make.
+ESDE的make路径是"C:\ESDE\runtime\bin", 把它加入path环境变量中即可. 如果加入到用户环境变量不行就加入到系统环境变量path的第一个. 
+确定后环境变量生效, eclipse, cmd等调用make的程序需要退出重启. 
+(2), 测试make是否正确使用"make -v". 如果不正确, 查看环境变量设置是否正确, 实在不行就把用户path变量环境都放到系统path的最前面.
+2), 如果没有规则, 把.cdproject删了, 重新更新.
+编译通过;
+
+3, 发现rvdebug设断点没能进入sd_init, 是rvdebug版本问题——Liao zhicheng装的带有较新的补丁的rvdebug有问题. <TODO>查目前我们的rvdebug版本</TODO>
+更换dvdebug后断点,单步正常. fat mount正常, ls正常, 但write crc error, 两次测试结果相同: 一次由fat cp, 一次直接write.
+AASP SD:/>ls
+VC0816_mas                      <DIR>
+1.xls                      31744
+1                      <DIR>
+2.xls                      31744
+Boxue test source                      <DIR>
+zhangjian.rar                      11817853
+111                      11817853
+1.rar                      11817853
+[FAT_MODULE]<-do_fat_ls() with 1
+
+AASP SD:/>fat
+FAT  SD:/>mount
+[FAT_MODULE]->do_fat_mount()
+Please select drv type(sdcard/nandflash)/[sdcard]
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Mount disk  success!
+[FAT_MODULE]<-do_fat_mount() with 1
+
+FAT  SD:/>ls
+VC0816_mas                      <DIR>
+1.xls                      31744
+1                      <DIR>
+2.xls                      31744
+Boxue test source                      <DIR>
+zhangjian.rar                      11817853
+111                      11817853
+1.rar                      11817853
+[FAT_MODULE]<-do_fat_ls() with 1
+
+FAT  SD:/>cp 1.rar 2.rar
+[FAT_MODULE]->do_fat_cp()
+Write data crc error.
+
+第二次测试, 错误同样:
+SDIO  SD:/>write 
+[SDIO_MODULE]->do_sdio_write()
+
+Single/Multi : (Int)/[0]
+Read start address : (Int)/[3]
+Read sector : (Int)/[-369098702]1
+[SDIO_MODULE]MESSAGE:do_sdio_write arg input succeed!
+
+Write data crc error.
+今天代码位置: "work\VC0830\SV\sdio\sdio_20090311.rar"
+
+4, (10:51 2009-3-12)
+用逻辑分析仪看, 发现是占空比有问题, 我当时没注意到divider同时管占空比:(
+divider中对高低电平分别分频, 写0表示1. 如果高低clk都写1表示2分频(1+1).
+修改
+	//first level divider = 2;
+//	Hal_WriteRegBitVal(CLOCKRST_CKD_SDIO_CONFIG, 0, 1, 2);
+//	Hal_WriteRegBitVal(CLOCKRST_CKD_SDIO_CONFIG, 4, 5, 0);
+	//second level divider = 10;
+//	Hal_WriteRegBitVal(CLOCKRST_CKD_SDIO_CONFIG, 8, 11, 10);
+//	Hal_WriteRegBitVal(CLOCKRST_CKD_SDIO_CONFIG, 12, 15, 0);
+为
+	HAL_WRITE_REG(CLOCKRST_CKD_SDIO_CONFIG, 0x4400);
+分频值都是2*10=20. 480/20=24MHz.
+
+速度正常!:
+Multi Read Speed is: 2664395 bytes/second
+Multi Write Speed is: 1802665 bytes/second
+
+5, bug:
+1), <转移>有一次fat cp, sdio speed 1测试后, sd卡被写坏;
+2), <转移>有一次插sd卡时会报大量card event1中断. 拔出sd卡再插入后aasp初始化和sd卡使用正常. 
+3), <DONE>测试udc出问题:
+(0), udc使用: udc; init: 参数除了sd选0外其余都是默认参数.
+(1), 第一次未插sd卡, 
+(2), data abort
+
+//	//ungate 所有clk
+//	Write_reg(CLOCKRST_SYS_CLK_GT_CTRL,0x0);
+//	Write_reg(CLOCKRST_M_CLK_GT_CTRL,0x0);
+	HAL_WRITE_UINT32_BITVAL(CLOCKRST_SYS_CLK_GT_CTRL, 6, 6, 0);
+	HAL_WRITE_UINT32_BITVAL(CLOCKRST_M_CLK_GT_CTRL, 18, 18, 0);
+
+"//	Write_reg(CLOCKRST_M_CLK_GT_CTRL,0x0);"进入data abort中断.
+改为
+	HAL_WRITE_UINT32_BITVAL(CLOCKRST_M_CLK_GT_CTRL, 18, 18, 0);
+后正常. 但是clkinit中sd是24Mz, 但是插卡启动进入aasp后, ls时寄存器已经改为了1100(52.6MHz, 这个速度超出了sdhc最快50MHz的限制, 更何况我们用的还不是sdhc. 
+
+6, 解决上面的bug-3)
+1), 跟踪代码发现Sd_Init调用的"SdioBase_SetSdioInputClk()"仍然进入了"__FPGA__"宏中. 也就是说今天上午和昨天SD正常时是先执行的"__FPGA__"宏再执行的"__SV__". "__FPGA__"宏仍然有效的原因是没有包含:
+#ifndef USE_ADS_MODE
+#include "../build/830macro.h"
+#endif
+我是在"sdiocommondef.h"中加入的. 系统没有提供统一的位置. 各个模块需要自己加入.
+
+2), 但查看编译log, 实际已经加入了:
+arm-elf-gcc -I./include -include ./build/830macro.h  -I"C:\ESDE/gcc/arm-elf/include" -g -fomit-frame-pointer -fno-exceptions -fno-unwind-tables -ffunction-sections -mcpu=arm926ej-s -msoft-float        -O0 -c SDIO/src/sdiodrv.c -o build/SDIO/src/sdiodrv.o
+
+3), 继续查, 发现fat_init中readoneblk timeout:
+Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+Init cmd
+No BBT
+Env init done
+Load.
+All backup images fail
+Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+Init cmd
+No BBT
+Env init done
+Load.
+All backup images failCard Event.
+Card Insert.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Read data time out.
+Read data time out.
+
+这个原因是void SdioBase_SetSdioInputClk()的SV中没有加入"g_SdioInputClk = 24*1000*1000;"
+造成调用GetSdioInputClk()设置clk不正确，这样初始化时clk不正确。造成后面读timeout。
+
+7, 到目前为止:
+1), 代码; "sdio_20090312_sdio_ok_修改了clk部分.rar".
+2), 
+(1), 有一次fat cp, sdio speed 1测试后, sd卡被写坏;
+(2), 有一次插sd卡时会报大量card event1中断. 拔出sd卡再插入后aasp初始化和sd卡使用正常. 
+(3), 多余的timeout, 原来没见过这个.(不是很确定原来没有)
+AASP SD:/>Card Remove.
+Card Insert.
+Response start time out: 1.
+
+21:50 2009-3-11
+VC0816, 存储, sd/sdio/mmc, 解决bug<DONE>
+2, 踢bug:
+和我们的办法一致, Lvpin也建议从sd_detect切走时mask sd_detect中断. 最后认定test case2实际不使用. 见Issue和Han jingfei2009.3.12 13:33邮件. 
+3, sd_detect对audio播放有无影响. 这个很重要. 最晚中午测试!!!
+由于test case2不出现, 所以这个就不需要测试了.
+
+99:99 2009-3-11
+项目VC0816/VC0830, 存储, sd/sdio/mmc, <TODO></TODO>
+1. 修板子解决"14:10 2009-3-9"2问题.
+H板子已修, 反而不能用了. read crc错误. 现象同I板.
+2, Xia kai bug
+0), 下午和Beizhan, Xia kai一起review我写的test代码. <DONE>
+1), 在VC0830上测试. 
+2), 换不同容量, 型号SD卡测试.
+3, 测试SD_Detect和SD_Lock. 今天close. 晚上总没有人吧. 应该不会用太长时间. 
+4, 速度慢的原因:
+看了代码3/4 12:34代码与当前代码的差异:
+1), sdio_drv.c/h: 加入NU_Activate_HISR处理函数. 最新版本是3.7的.
+2), sdio_test.c: 加入SD_FULL_TEST. 
+感觉这些不会影响速度啊, 晚上试试不同的板子.
+
+15:50 2009-3-12
+VC0816, 存储, sd/sdio/mmc, 速度慢的问题, "16:31 2009-3-11"续
+1, Lv pin用逻辑分析仪看single cmd之间的间隙, 计算1s能发多少个命令num_of_cmd, 这样1s能发的数据(k)=num_of_cmd * 512 / 1024. 用A板测试, 发现速度没有问题. 
+
+2, 具体测试 
+1), 环境:
+板子: A板. 接了sd_detect, 接了lcd, sensor; C板: 无其他外设.
+cf code: vc0816_09030924_09030922_cqdai_200903121019.ace
+FPGA编号: VMICF0801067
+
+2), A板:
+Feng beizhan myflash 512M sd卡:
+SDIO  SD:/>speed 1
+第一次:  c0816_09030924_09030922_cqdai_200903121019.ace
+Multi Read Speed is: 2594116 bytes/second
+Multi Write Speed is: 242602378 bytes/second
+第二次: c0816_09030924_09030922_cqdai_200903121019.ace
+Multi Read Speed is: 2594827 bytes/second
+Multi Write Speed is: 1184214 bytes/second
+
+SDIO  SD:/>speed 0
+第一次:  c0816_09030924_09030922_cqdai_200903121019.ace
+Single Read Speed is: 1468825 bytes/second
+Single Write Speed is: 3252076 bytes/second
+第二次: c0816_09030924_09030922_cqdai_200903121019.ace
+Single Read Speed is:  bytes/second
+Single Write Speed is: 1471523  bytes/second
+
+Zhangjian 松下 1G sd卡:
+SDIO  SD:/>speed 1
+第一次: c0816_09030924_09030922_cqdai_200903121019.ace
+Multi Read Speed is: 2515499 bytes/second
+Multi Write Speed is: 1582491 bytes/second
+第二次: vc0816_09030419_09030419.ace
+Multi Read Speed is: 2515400 bytes/second
+Multi Write Speed is: 1597470 bytes/second
+第三次: vc0816_09030123_09022719.ace
+Multi Read Speed is: 2517137 bytes/second
+Multi Write Speed is: 1871982 bytes/second
+
+SDIO  SD:/>speed 0
+第一次: c0816_09030924_09030922_cqdai_200903121019.ace
+Single Read Speed is: 1034657 bytes/second
+Single Write Speed is: 231975 bytes/second
+第二次: vc0816_09030419_09030419.ace
+Single Read Speed is: 1034222 bytes/second
+Single Write Speed is: 232939 bytes/second
+第三次: vc0816_09030123_09022719.ace
+Single Read Speed is: 1023398 bytes/second
+Single Write Speed is: 236029 bytes/second
+
+C板: c0816_09030924_09030922_cqdai_200903121019.ace
+Feng beizhan myflash 512M sd卡:
+SDIO  SD:/>speed 1
+Multi Read Speed is: 2594307 bytes/second
+Multi Write Speed is: 1180357 bytes/second
+
+SDIO  SD:/>speed 0
+Single Read Speed is: 1468825 bytes/second
+Single Write Speed is: 8641  bytes/second
+
+Zhangjian 松下 1G sd卡:
+SDIO  SD:/>speed 1
+Multi Read Speed is: 2516495 bytes/second
+Multi Write Speed is: 1823819 bytes/second
+
+SDIO  SD:/>speed 0
+Single Read Speed is: 1470496 bytes/second
+Single Write Speed is: 235979 bytes/second
+
+J板, VMIC0801061, Zhangjian 松下 1G sd卡, multi 速度正常.
+
+Beizhan卡的Amulti write 和Csingle write一个很快一个很慢. 速度慢那个是真实的速度慢. 
+很快那个再测时没有出现.
+代码: sdio_200903121720_VC0816_sdio_speed_ok.rar, 位置:"work\VC0816\sdio_test\code". 为了以防万一, 把整个VC0816代码都备份了.
+
+<TODO>加入经验总结</TODO>: 出问题一定保存好所有状态, 软件硬件版本/编号, 代码尽量做备份. 这次SD卡速度慢的问题如果编号都记清了, 就能快很多. 
+
+17:48 2009-3-12
+项目VC0830, 存储, sd/sdio/mmc, 代码修改
+1, 830代码修改: switch or not; auto, manual. 自"14:16 2009-3-11"3
+2, sd/mmc: 1bit, 4bit
+3, 其余之前认为应当优化的代码.
+
+20:42 2009-3-12
+项目VC0816/VC0830, 存储, sd/sdio/mmc, 读写速度, 续
+
+查找造成SD卡读写速度慢的原因:
+cf code: vc0816_09031020_09031020.ace. 根据Zhangjian"16:31 2009-3-11"测试结果, 这个版本的cf code也会造成速度满. 以下只测试sd speed 1(4bit sd卡读写速度测试). 暂时认为和软件代码无关. 用今天下午测试SD卡速度正常的代码. 
+
+测试结果: 未发现SD卡读写速度慢的组合, 除了出错的SD卡, 读写速度很稳定. 但是发现G板全部四次写出错. c板有一次读出错. A板有一次lcd share pin且不到的错误. 测试用VC0816.elf映像见附件. 详细测试日志如下:
+
+FPGA: VMICF0711054.
+K板: 
+Multi Read Speed is: 2515540 bytes/second
+Multi Write Speed is: 1713444 bytes/second
+A板: 
+Multi Read Speed is: 2518105 bytes/second
+Multi Write Speed is: 1716863 bytes/second
+J板: 
+Multi Read Speed is: 2518156 bytes/second
+Multi Write Speed is: 1730267 bytes/second
+C板: 
+Multi Read Speed is: 2518248 bytes/second
+Multi Write Speed is: 1715730 bytes/second
+G板: 
+Multi Read Speed is: 2517830 bytes/second
+Write Multi failed! Multi Write Speed is: 242568705 bytes/second
+
+FPGA: VMICF0801063
+K板: 
+Multi Read Speed is: 2515690 bytes/second
+Multi Write Speed is: 1719759 bytes/second
+A板: 提示:
+SDIO  SD:/>ard Insert.
+Card Event.
+Response start time outponse start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Fat mount success!
+rvdebug暂停后发现停在此处: 
+void Lcdc_RequestPadc3shareLcdcUse(void)
+{
+	//#ifndef NEW_PADC
+	g_padcSwitchLcdcUseFlag = 1;
+	LcdcB_SWPanelPadcReqEn();
+	while (1)
+	{
+		if (g_padcSwitchLcdcUseFlag == 0)
+		{
+			break;
+		}
+	}
+	//#endif
+}
+在rvdebug中设置"g_padcSwitchLcdcUseFlag=0"后sd读写正常:
+Multi Read Speed is: 2518250 bytes/second
+Multi Write Speed is: 1715410 bytes/second
+J板: 
+Multi Read Speed is: 2518645 bytes/second
+Multi Write Speed is: 1734132 bytes/second
+C板: read one blk crc error, 停在第二次readoneblk上面.
+Card Event.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Read data crc error.
+G板: 
+Multi Read Speed is: 2518330 bytes/second
+Write Multi failed! Multi Write Speed is: 242467742 bytes/second
+
+FPGA: VMICF0801056
+K板: 
+Multi Read Speed is: 2518465 bytes/second
+Multi Write Speed is: 1715745 bytes/second
+A板: 
+Multi Read Speed is: 2518694 bytes/second
+Multi Write Speed is: 1722595 bytes/second
+J板: 
+Multi Read Speed is: 2517982 bytes/second
+Multi Write Speed is: 1734561 bytes/second
+C板: 
+Multi Read Speed is: 2515854 bytes/second
+Multi Write Speed is: 1720257 bytes/second
+G板: 
+Multi Read Speed is: 2518279 bytes/second
+Write Multi failed! Multi Write Speed is: 242445317 bytes/second
+
+FPGA: VMICF0801060
+K板: 
+Multi Read Speed is: 2518737 bytes/second
+Multi Write Speed is: 1735786 bytes/second
+A板: 
+Multi Read Speed is: 2515666 bytes/second
+Multi Write Speed is: 1731870 bytes/second
+J板: 
+Multi Read Speed is: 2518785 bytes/second
+Multi Write Speed is: 1732889 bytes/second
+C板: 
+Multi Read Speed is: 2518698 bytes/second
+Multi Write Speed is: 1731109 bytes/second
+G板: 
+Multi Read Speed is: 2518622 bytes/second
+Write Multi failed! Multi Write Speed is: 242490171 bytes/second
+
+To Fengbeizhan, Shuyu:
+Beizhan, shuyu: A板这个错误和你们有关系么?
+
+(17:49 2009-3-13)后来发现VMICF0801063+C板+vc0816_09031020_09031020.ace没有再出现crc错误, 可能是没插好.
+
+21:50 2009-3-12
+项目, VC0830/VC0816, 下一阶段任务，<TODO></TODO>
+参见2009-3-11 VC0830 SV会议记录, 研发记录簿p46.
+1, VC0830 SV
+1), <DONE>sd mount不上. 明早查原因. 可能与Lingming修改的代码有关. 
+见"10:16 2009-3-13", 与lingming代码无关, 是跳线问题.
+2), (14:35 2009-3-14)Cai jin说单独编sdio启动会停在某个异常中(他只用了一次, 只出现了一次), 和video一起编没事. 这个问题当初把所有clk一起ungating(module clk ungating)也出现过, 不过当时是必现错误. 可能是我们的clk相关代码不稳定? "14:35 2009-3-14"end
+3), VC0830 SV PMU由我测试. 
+4), SD代码改进:
+(1), 杂: 1bit; 不share, 自动share, 手动share三种模式分开处理. <TODO>整理"10:02 2009-2-19"和"17:48 2009-3-12"内容</TODO>
+(2), 加入sdio功能, 可能是sdio wifi.
+(3), 测试sd告诉(48MHz)模式. 将来pll给我48MHz. 我自己再用cnt分频. 
+
+2, 816:
+1), 删除sdio专有函数;
+2), <DONE>找Lv pin辅助查看crc错误. (9:31 2009-3-16)后来没有再现, 应该是高速座没有插好. "9:31 2009-3-16"end
+
+10:16 2009-3-13
+VC0830, 存储, sd/sdio/mmc, debug
+1, 编译sdio target, 最后链接时提示Clk_GenPll3未定义, 在sdio target rule中加入clkrst中即可.
+
+2, SW15[1]. [4]拨到ON打开I2C. pinshare部分只能有一个地方使能I2C, 不能多个地方使能. I2C后来发现是ungating时配错了, 没有ungating
+
+3, 调试sd, timeout错误(<DONE>见5):
+Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+Init cmd
+Find BBT
+Env init done
+Load.
+Go
+AASP Shell V0.1 
+Copyright 2006 Vimicro. 
+__AASP_CMD_TAB__     = 0x37754 
+__AASP_CMD_TAB_END__ = 0x37850 
+sizeof(struct cmd)=12
+Total 21 commands
+
+AASP :/>help
+Read a piece of data from sys buf to PC
+   bufread
+Return data length from sys buf to PC
+   bufreadlength
+Test buf read and write
+   buf
+Write a piece of data from PC to sys buf
+   bufwrite
+Transmit a piece of data to PC
+   filetransmit
+Write a piece of data to arm
+   filewrite
+Help about help?
+   help
+Test interrupt
+   intbasictest
+Test interrupt
+   irq
+Test memory read and write
+   mem
+memory dump
+   memdump
+memory fill
+   memfill
+memory read
+   memread
+memory read
+   memread32
+memory write
+   memwrite
+memory write
+   memwrite32
+ Test padc
+   padc
+ Test timer and watchdog function and effect!
+   timer
+do uart test
+   uart
+Display AASP version information
+   version
+Display a string : Vimicro
+   vimicro
+AASP :/>version
+[VERSION_MODULE]MESSAGE:Vimicro AASP V0.1 - built 17:37:05, Mar 11 2009
+
+AASP :/>memread 0x60050020 -s 32
+[MEM_MODULE]MESSAGE:0x60050020==0x00000000
+AASP :/>memread 0x60024000 -s 32
+[MEM_MODULE]MESSAGE:0x60024000==0x00024000
+AASP :/>Card Event.
+Card Insert.
+Card Event.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Response start time out: 55.
+Response start time out: 41.
+Response start time out: 1.
+Fat mount fail!
+
+AASP Shell V0.1 
+Copyright 2006 Vimicro. 
+__AASP_CMD_TAB__     = 0x5b230 
+__AASP_CMD_TAB_END__ = 0x5b380 
+sizeof(struct cmd)=12
+Total 28 commands
+
+AASP :/>help
+Read a piece of data from sys buf to PC
+   bufread
+Return data length from sys buf to PC
+   bufreadlength
+Test buf read and write
+   buf
+Write a piece of data from PC to sys buf
+   bufwrite
+Test clkrst
+   clkrst
+Clock switch
+   clkswitch
+fat cd
+   cd
+fat ls
+   ls
+fat
+   fat
+Transmit a piece of data to PC
+   filetransmit
+Write a piece of data to arm
+   filewrite
+Help about help?
+   help
+Test interrupt
+   intbasictest
+Test interrupt
+   irq
+Test memory read and write
+   mem
+memory dump
+   memdump
+memory fill
+   memfill
+memory read
+   memread
+memory read
+   memread32
+memory write
+   memwrite
+memory write
+   memwrite32
+ Test padc
+   padc
+sd
+   sd
+restart sd
+   sdrestart
+ Test timer and watchdog function and effect!
+   timer
+do uart test
+   uart
+Display AASP version information
+   version
+Display a string : Vimicro
+   vimicro
+AASP :/>version
+[VERSION_MODULE]MESSAGE:Vimicro AASP V0.1 - built 10:15:13, Mar 13 2009
+
+AASP :/>memread 0x60050020 -s 32
+[MEM_MODULE]MESSAGE:0x60050020==0x00000000
+AASP :/>memread 0x60024000 -s 32
+[MEM_MODULE]MESSAGE:0x60024000==0x01171390
+AASP :/>
+AASP :/>
+AASP :/>
+AASP :/>
+AASP :/>sd
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 8.
+Response start time out: 55.
+Response start time out: 41.
+Response start time out: 1.
+[SDIO_MODULE]MESSAGE:SDIO open failed!
+
+4, 另外一个问题, 插一次报四次中断(<DONE>见5)
+AASP :/>Card Insert.
+Card Insert.
+Card Remove.
+Card Insert.
+
+5, 查clk:
+初始化时低电平很窄: 18ns;高电平2.48us. 频率大约是400k, 但占空比不对.
+<TODO>总结</TODO>: 逻辑分析仪要设置采样率, 如果采样周期过高可能显示的结果不正确. 目前是2ns, 最低的.
+r15, r12 sdram clk? <TODO>确认</TODO>
+用示波器结果一样. 
+
+注: fail load *.elf 可能是sdram有问题.
+
+最后发现是sw13开关问题, 应该是都拨到off. 否则PWM连到VDD:(
+SW13拨到off后3,4两个问题都解决了.
+<TODO>查, 为何造成这个占空比, 要能计算出来!!!</TODO>
+
+6, (Lingming)
+nand里面烧了启动代码, 当SW2. SW3打开时(nand/sd share 0-7 data pin), rom bootloader启动后会弹出优盘, 说明没找到nand里面的code. 但如果SW2, SW3关闭bootloader就能找到code,并启动代码可以正常运行(显示AASP提示符). 
+当时感觉是nand和sd pin share问题. 
+还出现过,启动后串口无输出等其他问题. 但后来在AASP fat下format, PC通过udc format nand后. nand和sd pin share没有大问题(有一次复制10M文件错了377个字节, 这可能是nand频率有点高造成的, 后面会实验.
+(18:16 2009-3-14)今天Lingming用逻辑分析仪看波形, 发现在clk下降沿(确定是否是clk)前后有毛刺, nand降频到0.8倍(32->26MHz)后虽然仍有毛刺但不影响使用, nand很稳定. 可能是两个sd插槽电容引起的? <TODO>有空我也看看这个波形</TODO>
+
+15:39 2009-3-13
+嵌入式, VC0830, 存储, nand flash
+nand flash有时需要特定占空比的clk, 这个datasheet上都有说明. 
+
+16:35 2009-3-13
+VC0830_SV, memory, rvdebug中的初始化脚本, <TODO>找sdram的datasheet</TODO>
+参考"VC0830 SDRC MAS 0.9"的"8.1 SDRC initial flow".
+1, setmem /W 0x60051900=0x2
+(1), [1], SDR_LVCMOS = 1
+表示选项SSTL2 (2.5v).
+可选参数:
+[1]	SDR_LVCMOS	1'b1	"{SDR_LVCMOS,SDR_DS}  used to select input receiver type , for all SDR_* pads
+2'b00 : SSTL18 (1.8v)
+2'b01:  SSTL2 (2.5v)
+2'b10:  MDDR (1.8v), LVCMOS(2.5v), LVTTL (3.3v)"
+
+[0], SDR_DS = 0:
+[0]	SDR_DS	1'b0	
+
+16:54 2009-3-13
+<TODO></TODO>
+打印: 19:53 2009-3-11
+
+17:29 2009-3-13
+VC0816, sd/sdio/mmc, sd速度慢(Issue [816 0007408])
+1, VMICF0801056, C, cf code:cf code: vc0816_09031020_09031020.ace
+用今天代码:
+speed 1
+Multi Read Speed is: 386793 bytes/second
+Multi Write Speed is: 369083 bytes/second
+speed 0
+Single Read Speed is: 198561 bytes/second
+Single Write Speed is: 114727 bytes/second
+
+换昨天测试用代码, 速度正常.
+speed 1
+Multi Read Speed is: 2517655 bytes/second
+Multi Write Speed is: 1826438 bytes/second
+speed 0
+Single Read Speed is: 1022670 bytes/second
+Single Write Speed is: 235107 bytes/second
+
+再换回今天代码:
+速度正常. 复位后又出现速度慢:
+Multi Read Speed is: 386783 bytes/second
+Multi Write Speed is: 367022 bytes/second
+Single Read Speed is: 198560 bytes/second
+Single Write Speed is: 114507 bytes/second
+重新上电, 按两次SW15, 两次FPGA_reset, 速度慢:
+Multi Read Speed is: 386796 bytes/second
+Multi Write Speed is: 368877 bytes/second
+Single Read Speed is: 198561 bytes/second
+Single Write Speed is: 114919 bytes/second
+
+再换昨天测试用代码, 速度正常.
+Multi Read Speed is: 2516848 bytes/second
+Multi Write Speed is: 1872570 bytes/second
+Single Read Speed is: 1022736 bytes/second
+Single Write Speed is: 236954 bytes/second
+
+2, 看来主要原因是code不一致, 详细比较所有相关代码.
+代码都位于"D:\work\VC0816\sdio_test\code"
+今天造成sd速度慢的代码: sdio_200903131756_VC0816_sdio_speed_slow()
+昨天sd速度正常的代码: sdio_200903121720_VC0816_sdio_speed_ok()
+
+1), sdio代码差异:
+今天代码sdio多了DEBUG_SD_DETECT_PINSHARE和"SdioBase_RequestMode()"., 对换sd代码, 速度仍然很慢:
+Multi Read Speed is: 386141 bytes/second
+Multi Write Speed is: 369174 bytes/second
+Single Read Speed is: 198570 bytes/second
+Single Write Speed is: 114991 bytes/second
+
+2), newpadc:
+今天代码多了padc_gpioTest(), padc_switch_func_video(), padc_switch_func_usb_detect()中部分内容, 应该和我无关.
+void padc_switch_func_sdio(void)注释了"//Padc_set_SD_Lock(); //for protect other test", 看起来也无关, 保险起见测试一下, 仍然速度慢:
+Multi Read Speed is: 386793 bytes/second
+Multi Write Speed is: 368789 bytes/second
+Single Read Speed is: 198557 bytes/second
+Single Write Speed is: 114967 bytes/second
+
+3), timer: 完全相同.
+
+4), interrupt: 完全相同.
+
+5), fat: 完全相同.
+
+<TODO>明天接着查代码区别, 可能和编译的模块多少有关?</TODO>
+
+<技巧>: VC0816中uart0需要jp43和jp39插跳线
+
+11:13 2009-3-14
+VC0816, sd/sdio/mmc, sd速度慢(Issue [816 0007408]), 续, cache对sd卡速度的影响, single, multi
+1, 用winmerge对比build目录, 发现编译模块差异很大, speed_ok是编译了jpeg target(build command: build  -m=cache,tools,marb,clkrst,fat,sdio,timer,video,jpeg -rvdebug -sdram4driver -sdram)
+程序停在:
+start_main()(bootloader\main.c)
+    ->Video_Open()
+        ->Panel_Open()
+            ->Lcdc_RequestPadc3shareLcdcUse()
+void Lcdc_RequestPadc3shareLcdcUse(void)
+{
+	//#ifndef NEW_PADC
+	g_padcSwitchLcdcUseFlag = 1;
+	LcdcB_SWPanelPadcReqEn();
+	while (1)
+	{
+		if (g_padcSwitchLcdcUseFlag == 0)
+		{
+			break;
+		}
+	}
+	//#endif
+}
+的while循环中.
+g_padcSwitchLcdcUseFlag = 1 改为 g_padcSwitchLcdcUseFlag = 0
+第二次运行又没这个问题了. 速度恢复正常:
+Multi Read Speed is: 2515743 bytes/second
+Multi Write Speed is: 1667808 bytes/second
+
+2, 与Fengbeizhan讨论, 编译video或编译jpeg的差异:
+1), cache开关. 也可以用AASP下(不能进入其它模块)命令cache on/off开关.
+2), video对pin share的配置与sdio对pin share的配置不同.
+
+1), 实验cache开关.
+把sdio build选项改为"build -m=cache,timer,sdio,fat,interrupt  -rvdebug -sdram4driver -sdram -force"
+关cache速度变慢:
+Multi Read Speed is: 385994 bytes/second
+Multi Write Speed is: 360312 bytes/second
+Single Read Speed is: 199122 bytes/second
+Single Write Speed is: 113846 bytes/second
+开cache速度恢复正常;
+Multi Read Speed is: 2517561 bytes/second
+Multi Write Speed is: 1825159 bytes/second
+Single Read Speed is: 1023077 bytes/second
+Single Write Speed is: 235243 bytes/second
+在sdio中加入cache规则再次实验, 速度正常:
+Multi Read Speed is: 2515521 bytes/second
+Multi Write Speed is: 1809167 bytes/second
+Single Read Speed is: 1023126 bytes/second
+Single Write Speed is: 235806 bytes/second
+为了确认分别实验ICache, DCache对sd速度的影响, 因为Sd_Mem_Read用的是NCNB的, 所以估计主要是ICache的影响, 确认DCache对此有无影响.
+关闭ICache, 速度明显下降, 接近原来测到的很慢的速度:
+Multi Read Speed is: 526743 bytes/second
+Multi Write Speed is: 485634 bytes/second
+Single Read Speed is: 259372 bytes/second
+Single Write Speed is: 132254 bytes/second
+为了保险起见先打开ICache测速, 如果速度正常再关闭DCache. 打开ICache后速度正常:
+Multi Read Speed is: 2515506 bytes/second
+Multi Write Speed is: 1805161 bytes/second
+Single Read Speed is: 1023224 bytes/second
+Single Write Speed is: 236806 bytes/second
+但是这是打开DCache时出现了未定义指令异常, Dragon提示:
+SDIO  SD:/>undefined instruction
+从cache\arm926ejs_cache.c中看到关Cache需要一定的操作, 例如清空DCache, 清WriteBuffer, 禁止DCache, ICache, flush等...<TODO>学习</TODO>
+void _cpu_cache_disable (void)
+{
+	unsigned int irqState;
+	
+	HAL_DISABLE_INTERRUPTS(irqState);
+  
+    HAL_DCACHE_SYNC();
+    HAL_ICACHE_DISABLE();
+    HAL_DCACHE_DISABLE();
+    HAL_ICACHE_INVALIDATE_ALL();
+    HAL_DCACHE_INVALIDATE_ALL();
+          
+    HAL_RESTORE_INTERRUPTS(irqState);
+}
+这些指令在rvdebug中写脚本就方便些了, 直接绕过去——先关Cache, 再分别打开DCache, ICache. 呵呵, 其实aasp里面指令, 数据Cache分别开关的命令也有. 
+只开DCache:
+Multi Read Speed is: 526774 bytes/second
+Multi Write Speed is: 485719 bytes/second
+Single Read Speed is: 259372 bytes/second
+Single Write Speed is: 132282 bytes/second
+只开ICache, 速度只是比只开DCache快一些:
+Multi Read Speed is: 848365 bytes/second
+Multi Write Speed is: 739928 bytes/second
+Single Read Speed is: 465179 bytes/second
+Single Write Speed is: 179884 bytes/second
+但这时再打开DCache, 速度就正常了
+Multi Read Speed is: 2515701 bytes/second
+Multi Write Speed is: 1811526 bytes/second
+Single Read Speed is: 1023281 bytes/second
+Single Write Speed is: 236786 bytes/second
+
+(15:52 2009-3-14)
+分析运行时间(sdio\subdir.mk, 打开"SD_SPEED_TEST_R_CACHE").
+ICache off, DCache off:
+Multi Read Speed is: 385751 bytes/second
+total read time is 648991(us)
+total copy time is 12934170(us)
+Multi Write Speed is: 359401 bytes/second
+total read time is 0(us)
+total write time is 1645378(us)
+total copy time is 12934191(us)
+Single Read Speed is: 189850 bytes/second
+total read time is 11962510(us)
+total copy time is 13728186(us)
+Single Write Speed is: 111546 bytes/second
+total read time is 0(us)
+total write time is 31201274(us)
+total copy time is 13730117(us)
+
+ICache on, DCache off:
+Multi Read Speed is: 847890 bytes/second
+total read time is 574333(us)
+total copy time is 5606169(us)
+Multi Write Speed is: 742095 bytes/second
+total read time is 0(us)
+total write time is 1362360(us)
+total copy time is 5699675(us)
+Single Read Speed is: 446841 bytes/second
+total read time is 5238770(us)
+total copy time is 5859095(us)
+Single Write Speed is: 177090 bytes/second
+total read time is 0(us)
+total write time is 22994698(us)
+total copy time is 5952211(us)
+
+ICache on, DCache on:
+Multi Read Speed is: 2514849 bytes/second
+total read time is 548845(us)
+total copy time is 1535498(us)
+Multi Write Speed is: 1825768 bytes/second
+total read time is 0(us)
+total write time is 1335688(us)
+total copy time is 1535490(us)
+Single Read Speed is: 1007118 bytes/second
+total read time is 3554561(us)
+total copy time is 1571349(us)
+Single Write Speed is: 236349 bytes/second
+total read time is 0(us)
+total write time is 20524593(us)
+total copy time is 1573156(us)
+
+ICache off, DCache on:
+Multi Read Speed is: 526384 bytes/second
+total read time is 612729(us)
+total copy time is 9340872(us)
+Multi Write Speed is: 486676 bytes/second
+total read time is 0(us)
+total write time is 1425378(us)
+total copy time is 9340870(us)
+Single Read Speed is: 246413 bytes/second
+total read time is 9756321(us)
+total copy time is 9972746(us)
+Single Write Speed is: 128837 bytes/second
+total read time is 0(us)
+total write time is 29046716(us)
+total copy time is 9972011(us)
+
+不论是否打开Cache 对sd卡本身读写影响不大. 但对copy时间影响很大(这很显然). 现在更关注开关DCache对memcpy的性能的影响, 因为:
+Cache全开时copy时间约为1.5s, 只开ICache时约为5.6s, 只开DCache时约为9.3s, Cache全关约为13s. 且只开ICache时sd读写速度只有700-800k. 
+当前代码: "sdio_200903141621_speed_time.rar", 位置: "work\VC0816\sdio_test\code"
+顺便用full_test实验, 没有出现Xia kai的bug.
+"15:52 2009-3-14"end
+
+2), pin share:
+虽然已经确定与pin share无关, 还是了看了一下:
+padc_init()是相同的, 差异是
+padc_switch_func_video()和padc_switch_func_sdio().
+但里面都是:
+HAL_WRITE_UINT32_BITVAL(PADC_FS_NF, 31, 31, 0x0)
+
+3, <经验, 技巧>:
+目前eclipse make编译有时有bug, 可能*.h可能修改了没编或其他问题. 所以编译选项加了"-force", 作用是先clean, 后编译指定的target.
+另外以后所有报Issue或发信的bug都要注明(Issue [项目 Issue编号])或收件人+发信时间.
+
+13:20 2009-3-14
+VC0816, 项目情况, 816项目支持要求
+自: Feng beizhan 2009年3月14日 10:27邮件.
+1), video 最大支持 640*480， 即 capture avi 最大是 640*480；
+2), size still image 最大支持 1280 * 960，即 640*480 up to 1280*960；
+3), zoom 的测试，可以支持很大的图片，例如4096*4096，即不经过size；
+4), ccir656 的panel 816不支持了（因为有tv模块了，所以可以不支持）
+
+15:09 2009-3-14
+实验室, ESD, 刚才量了一下实验室胶垫的电阻, 在几十到几百k之间, 我是300-400k. 比人体电阻略小.
+
+16:40 2009-3-14
+嵌入式, arm, newlib, memcpy与DCache
+memcpy对Cache影响的实验:
+从"11:13 2009-3-14"实验知道, 即使source和dest都是NCNB的, 开不开DCache对性能影响也很大. 
+所以想看我们memcpy的源代码, 看看是怎么优化的? 目前没有找到我们的newlib源代码, 看了下版本是1.14, 去"ftp://sources.redhat.com/pub/newlib/index.html"下载.
+
+结论: 每次copy1个long改为每次4个long的改进提升最大, 从4到8到32都没有明显提升, 
+代码: "sdio_200903141919_speed_memcpy_cache.rar", 位置: "work\VC0816\sdio_test\code", 新增代码位于sdio_lib.c/h
+
+<TODO>看arm926ejs cache, 为什么4个long是效果最好的?</TODO>
+具体日志:
+以下开关都在sdiocommondef.h中. 首先需要打开"SD_SPEED_TEST_R_CACHE"(sdio\subdir.mk)和SDIO_LIB(sdio\src\sdiocommondef.h), 下面不同memcpy实现是互斥的.
+SDIO_LIB_MEMCPY_1L(memcpy原型, 每次一个long):
+ICache on, DCache on:
+Multi Read Speed is: 714488 bytes/second
+total read time is 547091(us)
+total copy time is 6790425(us)
+Multi Write Speed is: 631528 bytes/second
+total read time is 0(us)
+total write time is 1511034(us)
+total copy time is 6790424(us)
+
+ICache on, DCache off:
+Multi Read Speed is: 187074 bytes/second
+total read time is 573380(us)
+total copy time is 27449258(us)
+Multi Write Speed is: 175746 bytes/second
+total read time is 0(us)
+total write time is 1522504(us)
+total copy time is 28306680(us)
+
+ICache off, DCache on:
+Multi Read Speed is: 89375 bytes/second
+total read time is 611887(us)
+total copy time is 58043042(us)
+Multi Write Speed is: 87916 bytes/second
+total read time is 0(us)
+total write time is 1585006(us)
+total copy time is 58043054(us)
+
+ICache off, DCache off:
+Multi Read Speed is: 67174 bytes/second
+total read time is 650536(us)
+total copy time is 77390194(us)
+Multi Write Speed is: 66360 bytes/second
+total read time is 0(us)
+total write time is 1607187(us)
+total copy time is 77390290(us)
+
+SDIO_LIB_MEMCPY_4L(memcpy原型, 每次4个long), 和原有代码速度接近:
+ICache on, DCache on:
+Multi Read Speed is: 2516907 bytes/second
+total read time is 547154(us)
+total copy time is 1535480(us)
+Multi Write Speed is: 1721825 bytes/second
+total read time is 0(us)
+total write time is 1509048(us)
+total copy time is 1535484(us)
+
+ICache on, DCache off:
+Multi Read Speed is: 847966 bytes/second
+total read time is 573890(us)
+total copy time is 5606038(us)
+Multi Write Speed is: 732531 bytes/second
+total read time is 0(us)
+total write time is 1454730(us)
+total copy time is 5699537(us)
+
+ICache off, DCache on:
+Multi Read Speed is: 526442 bytes/second
+total read time is 611865(us)
+total copy time is 9340648(us)
+Multi Write Speed is: 479863 bytes/second
+total read time is 0(us)
+total write time is 1578597(us)
+total copy time is 9340628(us)
+
+ICache off, DCache off:
+Multi Read Speed is: 385715 bytes/second
+total read time is 650553(us)
+total copy time is 12933865(us)
+Multi Write Speed is: 360474 bytes/second
+total read time is 0(us)
+total write time is 1602328(us)
+total copy time is 12933860(us)
+
+SDIO_LIB_MEMCPY_8L(memcpy原型, 每次8个long), 和原有代码速度接近, 略快10-20k:
+ICache on, DCache on:
+Multi Read Speed is: 2521973 bytes/second
+total read time is 546573(us)
+total copy time is 1531887(us)
+Multi Write Speed is: 1775007 bytes/second
+total read time is 0(us)
+total write time is 1422190(us)
+total copy time is 1531109(us)
+
+ICache on, DCache off:
+Multi Read Speed is: 862867 bytes/second
+total read time is 572941(us)
+total copy time is 5500213(us)
+Multi Write Speed is: 746815 bytes/second
+total read time is 0(us)
+total write time is 1517075(us)
+total copy time is 5500287(us)
+
+ICache off, DCache on:
+Multi Read Speed is: 413657 bytes/second
+total read time is 650623(us)
+total copy time is 12015632(us)
+Multi Write Speed is: 384901 bytes/second
+total read time is 0(us)
+total write time is 1604954(us)
+total copy time is 12008187(us)
+
+ICache off, DCache off:
+Multi Read Speed is: 413661 bytes/second
+total read time is 650485(us)
+total copy time is 12015627(us)
+Multi Write Speed is: 384640 bytes/second
+total read time is 0(us)
+total write time is 1614202(us)
+total copy time is 12008196(us)
+
+为了满足自己的好奇心, 再加一个32l的:)
+ICache on, DCache on:
+Multi Read Speed is: 2541946 bytes/second
+total read time is 547054(us)
+total copy time is 1515056(us
+Multi Write Speed is: 1743089 bytes/second
+total read time is 0(us)
+total write time is 1492363(us)
+total copy time is 1515016(us)
+
+ICache on, DCache off:
+Multi Read Speed is: 897118 bytes/second
+total read time is 573110(us)
+total copy time is 5268072(us)
+Multi Write Speed is: 761618 bytes/second
+total read time is 0(us)
+total write time is 1531828(us)
+total copy time is 5349100(us)
+
+ICache off, DCache on:
+Multi Read Speed is: 600186 bytes/second
+total read time is 611420(us)
+total copy time is 8117449(us)
+Multi Write Speed is: 540424 bytes/second
+total read time is 0(us)
+total write time is 1577397(us)
+total copy time is 8117446(us)
+
+ICache off, DCache off:
+Multi Read Speed is: 437346 bytes/second
+total read time is 650473(us)
+total copy time is 11329252(us)
+Multi Write Speed is: 404963 bytes/second
+total read time is 0(us)
+total write time is 1609049(us)
+total copy time is 11329267(us)
+
+11:24 2009-3-16
+VC0816, 存储, sd/sdio/mmc, 代码修改<TODO>完成后修改前面的任务</TODO>
+去掉VC0816中sdio_io_card专有部分:
+把sdio_io_card专有部分定义了SDIO_IO_CARD宏, 默认不开这个宏.
+sd没问题, mmc cp/mv文件有问题:
+AASP SD:/>ls
+zhangjian                      <DIR>
+2.rar                      452788
+RECYCLER                      <DIR>
+sd                      <DIR>
+SDIO                      <DIR>
+sdio_speed_test                      <DIR>
+sdio_200903121720_VC0816_sdio_speed_ok.rar                      61702303
+ultraedit_32.exe                      10051199
+[FAT_MODULE]<-do_fat_ls() with 1
+AASP SD:/>ls
+zhangjian                      <DIR>
+2.rar                      452788
+RECYCLER                      <DIR>
+sd                      <DIR>
+SDIO                      <DIR>
+sdio_speed_test                      <DIR>
+sdio_200903121720_VC0816_sdio_speed_ok.rar                      61702303
+ultraedit_32.exe                      10051199
+[FAT_MODULE]<-do_fat_ls() with 1
+AASP SD:/>cd sdio_speed_test
+[FAT_MODULE]->do_fat_cd()
+[FAT_MODULE]<-do_fat_cd() with 1
+AASP SD:/sdio_speed_test/>ls
+.                      <DIR>
+..                      <DIR>
+sdio_200903121720_VC0816_sdio_speed_ok.rar                      61702303
+VC0816.ELF                      2326263
+vc0816_09031020_09031020.ace                      12873643
+1                      <DIR>
+[FAT_MODULE]<-do_fat_ls() with 1
+AASP SD:/sdio_speed_test/>cp vc0816.elf 1
+** Error: Illegal command: "cp"
+AASP SD:/sdio_speed_test/>cp vc0816.elf 1.el
+** Error: Illegal command: "cp"
+AASP SD:/sdio_speed_test/>fat
+FAT  SD:/sdio_speed_test/>cp vc0816.elf 1.elf
+[FAT_MODULE]->do_fat_cp()
+the file vc0816.elf has been copy as 1.elf!
+[FAT_MODULE]<-do_fat_cp() with 1
+FAT  SD:/sdio_speed_test/>cmp vc0816.elf 1.elf
+[FAT_MODULE]->do_fat_cmp()
+They are the same!! 
+FAT  SD:/sdio_speed_test/>ls
+.                      <DIR>
+..                      <DIR>
+sdio_200903121720_VC0816_sdio_speed_ok.rar                      61702303
+VC0816.ELF                      2326263
+vc0816_09031020_09031020.ace                      12873643
+1                      <DIR>
+1.elf                      2326263
+[FAT_MODULE]<-do_fat_ls() with 1
+FAT  SD:/sdio_speed_test/>rm 1.elf
+[FAT_MODULE]->do_fat_rm()
+the file 1.elf has been delete!
+[FAT_MODULE]<-do_fat_rm() with 1
+FAT  SD:/sdio_speed_test/>ls
+.                      <DIR>
+..                      <DIR>
+sdio_200903121720_VC0816_sdio_speed_ok.rar                      61702303
+VC0816.ELF                      2326263
+vc0816_09031020_09031020.ace                      12873643
+1                      <DIR>
+[FAT_MODULE]<-do_fat_ls() with 1
+FAT  SD:/sdio_speed_test/>
+
+(14:11 2009-3-16)
+<TODO>临时, 移动</TODO>: fat中, ";sd"会执行"do_sd"命令. 奇怪. 
+暂时没有问题了. 难道和r4, r5有关?! <TODO>查</TODO>
+代码: "sdio_200903161605_SDIO_IO_CARD.rar"
+位置: "work\VC0816\sdio_test\code"
+
+12:34 2009-3-16
+VC0830, memory,  内存扫描, <TODO>疑问较多, 细看</TODO>
+1, 自: Li dongliang 2009年3月16日 11:13邮件
+做了一个简单的扫描比较cb和ncnb内存的程序
+mem 模块下面的"mem_cmp_test" 命令
+不需要参数
+
+大家最好编译timer_sv 
+因为进行内存扫描, 执行完本命令会破坏原本内存中的数据
+因此如果要测试测试其它模块, 最好重新load代码
+并且不要执行mem_cmp_test 命令
+
+目前扫描我的板子没有发现问题
+
+2, 看内存扫描程序:
+1), memory\mem.c:
+把"ptr_cb1"-"ptr_cb3", "ptr_ncnb1"-"ptr_ncnb3"区域内容每次每个byte都写入i(i=0-255), 比较三个cb是否相同, 三个ncnb是否相同. 
+	ptr_cb1 = __newlib_malloc_start;
+	ptr_cb2 = __ncnb_malloc_start;
+	ptr_cb3 = __ncnb_malloc_start + (MAX_NCNB_MEM_SIZE>>1);	
+	
+	ptr_ncnb1	= __multi_bank_1_start;
+	ptr_ncnb2	= __multi_bank_2_start;
+	ptr_ncnb3	= __multi_bank_3_start;
+
+3, 看这几个地址的来源: 
+1), 首先需要确定我们用的哪个链接脚本:
+当前链接脚本如下, 目前未定义$sram, 定义了$rvdebug, 未定义$Nucleus_module, 所以链接脚本应该是"SV_general.lds".
+
+for (@config)
+{
+    #更改链接脚本	
+    if($sram)
+    {	
+        if($rvdebug)
+        {
+            if($Nucleus_module)
+            {
+                #没有这个版本，现在不支持
+                $_ =~ s/bootloader(.*).lds/bootloader_Nucleus.SRAM.rvd.lds/;
+            }
+            else
+            {
+            $_ =~ s/bootloader(.*).lds/bootloader.SRAM.rvd.lds/;
+            }
+        }
+        else
+        {
+            if($Nucleus_module)
+            {
+                #没有这个版本，现在不支持
+                $_ =~ s/bootloader(.*).lds/bootloader_Nucleus.SRAM.lds/;
+            }
+            else
+            {    			    
+            $_ =~ s/bootloader(.*).lds/bootloader.SRAM.lds/;
+            }			
+        }	    			
+    }
+    else
+    {  		    	
+        if($rvdebug)
+        {
+            if($Nucleus_module)
+            {
+                $_ =~ s/SV(.*).lds/SV_general_Nucleus.rvd.lds/;
+            }
+            else
+            {
+            $_ =~ s/SV(.*).lds/SV_general.rvd.lds/;
+            }
+        }
+        else
+        {
+            if($Nucleus_module)
+            {
+                $_ =~ s/SV(.*).lds/SV_general_Nucleus.lds/;
+            }
+            else
+            {      			    
+            $_ =~ s/SV(.*).lds/SV_general.lds/;
+            }		
+        }
+    }
+    #不允许在这个文件里面有-D声明宏
+    if($_ =~/-D/)
+    {
+        s/-D.*//;
+    }
+}
+<TODO>疑问</TODO>: 这样删除"-D"定义会有问题吧, 好像是把-D后面所有内容都删除了. 
+
+2), 定义如下: <TODO>这些是根据什么定义的呢?</TODO>
+Newlib_malloc		0x00800000	0x00f00000-1	0x00700000	7M	cb
+multi_bank_1		0x00f00000	0x01000000-1	0x00100000	1M	ncnb
+					
+multi_bank_2		0x01000000	0x01100000-1	0x00100000	1M	ncnb
+ncnb_malloc		0x01100000	0x01f00000-1	0x00700000	14M	ncnb
+multi_bank_3		0x01f00000	0x02000000-1	0x00100000	1M	ncnb
+
+	__newlib_malloc_start = 0x00800000;		
+	__newlib_malloc_end = 0x00f00000;
+	
+	__multi_bank_1_start = 	0x00f00000;
+	__multi_bank_1_end = 0x01000000;
+	
+	__multi_bank_2_start = 0x01000000;
+	__multi_bank_2_end = 0x01100000;
+	
+	__ncnb_malloc_start = 0x01100000;
+	__ncnb_malloc_end = 0x01f00000;
+	
+	__multi_bank_3_start = 0x01f00000;
+	__multi_bank_3_end = 0x02000000;
+	
+这些地址在"_cpu_mmu_init()"(cache\arm926ejs_mmu.c)进行flat映射. "_cpu_mmu_init"在开启Cache前调用. 但是, 在这个函数中"__multi_bank_1_start"-"__multi_bank_3_end"区域的内存都放映射成了ncnb的. <TODO>疑问, 细看.</TODO>
+
+14:21 2009-3-16
+VC0830, 存储, sdio, mount不上, <TODO>经验: 总结各种可能</TODO>
+dongliang说sd mount不上:
+先说结论: vc0830_main.c\Mem_Init()被注释, 造成系统没法分配64k的ncnb memory给sd, 这64k ncnb是sd读写的buffer, 由sdioapp层调用, 没有buffer sd所有读写操作都没法进行. 当时debug的时候, 直接实验sd read命令, 发现是memory出错, 所以直接去查memory分配部分了.
+
+具体过程:
+1, mount现象:
+FAT  :/>mount
+[FAT_MODULE]->do_fat_mount()
+Please select drv type(sdcard/nandflash)/[sdcard]
+Response start time out: 52.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 5.
+Response start time out: 52.
+Response start time out: 52.
+Response start time out: 5.
+Response start time out: 5.
+Mount disk faile!
+
+2, 定位错误——抛开fat查sd, 发现sd open成功. 但read中提示"HAL_MALLOC_MEM":
+[SDIO_MODULE]->do_sdio_read()
+Single/Multi : (Int)/[0]
+Read start address : (Int)/[0]
+Read sector : (Int)/[3]
+[SDIO_MODULE]MESSAGE:do_sdio_read arg input succeed!
+[SDIO_MODULE]ERROR:HAL_MALLOC_MEM failed!
+
+设断点却未找到那句话打出的这个信息(估计是断点设错位置了, 这个信息是在sdio_test.c中打出的). 只编译sdio:
+跟踪发现Fat_Init中第一次读sd卡出错:
+Sd_Read()中"g_ncnb_buf == NULL)"直接返回. 
+进一步检查发现这是因为memory申请失败:
+SDIO_APP_RET_STATUS	Sd_Init(void)
+{
+    //...
+    if(g_ncnb_buf == NULL)
+		g_ncnb_buf = HAL_MALLOC_MEM(_64K_MEM_);//64K memory.
+    //...
+}
+g_ncnb_buf申请失败是因为"mem_ncnb_init(void)"未执行, 造成"g_SearchTable[]"都是0, 没有初始化. 所以memory申请失败.
+
+最后查到, vc0830_main.c中"Mem_Init()"被注释:
+#ifdef MEMORY
+	Mem_Init();//uncomment by zhangjian
+#endif 
+
+3, 学习ncnb memory分配:
+_SearchFreeSpace中MIN_GAP表示最小分配区域是32bytes?
+static int _SearchFreeSpace(int size)
+{	
+	int i = 0;
+	int start = 0;
+	int minAddr = 0;
+	int minSize = MAX_MEM_SIZE;	
+
+	if (size <= 0)
+		return -1;
+	i = _GetOrder(size);
+
+	while (i <= MAX_ORDER - 1)
+	{
+		start = g_SearchTable[i];
+		while (start)
+		{
+			//ZJ: 如果只大于size不多于32byte, 把这块都分给请求者. 已经很合适了
+			//直接退出while, 停止查找. 
+			if ((HAL_READ_MEM32(start + CHUNK_SIZE_POS) >= size) &&
+				(HAL_READ_MEM32(start + CHUNK_SIZE_POS) - size <= MIN_GAP))
+			{
+				minSize = HAL_READ_MEM32(start + CHUNK_SIZE_POS);
+				minAddr = start;
+				break;
+			}
+			//ZJ: 如果大于size, 且小于上次找到的memory区域minSize(minSize初值是
+			//MAX_MEM_SIZE(2G)). 先给你, 再看看有没有更合适的, 继续在while中. 
+			if ((HAL_READ_MEM32(start + CHUNK_SIZE_POS) < minSize) && 
+				((HAL_READ_MEM32(start + CHUNK_SIZE_POS) > size)))
+			{
+				minSize = HAL_READ_MEM32(start + CHUNK_SIZE_POS);
+				minAddr = start;
+			}
+			//ZJ: 看下一个区域. 
+			start = HAL_READ_MEM32(start + MNEXT_POS);
+		}
+
+		if (minSize != MAX_MEM_SIZE)
+			break;
+
+		i++;
+	}
+
+	// 如果此时minSize还是最大的，就说明申请的内存空间太大了，申请失败
+	if (minSize == MAX_MEM_SIZE)
+		return -1;
+
+	//	HAL_WRITE_MEM32(minAddr + CHUNK_SIG_POS, USED_MEM);
+	_RmSearchTable(minAddr, minSize);
+
+	return minAddr;
+}
+<TODO>看"_RmSearchTable()"</TODO>
+
+16:03 2009-3-16
+VC0830, 存储, sdio, 楼下问题
+楼下说sd初始化命令有时也就能过几个. 后来看代码发现初始化用的24MHz. 下去试了. 
+
+16:20 2009-3-16
+VC0830, pmu, 文档阅读和疑问:
+1, pmu分cp, ap两个模式. 
+
+2, pmu与bootloader: 
+读取PMU_CTRL寄存器[3]"Boot_flag_sw位"判断是恢复还是重新上电.
+boot flag for software.
+1'b0: software will continue to run in rom
+1'b1: software will jump to sdram after initialization
+
+3, bootloader中
+修改"PMU_CTRL"中[1],[8],[9:10]进行remap，把sdram映射到0地址。
+那pmu和marb什么关系?
+
+4, 自: "18:47 2008-12-31"1(1)
+自：Yang Zuo Xing [yangzuoxing@vimicro.com]，发送时间：2009-1-4 (星期日) 15:44
+下面列出的受影响的寄存器指恢复为默认值。
+RTC 电源上电后，会产生RTC域的RESET,此RESET会RESET RTC域的寄存器。不影响PSO/PMU的寄存器。
+830主电源上电后，会产生XRESET,此RESET会RESET, PMU/PSO域的寄存器。不影响RTC域。
+从SLEEP唤醒后，会产品PMU_HW_RESET,此RESET会RESET PSO域的寄存器。不影响RTC/PMU域。
+WATCHDOG RESET, 会RESET 除TIMER/WATCHDOG模块的以外的所以PSO域寄存器。不影响RTC/PMU域。(待做：待Lv pin确定，查邮件)
+域的划为：
+Pso: Sif, Ipp ,Lcdc ,Vdec ,Udc ,Nf ,Sdio ,Uart/spi/i2c ,Tpi ,Aud ,Pdma ,Dmac ,Marb ,Sdrc ,Cpu ,Clkrst ,Timer/watchdog ,Biu
+Pmu: Pmu_top, Pad/padc, Abi, Lcd bypass, Sar adc(<TODO>VC0830中是否只用于触摸屏</TODO>)
+Rtc: Rtc
+
+5, 状态切换:
+1), Software Flow Guideline: From POWER_OFF To NORMAL
+Software flow from POWER_OFF to NORMAL is shown as following:
+(1) Pressing power on/off button
+(2) if LCD_DATA0 pull down, go to step 3, else go to step 4
+(3) boot from rom, go to step 5
+(4) boot from eeprom
+(5) execute program on sdram
+
+2), Software Flow Guideline: From NORMAL To POWER_OFF
+The software flow from normal to power_off is shown as following:
+(1) users press power on/off button, press turn off button from menu or low power is detected
+(2) shut off all program
+(3) set @60050004[4] = 1;		//set transition_to_power_off in pmu_ctrl as 1
+(4) run wfi instruction:
+(17:44 2009-3-17)
+"Arm926ejs_Technical Reference Manual_r0p5"
+you can safely stop the ARM926EJ-S CLK if STANDBYWFI is HIGH and DBGTCKEN is LOW.
+STANDBYWFI是ARM926ej-s的输出引脚: When HIGH indicates that the ARM926EJ-S processor is in wait for interrupt mode.
+"ARM ARM":
+Wait for interrupt
+Puts the ARM into a low power state and stops it executing further until an interrupt, or a debug request, occurs. Interrupt and debug events always cause the ARM processor to restart, irrespective of whether the interrupt is masked. Debug events require debug enabled. 
+When an interrupt does occur, the MCR instruction completes and either the next instruction executes (if an interrupt event and the interrupt is masked), or the IRQ or FIQ handler is entered as normal. The return link in R14_irq or R14_fiq contains the address of the MCR instruction plus 8, so that the normal instruction used for interrupt return (SUBS PC,R14,#4) returns to the instruction following the MCR.
+"17:44 2009-3-17"
+
+(5) all power will be off except rtc
+
+17:33 2009-3-16
+VC0830, pdma, 使用注意事项
+自: Lidongliang, 2009年3月16日 17:32 哟级
+Hi,all
+ 
+跟boxue调试tpi pdma方式的时候
+发现了830 pdma的一个bug
+可能大家不清楚, 这里再重复一下
+ 
+Pdma的dest address 与 current address 的高4位是固定的0x4
+我们的pmu映射0x40000000 到0时
+对pdma不起作用
+ 
+大家可以试验一下
+例如给Pdma的dest address 写0x00120000
+然后读一下, 值并不是0x00120000
+而是 0x40120000
+Current address 也是一样
+ 
+大家尤其要注意
+通过 current address - dest address  计算数据量的情况
+ 
+弄清楚这里的地址
+
+自: Lingming 2009年3月16日 18:59
+这个不是问题，是我们内存方案的事。
+
+PDMA就是只支持到sdram,而且当年为了省一位寄存器，将最高默认为0x4了（以前提过，也许大家没有注意）。新的内存方案，将所有地址都设计为0x0000 0000；而FPGA 上，所有数据区都是0x4开头的，所以会出现问题。
+
+按照新的内存分配方案，就必须要注意取到的current地址，最高位永远是0x4，而不是0x0。
+
+19:30 2009-3-16
+配置环境, 软件技巧, 查看计算机名称
+1, 右键菜单我的电脑选属性, 计算机名选项卡;
+2, 运行->cmd->hostname命令.
+
+20:00 2009-3-16
+VC030, SV, 1号板, sd, nand, udc测试
+给Lingming的邮件, 2009年3月18日 20:07 "1号板sd, nand, udc测试":
+1, 开始用32M sdram: sd只是fat上复制1k文件通过, 2M文件有几十至一百多字节不同;
+2, 换成16M sdram(-75):
+1), sd+udc读写30M文件, 正确;
+2), nand+udc读写50M文件, 正确;
+3), sd2nand 11M文件, 正确.
+
+20:23 2009-3-16
+项目, 开发环境, VC0830, SV, PCB原理图; VC0816原理图
+1, 配rvdebug
+步骤4配置许可证中配置的"Virtual MAC Address"就是lisence中的"SERVER hostname"后面的那串数字: "SERVER zhangjian 0007e94c6f66"
+2, USB指示灯: 插入usb后, 电源板D9灯亮, VDDA_USB33这个引脚应该就是用VC0830内部的dc-dc把电压降为3.3后输出的, 用于USB供电. <TODO>但是TI TPS65050起什么作用没有查, VDD33接到的是输出而不是输出, 怎么做的USB供电呢</TODO>, 具体连接关系如下:
+176: VDDA_USB33--USB PHY Analog Power
+SV: VDDA_USB33(J18)--JP33--VDD_USB33
+J18,J19,J20分别对于SOCKET3,SOCKET2,SOCKET3.
+POWER(TI TPS65050): VDD_USB33--JP5--VDD33--D9
+3, 板子上什么都标的引脚是gnd.
+4, VC0830_SV原理图位于"ftp://10.0.2.109/VC0830/boards/VC0830-SV/"
+(13:41 2010-5-31)VC0816原理图也在这个目录. 36上也有"13:41 2010-5-31"end
+
+10:42 2009-3-17
+VC0830, 存储/video, sdio, video/ipp, debug
+Shuyu运行程序, 进入了sd中断, 但i值异常的大, 造成data abort:
+i = 0xE7933102
+srcpend = 0x0A000003.
+对应实际的寄存器(0x6003202C)是0x0001003B.
+
+据Beizhan说可能是sdram没插好造成的串扰, 先不动sdram, 重试一下. 
+第二次停在Ipp_GetCaptureStillWithFrameFlag"}"处, 应该看下汇编是啥命令.
+int Ipp_GetCaptureStillWithFrameFlag(void)
+{
+	//return IppB_GetDataFLcdcToLbufFlag();
+	return g_captureDoneFlag;
+}
+把sdram重新插拔一下, 问题同上. 这时有点怀疑是程序的问题. 因为每次问题现象相同. 
+
+测试命令:
+1, rvdebug run之前插入sd卡;
+2, video;
+3, preview
+4, 用vc命令播放视频, lcd上应该显示sensor和视频. 播放一段时间后会死在上面的地方. 
+<TODO>应该看看是谁调用的这个函数</TODO>
+
+11:15 2009-3-17
+VC0830, 存储, sdio, 查PWM对SDIO的影响, <TODO>继续</TODO>
+VDD_NF 通过jp49, jp48[2,3]接到VDD_28_OFF
+
+13:52 2009-3-17
+VC0816, 存储, sdio, 代码修改
+1, cf code: vc0816_09031618_09031618.ace
+2, 修改内容:
+1), 加入setpara命令设置auto cmd, 中断/查询模式;
+2), socket select: 加入SD_TWO_SOCKET宏, 816中默认关闭.
+代码"sdio_200903171719_auto-manaul-cmd_int-inquire-switch_socket.rar"
+位置: "work\VC0816\sdio_test\code"
+
+16:01 2009-3-17
+VC016/VC0830, 存储, sdio, bug
+1, VC0830: Shuyu: SD卡等不到cmd complete, 后来发现是编译video没有编video_sv;
+2, VC0816: Zhanglu: SD卡 open时所有命令都timeout, 可能是micro SD接触不好?
+
+
+20:05 2009-3-17
+VC0830, PMU, 测试
+1, Normal to Idle, Idle to Normal
+do_sleep_rtc_tick()
+
+Prefetch Means the memory cache line at the specified virtual address is loaded into the cache if the location does not abort, and is marked as cacheable. If the prefetch has an abort (due to MMU or MPU), the operation is guaranteed not to access memory. In ARMv6 there is no alignment requirement for the virtual address. Prior to ARMv6 the address was required to be cache line aligned. This operation must be supported with caches that use Format C lockdown, see Table B6-1 on page B6-14. In other cases, the operation is IMPLEMENTATION DEFINED.
+
+2, Normal to sleep, sleep to Normal
+用rtc做测试没有通过. 明天实验, 不行找Dongliang.
+
+9:53 2009-3-18
+VC0830, SV, memory, sdio, <TODO>sdio有时pad得不到, debug</TODO>
+830sv memcpy issue
+自: Aiguio 2009年3月18日 9:50邮件. 
+我昨天做了一个批量的CB和NCNB copy程序，没有发现问题，caijin能否找一下规律，我们一起debug。
+目前Sd card不太问题，主要是手动请求pad得不到（可能与reset有关，多reset几次好使），zhangjian多debug一下，我们要试试各种情况。
+MI1320 Sensor的出图应该是不正确的，shuyu还要进一步看，关于抓不下图的情况，我们今天一起看看。
+Boxue，TPI的问题怎么样？每天report一下，这个着记测试。
+Lingming，看今天有没有好的台子给zhanglu一个，zhanglu现把环境弄好（在自己坐位上）。
+
+9:54 2009-3-18
+VC0830/VC0816, <TODO>任务</TODO>: sdio, 开发环境
+1, "9:53 2009-3-18", sdio有时pad得不到.
+2, "16:06 2009-3-18", 项目, VC0830/VC0816, 开发环境, eclipse
+有sdio_test.c文件时, "C/C++ Indexer"会一直做不完.
+
+10:06 2009-3-18
+VC0830, video, 如何避免vfifo full
+自: Anna Chen, Dong Ying [chendy@vimicro.com] 2009年3月18日 10:02邮件
+When IPP upsizer sensor input to LCDC, there's always continuous pixels inside line along the iclk(60MHz), and often continuous lines without HBLANK along video stream. 
+Based on only 64x32 VFIFO of LCDC and the AXI writing latency, VFIFO full would be inevitably arising by peak bandwidth case inside the line, when upsizer resolution become large enough.  
+If DBI panel adopt, higher LCDC AXI-ID 0 PRI and lower LCDC AXI-ID 1 PRI shall be better to avoid VFIFO full, or longer D2D_delay of panel setting furthermore
+If DECODER result upsizer as LCDC input instead, LCDC v.s. IPP feedback control(lcdc_ipp_rd_en) shall avoid VFIFO full by hang-up IPP input before VFIFO full.
+
+10:18 2009-3-18
+VC0830, PMU, 测试, 续
+1, Normal to sleep, sleep to Normal
+1), 测试"Rtc_alarm_int", 没有得到预期结果:
+PMU  SD:/>open_wakeup_source 1 1
+[PMU_MODULE]->do_open_wakeup_source()
+[PMU_MODULE]MESSAGE:aasp_requestMain succeed!
+PMU  SD:/>sleep_rtc_reset_alarm
+[PMU_MODULE]MESSAGE:go sleep rtc alarm ...
+go sleep, jump to pc ...
+
+Clk,Uart init Done
+Icache
+Wake
+Still go
+Go
+Go之后要读取PMU_SW_REG1, strap_pin. 查这两个:
+PMU_SW_REG1配置为"0x0xxxxxxx"或"0x4xxxxxxx"应该都一样, 因为bootloader会把sdram映射到0x0起始的地址. 目前两个都不行.
+后来找Dongliang, 提示我print_vimicro中uart没改. 
+开始改的是否没有考虑到print_vimicro不能调用任何函数. 
+
+后来和dongliang讨论, dongliang分析有两种可能一是sdram自刷新问题, 二是uart配错了, 第二个很容易实验, 用示波器看没有波形, 所以肯定不是第二个问题.
+
+后来dongliang过来看才发现是由于没有512 info, 程序运行分支没有运行Sdram_Init, 没有没有退出自刷新模式. 所以sdram访问不了.
+
+<TODO>经验</TODO>: 其实dongliang都提示可能是自刷新问题了, 应该看看bootloader代码何处退出了自刷新. 现在还是思维不连贯. 累了?!
+
+<TODO>等Lingming512 info</TODO>
+
+15:54 2009-3-18
+VC0816, 存储, sdio, 提交测试
+1, 子板和跳线
+1), F, I 两块子板SD卡不能使用!
+2), 跳线:
+(1), sd0：jp6（2） - debug L2(20)
+(2), Sd_Detect：Jp25（1） - jp35（2）. 如果不接, 系统无法检测sd卡插入拔出中断, 需要插入sd卡后手工输入fat模块的mount命令挂载sd卡, 或输入sd模块的close, open命令重新初始化sd卡.
+
+2, sd卡新增测试命令:
+1), full_test: 依次测试sd卡single block 写读, 8 blocks 写读, 32 blocks写读, single block 写读四个case. 每个case都从sd卡1(sector), 3, 7, 15, .. g_TotalCardSector/2-1.
+Usage: full_test
+2), setpara: 设置sd卡参数. 当前支持设置中断/查询模式, 自动申请padc/手动申请padc.
+Usage: setpara is_interrupt_mode is_auto_cmd
+is_interrupt_mode = 1, 使用中断模式.
+is_interrupt_mode = 0, 使用查询模式.
+is_auto_cmd = 1, 所有命令都使用auto模式切换pad;
+is_auto_cmd = 0, 除CMD0(sd/mmc卡复位)和数据命令外所有命令都使用manual模式切换padc;
+3), setw: 设置sd卡/mmc卡总线宽度. 
+Usage: setw bus_width
+bus_width = 8, 设置mmc卡bus宽度为8, 对于sd卡无效, 软件会设置sd卡宽度为4;
+bus_width = 4, 设置sd/mmc卡bus宽度为4
+bus_width = 1, 设置sd/mmc卡bus宽度为1
+
+10:50 2009-3-19
+VC0830/VC0186, <TODO>任务</TODO>, 更新前面任务.
+1, 816 sd提交测试; <DONE>. 代码: "sdio_200903191026_setpara.rar", 日志: "log4sdio_200903191026_setpara.txt", 位置: "work\VC0816\sdio_test\code"
+2, 830 pmu rtc alarm等lingming 打包工具.
+3, fengbeizhan邮件.
+4, lingming VC0830 切频, 见邮件.
+
+14:25 2009-3-19
+VC0830/VC0816, 开发环境, Eclipse index在sdio_test.c停止
+自: "9:54 2009-3-18"2.
+1, 使用Eclipse 3.4+CDT5.0.2没有发现这个问题. 
+
+2, 用排除法看sdio_test.c何处问题. 
+为了简单只保留VC0830工程, 暂时去掉其它(包括VC0816的工程).
+1), 发现有do_sd中"goto" CDT Indexer就过不去. 修改了代码. 
+2), 其实直接把Project的Indexer从"Full C/C++ Index"改为"No Indexer"也可以.
+以及"Windows"->"Preference"->"C/C++"下的同样内容. 
+
+3, 
+代码修改:
+1), 所有工程目录下的".cdproject": 
+zhangjian: change C/C++ Indexer from "Full C/C++ Index" to "No Indexer".
+details:
+modify ".cdproject" from 
+<extension id="org.eclipse.cdt.core.domsourceindexer" point="org.eclipse.cdt.core.CIndexer"/>
+to
+<extension id="org.eclipse.cdt.core.nullindexer" point="org.eclipse.cdt.core.CIndexer"/>
+
+2), do_sd():
+zhangjian: remove "__EXIT__" tag in do_sd function in order to avoid C/C++ Indexer bug in Eclipse3.1+CDT3.0 environment.
+
+4, 邮件:
+标题: 解决Eclipse中C/C++ Indexer占资源问题
+内容: 
+Hi, all
+
+大家更新代码后重新打开Eclipse就不会有C/C++ Indexer消耗windows资源的问题了.
+
+具体修改:
+1, 目前Eclipse VC0830/VC0816工程中C/C++ Indexer会停在sdio_test.c处, 大量占用windows资源. 经查找是do_sd()函数中goto语句造成的, 代码已修改. 这似乎是个bug, 在Eclipse3.4+CDT5.0.2中无此问题.
+2, C/C++ Indexer能提高Eclipse中CDT查找效率, 类似于Source Insight中Project菜单的"Synchroniz Files"和"Rebuild Project". 如果Eclipse只用于编译工程, 可以关闭Indexer: 右键单击某个Project, 选择Properties的"C/C++ Indexer", 在右侧"Available indexers"选择"No Indexer (search-based features will not work correctly)", 单击OK退出. 
+".cdproject"是Eclipse工程的配置文件, 上面的修改就是把".cdproject"的
+<extension id="org.eclipse.cdt.core.domsourceindexer" point="org.eclipse.cdt.core.CIndexer"/>
+改为
+<extension id="org.eclipse.cdt.core.nullindexer" point="org.eclipse.cdt.core.CIndexer"/>
+
+Thanks
+
+Zhangjian
+
+16:22 2009-3-19
+VC0830, memory, 项目进展, 切频
+1, memory频率对memory的影响, memory参数设置不准确?
+参见: Lingming, Caijing, Aiguo 2009年3月19日 15:20-16:21邮件
+发现memory 120MHz不稳定, 今天Lingming改为用80M跑, 没有问题. Caijing RV"选rv的case12，连续跑5轮，比对通过".
+<TODO>看"统计一下bus＝80M，vdec＝80M下能够解多少帧（不考虑parser）"的邮件</TODO>
+
+现在bootloader切频有问题，只能在240/120M。所以我们得另外通过一个程序来切频。
+具体流程如下：
+更新830 CVS。
+添加工程：vc0830_sv_memscan。先clean.  然后再编译：armBin，产生切频程序。（以后再也不用编译了，除非有新的频率）
+运行自己830测试工程流程：
+1). 先打开axd，运行脚本。obey D:\VC0830\vc0830_sv_memscan\init.li   (路径要根据自己的修改一下)
+2). 关掉axd，按照以前的流程使用RVDedug运行830测试程序。
+
+2, 切为80MHz时周期大约是12.34-12.60ns. 
+
+3, 切频但不下载core bin文件, 供开发人员用
+以切频到bus 80MHz为例说明如何从任意频率使用vendor command切频到指定频率. 
+工具: "D:\VC0830\vc0830_bootloader\UsbUpdate\UsbUpdate.exe". 用vendor command与VC0830板子通信. 切频步骤如下, 只要不擦除下面已写入的512info, 以下步骤只需做一次:
+1), 830上电进入U盘模式. 如果nand时已写入core bin, 需要短接JMP7[1,2](板子上JMP7上有"]"标志的是1,2两个引脚, 即设置STRAP_PIN[2]=1), 使VC0830 rom bootloader进入usbboot.
+
+2), 单击"Find Nand", 提示"Find Nand OK", "Find Nand"按钮后信息栏显示nand id:"Find nand,you can do something on nand. NAND ID:0xec 0xf1 0x80 0x15 0x40". 
+
+3), "Set Info": "D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_120M.pakinfo"(不要加引号, 下同). "bootloader_sdram16_120M.pakinfo"是使用打包工具DfuPack生成的包含120M SDRAM配置参数的512info. Set Info后, 板子自动切频为512 info配置的频率. 所以直接下80MHz的512 info会造成USB挂掉. 板子log:
+Init cmd
+No BBT
+Env init done
+注: 我们120MHz的512info中"pll1_ckd = 0x00", 这表示不切频, 所以如果已经按后面步骤切频为其它频率, 例如80MHz, 再Set 120MHZ 512 Info是不会切到120Mhz的.
+
+4), 用Erase Nand擦除0, 1 block, 保险起见可以多擦除几个block. 80MHz 512 info中默认保存10份512info, 最多保存到第15个block. 板子log: "E B err", 这个提示信息表"Nandflash_blockPageErase()"没有返回"VNF_SUCCESS", 原因请Lingming解释:)
+
+5), 用"Write Nand"命令把80MHz 512 info("D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_80M.pakinfo")写入上面擦除的block的第0个和第1个page中(block=x, page=0, size=1). 例如写入到block 0, page 0, size 1. 板子log: "w p"
+
+6), 给开发板重新上电, rom bootloader根据512info把sdram切到80MHz. 提示信息如下:
+Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+            øInit cmd
+No BBT
+Env init done
+Load.
+All backup images failreset
+reset
+Mass Cfg
+rd_sec end
+
+7), 以后频率就都是80MHz了, rvdebug调试流程不变.
+
+4, 切频并且下载所需core bin文件, 供测试人员使用.
+************************************************
+*******此功能不稳定, 暂时不建议大家使用*********
+************************************************
+以切频到bus 80MHz为例说明如何从任意频率使用vendor command切频到指定频率. 同时下载所需的core bin文件. 路径: "D:\VC0830\vc0830_bootloader"
+1), 用"DfuPack\DfuPack.exe"打包工具把"D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_80M_pll1_ckd-0"和所需core bin文件(这里是"VC0830.bin")打包, 假设打包文件名是"D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_80M_pll1_ckd-0.pak"
+"bootloader_sdram16_80M_pll1_ckd-0"与"bootloader_sdram16_80M"的区别是PLL1_CKD=0. bootloader读到PLL1_CKD==0就不会切频. 
+
+2), 优盘模式, 把"DfuPack\K9F1G08U0A\bootloader_sdram16_80M_pll1_ckd-0.pak"拖入优盘. 自动引导后, 显示AASP, 这时尚未切频, 仍是120MHz.
+注: 如果nand中未找到坏块表(bbt), bootloader会重建bbt, 需要稍等10-20s. 一定要等出现AASP后再进入下面步骤. 
+
+3), 重新开发板进入优盘模式. 用"UsbUpdate"工具(UsbUpdate\UsbUpdate.exe).
+(1), 确认板子进入优盘模式后, 单击"Find Nand"读取Nand信息, 这步成功后才能进行后续步骤;
+(2), "Set Info": "D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_120M.pakinfo", 不包括括号. 传递512info后才能读写nand.
+(3), "Read Info"(Block number 0, page number 0, size 1), 假设读出文件名为"D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_80M_pll1_ckd_0.read"
+
+4), 使用DfuPack工具修改读出的512info: 
+(1), info bin file填刚才读取的512info: "D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_80M_pll1_ckd_0.read"
+(2), info txt file: "D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_sdram16_80M_pll1_ckd_0.write.txt". 
+(3), 注意这两个文件最好都是利用右侧对于的"..."按钮选择所需文件, 这样保证程序正确读取了文件名. 否则可能转换出错. 
+(4), PLL1_CKD填"0x00140190", 这是切频到80MHz所需的CKD配置. 单击"ChangeInfo"生成"bootloader_sdram16_80M_pll1_ckd_0.write.txt", 这里生成的其实是info文件不是文本文件. 保险起见打开"bootloader_sdram16_80M_pll1_ckd_0.write.txt"和"bootloader_sdram16_80M_pll1_ckd_0.read"对比, 应该有两处不同:
+a, "bootloader_sdram16_80M_pll1_ckd_0.write.txt"的1c0h开始的4个字节是90 01 14 00, 这是小端方式, 表示的是"0x00140190". 
+b, 1fc-1ff四个字节. 这是512 info的CRC, 我们修改了PLL1_CKD后, DfuPack自动重算了CRC.
+
+5), 用"UsbUpdate"把4)中修改的512info写入nand.
+(1), 重做步骤3)的(1),(2)两步;
+(2), "Erase Nand"擦除Block number=0,1等几个block.
+(3), "Write Info"写入步骤4)中修改的512info:
+写入上面擦除的block的第0个和第1个page中(block=x, page=0, size=1). 例如写入到block 0, page 0, size 1. 
+
+6), 拔去JMP7[1,2]跳线, 板子应该可以按80MHz启动并引导你打包的core bin了.
+注: 在我的板子上, 接通sd, SW2, SW3都开. 有时把插针插在TP8, 连接示波器探针和地并且把探针放在umonitor或lcd插槽附近板子就启动不起来, rom bootloader提示core bin都损坏了, 插在TP7上没事. 
+
+11:09 2009-3-20
+VC0830/VC0816, <TODO>任务</TODO>
+0, (不急), VC0816 sd不能用的板子降频后能否使用?
+1, <转移>切频: 动态<转移>, 静态<DONE>;
+2, eclisep: Eclipse Indexer是否好用, 若好用修改.cdproject,并上传.
+1), VC0816\sdio\sdio_test.c也做了同样修改;
+2), 发邮件:
+(1), Eclipse技巧
+a, 智能rename; 和SourceInsight类似的跳转到原型, 定义, reference search. 只是默认Ctrl+单击是跳到原型, <TODO>能否修改?</TODO>
+
+3, pmu优先级降低, 能进入sleep即可. 实验PMU进入rtc sleep状态, 成功. 
+1), open_wakeup_source 1 1
+sleep_rtc_reset_alarm
+可以一直打出不完整的vimicro:
+iicoviiroviirovmir
+vmcr
+imcr
+imco
+iicoviirovmir
+vmir
+vmcr
+imco
+iico
+iicoviirovmir
+vmcr
+vmcr
+测量sdram的clk和cke确定是否进入了自刷新模式:
+JP6[1]: SDR_CKE: 低电平, 表示clk无效. 
+"TP7: DDRSDR_CLK_INV; TP8: DDRSDR_CLK"所以二者看起来一样. 进入sleep后无clk. <TODO>INV CLK起什么作用? </TODO> 
+
+2), 上面不完整的原因打印每个字符之间的延时太少. 
+代码: "pmu_20090320_rtc_idle_sleep-alarm_ok.rar". pmu测试中idle下"使用rtc_tick中断反复的测试normal -> idle -> normal …"和sleep下"1.Rtc_alarm_int"(rtc alarm唤醒, VC0830从sleep返回)通过.
+位置: "D:\work\VC0830\SV\code"
+
+3), <TODO>遗留问题</TODO>:
+(1), pmu clk设的似乎有问题. 感觉设为5c才是12M分频为64k;
+(2), rtc唤醒时设定的是10s, 但实际时间是20多秒, 可能是rtc设置不正确?
+
+16:31 2009-3-20
+VC0830, memory, 项目进展, 切频, 动态切频
+1, 动态切频
+xclk范围是2-36MHz.
+cfg_sdrc()中区分目标频率是否是10MHz设置不同的sdrc_timing:
+0x16515511: 10110 01010001 01010101 00010001
+0x1965a553: 11001 01100101 10100101 01010011
+
+2, 修改完代码后, 可以从120Mhz切到12MHz再切回120MHz, 切回120MHz后就出现0x4异常了.
+修改后运行到
+HAL_WRITE_REG32(CLOCLRST_PHY_MUX_SEL, 0x10021113);
+出现软件中断, 改为原来的0x0. 试验. 
+
+3, 修改后成功. 目前是120Mhz->12Mhz->120Mhz, 改为80MHz应该很容易. 
+80MHz和120MHz使用同样的sdram配置, 目前120->12->80, 80->12->120正常. 切频后uart工作正常, 未测试其它模块. 切频到12MHz uart不能正常工作.
+代码: "clkrst_200903202221_120-12-80_ok.rar", "clkrst_20090320_120-12-120_ok.rar"
+位置: "D:\work\VC0830\SV\code"
+修改: 
+1), 添加"Uart_Init4Clkrst"用于切频后的uart初始化. 原有代码是基于bootloader初始化做初始化.
+2), 添加"clk_switch.c/h"文件和"do_clkswitchSV"命令, 用于切频. 目前支持120和80互切.
+
+4, 
+1), 下一步, 在pll1和pll2之间切换. 切换应该不影响外设模块; 支持切换pll1到其他频点.
+2), <TODO>能否先拖一个80M但pll1 ckd=0的映像到优盘, 再拖一个80MHz正常的映像到优盘, 如果bootloader是先写入info再切频就可以</TODO>, 呵呵, 120MHz可以跑了, 暂时不急试验了.
+
+20:56 2009-3-20
+VC0816, <TODO>经验</TODO>
+1, zhicheng的nand socket降频到8MHz, 可以工作;
+2, guangyue的告诉1.5MHz uart每批发送数据后delay后就可以改善出错.
+
+10:54 2009-3-23
+VC0830/VC0816, 切频, <TODO>任务</TODO>
+1, 建立数据结构; pll1->pll2->pll1切频; 尽量使用lingming现有代码. 
+2, 数据结构元素:
+1), xclk:
+unsigned int xclk, *, 单位MHz.
+2), switch_type:
+0: pll1->xclk->pll1;
+1: pll1->pll2->pll1;
+3), pll1:
+enum frequency: 480, 528, 672..., *, 单位MHz.
+const unsigned int maindiv(mask 0x3f)
+const unsigned int indiv(mask 0x7ff)
+4), cpu, bus, vdec比例:
+144以上: 1:2; 80-144: 1:3; 80以下: 1:4.
+unsigned int cpu:pll
+unsigned int bus:pll
+unsigned int vdec:pll
+5), sdram/ddr参数
+struct {    //*, 单位MHz.
+    clk; //sdram clk;
+    UsingDll;   //60MHz以下不能用dll;
+    param...
+}
+
+15:10 2009-3-23
+VC0830, dmac, <TODO>看dma代码</TODO>
+do_dmac_lli_auto_test使用dma lli模式自动测试. lli模式是什么含义?
+
+15:11 2009-3-23
+VC830, 存储, sdio, fat mount停, <TODO>sd经验总结</TODO>
+boxue, sd卡mount时停在timeout52, 5, 8后面, 但是设断点发现写操作没有问题. 应该是fat在mount失败后自动格式化了. 用读卡器在PC上看, 果然是sd fat被破坏. 
+经验: 做事总是缺乏顺序, 应该是先测试sd卡本身读写有无问题(用speed命令). 再看fat问题.
+
+15:44 2009-3-23
+VC0830, clk, 切频到144MHz
+切频到144, 切频过程中没有死, 但切频后频率仍是120, uart波特率也不对. 把per_ckd改为4400后uart正常. 综合看说明切频没成功. 
+直接用我原来的512info方法是可以切到144Mhz的.
+
+步骤4在1之前
+4)	Configure PLL1 control register, system clock divider to adjust system clock frequency, cpu_bus_clk_ratio register according to the cpu and bus clock frequency. (new added in version 0.4). 
+
+自己都乱了, 唯一能确定的是pll1没切频.
+
+9:36 2009-3-24
+VC0830, clk, 切频到144MHz, 续
+1, lliautotest测试:
+1), 1000次, 有一次错误:
+Please input random test times (Int)/[10]1000
+0..
+10..20..30..40..50..60..70..80..90..100..
+110..120..130..140..150..160..170..180..190..200..
+210..
+ 217   218  Soure address:0x11a6c19, Dest addreas:0x135f53f, Length:0xbbca9, Channel:1,  lli num:1, test failed!!!
+220..230..240..250..260..270..280..290..300..
+310..320..330..340..350..360..370..380..390..400..
+410..420..430..440..450..460..470..480..490..500..
+510..520..530..540..550..560..570..580..590..600..
+610..620..630..640..650..660..670..680..690..700..
+710..720..730..740..750..760..770..780..790..800..
+810..820..830..840..850..860..870..880..890..900..
+910..920..930..940..950..960..970..980..990..[DMA_MODULE]MESSAGE:Random test over
+2), 5000次, 有四次错误::
+2410..2420..2430..2440..2450..2460..
+ 2466   3467  Soure address:0x11b266a, Dest addreas:0x13c6222, Length:0xc1ed2, Channel:0,  lli num:7, test failed!!!
+2470..2480..2490..2500..
+3010..
+ 3013   4014  Soure address:0x1163811, Dest addreas:0x13351df, Length:0x8b54b, Channel:1,  lli num:10, test failed!!!
+3020..3030..3040..3050..3060..
+ 3067   4068  Soure address:0x115c969, Dest addreas:0x131adbf, Length:0x6268d, Channel:0,  lli num:3, test failed!!!
+3070..3080..3090..3100..
+3410..3420..3430..3440..3450..3460..
+ 3466   4467  Soure address:0x11c31cc, Dest addreas:0x13d8b16, Length:0xa6733, Channel:0,  lli num:1, test failed!!!
+3470..3480..3490..3500..
+
+2, 实验Lingming VC0830_sv_memscan中的切频程序. 
+1), 用eclipse一直编译不过, 编译参数都没问题, 最后没办法在命令行手工完成编译:
+D:\VC0830\vc0830_sv_memscan>C:\ESDE\gcc\bin\arm-elf-ld  --gc-sections -g -Os -T.
+\vc0830bootloader.lds --print-map > .\build\map.info -nostartfiles -nodefaultlib
+s -nostdlib -LC:\ESDE\gcc\lib\gcc\arm-elf\4.1.1 -L.\build\boot  -o build\bootloa
+der.elf  .\build\uart\uart.o  .\build\boot\bootloader.o  .\build\boot\function.o
+  .\build\boot\sys.o  .\build\boot\delay.o  .\build\sdram\sdram.o -lgcc
+
+2), AXD
+AXD在36服务器上有, 需要配置multiICE, dll文件位于: C:\Program Files\ARM\Multi-ICE\Multi-ICE.dll.
+
+3), obey D:\VC0830\vc0830_sv_memscan\init.li
+
+3, 昨天切频到144优盘不能用是因为per_clk配置不正确, 从0x2211改为0x22112211即可. 
+
+4, 找lvpin帮忙看, 发现pll reset reconfig使用不对, 应该是先写后清(不需要延时). 
+其实如果看下lingming gen_pll1也能知道, 这两天调pll实在是太混乱了. 
+
+5, 目前问题是sdram配置问题, 或者是配置sdram中死, 或者是切频成功后data abort.
+1), 先切pll1, 配置cpu,bus,module clk, 再配sdram, 在MADJ后死
+	else if( 144 == busclk_frq ) //from "..\VC0830_SV_memscan\sdram\sdram.c"
+    {
+//        HAL_WRITE_REG32(SDRC_DLL_PD, 0);               //power on dll
+#ifdef DLL_FIRST
+        HAL_WRITE_REG32(CLOCLRST_DLL_RST_CTRL, 0x200);            //enable dll reset during clock switch
+        for ( clk_cnt = 4000; clk_cnt > 0; clk_cnt-- );
+        HAL_WRITE_REG32(CLOCLRST_DLL_RST_CTRL, 0x1b0);            //enable dll reset during clock switch
+        for ( clk_cnt = 4000; clk_cnt > 0; clk_cnt-- );
+#endif
+        HAL_WRITE_REG32(CLOCKRST_CKD_SDR_CONFIG, 0xe98d);
+        HAL_WRITE_REG32(CLOCKRST_PLL2_CKD_SDR_CONFIG, 0x4201c1);		
+		HAL_WRITE_REG32(SDRC_CFG, 0x4ac211a0);
+		HAL_WRITE_REG32(SDRC_MODE, 0x00000033);
+		HAL_WRITE_REG32(SDRC_TIMING, 0x1959aa95);   //set sdrc timing
+		HAL_WRITE_REG32(SDRC_RFRSH, 0x514);       //set sdrc refresh
+        HAL_WRITE_REG32(SDRC_RD_PATH_CTRL, 0x32);    //tcas 2
+        HAL_WRITE_REG32(SDRC_MADJ_0, 0xf0);
+        HAL_WRITE_REG32(SDRC_ADJ_0, 0x90);             //adj_0
+        HAL_WRITE_REG32(SDRC_ADJ_1, 0x8f);             //adj_1
+        HAL_WRITE_REG32(SDRC_ADJ_2, 0x48);             //adj_2
+        HAL_WRITE_REG32(SDRC_ADJ_3, 0x50);              //adj_3        
+#ifndef DLL_FIRST		
+        HAL_WRITE_REG32(CLOCLRST_DLL_RST_CTRL, 0x200);            //enable dll reset during clock switch
+        for ( clk_cnt = 4000; clk_cnt > 0; clk_cnt-- );
+        HAL_WRITE_REG32(CLOCLRST_DLL_RST_CTRL, 0x1b0);            //enable dll reset during clock switch
+        for ( clk_cnt = 4000; clk_cnt > 0; clk_cnt-- );
+#endif
+		if ( cond ) {
+	//        HAL_WRITE_REG32(CLOCLRST_PHY_MUX_SEL, 0x10021113);
+	        HAL_WRITE_REG32(CLOCLRST_PHY_MUX_SEL, 0x0);
+		}		
+ 		if ( cond ) {
+			//166MHz配置文件中没有配这两个寄存器, 是否需要?
+	        HAL_WRITE_REG32(CLOCLRST_SDRC_STABLE_TGT, 0x200);       //set sdrc stable register to 512 cycle
+	        HAL_WRITE_REG32(SDRC_CLOCK_SWITCH, 0x1);    //enable sdrc clock switch
+		}
+	}	
+2), 发现sdram参数中adj有问题, 这可就奇怪了, 我明明是贴过来的. 郁闷...
+CLOCLRST_PHY_MUX_SEL需要先不使能, sdram使用新参数时会自动使用.
+<TODO>理解这些参数</TODO>.
+
+3), 目前做1000次测试通过, 上午测试不通过的原因可能是ADJ配错了, 不够细心:(
+跑5000次到了750次, 用60的sdram实验, 呵呵, 用75的居然没事, 超频了:)
+代码: D:\work\VC0830\SV\code\clkrst_200903241700_120_80_144_ok.rar
+
+4), 代码修改, 支持动态切频. 切频时把ungating的module gating, 修改tag_TClockInfo中module divider, 切频后ungating切频前ungate的模块. 
+CVS 注释:
+zhangjian, clk switch
+support dynamic clock switch between 80, 120, 144. sdio is ok under 120, 144, udc(sdio, nand) is fail at 120, 144. 80Mhz is not tested. The other module is not tested.
+before switch gating ungating module in m_gt register, save to PTClockInfo->m_gt_status;
+after switch changed cpu, bus divider and the following module's divider:
+vclk_div, per_div, iclk_div, snr_div, spi_div, nfc_div, sdio_div.
+and ungating module which is ungating in  PTClockInfo->m_gt_status variable.
+代码: "clkrst_200903242107_120_80_144_dynamic_ok.rar".
+位置: "D:\work\VC0830\SV\code".
+
+5), <TODO>下一步</TODO>
+(1), 实现24->168所有可能, 除了168都配成2:1的.
+a, cpu_bus那个中得改, 比例写反了.
+b, cpu, bus和module clk分开两个结构体.
+(2), <TODO>CLOCLRST_DLL_RST_CTRL</TODO>应该是200, 还是1b0?, 感觉应该是后者.
+(3), 理解pll, sdram;
+
+14:21 2009-3-24
+(12:45 2010-2-7)
+项目, Issue track, 网址
+http://10.0.2.208/mantis/login_page.php
+用户名: zhangjian
+密码: via staff id
+
+9:58 2009-3-25
+1, 从Aiguo(DONE, 已归还), 11板, 实验室拿了三块60的sdram.
+2, zhanglu 板子((9#+3#, 底板+CPU板, 下同)
+1), 切120, 80正常, 切144在切频后切频成功但是通过rvdebug访问memory0x41000000出现data abort.
+2), 重新插拔cpu板也不行. 死在切频144后.
+
+3, 目前我的8#板和aiguo板, caijin板子可以. 
+把我的8#给zhanglu, 8#板第一次跑vdec出错, 死在sd读写函数中, 应该是等待DMA完成. 
+第二次跑尚未出错. 
+4, caijin(5#+5#):
+1), 288:144:144, 288:144:96 跑vdec都有问题, video/sensor简单测试没问题.
+2), 120->80 vdec->120 vdec->144串口乱码;
+3), dma 串口乱码.
+
+15:42 2009-3-25
+VC0830, SV, storage, sdio, <TODO>经验总结</TODO>
+boxue, fengyaya都死在sd初始化, 两次插拔CPU板后问题解决. 应该是CPU子板接触不良造成.
+
+16:42 2009-3-25
+672=12*56=2^5*3*7
+
+2(x+1)*2*(y+1)*24=672
+
+17:15 2009-3-25
+VC0830, sdio, tpi, <TODO></TODO>
+现象: tpi中f_open死在readoneblk中等命令返回处.
+zhangjian: tpi
+update the following code to avoid f_open(sd: readOneBlk) in tpi_manual_adc_test() funcion.
+tpi_test()
+    ->tpi_sys_construct():
+
+<TODO>看这些配置的作用</TODO>
+//only for umonitor debug in VC0830 FPGA tpi add by yangzuoxing
+#if 0	
+	// UMONITOR
+	TPI_DEV_SET_REG(0x60051800, 0xffffffff);
+	TPI_DEV_SET_REG(0x60051804, 0x00000aba);
+	TPI_DEV_SET_REG(0x60051818, 0xffffffff);
+	TPI_DEV_SET_REG(0x60051c00, 0x00004a01);	// 0x00004a03
+	TPI_DEV_SET_REG(0x60051c04, 0x00000001);
+	TPI_DEV_SET_REG(0x600000e0, 0x0000000b);
+#endif	
+
+17:47 2009-3-25
+VC0830, clkrst, 切频, 168_168_168
+总结: (邮件: sdram测试结果不好, 8块中只有两块可以过168Mhz的lliautotest 5000)
+Hi, aiguo
+测试8块60sdram, 6块过不了lliautotest 5000. 还有6块未测(包括发给aiguo, caijin, zhanglu, zhangjian的). 测试用板子是zhanglu的9#+3#(socket).
+不好的sdram片子可能造成切频失败(频率改变但AASP无响应(SW instruct breakpoint等))或lliautotest 5000次过不了. 不好的sdram片子用SV n#表示. 
+有点奇怪的是切到144会出错的sdram切到166只是lliautotest 5000过不了. 并不会出现切频死和切频后uart乱码的问题. 144和166的区别是sdram频率不同, pll频率不同(144是576M, 168是672. 二者sdram配置参数相同. 
+会不会sdram参数不好?
+
+Hi, caijin:
+你今天遇到的切频后uart乱码我也遇到了, 和sdram有关. 你换个我测过的片子试试.
+
+Hi, zhanglu:
+你今天切频出错不一定是你板子问题, 现在给你的是过过168Mhz的lliautotest 5000的, 你再试试. 
+
+具体情况: 
+在我工位上用#11+#11或#9+#11都是很容易出现SW instruction breakpoint, 可能在切频前, 可能在切频后(包括刚切频后回不到命令行, 切频后, 两次回车后死等).
+拿到830实验室(Lingming那边)没事. 
+zhangjain: clkrst: clk swtich
+add 168:168:168(cpu:bus:vdec), other module clock is:
+per: 24
+iclk: 42
+snr: 12
+spi: 24
+nfc: 24
+sdio: 24
+
+下面列出出错的sdram错误及编号(168:168:168):
+测试用板子是zhanglu的9#+3#(socket)
+1, SV 1#: 0-1300测试, 错误大于10次, 中途停止.
+DMA  :/>lliautotest 5000
+[DMA_MODULE]->do_dmac_lli_auto_test()
+0..
+10..20..
+ 24   25  Soure address:0x8a27cb, Dest addreas:0xa19869, Length:0xf0c93, Channel:1,  lli num:6, test failed!!! 
+30..40..50..60..70..80..90..100..
+110..120..130..
+ 132   133  Soure address:0x807956, Dest addreas:0xa89d74, Length:0xb5692, Channel:1,  lli num:7, test failed!!! 
+140..
+ 140   141  Soure address:0x8f350f, Dest addreas:0xadc7e1, Length:0x49dc7, Channel:0,  lli num:10, test failed!!! 
+150..160..170..180..190..200..
+210..220..
+ 227   228  Soure address:0x8998cf, Dest addreas:0xa11cd9, Length:0xb35c1, Channel:1,  lli num:4, test failed!!! 
+230..240..250..260..270..280..290..
+ 299   300  Soure address:0x85b5d8, Dest addreas:0xa4fada, Length:0xa164f, Channel:1,  lli num:1, test failed!!! 
+300..
+310..320..330..340..350..
+ 359   360  Soure address:0x848d8f, Dest addreas:0xabfcc1, Length:0xe1d1b, Channel:0,  lli num:7, test failed!!! 
+360..370..380..390..400..
+410..
+ 414   415  Soure address:0x88e787, Dest addreas:0xaea5c5, Length:0x782d7, Channel:1,  lli num:3, test failed!!! 
+420..
+ 428   429  Soure address:0x811316, Dest addreas:0xa84726, Length:0xb7c69, Channel:0,  lli num:5, test failed!!! 
+430..440..
+ 446   447  Soure address:0x8049b4, Dest addreas:0xa6f876, Length:0xabba1, Channel:0,  lli num:6, test failed!!! 
+450..
+ 454   455  Soure address:0x802146, Dest addreas:0xafd7a0, Length:0x3d063, Channel:0,  lli num:3, test failed!!! 
+460..470..
+ 471   472  Soure address:0x82444b, Dest addreas:0xab581b, Length:0xac108, Channel:0,  lli num:9, test failed!!! 
+
+ 473   474  Soure address:0x80d7e4, Dest addreas:0xa9aa68, Length:0xa205e, Channel:1,  lli num:5, test failed!!! 
+480..490..500..
+510..520..530..540..550..560..570..
+ 573   574  Soure address:0x86d388, Dest addreas:0xaf63e2, Length:0xb29f7, Channel:1,  lli num:10, test failed!!! 
+580..590..600..
+610..620..630..640..650..
+ 654   655  Soure address:0x89aea9, Dest addreas:0xa89ce7, Length:0xb1cdd, Channel:1,  lli num:8, test failed!!! 
+660..670..680..690..700..
+710..720..730..740..750..760..
+ 768   769  Soure address:0x8be70d, Dest addreas:0xadc7a9, Length:0xe5e93, Channel:1,  lli num:8, test failed!!! 
+770..780..790..
+ 799   800  Soure address:0x85ff1b, Dest addreas:0xa74bbb, Length:0xbd77d, Channel:1,  lli num:10, test failed!!! 
+800..
+810..820..830..
+ 832   833  Soure address:0x84bd37, Dest addreas:0xaee529, Length:0xd9ad2, Channel:0,  lli num:8, test failed!!! 
+840..850..
+ 852   853  Soure address:0x891f37, Dest addreas:0xa514f1, Length:0x90c02, Channel:1,  lli num:1, test failed!!! 
+860..870..
+ 870   871  Soure address:0x8665b9, Dest addreas:0xaffd77, Length:0x48bde, Channel:1,  lli num:2, test failed!!! 
+880..890..900..
+910..920..
+ 923   924  Soure address:0x8a037f, Dest addreas:0xab557f, Length:0xfe9ed, Channel:0,  lli num:6, test failed!!! 
+
+ 928   929  Soure address:0x8deb24, Dest addreas:0xae0e80, Length:0xb8818, Channel:0,  lli num:6, test failed!!! 
+930..940..950..960..970..980..990..1000..
+1010..1020..
+ 1025   1026  Soure address:0x8c73dc, Dest addreas:0xa73cea, Length:0xfc94f, Channel:0,  lli num:10, test failed!!! 
+1030..1040..1050..1060..1070..1080..1090..1100..
+1110..1120..1130..1140..
+ 1143   1144  Soure address:0x872340, Dest addreas:0xaf5e2a, Length:0x94bce, Channel:1,  lli num:7, test failed!!! 
+1150..1160..1170..1180..1190..1200..
+1210..1220..1230..1240..
+ 1243   1244  Soure address:0x8555b4, Dest addreas:0xa1cada, Length:0x94579, Channel:0,  lli num:3, test failed!!! 
+1250..1260..1270..1280..
+ 1283   1284  Soure address:0x803ee1, Dest addreas:0xaf7be3, Length:0x531e2, Channel:1,  lli num:7, test failed!!! 
+1290..1300..
+
+2, SV 2#, lliautotest 5000, 错误1次
+3310..3320..
+ 3321   3322  Soure address:0x8aa34a, Dest addreas:0xb00e44, Length:0x7a11a, Channel:0,  lli num:5, test failed!!! 
+3330..
+顺便用这个板子测试了144:72:72和192:96:96, lliautotest各1000次, 通过. 
+切频到144, 死. <TODO>是否sdram不好用才会导致切频到144死? 144参数不好?</TODO>
+
+3, SV 3#, lliautotest 5000, 错误2次
+3321   3322  Soure address:0x8aa34a, Dest addreas:0xb00e44, Length:0x7a11a, Channel:0,  lli num:5, test failed!!! 
+3330..
+4110..4120..4130..4140..
+4140   4141  Soure address:0x8298a8, Dest addreas:0xaab8a2, Length:0x842fa, Channel:0,  lli num:1, test failed!!! 
+
+4, SV 4#, 切144MHz后uart出现连续乱码(2次出现, 100%, 很像caijin现象). lliautotest 5000, 做到1160次停止, 错误:
+299   300  Soure address:0x85b5d8, Dest addreas:0xa4fada, Length:0xa164f, Channel:1,  lli num:1, test failed!!! 
+654   655  Soure address:0x89aea9, Dest addreas:0xa89ce7, Length:0xb1cdd, Channel:1,  lli num:8, test failed!!! 
+710..710..720..720..730..730..740..740..750..750..760..Length:0xb1cdd, Channel:1,  lli num:8, test failed!!! 
+768   769  Soure address:0x8be70d, Dest addreas:0xadc7a9, Length:0xe5e93, Channel:1,  lli num:8, test failed!!! 
+
+5, SV 5#, 切144MHz死(2次出现, 100%). lliautotest 5000, 错误6次:
+1169   1170  Soure address:0x8c1186, Dest addreas:0xa7ec1c, Length:0xc7f87, Channel:0,  lli num:8, test failed!!! 
+2039   2040  Soure address:0x82d326, Dest addreas:0xad30f8, Length:0xe7db1, Channel:1,  lli num:4, test failed!!! 
+4756   4757  Soure address:0x833ea0, Dest addreas:0xa7fb5e, Length:0x6e829, Channel:1,  lli num:4, test failed!!!
+! 
+4810..st addreas:0xa7fb5e, Length:0x6e829, Channel:1,  lli num:4, test failed!!! 
+4810   4811  Soure address:0x84eacf, Dest addreas:0xadd0dd, Length:0x6633e, Channel:1,  lli num:5, test failed!!!
+! 
+4982   4983  Soure address:0x879a30, Dest add0..4960..4970..4980..
+4982   4983  Soure address:0x879a30, Dest addreas:0xa22ee2, Length:0xd8e24, Channel:0,  lli num:9, test failed!!! 
+! 
+4990..est failed!!! 
+4990..[DMA_MODULE]MESSAGE:Rand[DMA_MODULE]MESSAGE:Random test over
+
+6, SV 6#, 切144MHz死(2次出现, 100%). lliautotest 5000, 错误6次
+1283   1284  Soure address:0x803ee1, Dest addreas:0xaf7be3, Length:0x531e2, Channel:1,  lli num:7, test failed!!! 
+3310..3320..
+3321   3322  Soure address:0x8aa34a, Dest addreas:0xb00e44, Length:0x7a11a, Channel:0,  lli num:5, test failed!!! 
+4140   4141  Soure address:0x8298a8, Dest addreas:0xaab8a2, Length:0x842fa, Channel:0,  lli num:1, test failed!!! 
+4476   4477  Soure address:0x806311, Dest addreas:0xad8a33, Length:0x2a3e6, Channel:0,  lli num:10, test failed!!! 
+4756   4757  Soure address:0x833ea0, Dest addreas:0xa7fb5e, Length:0x6e829, Channel:1,  lli num:4, test failed!!! 
+4810   4811  Soure address:0x84eacf, Dest addreas:0xadd0dd, Length:0x6633e, Channel:1,  lli num:5, test failed!!! 
+4910..4920..4930..4940..4950..4960..4970..4980..4990..[DMA_MODULE]MESSAGE:Random test over
+
+代码:
+zhangjian, clock, clk switch
+add 192:96:96, 144:72:72,  switch
+"clkrst_200903252044_144_72+192_96_dynamic_ok.rar"
+
+20:40 2009-3-25
+VC0830, <TODO>任务</TODO>
+24, 48 sdram切频,
+
+9:50 2009-3-26
+VC0830, clkrst, 切频, 168_168_168, 续
+1, 给Caijin(5#+5#) 168测试通过的仍然不行.
+今天测试其它60 sdram 168MHz的情况, 排除sdram的问题.
+换成(5#+4#(Fengyaya CPU板))vdec可以简单跑. 但lliautotest 5000过不了, :
+24   25  Soure address:0x8ec363, Dest addreas:0xa63401, Length:0xf0c93, Channel:1,  lli num:6, test failed!!! 
+45   46  Soure address:0x90a121, Dest addreas:0xb163df, Length:0xfbb3b, Channel:1,  lli num:4, test failed!!! 
+148   149  Soure address:0x864944, Dest addreas:0xaf935e, Length:0xb7910, Channel:1,  lli num:6, test failed!!! 
+196   197  Soure address:0x86aa8c, Dest addreas:0xacb34c, Length:0xf4330, Channel:1,  lli num:2, test failed!!! 
+200   201  Soure address:0x89297d, Dest addreas:0xae21ab, Length:0x48c0a, Channel:0,  lli num:4, test failed!!! 
+203   204  Soure address:0x8f0b42, Dest addreas:0xb3b892, Length:0x8f099, Channel:0,  lli num:7, test failed!!! 
+208   209  Soure address:0x912564, Dest addreas:0xaebaea, Length:0xf9c2b, Channel:0,  lli num:3, test failed!!! 
+217   218  Soure address:0x8f0fc5, Dest addreas:0xaaa8df, Length:0xbbc9f, Channel:1,  lli num:1, test failed!!! 
+272   273  Soure address:0x851473, Dest addreas:0xb3cf31, Length:0xd0b7b, Channel:0,  lli num:2, test failed!!! 
+377   378  Soure address:0x89fa1b, Dest addreas:0xa589b5, Length:0xf6d57, Channel:1,  lli num:7, test failed!!! 
+456   457  Soure address:0x8b0d38, Dest addreas:0xb4586e, Length:0xf368d, Channel:1,  lli num:9, test failed!!! 
+502   503  Soure address:0x8da4aa, Dest addreas:0xb01ee8, Length:0x9f68e, Channel:1,  lli num:4, test failed!!! 
+529   530  Soure address:0x8c1e75, Dest addreas:0xb3de6f, Length:0x7c55a, Channel:0,  lli num:4, test failed!!! 
+538   539  Soure address:0x928842, Dest addreas:0xa88ff0, Length:0xfb5d0, Channel:1,  lli num:3, test failed!!! 
+547   548  Soure address:0x930025, Dest addreas:0xac91b5, Length:0x94869, Channel:0,  lli num:1, test failed!!! 
+576   577  Soure address:0x85afaf, Dest addreas:0xa97d79, Length:0x95148, Channel:1,  lli num:8, test failed!!! 
+659   660  Soure address:0x8c6918, Dest addreas:0xa774ea, Length:0xb9ece, Channel:1,  lli num:1, test failed!!! 
+1440..1450..1450..1460..1460..1470..1470..1480..1480..1490.. Channel:0,  lli num:7, test failed!!! 
+1380..1390..1400..
+1410..1420..1430..1440..1450..1460..1470..1480..1490..
+1498   1499  Soure address:0x8d745a, Dest addreas:0xa6f4d4, Length:0xf4e2b, Channel:1,  lli num:2, test failed!!!
+
+2, zhanglu板子切288_144_144死, 切168_168_168没事. 代码加了144_144_144排除是不是cpu板的问题. 
+
+3, lingming在#1板实验我测lliautotest 5000过不了的没问题. 可能和zhanglu板子有关系, 在我的8#+8#实验这片sdram.
+
+10:09 2009-3-27
+VC0830, SV, 存储, sdio, <TODO>优化sd卡速度</TODO>
+0, 确认sd卡最高速度
+1, sdapp层ncnb改为cb;
+2, sd用统一的cb区域, dma时清cache. 
+3, zhangjian: memcpy时可以改为用dmac.
+4, 针对高速sd卡测试48MHz时钟, 从fengyaya处拿了8G sd卡, class6, Adata.
+5, <TODO>要不要测mmc卡速度</TODO>
+
+10:15 2009-3-27
+VC0830, SV, clock, clk switch, <TODO>有空改进clk switch结构体, 对用户是选择cpu,bus,vdec, 内部根据pll频点和sdram频点分类; 给高级用户自由度, 可能自由配置pll频点等参数</TODO>
+
+10:09 2009-3-27
+VC0830, SV, 存储, sdio, 优化sd卡速度
+1, 测试当前读卡器读写sd卡速度, VC0830板子读写sd卡速度(区分sd卡实际读写速度和memcpy速度. 
+SD卡: 1#: Panasonic 1GB class2; 2#ADATA 8GB class6;
+1), 830 SV:
+发现加上计算读写和memcpy时间函数后速度慢了很多:
+(1), 不单独计算memcpy时间
+1#
+Multi Read Speed is: 5283792 bytes/second
+Multi Write Speed is: 3027343 bytes/second
+Single Read Speed is: 1348634 bytes/second
+Single Write Speed is: 249905 bytes/second
+2#
+Multi Read Speed is: 5879131 bytes/second
+Multi Write Speed is: 5048133 bytes/second
+Single Read Speed is: 2015348 bytes/second
+Single Write Speed is: 145650 bytes/second
+(2), 单独计算memcpy时间:
+1#:
+total read time is 451206(us)
+total copy time is 1415051(us)
+time1-time0(us)=1867104
+Multi Read Speed is: 2808027 bytes/second
+total read time is 0(us)
+total write time is 486142(us)
+total copy time is 1415047(us)
+time1-time0(us)=1902038
+Multi Write Speed is: 2756453 bytes/second
+
+total read time is 2584309(us)
+total copy time is 1485511(us)
+time1-time0(us)=4249583
+Single Read Speed is: 1233739 bytes/second
+total read time is 2584309(us)
+total copy time is 1485511(us)
+time1-time0(us)=37800614
+Single Write Speed is: 138698 bytes/second
+
+虽然对性能有影响, 但是可以看出SD纯读写读写>10M/sec. 所以主要得优化memcpy时间. 读写接近, 可能因为没有到sd卡最高速度, 且读速度被限制.
+恢复了CVS上的代码, 仍然不行, multi read速度是2.8M, 还是到不了5M.
+<TODO>下一步</TODO>
+1, 原因未知, 今天修改的代码没有上传CVS, 以后接着查;
+代码: sdio_20090327_SDIO_SPEED_OPTIMIZATION_未上传至CVS.rar
+位置: "D:\work\VC0830\SV\code"
+2, 需要知道sd规范中最多一次能传多少大数据.<TODO></TODO>
+
+13:45 2009-3-27
+<TODO>困的时候</TODO>:
+1, 整理26,27邮件
+2, 报销单据;
+
+15:07 2009-3-27
+VC0830, <TODO>任务</TODO>
+1, 72-168MHz切频程序8MHz一个频点, <DONE>
+1), 参考system.h宏定义, 实现288MHz->360MHz内各个频点.
+2), bootloader.c中有各频点pll配置;
+3), sdram.c有sdram参数, 根据频率计算sdram自刷新数值.
+4), 外设频率
+(1), uart必须支持: 大致在24MHz左右即可, 需要根据per clk计算波特率
+(2), 其它模块不急, 需求: spi: 50-70. sdio<25MHz(加入告诉模式后<50MHz). iclk: 40-50MHz.
+
+2, "10:09 2009-3-27", 优化sd卡速度;
+
+15:07 2009-3-27
+VC0830, SV, clock, clk switch
+1, 修改结构体
+typedef struct tag_TClockSwitchInfo
+{
+    PTSystemInfo systemInfo;
+    PTModuleClockInfo moduleClockInfo;
+    PTSdramInfo	sdramInfo;
+    PTDdrInfo	ddrInfo;
+}TClockSwitchInfo;
+
+enum memory_type {SDRAM, DDR};
+enum pll_index_type {PLL1=1, PLL2, PLL3};
+
+enum m_divider_status_type {USABLE, GATING, REVERSED, NOT_A_MODULE, NOT_ADD}; 
+
+//1), 增加"tag_TSystemInfo"结构体, 描述从外部看确定系统频点所需参数
+//其中pll_ckd, pll_index_type不需要用户输入, 由系统根据xclk,cpu_clock,
+//bus_clock,vclk_clock选择. 查找时根据xclk和bus_clock查找, 用cpu_clock,
+//vclk_clock确认, 如果没有符合要求的, 初期可以直接报错. 将来可以自动选择更
+//合适的.
+typedef struct tag_TSystemInfo
+{
+    UINT32 xclk;
+    UINT32 cpu_bus_ratio;
+    UINT32 cpu_clock;
+    UINT32 bus_clock;
+    UINT32 vclk_clock;
+    enum memory_type memory_t;
+    UINT32 pll_freq;
+    UINT32 pll_ckd;
+    enum pll_index_type pll_index;
+}TSystemInfo, *PTSystemInfo;
+
+//2), 原有"tag_TClockInfo"剩余内容改为"tag_TModuleClockInfo"
+//m_divider按照m_clk_gt_ctrl(0x60000030)寄存器顺序保存module_divider. 
+//m_divider_status按同样顺序排列, 表示对应的m_divider是否可用. 有些不属于
+//"tag_TModuleClockInfo"标为"NOT_A_MODULE"属性, 例如vdec等. 如果有模块在某
+//些情况不可用, 可以把状态从USABLE改为GATING或其它状态. 
+//m_gt_status保存切频前的"m_clk_gt_ctrl"寄存器. 
+//使用数组的目的: 便于程序遍历; 便于module得到自己的divider, 再根据pll_cke
+//算出模块clock. 
+typedef struct tag_TModuleClockInfo
+{
+    UINT32 m_divider[MAX_NUM_OF_MODULE];
+    enum m_divider_status_type m_divider_status[MAX_NUM_OF_MODULE];
+    UINT32 m_gt_status;
+}TModuleClockInfo, *PTModuleClockInfo;
+
+//3), <TODO>加入DDR时修改</TODO>: 把sdram_info和ddr_info合并为union
+typedef struct tag_TSdramInfo
+{
+    UINT32 sdrc_adj0;
+    UINT32 sdrc_adj1;
+    UINT32 sdrc_adj2;
+    UINT32 sdrc_adj3;
+    UINT32 sdrc_refresh;
+    UINT32 sdrc_dll_pd;
+    UINT32 phy_mux_sel;
+}TSdramInfo, *PTSdramInfo;
+
+typedef struct tag_TDdrInfo
+{
+    UINT32 sdrc_adj0;
+    
+}TDdrInfo, *PTDdrInfo;
+
+2, <DONE>代码: 
+1), 用lingming sdram.c参数替换已有参数.
+2), 240_120, 288_144过, 加入所有所需频点
+
+11:40 2009-3-29
+<TODO>根据memory.xls修改结构体</TODO>
+增加了:
+		UINT32 sdrc_mode;
+		UINT32 sdrc_rd_path_control;
+用c99方式:
+static struct fb_ops s3c2410fb_ops = {
+	.owner		= THIS_MODULE,
+	.fb_check_var	= s3c2410fb_check_var,
+	.fb_set_par	= s3c2410fb_set_par,
+	.fb_blank	= s3c2410fb_blank,
+	.fb_setcolreg	= s3c2410fb_setcolreg,
+	.fb_fillrect	= cfb_fillrect,
+	.fb_copyarea	= cfb_copyarea,
+	.fb_imageblit	= cfb_imageblit,
+};
+重新写g_SdramInfo_120_200等struct赋值.
+
+<DONE>:
+1, 加入其它频点参数.<DONE>
+2, 计算sdrc_refresh.<DONE>
+3, 切频前计算uart波特率:<DONE>
+1), g_ModuleClockInfo_696频率uart是12MHz, 需要重新计算uart自身的divider!!!! 周一到公司要注意这个频率
+2), g_ModuleClockInfo_640频率uart是24.6MHz.
+5, 疑问: 问Lingming, <60MHz时, 既然不使用dll, 没必要配置sdrc_adj_x吧. <DONE>
+
+3:14 2009-3-30
+VC0830, SV, memory, clock, clk switch, 周一测试计划, <DONE>
+1, 各频点切频, uart是否可用. <DONE>除了程序跑飞的频率, uart都可用.
+2, sdram刷新率是否合适. 请教大山.<DONE>Lingming认可.
+
+9:42 2009-3-30
+VC0830, SV, clock, 切频, 
+1, sdram低频参数有问题. 没写进去?!
+原因是cfg_sdrc没有考虑切频到xclk时的情况, 切到xclk使用的是用户希望的pll1 sdram参数. 解决见"10:03 2009-3-30".
+
+2, 切回120MHz时死.
+修改rdpath后可以:
+	.sdrc_rd_path_control = 0x32,//lingming: 0x22,
+<TODO>疑问, 找lingming</TODO>: 参数有问题.
+可能与CL设置不同有关. 
+
+3, 实验每个频点:
+1), cache on
+ xclk pll cpu bus vdec
+ 0 12  480 240 120 120  //switch pass
+ 1 12  864 432 144 144  //bus freq right, 程序飞. sdram简单读写失败.
+ 2 12  816 408 136 136  //bus freq right, 程序飞. sdram简单读写pass.
+ 3 12  768 384 128 128  //bus freq right, 程序飞. sdram简单读写pass.
+ 4 12  720 360 120 120  //bus freq right, 程序飞. sdram简单读写pass.
+ 5 12  720 360 180 180  //bus freq right, 程序飞. sdram简单读写pass.
+ 6 12  696 348 116 116  //bus freq right, 程序飞. sdram简单读写pass.
+ 7 12  672 336 168 168  //bus freq right, 程序飞. sdram简单读写pass. cache off
+ 8 12  640 320 160 160  //bus freq right, 程序飞. sdram简单读写pass.
+ 9 12  624 312 156 156  //bus freq right, 程序飞. sdram简单读写pass.
+10 12  608 304 152 152  //bus freq right, 程序飞. sdram简单读写pass; 
+11 12  592 296 148 148  //switch pass, cache on dataabort; cache off, lliautotest 1000 doing(320pass).
+12 12  576 288 144 144  //switch pass, cache on dataabort; cache off, lliautotest 1000 pass.
+13 12  528 264 132 132  //switch pass, cache on, lliautotest 5000 pass
+14 12  480 240  80 80   //switch pass
+15 12  480 240  60 60   //switch fail, 60MHz原来走<60分支, 现在走60_max的分支. pass
+16 12  672 168 168 168  //switch pass
+17 12  288 144  48 48   //switch pass
+18 12  288 144  36 36   //switch pass
+19 12  144  72  24 24   //switch pass
+
+2), cache off
+实验cache on失败的:
+ 1 12  864 432 144 144  //switch fail
+ 2 12  816 408 136 136  //switch fail
+ 3 12  768 384 128 128  //switch fail
+ 4 12  720 360 120 120  //switch fail
+ 5 12  720 360 180 180  //switch fail
+ 6 12  696 348 116 116  //lliautotest 1120 pass
+ 7 12  672 336 168 168  //lliautotest 1000 pass.
+ 8 12  640 320 160 160  //switch pass
+ 9 12  624 312 156 156  //switch pass
+10 12  608 304 152 152  //switch pass
+11 12  592 296 148 148  //lliautotest 1000 doing(320pass).
+12 12  576 288 144 144  //lliautotest 1000 pass.
+
+4, 上述测试的说明:
+1), 60MHz sdram我使用的是60_120的参数, 但是处理流程用的是<60M的流程(没有配置ADJ_x, 关了DLL). 修改"cfg_sdrc"和"clk_switch_to_pll1"对应语句即可. 
+2), sdram简单读写指在三个不同地址随机写入数据, 看该地址数据是否正确, 有无影响相邻地址数据. 
+3), 11,12切频后的操作中会出现data abort? 会不会是sdram refresh太小?
+Lingming说也可能是cpu不稳定, 让我关cache试试. 关cache后实验(12  576 288 144 144)lliautotest 1000
+4), 开cache: 我板子目前能上的最高频率(12  528 264 132 132)做lliautotest 5000次(cache on)测试. 
+5), 关cache: (12  696 348 116 116)lliautotest 1120 pass
+
+5, clk switch Usage:
+映像: "clkrst_image_200903301313_20_clk_switch_caes.rar"
+位置: "D:\work\VC0830\SV\code"
+1), 把” timer_sv.pak”下载到830板子, 第一次下载需要建立bbt, 会慢一点.
+2), 进入AASP后, 输入”clkrst”进入clock模块;
+3), 输入” print_clockswitchsv_info”显示所有频点, 第一列是index;
+4), 输入” clockswitchsv index”切频到制定频点.
+5), 切频后, 输入"dma"进入dmac模块, 可以使用"lliautotest"测试系统. 开cache时一般测试5000次未报错就认为cpu,sdram稳定了. 关cache时测试速度慢, 可以测试1000次.
+Note: cache是VC0830的关键路径, 关闭cache能切频到较高频率. 
+
+10:03 2009-3-30
+VC0830, SV, 本周任务, <TODO>整理会议任务, 整理"11:40 2009-3-29"和"15:07 2009-3-27"<TODO>, 按优先级排序</TODO>
+1, clock: 切频, 基本完成, 几个小东西改下. 1)-4)今天要做完:
+1), <DONE>完善clockswitchsv提示, 提示从"print_clockswitchsv_info"看支持的频率, 回显用户选择的频率组合."input 99 to list freq table"
+2), <DONE>按Lingming参数修改sdrc配置, 之前配置Tcas造成错误, 可能是由于没有同时配置sdrc_mode的CL(cas latency)
+3), <DONE>分出xclk工作的命令. 同时修改:
+"cfg_sdrc"中如果传入的是xclk, 刷新率用的是用户希望的pll1 sdram刷新率. 
+<DONE>: 这个舍近求远了, 其实"get_sdrc_refresh"只需要"busclk_frq"这一个参数, 所以直接修改
+static UINT32 get_sdrc_refresh(TClockSwitchInfo *clockSwitchInfo)
+为
+static UINT32 get_sdrc_refresh(UINT32 busclk_frq)
+最简单.
+4), 240-288 cpu频率以8m增加. 目前176封装288M不能稳定工作在85度.
+5), Lingming pll操作函数和我的合并, 为将来加入切换到pll2做准备.
+6), 去耦合: xclk, pll_ckd与cpu bus ratio, vclk ratio, pll_freq分离.
+7), CLOCLRST_DLL_RST_CTRL也可以根据频率计算. 
+8), 详细看dll和adj clk配置.
+9), <DONE>为boxuo audio外部codec添加了AUDIO_P3(pll2 fout5分频得到24MHz), xclk=12时: 12/10*2*50/5=24, boxue测试通过. 其它xclk为测试.
+
+2, sd卡完善代码
+1), 今天加入sdio 1bit代码. Fengyaya测试需要. 
+2), auto/manual, 中断/查询.
+3), 初始化流程.
+4), sd 有时抢不到padc, 怎么办? 重新trigger?
+今天Shuyu的问题: padc一直被nand占用. 原来其它人也发现过被lcd占用.
+5), dma trigger时根据是否自动/手动判断是否需要查询. <TODO>816中未改此代码</TODO>
+
+3, pmu: 
+1), 测试282封装下所有APcase. 这个工作量较大, 测试中会了解很多外设模块, 如果有时间提前了解. 计划安排周四, 周五两天加班完成.
+2), 希望能建立完善的suspend/resume架构, 参考Linux/wince的树型管理方式. <TODO>思考, 看Linux代码, 会和aiguo讨论</TODO>
+
+4, 830 code的整理
+自: Aiguo: 2009年3月30日 15:05邮件.
+关于830 code，底层的引用要直接用hal_io.h，主要包括如下几项：
+1) 寄存器读写，直接用hal_io.h中的函数，别自定义一些或者直接读写；
+2) Memory的malloc要直接用hal_io.h中；
+3) 打印直接用hal_io.h中的HALPrint；
+4) Delay直接用hal_io.h中的HALDelay；
+5) 得到当前的时间直接hal_io.h中的HALGetNowTime
+6) 等等。
+这样便于大家移植到不同的系统中，如CP的程序直接用我们现在就可以，省的我们到处定义宏，我们现在不需要，但ADS下就需要了。
+每个人尽快check一下自己的code（属于自己的模块），如果有用到尽快改过来，希望越快越好。
+
+5, VC0816 check寄存器.
+
+6, review 3月TODO
+
+14:12 2009-3-30
+(9:45 2009-3-31)
+VC0830, SV, 封装, 总结
+0, 根据不同封装定义"_SV128_","_SV176_", "_SV181_", "_SV282_"四个宏, 详见"sys.h"宏.
+1, 128封装只支持16M sdram, 不支持32M. 没有引出JTAG?<TODO>确认</TODO>
+2, 282封装目前能稳定跑到304MHz, 有一个片子能跑到320MHz, 呵呵, 还是不能稳定跑到333.
+
+14:32 2009-3-30
+VC0830, clock, clk switch, 总结
+1, "Data abort", 目前遇到的data abort有两个原因:
+1), cpu频率过高不稳定导致;
+2), 访问了无效sdram区域, 例如128封装中地址线只到A11(即只有12根地址线, <TODO>地址线与sdram容量大小区别, 可能需要问dashan</TODO>), 如果使用A12, 就会引起data abort.
+2, Fengyaya发现如果sdram片子不好(旧片子)有时切频时间长(切频后按回车无反应), 有时会切死.
+
+18:55 2009-3-30
+VC0830, clock, clk switch, 调试
+今天状态不好, 真不该乱改, 现在完全没法切频了. 明天慢慢调吧:(
+后来发现是"clk_switch_to_xclk"函数中sdrc参数用错了, 没法切到xclk.
+
+9:40 2009-3-31
+VC0830, clock, sdram板子对CPU频率有影响
+昨天Lingming测到282封装(120_max)sdram参数需要用不同参数, 后来发现是sdram板子的问题, 换成新的sdram板子(板子质量明显好很多)就没事了. 
+
+10:57 2009-3-31
+VC0830, AASP
+发现AASP一个bug, clockswitchsv 99应该显示clk switch list后, 等待输入. 现在是一直循环显示. 没有等待用户输入
+
+11:40 2009-3-31
+<TODO></TODO>
+1, 测试282, 通过后提交代码
+1), 切频测试:
+(1), "_SV176_"在下列频点lliautotest 5000次pass
+"12  480 240  80 80", "12  576 288 144 144"(doing)
+(2), "_SV282_".
+注: 在282下光用usb供电影响cpu最高频率, 切到"12  592 296 148 148"很很快出现"data abort", 以下测试都使用外接电源测试.
+cache on:
+ xclk pll cpu bus vdec
+ 0 12  480 240 120 120      //switch pass
+ 1 12  864 432 144 144      //switch fail
+ 2 12  816 408 136 136      //switch fail
+ 3 12  768 384 128 128      //switch fail
+ 4 12  720 360 120 120      //switch fail
+ 5 12  720 360 180 180      //switch fail
+ 6 12  696 348 116 116      //switch fail
+ 7 12  672 336 168 168      //switch fail
+ 8 12  640 320 160 160      //switch pass, lliautotest 5000 不超过30次就会死, 死前有50%测试错误; 新sdram板子: switch后很快data abort
+ 9 12  624 312 156 156      //switch pass, lliautotest 5000失败. 1660次错了79次;新sdram板子: lliautotest 5000 doing.
+10 12  608 304 152 152      //switch pass, 
+11 12  592 296 148 148      //switch pass, lliautotest 5000 pass
+12 12  576 288 144 144      //switch pass
+13 12  528 264 132 132      //switch pass
+14 12  480 240  80 80       //switch pass
+15 12  480 240  60 60       //switch pass
+16 12  672 168 168 168      //switch fail, 换成新sdram板子, lliautotest 5000 pass
+17 12  288 144  48 48       //switch pass
+18 12  288 144  36 36       //switch pass
+19 12  144  72  24 24       //switch pass
+20 12 (cpu bus using xclk)  //switch pass
+
+cache off:
+ 1 12  864 432 144 144      //switch fail
+ 2 12  816 408 136 136      //switch fail
+ 3 12  768 384 128 128      //switch pass, lliautotest 1000 doing
+ 4 12  720 360 120 120      //switch pass
+ 5 12  720 360 180 180      //switch pass, lliautotest 1000 todo
+ 6 12  696 348 116 116      //switch pass
+ 7 12  672 336 168 168      //switch pass
+
+2, 代码修改:<DONE>
+1), 加入校验pll频率和pll ckd的代码. 
+2), 
+#ifdef _SV282_	//zhangjian: 282封装下需要使用uart1, 可能是bug, lingming再查.
+	#define STD_UART_NUM	1
+#else
+	#define STD_UART_NUM	0
+#endif
+3, 现在模块时钟管理也不方便. clk也需要一棵树, 例如per有效时, uart可能才有效. 能不能和pmu合并为一棵树呢?
+//TODO: export "get_uart_module_clk" and other get_xxx_module_clk to user using
+//function pointer struct.
+3, 282封装, 写入映像后死在"Go":
+1), sys.h: define _SV282_. uart_define.h中如果定义了_SV282_会使用uart1
+2), strap pin[7:6]=1. 对应JMP13,JMP12. JMP12[1:2]短接(有"]"符号为1,2脚).
+3), uart1跳线: uart1开关的2(SDI),3(SDO) on
+4), 串口线插在uart1上.
+
+15:10 2009-3-31
+VC0830, clock, clk switch, 加入区分容量, 16/32bit定义不同参数.
+1, 0x60011000(sdrc_cfg)应该是在bootloader的512info设置吧.
+2, <DONE>直接用预定义区分16bit, 32M等不同sdram.16bit, 32bit, 16m, 32m, 64m.
+3, 不同品牌sdram考虑用不同文件区分, 在sdram_config.h通过判断sys.h预定义来选择不同的sdram_config_xxx.h文件, 从而编译不同的sdram_config_xxx.c. 目前参数同时作为默认值, 如果用户没有设置品牌也使用这个参数.
+/**
+ * TODO: add guide for add new sdram vendor
+ * subdir.mk, sdram_config_vendor.c/h.
+ */
+
+19:52 2009-3-31
+VC0830/VC0816, 今晚任务, <TODO>完成后, 修改前面对应任务</TODO>
+今晚希望完成的事情还真多, 需要提高效率:)
+1, Boxue audio clk;<DONE>未测试
+2, sd修改:  CMD0 manual模式尝试重新trigger. auto/manual, int/inquire
+3, 816寄存器check.
+4, 报销.填写完成, 明天签字, 贴条.<DONE>

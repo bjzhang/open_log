@@ -1,0 +1,2774 @@
+11:00 2009-9-1
+Linux移植, uart, 文件系统, bosybox-1.14.3, <TODO></TODO>
+1, busybox的ash读取串口过程如下: 
+parsecmd()->readtoken()->xxreadtoken()->pgetc_fast(), pgetc()
+pgetc()->pgetc_as_macro()->preadbuffer()->preadfd()->nonblock_safe_read()
+nonblock_safe_read()->safe_read()->read()
+从中可以看出, 最后还是通过系统调用read实现的. 所以tty分析的重点应当是write和read函数. 
+
+2, busybox console_init()(init/init.c), 说明了如何open串口:
+
+int fd = open(s, O_RDWR | O_NONBLOCK | O_NOCTTY);
+		if (fd >= 0) {
+			dup2(fd, STDIN_FILENO);
+			dup2(fd, STDOUT_FILENO);
+			xmove_fd(fd, STDERR_FILENO);
+		}
+
+18:14 2009-9-1
+Linux移植, uart, 文件系统, 进展
+1, 今天zhicheng发现如果tx_empty直接返回1就有kernel panic, 感觉是tx_empty使用问题
+uart_ioctl()->uart_get_lsr_info()->port->ops->tx_empty(port)
+tty_wait_until_sent()->uart_ops.wait_until_sent(uart_wait_until_sent())->port->ops->tx_empty(port)(while循环, 直到empty退出)
+
+2, 调用"tty_wait_until_sent"的通用函数有:
+1), uart_close(drivers\serial\serial_core.c)
+	->tty_wait_until_sent(tty, msecs_to_jiffies(state->closing_wait));
+uart_close这个函数会被tty的release函数调用. 
+2), set_termios(drivers\char\tty_ioctl.c)->tty_wait_until_sent(tty, 0);
+3), tty_set_ldisc(drivers\char\tty_ldisc.c)->tty_wait_until_sent(tty, 0);
+
+3, uart_wait_until_sent分析.
+可以看出如果超时退出, 有signal也有退出. 所以只要"port->ops->tx_empty(port)(vc0830_uart_tx_empty)"实现正确, 这里不应该会死等. 
+另外每次的超时时间char_time是与fifosize有关, 可以估算一下830会不会超时. 
+
+4, 从上面分析看咱们目前的vc0830_tx_chars不太合理. 
+咱们uart没有fifo, 把fifosize设为1比较合理. 然后vc0830_tx_chars中不等发送发成, 改为在tx_empty()(vc0830_uart_tx_empty)中等待. 这样更符合linux uart架构. 
+
+10:42 2009-9-2
+时间管理
+10:00-10:40: 与zhicheng讨论Linux uart
+10:40-11:10  看邮件, 回邮件. 
+
+12:44 2009-9-2
+<TODO>继续整理</TODO>
+uart_ops.write(uart_write(), drviers\serial/serial_core.c)和fluash_char都会调用uart_start. 
+其中uart_write会一次把用户传入数据写入xmit buffer, 所以uart start需要一次把这些数据都发送出去.
+
+13:33 2009-9-2
+VC0830, SV, clkrst, clkswitch, 继续完成打包切频工具
+之前的批量切频工具可以完成批量切频测试, 目前pcddr, sdram切频流程已经稳定, 希望把batchswitch info也用于aasp中的切频. 这样达到代码与数据的分离. 需要做的工作
+1, clkrst_init中需要把batchswitch info从0x200000移到malloc的区域, 避免被后面的malloc破坏.
+2, 为用户数据建立单独的用户TMemoryInfo. 如果有g_userMemInfo, 以此为默认memoryInfo.
+3, 切频相关函数的修改:
+1), 频点只能从用户频点中选择, 需要修改Clkrst_App_PrintAllCpu().
+2), 频点的限制通过get memory info中能否得到对应memory info控制. 
+Clkrst_MemParm_DefaultGet()改为两种方式:
+(1), 如果是g_userMemInfo, 只查找该频点是否存在. 
+(2), 如果不是, 按现有方式. 
+Q: 二者为什么不能合并和? 
+A: 因为前者提供的频点和memory参数一一对应, 有时会造成bus频率相关, bus divider相同但参数不同的情况.  使用方法(2)必须要求memory参数只和bus频率, bus divider相关. 
+4, batchswitch函数本身应当使用移动后的info, 而不是0x200000的. 
+5, <TODO>bug, 明天找linchuan</TODO>:
+发现如果判断了sdrc_mode是否变化, 有时会判断错误, 导致切频死:
+if ( 1 /* && sdrc_mode_prev != clockSwitchInfo->memParm->sdrc_mode*/ ) {
+
+18:32 2009-9-2
+VC0830, SV, clkrst, clkswitch, eorex_6切频问题
+Sdram 要求1， -6 （312，156）-7.5（264，132），2，（360，120），3（288，96）4（288，72）5（192，48）6（96，24）
+
+22:37 2009-9-2
+VC0830, SV, clkrst, clkswitch, 时间管理
+今天下班哪会儿(18:00-19:25)心里有点乱了, 应该静下心来分析一下.
+感觉eorex-6芯片切频有问题可能是sdram切频还没有完成, 或没有稳定. 考虑用下面三个方法:
+1), 返回前读取memory特定地址的数据. 为了简单可以直接读取sram切频程序部分. 这段程序不会执行, 所以不会在cache里面. 
+2), 返回前加入足够的nop, nop数量参考lvpin邮件. 如果没找到, 暂时用800nop代替.
+\todo 需要查一下上次为什么要加nop. 在sram中的代码, 加入while循环应该也是一样的. 
+3), 查询发送自刷新命令后, 是否真的进入了自刷新. 
+4), 对于eorex_6, 切频时不修改sdrc_mode, 把sdrc_mode和rd_path_ctrl的Tcas和CL延时同时增加1.
+
+反思: 从时间管理角度看. 造成我下班是紧张的原因是没法按时提交高低温测试. 没法按时提交高低温测试的原因又是因为优先安排了"不紧急, 重要"的任务(通过打包方式配置频点和memory参数). 本来预期是这个任务完成后, eorex_6高低温实验用这个工具做, 正好检验工具是否好用, 但是这个工具所需时间长于预期(这类预期时间小于实际时间的情况我多次遇到), 造成现在这个结果. 由于已经到了下班时间, 也没法找IC同事讨论. 
+
+9:47 2009-9-3
+VC0830, SV, clkrst, clkswitch, 继续解决昨天eorex_6切频问题
+1, 实验昨天的四个方法:
+1), 实验3), fail.
+2), 用方法2), 加入延时, 开始感觉也是按单步就行. 后来看sdrc寄存器时, 突然发现有频点timing配置不正确. 进一步检查发现有三个频点参数有错误. 昨天实在太着急了.
+3), 修改参数后发现每次切到xclk时不会进入自刷新. 与LinChuan讨论:
+发现eorex_6这个屏的sdrc_cfg是"0x6959aa95", 6
+sdrc_timing(0x60011008)bit[28,31]
+31:28	TASE	Preset value for automatic self- refresh Mode Timer
+Preset value = (Tase + 1) * 16 cycles	RW	4'hf
+所以6表示(6+1)x16=112cycle后进入自刷新, 但是xclk下sdrc_refresh(0x6001100c)是0x60(96), 每隔96个cycle会刷新sdram, 小于112, 也就是说112个cycle内必然有sdram访问. 为了避免这个问题, sram切频时修改为0, 切频后改为原有值. 
+注意: 这个值越小对性能影响越大, 因为memory退出自刷新不能立刻访问. 
+
+2, 下午继续实验. 
+1), 发现修改后除了720_360_120以外都可以. 先不考虑这个频点, 切1000轮 pass
+2), 发现720_360_120死在切频后的updata_module_divider. 如果在sram代码跳回sdram前设断点, 手动切频100次就没问题. 
+3), 昨天想的四点中还有1), 4)没有实验, 加上方法1)实验. 
+此时core=1.44
+先实验除了360_120以外的5个频点, 切频2000轮, pass
+如果pass, 专门实验720_360_120这个频点. 切频1778轮, pass, 现在不行了(core=1.23). 奇怪. 
+后来发现是电压问题, core升到1.5v切2万轮没问题. 
+
+3, 大量测试. 上面那个板子是tomli(core=1.5, memory=3.31)
+1), #9. core=1.45, memory=3.33
+2), tomLi板子core=1.45, 切频几十次会死在720_360_120, 
+
+4, (20:38 2009-9-3)(9:44 2009-9-4)
+高低温切频实验随机测试youhai提供的6个频点: 1, （312，156），2，（360，120），3（288，96）4（288，72）5（192，48）6（96，24）
+1), 720_360_120频点在常温下加压对稳定性有一定改善, 但同样电压下高温切频不稳定. 去掉720_360_120后, 其余5个频点常温切频12小时稳定, 高温1个板子pass.2个板子fail. 
+(1), 包括720_360_120等6个频点: 
+tomli板子: core=1.5, #9: core=1.45
+常温:
+tomli板子和#9板子都切频2万轮(共6个频点)pass.
+高温: 
+tomli板子 切到360轮后死在720_360_120频点, 复位2次都是第一次切到720_360_120死.
+#9 切几次后死在720_360_120, 复位2次都是第一次切到720_360_120死.
+(2), 去掉720_360_120频点, 最高频点是312_156, 共5个频点. 调整core=1.42. 
+常温切频2000轮pass. 高温测试tomli板312_156频点切频几轮内死(共实验5次). 怀疑是板子问题换另一个板子. 换#0板, 第一次也是很快死, 第二次也很快死. 
+#9板子高温切频6.6万轮. 
+tomli板子常温切频6.5万轮没有问题. 说明是高温问题. 
+"9:44 2009-9-4"end
+
+delay原因补充:
+1, xclk下无法进入自刷新造成切频无法继续, 9月2日上午与linchuan讨论后解决. 
+2, 720_360_120不稳定, 排查问题. 
+3, eorex_6能用的片子到9月2日下午前只有一个, 无法一边测试一边debug. 
+
+5, 测试vdec
+1), 切频, open屏, ls时出现大量marb apb timeout. 查原因. ls时会死. 
+(1), clksv中时i2c操作函数会引起marb apb timeout
+(2), ls时死在read 等cmd complete.
+EVB hynix板子问题相同. 看来是batchswitch code问题.
+
+10:52 2009-9-3
+VC0830, SV, <TODO></TODO>
+0, 晚上把heming简历发给aiguo.
+2, EVB pcddr sdrc_mode不变情况下反而有问题, linchuan感觉可能是nop问题, 尝试. 
+3, SV sdram切频用目前code有问题. 查原因. 
+4, MP4切频有的屏幕会闪白, 估计闪白的原因是切频时pclk被gate了, 目前youhai的解决办法是切频时把背光关了. 
+这个是个案, 一般的屏都没这个问题, youhai实验过播MP4过程中1ms切频一次, 是没问题的. 
+5, sram切频code不应当其它链接脚本. 
+6, sdrc_timeing中如下两位有什么区别? 
+31:28   TASE    Preset value for automatic self- refresh Mode Timer Preset value = (Tase + 1) * 16 cycles  RW   4'hf
+19:16   TRFC    Auto Refresh Period     0000-1111: 1-16 cycles  RW  4'hf   
+
+9:00 2009-9-4
+VC0830, Linux移植进展
+review uart driver代码后/dev/console输出仍有问题, 无论我们start_tx一次打印几个字符, 现象是只打印两次. 之前分析发送代码时不同sos uart fifosize设置不同, 所以感觉是fifosize影响. 后来发现除了uart_wait_until_sent外都未使用该变量. 
+暂时放下底层代码分析tty流程:
+redirect_tty_write -> tty_write -> write_chans(n_tty.c, 系统注册的默认tty line discipline, 实际硬件是uart) -> uart_write / flush_char -> uart_start -> __uart_start -> vc0830_start_tx -> vc0830_tx_chars.
+write_chans 是把所有字符通过opost写入xmit缓冲后,调用一次uart_write / flush_char. 所以后面的start_tx必须保证调用一次就发送完xmit中所有字符.
+这里一般方式是利用发送中断反复发送, 但我们没有发送中断. 所以只能在start_tx直接调用tx_char一次发送.
+
+13:53 2009-9-4
+VC0830, SV, clkrst, clkswitch, linchuan, dram配置参数说明
+<TODO>很有的说明, 细看</TODO>
+位置: D:\work\VC0830\SV\clk
+
+13:54 2009-9-4
+时间管理:
+1, 今天计划:
+1), 1小时时间完成脚本配置eorex切频工具, release给dashan.
+2), 其余时间调试vdec 720p脚本配置为什么会出现marb apb timeout. 有问题及时与IC同事讨论. 
+
+2, 实际进度
+1), 
+13:56 完成脚本配置eorex切频工具
+
+14:50 2009-9-4
+VC0830, 软件技巧, clkrst, clkswitch, 打包切频工具, rvdebug使用技巧, 续
+1, 为了调试需要在0x20000处写入数据, 可以把打包工具生成的info load到memory, 或者在rvdebug 命令行copy已有结构体到0x20000处. 
+1), load pakinfo到memory:
+菜单: Debug -> "Memory/Register Operation" -> "Upload/Download file from/to Memory", 
+rawb模式格式与bin相同, 如果采用rawb模式load文件"D:\work\VC0830\SV\code_image\20090904\1414_timer_sv_EVBsdramEorex6_batchswitch.pakinfo"到memory 0x200000处, 对应命令如下:
+readfile,rawb,gui "D:\work\VC0830\SV\code_image\20090904\1414_timer_sv_EVBsdramEorex6_batchswitch.pakinfo"=0x200000
+2), 方法二
+(1), 查rvdebug help
+COPY
+Copies the contents of a specified block of memory to a block of the same size starting at a specified location.
+Syntax
+COPY addressrange, targetaddr
+For more details, see the RealView Debugger v1.8 Command Line Reference Guide.
+(2), 仍是不太明白, 根据提示去开始菜单找到pdf
+"C:\Program Files\ARM\Documentation\RVD\1.8\release\windows\PDF\DUI0175F_rvd_cli_guide.pdf"
+找到如下例子: 
+The following examples show how to use COPY:
+copy 0x8100..0x81FF,0x8700
+Copies the contents of memory at 0x8100 to 0x81FF to memory at 0x8700
+to 087FF.
+copy 0x8100..+128,0x8700
+Copies the contents of memory at 0x8100 to 0x817F to memory at 0x8700
+to 0877F.
+这样就清楚了.
+
+2, 调试发现是"SpiScanMemPack"工具没有同步更新TBatchSwitch变化.
+在TBatchSwitch尾部加入magic和版本号, 如果不同也要提示.
+结构体修改完成, 修改代码, Clkrst_App_IsBatchSwitch: Clkrst_App_IsBatchSwitch中即使是debug, 也要查magic. 
+
+3, 昨天marb apb timeout的问题果然是gate了m_gt寄存器对应模块的bit. 当初batchswitch时gate了多数模块, 本来想将来再ungate的. 自己忘了. 
+
+4, 
+1), 把312_156改为156_156, 去掉360_120, 共5个频点, 用昨天312_156高温fail的板子(#0)做高温切频实验. 发信时说明#0板子的memory片子不一定是昨天的. 
+切频40分钟 2600轮没有问题. 
+2), 常温312_156_156 720p 播40000 frames未出错. 
+
+5, 发信
+eorex目前测试情况(周四周五总结)
+测试结果不好. 高温下cpu在312, 360都不稳定. 高温bus在156MHz目前看是稳定的. 
+1), 切频测试
+测试如下6个频点（312，156）（360，120）（288，96）（288，72）（192，48）（96，24）
+(1), 720_360_120频点在常温下加压对稳定性有一定改善, 但同样电压下高温切频不稳定. (2), 720_360_120后, 其余5个频点常温切频12小时稳定, 高温1个板子pass.2个板子fail. 
+(3), 把测试(2)的312_156改为156_156, （156，156）（288，96）（288，72）（192，48）（96，24）5个频点高温切频测试,  测试进行中.目前切频40分钟 2600轮没有问题.
+2), 720p播放测试:
+312_156频点常温720p播放40000 frames未出错.
+
+6, <TODO>测试autoswitch, EVBhunix, SV mobile ddr, SV sdram三星</TODO>
+测试标准定为: 切频测试1000次, 已有最高频率720p dixinyouji 4000frame pass.
+1), 当初写"Clkrst_App_BatchSwitch"没有加入clkrst模块的autoswitch命令. 目前也不打算加入这个命令. 希望Clkrst_App_BatchSwitch是个相对轻量级的自动切频code.
+
+2), 还需要考虑编译其它脚本时可以编译. 周一先merge最新代码, 再继续测试.
+
+22:51 2009-9-4
+VC0830, Linux移植
+1, 紧急, 重要: 8月总结; 这是要养成的习惯, 加油.
+2, Linux移植思路整理(含本周进展). 不紧急, 重要.
+
+10:05 2009-9-7
+时间管理
+1, table
+10:00 - 10:35 切频打包工具给dashan
+
+10:40 2009-9-7
+VC0830, SV, clkrst, clkswitch,<TODO></TODO>
+1, 早晨看了邮件, 主要是切频的事. dashan要实验出cpu,bus,vdec最高频率.
+
+10:41 2009-9-7
+Linux移植, uart, 文件系统, busybox, Linux移植进展, 工作总结, 本周工作总结, 2009年8月31日--2009年9月4日
+1, 周进展和总结(2009年8月31日--2009年9月4日)
+解决kernel panic和uart只发送两次两个问题(liaozhicheng):
+1), 解决kernel panic
+helloworld虽然正常打印(只是fifosize=16时正常, fifosize小的时候打印不全), 但是后面没有kernel panic, 这是遗留很久的问题了. 既然helloworld看起来正常, 下一步是busybox能跑起来. 这之前希望解决kernel panic不出现这个问题, 担心隐藏了问题. 
+(1), 开始没什么思路, 比较盲目(具体过程我不太清楚, 请zhicheng补充). 后来偶然发现 vc0830_uart_tx_empty() 直接返回0的话是可以打印kernel panic的. 
+
+(2), 分析 vc0830_uart_tx_empty() 函数
+vc0830_uart_tx_empty是 uart_ops.tx_empty 用于查询发送缓冲是否为空(初步分析结果). 返回 TIOCSER_TEMT 表示 Transmitter physically empty. ( TIOCSER_TEMT 定义见 ioctls.h (arch\arm\include\asm) ), 返回0表示非空. 
+uart_ops.tx_empty 有三处调用: 
+A, uart_ioctl()->uart_get_lsr_info()->port->ops->tx_empty(port)(serial_core.c (drivers\serial))
+B, tty_wait_until_sent()->uart_ops.wait_until_sent(uart_wait_until_sent())->port->ops->tx_empty(port)(while循环, 直到empty或timeout退出)
+C, uart_suspend_port(): serial_core.c (drivers\serial):		for (tries = 3; !ops->tx_empty(port) && tries; tries--)
+A,C两处与发送函数关系不大, 重点分析B.
+
+(3), 调用"tty_wait_until_sent"的通用函数有:
+1), uart_close(drivers\serial\serial_core.c)
+	->tty_wait_until_sent(tty, msecs_to_jiffies(state->closing_wait));
+uart_close这个函数会被tty的release函数调用. 
+2), set_termios(drivers\char\tty_ioctl.c)->tty_wait_until_sent(tty, 0);
+3), tty_set_ldisc(drivers\char\tty_ldisc.c)->tty_wait_until_sent(tty, 0);
+
+(4), 从tx_empty的调用关系没看出什么端倪, 
+不知道是哪里出的问题, uart_wait_until_sent没有正常返回像是调度出了问题. 这期间在qmeu realview和VC0830上对比函数调用关系, 最后发现是 uart_wait_until_sent 的char_time不正常. char_time计算公式: char_time = (port->timeout - HZ/50) / port->fifosize; char_time = char_time / 5;
+port->timeout 原来没有用过. 需要分析. 其余变量都很明确:
+struct uart_state *state = tty->driver_data;
+struct uart_port *port = state->port;
+tty是传入的tty_struct: static void uart_wait_until_sent(struct tty_struct *tty, int timeout).
+
+(5), 搜索timeout很多, 直接搜索port->timeout.
+发现 uart_update_timeout 会设置port->timeout:
+bits = bits * port->fifosize;
+port->timeout = (HZ * bits) / baud + HZ/50;
+"baud/bits"表示uart在1秒内发送的次数. 其倒数是时间, 所以"(HZ * bits) / baud"是uart完成一次发送需要jiffies数. 
+
+所以 char_time = (port->timeout - HZ/50) / port->fifosize = HZ * bits / baud;
+如果是8位, 115200, char_time = 0.00694, char_time=char_time/5=..., 所以uart_wait_until_sent会round到1. 
+结合注释看, char_time(除5之前)是发送一个uart 发送一个字符需要的jiffies数, 对于115200 8n1的uart, uart发送一个字符的时间肯定是远小于一个jiffies的. 
+<TODO>需要确认分析的是否准确</TODO>
+
+(6), 从其它移植看, uart_update_timeout 应当在 uart_ops.set_termios 中设置. 我们的 set_termios 当时是想固定死115200 8n1所以基本就没参考其它uart的写法, 这是个疏漏. 其实uart移植中遇到的问题多数是没有依照规范移植的结果. 最早分析uart时zhangjian着重分析了printk相关内容, 后来zhicheng实际做的时候才发现用户空间的tty所需的uart驱动部分比printk部分复杂很多. 
+<TODO>总结</TODO>: 当时给我的uart和clock, 应当是按照缓急先做uart, 当时为了完成clock分析和建立文档所以花大量时间在clock上. 现在看来应该是先认真分析uart. 不过后来采用qemu虚拟机辅助分析是个好方法. 
+
+2), 解决uart只发送了两次的问题.
+由于分析830代码暂时没有进展, 转而分析tty调用流程:
+(/dev/console): redirect_tty_write() -> tty_write() -> write_chan()(n_tty.c, 系统注册的默认tty line discipline, 实际硬件是uart) -> uart_write()(uart_ops.write, uart_ops是struct tty_operations) / uart_flush_chars()(uart_ops.flush_chars) -> uart_start() -> __uart_start() -> vc0830_start_tx() -> vc0830_tx_chars()
+write_chans 是把所有字符通过opost写入xmit缓冲后,调用一次uart_write发送这个字符. 所以后面的start_tx必须保证调用一次就发送完xmit中所有字符.
+Linux一般方式是利用发送中断反复发送, 但我们没有发送中断. 所以只能在start_tx直接调用tx_char一次发送.
+
+2, 发现的问题:
+1), 本周发现原来的的vc0830_tx_chars不太合理. 830 uart没有fifo, 把fifosize设为1比较合理. 然后vc0830_tx_chars中不等发送发成, 改为在tx_empty()(vc0830_uart_tx_empty)中等待. 这样更符合linux uart架构. 
+2), 1-2)中提到的uart没有发送中断的问题.
+
+3, 下周计划
+根据busybox过程, 测试/dev/console和/dev/ttyS0
+busybox前面先执行了linuxrc, 需要确认直接执行init是否可以正常登录. 如果可以按init.c: init_main()->console_init()这个思路实验就没问题. 
+
+14:40 2009-9-7
+<TODO>看3520邮件</TODO>
+
+17:58 2009-9-7
+(15:19 2009-9-22)
+Linux移植, uart, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月7日, busybox登录过程分析, 登录出问题的debug方法
+1, 基于上周分析的结果, 这周从分析busybox机制开始.
+1), 今天结合代码和打印分析了busybox启动流程. 
+(1), 总的调用关系
+init_main() -> run_action() -> run() -> getty_main() -> parse_args() -> get_logname()
+(2), parse_args(): 处理命令行参数, 例如inittab中的"/sbin/getty -L ttyS0 115200 xterm", 如果登录有问题, 可以在这里加入打印信息, 这样就能知道getty操作的哪个串口. 
+(3), get_logname(): 显示login提示符, 具体过程:
+get_logname() -> sleep(1) //这个地方830没有返回. 
+              -> do_prompt() -> print_login_prompt()    //这个函数打印
+              出"hostname login:"的提示符.
+              -> (输入用户名密码正确后) -> login_main()(login_main()是
+              getty_main()调用BB_EXECLP宏(exe*函数)执行的. 
+
+2), 发现830在sleep(1)后没有返回. 说明可能是sleep有问题. 注释sleep后可以显示出login提示符. 但是输入没有反应. 加入打印信息后发现没有进入830 uart接收中断. 
+(21:23 2009-9-9)后来发现是putty问题. 见"19:45 2009-9-9"
+
+2, 从楼下拿到830kernel, 使用的是android 2.6.27kernel, 据了解已经有了最小环境以及framebuffer, USB net驱动. 
+位置: \\10.0.2.36\sqmshare\Share\aiguo\linux\836EVB
+
+3, 近期计划: 
+希望从现在开始用一个月时间完成Linux基本环境, 驱动包括framebuffer, USB net和storage(sd或nand)
+
+19:05 2009-9-7
+dave婚纱照
+http://bbs.55bbs.com/thread-2809838-1-1.html
+
+19:59 2009-9-7
+Linux移植进展, 工作总结, 2009年8月22日--2009年8月27日, 0821更早的移植我没有参与, 请zhicheng补充.
+0822,23文件系统如何配置,cpio如何打包
+0824, 0825: 怀疑是load elf出错, 用qemu和rvdebug配合调试, 确认已经进入用户空间. 而且有kernel panic.
+0826: 分析用户空间写串口过程中, 内核处理过程, helloworld 可以正常显示. 但后来发现底层串口输出函数只调用了两次, 仍有问题.
+0827下午: review uart代码, 未完成.
+
+20:10 2009-9-7
+VC0830, SV, MP4项目进展, 重要
+StevenLiu邮件"答复: VC0831 Task Tracking List_20090904"20090907_2007
+Zhihong，MKV的问题已通过测试，可以close。
+删除第23行和第18行的任务，因为已经在别的任务中cover了。 
+
+根据目前状况需要加入的任务有：
+4.3”样机上还有较多的问题，要集中再debug一次，周末要release出去（高优先）把下面红色字列个专项表格出来，落实到人，周五搞定。
+3”样机上菜单刷屏慢（高优先）
+3”样机上CVBS输出有较多丢帧（高优先）
+5MP sensor调试（列入middle priority）
+
+1.一般性死机 1个，随机性的和例外死机 5个(具体现象见附件)
+2.播放FLV文件一会后，没有声音输出，进行快进后只有“咔咔”杂音(具体现象见附件)
+3.播放歌曲时，背光灭，播放一段时间后，按任意键点亮屏时，会显示白屏、花屏、红屏、蓝屏、绿屏。(具体现象见附件)
+4.低电关机后，出现Nand为0KB(第一次低电关机不显示低电提示画面时，就会出现OKB)
+5.播放“高低音DJ试音曲.mp3”、“FLY.ape”或“44.1kHz-192kbps-Stereo-光良-童话.wma”等部分音乐文件时背光灭->按遥控板上的任意键点亮屏->【长按遥控板上的Next键】快进到末尾->松开按键后不会自动跳曲，声音播放结束后才会跳曲
+6.播放VBR歌曲(如“22.05kHz-60Kbps(VBR)-Stereo-22kHz-VBR-046郑源-一万个理由.mp3”等)->快进到末尾后松开按键->不自动跳曲，要等声音播放结束后才会跳曲
+7.提取书签后，无法进行翻页
+8.信息栏的电池Icon经常显示为空格，电池检测不准
+9.低电关机后，【按OK键】或插入充电->闪一下白屏
+10.任意界面->将开关打到OFF，再打到ON->开机，会闪下白屏
+11.在任意界面，背光灭时->有“啪”的一声(按键点亮屏时也有“啪”的一声)
+12.【长按OK键】开机或关机->有“啪”的一声
+13.将音量调到32后，长时间用喇叭输出播放视频或音乐，喇叭容易被烧坏
+14.播放VOB文件时，严重卡，AV不同步
+15.电子书自动浏览时，有时会以1秒的速度自动翻几页
+16.在电子书列表添加文件到我的收藏夹后，在“我的最爱”中找不到文件(添加的文件不保存)
+17.播放分辨率小于720P的文件时，进行基本操作后，视频播放界面有横的或竖的白色长条(具体现象见附件)
+18. TV输出时->进入系统设置->选择电视输出->选择关闭->【按OK键】确定输出到LCD上->样机显示白屏、红屏、蓝屏、绿屏等
+19. CVBS输出->任意界面显示模糊，有很多雪花点
+20. TV输出时样机闪屏、花屏严重
+
+21:43 2009-9-7
+VC0830, SV, clkrst, clkswitch, 代码整理, 验证切频打包工具
+1, 
+1), 刚才sdram出错原因是sdram中没有开自动自刷新, 在sram切频代码中加入了开启自动自刷新的代码, 需要回归测试EVB的sdram和pcddr是否可用. 
+2), 之前代码没有考虑sdram下medium=xclk时, pll1->pll2切频流程. 所以batchswtich中
+if ( 
+    curClkSrc == mediumInfo.clksource_index 
+    || mediumInfo.clksource_index == switchInfo.clksource_index 
+    ) {
+改为
+     ( PLL1_ID == curClkSrc && PLL2_ID == switchInfo.clksource_index ) 
+    || ( PLL2_ID == curClkSrc && PLL1_ID == switchInfo.clksource_index ) 
+    || ( PLL1_ID == curClkSrc && XCLK_ID == switchInfo.clksource_index ) 
+    || ( XCLK_ID == curClkSrc && PLL1_ID == switchInfo.clksource_index ) 
+
+2, 如果今晚实验顺利, 明天测试282 mddr. 同时修改代码保证其它脚本能编译通过. 
+(12:59 2009-9-8)实验结果:
+SV LQFP176 sdramSamsung: 切频75847轮(5个频点, 约15小时)pass;
+EVB sdram eorex_6: 78836轮(5个频点, 约15小时)pass
+
+10:01 2009-9-8
+VC0830, SV, 量产, Wafer, 832成品率已经提高到80%?
+830 Wafer  Test  Program	
+1. 832program PLL调试问题已经解决，Yield提到80%，仍在继续调整
+2. 898Pattern已经Release到TW。
+
+10:06 2009-9-8
+时间管理
+1, table
+1), 9:40-10:08 邮件, 关注830量产进度, bug解决进展.
+2), 10:08-11:06  整理早晨手机工作日志, 上周总结
+
+10:11 2009-9-8
+VC0830, 周工作总结, 2009年8月31日-2009年9月4日, EVB pcddrHynix切频fail原因, EVB sdramEorex_6切频, 打包切频工具, sdrc寄存器学习(auto refresh, self refresh区别和配置方法, 重要), 反思时间安排不合理的地方
+1, 主要工作:
+20090831: 发现对于EVB pcddr Hynix, 如果sdrc_mode不变时不进入sram切频流程, 切频有时会失败
+20090901: 继续解决Linux移植uart和文件系统问题
+20090902:打包切频工具和evb board eorex_6切频.
+20090903:打包切频工具续1和evb board eorex_6切频续1
+20090904:打包切频工具续2
+2, 经验总结: 
+1), 20090902同时做打包切频工具和evb板eorex_6 sdram两个事, 前者重要不紧急, 后者紧急重要. 开始预期切频流程已经稳定, 后者不会有困难.
+实际情况是两者混在一起引入了更多的问题.
+2), 20090903: eorex_6遇到的问题: 三个频点8sdrc timing参数填错,xclk自刷新周期影响无法进入自动自刷新, 720_360_120是cpu频率过高.
+3), 疑问: auto refresh和self refresh区别, TASE, TRFC等的含义
+(1), autorefresh是指sdrc发送auto refresh command刷新dram. 发送周期从dram datasheet读出, 例如sdram samsung 写着64ms refresh period (8K Cycle), 也就是auto refresh 周期 = bus * 64ms / 8k = bus * 64000 / 8192 =(约等于)= bus * 8. 配置到sdrc_refresh寄存器. 
+dram要求做auto refresh时一定时间内不能有其它命令, 这个时间有sdrc_timing的TRFC配置(有时datesheet不全没写这个timing, 找个完整的datasheet看):
+19:16	TRFC	Auto Refresh Period
+0000-1111: 1-16 cycles	RW	4'hf
+(2), self refresh是指dram不使用cpu提供的clk, 自己进行刷新. 这是一种低功耗模式, 但是退出self refresh需要一定时间才能工作, 所以进去self-refresh过快会影响性能. 
+dram判断进行self refresh的时间通过sdrc_timing的TASE设置:
+31:28	TASE	Preset value for automatic self- refresh Mode Timer
+Preset value = (Tase + 1) * 16 cycles	RW	4'hf
+TASE是否有效有sdrc_cfg的AUTOSELFREFRESHENTRY控制
+9	AUTOSELFREFRESHENTRY	When SDRC is in idle state, internal timer starts counting. When SDRC internal timer reaches preset value, SDRC will issue self-refresh command to SDRAM/DDR device for saving power. SDRAM/DDR clock is gated by SDRC. SDRC internal FSM keeps the state until MARB needs access to SDRAM/DDR device or SW issues exiting self-refresh command. Preset value for internal timer is determined by SDRC_TIMING[31:28]
+0: disable auto-enter self-refresh mode entry
+1: enable auto-enter self-refresh mode entry	RW	1'b0
+(3), 两个refresh与切频的关系:
+A, auto refresh与频率有关, 所以要求切频时根据bus频率配置. 实际操作中分两个情况:
+i, 如果是用户通过打包切频工具传入的频点和dram参数, 需要用户自己计算sdrc_refresh.
+ii, 如果是用户在mem_memType_memVender配置memory参数, 需要提供PTMemoryParm->getSdrcRefresh函数, 根据传入的bus频率计算sdrc_refresh. 
+B, self refresh是低功耗模式, 从EVB板的pcddr hynix开始, 包括EVB sdram eorex都把sdrc_cfg的auto-entry self-refresh打开. 切频时设置sdrc_mode之前为了包括对dram没有访问, 要查询dram是否进入了self refresh(如果没有打开auto-entry self-refresh, 打开之), 确定进入self refresh后通过sdrc_cmd(0x60011014)寄存器发送"00011: Self Refresh Exit (SLFRSHX)"命令退出self refresh, 发送后查询是否退出self refresh, 确定退出后修改sdrc_mode, 发送MRS, 根据sdrc_cfg配置发送EMRS. 完成后再打开auto-entry self-refresh. 具体sram切频流程参见clkrst/drv/clkrst_drv.c的Clkrst_Drv_TriggerSwitch()函数. 
+注: 这里的sram切频流程指为了修改sdrc_mode走的特殊切频流程, 如果sdrc_mode永远不需要改变, 直接trigger switch即可, 不需要sram切频流程. 目前为了统一和简化, 所有情况下都走sram切频流程. 
+
+10:27 2009-9-8
+VC0830, SV, sdrc, clkrst, clkswitch, dram(sdram/pcddr/mobile ddr) data sheet位置
+ftp://10.0.2.109/VC0830/boards/VC0830-FPGA/%5BDRAM-Datasheet%5D/
+
+12:59 2009-9-8
+VC0830, SV, clkrst, clkswitch, 打包切频工具
+1, EVB pcddr hynix:
+切频到pll2后, 再切回pll1, open时有marb apb timeout
+发现是切到pll2后gate了iclk, 深层原因是cpu,bus频率计算不正确(应当是120_120, 实际是240_240), 参考816代码加入了c_clk_pll2f2用来表示pll2 fout2这个输出. 
+
+2, 其它问题
+1), print cpu freq时区分cpu clocksoure, 并排序. 
+排序这是事用了100分钟, 当初数据结构和算法学的确实不怎么样. 也凸显编程基本功仍然不过关. 所以像目前这样多coding对我大有好处. 
+这次的主要错误是"++"用的不对. 结果比预期多加了一次:
+需要把"while ( data < *array++ );"改为"while ( data < *array ) array++;"
+前者是任何条件都自增, 后者是满足条件才自增, 条件不满足退出循环. 
+
+3, 
+1), 目前只有"dram32M_4bank_dynamic.lds"(默认脚本)支持sram切频流程, 如果不使用此脚本需要注释sys.h的"CLKRST_SRAM_SWITCH_FUNC_SUPPORT"关闭sram切频流程. 
+
+4, CVS
+1), VC0830(上传时点错了, 如下log没有贴入CVS), 如果pass打个tag.
+(1), 允许用户使用打包的batchswitch info切频. 这样实验不同memory片子/参数时不需要重新编译. 根据这个需要修改了Clkrst_MemParm_DefaultGet, Clkrst_App_PrintAllCpu等函数. 原有batchswitch测试使用CLKRST_AUTOSWITCH_BATCH_RUN_BEFORE_AASP宏, 默认此宏不定义. 同时在clkrst模块加入batchswitch(do_clkswitchBatchSwtich())命令. 
+
+(2), 加入c_clk_pll2f2表示pll2 fout2, 当cpu,bus在pll2时, clock tree是
+c_clk_pll2  -- c_clk_pll2f2 -- c_clk_cpu
+                            `- c_clk_bus
+在pll1时:
+c_clk_pll1 -- c_clk_cpu
+           `- c_clk_bus
+
+(3), sram切频流程(Clkrst_Drv_TriggerSwitch)有微调:
+a, 切频时如果没有进入auto-entry self-refresh, 软件设置sdrc_cfg[9]=1, 使其进入. 
+b, sdrc_timinig[28:31]的auto self-refresh count设为0, 表示(0+1)*16=16cycles后进入self refresh, 避免由于sdrc周期发送auto-refresh导致dram无法进入self-refresh. 详见"10:11 2009-9-8"2-3)
+
+(4), 调整Clkrst_Drv_SysInfo_Cmp: 区分xclk, pll1和pll2两个情况. 加入Clkrst_Drv_SysInfo_Cmp_ingoreVdec函数————不考虑vdec差异, 例如比较memory参数对应频点时不考虑vdec.
+
+(5), 完善Clkrst_MemParm_Cpy(), 原来没有copy clkrst_pll_sdrc_adjAry, clkrst_pll_sdrc_adj和getSdrcRefresh.
+
+(6), 调整Clkrst_Mem_GetCurBusMax, Clkrst_Mem_GetCurBusPreferedMax. 原来是单独定义一个数组保存不同memory的最大和最大推荐频率, 现在把这两个频率放到TMemoryInfo中. 数据更紧凑. 
+
+CVS log
+Checking in bootloader/vc0830_main.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/bootloader/vc0830_main.c,v  <--  vc0830_main.c
+new revision: 1.139; previous revision: 1.138
+done
+Checking in clkrst/app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.45; previous revision: 1.44
+done
+Checking in clkrst/app/clkrst_app.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.h,v  <--  clkrst_app.h
+new revision: 1.18; previous revision: 1.17
+done
+Checking in clkrst/app/clkrst_app_module_clock.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.c,v  <--  clkrst_app_module_clock.c
+new revision: 1.7; previous revision: 1.6
+done
+Checking in clkrst/app/clkrst_app_module_clock.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.h,v  <--  clkrst_app_module_clock.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in clkrst/app/clkrst_app_switch.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.c,v  <--  clkrst_app_switch.c
+new revision: 1.10; previous revision: 1.9
+done
+Checking in clkrst/app/clkrst_app_switch.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.h,v  <--  clkrst_app_switch.h
+new revision: 1.5; previous revision: 1.4
+done
+Checking in clkrst/basefunc/clkrst_basefunc.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+new revision: 1.19; previous revision: 1.18
+done
+Checking in clkrst/driver/clkrst_drv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+new revision: 1.8; previous revision: 1.7
+done
+Checking in clkrst/driver/clkrst_drv.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.h,v  <--  clkrst_drv.h
+new revision: 1.5; previous revision: 1.4
+done
+Checking in clkrst/driver/clkrst_drv_divider.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_divider.h,v  <--  clkrst_drv_divider.h
+new revision: 1.4; previous revision: 1.3
+done
+Checking in clkrst/driver/clkrst_drv_system_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.c,v  <--  clkrst_drv_system_info.c
+new revision: 1.5; previous revision: 1.4
+done
+Checking in clkrst/driver/clkrst_drv_system_info.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.h,v  <--  clkrst_drv_system_info.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in clkrst/driver/clkrst_public_type.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_public_type.h,v  <--  clkrst_public_type.h
+new revision: 1.9; previous revision: 1.8
+done
+Checking in clkrst/memory/mem_config.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_config.c,v  <--  mem_config.c
+new revision: 1.9; previous revision: 1.8
+done
+Checking in clkrst/memory/mem_config.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_config.h,v  <--  mem_config.h
+new revision: 1.8; previous revision: 1.7
+done
+Checking in clkrst/memory/mem_mddr_micron.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_mddr_micron.c,v  <--  mem_mddr_micron.c
+new revision: 1.7; previous revision: 1.6
+done
+Checking in clkrst/memory/mem_pcddr_hynix.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_pcddr_hynix.c,v  <--  mem_pcddr_hynix.c
+new revision: 1.12; previous revision: 1.11
+done
+Checking in clkrst/memory/mem_sdram_samsung.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_samsung.c,v  <--  mem_sdram_samsung.c
+new revision: 1.7; previous revision: 1.6
+done
+Checking in clkrst/memory/mem_sdram_vimicro_BGA181.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_vimicro_BGA181.c,v  <--  mem_sdram_vimicro_BGA181.c
+new revision: 1.5; previous revision: 1.4
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_eorex.c,v
+done
+Checking in clkrst/memory/mem_sdram_eorex.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_eorex.c,v  <--  mem_sdram_eorex.c
+initial revision: 1.1
+done
+Checking in clkrst/subdir.mk;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.24; previous revision: 1.23
+done
+Checking in clkrst/test/clkrst_test.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.34; previous revision: 1.33
+done
+Checking in include/sys.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/include/sys.h,v  <--  sys.h
+new revision: 1.58; previous revision: 1.57
+done
+Checking in ld_script/dram32M_4bank_dynamic.lds;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/ld_script/dram32M_4bank_dynamic.lds,v  <--  dram32M_4bank_dynamic.lds
+new revision: 1.7; previous revision: 1.6
+done
+Checking in marb/bsdrc.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/marb/bsdrc.h,v  <--  bsdrc.h
+new revision: 1.5; previous revision: 1.4
+done
+Checking in sdio/src/sdiodrv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.c,v  <--  sdiodrv.c
+new revision: 1.104; previous revision: 1.103
+done
+
+后来有几个小的编译问题, 重新提交, 同时提交了上面的log(含CVS log), 此次CVS log如下:
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/Makefile,v  <--  Makefile
+new revision: 1.83; previous revision: 1.82
+done
+Checking in config.mk;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/config.mk,v  <--  config.mk
+new revision: 1.115; previous revision: 1.114
+done
+Checking in clkrst/app/clkrst_app_switch.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.c,v  <--  clkrst_app_switch.c
+new revision: 1.11; previous revision: 1.10
+done
+Checking in clkrst/driver/clkrst_drv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+new revision: 1.9; previous revision: 1.8
+done
+
+2), 打包工具SpiScanMemPack
+zhangjian, clkrst, clkswitch
+1, 加入SV LQF282 mobile ddr micro的范例配置文件
+2, 打包工具加入batchswtich info的版本号
+
+Checking in SpiScanMemPackDlg.cpp;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/SpiScanMemPackDlg.cpp,v  <--  SpiScanMemPackDlg.cpp
+new revision: 1.13; previous revision: 1.12
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SVLQFP282_MddrMicro.txt,v
+done
+Checking in batchswitch_info_SVLQFP282_MddrMicro.txt;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SVLQFP282_MddrMicro.txt,v  <--  batchswitch_info_SVLQFP282_MddrMicro.txt
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SV_sdramSamsung.txt,v
+done
+Checking in batchswitch_info_SV_sdramSamsung.txt;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SV_sdramSamsung.txt,v  <--  batchswitch_info_SV_sdramSamsung.txt
+initial revision: 1.1
+done
+
+5, 代码已提交. 用新代码实验EVB pcddrHynix和SV BGA282 mddrMicro. 如果pass打个tag. 同时完成文档. 
+
+6, 文档
+(11:16 2010-3-30)已合并到notes(D:\VC0830\VC0830\clkrst), 见"11:18 2010-3-30"
+"11:17 2010-3-30"end
+
+7, 文档已发. 编译"me_sv_128m"pass. 代码已上传. 
+
+8, (13:40 2009-9-9)两个板子都是0908_19--0909_1330, 大约18小时. 
+EVB pcddrHynix(#7), 切频68780轮(7个频点)未死.
+SV BGA282 mddr(BGA282: 80090403033, mddrMicro80090408045 底板80090319030), 切频169196轮(4个频点)未死. 
+保存代码.830代码,打包工具代码,打包工具.rar都放到"阶段性映像".
+代码, 映像和文档位置: "D:\work\VC0830\SV\阶段映像和log\20090908_切频打包工具", 映像和文档在"切频和720p打包工具.rar"中. 
+
+9, 总结目前切频工作阶段性完成, 如果切频流程没问题估计代码不会有变化了. 目前切频需要注意: 一, sram返回前要查询切频前写入的memory magic正确, 如果提前返回可能会出错. 这个错误用jtag没法发现, 因为用jtag看时memory肯定已经稳定了. 二, 切频时保证无人访问dram, 目前通过检查是否进入自刷新保证dram无访问. 除此之外如果切频切死了都是memory不稳定造成的. 另外对于极限频率, 有可能出现静态可以, 动态不稳定的情况, 判断动态代码有无问题的方法是升压————如果升压后文档, 说明是频率极限, 不是动态切频问题. 
+有时间可以总结切频中遇到的问题, 总结后请dongliang帮我review. 
+
+0:39 2009-9-9
+(19:53 2009-9-9)
+Linux移植, VC0830, BGA282, VC0836移植分析, 与本组已有830移植比较; 文档
+0, 总体浏览了836的移植, 将来需要一个函数一个函数看. 
+
+1, clock.c: 初始化830系统时钟, 相当于VC0830/bootloader/vc830_main.c中clock_init()的功能. 没有涉及Linux要求的clk结构体及其操作函数.\
+
+2, vc0830.c: 830 board.
+836的移植采用SOC与board分离的方法, 实际上除了goldfish都是这样的. 我们的830移植为了简化把SOC和board都放到了board-vc0830.c, 将来肯定是要分开的. 
+
+3, core.c: 描述830 SOC. 
+1), 值得注意的只有clock event没有clock source, 所以默认的jiffies作为clock source. clock event的feature包括CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT, 同时注意到vc0830_timer0_set_next_event直接返回0, 也就是没有设置下一次中断, CLOCK_EVT_FEAT_PERIODIC模式下不需要每次设置中断.
+(1), 分析每个调用tick_setup_periodic()的函数. 
+A, tick_device_uses_broadcast() / tick_check_broadcast_device() / tick_do_broadcast_on_off() / tick_resume_broadcast() -> tick_broadcast_start_periodic() -> tick_setup_periodic()
+B, tick_do_broadcast_on_off() -> tick_setup_periodic()
+C, tick_notify()(reason == CLOCK_EVT_NOTIFY_ADD时, 表示新添clockevent) -> tick_check_new_device() -> tick_setup_device()-> tick_setup_periodic()
+也就是说新加入每个clockevent时都会执行 tick_setup_periodic(), 对于CLOCK_EVT_FEAT_PERIODIC会调用 clock_event_device.set_mode进行CLOCK_EVT_FEAT_PERIODIC所需操作, 感觉是针对不同CLOCK_EVT进行不是设置. 对于CLOCK_EVT_FEAT_ONESHOT会执行第一次 clock_event_device.set_next_event(返回0表示成功, 836的移植是直接返回0)
+D, tick_resume() -> tick_setup_periodic()
+
+4, cp15.h: 开关中断, 开关cache, 读cp15等汇编. \todo 感觉这是通用函数, 为什么要这里实现呢? 
+
+5, devices.c: 注册了vc083x_device_usbgadget platform_device, 显然是后面的驱动会注册usb gadget driver.
+
+6, nand.c: 注册nand设备. 等待zhicheng补充. 
+
+7, include
+1), debug-macro.S: kernel lowlevel debug 所需的uart操作. 
+2), entry-macro.S: Low-level IRQ helper macros for VC0830 platforms.
+
+8, driver/serial/vc0830_uart.c: 多数函数与我们类似, 只有方法多些东西:
+vc0830_uart_startup()中注册了一个timer(handler vc0830_uart_timeout)用于发送, 
+vc0830_uart_timeout()在发送完成时(tr empty为真)调用vc0830_uart_transmit_chars()发送. 与我们相同的地方是在vc0830_uart_start_tx()中直接调用vc0830_uart_transmit_chars()发送字符. 由于830没有发送中断, vc0830_uart_transmit_chars()只能是一次发送完xmit中所有字符. 
+\todo 用time中断反复调用发送函数, 目的何在? 为了模拟发送中断, 还是为了及时发送? 
+
+9, 目录"drivers\mtd\nand\vc083x_nand"
+zhicheng看了看, 发现基本是把830 nand代码copy过来.
+
+17:40 2009-9-9
+VC01600, SV, arm仿真器.
+1, 以个人名义咨询了北京麦尔泰, 有BDI和code viser都支持CortexA8调试. 
+code viser是韩国公司做的, 据介绍对Linux和windowCE调试都支持, 当然也支持裸的硬件调试. 完整板工具(支持全系列arm)大约3000$, 可以选择不同包, 少选一些可能可以便宜一些. 下面是链接
+http://www.bmrtech.com/products/jandd.htm
+BDI由于使用GDB调试, 所以只支持裸硬件和Linux的调试.
+
+2, 拿到了bdi和code viser的文档, 位置: "D:\work\Documentation\调试工具"
+这两个工具都能调试Linux kernel, 对开发有一定帮助. 
+1), bdi可以调试裸硬件和Linux(通过GDB). 调试Linux使用gdb方式, 用起来比较方便, 可以用eclipse或insight等前端. 这种调试与我们调试qemu模拟器上运行的Linux kernel方式一样. 
+2), code viser使用自己的调试工具CVD, 据称支持Linux, winCE6.0等多种操作系统. 附件中有调试文档. 调试Linux时需要写脚本load映像, 指定source code命令. 调试winCE的文档介绍了调试bootloader(eboot), kernel, dll的方法. Lingming帮忙看看这样调试winCE石有用呢? 
+
+19:45 2009-9-9
+Linux移植, uart, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月8日-2009年9月9日, 软件技巧, putty无法接收
+1, (0908)拿到楼下836移植code, 和zhicheng一起分析了与现有我们830移植的差异. 具体差异参见文档"Linux移植, VC0830, BGA282, VC0836移植分析, 与本组已有830移植比较"
+1), vmlinux/Image可以跑起来, zImage跑不起来. 原因未知. \todo 需要问楼下同事. 
+开始以为是自己编译问题, 后来发现是zImage问题. 编译器使用的是goldfish arm-eabi-gcc 4.2.1
+2), 跑836kernel时文件系统有问题, 启动后无法输入.
+从配置文件名称看836基本照搬android的文件系统
+
+2, 9月7日的串口无法输入问题其实是由于putty无法接收造成的. 有时串口出现的乱码会导致putty认为接收到错误控制字符关闭串口接收. 重新打开putty问题解决. 0909晚上排查时, 更换了板子和串口线都不行, zhangjian突然想到是putty问题, 原来做切频时也遇到过. 
+
+19:45 2009-9-9
+Linux移植, uart, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月10日
+1, 上午会议
+1), 简单介绍了最近Linux移植进展. 争取以后这周都开会讲讲. 下周计划是FanXiaoFan讲PCI/PCI-e.
+2), 目前移植仍存在的问题: sleep(1)会死(也可能是时间过长); shell中回显速度很慢, 考虑用楼下的timer方式. 
+3), 下一步计划: zhangpu移植framebuffer. 以后计划是做android平台.
+
+2, 今日进展:
+1), 串口回显慢有改进:
+昨天实验时830的tx_empty是直接返回的0, 所以uart_wait_until_sent是超时退出的. 今天把tx_empty改为查询发送状态. 现在速度正常很多, 但还是感觉有点慢. 
+另外据zhicheng实验结果, 836移植中uart的timer对回显速度没有影响. 
+2), zhangpu实验simple platform device. 注册使用platform_driver_register, platform_device_alloc和platform_device_add; 注销使用platform_device_unregister, platform_driver_unregister. 不能用platform_device_register, 因为后者不会注册platform_device的release.
+
+3, 明天计划:
+1), SVN上传. 我自己跑一遍SVN上的代码.
+2), 解决sleep问题. 
+
+15:50 2009-9-10
+VC0830, SV, clkrst, clkswitch, 会议记录, 切频流程已给YouHai, Jiangbo(根据现有流程修改databook)
+1, pll1_sdrc_adj中xclk_path如何配置? 配置是否影响pll1? 
+不影响. 配置xclk时pll1_sdrc_adj只能修改3,11,15. 配置pll1时相反。
+加入了Clkrst_GetXclkPhase, Clkrst_SetXclkPhase, 修改了Clkrst_GetPll1SdrcAdjClk, Clkrst_SetPll1SdrcAdjClk. 等liuchuan邮件修改. 
+2, pll2最高614.4. 所以pll2 cpu,bus 只保证308/4. 
+3, youhai使用cache的原因是sram用于视频软解码加速. 
+4, 给youhai, jiangbo发code, 并做简要说明(着重说明与databook不同点)
+邮件"答复: 在讨论下文档和工具的结构"20090910_1811
+Hi, jiangbo
+如下是目前切频流程, 及其与databook的差异
+
+Hi, youhai:
+用红色表示与之前sram切频流程的差异
+
+clkrst\app\clkrst_app_switch.c描述了切频api, 其中"Clkrst_SwitchPll12Pll1Base()"是核心切频函数. sram切频是Clkrst_Drv_TriggerSwitch()(clkrst\drv\clkrst_drv.c).
+目前切频流程与databook差异主要是sdrc_mode(0x60011004)没有shadow寄存器, 所以不能在sdram中配置. 例如放到sram中切频流程如下: 
+
+	//1, 在sdram中写入magic number, 返回sdram前读取sdram三个magic number, 正确
+	//后返回, 目前发现EVB eorex_6 sdram 如果没有确定memory正确直接返回, 切频
+	//不稳定. 
+	g_clkrst_Switch_magic[0] = CLKRST_SWITCH_MAGIC1;
+	g_clkrst_Switch_magic[1] = CLKRST_SWITCH_MAGIC2;
+	g_clkrst_Switch_magic[2] = CLKRST_SWITCH_MAGIC3;
+	//2, trigger切频
+	if ( CLK_NORMAL == Clkrst_GetPllSwitch() ) {
+		Clkrst_SetNormal2Bypass();
+	} else {
+		Clkrst_SetBypass2Normal();
+	}
+	//3, 为了设置sdrc_mode(0x60011004), 需要先禁止sdrc shadow寄存器
+	Sdrc_ClkSwitchEnd();
+	//4, 设置sdrc_mode, 设置sdrc_mode时必须保证dram无访问(如果dram进入self 
+	//refresh说明无访问)
+	//1), 为了避免sdrc刷新dram造成dram无法进入self refresh, 把self refresh
+	//count设为最小(=(0+1)*16=16cycles)
+	Sdrc_GetSdrcTiming(Clkrst_Sdram2SramVal(&g_clkrst_sdrc_timing_Tase_bak));
+	Sdrc_SetSdrcTiming(Clkrst_Sdram2SramVal(&g_clkrst_sdrc_timing_Tase_bak) & 0x0fffffff );
+	//2), 打开自动进入self refresh
+	Sdrc_EnableAutoEnterSelfRefresh();
+	//3), 查询是否进入self refresh
+	while( 1 != Sdrc_GetStatus() );
+	//4), 关闭并确认退出self refresh
+	Sdrc_DisableAutoEnterSelfRefresh();
+	Sdrc_SendCmd_SLFRSHX();
+	while( 0 != Sdrc_GetStatus() );
+	//5), 修改sdrc_mode, 发送MRS, EMRS更新sdrc_mode到dram内部寄存器. EMRS不是每
+	//个片子都有. sdrc_cfg[9]==1表示有EMRS, sdrc_cfg是rom bootloader利用512 info
+	//配置的.
+	Sdrc_SetSdrcMode(Clkrst_Sdram2SramVal(&g_clkrst_sdrc_mode));
+	Sdrc_SendCmd_MRS();
+	if ( Sdrc_GetSdrcCfg_EMRSEnable() ) {
+		Sdrc_SendCmd_EMRS();
+	}
+	//6), linchuan建议的nop
+	asm volatile (
+		"nop;"
+		"nop;"
+		"nop;"
+		"nop;"
+		"nop;"
+	);
+	//7), 打开自动进入self refresh
+	Sdrc_EnableAutoEnterSelfRefresh();
+	//8), 恢复sdrc_timing
+	Sdrc_SetSdrcTiming(Clkrst_Sdram2SramVal(&g_clkrst_sdrc_timing_Tase_bak));
+	//5, 准备返回sdram, 返回前一定要保证切频前写入的三个magic number正确.
+	while ( CLKRST_SWITCH_MAGIC1 != g_clkrst_Switch_magic[0] 
+		&& CLKRST_SWITCH_MAGIC2 != g_clkrst_Switch_magic[1] 
+		&& CLKRST_SWITCH_MAGIC3 != g_clkrst_Switch_magic[2] );
+//	clkrst_drv_delay_400000000cycle11_12_13_14();
+	//6, 返回sdram
+	asm volatile (
+		"mov	r1, %0;"
+		"nop;"
+		"nop;"
+		"nop;"
+		"nop;"
+		"nop;"
+		"ldr	pc, [r1];"
+	:						\
+	: "r" (Clkrst_Sdram2SramAddr(&g_clkrst_pc_bak))	\
+	: "cc", "r1"			\
+	);
+
+17:19 2009-9-10
+Linux移植, arm debug, 开发工具, JTAG与调试环境列表, 常用的JTAG支持列表, 常用调试环境支持列表
+LiaoZhiCheng邮件"JTAG与调试环境列表"20090910_1426
+常用的JTAG支持列表：
+            ARM7    ARM9    ARM11   CORTEX-M3   CORTEX-A8   CORTEX-A9
+Multi-ICE   √       √       ×       ×           ×           ×
+JLINK V6    √       √       ×       ×           ×           ×
+JLINK V7    √       √       √       √           ×           ×
+ULINK 2     √       √       ×       √           ×           ×
+RealView ICE 2 √    √       √       √           √           ×
+RealView ICE 3.3 √  √       √       √           √           √
+BDI3000     √       √       √       √           √           ×
+Trace-32    √       √       √       √           √           √
+code viser  √       √       √       √           √           ?
+
+常用调试环境支持列表：
+            ARM7    ARM9    ARM11   CORTEX-M3   CORTEX-A8   CORTEX-A9
+AXD 1.2     √       √       √       ×           ×           ×
+RVD 1.8     √       √       √       ×           ×           ×
+RVD 3.0     √       √       √       √           √           ?
+RVD 4.0     √       √       √       √           √           ?
+
+10:05 2009-9-11
+Linux移植, uart, 文件系统, busybox
+1, svnserver说明
+1), 先说明一下目前的svn目录:
+svn server位于: 服务器(10.0.26.35)的/svn, 目前有如下几个repo: 
+goldfish: 是goldfish(2.6.27)注释版本, 用于早期学习;
+linux-2.6.27.26: 早期830 linux移植版本, 在qemu realview模拟器上kernel打印信息不全. 暂时不用. 
+vmc: 目前830 linux移植版本, 版本2串口ok. (版本1应该也是ok的, 当时应该是pc的putty有问题造成串口无法输入)
+linux-bootloader: zhicheng写的linux bootloader, 未完成. 
+2), svn访问权限信息位于repo/conf目录, 例如/svn/vmc/conf. 其中
+svnserve.conf: 总的配置文件, 这里指明了用户在authz文件, 密码在passwd文件
+authz: 用户访问控制
+passwd: 密码文件, 为了简单使用的是明码. 
+
+2, 昨天串口回显速度还是有些慢, zhicheng在串口接收部分加入打印信息, 发现在所有串口接收结束后, 有明显延迟后才有回显, 感觉不是串口接收的问题. 从busybox打出的信息看串口发送也没有延时. 这样先kernel出问题的可能性不大, 感觉可能是busybox造成的. 会不会是busybox回显时有延时造成的呢? 这样其实和sleep问题是同一问题了. 所以分两个方向:
+1), 先实验sleep: 在helloworld的usleep前后打印信息. 
+中午实验发现睡眠时间很长. 
+2), 暂未分析出结果. 
+
+3, uClibc-20090911.tar的usleep
+"libc/unistd/usleep.c""
+#if defined __USE_BSD || defined __USE_POSIX98
+#if defined __UCLIBC_HAS_REALTIME__
+/*libc_hidden_proto(nanosleep) need the reloc for cancellation*/
+
+int usleep (__useconds_t usec)
+{
+    const struct timespec ts = {
+	.tv_sec = (long int) (usec / 1000000),
+	.tv_nsec = (long int) (usec % 1000000) * 1000ul
+    };
+    return(nanosleep(&ts, NULL));
+}
+#else /* __UCLIBC_HAS_REALTIME__ */
+/* libc_hidden_proto(select) */
+int usleep (__useconds_t usec)
+{
+	struct timeval tv;
+
+	tv.tv_sec = 0;
+	tv.tv_usec = usec;
+	return select(0, NULL, NULL, NULL, &tv);
+}
+#endif /* __UCLIBC_HAS_REALTIME__ */
+#endif
+1), 如果用select方式实现, 对应系统调用 do_select
+大致分析调用过程, 可以看到do_select通过软定时器实现, 所以最小精度是一个tick.
+do_select() -> schedule_timeout() -> __mod_timer()
+
+2), 如果用nanosleep实现;
+即对应系统调用 do_nanosleep, 
+do_nanosleep() 使用高精度定时器实现. 暂时不详细分析. 大致过程如下, 可以看出后面调用了clock_source_event的set_next_event, 同时看到max_delta_ns根据clock_source_evnet的max_delta_ns, min_delta_ns对传入的定时时间round. 
+set_next_event
+目前知道的调用关系:
+do_nanosleep() -> hrtimer_start() -> hrtimer_raise_softirq()
+hrtimers_init()通过open_softirq注册run_hrtimer_softirq为hrt的软中断处理函数. 
+run_hrtimer_softirq() -> run_hrtimer_pending() -> hrtimer_reprogram() -> tick_program_event() -> tick_dev_program_event() -> clockevents_program_event() -> clock_event_device.set_next_event
+
+4, updata_wall_time()的__do_div64提示除0
+查找发现 update_wall_time() -> change_clocksource() -> clocksource_calculate_interval() -> do_div() -> __do_div_asm() -> __do_div64
+发现clocksource的multi是0. 修改后可以正常挂载文件系统. 
+但是helloworld中sleep 1ms会很长时间. 
+
+5, 分析sleep
+uClibc中sleep()定义__UCLIBC_HAS_REALTIME__时通过nanosleep实现. 未定义时通过alarm实现. 
+
+6, review timer代码
+1), 发现有些地方写的timer0, 有些地方写的timer1. 中断注册的是timer0. 统一改为timer1;
+2), 
+	.features	= CLOCK_EVT_FEAT_PERIODIC | CLOCK_EVT_FEAT_ONESHOT,
+写成了
+	.features	= CLOCK_EVT_MODE_PERIODIC | CLOCK_EVT_FEAT_ONESHOT,
+
+7, (21:20 2009-9-11)
+1), 从上面结果看, 之前去掉CLOCK_EVT_FEAT_ONESHOT不能用的原因是CLOCK_EVT_FEAT_PERIODIC设置错误, 而且初始化设置的timer1, 中断注册的是timer0. 
+考虑到sleep涉及东西较多, 下周打算分开分析, 用get_timeofday判断时间是否正确, 如果正确说明就需要看sleep其他问题. 
+2), 今天的另一结果是修改了clocesource和clock_event_device的multi的计算方式. 原来以为这里造成sleep有问题, 后来发现不是. 
+
+21:27 2009-9-12
+项目, 工作总结, 本周总结, 9月工作总结, 20090907-20090913
+1, 主要工作内容:
+1), Linux移植: 2), 3)的剩余时间, 大于3天. 
+2), 上周工作总结: Linux移植日志和个人周工作总结. 3小时.
+3), 接上周完成切频打包工具测试. 1.5天. 
+
+2, 主要问题: 
+1), 上周工作总结应该放在上周完成, 放在本周影响效率. 
+
+21:40 2009-9-12
+Linux移植, uart, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月11日
+1, 09/11: review timer代码, timer代码统一使用timer1. 使用clocksource和clock_event_device, 且二者的multi由函数利用shift计算得到. 暂时没有解决现存问题. 
+
+21:43 2009-9-12
+Linux移植, uart, timer, 文件系统, busybox, Linux移植进展, 工作总结, 本周工作总结, 2009年9月7日--2009年9月12日
+1, 从本周开始记录日工作日志, 所以周工作日志不再详细说明问题, 只写出本周outline和下周计划. 
+
+2, 本周最大进展是830 linux终于可以启动到shell. 遗留问题是sleep时间超长; shell回显速度慢. 
+
+3, 下周计划:
+1), 从目前看uart没有太大问题. 下周希望相信分析timekeeping, timer代码. 解决现有830问题. 如果单分析自己830代码无法解决问题, 可以对比楼下836移植. 
+注: 楼下836移植半新不旧, 而且并不规范, 看不规范的代码其实帮助不是很大, 所以并不希望过多参考楼下代码, 只是作为bakcup. 
+2), 从目前830 uart和timer代码情况看, 在code初步调试通过后尽早review code很有好处. 如果zhangpu framebuffer完成, 希望尽快review. 
+
+14:05 2009-9-14
+时间table
+1, 上午: fanxiaofan, PCI介绍. 
+
+14:16 2009-9-14
+网址, arm, SOC, IP
+http://infocenter.arm.com/help/index.jsp, arm infomation center, 包括
+1, PrimeCell peripherals(各种IP, GPIO, CLCD, DMAC等等), 
+2, Development boards: arm realview, vertatile, intergrator cp等等开发板. 
+
+14:00 2009-9-14
+Linux移植, uart, time/timer, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月14日
+1, 今日计划
+1), zhicheng实验 836移植的timer.<DONE>
+2), zhangjian研究realview timer.<DOING>
+3), 把下载的文档放到36. <DONE>
+
+2, 下载了qemu模拟器中使用的arm soc及其ip的datasheet. "\\10.0.2.36\sqmshare\Share\linux\doc\soc datasheet\arm_soc"
+kernel代码中arch\arm\mach-realview\realview_eb.c对应的SOC是realview/DUI0303D_emulation_baseboard_user_guide.pdf
+
+15:47 2009-9-14
+Linux移植, uart, time/timer, 文件系统, busybox
+1, tick的通知链使用了RCU
+官方介绍: http://lse.sourceforge.net/locking/rcupdate.html
+
+以下介绍自: Linux\doc\kernel\RCU(Read-Copy Update)介绍.txt
+自: http://blog.chinaunix.net/u1/55599/showart_1101095.html
+RCU(Read-Copy Update),对于被RCU保护的共享数据结构，读者不需要获得任何锁就可以访问它，但写者在访问它时首先拷贝一个副本，然后对副本进行修改，最后使用一个回调（callback）机制在适当的时机把指向原来数据的指针重新指向新的被修改的数据。这个时机就是所有引用该数据的CPU都退出对共享数据的操作。
+
+RCU实际上是一种改进的rwlock，读者几乎没有什么同步开销，它不需要锁，不使用原子指令，而且在除alpha的所有架构上也不需要内存栅（Memory Barrier），因此不会导致锁竞争，内存延迟以及流水线停滞。不需要锁也使得使用更容易，因为死锁问题就不需要考虑了。写者的同步开销比较大，它需要延迟数据结构的释放，复制被修改的数据结构，它也必须使用某种锁机制同步并行的其它写者的修改操作。读者必须提供一个信号给写者以便写者能够确定数据可以被安全地释放或修改的时机。有一个专门的垃圾收集器来探测读者的信号，一旦所有的读者都已经发送信号告知它们都不在使用被RCU保护的数据结构，垃圾收集器就调用回调函数完成最后的数据释放或修改操作。 RCU与rwlock的不同之处是：它既允许多个读者同时访问被保护的数据，又允许多个读者和多个写者同时访问被保护的数据（注意：是否可以有多个写者并行访问取决于写者之间使用的同步机制），读者没有任何同步开销，而写者的同步开销则取决于使用的写者间同步机制。但RCU不能替代rwlock，因为如果写比较多时，对读者的性能提高不能弥补写者导致的损失。
+
+2, 
+1), 使用楼下836移植没问题
+2), 我们移植代码去掉clocksource也没问题. 
+3), 我们的clocksource是timer1, 但是timer1同时也用做tick中断, 而且是满清的. 不是连续计数的. 
+所以把timer0用于tick timer 中断. timer1用于clock source read.
+
+10:34 2009-9-15
+(12:42 2009-9-15)
+Linux移植, uart, time/timer, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月15日
+1, 今日计划, 本周计划:
+1), 为driver提供开发环境
+(1), 注释busybox多余注释. zhicheng, zhangjian
+(2), busybox上传SVN
+(3), 做打包工具, 加CONFIG_VMC保证不影响其它平台kernel使用, zImage放到0x0地址不能启动问题暂时绕过. <zhicheng>
+(4), 打包工具完成后写内核, busybox编译使用文档. 
+
+2), 开始详细分析time机制, 包括time,timer,tick,用户空间调用方法等. zhicheng, zhangjian. 计划本周完成. 
+(1), 疑问: 为什么原来timer.c不能用呢? 感觉除了multi计算不正确, 没什么大问题. zhicheng计划实验. 
+3), 分析uart,tty,console机制. 希望尽快完成. 
+4), 利用楼下836移植尝试usb net. 下周
+
+5), 下午与aiguo讨论了最近工作安排
+1-2周内完成linux移植分析(包括timer, uart, irq, memory等), 可能会被arm11开发环境这个事情打断. 
+
+2, memory.h(arch\arm\include\asm)中不能使用"//"注释. 只能使用"/**/"注释
+编译vmlinux.lds时会include memory.h, arm ld链接时如果遇到//会提示错误. 
+我们的内核编译vmlinuxr.lds如下:
+arm-none-linux-gnueabi-gcc -E -Wp,-MD,arch/arm/kernel/.vmlinux.lds.d  -nostdinc -isystem /usr/src/embedded2/toolchain/arm-2009q1/bin/../lib/gcc/arm-none-linux-gnueabi/4.3.3/include -D__KERNEL__ -Iinclude  -I/usr/src/embedded2/kernel/vmc/arch/arm/include -include include/linux/autoconf.h -mlittle-endian -Iarch/arm/mach-vmc/include   -DTEXT_OFFSET=0x00008000 -P -C -Uarm -D__ASSEMBLY__ -o arch/arm/kernel/vmlinux.lds arch/arm/kernel/vmlinux.lds.S
+vmlinux.lds.S 会 include asm/memory.h
+vmlinux.lds详细分析见"vimicro_Linux移植文档"4-11-1
+
+3, 今日进展:
+1), 内核可以正常挂载文件系统, timer, uart简单试用正常. 
+2), 完成830内核和文件系统文档初稿
+
+4, 目前问题
+1), 830 timer移植为什么原来的不能用, 需要分析. 
+2), busybox是静态编译, 需要实验busybox是动态链接能否使用, 至少要实验应用程序能否使用动态库. 
+
+14:13 2009-9-15
+Linux移植, VC0830, merge goldfish注释到现有vmc linux移植, svn, 项目文档, qemu
+1, svn log, 使用英文避免乱码, 目前版本是7.
+code has been tested in 830 BGA282+sdramSamsung board ( using vc0830_defconfig ) and qemu realview simulator ( using realview_defconfig ).
+1), merge comment in goldfish kernel to vmc kernel souce tree
+(1), dir: arch/arm, drivers/mtd, drivers/serial
+(2), add DOXYGEN macro in some file to optimize doxygen documentation. 
+DOXYGEN is defined in doxygen.conf PREDEFINED variable.
+(3), add new file Documentation/doxygen.conf INPUT variable
+2), add CONFIG_DEBUG_LL macro for low level debug function in kernel/panic.c, driver/serial/serial_core.c.
+
+2, 文档
+0), 综述
+目前我们的kernel已经可以正常引导ram中的文件系统(initramfs), timer, uart工作正常, 这里说明了svn下载linux kernel和filesytem代码, 编译, 运行VC0830和qemu realview虚拟机的kernel, filesytem的全过程.
+1), 目前用windows下svn check out有问题, 请大家在Linux下check out.
+2), 开发Linux kernel driver, filesystem共需要约1.8G硬盘空间(kernel 1.2G, filesytem 0.2G, toolchain 0.4G), 将来开发android还需要5G左右. 
+3), 为了便于说明问题, 我使用如下的目录结构, 后文的起始目录都是"embedded2"
+[dec@localhost embedded2]$ pwd
+/usr/src/embedded2
+[dec@localhost embedded2]$ tree -L 2
+.
+|-- android
+|   |-- android-sdk-linux_x86-1.5_r2
+|   `-- source
+|-- filesystem
+|   |-- busybox   : busybox-1.14.2
+|   `-- helloworld: helloworld文件系统, 测试文件系统挂载是否正常
+|-- kernel
+|   `-- vmc       : 支持830的linux-2.6.27.26源代码
+|-- qemu          : qemu arm模拟器及其测试映像
+|   |-- arm-test
+|   |-- qemu-0.10.6
+|   |-- qemu-doc.html
+|   `-- zImage_arm_integrator_Linux2.6.27.26
+|-- software      : 相关工具
+|   |-- meld-1.3.1: 代码比较和merge工具
+|   `-- xterm-237-1.fc10.i386.rpm: x-windows远程登录工具, 可以使用GUI界面, 
+                                   比纯SSh shell更灵活. 位于36服务器:
+                                   \\10.0.2.36\sqmshare\Share\Linux\host\xterm
+`-- toolchain
+    `-- arm-2009q1: 工具链, arm gcc 4.3.3
+
+1), 内核下载编译方法
+(1), 下载
+#下载kernel source code
+cd /usr/src/embedded2/kernel    #进入要下载kernel source code的目录
+svn co //10.0.26.35/vmc         #下载svn上vmc repo到当前vmc目录下
+(13:02 2010-8-9)今天试了试, 命令是"svn co svn://10.0.26.35/vmc"
+"13:02 2010-8-9"end
+#下载和解压缩工具链
+#工具链arm-2009q1-203-arm-none-linux-gnueabi-i686-pc-linux-gnu.tar.gz位
+#于"\\10.0.2.36\sqmshare\Share\Linux\toolchain&lib". 假设已经下载到
+#"/usr/src/embedded2/toolchain", 用如下命令解压缩
+tar zxf arm-2009q1-203-arm-none-linux-gnueabi-i686-pc-linux-gnu.tar.gz
+
+(2), 配置环境变量和内核配置文件
+#为了每次使用方便, 可以把如下语句保存到build_kernel脚本.
+export ARCH=arm
+export CROSS_COMPILE=arm-none-linux-gnueabi-
+PATH=$PATH:/usr/src/embedded2/toolchain/arm-2009q1/bin
+#指定kernel默认配置文件
+#编译830时: 
+make vc0830_defconfig
+#编译realview emulator board时: "make realview_defconfig"
+#指定initramfs目录
+make menuconfig
+#进入"General setup  --->"选中"[*] Initial RAM filesystem and RAM disk (initramfs/initrd) support", 并把filesystem路径"/usr/src/embedded2/filesystem/busybox/_install"填入" Initramfs source file(s)"
+注: 文件系统获取方法见"2), 文件系统下载和编译方法"的(1), (2)两步
+
+(3), 编译
+make 
+#成功编译后可以看到Image和zImage, 它们分别是vmlinux和
+#arch/arm/boot/compressed/vmlinux对应的bin文件
+[dec@localhost vmc]$ ll arch/arm/boot/*Image 
+-rwxrwxr-x 1 dec dec 2748584 2009-09-15 17:58 arch/arm/boot/Image
+-rwxrwxr-x 1 dec dec 1855888 2009-09-15 17:58 arch/arm/boot/zImage
+
+2), 文件系统下载和编译方法
+(1), 下载
+cd /usr/src/embedded2/filesystem  #进入要下载filesytem source code的目录
+svn co //10.0.26.35/busybox       #下载svn上busybox repo到当前busybox目录下
+
+(2), 直接使用现有的文件系统
+cd /usr/src/embedded2/filesystem/busybox
+[dec@localhost busybox]$ tar zxf filesystem_20090915.tar
+解包后"/usr/src/embedded2/filesystem/busybox/_install"是已经做好的文件系统, 可以参考1)-(2)编译与内核编译为一个映像.
+
+(3), 配置busybox
+#编译busybox与编译kernel类似, 同样需要设置ARCH, CROSS_COMPILE:
+export ARCH=arm
+export CROSS_COMPILE=arm-none-linux-gnueabi-
+PATH=$PATH:/usr/src/embedded2/toolchain/arm-2009q1/bin
+#配置busybox
+make menuconfig
+首先实验static链接的busybox, 选中: 
+Busybox Settings ->  Build Options -> [*] Build BusyBox as a static binary (no shared libs) 
+其余使用默认配置即可.
+
+(4), 编译, 安装
+make && make install
+
+(5), 复制文件系统必须的文件
+[dec@localhost busybox]$ tar zxf dev_etc.tar.gz
+[dec@localhost busybox]$ cd temp/
+[dec@localhost temp]$ ls
+dev  etc
+#复制设备文件需要root权限
+[dec@localhost temp]$ sudo cp dev etc ../_install/ -a
+#我们的文件系统直接执行/sbin/init, 为了不用传递命令行参数, 直接在跟目录建立符号链接:
+[dec@localhost _install]$ pwd
+/usr/src/embedded2/filesystem/busybox/_install
+[dec@localhost _install]$ ln -sf sbin/init init
+
+(6), 步骤(5)完成后按照1)-(2)编译内核. 
+
+3), 打包, 运行
+打包工具仍然使用dfupack, 只是需要修改512info和bin offset:
+(1), 512info需要修改go_addr为0x40008000
+(2), 打包工具的bin offset处填入0x8000. 因为目前zImage只能放在0x8000这个偏移地址, 所以打包时需要在zImage前32k填入无用数据, 保证830的rom bootloader把zImage映像load到0x8000地址处. 
+打包完成后用usb下载即可运行, 方法与下载830打包文件相同. 
+内核启动完成后会挂载文件系统, 使用root登录(无密码).
+
+4), qemu realview模拟器使用方法
+qemu是支持x86, arm, mips等多种体系结构体的指令集仿真器, 我们学习用的realview emulator board kernel可以在qemu中运行. 方法如下:
+(1), qemu源代码和测试映像位于: \\10.0.2.36\sqmshare\Share\Linux\host\tools\simulator\qemu. 
+qemu-0.10.6.tar.gz是源代码, arm-test-0.2.tar.gz是arm integrator测试映像. 编译qemu时间较长, 为了便于大家使用提供编译好的qemu模拟器: "\\10.0.2.36\sqmshare\Share\Linux\host\tools\simulator\qemu\qemu-system-arm"
+下载到linux虚拟机, 并增加可执行权限即可:
+#假设下载到"/usr/src/embedded2/qemu/"目录
+chmod a+x qemu-system-arm
+
+(2), 运行
+[dec@localhost qemu]$ pwd
+/usr/src/embedded2/qemu
+[dec@localhost qemu]$ ./qemu -M realview -kernel /usr/src/embedded2/kernel/vmc/arch/arm/boot/zImage -nographic
+
+这个文件系统与830文件系统完全相同, 用法参见步骤3)
+
+(3), 调试
+qemu可以使用gdb调试kernel, 目前我们使用eclipse做为gdb前端调试kernel, 效果很好, 稍后有单独文档介绍. 
+
+9:54 2009-9-16
+时间管理
+1, 今日计划:
+1), 看timer机制, 如果进展顺利, 实验ktrace是否好用. 
+
+2, table
+1), 9:35-10:00 邮件, 与zhicheng讨论问题.
+2), 10:00-11:31 对比linux-2.6.25.20看time,timer部分. 
+3), 12:45-14:48 与zhicheng, kernel打包工具
+4), 14:48-15:52 开始是自己修改打包工具; 后来与zhicheng, zhangpu一起实验在其它板子跑现有kernel
+
+10:29 2009-9-16
+Linux移植, time/timer, clock, uart, 调度, 今日进展, 本日工作总结, 2009年9月16
+日
+1, 今日工作: 
+1), 除了昨天日志写明需要分析的模块, clock也是需要分析, 之前zhangjian分析的基本差不多了. 稍后完善. 
+2), 下午发现830串口接收大量数据时会出错, 有时会提示ttyS0 overrun. 如果串口可以接收文件, 调试driver会方便很多. 
+3), (16:18 2009-9-16)与aiguo讨论中的疑问: android java应用程序如何操作硬件???
+4), 今天zhangpu, zhicheng尝试移植836的framebuffer, 进展如下: 
+(1), 为了直接使用了楼下的framebuffer, 不能使用我们的hardware.h, 所以只能把IO_ADDRESS放到单独的io_address.h中.
+(2), framebuffer初始化时获得padc失败. 开了lcdc的一级, 二级中断仍然不行. 
+5), 为了配合zhangpu framebuffer, 初步写一个clock模块, 提供结构修改pclk. 明日计划.
+6), 上传了增加timer,tick注释的代码, 上传后svn版本是8.
+
+2, 明日计划:
+1), 提供pclk配置函数.
+2), 继续看timer, tick代码. 
+
+11:18 2009-9-16
+公司, 项目, team name变化
+aiguo转发邮件"转发: A good name for Aiguo's team"20090916_1117, 原邮件"答复: A good name for Aiguo's team"20090916_1114
+经多方讨论，Ai Guo所在的team team 以后更名为IC prototyping team. 简称ICP。
+ 
+目前IC Prototyping team工作的主要内容：
+1) C model （现在比较弱化）
+2) FPGA和SV验证driver和测试工具的开发；
+3) 底层driver在FPGA 和ASIC上的开发在，作为系统部门的参考code，以后尽量做到AE直接复用底层driver（80％以上）。
+4) OS 在FPGA上的porting，包括windows CE，Linux和Android，一方面满足系统验证的需求，一方面可以给系统人员提供参考和直接使用；
+ 
+历史上，这个team 自从You Mingqi时代，叫过很多名字，如Dragon， SQM， 软件组，工具组，verification, software verification, FPGA verification, QA等等。有的已经有些旧而不合时宜，有的会和其他function teams 产生混淆。现在“正名”后，希望能减少confusion, 并为他们的工作做一个较为准确的界定。
+
+23:17 2009-9-16
+Linux移植, android, 解决"10:29 2009-9-16"1-3), <TODO>待续, 加入linux移植日志</TODO>
+1, [原创]Android的源代码结构
+自: http://hi.baidu.com/hanchao3c/blog/item/a6980dec1823aad3b31cb1e1.html
+2, 如何操作framebuffer:
+Android 技术专题系列之九--图形系统.txt
+介绍了android GUI架构, 文中提到frameworks/base/libs/ui/EGLDisplaySurface.cpp会直接操作framebuffer, 上层的java应该是通过c++封装的库控制framebufer.
+
+10:25 2009-9-17
+时间管理
+1, table
+1), 9:30-10:25 杂事
+2), 10:25-      计划2小时完成clock.
+3), 午饭, 中午状态不好, 弹钢琴一小时.
+4), 15:15-16:22 面试: 项目总体能说清楚, 细节有些模糊, 有些需要提醒(可能与项目是2-3年前有关)
+5), 16:22- clock, 未完成. 
+6), 晚饭
+7), 19:05-20:55  帮zhicheng找jtag资料, 与zhicheng讨论jtag, 一起实验
+
+2, 今天严重未完成计划, 主要是新增了arm11 jtag这个事情. 明天打算先完成clock部分, 这样就不影响zhangpu使用了. clock部分希望还完成通过sysfs控制的结构和设备驱动get, set rate的范例(用一个char device表示)
+
+11:06 2009-9-17
+Linux移植, time/timer, clock, uart, 调度, 今日进展, 本日工作总结, 2009年9月17
+日
+1, 昨天串口问题可以考虑降低波特率试试, 例如38400, 57600, 如果降低波特率可以, 就不影响zhangpu使用了. 
+2, 加入clock结构体, 现在的计划是尽量利用830中的代码, 但是每次copy都只copy最少代码. 
+1), 830 clkrst的driver和basefunc两层直接copy;
+2), clkrst/app/clkrst_app_module_clock.c作为clock.c
+3), \todo 将来做718或882项目时, 要考虑到linux中尽量直接使用源代码, 也就是代码支持panda(无OS或nucleus), dragon和linux. 例如
+(1), io抽象操作不要放到mem.c中. mem.c还有mem init等. 二者应该分开. 
+(2), 修改到Clkrst_drv_divider.h (arch\arm\mach-vmc\clkrst\driver), <TODO></TODO>
+
+16:30 2009-9-17
+VC0830, SV, MP4, 大电流充电模式降频引起死机, <TODO>关注</TODO>
+最后一封邮件是YangXiaoBo"答复: 客户项目情况"20090917_1604
+1, 发件人: Qin Le Fei 
+发送时间: 2009年9月17日 13:54
+收件人: Wang Bing; ling wenxi; 830MP4; Zeng ligong; Yang Xiao Bo
+抄送: Xiang Zhi Hong; Steven Liu; Wang zhiyong; mark; Larry L Xie
+主题: Re: 客户项目情况
+Dear All,
+前天驰能老化100PCS，发现有90%在大电流充电模式下死机的情况。
+现在初步发现在大电流充电模式下降频后易死机。现在正在重新搜DDR参数，
+预计今天晚上可以将新软件发给客户。
+
+2, From: Yang Zuo Xing 
+To: Qin Le Fei ; Wang Bing ; ling wenxi ; 830MP4 ; Zeng ligong ; Yang Xiao Bo 
+Cc: Xiang Zhi Hong ; Steven Liu ; Wang zhiyong ; mark ; Larry L Xie 
+Sent: Thursday, September 17, 2009 2:51 PM
+Subject: 答复: 客户项目情况
+Hi, lefei,
+大电流充电降频是一个什么样的应用场景？
+为啥要重新搜索参数？
+杨作兴
+
+3, 发件人: Jackson [mailto:qinlefei@vimicro.com] 
+发送时间: 2009年9月17日 15:58
+收件人: Yang Zuo Xing; Wang Bing; ling wenxi; 830MP4; Zeng ligong; Yang Xiao Bo
+抄送: Xiang Zhi Hong; Steven Liu; Wang zhiyong; mark; Larry L Xie
+主题: Re: 客户项目情况
+ 目前我们方案在充电模式下系统还在正常工作，因为需要在LCD上显示充电状态（显示充电图标）。 
+如果不降频那么功耗就比较大，那么我们的VC0831在长时间充电时就会发热所以需要降频。
+经过测试我们发现目前的软件版本切频时很容易死机，yangxiaobo分析死机的原因很可能是因为DDR参数不太匹配引起。所以现在要重新搜参数。
+秦乐飞
+
+4, 进入了切频模式，会死机。目前的程序，使用的老参数，配合新的流程。所以要使用新的144M 中间频点，来重新搜一下参数。
+Thanks,
+James Yang
+
+17:28 2009-9-17
+VC0830, VC0816, SV, clkrst, clkswitch, 注意事项, <TODO>加入项目文档, 项目经验</TODO>
+1, pll2_cpu_bus_div与pll1_cpu_bus_div不同. 前者是高16是bus, 低16位是cpu. 后者是[15:8]bus, [7:0]cpu.
+2, 如果切频时在sram中就死了, 说明与memory无关. 应该重点查切频相关寄存器. 首先保证cpu,bus频率正确, 比例合理, 占空比是1:1, 如果切频逻辑没有问题, 切频就没有问题. 
+但是在VC0816项目切频逻辑有问题, 有时可以看到的现象是切频后PLL_CTRL寄存器串位, 后来查到是IC切频时gate有问题. 
+
+20:59 2009-9-17
+VC01600, VC0718, 环境, jtag
+1, 今天与zhicheng一起实验, arm11调试环境, 发现用jlink的"i"命令读不到device ID. 在VC0830上是可以读到的. 
+arm926的device identification code是0x7926,
+arm1176的device identification code是0x7b76, b是11, 所以b76也就是1176.
+2, 明天希望实验用jlink中的jtag命令去读写arm926的debug寄存器, 如果实验成功再读写arm11. 
+
+00:34 2009-9-17
+VC01600, VC0718, jtag
+1, 思考:
+1), 用什么工具控制jtag? 直接用jlink命令很不方便, 考虑openocd命令(看openocd userguide,  development doc)或本组原来自己写的jtag工具(这个可以问aiguo). 
+2), 既然device id都读不出来, 应该尽快定位jtag到底什么原因, 然后找IC同事调试(IC同事可能会用umonitor吧).
+3), 为了便于完成1,2, 明天早晨看jtag资料. 关键是理解如何用jtag读写arm debug 寄存器.
+4), 尝试用openocd读id, 需要zhangpu带他的jlink么? 明早联系. 
+5), 刚才洗澡是还想到了什么? 忘了一些, 以后记得及时整理思路. 
+
+2, 查看openocd target/target.c, 得知openocd已经支持arm11, cortex-a8.
+参考"OpenOCD介绍以及上手, 自: http://group.ednchina.com/1065/12674.aspx"
+至少从src/target/arm11.c的arm11_examine的switch看到检查device id是否是
+0x07B36000, 0x07B56000, 0x07B76000. 说明openocd至少可以识别arm11. 明天计划用openocd查看. 
+
+10:25 2009-9-18
+VC0830, SV, clkrst, clkswitch, 如何配置切频相关寄存器(pll_ckd和cpu_bus_div)
+注: 以下步骤只用于显示指定频点配置, 只保证频点正确, 不保证memory稳定工作. 
+1, 进入clkrst模块
+2, 保证切频频点没有限制.
+1), settype 0 0 1, 修改为sdram samsung memory片子, 
+2), setsysmaxfreq 900 500 200 192, 修改系统最大频率
+3, 切频到指定频点, 根据需要选择pll id, pll, cpu, bus频率, "CLKRST: Start Switch clk"前一行显示是pll_ckd和cpu_bus_div. 
+clkrst  :/>clksv
+Select the clock switch path: [CLKRST_MODULE]->Clkrst_TestGetSwitchPath()
+destination clock source(0: pll1; 1: pll2, 3: xclk): (Int)/[0]
+[CLKRST_MODULE]MESSAGE:arguments_dstCpuBusSrc input succeed!
+[CLKRST_MODULE]->Clkrst_TestGetPll1MediumClkSrc()
+clock switch method (1: pll1->pll2->pll1, 3: pll1->xclk->pll1): (Int)/[3]
+[CLKRST_MODULE]MESSAGE:arguments_mediumCpuBusSrc input succeed!
+System Clock Switch Path is: PLL1 -> XCLK -> PLL1
+please input any cpu freq(MHz).
+[CLKRST_MODULE]->do_clkswitchSV_cpurate()
+cpu freq: (Int)/[240]
+[CLKRST_MODULE]MESSAGE:cpu freq index input succeed!
+Please input pll_cpu_bus index, input INVALID index to exit clock switch.CLKRST: All pll1, cpu, bus frequency at cpu = 240
+CLKRST: vdec frequency range is same to bus frequency
+CLKRST: CAUTION: when cpu > 500MHz bus > 200MHz clock switch may be fail.
+index pll cpu bus
+ 0  960 240 120
+ 1  480 240 120
+ 2  480 240  80
+ 3  480 240  60
+vdec divider |   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
+pll:  960    | 480 320 240 192 160 137 120 106  96  87  80  73  68  64  60
+pll:  480    | 240 160 120  96  80  68  60  53  48  43  40  36  34  32  30
+[CLKRST_MODULE]->do_clkswitchSV_cpurate()
+pll cpu bus index: (Int)/[1]
+[CLKRST_MODULE]MESSAGE:arguments_pll_cpu_bus input succeed!
+vdec divider |   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
+pll:  480    | 240 160 120  96  80  68  60  53  48  43  40  36  34  32  30
+[CLKRST_MODULE]->do_clkswitchSV_cpurate()
+vdec div: (Int)/[4]
+[CLKRST_MODULE]MESSAGE:arguments_vdec input succeed!
+[CLKRST_MODULE]->do_clkswitchSV_cpurate()
+delay(us): (Int)/[0]
+[CLKRST_MODULE]MESSAGE:arguments_delay input succeed!
+CLKRST: system operation point will switch to :
+CLKRST: xclk pll1 cpu bus vdec
+CLKRST: 12  480 240 120 120
+CLKRST: xclk    pll_div cpu_bus_div   vclk_div
+CLKRST: 12   0x00140190      0x1100     0x0011
+CLKRST: Start Switch clk
+##CAUTION: we assume that sdio, and other module input clk is not changed
+during clock switch. otherwise the internal divider in sdio, and other
+relative module should be reconfigured!!!, see "update_module_divier()"
+for detail.
+           ý
+CLKRST: End Switch clk
+
+上述信息表示在xclk=12MHz, pll1=480(寄存器配置是0x00140190), cpu_bus_div是120:120(0x1100, 注意pll1 cpu_bus_div与pll2 cpu_bus_div不同)
+
+另外, batchswitch中需要根据显示信息确定频点配置是否正确, 下面显示的是batchswitch中切到下一频点的频率频率(xclk=12MHz, pll1=480MHz, cpu=120MHz, bus=120MHz), 这个频率是程序根据寄存器配置计算的, info文件预期的频率应当与此相同. 
+CLKRST: Current operation point (1) is: 
+CLKRST: xclk pll1 cpu bus vdec
+CLKRST: 12  480 240 120 120
+CLKRST_DBG: 0x7f0000, 0x800420, 0x100023c, 0x1810264
+
+14:05 2009-9-18
+时间管理
+1, 上午: jtag调试; 切频问题(后来发现是384_192_96问题).
+2, 中午: 午饭, 午休. 
+3, 14:13- vc0830 linux clock.
+
+14:16 2009-9-18
+Linux移植, time/timer, clock, uart, 调度, 今日进展, 本日工作总结, 2009年9月18
+日
+1, 继续昨天修改linux中配置vc0830 clock. 重点是配置pclk. 
+1), 暂时把板子和封装定义在clkrst_basefunc_public.h的CLKRST_IN_LINUX中.
+	#define SV_BOARD
+	#define _SV176_
+将来需要放到适合的位置: 也是提供默认值和修改函数(kernel tags, sysfs)
+
+2, zhicheng用836的uart接收文件没问题, 等待zhicheng把今天进展加入文档. 
+<TODO></TODO>: 718, 882改进: uart需要fifo, timer需要OS timer.
+
+17:49 2009-9-18
+VC0830, SV, memory, memory布线, <TODO>项目总结, 项目文档</TODO>
+YangZuoXing邮件"答复: 830MP4 sdram/ddr 问题突击的安排"20090918_1734, 20090918_1748
+关于（弛能Q2）板子原理图，PCB图的CHECK结果如下：
+关于原理图：
+3.     DDR_VREF采用10K电阻分压方法，可能有风险。我们在SV/EVB板上使用的是专用电源芯片。不知LIGONG在SZ有试过这种方法没有.
+4.     检测串联电阻，原理图上R84是22OHM，但通过实测，板上焊的是47OHM,希望原理图上能改过来。
+PCB:
+3、   蛇形线最好用圆弧或45度角，禁止直角走线。------阻抗不连续。
+4、   线间距最好保证3倍线宽。
+
+PCB上还有一个问题，串联电阻大部分放在了DDR CHIP那边。
+串联电阻是用来解决830这边的SSO问题的，请在以后的板上要求客户尽量放在830这边。
+
+0:33 2009-9-19
+Linux移植, clock, 今日进展, 本日工作总结, 2009年9月19日
+1, 为zhangpu framebuffer提供pclk操作函数
+1), 今天下午基本把clkrst_app_module_clock.c/h中设置lcd pclk部分移植到kernel中, 同时clkrst模块drver和basefunc层基本完全移植过来, 只是hal_io中操作寄存器的宏没有直接操作寄存器, 而是通过readl, writel操作. 
+2), 上面的代码编译未通过, 修改中. 另外makefile中objs-xxx, 中xxx忘了加CONFIG_字头, 造成clkrst目录下的basefunc, driver, linuxdep目录下的文件都未编译.
+3), 从下午进展看, 自己coding还远谈不上熟练, 需要有意识多锻炼自己的coding能力.
+
+2, 总结一下现在需要做的事情:
+1), lcd pclk: 计划周一完成, 考虑到其它事情的影响, 底线是下班时完成, 完不成就只能加班了. 
+2), time, tick文档: 本来是计划这周完成的, 目前计划周二, 周三完成. 
+3), jtag原理: 这个不属于830 linux移植, 但属于VC01600(VC0718+VC0882)预研项目. 希望是对照arm926ej-s调试原理和openocd代码理解arm调试原理. debug register, scan chain等等. 
+(1), 已经下载了"DDI0222_ARM9EJ-S_Technical Reference Manual_r1p2", 根据arm926ej-s文档, debug 文档在这个文档中. 主要是"Debug in depth"这章, 需要详细看. 
+4), 两个次重点:
+(1), uart: 关注zhicheng如何解决830 linux shell不能rx xmoderm文件问题.
+(2), 思考为什么我的clock模块比其它arm linux移植复杂很多. 因为我们支持完整的clock接口? 因为我们底层硬件处理无法用同一函数?(l例如module divider计算方法不同)
+
+22:20 2009-9-20
+项目, 工作总结, 本周工作总结, 9月工作总结, 20090914-20090920
+1, Linux移植进展:
+1), kernel和文件系统移植基本完成, 除了uart接收文件会丢数. (楼下的uart移植传输很小的文件没事,几十k的文件会死)
+2), 简单看了rcu原理, 这个需要深入看.
+
+2, VC01600, 环境
+1), 为了调试arm11, 简单看了jtag调试原理, 这个也需要深入看. 
+
+3, 其它
+1), team更名(9-16), 包括四类工作: OS porting in FPGA, FPGA和SV验证, 底层driver开发(FPGA, SV), C model. 详见"11:18 2009-9-16"1)
+
+9:46 2009-9-21
+时间管理
+1, 今日计划:
+1), 完成linux pclk;
+2), 今明两天看完arm jtag调试.pdf. rcu打印资料适时看.
+
+2, table
+1), 9:30-10:10  工作准备, 邮件. 
+2), 10:11-11:26  linux pclk
+3), 11:26-11:57  前面工作被打断, 帮youhai check切频流程. 
+4), 午饭
+5), 13:15-18:07 linux pclk: 初步功能完成, 晚上加入sys和char范例, 测试所有接口函数.
+其中14:10-14:40 与LiDongLiang讨论问题, 见"11:26 2009-9-21"
+6), 晚饭.
+7), 19:13-20:50 实验和整理svn技巧: diff工具, GUI客户端, 修改working copy版本. <TODO>加入Linux移植日志, 进展</TODO>
+
+3, 新增todo
+1), linux深入的make机制还需要继续分析, 详见"10:26 2009-9-21"1-3)-(5)
+
+9:49 2009-9-21
+VC0830, SV, VC0832, 量产, Wafer Test Program, Yield(成品率?) 93.35%
+XiangZhiHong邮件"Re: Re: 答复: VC0831 Task Tracking List_20090915"20090919_0039
+Item16，经TE/IC/COP共同努力，Wafer Test Program已经调试通过，目前Typical Process的Yield为93.35%，Corner Case的测试结果表明Typical Process下的Yield值最高。目前针对Wafer的Item暂时close，832 FT程序继续进行，831FT待LB回公司后继续进行。
+感谢CaoYanhui/ZhouZhitao及其Team. 
+
+9:52 2009-9-21
+VC0830, SV, EVB, Pcddr, Hynix, pll2: 288_72_36, 该频点切频600次死的原因是sdrc_timing过紧, <TODO>项目总结, 进展, memory调试经验, clkswitch(切频)调试经验</TODO>
+调试通过. 上周五下午抽了一点时间帮忙看batchSwitch log, 当时是切频到600轮左右死(3个频点, 切频次数约1800次, 其中切频到pll2_288_72_36 600次)
+后来linchuan把sdrc_timing改为最宽松(0xffffffff)测试通过, 这说明可能是原有timing过紧. 后来linchuan重新计算了sdrc_timing, 高低温测试通过. 
+
+9:58 2009-9-21
+VC0830, SV, EVB, rdpath设置不正确导致搜索不到参数
+linchuan邮件"答复: 830MP4 sdram/ddr 问题突击的安排"20090919_1644
+“上周五发布的其实参数和以往的差异很大，也不稳定，后来看rd path 的新方案选择引入这个问题，应该没经过测试。”这是引入了新的搜索算法带来的问题，以后要加强测试后才能 release出,也可以release未经测试版本（供youhai 深圳紧急使用，但是应该注明，同时北京继续测试）。直接负责人： zhou dashan ，Lin Chuan。
+上周五的问题是在使用过程中，info的rdpath初始值配置不当导致，youhai已清楚，以后在文档会加重强调。工具的修改流程经youhai，lingming，dashan的讨论是这样：每修改一版，先初步测试，重点在修改部分，同时提供描述修改文档，然后先提供给youhai，提高时效性。同时将新一版做完整大规模测试，并提供测试报告，保证稳定性
+
+10:26 2009-9-21
+Linux移植, clock, 配置pclk, 进展; 文档
+1, Makefile写法, obj-y中要么是目录要么是.o, 不能是有路径的.o:
+1), arch/arm/mach-vmc有如下目录结构: 
+[dec@localhost clkrst]$ tree
+.
+|-- Makefile
+|-- basefunc
+|   |-- bsdrc.h
+|   |-- built-in.o
+|   |-- clkrst_basefunc.c
+|   |-- clkrst_basefunc.h
+|   |-- clkrst_basefunc.o
+|   |-- clkrst_basefunc_public.h
+|   `-- modules.order
+|-- driver
+|   |-- clkrst_drv.c
+|   |-- clkrst_drv.h
+|   |-- clkrst_drv_divider.c
+|   |-- clkrst_drv_divider.h
+|   |-- clkrst_drv_public.h
+|   |-- clkrst_drv_system_info.c
+|   |-- clkrst_drv_system_info.h
+|   |-- clkrst_drv_type.h
+|   `-- clkrst_public_type.h
+`-- linux_dep
+    |-- common_def.h
+    |-- hal_io.c
+    `-- hal_io.h
+
+2), 如果arch/arm/mach-vmc/Makefile写为如下形式: 
+obj-y           := timer.o irq.o vc0830_devices.o clock.o
+obj-$(CONFIG_MACH_VC0830) += board-vc0830.o
+obj-$(CONFIG_MACH_VC0830_CLOCK) = clkrst/basefunc/clkrst_basefunc.o
+obj-$(CONFIG_MACH_VC0830_CLOCK) = clkrst/driver/clkrst_drv.o
+obj-$(CONFIG_MACH_VC0830_CLOCK) = ...
+
+编译时会报错, 可以看到make没有进入basefunc目录, 只是在mach-vmc目录编译:
+make -f scripts/Makefile.build obj=arch/arm/mach-vmc
+ arm-none-linux-gnueabi-gcc -Wp,-MD,arch/arm/mach-vmc/clkrst/basefunc/.clkrst_basefunc.o.d  -nostdinc -isystem /usr/src/embedded2/toolchain/arm-2009q1/bin/../lib/gcc/arm-none-linux-gnueabi/4.3.3/include -D__KERNEL__ -Iinclude  -I/usr/src/embedded2/kernel/vmc/arch/arm/include -include include/linux/autoconf.h -mlittle-endian -Iarch/arm/mach-vmc/include -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Os -marm -fno-omit-frame-pointer -mapcs -mno-sched-prolog -mabi=aapcs-linux -mno-thumb-interwork -D__LINUX_ARM_ARCH__=5 -march=armv5te -mtune=arm9tdmi -msoft-float -Uarm -fno-stack-protector -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -Wdeclaration-after-statement -Wno-pointer-sign -fwrapv  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(clkrst_basefunc)"  -D"KBUILD_MODNAME=KBUILD_STR(clkrst_basefunc)" -c -o arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.o arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c
+arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c: In function 'get_module_divReg':
+arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c:6: warning: 'regVal' may be used uninitialized in this function
+arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c: At top level:
+arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c:57: fatal error: opening dependency file arch/arm/mach-vmc/clkrst/basefunc/.clkrst_basefunc.o.d: Permission denied
+compilation terminated.
+
+3), 按照linux要求修改后目录结构如下, 注意每个目录下都有Makefile
+[dec@localhost clkrst]$ tree
+.
+|-- Makefile
+|-- basefunc
+|   |-- Makefile
+|   |-- bsdrc.h
+|   |-- built-in.o
+|   |-- clkrst_basefunc.c
+|   |-- clkrst_basefunc.h
+|   |-- clkrst_basefunc.o
+|   |-- clkrst_basefunc_public.h
+|   `-- modules.order
+|-- driver
+|   |-- Makefile
+|   |-- clkrst_drv.c
+|   |-- clkrst_drv.h
+|   |-- clkrst_drv_divider.c
+|   |-- clkrst_drv_divider.h
+|   |-- clkrst_drv_public.h
+|   |-- clkrst_drv_system_info.c
+|   |-- clkrst_drv_system_info.h
+|   |-- clkrst_drv_type.h
+|   `-- clkrst_public_type.h
+`-- linux_dep
+|   |-- Makefile
+    |-- common_def.h
+    |-- hal_io.c
+    `-- hal_io.h
+(1), cat arch/arm/mach-vmc/Makefile
+obj-y           := timer.o irq.o vc0830_devices.o clock.o
+obj-$(CONFIG_MACH_VC0830) += board-vc0830.o
+obj-$(CONFIG_MACH_VC0830_CLOCK)  += clkrst/
+(2), cat arch/arm/mach-vmc/clkrst/Makefile
+obj-y  += basefunc/
+obj-y  += driver/
+obj-y  += linux_dep/
+(3), cat arch/arm/mach-vmc/clkrst/basefunc/Makefile
+obj-y  += clkrst_basefunc.o
+(4), 此时编译过程如下, 可以看到make依次进入mach-vmc, clkrst, basefunc目录执行里面的Makefile
+make -f scripts/Makefile.build obj=arch/arm/mach-vmc
+make -f scripts/Makefile.build obj=arch/arm/mach-vmc/clkrst
+make -f scripts/Makefile.build obj=arch/arm/mach-vmc/clkrst/basefunc
+  arm-none-linux-gnueabi-gcc -Wp,-MD,arch/arm/mach-vmc/clkrst/basefunc/.clkrst_basefunc.o.d  -nostdinc -isystem /usr/src/embedded2/toolchain/arm-2009q1/bin/../lib/gcc/arm-none-linux-gnueabi/4.3.3/include -D__KERNEL__ -Iinclude  -I/usr/src/embedded2/kernel/vmc/arch/arm/include -include include/linux/autoconf.h -mlittle-endian -Iarch/arm/mach-vmc/include -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Os -marm -fno-omit-frame-pointer -mapcs -mno-sched-prolog -mabi=aapcs-linux -mno-thumb-interwork -D__LINUX_ARM_ARCH__=5 -march=armv5te -mtune=arm9tdmi -msoft-float -Uarm -fno-stack-protector -fno-omit-frame-pointer -fno-optimize-sibling-calls -g -Wdeclaration-after-statement -Wno-pointer-sign -fwrapv  -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(clkrst_basefunc)"  -D"KBUILD_MODNAME=KBUILD_STR(clkrst_basefunc)" -c -o arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.o arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c
+arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c: In function 'get_module_divReg':
+arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.c:6: warning: 'regVal' may be 
+used uninitialized in this function
+   arm-none-linux-gnueabi-ld -EL    -r -o arch/arm/mach-vmc/clkrst/basefunc/built-in.o arch/arm/mach-vmc/clkrst/basefunc/clkrst_basefunc.o 
+(cat /dev/null; ) > arch/arm/mach-vmc/clkrst/basefunc/modules.order
+(5), linux深入的make机制, 还需要继续分析. 
+需要分析具体编译机制, 编译中间文件的作用. 例如"(cat /dev/null; ) > arch/arm/mach-vmc/clkrst/basefunc/modules.order"起什么作用?
+
+2, 计算pll时需要除法, 加入kernel中除法的支持. 
+1), 不加入时编译提示: 
+  LD      .tmp_vmlinux1
+arch/arm/mach-vmc/built-in.o: In function `pll_get_freq':
+/usr/src/embedded2/kernel/vmc/arch/arm/mach-vmc/clock.c:474: undefined reference to `__aeabi_uldivmod'
+arch/arm/mach-vmc/built-in.o: In function `Clkrst_DrvGetPllFreq':
+/usr/src/embedded2/kernel/vmc/arch/arm/mach-vmc/clkrst/driver/clkrst_drv.c:125: undefined reference to `__aeabi_uldivmod'
+arch/arm/mach-vmc/built-in.o: In function `SysInfo_GetPll':
+/usr/src/embedded2/kernel/vmc/arch/arm/mach-vmc/clkrst/driver/clkrst_drv_system_info.c:907: undefined reference to `__aeabi_uldivmod'
+
+2), 加入 VFP-format floating point maths, 修改后需要clean需要除法的.o, 编译后仍然提示同上, 为什么呢? 
+换另一个除法试试(NWFPE math emulation (NEW)), 不过这个就不支持eabi了. 仍然不行, 上网搜索, 发现没有加入asm/div64.h. 这个头文件中的除法支持64bit/32bit.
+加入头文件后仍然不行, 把Clkrst_DrvPllCkd2Freq宏改为函数编译通过. 但是这样就不支持xclk不是整数Mhz的情况了.
+\todo __aeabi_uldivmod错误是绕过去的: 宏改为函数后只是32bit / 32bit. 另外xclk不是整数Mhz时需要修改此函数. 
+
+3), 编译通过.
+
+3, 为了看到调试信息, cmdline中加入"loglevel=8"
+1), 寄存器正确, 但是没有波形, 怀疑是使能问题. 
+2), 设置频率: pclk=33Mhz, iclk=66Mhz(for ipp)
+3), 编译通过后, divider寄存器数值正常, 但是量不到pclk.
+此时ckd_en, sys_gt, m_gt都和830一样打开. 
+后来单步跟踪830代码, 发现是padc没有设置正确. 
+临时在vc0830_map_io()加入:
+#define Padc_GpioD_Cfg_Func(x)		HAL_WRITE_UINT32_MASK(IO_ADDRESS(PADC_GPIO_D_CFG), (x), ~(x))
+	Padc_GpioD_Cfg_Func(~0xF8000000);
+这样就能量到pclk了. 将来这个语句应该放在lcd初始化中. 
+
+4, changeLOG20090921(for svn verion 14 and version 15)
+1), add MACH_VC0830_CLOCK in "Vimicro VC0830 Options" menu, select it will enable vc0830 clock. 
+currrent support clk_get, clk_put, clk_enable, clk_disable, clk_get_rate, clk_set_rate clk interface function and clock register function(clk_register), clk init function(vc0830_clk_init). 
+CAUTION: only vc0830_clk_init, clk_register and clk_set_rate(for iclk and pclk) are tested. other function will be tested. 
+2), add float point support(VFP) for calculation clock divider.
+3), add some comment in clock module. 
+
+5, 映像见"D:\work\VC0830\SV\code_image\20090921\1734_linux_LQFP176_sdramSamsung_pclk_iclk"
+
+6, (21:42 2009-9-21)在/sys/kernel/debug加入"vmc_clk"
+1), 加入了debugFS, 但是sys/kernel/debug没有vmc_clk这项. 
+(1), clean重新编译试试. 仍然不行, 明天看看有没有at91的模拟器. 
+
+11:26 2009-9-21
+VC0830, SV, EVB, clkrst, clkswitch, <TODO>关注进展</TODO>
+发现youhai sram切频程序中修改sdrc_timing在sdrc_switch_end(0x60011018=0)之前, 这样等于是先写到了shadow寄存器中. <TODO>关注进展</TODO>
+需要确认这个问题是在哪个样机出现的. 
+
+14:36 2009-9-21
+编译器, VC, LiDongLiang做598环境时遇到的问题, <TODO>项目总结, 经验</TODO>
+1, VC不支持变长参数怎么办?
+简单查找, 似乎VC不支持C99, 所以C99的_VA_ARGS_不能用. 如果又希望使用变长参数, 可以使用如下形式, 其中_x_是带括号的变长参数, 这样替换时就可以把_x_作为整体替换. 但要注意这种情况下printf就不能加括号了. 
+#define MSG(_x_) \
+do {\
+	AASP_PrintCond(DBGLVL_HIGH,!ATE_MODE,("[%s]MESSAGE:",MOD_NAME)); \
+	AASP_PrintCond(DBGLVL_HIGH,ATE_MODE,("<msg c=\"%s\">",MOD_NAME)); \
+	AASP_PrintCond(DBGLVL_HIGH,true,_x_);\
+	AASP_PrintCond(DBGLVL_HIGH,!ATE_MODE,("\n"));\
+	AASP_PrintCond(DBGLVL_HIGH,ATE_MODE,("</msg>\n"));\
+}while(0)	
+
+#define AASP_PrintCond( ilev, cond, _x_) \
+        if( AASP_DebugLevel && ( ilev <= AASP_DebugLevel ) && ( cond )) { \
+			iprintf _x_ ; \
+	}
+
+#define iprintf printf
+
+例如:
+MSG(("a = %d", a));
+
+2, __global_reg是rvct的用法:
+http://infocenter.arm.com/help/topic/com.arm.doc.dui0348ac/BABEIDCA.html
+__global_reg 存储类说明符将声明的变量分配给全局变量寄存器。
+语法
+__global_reg(n) type varName
+其中：
+n
+是 1 到 8 之间的整数。
+
+type是以下类型之一：
+除 long long 之外的任何整型
+任何字符类型
+任何指针类型。
+
+varName
+是变量名称。
+
+限制
+如果使用此存储类，则无法使用任何其他存储类，如 extern、static 或 typedef。
+在 C 中，不能在声明时限定或初始化全局寄存器变量。 在 C++ 中，任何初始化均被视为动态初始化。
+可用寄存器的数量因所使用的 AAPCS 变体而异，有 5 到 7 个寄存器可用作全局变量寄存器。
+实际上，使用全局寄存器变量时，建议：
+ARM 或 Thumb-2 中不要超过三个全局寄存器变量
+Thumb-1 中不要超过一个全局寄存器变量
+全局浮点寄存器变量不要超过可用浮点寄存器数量的一半。
+如果声明的全局变量太多，代码大小会显著增加。 在某些情况下，程序可能无法进行编译。
+
+Caution
+在使用全局寄存器变量时必须小心，原因如下：
+在链接时不进行检查，因而无法保证不同编译单元之间的直接调用是合理的。 如果可能，请在程序的每个编译单元内定义程序中使用的全局寄存器变量。 通常，最好将定义放在全局头文件中。 在使用全局寄存器之前，必须及早在代码中设置寄存器内的值。
+全局寄存器变量映射到由被调用方保存的寄存器，因此，对于未将该变量用作全局寄存器变量的编译单元，将通过函数调用来保存和恢复它的值，例如，库函数。
+回调使用全局寄存器变量的编译单元是很危险的。 例如，如果从未声明某个全局寄存器变量的编译单元中调用使用该全局寄存器的函数，函数将从其假定的全局寄存器变量中读取错误的值。
+只能在文件范围内使用此存储类。
+
+示例
+Example 4.1 声明一个分配给 r5 的全局变量寄存器。 
+Example 4.1. 声明全局整数寄存器变量
+__global_reg(2) int x      ; v2 is the synonym for r5
+
+Example 4.2 将生成错误，因为必须在同一变量的所有声明中均指定全局寄存器。
+Example 4.2.  全局寄存器 - 声明错误
+int x;
+__global_reg(1) int x; // error
+在 C 中，无法在定义时初始化 __global_reg 变量。Example 4.3 在 C 中生成错误，而在 C++ 中不生成错误。
+Example 4.3. 全局寄存器 - 初始化错误
+__global_reg(1) int x=1; // error in C, OK in C++
+
+16:36 2009-9-21
+SVN
+svn中文book: http://svnbook.red-bean.com/
+
+18:07 2009-9-21
+Linux移植, 软件技巧, svn使用技巧, diff: meld, 显示文件名和版本; svn GUI客户端, 修改working copy版本, update到特定版本; 文档, 总结
+1, 设置SVN diff工具
+1), linux下的diff工具我习惯用meld, 这是python脚本编写的GUI diff, 不需要安装. 
+36: \\10.0.2.36\sqmshare\Share\Linux\host\tools\meld-1.3.1.tar.bz2
+第一次使用时需要设置meld尝试的字符集, 进入meld Edit菜单->preference选择: 
+选择"Encoding"选项卡, 填入"utf8 gb2312 gb18030 latin-1", 表示meld会顺序尝试这几个字符集, 这样linux, windows下的中文就都不会是乱码了. 
+2), 设置svn diff wrapper脚本:
+这个脚本来自svn中手册"使用外置比较工具", "http://www.subversion.org.cn/svnbook/1.4/svn.advanced.externaldifftools.html"
+
+#!/bin/sh
+
+# Configure your favorite diff program here.
+DIFF="/usr/src/embedded2/software/meld-1.3.1/meld"
+
+# Subversion provides the paths we need as the sixth and seventh 
+# parameters.
+echo left file is \"$3\"
+echo right file is  \"$5\"
+LEFT=${6}
+RIGHT=${7}
+
+# Call the diff command (change the following line to make sense for
+# your merge program).
+$DIFF $LEFT $RIGHT
+
+# Return an errorcode of 0 if no differences were detected, 1 if some were.
+# Any other errorcode will be treated as fatal.
+
+(10:17 2010-9-21)改进脚本, 之前是直接显示文件名, 如果是svn上的文件, 显示的是tmp*的文件名, 不方便, 希望显示文件名和版本: 
+在上面脚本中加入"echo $*"输出所有参数: 
+-u -L arch/arm/mach-vc088x/irq.c (revision 10) -L arch/arm/mach-vc088x/irq.c (revision 19) /tmp/tempfile.2.tmp /tmp/tempfile.4.tm
+发现$3和$5是文件名. 但是直接用$DIFF $*不行. 估计是因为里面有空格. 所以改为: 
+$DIFF $LEFT -L "$3" $RIGHT -L "$5"
+这样就可以在顶部的标题栏正确显示文件名和版本了. 
+"10:17 2010-9-21"emd
+
+3), 使用svn diff比较不同版本代码
+(1), 查看revision history
+[dec@localhost vmc]$ svn log drivers/serial/vc0830_uart.c
+[dec@localhost vmc]$ svn log drivers/serial/vc0830_uart.c
+------------------------------------------------------------------------
+r10 | liao | 2009-09-18 17:52:17 +0800 (Fri, 18 Sep 2009) | 1 line
+ttyVS=>ttyS
+------------------------------------------------------------------------
+r9 | liao | 2009-09-18 17:02:35 +0800 (Fri, 18 Sep 2009) | 1 line
+use 6 lou vc0830_uart.c
+------------------------------------------------------------------------
+r3 | liao | 2009-09-11 18:09:59 +0800 (Fri, 11 Sep 2009) | 1 line
+------------------------------------------------------------------------
+r2 | liao | 2009-09-11 10:21:15 +0800 (Fri, 11 Sep 2009) | 1 line
+uart ok. sleep error.
+------------------------------------------------------------------------
+r1 | liao | 2009-09-07 19:34:15 +0800 (Mon, 07 Sep 2009) | 1 line
+------------------------------------------------------------------------
+
+(2), 比较
+比较当前版本和svn最新版本:
+[dec@localhost vmc]$ svn diff
+比较当前版本和版本9(meld中左边的是版本9, 右边是当前版本)
+[dec@localhost vmc]$ svn diff  -r 9 drivers/serial/vc0830_uart.c
+比较当前版本9和版本10(meld中左边的是版本9, 右边是版本10)
+[dec@localhost vmc]$ svn diff  -r 9:10 drivers/serial/vc0830_uart.c
+
+2, SVN GUI客户端, 本来想和eclipse集成, 但是公司网络没法直接按照插件, 打算回家下载插件带过来. 后来找了几个open source的都需要重新编译svn, 只能稍后再实验了. 
+目前我用的是smartSVN, 36: \\10.0.2.36\sqmshare\Share\Linux\host\tools\smartSVN
+smartSVN不需不用安装, 简单说明一下用法: 
+1), 解压缩
+1), 设置SMARTSVN_JAVA_HOME. (jdk, jre的默认安装路径是执行jdk_version.bin的目录)
+smartSVN推荐使用jre1.6, 我用额jdk1.5, 也可以用. 
+2), 运行smartSVN
+smartsvn-6_0_6/bin/smartsvn.sh &
+(1), 第一次运行会提示下载license, 附件中是我去"http://www.syntevo.com/smartsvn/evaluate.html"注册的, 只需要填写姓名和邮箱. 
+(2), 启动smartSVN后根据情况建立project. 如果已经有svn repo, 选择"create project from existing Working-Copy", ok确认后设置versioned directory.
+(3), 使用方法和eclipse和TortoiseCVS差不多, 不多说了. 
+
+3, SVN技巧, 如果提示working copy过旧, 可以用下面网址提供的脚本进行working copy 版本转换: http://subversion.tigris.org/faq.html#working-copy-format-change.
+36位置: '\\10.0.2.36\sqmshare\Share\Linux\host\tools\svn\change-svn-wc-format.py"
+使用方法是:
+[dec@localhost vmc]$ ../../software/svn_tools/change-svn-wc-format.py /usr/src/embedded/kernel/vmc 1.5
+注意这里的版本号只能是1.4, 1.5. 1.6
+
+4, 更新文件到某一版本
+[dec@localhost vmc]$ svn up -r 9 drivers/serial/vc0830_uart.c
+
+5, (20:08 2010-8-18)之前的日志没有说明如果修改svn的配置文件.
+在svn全局配置文件"/etc/subversion/config"或用户配置文件"/home/username/.subversion/config"修改diff-cmd行注释为1-2)中脚本的绝对路径. 
+diff-cmd = /opt/software/meld-1.3.1/diff_wrapper_4_svn.sh 
+修改配置文件后运行svn diff出错
+zhangjian@icp-desktop:/opt/share/zhangjian/development/kernel/linux-2.6.29/trunk
+$ svn diff -r 1:2
+svn: /home/zhangjian/.subversion/config:57: Option expected
+google后, 在"http://doc.iusesvn.com/show-28-1.html"找到解决方法是去掉"diff-cmd"前面的空格. 
+
+18:08 2009-9-21
+软件技巧, sourceinsight, 无空间保存文件
+source insight提示没有空间保存文件, 也可能是因为已经无法访问samba驱动器. 
+
+20:04 2009-9-21
+Linux移植, 在线文档, doxygen
+LiaoZhiCheng邮件"答复: 新一代的平台开发启动"20090719_1844
+已搭建了HTTP服务器，大家可以在本地IE上输入http://10.0.26.35/ 来阅读kernel代码。
+
+10:11 2009-9-22
+Linux移植, uart, 文件系统, busybox, 今日进展, 本日工作总结, 2009年9月21日, linux移植进展
+如果每项已经记录清楚, 移植进展中尽量只写outline. 
+1, clock(iclk,pclk)初步完成，详见"10:26 2009-9-21"
+2, 熟悉了svn diff(借助meld), update, log(history)用法, 找到一个可用的svn前端gui.
+详见"18:07 2009-9-21"
+
+10:12 2009-9-22
+时间管理
+1, 计划
+1), 用一个字符设备测试clock接口函数;
+2), debugFS先看at91模拟器, 不行需要看看文档, 可能需要mount或enable. 
+3), 明天必须开始看timer
+4), 路上: 今明两天看完arm jtag调试.pdf. rcu打印资料适时看.
+
+2, 
+1), 9:50-11:10 linux clock
+2), 11:10-11:46 解决dragon robust问题
+3), 午饭
+4), -13:30 继续2)
+5), 13:30-16:00 linux clock
+6), 16:00 - 18:10 vc0882 kick off meeting.
+7), 18:10-18:50 与zhicheng讨论近期计划, 并整理为文档.
+
+10:33 2009-9-22
+Linux移植, clock, 文件系统, debugFS
+1, debugFS果然也需要mount:
+mount -t debugfs debugfs /sys/kernel/debug/
+参考: "debugfs -- usefull linux kernel debug tools""http://hi.baidu.com/greek_zjb/blog/item/ecfe214d6def00f0d72afc95.html"
+文章提到"http://lwn.net/Articles/115405/" 讲述了如何使用debugfs提供的API
+
+2, 基本完成.
+1), SVN log(version 17): 
+add debugFS support.  cat /sys/kernel/debug/vmc_clk will display all clock
+rate.
+comment: debugfs usage(already in /etc/init.d/rcS):  mount -t debugfs debugfs /sys/kernel/debug.
+2), clock使用说明
+(1), 头文件:
+#include <linux/clk.h>
+
+(2), get clk和get clk rate(参见vmc_clk_show()(arch/arm/mach-vmc/clock.c)):
+struct clk *clkp;
+clkp = clk_get(NULL, clk_name); //获得名字是clk_name的clk指针
+clk_get_rate(clkp);             //获得clkp指针指向的clk的频率(单位Hz).
+
+范例: 
+	clk = clk_get(NULL, "pclk_clk");
+	if ( !IS_ERR(clk) ) {
+        //利用clk_get_rate得到pclk的频率(单位Hz)
+		seq_printf(s, "%-10s %9ld Hz %s\n", clk->name, clk_get_rate(clk),
+						clk->parent ? clk->parent->name : "");
+	} else {
+		Clkrst_Err("get pclk_clk fail.\n");
+	}
+	clk_put(clk);
+
+(3), 修改模块频率(暂时不支持设置占空比)
+clk_set_rate(clkp, 60 * MHZ);   //修改clkp指向的clk的频率为60MHz, 
+范例参见vc0830_clk_init()(arch/arm/mach-vmc/clock.c)
+
+11:14 2009-9-22
+VC0830, SV, 严重工作失误!!, 深刻反省, <TODO>项目总结</TODO>
+bootloader打包脚本中0xffffffff写成了0x0xffffffff, 打包工具认成了0x0.
+把原有sscanf4switchNumber改为如下形式, 考虑了十进制和十六进制, 数字后面只允许' ', '\t', '/'(注释的第一个斜杠), 字符串结束'\0'和0数字0. 
+暂时不提交, 先放这里: 
+/*!
+ * \fn int sscanf4switchNumber(const char *buffer, ULONG *datap)
+ * \brief 从buffer中读取十进制或十六进制整数写入到*datap中. 代替原有的//sscanf(iniStr, "%d", &iniData);或//sscanf(iniStr, "%x", &iniData);
+ */
+int sscanf4switchNumber(const char *buffer, ULONG *datap)
+{
+	int ret;//for debug
+	char temp;
+
+	//try hex number
+	ret = sscanf(buffer, "0x%x%c", datap, &temp);
+	//if cannot get parameter, try decimal number
+	if ( 0 == ret || -1 == ret ) {
+		ret = sscanf(buffer, "%d%c", datap, &temp);
+		if ( 0 == ret || -1 == ret ) {
+			//::AfxMessageBox("warning: parameter not found");
+		} else if ( ret == 1 ) {
+			;
+		} else if (  temp != ' ' && temp != '/' && temp != '\t' && temp != '\0' && temp != 0 ) {
+			goto err;
+		}
+	} else if ( 1 == ret ) {
+		;
+	} else if ( temp != ' ' && temp != '/' && temp != '\t' && temp != '\0' && temp != 0 ) {
+		goto err;
+	}
+	return ret;
+err:
+	::AfxMessageBox("get info file fail, pls check info file");
+	return -1;
+}
+
+18:30 2009-9-22
+Linux移植, 工作计划, LiaoZhiCheng和zhangjian讨论结果
+1, 本周计划完成timer分析, 包括
+(1), clocksource和timer中断;
+(2), clockevent和tick;
+(3), timekeeping(计时);
+(4), kernel API以及用户如何调用. 
+(5), 疑问:
+a, 小于一个tick的计时如何实现, 是否一定使用高精度timer? 
+
+2, 本周后计划看uart和irq, 希望对Linux移植有更深入的理解, 将来VC0882, VC0718能好支持Linux.
+
+19:00 2009-9-22
+项目, 工作总结, 本周总结, 9月工作总结, 20090922
+感觉今天没昨天安排紧凑.
+1, linux clock初步完成, 最后支持zhangpu在他板子上跑起来. 时间不够紧凑.
+2. 今天看完了arm jtag调试文档, 有些地方不懂, 计划对照arm926ej-s manaul和openocd代码看. 参考openocd使用和开发文档了解openocd机制和代码结构.
+
+9:32 2009-9-23
+时间管理
+1, 今日安排
+1), 整理昨天会议记录
+2), zhicheng: 先看clocksource和clockevent, 重点看二者关系, clockevent调用的tick和调度等稍后看. 
+3), linuxsymposium_procv1_2005.pdf, p313, sysfs filesystem
+4), 看arm926ej-s jtag调试. 抽空看rcu和"DataBook.Vivante.GCCORE_1.2.pdf".
+
+2, 
+1), 10:10- 11:29: 整理昨天会议记录
+2), 午饭, 午睡.
+3), 14:00-17:30 linux timer: clock source and clock event
+4), 17:30-18:30 zhangpu framebuffer, 暂时可以显示. 
+5), 晚饭
+6), -20:12, eclipse CDT error parser(project properties->make xxx -> error parser; 支持dongliang切频. 
+7), 20:14-21:42  键盘, 基本看完, 明天写code.
+其中20分钟为dashan解释sram切频, 跳转到sram时, 返回地址-8, 是否是因为流水线呢? 
+
+10:10 2009-9-23
+Linux移植, clock, uart, 文件系统, busybox, framebuffer, 今日进展, 本日工作总结, 2009年9月22日
+1, linux clock初步完成, 最后支持zhangpu在他板子上跑起来
+2, zhangpu framebuffer module init运行通过, 但是屏似乎没有显示.
+3, zhicheng, 串口问题暂无进展. 
+
+10:12 2009-9-23
+项目, VC0882, 会议, 2009年9月22日下午, VC0882 kick off, 882单独列支, bonus
+bavmor: 开完会后感觉清晰很多, 其实对于项目总体计划很感兴趣. 高层也很重视. 感觉公司制度对于项目运行是个障碍. 
+
+1, VC0882总体feature:
+1), 32mm(平方毫米) @ TSMC 65nm
+2), arm1176 or cortex-A8(800Mhz-1GHz), 目前倾向于使用A8. arm1176的软核硬核已有. 
+3), 3D: mali200 OPENGL ES2.0, 比较中. 
+4), DDR 667MHz, 400MHz.
+5), nand, 支持24bit ecc
+
+2, schedule
+1), 年底: mas freeze, rtl 0.75;
+2), 2010.3.15: RTL 0.9
+3), code freeze
+4), 2010.9.15 tape out
+5), 2010.11.15 拿样品;
+6), 2011.12.15 SV done;
+7), 2011.5.15 MP4 小pp;
+
+存在的问题:
+tape out时间虽然从10.30提前到9.15, 市场仍然认为太晚, 希望7月tape out, MP4产品赶上2011.4的season. 手机也仅仅比MP4晚一个月. 大家讨论. 感觉资源严重不足. 
+
+3, dependency
+1), project dependency: 598, 830(831,836,898)
+2), external vendor
+(1), IP一定要在2009.10.15freeze, 目前IP问题见4.
+(2), 后端设计, 为了不影响进度, 后端外包谈判应当在今年年底或明年年初完成. 
+3), cross functional dependency
+(1), feature freeze deadline. 09.9.30
+(2), AE基本没人加入.
+(3), VC0882希望使用VA7882芯片(PMIC). 
+4), bonus, 见9.
+
+4, IP状态
+1), 外部IP
+(1), ARM, 希望用cortex-A8, 谈判中, 希望尽快完成. 
+(2), PLL暂时未找到, 计划是用synopsys的.
+(3), 3D mali 200和GC500评估中. 
+bamvor: GC500是vivante公司产品, 3D产品包括GC400, 500, 600, 1000. vivante产品介绍位于"D:\work\VC0882\3D\vivante"
+Vivante Advantage.pdf: 介绍了vivante公司产品和优势(与mali比较);
+DataBook.Vivante.GCCORE_1.2.pdf: 硬件设计文档, 有空好好看看. 
+(4), USB2.0 PHY, 暂时没有找到成熟的. 
+2), 内部:
+USB OTG. 
+
+5, 项目人数(未包括系统)
+IC共60人(包括aiguo team), 已有35人, 待招25人. 
+具体缺人情况如下(已有+待招)
+验证组: 2+8;
+ICP(aiguo组): 7+6
+QA: 0+3
+
+6, sharing @ 1600, platform
+VC0882和VC0718合称VC1600, 两个项目的资源部分可以share.
+
+7, 待定技术问题
+1), FE(front end): 是否需要share memory with moderm;
+2), FPGA: dual-V5 vs Four-V5;
+3), BE(back end): external service vs in-house implement. 
+从项目schedule考虑, 外包比较合适.
+4), 缺少DDR2, DDR3测试设备.
+5), IP问题:
+(1), 若使用arm1176需要L2. (bamvor: A8内部有L2)
+(2), 7280 vs 8270(支持1080p编码)
+使用8270会不会影响带宽? 会不会影响项目计划? 8270的成熟度如何? )
+(3), 3D IP评估.
+(4), USB(bamvor: USB PHY?): TSMC or Synopsys. 
+
+8, 可能的技术难点
+1), A8 hardening. (bamvor: A8做硬化)
+2), 65nm技术挑战;
+3), low power挑战. 公司的low power技术虽然有进步, 但离市场部要求仍然有距离;
+4), 软件方面, 1176, A8的compiler, debugger. 
+
+9, bonus
+原计划是kick off到custom sample IC部门有300k$的bonus.
+custom sample是指给客户做demo. 
+后来邓博士决定为882单独订bonus方式, 882单独列支: 把bonus提前, 如果能用10个月完成12个月的计划. 就发300k$. 由Raymond和Dave指定具体计划. 
+
+10, 后来是中高层讨论一些问题, 主要是给大家打气, 同时强调882很重要. 
+1), 邓博士: 882公司会投入1000万$. 
+公司目前一个季度日常支出是900万$, 按这个花钱的速度, 两年后公司就没钱了.
+国际上的AP厂商三星, marvell, boardcom也在降价, 低的已经做到8$. 
+公司已经连续8个季度亏本. 
+对于公司产品打入apple很高兴. 
+2), 其它:
+TCL目前在用8348(820产品线, 似乎是820b);
+大家讨论718, 598对项目的影响. yangzuoxing建议718和882错开3个月(882提前2个月, 718后推1个月). aiguo建议先做完598再做882. 两个人其实是角度不同, 对于aiguo来说598投入了很多的人员, 而且我们组进入882肯定会晚一些. 
+
+10:16 2009-9-23
+Linux移植, clock, uart, 文件系统, busybox, framebuffer, 今日进展, 本日工作总结, 2009年9月23日
+1, zhangpu framebuffer:
+1), 用framebuffer test实验, 操作没有报错, 说明framebuffer本身工作正常. 打算查寄存器配置. 留下的lcd结构体与我们不同, 需要看.
+
+11:18 2009-9-23
+VC0830, SV, memory, clkrst, clkswitch, 现在用小电流搜的参数(是不是小电流搜索的也 需要确定): 大电流可以, 小电流不行. 而且是bootloader切频时就fail了, <TODO>关注进展</TODO>
+
+14:03 2009-9-23
+Linux移植, clock, hrtimer
+1, 阅读
+下面的highres.txt和ols2006-hrtimers.pdf看完后就能对Linux现有的timer架构有大致的了解. 
+1), 几篇文章: 
+http://sourceforge.net/projects/high-res-timers/
+hrt官网
+"hrtimers and beyond"
+http://www.linuxsymposium.org/2006/linuxsymposium_procv1.pdf
+The slides to this talk are available from: http://tglx.de/projects/hrtimers/ols2006-hrtimers.pdf 
+We Are Not Getting Any Younger: A New Approach to Time and Timers
+http://www.linuxsymposium.org/2005/linuxsymposium_procv1.pdf
+
+2), highres.txt (documentation\timers)
+clock event management
+---------------------- 
+While clock sources provide read access to the monotonically increasing time value, clock event devices are used to schedule the next event 
+
+The management layer assigns one or more of the following functions to a clock event device:
+      - system global periodic tick (jiffies update)
+      - cpu local update_process_times
+      - cpu local profiling
+      - cpu local next event interrupt (non periodic mode)
+
+The clock event layer API is rather small. Aside from the clock event device registration interface it provides functions to schedule the next event interrupt, clock event device notification service and support for suspend and resume.
+
+high resolution timer functionality
+----------------------------------- 
+he clock source and the clock event device layers provide notification functions which inform hrtimers about availability of new hardware. hrtimers validates the usability of the registered clock sources and clock event devices before switching to high resolution mode. This ensures also that a kernel which is configured for high resolution timers can run on a system which lacks the necessary hardware support.
+
+Once a system has switched to high resolution mode, the periodic tick is switched off. This disables the per system global periodic clock event device
+
+dynamic ticks
+-------------
+如果cpu处于idle状态, 会停止调度tick.
+
+2, hrtimer + clockevent + Timekeeping
+http://blog.chinaunix.net/u/14459/showart_415394.html
+这篇文章参考资料就是"1"的文章.
+
+21:01 2009-9-23
+Linux移植, qtopia, kpd, 为了运行qtopia加入键盘支持, 只有BGA282封装支持5x5键盘
+1, 开始实验LQFP176的板子, 发现键盘程序不能用, 后来又实验EVB板, 发现也不能用. 没办法只能先看kpd代码, 看代码时发现5x5键盘只有BGA282才支持. 换成BGA282的cpu, 果然可以了. <TODO>又是封装问题, 上次的uart问题也是, 以后一定记得先看看封装是否支持</TODO>
+
+9:46 2009-9-24
+Linux移植, uart, 文件系统, busybox, Linux移植进展, 日工作总结, 2009年9月24日
+1, framebuffer
+ZhangPu邮件"vc0830 fb已经基本可以工作了"20090923_1830
+Fb驱动已经可以工作，但其中绕过了一些机制。
+Fb驱动基于6层的代码修改而来。
+主要做了如下工作，
+1: 将楼下fb代码复制到我们的kernel中，修改Kconfig及Makefile，将其添加到我们的编译工具中。
+2: 由于代码中使用了很多自己重新定义的寄存器列表和我们的定义方式不同，所以我直接将它们的头文件也加入，其中IO_ADDRESS使用我们的并增加mach/io_address.h头文件。
+3: 目前看来他们的fb中重新申请了一块显存，和lcdc的mbf不是同一个，但其刷新机制还没搞清楚，因为我直接将lcdc中的mbf申请的地址付给fb驱动，如下
+pfbi->screen_base            = (char __iomem *)start;               //start为虚拟地址映射后的mfb其实地址
+pfbi->screen_size              = size;
+pfixinf->smem_start          = (unsigned long)DMA_ADDRESS( start );        //目前看来，此地址直接影响到mmap这种绘制屏幕的操作方式。
+pfixinf->smem_len             = size;
+pfixinf->line_length   = length;
+
+2, clocksource, clockevent进展是找到几个关键文档, 大致的架构有了了解.
+见"14:03 2009-9-23"
+
+9:48 2009-9-24
+项目, 日工作总结, 20090924
+1, 用上午一个多小时整理会议记录, 时间有点长, 以后尽量当天整理.
+2, clocksource, clockevent进展是找到几个关键文档, 大致的架构有了了解.
+见"14:03 2009-9-23"
+3, eclipse 如何把build error标到文件中: 初步看是通过error parser做的, 改code难度大, 考虑用perl脚本.
+4, 开始写kpd linux driver(input device).
+
+9:52 2009-9-24
+时间管理
+1, 计划
+1), 今天input设备估计得搞一天.
+2), 收入证明
+3), 改切频code, 可以选择中介频点是否检查memory数据正确, 并打印. 
+
+2, table
+1), 上午切频;
+2), -18:15 下午切频, 其它杂事
+3), 饭后, keypad代码初步完成, 明天主要是编译. 
+
+11:14 2009-9-24
+VC0830, SV, EVB, clkrst, clkswitch, memory
+1, 
+切频次数中axb=c, 表示b个频点, 共切频a轮, 总切频次数c次. 
+case     温度   pass or not 切频次数       切死频点(pllx: pll, cpu, bus, vdec)
+小电流-1 -20   (fail)      4908x4=1.9万    pll1: 384_192_48_48
+小电流-2 -20   (pass)      16248x4=6.5万
+小电流-3  65   (pass)      17130x4=6.8万   pll2: 288_72_36_144
+小电流-4 -20   (fail)      9293x4=3.7万    pll2: 288_72_36_144
+大电流-1       (pass)      137034x4=54万(低温只做了2小时, 其余是常温)   
+总结果看, 只有小电流-20fail两次, 成功切频1.9和3.7万次. 
+2, 以后都是我发excel, 包括上面各项. 
+
+15:15 2009-9-24
+Linux移植, framebuffer, input, kpd, 今日工作总结, 2009年9月24日
+1, 昨天zhangpu用的是merge buffer, 所以颜色有些不正常. 今天加入了自动trigger, 显示图片正常. 
+2, 移植pxa27x_keypad.c框架完成, 未编译. 9/25目标是中断正确得到键值. 
+
+17:33 2009-9-24
+VC0830, SV, EVB, clkrst, clkswitch, batchswitch中即使中介频点也做memory比较(如果失败打印信息), sdram: bus >= 60MHz时不配置pll1_sdrc_adj
+1, VC0830
+zhangjian, clkrst, clkswithc
+1). batchswitch中即使中介频点也做memory比较, 如果失败打印信息
+
+2), 根据linchuan要求, Clkrst_ClkSwitchSetSdrcAdjClk() (clkrst/app/clkrst_app_switch.c)加入sdram, bus >= 60MHz时不配置pll1_sdrc_adj. 
+if ( SysInfo_GetBus_MHz(infop->systemInfo) >= 60
+    && Clkrst_MemInfo_GetCur()->attrp->type == MEM_SDRAM ) {
+    break;
+}
+如果将来sdram切频有问题, 需要修改此处的流程. 目前memoryType在其它地方都没有使用, 所以如果type配置为ddr可以, 说明是这个流程的影响了切频稳定性. 
+
+Checking in app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.46; previous revision: 1.45
+done
+Checking in app/clkrst_app_module_clock.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.c,v  <--  clkrst_app_module_clock.c
+new revision: 1.8; previous revision: 1.7
+done
+Checking in app/clkrst_app_switch.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.c,v  <--  clkrst_app_switch.c
+new revision: 1.12; previous revision: 1.11
+done
+Checking in basefunc/clkrst_basefunc.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+new revision: 1.20; previous revision: 1.19
+done
+Checking in driver/clkrst_drv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+new revision: 1.11; previous revision: 1.10
+done
+Checking in driver/clkrst_drv.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.h,v  <--  clkrst_drv.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in driver/clkrst_public_type.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_public_type.h,v  <--  clkrst_public_type.h
+new revision: 1.10; previous revision: 1.9
+done
+
+2, batchswitch切频打包工具
+zhangjian, clkrst, clkswitch, batchSwitch中加入memoryCompInMedium
+Checking in SpiScanMemPackDlg.cpp;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/SpiScanMemPackDlg.cpp,v  <--  SpiScanMemPackDlg.cpp
+new revision: 1.15; previous revision: 1.14
+done
+Checking in batchswitch_info_SVLQFP176_SdramSunsang.txt;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SVLQFP176_SdramSunsang.txt,v  <--  batchswitch_info_SVLQFP176_SdramSunsang.txt
+new revision: 1.2; previous revision: 1.1
+done
+Checking in batchswitch_info_SV_sdramSamsung.txt;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SV_sdramSamsung.txt,v  <--  batchswitch_info_SV_sdramSamsung.txt
+new revision: 1.3; previous revision: 1.2
+done
+
+3, bootloader打包工具
+"zhangjian, 如果offset=0, 不生成带头的core bin.
+argument' from cvs server
+Checking in DfuPack.exe;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_bootloader/DfuPack/DfuPack.exe,v  <--  DfuPack.exe
+new revision: 1.17; previous revision: 1.16
+done
+Checking in source/DfuPackDlg.cpp;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_bootloader/DfuPack/source/DfuPackDlg.cpp,v  <--  DfuPackDlg.cpp
+new revision: 1.19; previous revision: 1.18
+done
+
+10:44 2009-9-25
+时间管理
+1, 
+2, table
+1), 9:40-10:10 882 meeting;
+2), 10:10-11:30 linux timer archtecture: Hrtimers and Beyond: Transforming the Linux Time Subsystems
+3), 14:50-15:10 看zhangpu qt效果. 
+
+10:46 2009-9-25
+Linux移植, timer, linux timer archtecture
+1, hrt官网: http://high-res-timers.sourceforge.net.
+hrt API下载: http://sourceforge.net/projects/high-res-timers
+2, 阅读:"Hrtimers and Beyond: Transforming the Linux Time Subsystems"
+terms: CTW: cascading timer wheel;
+这篇文章写的很清楚, 一下对于hrt就有了总体的了解. 
+3, 结合2的文章和原来分析, 感觉Linux timer可以分为:
+1), timer architecture
+2), clock source and timekeeping:
+clock source是一个单增的timer, 利用这个timer可以实现计时. 实现GTOD(general time of day); 默认的clock source是jiffies. 
+kernel config: CONFIG_GENERIC_TIME
+3), clock event and tick(periodic tick, dynamic tick, tickless);
+clock event用于实现下一次事件, 不支持hrtimer情况下, 每个事件就是一个tick. 支持hrtimer时, 事件可能是tick, 也可能是一个普通hrtimer事件(不是tick). 
+kernel config: CONFIG_GENERIC_CLOCKEVENTS
+4), hrtimer: 高精度timer.
+kernel config: CONFIG_HIGH_RES_TIMERS and CONFIG_TICK_ONESHOT
+
+15:11 2009-9-25
+Linux移植, framebuffer, input, kpd, 日工作总结, 2009年9月25日
+1, zhangpu qt移植完成. 
+
+16:49 2009-9-25
+Linux移植, input, kpd
+1, 
+2), 有些寄存器读写直接用的物理地址, 忘了转为虚拟地址, 造成dataabort.
+3), 部分按键可以打出键值, 
+4), dev_dbg无打印信息. 打开"CONFIG_DEBUG_DRIVER"试试. 
+(1), 出现kernel panic, "1715_Linux_BGA282_sdramSamsung_keypad.pak"
+device class 'sound': registering
+Advanced Linux Sound Architecture Driver Version 1.0.17.
+device: 'timer': device_add
+Unable to handle kernel NULL pointer dereference at virtual address 0000000a
+pgd = c0004000
+[0000000a] *pgd=00000000
+Internal error: Oops: 1 [#1]
+Modules linked in:
+CPU: 0    Not tainted  (2.6.27.26-svn16-dirty12 #67)
+PC is at kmem_cache_alloc+0x34/0x88
+LR is at get_empty_filp+0x6c/0x118
+pc : [<c016c034>]    lr : [<c0170590>]    psr: 20000093
+sp : c1f8fe48  ip : c1f8fe70  fp : c1f8fe6c
+r10: c1f8ff68  r9 : 00000000  r8 : c1c1de0c
+r7 : 000080d0  r6 : 00000080  r5 : 80000013  r4 : 0000000a
+r3 : 00000000  r2 : 80000093  r1 : 000080d0  r0 : c029040c
+Flags: nzCv  IRQs off  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+Control: 0005317f  Table: 40004000  DAC: 00000017
+Process khelper (pid: 211, stack limit = 0xc1f8e268)
+Stack: (0xc1f8fe48 to 0xc1f90000)
+fe40:                   c1f8fe7c c1f8fe58 c02a6020 c0296340 c0297b18 00000001 
+fe60: c1f8fe84 c1f8fe70 c0170590 c016c010 c1f8fec8 ffffff9c c1f8fea4 c1f8fe88 
+fe80: c0179010 c0170534 c1f8fec8 c1c17300 00000021 c1c09000 c1f8febc c1f8fea8 
+fea0: c01790a8 c0179000 00000021 00000000 c1f8ff34 c1f8fec0 c01743f4 c0179094 
+fec0: 00000021 c1f8ff4c c1801180 c1c741c0 c1c741c0 00000000 c1f8ff04 c1f8fee8 
+fee0: c0180df8 c0180cc8 c1f8ff4c 00000000 c029e750 c1c1af38 885bb200 00000000 
+ff00: c1c1af30 c1c6c300 c1f8ff34 c016c07c c012722c c0127194 00000000 00000000 
+ff20: c1c17300 c0297b18 c1f8ff64 c1f8ff38 c0174868 c01743d4 c01228b8 00000000 
+ff40: c0297b18 c1c1de0c c1c09000 c1f8ff68 00000000 00000000 c1f8ffcc c1f8ff68 
+ff60: c0115c48 c0174828 00000000 00000000 00000000 00000000 00000000 00000000 
+ff80: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 
+ffa0: 00000000 00000000 00000000 00000000 00000000 c1f8e000 00000000 c1c74700 
+ffc0: c1f8fff4 c1f8ffd0 c0138728 c0115c18 00000000 00000001 00000000 00000000 
+ffe0: 00000000 00000000 00000000 c1f8fff8 c012c208 c013864c 00000000 00000000 
+Backtrace: 
+[<c016c000>] (kmem_cache_alloc+0x0/0x88) from [<c0170590>] (get_empty_filp+0x6c/0x118)
+ r7:00000001 r6:c0297b18 r5:c0296340 r4:c02a6020
+[<c0170524>] (get_empty_filp+0x0/0x118) from [<c0179010>] (__path_lookup_intent_open+0x20/0x94)
+ r5:ffffff9c r4:c1f8fec8
+[<c0178ff0>] (__path_lookup_intent_open+0x0/0x94) from [<c01790a8>] (path_lookup_open+0x24/0x2c)
+ r7:c1c09000 r6:00000021 r5:c1c17300 r4:c1f8fec8
+[<c0179084>] (path_lookup_open+0x0/0x2c) from [<c01743f4>] (open_exec+0x30/0xcc)
+[<c01743c4>] (open_exec+0x0/0xcc) from [<c0174868>] (do_execve+0x50/0x1d0)
+ r6:c0297b18 r5:c1c17300 r4:00000000
+[<c0174818>] (do_execve+0x0/0x1d0) from [<c0115c48>] (kernel_execve+0x40/0x8c)
+[<c0115c08>] (kernel_execve+0x0/0x8c) from [<c0138728>] (____call_usermodehelper+0xec/0xfc)
+ r7:c1c74700 r6:00000000 r5:c1f8e000 r4:00000000
+[<c013863c>] (____call_usermodehelper+0x0/0xfc) from [<c012c208>] (do_exit+0x0/0x6f4)
+ r7:00000000 r6:00000000 r5:00000000 r4:00000000
+Code: e5904080 e5906090 e3540000 1590308c (17943103) 
+---[ end trace 28e2f77155e6477e ]---
+Unable to handle kernel NULL pointer dereference at virtual address 0000000a
+pgd = c0004000
+[0000000a] *pgd=00000000
+Internal error: Oops: 1 [#2]
+Modules linked in:
+CPU: 0    Tainted: G      D    (2.6.27.26-svn16-dirty12 #67)
+PC is at __kmalloc+0x74/0xd0
+LR is at __kmalloc+0x48/0xd0
+pc : [<c016c620>]    lr : [<c016c5f4>]    psr: 20000093
+sp : c1c1dec0  ip : c029040c  fp : c1c1deec
+r10: 00000001  r9 : 00000000  r8 : 00000080
+r7 : c01a6af4  r6 : 000000d0  r5 : a0000013  r4 : 0000000a
+r3 : 00000000  r2 : 00000094  r1 : 000000d0  r0 : c029040c
+Flags: nzCv  IRQs off  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+Control: 0005317f  Table: 40004000  DAC: 00000017
+Process swapper (pid: 1, stack limit = 0xc1c1c268)
+Stack: (0xc1c1dec0 to 0xc1c1e000)
+dec0: c01a6820 c01a67ac 00000000 c02808e3 c0245e20 0000000e 00000000 000081a4 
+dee0: c1c1df1c c1c1def0 c01a6af4 c016c5bc c1c1df1c c02808e3 00000000 c0245e20 
+df00: c0014e54 00000000 00000000 00000000 c1c1df3c c1c1df20 c01a7034 c01a6a88 
+df20: c1c1df44 c1c135a0 00000000 00000000 c1c1df5c c1c1df40 c0014e80 c01a6fd4 
+df40: 00000000 c021ed40 c0015e7c c0015e80 c1c1dfd4 c1c1df60 c01122e4 c0014e64 
+df60: c1c1df8c c1c1df70 c01a70f4 c01a6e6c c1c1df00 c1c32540 c01a71f8 c1c1df96 
+df80: c1c1dfbc c1c1df90 c014c434 c01a7084 c1c1dfac 31336888 00000000 00000000 
+dfa0: 00000025 00000000 00000000 00000000 c1c1dfd4 c0015e80 00000000 00000000 
+dfc0: 00000000 00000000 c1c1dff4 c1c1dfd8 c000841c c01122a0 00000000 00000001 
+dfe0: 00000000 00000000 00000000 c1c1dff8 c012c208 c00083ac fff7bdff bbb7ffad 
+Backtrace: 
+[<c016c5ac>] (__kmalloc+0x0/0xd0) from [<c01a6af4>] (__proc_create+0x7c/0xe0)
+ r8:000081a4 r7:00000000 r6:0000000e r5:c0245e20 r4:c02808e3
+[<c01a6a78>] (__proc_create+0x0/0xe0) from [<c01a7034>] (proc_create_data+0x70/0xb0)
+[<c01a6fc4>] (proc_create_data+0x0/0xb0) from [<c0014e80>] (snd_mem_init+0x2c/0x4c)
+ r5:00000000 r4:00000000
+[<c0014e54>] (snd_mem_init+0x0/0x4c) from [<c01122e4>] (do_one_initcall+0x54/0x188)
+ r4:c0015e80
+[<c0112290>] (do_one_initcall+0x0/0x188) from [<c000841c>] (kernel_init+0x80/0xf4)
+ r8:00000000 r7:00000000 r6:00000000 r5:00000000 r4:c0015e80
+[<c000839c>] (kernel_init+0x0/0xf4) from [<c012c208>] (do_exit+0x0/0x6f4)
+ r4:00000000
+Code: e59c4080 e59c8090 e3540000 159c308c (17943103) 
+---[ end trace 28e2f77155e6477e ]---
+Kernel panic - not syncing: Attempted to kill init!
+
+(2), 对比之前正常的启动信息("1653_Linux_BGA282_sdramSamsung_keypad.pak"), 发现"ALSA device list"及其后信息没有打印出来. 
+Advanced Linux Sound Architecture Driver Version 1.0.17.
+ALSA device list:
+  No soundcards found.
+
+5), make clean && make, 仍然不行. 去掉"CONFIG_DEBUG_DRIVER"试试. 
+(1), 仍然不行, 可能是vmc_keypad.c改错了什么地方. 
+出错信息:
+input: vmc-keypad as /class/input/input0
+Unable to handle kernel NULL pointer dereference at virtual address 0000000a
+pgd = c0004000
+[0000000a] *pgd=00000000
+Internal error: Oops: 1 [#1]
+Modules linked in:
+CPU: 0    Not tainted  (2.6.27.26-svn16-dirty12 #70)
+PC is at __rcu_process_callbacks+0x158/0x1f8
+LR is at file_free_rcu+0x1c/0x24
+pc : [<c014ca70>]    lr : [<c0170260>]    psr: 20000013
+sp : c028fec8  ip : c028feb8  fp : c028fee4
+r10: 400159bc  r9 : 41069265  r8 : 400159f0
+r7 : c0292320  r6 : 00000007  r5 : 0000000a  r4 : c02a5cbc
+r3 : 0000000a  r2 : c1c87a80  r1 : c02ec0e0  r0 : c029040c
+Flags: nzCv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+Control: 0005317f  Table: 40004000  DAC: 00000017
+Process swapper (pid: 0, stack limit = 0xc028e268)
+Stack: (0xc028fec8 to 0xc0290000)
+fec0:                   c0295c1c c02a5cbc 00000007 c0292320 c028fefc c028fee8
+fee0: c014cb30 c014c928 c02a359c 00000001 c028ff1c c028ff00 c012df98 c014cb20
+ff00: c0295750 00000012 00000000 c0292320 c028ff2c c028ff20 c012e048 c012df48
+ff20: c028ff4c c028ff30 c0112048 c012e010 ffffffff fe002000 00040000 c0292320
+ff40: c028ffa4 c028ff50 c0112870 c0112010 00000000 0005317f 0005217f 60000013
+ff60: c0113c6c c028e000 c0110ef0 c0292320 400159f0 41069265 400159bc c028ffa4
+ff80: 600000d3 c028ff98 c0113cb4 c0113cc0 60000013 ffffffff c028ffbc c028ffa8
+ffa0: c0113c50 c0113c7c c02a5fa0 c029e0d0 c028ffcc c028ffc0 c0238288 c0113c20
+ffc0: c028fff4 c028ffd0 c0008990 c0238240 c0008490 00000000 00000000 c0110ef4
+ffe0: 00053175 c029e5e8 00000000 c028fff8 40008034 c0008724 00000000 00000000
+Backtrace:
+[<c014c918>] (__rcu_process_callbacks+0x0/0x1f8) from [<c014cb30>] (rcu_process_callbacks+0x20/0x38)
+ r7:c0292320 r6:00000007 r5:c02a5cbc r4:c0295c1c
+[<c014cb10>] (rcu_process_callbacks+0x0/0x38) from [<c012df98>] (__do_softirq+0x60/0xc8)
+ r5:00000001 r4:c02a359c
+[<c012df38>] (__do_softirq+0x0/0xc8) from [<c012e048>] (irq_exit+0x48/0x50)
+ r7:c0292320 r6:00000000 r5:00000012 r4:c0295750
+[<c012e000>] (irq_exit+0x0/0x50) from [<c0112048>] (__exception_text_start+0x48/0x60)
+[<c0112000>] (__exception_text_start+0x0/0x60) from [<c0112870>] (__irq_svc+0x30/0x80)
+Exception stack(0xc028ff50 to 0xc028ff98)
+ff40:                                     00000000 0005317f 0005217f 60000013
+ff60: c0113c6c c028e000 c0110ef0 c0292320 400159f0 41069265 400159bc c028ffa4
+ff80: 600000d3 c028ff98 c0113cb4 c0113cc0 60000013 ffffffff
+ r7:c0292320 r6:00040000 r5:fe002000 r4:ffffffff
+[<c0113c6c>] (default_idle+0x0/0x5c) from [<c0113c50>] (cpu_idle+0x40/0x5c)
+[<c0113c10>] (cpu_idle+0x0/0x5c) from [<c0238288>] (rest_init+0x58/0x6c)
+ r5:c029e0d0 r4:c02a5fa0
+[<c0238230>] (rest_init+0x0/0x6c) from [<c0008990>] (start_kernel+0x27c/0x2d4)
+[<c0008714>] (start_kernel+0x0/0x2d4) from [<40008034>] (0x40008034)
+ r5:c029e5e8 r4:00053175
+Code: e5943024 e3530000 089da8f0 e3a06000 (e5935000)
+Kernel panic - not syncing: Fatal exception in interrupt
+
+查找"pc = c014ca70"的内容:
+[dec@localhost vmc]$ arm-none-linux-gnueabi-objdump -Sx vmlinux | grep c014ca70 -A 20 -B 20
+                rcp->completed = rcp->cur;
+c014ca58:       e5853004        str     r3, [r5, #4]
+                rcu_start_batch(rcp);
+c014ca5c:       ebffff3b        bl      c014c750 <rcu_start_batch>
+                        spin_unlock(&rcp->lock);
+                }
+        }
+
+        rcu_check_quiescent_state(rcp, rdp);
+        if (rdp->donelist)
+
+c014ca60:       e5943024        ldr     r3, [r4, #36]
+c014ca64:       e3530000        cmp     r3, #0  ; 0x0
+c014ca68:       089da8f0        ldmeq   sp, {r4, r5, r6, r7, fp, sp, pc}
+c014ca6c:       e3a06000        mov     r6, #0  ; 0x0
+        struct rcu_head *next, *list;
+        int count = 0;
+
+        list = rdp->donelist;
+        while (list) {
+                next = list->next;
+c014ca70:       e5935000        ldr     r5, [r3]
+c014ca74:       f5d5f000        pld     [r5]
+                prefetch(next);
+                list->func(list);
+c014ca78:       e1a00003        mov     r0, r3
+c014ca7c:       e1a0e00f        mov     lr, pc
+c014ca80:       e593f004        ldr     pc, [r3, #4]
+                list = next;
+                if (++count >= rdp->blimit)
+c014ca84:       e594302c        ldr     r3, [r4, #44]
+c014ca88:       e2866001        add     r6, r6, #1      ; 0x1
+c014ca8c:       e1560003        cmp     r6, r3
+{
+        struct rcu_head *next, *list;
+        int count = 0;
+
+        list = rdp->donelist;
+        while (list) {
+c014ca90:       e1a03005        mov     r3, r5
+                next = list->next;
+                prefetch(next);
+                list->func(list);
+                list = next;
+                if (++count >= rdp->blimit)
+c014ca94:       aa000001        bge     c014caa0 <__rcu_process_callbacks+0x188>
+{
+        struct rcu_head *next, *list;
+        int count = 0;
+
+        list = rdp->donelist;
+        while (list) {
+c014ca98:       e3550000        cmp     r5, #0  ; 0x0
+c014ca9c:       1afffff3        bne     c014ca70 <__rcu_process_callbacks+0x158>
+                list->func(list);
+                list = next;
+                if (++count >= rdp->blimit)
+                        break;
+        }
+        rdp->donelist = list;
+c014caa0:       e5845024        str     r5, [r4, #36]
+
+        local_irq_disable();
+c014caa4:       e10f3000        mrs     r3, CPSR
+c014caa8:       e3833080        orr     r3, r3, #128    ; 0x80
+c014caac:       e121f003        msr     CPSR_c, r3
+        rdp->qlen -= count;
+c014cab0:       e5943018        ldr     r3, [r4, #24]
+c014cab4:       e0663003        rsb     r3, r6, r3
+c014cab8:       e5843018        str     r3, [r4, #24]
+        local_irq_enable();
+c014cabc:       e10f3000        mrs     r3, CPSR
+c014cac0:       e3c33080        bic     r3, r3, #128    ; 0x80
+c014cac4:       e121f003        msr     CPSR_c, r3
+
+6), 感觉是rcu上的东西有问题. rcu暂时没什么调试办法,
+(1), 去掉kpd试试: 可以. 
+(2), 加入一些调试信息后又可以了, 没办法只能先备份代码. 
+(3), 1934_Linux_BGA282_sdramSamsung_kpd_timerDebug.pak是好的. 
+1945_Linux_BGA282_sdramSamsung_kpd_timerDebug.pak, 1929_Linux_BGA282_sdramSamsung_kpd_timerDebug.pak是坏的. 与好的只差下面两个调试信息. 
+//	printk(KERN_DEBUG "%s: will enter mutex.\n", __FUNCTION__);
+//	printk(KERN_DEBUG "%s: exit.\n", __FUNCTION__);
+(4), 开lowlevel debug后, 原来好的也死了. 
+在zhicheng板子上死的位置不同. 现在第一个出错的函数要么是rcu要么是kmem_cache_alloc.
+(5), 现在发现1934多数也都跑不起来, 能跑起来是偶尔的. 
+(6), 关闭"CONFIG_DEBUG_FS", 也就是关闭clock.c中的调试用文件系统. 关闭lowleveldebug. 打开printk time(时间不太正常, 从0直接跳到42949372: 
+[    0.000000] clock event mult=4294967
+[42949372.960000] Console: colour dummy device 80x30
+同时观察到, 每次到了"vc0830_add_device_uart()"都会有停顿. 
+[42949373.270000] arch/arm/mach-vmc/vc0830_devices.c: 66: vc0830_add_device_uart
+[42949374.050000] msgmni has been set to 57
+(7), 目前另外一个问题就是不知道用哪个设备文件, 没有预期的dev文件. 
+例如鼠标就有: /sys/class/input/mice/dev
+
+2, 尝试读取设备文件. 
+
+9:48 2009-9-26
+VC1600, VC0718, ARM11, 调试, <TODO>整理, 总结</TODO>
+arm1176的jtag调试与arm7,arm9有较大调整:
+写入指令, 数据分别用scan chain4, 5.
+arm11支持在arm core运行状态通过jtag读写core数据.
+
+10:13 2009-9-27
+时间管理
+1, 今天
+1), 解决830 kpd Linux driver bug
+
+2, 时间管理
+1), 10:10-14:00 830 kpd Linux driver bug
+(中间午饭)
+2), 14:00-15:10, LiaoZhiCheng, ZhangPu和ZhangJian讨论Linux移植下一步计划. 
+15:10-15:30, meeting minutes.
+3), 15:30-17:00 svn如何建立分支? fail. 当初svn目录不合理. 只能以后注意了.
+4), 17:00-18:50 linux kpd driver
+
+10:14 2009-9-27
+Linux移植, Kpd, input, <TODO>总结</TODO>
+1, 实验:
+1), 去掉不必要的debug信息, 加入ll debug
+2), 对比原来kernel, add uart步骤是否会停, 更新我们自己的uart代码试试: 现象一样. 
+3), 如果不行, 一步一步注释kpd代码. 
+(1), kpd platform probe不处理后没有问题. 
+(2), probe中"vmc_keypad_build_keycode()"引起的问题:
+证据: 只执行vmc_keypad_build_keycode前的函数, kernel启动正常. 加上vmc_keypad_build_keycode kernel启动会fail. 另外只注释vmc_keypad_build_keycode函数, probe和kernel启动正常. 
+(3), 查vmc_keypad_build_keycode.
+有可能是:
+		keypad->matrix_keycodes[(row << 3) + col] = code;
+ 的问题, <<3可以是考虑到pxa27x最大是8x.
+(4), 把#define MAX_MATRIX_KEY_NUM	(5 * 5)改为
+#define MAX_MATRIX_KEY_NUM	(8 * 8)
+即可. 呵呵, 查到最后发现是数组溢出了. <TODO>总结</TODO>
+(5), <TODO>下一步是看为什么有的按键没有报到event, 并分析输出十六进制是否正确</TODO>
+
+2, (17:28 2009-9-27)
+键盘基本完成. 明天上传代码. 开始看timer. <DONE>
+
+15:14 2009-9-27
+Linux移植, meeting, 总结, 整理
+LiaoZhiCheng, Zhangpu, Zhangjian
+1, Linux移植近期计划
+我们的Linux移植工作主要分为core和driver两部分. 
+1), core包括timer, uart, irq等, 目前主要是Zhicheng和Zhangjian看, 计划是按照专题分析,总结. 目前在看timer, 之后顺序看uart, irq. 
+2), driver, 按子系统分析, 例如framebuffer(ZhangPu), mtd(LiaoZhiCheng), SD(ZhangJian), USB(SunGuangYue)等等. 
+
+2, 建立一个Linux bbs. 大家有什么进展都放到上面. 
+负责人: zhangpu.
+主要为了解决邮件不便于归类整理, 不便于共享. 
+3, LiaoZhiCheng写一个830 Linux最小子系统环境, 包括如果使用830 Linux(bootloader打包, rvdebug load), kernel启动过程及何时调用了最小子系统的接口, 最小子系统介绍(memory映射, I/O映射, irq使用, clk使用), 其中clk部分由ZhangJian负责. 
+
+16:55 2009-9-27
+Linux移植, SVN, 现在SVN没有建立分支, 用起来不太方便, 下次建立SVN时一定得按标准layout做, <TODO>总结</TODO>
+
+10:12 2009-9-28
+时间管理
+1, 计划
+timer分析, 晚上分析kpd出问题原因. 
+
+2, 时间表
+1), -10:16 杂;
+2), 10:16-10:40 上传Linux kpd代码. 
+3), 10:40-11:15 讨论Linux BBS.
+4), 午饭, 午睡.
+5), 14:00-15:00 Linux timer分析.
+6), 15:00-15:43 改进batchswitch工具, 可以选择AASP前运行batchSwitch. 
+
+10:30 2009-9-28
+Linux移植, kpd, input设备, 上传代码
+changLog20090928_1032(for revision 25)
+1, add vc0830 kpd input device driver, currently only 5x3 button(not 5x5) @ BGA282 chip.
+you can config 830 kpd using: 
+Device Drvier -> Input device support -> Event interface -- Y
+                                         Event debugging -- Y
+                                         Keyboards -> Vc0830 keypad support -- Y
+                                                        Vc0830 keypad debug -- Y
+2, add some comment in timer module(including hrtimer, timer, clocksource, 
+
+11:24 2009-9-28
+Linux移植, timer
+1, 阅读"内核的时间系统.pdf"(36, Linux\doc\kernel\timer)
+event_handler，刚会根据系统采用的时间配置信
+息，在后面注册的过程中，最终建立。按照我目前的调试信息，它与CONFIG_NO_HZ
+和CONFIG_HIGH_RES_TIMERS有关.最终是这个样子的：
+1) CONFIG_NO_HZ=y CONFIG_HIGH_RES_TIMERS=n : event_handler=tick_nohz_handler → The nohz low res interrupt handler
+2) CONFIG_NO_HZ=y/n CONFIG_HIGH_RES_TIMERS=y : event_handler=hrtimer_interrupt -->High resolution timer interrupt
+1) CONFIG_NO_HZ=n CONFIG_HIGH_RES_TIMERS=n : event_handler=tick_handle_periodic() → Event handler for periodic ticks
+
+2, 疑问jiffies clock source是什么时候注册的? 
+
+3, 系统计时精度是tick的情况(定义CONFIG_GENERIC_TIME和CONFIG_GENERIC_CLOCKEVENTS, 未定义CONFIG_HIGH_RES_TIMERS, CONFIG_TICK_ONESHOT, CONFIG_NO_HZ):
+1), 注册和初始化
+start_kernel -> tick_init() 注册tick事件(clock event)回调函数. arch无关. 
+             -> setup_arch() 设置system_timer指针. arm专用, machine提供指针. 
+             -> init_timers() 初始化系统定时器--timer wheel(用于timeout的timer), 
+                  arch无关. 
+             -> hrtimers_init() 初始化hrtimer, 如果未定义CONFIG_HIGH_RES_TIMERS
+                  实际是利用time  wheel 模拟hrtimer(所以最小精度仍然是tick). 
+             -> timekeeping_init() Initializes the clocksource and common 
+                timekeeping values: 获取相应的 clock source,读取硬件时钟的cycle,
+                给xtime及wall-to-monotic初始化, 这些变量在后面是经常遇到的. (自"
+                内核时间系统.pdf")
+             -> time_init() 执行system_timer->init(), arm专用, machine提供函数. 
+
+13:55 2009-9-29
+(15:33 2009-9-30)
+Linux移植, 总结, <TODO></TODO>
+1, 系统描述
+1), 在opt下放置文件系统. 
+2), 由platform bus管理资源: irq, register?
+
+2, 进展:
+1), core: mdesc, timer, uart;
+2), driver: framebuffer, kpd.
+
+3, 问题:
+1), printk的时间从0直接跳到很大. 
+2), uart接收文件. 
+
+4, IC改进建议:
+1), timer: OSTimer: 中断到来后继续计数, 这样更符合Linux要求. 
+2), uart: rx fifo, 没有容易丢数, 接收文件会有问题. 
+
+16:06 2009-9-29
+Linux移植, timer
+1, clock event 模式, 共三个
+#define CLOCK_EVT_FEAT_PERIODIC		0x000001
+#define CLOCK_EVT_FEAT_ONESHOT		0x000002
+/*
+ * x86(64) specific misfeatures:
+ *
+ * - Clockevent source stops in C3 State and needs broadcast support.
+ * - Local APIC timer is used as a dummy device.
+ */
+#define CLOCK_EVT_FEAT_C3STOP		0x000004
+
+2, 从menuconfig看, broadcast似乎只在SMP时使用才有意义. 从下面的代码分析看, 如果只有一个clock event, 是没法开启broadcast的. 
+1), tick_device_uses_broadcast()/tick_check_broadcast_device()/tick_do_broadcast_on_off() -> tick_broadcast_start_periodic() -> tick_setup_periodic(xxx, 1);
+
+tick_setup_device() -> tick_device_uses_broadcast()
+
+tick_notify() -> tick_check_new_device() -> tick_setup_device() -> tick_setup_periodic(xxx, 0);
+
+2), tick_device_uses_broadcast 只有当定义了 CLOCK_EVT_FEAT_DUMMY 时才会开 通过  tick_broadcast_start_periodic() -> tick_setup_periodic(xxx, 1); 开启broadcast.
+
+3, 与timer有关的内核配置选项: 
+CONFIG_GENERIC_TIME: 采用Linux通用计时架构, 与体系结构无关.
+CONFIG_GENERIC_CLOCKEVENTS: 使用clock event device抽象timer中断的行为, timer中断处理不直接调用tick, process_profiling等处理函数, 而是通过clock_event_device的event_handler调用.
+CONFIG_GENERIC_CLOCKEVENTS_BROADCAST: 似乎是SMP时才有意义. 单CPU没必要设置. 
+CONFIG_TICK_ONESHOT: 是定义CONFIG_NO_HZ或CONFIG_HIGH_RES_TIMERS时自动选择. 这里要区分"CLOCK_EVT_FEAT_ONESHOT", 前者是kernel机制, 后者是clock event device的属性. 如果没有CLOCK_EVT_FEAT_ONESHOT属性, 是没法支持CONFIG_TICK_ONESHOT机制的. 这点可以从tick_check_oneshot_change()->tick_is_oneshot_available()看出. 
+CONFIG_NO_HZ: tickless
+CONFIG_HIGH_RES_TIMERS: 高精度timer, 最小精度是1ns.
+
+4, (21:22 2009-9-29)现在clock_event_device, hrtimer都差不多了. clock_source和no_hz还需要看. 
+
+16:42 2009-9-29
+项目, VC0882, storate, sd, 文档, <TODO></TODO>
+1, 看eMMC: 2_32gb_emmc_ctrlr_q_j534q567s_v4_4[1].pdf
+2, 文档资料位于"\\10.0.2.36\sqmshare\Document", 其中"BusIF"是总线资料. 
+
+18:06 2009-9-29
+VC0830, clkrst, clkswitch, 修改判定频点相同依据, <TODO>总结</TODO>
+0, 总结: 修改后的算法判定频点相同依据改为: xclk相同, pll频率(单位Mhz)相同, cpu_bus_div相同, vdec_div相同(可选). 目前没有考虑不同pll频率但是cpu,bus频率相同的频点, 因为: 
+1), ddr memory参数中pll1/2_sdrc_adj受bus divider影响, 所以bus divider不同对于ddr memory来说应该看成不同频点;
+2), 考虑pll频率限制(480-672)和我们配置频点时按最高pll频率(pll频率越高噪声越小)计算, 所以频点是唯一的额. 
+
+1, dashan报clksv切频时没有列出所有频点, 但是batchSwitch时频点不少. 调试还是Clkrst_Drv_SysInfo_Cmp_ingoreVdec函数的问题. pll需要比较数值,这样会不会不准确呢? 
+
+2, CVS
+zhangjian, clkrst, clkswitch
+1), 修改 Clkrst_Drv_SysInfo_Cmp_ingoreVdec(), 比较TSystemInfo时计算pll频率, 而不是只比较pll_ckd.
+2), 微调了打印信息, 这样更便于使用. 
+
+3, CVS log
+Checking in Makefile;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/Makefile,v  <--  Makefile
+new revision: 1.84; previous revision: 1.83
+done
+Checking in config.mk;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/config.mk,v  <--  config.mk
+new revision: 1.116; previous revision: 1.115
+done
+Checking in autotest/video_auto.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/autotest/video_auto.c,v  <--  video_auto.c
+new revision: 1.6; previous revision: 1.5
+done
+Checking in clkrst/app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.48; previous revision: 1.47
+done
+Checking in clkrst/app/clkrst_app_module_clock.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.c,v  <--  clkrst_app_module_clock.c
+new revision: 1.9; previous revision: 1.8
+done
+Checking in clkrst/app/clkrst_app_switch.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.c,v  <--  clkrst_app_switch.c
+new revision: 1.13; previous revision: 1.12
+done
+Checking in clkrst/driver/clkrst_drv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+new revision: 1.12; previous revision: 1.11
+done
+Checking in clkrst/driver/clkrst_drv_system_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.c,v  <--  clkrst_drv_system_info.c
+new revision: 1.6; previous revision: 1.5
+done
+Checking in clkrst/driver/clkrst_drv_type.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_type.h,v  <--  clkrst_drv_type.h
+new revision: 1.3; previous revision: 1.2
+done
+
+4, CVS(vc0830_sv_memscan_use_spi_eeprom): 
+zhangjian, clkrst, clkswitch, 加入520_260_86频点, 测试: clksv命令能否把不同pll_ckd但相同pll_freq看成是同一个频点.
+
+Checking in batchswitch_info_SV_sdramSamsung.txt;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/vc0830_sv_memscan_use_spi_eeprom/SpiScanMemPack/batchswitch_info_SV_sdramSamsung.txt,v  <--  batchswitch_info_SV_sdramSamsung.txt
+new revision: 1.5; previous revision: 1.4
+done
+
+
+21:24 2009-9-29
+Linux移植, <TODO></TODO>
+1, linux编译信息是编译前生成的, 对错误无处理. eclipse中的parser可能还得用perl处理. 
+2, kpd问题需要调试, data abort是否在同一地址区域出现? 与数组有多远? 数组写入magic 数据验证想法.
+
+13:21 2009-9-30
+时间管理
+1, 
+1), 请假, 确认有无半天事假. \todo aiguo签字.
+2), Linux timer阶段性总结.
+3), 实验usb net.
+4), \todo in future
+(1), emmc协议, boot: 先看一下micron的boot opeation部分, 计划十一看完. 
+(2), Linux timer估计十一还需要看.
+(3), framebuffer机制得作为远期计划了.
+(4), jtag协议需要适时结合openocd代码看. s3c6410其实就是基于arm1176的. 如果买过来很有利于学习. 其实最好的办法是将来利用FPGA学习. 有机会可以了解arm core. 
+
+2, 
+1), 13:22-13:39 杂core. 
+
+13:32 2009-9-30
+公司, 服务器, 密码, 10.0.2.208, share, share
+
+13:35 2009-9-30
+VC0830, SV, MP4量产进展, 切频稳定性, rvmb播大码流文件, <TODO>关注切频问题</TODO>
+1, MP4量产进展, 切频稳定性和rvmb播大码流文件
+Steven邮件"答复: VC0831 Task Tracking List_20090929"20090930_2253
+A型已再出货400台，未发现问题（配新的切频参数和切频流程）
+B和C两个3”的，参数稳定了要尽快传到深圳，明天我要把3”样机寄给客户，用做国庆期间的宣传。同时客户将进行测试，准备国庆后开始试产。Yangxiaobo今天发了邮件要参数，我还没有看到发过来。
+请xulei加快调试30/100的任务，客户已经等很久了。也希望能在国庆前release出来，用于国庆期间的宣传。
+
+2, rmvb优化: 
+1), XuLei邮件"答复: VC0831 Task Tracking List_20090929"20090930_1048
+关于rmvb的30/100的任务，我们的Task Tracking List 上的Deadline是11.10号。我今天可以给出一版代码，能较流畅的播放nand上的我手头的几个大码率的rmvb文件。但是，这版新修改的代码，我昨天晚上才完成，还没有经过QA的批量测试验证。目前，我可以单独release一版代码，针对几个重点文件进行测试，保证其稳定。
+2), (10:00 2009-10-9)
+StevenLiu邮件"答复: 【Item27】30M/100M RMVB文件调试"20090930_2001
+实际看了一下，蓝光预告片的可以通过，虽然个别地方有点卡，但总体效果比较好。
+夺宝奇兵和GT赛车都有严重的丢帧，特别是GT赛车，效果比不上未优化的版本，感觉是丢帧太多，所以出现大段的直接跳帧的情况。需要继续优化。其实这两个我们原来效果已经还可以了，也许可以在原来的机制上去做优化更好。
+"10:00 2009-10-9"
+
+3, 切频稳定性:
+"A型机：高低温切频OK
+B型机: 高低温切频OK
+C型机：高低温切频OK (用youhai 的切频)
+D型机：参数已经搜出,发现切频时会死掉，死机的频率不固定,各个频点都有。从X_CLK 向其它的频点切的时候会死掉,经weiran 查切频时会有200mv 的电压跳动,是否是该原因引起无定论。相关的log 文件已经上传到36供linchuan 分析。在BUS 144M 下做DMA 搬运,不小于5000次未发现问题。原因不明,正在排查中
+E型机：E-1串口出现了问题
+G型机：SPI 扫描参数，G-1串口突然坏掉了.E/G型机只能明天相关人员修好之后,才能继续走
+按照linchuan 的要求,搜索出相应的4.3寸板子改精度和电阻的参数,供其分"
+
+13:39 2009-9-30
+置底:
+1, arm11, cortex-a8调试中要注意了解原来arm9调试的经验(IC, ICP). 
+2, 了解816切频问题
+
+14:00 2009-9-30
+(10:42 2011-1-12)
+公司, 绩效考核, 评价
+2008Q4: 善于思考，积极进取，继续努力！
+2009Q1: 任务多，工作重，希望能够按时完成任务。
+2009Q2: 工作认真负责，善于钻研，希继续努力。
+2010: 工作富有激情，学习能力强，需要加强工作的合理安排和进度的控制，同时需要学习项目的协调和管理。
+
+16:20 2009-9-30
+VC0830, SV, memory, 供电, mobile ddr(micron)供电是3.3v时读写不正常, 改为1.8v后正常.
+
+18:08 2009-9-30
+Linux移植, usb gargage
+1, usb garbge driver: PC端可以找到网卡. 
+2, kernel panic crc error, 可能是编译器不正确.
+zhicheng用的是"arm-eabi-gcc 4.2.1"
+3, 但后来换了config文件就行了. 备份config:
+D:\work\VC0830\SV\code_image\20090930\836_image
+4, 可能是命令问题, 十一回来用我们的文件系统试试. 
+
+22:56 2009-10-8
+项目, Linux移植, 工作总结, 本周工作总结, 9月工作总结, 20090921-20090927, 20090928-20090930
+1, Linux移植:
+1), 继续上周完成Linux Clock支持. 1天
+2), 0925: zhangpu framebuffer基本调通. 
+3), 继续看timer, 参考hrtimer相关资料(详见"10:46 2009-9-25"), 对Linux timer有了宏观理解. 2.5天
+4), kpd driver. >1天. 
+2, svn使用.  0.5天. 
+3, 0923: VC0882 kick off会议及会议记录整理. 1天
+4, 0929: VC0830 clkrst的batchSwitch有点小问题, 原来关闭的启动自动切频重新打开. 其实当初修改是就没必要关闭这个功能(仅仅是VC屏蔽这个选项即可). 
+
+23:16 2009-10-8
+项目, Linux移植, 工作总结, 9月工作总结
+1, Linux移植
+1), debug kernel uart porting code. 
+2), 完成kernel打包工具, 为了简单没有使用bootloader, 如果定义了830板子直接在内核启动时设置arch和machine id(将来如果有多个830板子, 这样就不行了). 同时改进打包工具————自动在zImage前填入0x8000内容, 保证zImage从0x8000处开始运行. 
+3), driver: 
+(1), zhangpu, 使用楼下framebuffer driver跑通.
+(2), Linux pclk: 支持iclk和pclk配置.
+(3), Linux keypad(kpd) driver: 支持5x3键盘. 
+
+2, VC0830: 
+1), 一个工作失误: 填512info的memory电流时写成了0x0xffffffff, 打包工具parser时实际看成了0. 造成我和ZhouDaShan部分测试结果无效. 影响已经挽回(by Aiguo and dashan). 但对于自己来说首先是给出去的东西需要double check, 自己填写时需要注意, 另外软件需要更robust毕竟人总有马虎的时候, 还有就是职责需要分清————熟悉的人做熟悉的东西.
+2), 本月前10天有70%时间用于eorex-6切频和batchSwitch工具), 后面共有1-2天时间支持dashan和修改batchSwitch. 
+
+3, VC1600: 了解arm jtag调试基本原理, 用5个以上上下班时间看了看arm1176的jtag调试资料. 
+
+16:51 2009-11-30
+VC0830, SV, 量产, 切频, 批量切频工具, 最终版, 文档
+邮件是Zhangjian给ZhouDaShan, 2009年9月28日, 2009年9月29日. 
+映像位置: D:\work\VC0830\SV\阶段映像和log\20090928_批量切频release
+文档见"12:59 2009-9-8"6

@@ -1,0 +1,1681 @@
+﻿13:55 2009-2-1
+(10:48 2009-2-2)
+Linux学习, 移植, 代码阅读, c语言, time/timer, "vimicro_Linux移植文档"4-4, DONE
+4, time/timer分析
+本部分分析Linux系统time(时间,计时)和timer(定时器), 不涉及clock(时钟).
+1), 相关数据结构:
+(1), "jiffies/jiffies_64"变量: jiffies_64存放系统自启动以来的节拍总数, 
+jiffies_64定义如下: 
+timer.c (kernel):u64 jiffies_64 __cacheline_aligned_in_smp = INITIAL_JIFFIES;
+jiffies在"vmlinux.lds.S (arch\arm\kernel)"链接时指定为"jiffies_64"低32位. 
+#ifndef __ARMEB__
+jiffies = jiffies_64;
+#else
+jiffies = jiffies_64 + 4;
+#endif
+
+(2), "xtime"变量
+存放当前日期和时间, 包括:
+tv_sec: 自1970年1月1日0点开始的秒数;
+tv_nsec: 上一秒后经过的纳秒数. 注意tv_nesc恒大于0, 小于1s.
+由"do_timer()"函数更新, 定义: kernel\time\timekeeping.c: struct timespec xtime __attribute__ ((aligned (16)));
+
+(3), 是否使用通用计时体系架构
+配置"CONFIG_GENERIC_TIME"=y/n. Linux通用计时架构在"kernel\time\timekeeping.c"中实现, 支持多个时钟源(clocksource), 注册新时钟源时系统自动选择最好的(rating高者)时钟源作为系统next clock source. 在时钟源中断处理中调用"update_wall_time"更新系统时间后会选择next clock source作为系统当前时钟源. 
+时钟源用struct clocksource(include\linux\clocksource.h)表示, 每个时钟源对应一个硬件定时器. 使用Linux通用计时架构时machine自己至少要定义一个时钟源, 至少填写下列函数/变量:
+read():用于读取clocksource的当前cycle,do_gettimeofday()(kernel\time\timekeeping)会调用此函数.
+mask, mult, shift: 用于cycle到ns的转换. mult和系统时钟相关, 可以在SOC定时器初始化后计算.
+
+(4), "system_timer"变量
+"struct sys_timer *system_timer"是arm linux用于管理系统定时器的结构体, 在
+"arch\arm\kernel\time.c" 定义, "struct sys_timer"在"include\asm-arm\mach\time.h"定义.
+init(): 系统时间管理初始化, 参见"time_init()"分析.
+suspend()\resume(): 电源管理函数.
+offset(): 返回上一次处理jiffy timer中断后经过的microseconds. 这个函数一定要考虑未处理的timer中断. 未定义"CONFIG_GENERIC_TIME"时需要实现offset()以实现arm的"do_gettimeofday()"; 如果定义了"CONFIG_GENERIC_TIME", offset()不需要实现, "do_gettimeofday()"通过Linux通用函数和clocksource.read()实现.
+
+(5), 是否使用clock event device
+配置"CONFIG_GENERIC_CLOCKEVENTS"=y/n. 如果"CONFIG_GENERIC_CLOCKEVENTS"=y, Linux系统时钟的定时器中断通过clock event设备实现, 这是Linux通用方法. 如果=n, 定时器中断通过arm linux自己的"timer_tick()"函数实现.
+
+(6), 软中断
+Linux系统定时器通过软中断实现.
+
+(7), Linux系统定时器事件通过"struct tvec_t_base"维护: 
+struct tvec_base {
+    spinlock_t lock;
+    struct timer_list *running_timer;
+    unsigned long timer_jiffies;
+    struct tvec_root tv1;
+    struct tvec tv2;
+    struct tvec tv3;
+    struct tvec tv4;
+    struct tvec tv5;
+} ____cacheline_aligned;
+
+struct tvec_base boot_tvec_bases;
+EXPORT_SYMBOL(boot_tvec_bases);
+base->tv1 -- base->tv5(base是tvec_base_t类型指针)是5组定时器事件链表, 调用"internal_add_timer()"把定时器事件按到时时间长短分配到五组链表中, 其中tv1包含最近要发生的定时器事件. Linux这种定时器处理机制即保证了定时器事件有序排列, 又避免了定时器事件链表过长. 定时器事件处理机制与内核移植关系不大, 放到"time/timer详细分析"部分.
+
+2), 函数调用关系
+下面的分析中s3c24xx移植未定义"CONFIG_GENERIC_TIME" 和 "CONFIG_GENERIC_CLOCKEVENTS". pxa移植定义了"CONFIG_GENERIC_TIME"和 "CONFIG_GENERIC_CLOCKEVENTS"
+
+start_kernel()
+    ->tick_init():注册系统tick事件的顶层通知函数. dep:CONFIG_GENERIC_CLOCKEVENTS
+    ->setup_arch(): "system_timer"指针赋值为"s3c24xx_timer".
+    ->init_timers(): 初始化系统定时器
+        ->timer_cpu_notify(): 初始化是系统定时器链表
+        ->open_softirq(): 注册系统定时器软中断回调函数"run_timer_softirq()". 
+    ->timekeeping_init(): 计时初始化: 初始化时钟源和通用计时变量. 
+    ->time_init(): 计时(timekeeping)初始化
+    ->kernel_init()
+        ->...
+            ->do_initcalls()
+                ->timer_init_sysfs(): 注册timer到sysfs
+
+(2), tick_init()分析
+ * start_kernel()->
+ * 注册系统tick事件的顶层通知函数:
+ * 注册"tick_notifier" 到"clockevents_chain". "tick_notifier.notifier_call()"
+ * (tick_notify())是clock event框架的notifier函数, 这个函数用于响应不同的tick事
+ * 件(添加新设备, 广播模式, 电源管理(suspend, resume))并调用底层硬件操作函数.
+
+(3), time_init()分析, 系统时间管理初始化, 分别分析s3c24xx和pxa两种实现方法:
+a, s3c24xx:
+->system_timer->init()(s3c2410_timer_init()): 配置jiffy timer并注册中断
+    ->s3c2410_timer_setup(): 配置jiffy timer
+    ->setup_irq(): 注册jiffy timer中断, 回调函数是"s3c2410_timer_interrupt"
+b, pxa:
+->system_timer->init()(pxa_timer_init())
+    ->setup_irq(): 注册中断处理函数"pxa_ost0_interrupt()"
+    ->clocksource_register(): 注册用于内核计时的时钟源.
+    ->clockevents_register_device(): 注册clock event设备供时钟中断处理函数调用; 调用"clockevents_do_notify()"设置它的event_handler: tick_handle_periodic.
+
+(2), 中断处理, 目前看到有两种实现方式, 
+i, s3c24xx方式:
+s3c24xx中"time_init()"注册的中断处理函数是"s3c2410_timer_interrupt()", 它会调用"timer_tick()", 此函数完成:
+a, 调用"do_timer()"更新jiffies_64和系统时间xtime.
+b, 调用"update_process_times()":
+a), 通过"raise_softirq()"触发"run_timer_softirq()"进而处理已经到时的系统定时器事件.
+b), 进程时间片计算
+
+ii, pxa方式: 定义"CONFIG_GENERIC_CLOCKEVENTS"时通过clock_event_device实现.
+中断注册过程与s3c24xx相同. 中断处理中, 中断处理函数"pxa_ost0_interrupt"通过"tick_handle_periodic()"调用"do_timer()"和"update_process_times()"
+
+(3), 系统调用:
+sys_gettimeofday()
+    ->do_gettimeofday(): 获得系统当前时间.
+        s3c24xx:
+            ...->system_timer.offsetof()(s3c2410_gettimeoffset())
+        pxa: 
+            ...->cs->read()(pxa_read_oscr())
+
+3), 移植工作:
+(1), 时钟移植可以参考pxa的时钟, 它使用了Linux通用计时架构(s3c24xx和at91sam9261未使用. 感觉用更好些). 使用通用计时架构至少需要自己定义一个时钟源.
+(2), 移植需要填充machine_desc的"sys_timer"结构体, 该结构体一般在"arch\arm\mach-xxx\time.c"中定义. 必须要实现其中的init和offset函数.
+(3), 实现系统时钟所用的timer的中断处理程序, 一般是直接调用"time_tick()"并返回"IRQ_HANDLED".
+
+17:48 2009-2-1
+Linux学习, 移植, 代码阅读, time/timer详细分析, do_gettimeofday()分析, "vimicro_Linux移植文档"7-3, DONE
+3, 获得系统当前时间
+"do_gettimeofday()"用于获得系统当前时间. 系统调用"sys_gettimeofday()"通过它实现; 内核其它模块通过"do_gettimeofday()"得到当前时间.
+1), 定义"CONFIG_GENERIC_TIME"时, 相关函数都位于"kernel\time\timekeeping.c", 这是Linux通用处理方式:
+do_gettimeofday()
+    ->getnstimeofday()
+        ->持有"xtime_lock"
+            ->__get_nsec_offset()
+                ->clocksource_read()
+                    ->cs->read()(pxa_read_oscr()): 直接返回os timer计数器值.
+
+(1), getnstimeofday()分析
+ * 从"__get_nsec_offset()"得到新增ns, 加到现有时间ts上.
+
+(2), __get_nsec_offset()分析
+ * 返回上一次周期性时钟处理后的新增纳秒数.
+ * 调用"clocksource.read"读取当前时钟源clock的cycle, 与"clock->cycle_last"相减
+ * 得到新增cycle数, 返回其对于的纳秒. "clock->cycle_last"由时钟中断更新
+ * (update_wall_time())
+
+2), 未定义"CONFIG_GENERIC_TIME"时, 分析arm Linux的特有方式:
+getnstimeofday()(kernel\time.c)
+    ->do_gettimeofday()(arch\arm\kernel)
+
+(1), getnstimeofday():功能同上. 这个函数是内核内公用函数, 必须要实现. arm linux中借助do_gettimeofday实现. 
+
+(2), do_gettimeofday()(arch\arm\kernel\time.c):
+ * 在顺序锁"xtime_lock"保护下, 读取最新xtime, 加上"system_timer->offset()"得到
+ * 最新系统时间, 返回这个值.
+
+11:24 2009-2-2
+Linux学习, 移植, 代码阅读, c语言, clock, "vimicro_Linux移植文档"4-5, DONE
+5, clock分析
+本节分析Linux设备时钟clock(clk)的注册, 使用. 这部分Linux没有通用结构体, 只是定义了统一的函数接口, 详见文件"clk.h(include\linux)"注释, 其中规定了函数原型和行为: 包括必选函数和可选函数.
+1), 数据结构
+(1), clocks
+clock.c(arch\arm\plat-s3c24xx): static LIST_HEAD(clocks)
+保存所有s3c24xx struct clk的链表
+
+(2), clk.h中要求的接口函数
+i, clk_get(): 
+ * 增加clock的引用计数, s3c24xx中直接增加module的引用计数.
+ * 查找并得到clock指针. s3c24xx中直接查找clocks全局链表;
+
+ii, clk_put(), 可选
+ * 减少module的引用计数.
+ * Note: drivers must ensure that all clk_enable calls made on this
+ * clock source are balanced by clk_disable calls prior to calling
+ * this function.
+
+iii, clk_enable()
+ * ->(clk->enable)(clk, 1)
+ * clk.h要求如果不支持enable, 也返回成功(0).
+ * 先enable parent, clk未使用(usage==0)时使能时钟
+
+iv, clk_disable()
+ * ->(clk->enable)(clk, 0)
+ * clk.h要求如果不支持disable, 也返回成功(0).
+
+v, clk_get_rate().
+
+vi, clk_round_rate(), 可选
+ * 根据用户预期rate, round到clock可以产生的合理rate
+
+vii, clk_set_rate(), 可选
+
+viii, clk_get_parent(), 可选
+
+ix, clk_set_parent(), 可选
+
+(3), struct clk
+ * 用于管理s3c24xx clock. 通过list把所有clock加入到链表. 通过parent形成树型结构.
+ * 函数由clk.h定义的接口函数调用.
+struct clk {
+    //通过"s3c24xx_register_clock()"函数把clk.list插入到clocks静态全局链表
+    struct list_head      list;
+    //"s3c24xx_register_clock()"函数设为"THIS_MODULE", 即指向当前模块
+    struct module        *owner;
+    /** V_ZJ
+     * clock的parent:
+     * 1, 时钟源parent为NULL:
+     * 2, 模块的clock的parent为s3c24xx六个时钟源之一.
+     */
+    struct clk           *parent;
+    //这个clock的name
+    const char           *name;
+    //s3c24xx的id都是"-1"
+    int              id;
+    /** V_ZJ
+     * 0: 未使用; n(>0): 在使用, n表示引用计数, 有n个设备正在使用这个时钟源. 只
+     * 有当n=1时才会调用disable, 否则只是减小引用计数.
+     */
+    int              usage;
+    //时钟频率, 单位是Hz.
+    unsigned long         rate;
+    //"s3c2410_clkcon_enable()"函数修改S3C2410_CLKCON对应位从而使能或禁止clock
+    unsigned long         ctrlbit;
+
+    /** V_ZJ
+     * 使能或禁止时钟, 若空. "s3c24xx_register_clock()"会设为
+     * "clk_null_enable()", 该函数直接返回0
+     */
+    int            (*enable)(struct clk *, int enable);
+    int            (*set_rate)(struct clk *c, unsigned long rate);
+    unsigned long        (*get_rate)(struct clk *c);
+    unsigned long        (*round_rate)(struct clk *c, unsigned long rate);
+    //设置parent, 可能需要根据parent修改外设的寄存器
+    int            (*set_parent)(struct clk *c, struct clk *parent);
+};
+
+2), 函数调用关系
+mdesc->map_io()(smdk2440_map_io())
+    ->s3c24xx_init_clocks()
+        ->(cpu->init_clocks)(xtal)(s3c244x_init_clocks()).
+
+(1), "arch_initcall"分析
+    ->s3c24xx_clk_driver(): arch\arm\mach-s3c2440\clock.c, 注册s3c2440特有时钟camera和ac97到s3c24xx的clocks链表中
+    ->s3c2440_clk_init(): arch\arm\plat-s3c24xx\s3c244x-clock.c: s3c244x特有时钟处理部分.
+
+(2), s3c24xx_init_clocks()分析:
+ * smdk2440_map_io()->
+ * ->s3c244x_init_clocks()
+ * 根据给出的外部晶振频率初始化时钟子系统及其相关信息
+
+(3), s3c244x_init_clocks()分析:
+ * 1, 根据pll配置和xtal计算fclk, pclk, hclk;
+ * 2, 调用"s3c24xx_setup_clocks"注册外部晶振, 两个pll, fclk, pclk, hclk这六个时
+ * 钟到clocks静态全局链表
+ * 3, 调用"s3c2410_baseclk_add()"注册s3c24xx通用的外设时钟到clocks静态全局链表.
+
+(4), arch\arm\plat-s3c24xx\clock.c:
+clk_set_rate()
+    ->(clk->set_rate)(clk, rate);
+
+(5), 注册s3c244x时钟和s3c2440时钟:
+"arch_initcall"
+    ->s3c24xx_clk_driver(): mach-s3c2440\clock.c, 注册s3c2440特有时钟camera和ac97到s3c24xx的clocks链表中
+    ->s3c2440_clk_init(): s3c244x-clock.c: s3c244x特有时钟处理部分.
+两个函数都是调用"s3c24xx_register_clock()"注册时钟.
+
+3), 移植工作
+这部分移植工作量较大:
+(1), 定义合理的"struct clk": 至少要有rate, parent, list等. 
+(2), 按"clk.h(include\linux)"要求实现接口函数. 
+(3), 在合适的位置做clock初始化, 配置时钟并把所有clock加入全局list. s3c24xx是在"mdesc->map_io()和arch_initcall"中完成此项工作的. VC0830移植中没有platform层, smdk2440中分三层注册时钟都方法可以简化——把所有clock注册都放到"mdesc->map_io()" 中.
+
+13:41 2009-2-2
+Linux学习, 内核, 参考资料, <TODO>待看</TODO>
+1, The Linux Kernel HOWTO
+http://linuxdocs.org/HOWTOs/Kernel-HOWTO.html
+This is a detailed guide to kernel configuration, compilation, upgrades, and troubleshooting for ix86-based systems.
+2, Linux Kernel Documentation
+http://www.kernel.org/doc/
+This page collects and organizes documentation about the Linux kernel, taken from many different sources. What is the kernel, how do you build it, how do you use it, how do you change it...
+3, Kernel Rebuild Guide
+http://www.digitalhermit.com/linux/Kernel-Build-HOWTO.html
+4, Linux online
+http://www.linux.org/
+5, kconfig language 
+Documentation/kbuild/kconfig-language.txt
+6, The Linux Documentation Project, 据说不错, 细看.
+http://browseatwork.com/nph-proxy.cgi/000000A/http/www.tldp.org/
+使用Tor和privoxy访问tldp
+http://blog.chinaunix.net/u/6303/showart_245226.html
+7, qemu: open source processor emulator
+http://bellard.org/qemu/index.html
+
+18:18 2009-2-2
+Linux学习, 移植, 代码阅读, 函数调用关系图, "vimicro_Linux移植文档"3
+三, 与内核移植有关的函数调用关系图
+对于移植来说, 有三部分函数调用关系很重要: 
+内核启动过程中调用了哪些与体系结构相关的函数; 
+内核启动阶段如何通过printk输出log;
+Linux内核响应中断的过程.
+这里简单列出相关函数调用关系, 移植相关的函数分析见后面文档, 时间关系没有画成visio图, 稍候我会改为visio图.
+
+1, 内核启动阶段:
+start_kernel()
+    ->tick_init():注册系统tick事件的顶层通知函数. dep:CONFIG_GENERIC_CLOCKEVENTS
+    ->setup_arch()(arch\arm\kernel\setup.c): arm体系结构相关初始化
+        ->paging_init()(arch\arm\mm\mmu.c)
+            ->bootmem_init(): 根据memory配置得到high_memory地址
+            ->devicemaps_init(), 参"21:29 2009-7-6"
+                ->mdesc->map_io()(smdk2440_map_io())
+                    ->s3c24xx_init_io(): 调用"iotable_init()"把IO寄存器从物理地址映射到虚地址.
+                    ->s3c24xx_init_clocks(): 根据给出的外部晶振频率初始化时钟子系统及其相关信息.
+                    ->s3c24xx_init_uarts(): 设置uart platform device
+        "system_timer = mdesc->timer;": 为"system_timer"指针赋值.
+    ->parse_args(): 根据__start___param--__stop___param的参数处理command_line
+        ->unknown_bootoption(): 未找到匹配的参数的回调函数
+            ->obsolete_checksetup(): 在"__setup_start"--"__setup_end"之间匹配param name等于"line"的"struct obs_kernel_param"并执行其setup_func().
+                ->console_setup(): 设置console_cmdline[x]
+    ->trap_init(): 把异常向量处理代码复制到指定地址.
+    ->init_IRQ(): 中断初始化. s3c24xx中只初始化s3c24xx共有中断.
+    ->init_timers(): 初始化系统定时器
+    ->hrtimers_init(): 初始化高精度定时器, 定义"HRTIMER_SOFTIRQ"时注册软中断回调函数. arm处理器实现的很少(只找到Omap_h2_1610, Omap_osk_5912实现).
+    ->softirq_init():通过给"softirq_vec"数组赋值软中断编号和回调函数.与移植无关.
+    ->timekeeping_init(): 计时初始化: 初始化时钟源和通用计时变量. 
+    ->time_init(): 系统时间管理部分.
+    ->console_init(): 初始化console硬件, 注册console设备到Linux内核. 注册成功后会把注册前printk输出的log从buffer输出到终端.
+
+    ->rest_init(): 执行到这里内核启动就基本完成了:)
+        ->kernel_thread(kernel_init, NULL, CLONE_FS | CLONE_SIGHAND)
+            ->kernel_init(): 内核中的第一个内核线程
+                ->do_basic_setup()
+                    ->do_initcalls(): 需要在内核启动中执行的初始化函数. 详见do_initcalls()分析
+                        "arch_initcall"
+                            ->customize_machine()
+                                ->init_machine()(smdk2440_machine_init()): machine初始化, 主要是注册machine的device到系统.
+                            ->s3c24xx_clk_driver(): mach-s3c2440\clock.c, 注册s3c2440特有时钟camera和ac97到s3c24xx的clocks链表中
+                            ->s3c_arch_init(): s3c24xx通用初始化
+                            ->s3c2440_irq_init()(mach-s3c2440\irq.c), 中断注册
+                            ->s3c2440_clk_init(): s3c244x-clock.c: s3c244x特有时钟处理部分.
+                            ->s3c2440_irq_init()(s3c244x-irq.c), 中断注册
+                        "device_initcall"
+                            ->timer_init_sysfs(): 注册timer到sysfs,详见timer分析
+                ->init_post()：init_post中启动init脚本, init脚本启动后内核启动完成. init进程启动后, 系统控制权交给应用层, 应用层会继续执行初始化脚本, 开启终端.
+
+2, 中断调用过程: 见"中断机制"部分.
+
+3, printk输出log流程: 见"console(uart)"的"printk输出log"部分.
+
+11:38 2009-2-3
+Linux学习, 移植, 代码阅读, c语言, IO mapping, "vimicro_Linux移植文档"4-6, DONE
+6, IO映射
+把IO从物理地址映射到虚拟地址.
+1), 函数调用关系
+mdesc->map_io()(smdk2440_map_io())
+    ->s3c24xx_init_io(): 调用iotable_init把io从物理地址映射到虚地址
+        ->iotable_init()
+
+(1), s3c24xx_init_io()(arch\arm\plat-s3c24xx\cpu.c)分析:
+ * mdesc->map_io()(smdk2440_map_io())->
+ * ->(cpu->map_io)()(s3c244x_map_io())
+ * 调用iotable_init把io从物理地址映射到虚地址: IO映射需要虚拟地址, 物理pfn, IO
+ * 寄存器大小和type(对于IO来时都是"MT_DEVICE")四个参数.
+ * 1, 调用"iotable_init()"映射s3c24xx通用IO
+ * 2, 调用"(cpu->map_io)()"映射各CPU特有IO.
+
+17:49 2009-2-3
+Linux学习, 移植, 代码阅读, c语言, time, timekeeping_init()+time_init()分析, <TODO>补充</TODO>
+分定义和未定义"CONFIG_GENERIC_TIME"两种情况. 定义以pxa为例, 未定义以s3c24xx为例.
+只有当定义了"CONFIG_GENERIC_TIME=y"的开发板才调用"clocksouce_register"注册除了"clocksource_jiffies"以外的时钟源. 但是s3c24xx未定义"CONFIG_GENERIC_TIME", 这里以zylonite且支持pxa3xx的板子(zylonite_defconfig)分析.
+
+1, 数据结构
+1), struct clocksource
+include\linux\clocksource.h
+struct clocksource {
+    /*
+     * First part of structure is read mostly
+     */
+    char *name;
+    struct list_head list;
+    //rating越大说明越适合做时钟源, 似乎是用户自己设定的.
+    int rating;
+    cycle_t (*read)(void);
+    cycle_t mask;
+    u32 mult;
+    u32 shift;
+    unsigned long flags;
+    cycle_t (*vread)(void);
+    void (*resume)(void);
+#ifdef CONFIG_IA64
+    void *fsys_mmio;        /* used by fsyscall asm code */
+#define CLKSRC_FSYS_MMIO_SET(mmio, addr)      ((mmio) = (addr))
+#else
+#define CLKSRC_FSYS_MMIO_SET(mmio, addr)      do { } while (0)
+#endif
+
+    /* timekeeping specific data, ignore */
+    cycle_t cycle_interval;
+    u64	xtime_interval;
+    /*
+     * Second part is written at each timer interrupt
+     * Keep it in a different cache line to dirty no
+     * more than one cache line.
+     */
+    cycle_t cycle_last ____cacheline_aligned_in_smp;
+    u64 xtime_nsec;
+    s64 error;
+
+#ifdef CONFIG_CLOCKSOURCE_WATCHDOG
+    /* Watchdog related data, used by the framework */
+    struct list_head wd_list;
+    cycle_t wd_last;
+#endif
+};
+
+2), 
+arch\arm\mach-pxa\time.c:
+static struct clocksource cksrc_pxa_oscr0 = {
+    .name           = "oscr0",
+    .rating         = 200,
+    .read           = pxa_read_oscr,
+    .mask           = CLOCKSOURCE_MASK(32),
+    .shift          = 20,
+    .flags        = CLOCK_SOURCE_IS_CONTINUOUS,
+};
+
+3), 
+static struct clocksource *curr_clocksource = &clocksource_jiffies;
+static struct clocksource *next_clocksource;
+static struct clocksource *clocksource_override;
+static LIST_HEAD(clocksource_list);
+ * curr_clocksource: 当前时钟源
+ * next_clocksource: 当前最好的时钟源, 下次调用"select_clocksource()"会设置为
+ * "curr_clocksource"
+ * clocksource_list: 时钟源列表, clocksource_list.next是rating最大的时钟源.
+
+2, 具体函数分析(定义"CONFIG_GENERIC_TIME")
+start_kernel()
+    ->timekeeping_init()
+        ->clocksource_get_next()
+    ->time_init()
+        ->system_timer->init()(pxa_timer_init())
+            ->clocksource_register(): 时钟源注册
+                ->clocksource_enqueue()
+                ->select_clocksource()
+            ->clockevents_register_device(): 注册clock event设备(ckevt_pxa_osmr0), 参考"15:51 2008-11-21"
+
+1), timekeeping_init()分析:
+  * start_kernel()->
+  * 初始化时钟源和通用计时变量
+  * 1, 调用"read_persistent_clock()"读取系统底层时钟, 在x86中是读取rtc时间. arm
+  * 未实现该函数, 默认函数返回0. 
+  * 2, ntp_clear(): 清除NTP状态变量, <TODO>作用未知</TODO>
+  * 3, 调用"clocksource_get_next"获得时钟源. 此时由于"finished_booting"未设置, 
+  * 所以得到的是"clocksource_jiffies"--把jiffy作为时钟源.
+  * 4, 调用"clocksource_calculate_interval"设置clock.cycle_interval和
+  * clock.xtime_interval
+  * 5, 设置"xtime"初值, 并调用"set_normalized_timespec()"调整为合理值.
+  * 6, "update_xtime_cache()"和"total_sleep_time"未看. <TODO></TODO>
+
+2), clocksource_get_next()分析: 
+  * timekeeping_init()->
+  * 返回当前时钟源:
+  * 1, 如果设置了"next_clocksource", 且内核启动完成, 设置"next_clocksource"为
+  * "curr_clocksource"; 否则返回默认"curr_clocksource"--clocksource_jiffies
+  * 2, "next_clocksource"由"select_clocksource()"给出
+  * 3, 这里的"finished_booting"变量在fs_initcall中通过
+  * "clocksource_done_booting()"置1.
+
+3), time_init()
+ * ->system_timer->init()(s3c2410_timer_init(), pxa_timer_init()...)
+ * 利用setup_arch()设置"system_timer"用于初始化系统时间: 
+ * 1, 判断system_timer有无offset()函数, 若无, 设置dummp函数--
+ * "dummy_gettimeoffset". 
+ * 2, 调用"system_timer->init()"配置jiffy timer并注册中断.
+ * 3, "CONFIG_NO_IDLE_HZ"未定义, 暂不分析.
+ * 宏"CONFIG_GENERIC_TIME" 和 "CONFIG_NO_IDLE_HZ" at91xx和s3c24xx都未定义. 
+ * "CONFIG_GENERIC_TIME"表示使用内核提供的通用"do_gettimeofday"而不是体系结构
+ * 自己定义的函数.  
+
+4), select_clocksource()分析: 
+  * "clocksource_enqueue()"会为"clocksource_list"加入新时钟源
+
+5), clocksource_enqueue()分析:
+ * clocksource_register()->
+ * 按照"clocksource.rating"从大到小顺序, 把新时钟源"c"插入"clocksource_list"
+
+3, 未定义"CONFIG_GENERIC_TIME":
+start_kernel()
+    ->time_init(): 
+        ->system_timer->init()(s3c2410_timer_init()): 配置jiffy timer并注册中断
+            ->s3c2410_timer_setup(): 配置jiffy timer
+                ->clk_get()     :配置使用timer中断时
+                ->clk_enable()  :需要clock的相关操作
+                ->clk_get_rate():函数.
+            ->setup_irq(IRQ_TIMER4, &s3c2410_timer_irq): 注册jiffy timer中断, "s3c2410_timer_irq.handler"是"s3c2410_timer_interrupt", 每次timer中断时会调用"timer_tick()"并返回"IRQ_HANDLED".
+
+9:43 2009-2-5
+Linux学习, 移植, 代码阅读, 遗留问题, "vimicro_Linux移植文档"5, DONE
+五, 遗留问题
+这里描述了目前smdk2440相关文件分析状态以及遗留问题
+1, 文件分析状态
+跳过的文件主要是设备驱动相关的文件(来自文件"log_0122112851_porting_state").
+DONE: arch/arm/mach-s3c2440/clock.c
+DONE: arch/arm/mach-s3c2440/irq.c
+DONE: arch/arm/mach-s3c2440/Kconfig
+DONE: arch/arm/mach-s3c2440/mach-smdk2440.c
+DONE: arch/arm/mach-s3c2440/Makefile
+DONE: arch/arm/mach-s3c2440/s3c2440.c
+DONE: arch/arm/plat-s3c24xx/clock.c
+DONE: arch/arm/plat-s3c24xx/common-smdk.c
+DONE: arch/arm/plat-s3c24xx/cpu.c
+DONE: arch/arm/plat-s3c24xx/devs.c
+DONE: arch/arm/plat-s3c24xx/gpio.c
+DONE: arch/arm/plat-s3c24xx/irq.c
+DONE: arch/arm/plat-s3c24xx/Kconfig
+DONE: arch/arm/plat-s3c24xx/Makefile
+DONE: arch/arm/plat-s3c24xx/s3c244x.c
+DONE: arch/arm/plat-s3c24xx/s3c244x-clock.c
+DONE: arch/arm/plat-s3c24xx/s3c244x.h
+DONE: arch/arm/plat-s3c24xx/s3c244x-irq.c
+DONE: arch/arm/plat-s3c24xx/time.c
+DONE: include/asm-arm/arch-s3c2410/debug-macro.S
+DONE: include/asm-arm/arch-s3c2410/entry-macro.S
+DONE: include/asm-arm/arch-s3c2410/fb.h
+DONE: include/asm-arm/arch-s3c2410/gpio.h
+DONE: include/asm-arm/arch-s3c2410/hardware.h
+DONE: include/asm-arm/arch-s3c2410/idle.h
+DONE: include/asm-arm/arch-s3c2410/irqs.h
+DONE: include/asm-arm/arch-s3c2410/leds-gpio.h
+DONE: include/asm-arm/arch-s3c2410/map.h
+DONE: include/asm-arm/arch-s3c2410/memory.h
+DONE: include/asm-arm/arch-s3c2410/regs-clock.h
+DONE: include/asm-arm/arch-s3c2410/regs-irq.h
+DONE: include/asm-arm/arch-s3c2410/reset.h
+DONE: include/asm-arm/arch-s3c2410/uncompress.h
+DONE: include/asm-arm/arch-s3c2410/vmalloc.h
+DONE: include/asm-arm/plat-s3c24xx/clock.h
+DONE: include/asm-arm/plat-s3c24xx/common-smdk.h
+DONE: include/asm-arm/plat-s3c24xx/cpu.h
+DONE: include/asm-arm/plat-s3c24xx/devs.h
+DONE: include/asm-arm/plat-s3c24xx/irq.h
+DONE: include/asm-arm/plat-s3c24xx/s3c2400.h
+DONE: include/asm-arm/plat-s3c24xx/s3c2410.h
+DONE: include/asm-arm/plat-s3c24xx/s3c2412.h
+DONE: include/asm-arm/plat-s3c24xx/s3c2440.h
+DONE: include/asm-arm/plat-s3c24xx/s3c2442.h
+DONE: include/asm-arm/plat-s3c24xx/s3c2443.h
+DONE: include/asm-arm/plat-s3c/debug-macro.S
+DONE: include/asm-arm/plat-s3c/map.h
+DONE: include/asm-arm/plat-s3c/regs-rtc.h
+DONE: include/asm-arm/plat-s3c/regs-timer.h
+DONE: include/asm-arm/plat-s3c/regs-watchdog.h
+DONE: include/asm-arm/plat-s3c/uncompress.h
+SKIP: arch/arm/mach-s3c2440/dma.c
+SKIP: arch/arm/mach-s3c2440/dsc.c
+SKIP: arch/arm/mach-s3c2440/mach-anubis.c
+SKIP: arch/arm/mach-s3c2440/mach-nexcoder.c
+SKIP: arch/arm/mach-s3c2440/mach-osiris.c
+SKIP: arch/arm/mach-s3c2440/mach-rx3715.c
+SKIP: arch/arm/plat-s3c24xx/dma.c
+SKIP: arch/arm/plat-s3c24xx/pm.c
+SKIP: arch/arm/plat-s3c24xx/pm-simtec.c
+SKIP: arch/arm/plat-s3c24xx/sleep.S
+SKIP: include/asm-arm/arch-s3c2410/anubis-cpld.h
+SKIP: include/asm-arm/arch-s3c2410/anubis-irq.h
+SKIP: include/asm-arm/arch-s3c2410/anubis-map.h
+SKIP: include/asm-arm/arch-s3c2410/audio.h
+SKIP: include/asm-arm/arch-s3c2410/bast-cpld.h
+SKIP: include/asm-arm/arch-s3c2410/bast-irq.h
+SKIP: include/asm-arm/arch-s3c2410/bast-map.h
+SKIP: include/asm-arm/arch-s3c2410/bast-pmu.h
+SKIP: include/asm-arm/arch-s3c2410/dma.h
+SKIP: include/asm-arm/arch-s3c2410/h1940.h
+SKIP: include/asm-arm/arch-s3c2410/h1940-latch.h
+SKIP: include/asm-arm/arch-s3c2410/osiris-cpld.h
+SKIP: include/asm-arm/arch-s3c2410/osiris-map.h
+SKIP: include/asm-arm/arch-s3c2410/otom-map.h
+SKIP: include/asm-arm/arch-s3c2410/regs-dsc.h
+SKIP: include/asm-arm/arch-s3c2410/regs-gpio.h
+SKIP: include/asm-arm/arch-s3c2410/regs-gpioj.h
+SKIP: include/asm-arm/arch-s3c2410/regs-lcd.h
+SKIP: include/asm-arm/arch-s3c2410/regs-mem.h
+SKIP: include/asm-arm/arch-s3c2410/regs-power.h
+SKIP: include/asm-arm/arch-s3c2410/regs-s3c2412.h
+SKIP: include/asm-arm/arch-s3c2410/regs-s3c2443-clock.h
+SKIP: include/asm-arm/arch-s3c2410/regs-sdi.h
+SKIP: include/asm-arm/arch-s3c2410/spi-gpio.h
+SKIP: include/asm-arm/arch-s3c2410/spi.h
+SKIP: include/asm-arm/arch-s3c2410/timex.h
+SKIP: include/asm-arm/arch-s3c2410/usb-control.h
+SKIP: include/asm-arm/arch-s3c2410/vr1000-cpld.h
+SKIP: include/asm-arm/arch-s3c2410/vr1000-irq.h
+SKIP: include/asm-arm/arch-s3c2410/vr1000-map.h
+SKIP: include/asm-arm/plat-s3c24xx/dma.h
+SKIP: include/asm-arm/plat-s3c24xx/pm.h
+SKIP: include/asm-arm/plat-s3c24xx/regs-iis.h
+SKIP: include/asm-arm/plat-s3c24xx/regs-s3c2412-iis.h
+SKIP: include/asm-arm/plat-s3c24xx/regs-spi.h
+SKIP: include/asm-arm/plat-s3c24xx/regs-udc.h
+SKIP: include/asm-arm/plat-s3c24xx/udc.h
+SKIP: include/asm-arm/plat-s3c/iic.h
+SKIP: include/asm-arm/plat-s3c/nand.h
+SKIP: include/asm-arm/plat-s3c/regs-ac97.h
+SKIP: include/asm-arm/plat-s3c/regs-adc.h
+SKIP: include/asm-arm/plat-s3c/regs-iic.h
+SKIP: include/asm-arm/plat-s3c/regs-nand.h
+UNDONE: arch/arm/mach-s3c2440/modules.order
+UNDONE: arch/arm/plat-s3c24xx/modules.order
+UNDONE: arch/arm/plat-s3c/Kconfig
+UNDONE: include/asm-arm/arch-s3c2410/io.h
+UNDONE: include/asm-arm/arch-s3c2410/system.h
+UNDONE: include/asm-arm/plat-s3c/regs-serial.h
+
+2), 遗留问题
+(1), 需要了解setup_kernel()中每个函数的大致作用, 是否与移植有关.
+
+(2), 下面文件的生成过程, 参考Standard way of generating assembler offsets=++.txt
+asm-offsets.c(arch\arm\kernel)
+    ->asm-offsets.s(arch\arm\kernel)
+        ->asm-offsets.h(include\asm-arm)
+文档中提到.s->.h通过awk脚本实现的，暂时没有找到这个对应脚本.
+
+(3), linux/kernel/hrtimer.c, 基于timer.c高精度内核定时器. 定时器事件处理中调用了hrt函数. 未分析是否与移植相关.
+
+(4), 各模块只分析了主线, 需要进一步分析.
+
+(5), yaffs2是否支持4k flash? 有无补丁.
+
+(6), 如何调试Linux内核?
+
+(7), machine.io_pg_offst在何处使用?
+
+(8), Makefile(arch\arm)与移植很大关系, 未分析完成.
+
+10:35 2009-2-5
+项目会议, 8xx(830, 816), <TODO>下一阶段任务</TODO>
+自: 研发记录簿, p21.
+1, 会议主要内容:
+1), 830 SV 3/15 开始测试;
+2), 816希望4/15tape out, 遗留模块分工见研发记录簿.
+3), 747计划2010年2月tape out, 需要15人, 目前人员严重不足, 需要招人, 可以推荐.
+
+2, 下一阶段任务
+1), Linux文档1-2天内完成, 我计划今天加班完成;
+2), 1完成后, 找Aiguo要SD卡和SDIO文档, 目前SD由Feng beizhan负责, 一个人不够. 我看文档后, 可能需要我调816/830 sd代码.
+3), 830 SVPCB版图, 目前由Lingming负责, 我也需要参与, 看版图.
+
+13:50 2009-2-6
+Linux学习, 移植, 代码阅读, time/timer, __run_timers(), <TODO>补充</TODO>
+"vimicro_Linux移植文档"中没有对__run_timers及tvec_base详细分析, 其实Linux定时器实现的很巧妙, 在加入定时器事件时按顺序插入不同链表组, 只有tv1中快到期的定时器事件, 这样每次到期时就不需要便利整个链表. 如果用一个链表组, 链表组的长度应该等于定时器到时时间, 这会造成巨大空间浪费, tv2-tv5按指数保存的定时器事件解决了这个问题.
+下面是分析草稿: 
+__run_timers()(kernel\timer.c)分析
+这里实际处理系统定时器事件, "jiffies"表示当前时间, "base->timer_jiffies"表示上次调用"__run_timers()"后已处理过定时器事件的时间+1. 如果前者大于后者, 说明有事件需要处理, 进入"base->timer_jiffies"这个时间点上定时器事件处理. 一般每次定时器中断都会及时处理, 所以 "jiffies-base->timer_jiffies==1".
+"base->timer_jiffies"时间点上的定时器事件是已经到时的定时器事件.
+a, 前面已经提到base->tv1 -- base->tv5按事件发生时间长短保存定时器事件. 如果base->tvx已经没有需要处理的事件, 说明base->tx+1链表组中有到期事件. 调用"cascade()"把base->tx+1的事件重新加入到base->tv1 -- base->tvx+1链表中.
+b, 已经到时的定时器事件都位于base->tv1+index的对应链表中, 处理该链表中所有事件----即执行"timer->function(timer->data)".
+
+10:56 2009-2-9
+"vimicro_Linux移植文档", <TODO>完善文档</TODO>
+1, 从"s3c2440 Linux移植分析_V0.1"更新log对于内容;
+2, 闲暇时间优化结构, 晚上详细分析各章.
+3, 完成其中遗留问题;
+4, 阅读网上相关文档.
+
+22:25 2009-2-8
+Linux学习, 工具, 函数关系图
+Linux代码函数关系复杂, 且随版本变动, 直接用visio画图不方便. 目前需要一个函数关系图分析工具:
+1, 根据代码自动分析函数调用关系, 生成函数调用关系图. 
+2, 生成的关系图可以修改, 可以不显示次要函数, 可以修改函数调用关系. 这些都可以反标回代码;
+3, 可以做为外挂工具用于sourceinsight, 能跨平台更好;
+
+14:16 2009-2-9
+VC0830学习, 模块, memory, sdrc(sdram, ddr controller), SDRC注意事项, <TODO>进一步了解</TODO>
+本日志自"VC0830_SDRC_Driver_Spec"(CVS: VC0830\VC0830\document\Driver Spec), sdrc与Linux移植可能有关.
+1, 扫描程序的准备：由于内存是基本的工作单元和基础，我们应用程序均是跑在SDRAM中。在SDRAM中扫描SDRAM ,如果出错，导致程序跑飞,很难定位原因。首先我们将程序跑在sram中，对sdram 进行读写操作，调好了，再更改程序，跑在sdram中，扫描sdram，如果没有出错，再跑830实际的复杂case.这样调试，能够比较容易定位原因。对于读写操作，做了各种情况的扫描，按照int ,short ,char ，顺序，逆序，跳跃扫描几种。后来，又发现这样的赋值针对地址环绕，无法排除原因，比如在一个内存的地址写进了一个值，但是在内存的另一个地方，也被修改了，该地址一般是128的整数倍我们又增加了检测地址环绕的case.
+拿到一款内存芯片，首先了解它的spec ，重点是开头的一些重要参数
+    工作电压
+    内存大小,
+    bank ,位宽，
+    page 大小，
+    cas latency 的大小
+    这几个参数比较重要。其它的一些寄存器的参数对于SDRAM的影响不是很大。
+2, 对于地址环绕的调试
+    产生地址环绕有2个原因：
+1)	我们对于内存bank,位宽，page 大小等寄存器没有配正确。
+2)	内存芯片的焊接问题
+    首先排查是否是寄存器没有配好，如果配的正确，我们需要怀疑焊接的问题。查找出错的地址数据线。方法：将发生环绕的地址线拆分成行和列，写出行列的数值，然后在行和列互换，去该地址查找是否有相同的数值，如果有，则说明是焊接问题。
+3, 内存出现没有规律的错误
+1)	需要核实我们的芯片是我们spec对应的芯片，有的芯片从硬件组拿过来，并没相应的标号，这个需要和他们核实。在这个问题上走过弯路。
+2)	查看工作电压等硬件指标。这一点很重要，我们之前也走过弯路。SDRAM的电压被作死成3.3V。导致1.6V和2.5V的SDRAM出现不可预知的问题。
+3)	调整寄存器的tcbr 这个参数 （CBR times when initialize 0~7 = 1~16 times），如果这个时间预留的不够，也会导致内存出现没有规律的错误，我们现在配的数值有1，2，3三种。
+4, 内存中数据前移后移的问题
+      这个比较好调整，通过调整sdrc的read data path 来进行调节。
+5, FPGA的timing 问题
+由于我们的FPGA的timing 各个版本可能会有差异，导致好多在以前版本上通过的sdram ,DDR SDRAM 需要重新改写寄存器重新配置。并且在不同的频率下，timing 也不一定相同，所以，需要各个频率下都要测试检验。
+6, DDR /SDRAM 刷新的问题
+现象就是内存中的数据大部分是正确的。偶而会出现错误的数据。
+产生这样的原因大致有2种，
+1)	刷新频率过慢，导致电容并不稳定 
+2)	硬件本身的原因，比如板上的电压过大，或者频率并不是它spec 规定的频率，都会产生这样的原因。这两种现象均出现过。 
+7, 对白片的测试
+由于没有spec文件，我们对于寄存器的配置不知道是否正确。我们无法定位出错的原因，比如内存地址写错了。不知道是什么原因，为此我们设计了一个白片扫描程序，将可能的寄存器配置（960种可能的配置组合）分别配给SDRAM，然后启动扫描，找到一个正确的配置。如果SDRAM是正常的，或者是我们支持的片子，这960种配置组合里面，总归是有几种能够扫描通过。否则，认为该SDRAM我们不支持，或者该芯片有问题。
+8, 如果以上的方法都试过，均无效，只好上逻辑分析仪看sdrc的内部信号了。  
+
+14:28 2009-2-9
+Linux学习, 脚本(script), bash, "vimicro_Linux移植文档"使用的脚本
+位置: linux-2.6.25.20\s3c24xx_analysis\get_un_done_file
+这个脚本用于输出smdk2440相关目录文件是否完成分析的列表, 完成分析的文件的文件开始的注释会有文件功能介绍.
+
+脚本:
+#!/bin/bash
+#This script output the file analysis status in the following directory:
+#  arch/arm/plat-s3c24xx/* arch/arm/plat-s3c/* arch/arm/mach-s3c2440/* include/asm-arm/plat-s3c/* include/asm-arm/plat-s3c24xx/* include/asm-arm/arch-s3c2410/*
+#  excluding *.mod.c, *.o
+#If the first line of file is:
+#  "PORTING_ANALYSIS_DONE": this file has been analized.
+#  "PORTING_ANALYSIS_UNDONE": this file is not analized.
+#  "PORTING_ANALYSIS_SKIP": this file is skipped.
+#Usage:
+# s3c24xx_analysis/get_un_done_file log/log_`date +%m%d%H%M%S`_porting_state
+# output result to file "log/log_`date +%m%d%H%M%S`_porting_state" and shell
+
+#first arg is filename; second arg is state(DONE/UNDONE); 
+#third arg is log_filename
+#forth arg is wether output messsage to shell or not(SHELL means output)
+echo_file_state() 
+{
+	echo $2: $1 >> $3
+	if [ "$4" == "SHELL" ];then
+		echo $2: $1 		
+	fi
+}
+
+#common varible
+undone="UNDONE"
+done="DONE"
+skip="SKIP"
+output_to_shell="SHELL"
+
+#parse args
+if [ "$1" != "" ];then
+	log_filename=$1
+else
+	echo no log file exit;
+	exit 1
+fi
+
+#get file list
+filelist=`ls arch/arm/plat-s3c24xx/* arch/arm/plat-s3c/* arch/arm/mach-s3c2440/* include/asm-arm/plat-s3c/* include/asm-arm/plat-s3c24xx/* include/asm-arm/arch-s3c2410/*`
+filelist=`echo $filelist | sed "s/\<[^\ ]*mod\.c\>//g" | sed "s/\<[^\ ]*\.o\>//g"`
+#echo file list is $filelist
+
+#wether is done or not
+for file in $filelist; do
+	first_line=`head -n 1 $file | sed "s/\/\*//" | sed "s/\#//" | sed "s/^\/\///" | sed "s/_ZJ//"`
+#	echo first line is \"$first_line\"
+	if  [ "$first_line" == "" ]; then
+		echo_file_state $file $undone $log_filename
+		continue
+	elif [ "$first_line" == "PORTING_ANALYSIS_$done" ]; then
+		echo_file_state $file $done $log_filename
+	elif [ "$first_line" == "PORTING_ANALYSIS_$skip" ]; then
+		echo_file_state $file $skip $log_filename
+	else
+		echo_file_state $file $undone $log_filename $output_to_shell
+	fi
+#	stop for debug
+#	read	
+done
+
+sort $log_filename > $log_filename.bak
+mv $log_filename.bak $log_filename
+
+14:48 2009-2-9
+Linux学习, 移植, "vimicro_Linux移植文档", readme
+位置:\\10.0.2.36\sqmshare\Share\Linux\readme
+VC0830 Linux移植资料目录
+readme: \\10.0.2.36\sqmshare\Share\Linux\readme
+VC0830 Linux移植资料目录
+android
+	Android_git_20090115: android 2009/1/15日 repo中的全部代码.
+doc:
+	移植文档"s3c2440 Linux移植分析_V0.1", Liao zhicheng Linux文档和其它参考文档.
+host: Linux开发环境
+	ubuntu_9.0.4_jaunty-dvd-i386.iso: hostPC的Linux环境.
+	openjtag_开源调试工具: Eclipse+gdb+openocd+openjtag调试环境, host支持windows, 
+Linux, 可以调试任何elf程序. openjtag是作者制作的usb2jtag转接板(180元一个), 作者声称速度能达到6Mbit/sec, 我没有实测. 详细说明见光盘"Eclipse,OpenOCD,OpenJTAG嵌入式开发教程.pdf". 映像用daemon打开.
+kernel: Linux内核代码.
+	Linux2.6.25.20, Linux2.6.27.8及changelog
+	linux-2.6.25.20_20090209_bamvor.tar.tar.gz: "s3c2440 Linux移植分析_V0.1"文档对应内核, 内有相关注释. 其中的log目录是使用下面工具链编译内核log, 对at91和smdk2440都各编译了两次: 一次是正常编译; 一次是加入"V=1"参数, 显示完整编译命令.
+toolchain: 工具链.
+	arm-linux-gcc4.1.1, 包括编译好的工具链和源代码, 源代码中有写好的crosstool编译脚本.
+
+15:19 2009-2-9
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc
+重点看sd memory卡, mmc卡. 希望我3/10前能对sd协议很熟悉, 计划我调830 sv sd卡.
+vimicro是SD组织成员.
+看"sdspec2.0.pdf"和"MMCV42SysSpecFinal.pdf", sdio文档暂时不看.位置"D:\work\Documentation\sd\commend_spec"
+
+10:50 2009-2-10
+嵌入式, 存储, SD/SDIO, sdspec2.0阅读笔记; 工作模式, 速度, 容量, bus类型
+sd spec2.0文档目录页数+13是实际pdf文档页数.
+1, 按工作模式分有默认模式和高速模式. 
+速度和时钟关系: 50MHz * 4bit/sec / 8bit/Byte = 25MB/sec.
+Default mode: Variable clock rate 0 - 25 MHz, up to 12.5 MB/sec interface speed (using 4 parallel data lines)
+High-Speed mode: Variable clock rate 0 - 50 MHz, up to 25 MB/sec interface speed (using 4 parallel data lines)
+
+2, 按容量分
+Standard Capacity SD Memory Cards: <= 2GB
+High Capacity SD Memory Cards: 2GB < 容量 <= 32GB, defined from the Physical Layer Specification Version 2.00.
+
+3, 按速度(Speed Class)分:
+大容量卡应该至少支持Class 2, 速度>=2MB/sec
+• Class 0 - These class cards do not specify performance. It includes all the legacy cards prior to this specification, regardless of its performance
+• Class 2 - Are more than or equal to 2 MB/sec performance.
+• Class 4 - Are more than or equal to 4 MB/sec performance.
+• Class 6 - Are more than or equal to 6 MB/sec performance.
+High Capacity SD Memory Cards shall support Speed Class Specification and have performance more than or equal to Class 2.
+
+4, Bus
+SD卡支持SD bus和SPI bus. SD收到reset(CMD0)命令时判断使用何种总线, 此后一直使用此模式.
+不推荐多个SD卡共享一个bus. 如果SD host支持告诉模式, 一个bus应该只连接一个SD卡.
+(1), SD Bus:
+The SD bus includes the following signals:
+CLK: Host to card clock signal
+CMD: Bidirectional Command/Response signal
+DAT0 - DAT3: 4 Bidirectional data signals.
+VDD, VSS1, VSS2: Power and ground signals.
+SD memory卡总线有一个master(application)和多个slave(cards). SD bus中时钟, 电源, 地共用; command, data[0-3]独立连接到不同卡. 
+SD卡正常使用时可能采用"广播"方式发送数据：
+初始化阶段命令会分别发给不同的卡, 这样Master可以完成卡的检测, 为物理插槽(Physical slot)分配逻辑地址. 但, 为了简化SD卡的协议栈, 初始化过程后, 所有命令可能会同时发给所有卡(命令中包含地址).
+SD bus允许动态配置data宽度, 上电后默认只使用data[0]:
+SD bus allows dynamic configuration of the number of data lines. After power up, by default, the SD Memory Card will use only DAT0 for data transfer. After initialization the host can change the bus width (number of active data lines). This feature allows easy trade off between HW cost and system performance. Note that while DAT1-DAT3 are not in use, the related Host’s DAT lines should be in tri-state (input mode). For SDIO cards DAT1 and DAT2 are used for signaling.
+
+3.6.1(P23)开始大致介绍了SD bus的传输协议, <TODO>完善</TODO>:
+SD bus和其它串行通信协议类似, 也是以0为开始位, 1为停止位. 传输包括COMMAND, RESPONSE, DATA. 前两个都通过command line传输, data通过data line传输.
+COMMAND总长48bit, RESPONSE长度是48或138bits. CMD line数据先发MSB.
+DATA有两种:
+1), Usual data: 以字节为单位发送. 先发LSB Byte. MSB Byte在最后. 但在字节内部先发MSB bit, LSB bit在最后.
+命令举例: SDIO: CMD53; SD memory: CMD17,CMD18,CMD24,CMD25, ACMD18,ACMD25.
+即数据读(CMD17,CMD18)写(CMD24,CMD25)都是使用这种数据.
+2), Wide width data: 打乱字节. 先发MSB bit(例如第511字节), 最后发LSB bit(第0字节).
+命令举例: ACMD13(SD status): 返回SD status(512bit, 见4.10.2), ACMD51(SCR): 读SD卡 SCR寄存器(64bit).
+
+(2), SPI bus
+SD卡也支持SPI bus. 好处是简化了系统设计, 坏处是降低了性能. 卡片检测和寻址模式都由SPI的片选CS(低有效)代替. 所以也没有广播命令. SPI传输过程中CS应该一直有效. 除非在Card Programming中, host可以把CS设为无效使Card Programming过程无效.
+
+5, SD memory Card-Pins and Register
+1), SD memory卡(这里分析的都是memory卡, SDIO暂时不需要我看)有薄厚两种规格: 2.1mm, 1.4mm.
+2), 这里再次强调DAT1-DAT3在上电或未使用时host都应设为输入. host通过SET_BUS_WIDTH命令设置它们为DATA引脚.
+3), 卡插入检测和模块选择:
+上电时DATA3有50K Ohm的上拉电阻. host通过这个上拉检测到卡的插入. 在正常数据传输前, 通过"SET_CLR_CARD_DETECT (ACMD42)"命令取消这个上拉. 
+模式选择: 把DATA3上拉表示选择SD bus模式, 下拉表示选择SPI bus模式.
+4), SDIO中DATA1, DATA2的特殊应用:
+DAT1和DAT2在SDIO可能会被分别用为"Interrupt Output (from the Card)"和"Read Wait signal".
+5), SD卡内部有八个寄存器. 第五章"Card Registers"中会有详细描述.
+
+15:56 2009-2-10
+公司会议, VC0830, SV, <TODO>整理会议,P22</TODO>
+VC0830 3月10日回, 3月15日开始做, 计划5月1日前完成. 和VC0816打个时间差, 815计划是3月15日freeze.
+我的SD卡需要在3月22日--3月29日周完成软件(主要工作可能只是改clock), 然后交给测试组测试.
+安排详见Aiguo, 20090210 10:22邮件. 
+
+10:43 2009-2-12
+嵌入式, 存储, SD/SDIO, sdspec2.0阅读笔记, 续
+1, <TODO>添加纸上笔记至此</TODO>
+2, 写操作:
+向写保护区域写入数据slave会设置WP_VIOLATION位(Card status, 详见“4.10.1")
+3, slave拉低DAT0表示busy, 具体原因: <TODO>补充</TODO>:
+1), 写操作时写buffer满.
+
+11:05 2009-2-12
+项目, VC0830, 性能分析(performance analysis), <TODO>阅读文档</TODO>
+vc0830_performance_analysis.doc
+位置: work\VC0830\SV
+Hi,all
+请相关的人认真阅读一下performance的文档，我们要在SV要进行验证，我会随后写一个plan。Lingming可以提前研究一下sdram/ddr相关的东东，lidongliang研究一下memory bank机制，shuyu研究一下各种优先级设置。
+
+15:09 2009-2-12
+(16:24 2009-2-20)
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, 初始化
+这里详细阅读, 调试SD卡初始化(包括硬件和应用层)的过程, 并提出改进建议.
+Sd_Open()
+    ->Sdio_Protocol_Identify()
+        ->Init_Io()   :初始化SDIO卡
+            ->Test_Flags()
+        ->Init_Mem()  :初始化SD卡
+            ->Send CMD8
+            ->Send ACMD41
+            ->Init_MMC(): 如果ACMD41无回应, 说明不是SD卡, 按MMC卡尝试.
+                ->MmcPreprocess()
+            ->Test_Flags()
+        ->Test_Flags()
+            ->Preprocess()
+                ->IoPreprocess()
+                ->MemPreprocessI();
+
+1, <TODO>改进"Send CMD8"</TODO>:
+    CMD8返回的是R7, 如果有返回, 说明卡是Ver2.00的. 目前程序是根据发送CMD8有无回应判断是否是2.0卡, 但协议中如果2.0卡电压不匹配也会没有rsponse. <TODO>改进</TODO>: 
+    参数是"0x1aa"即"00110101010b", 后面8位是文档中推荐的check pattern设置. 前面的0x001,表示电压范围是"2.7-3.6". 低电压卡是"0x010". 为了扩展性, 这个电压也应该支持. 
+
+2, Init_Mem()和Test_Flags()共同完成了sdspec2.0 p18,p20的初始化流程.
+
+3, <TODO>改进"Sdio_Protocol_Identify()"</TODO>: 
+Init_Io(), Init_Mem()和Init_MMC应该在一个层次;
+Test_Flags()加入MMC部分. 设置卡类型, 这样后面设置bus width时利用卡类型即可使用不同命令. 注释中说明: 目前没有多个slave未考虑SD RCA相同问题.
+IoPreprocess, MemPreprocess, MmcPreprocess也应该在同一层次. 放在Test_Flags()中. 
+
+1), 修改, 希望Sdio_Protocol_Identify()按卡的类型初始化. 先初始化SDIO, 再初始化SDMEM, 最后MMC. SDIO_COMBO的识别在SDIO或SDMEM中处理, <TODO>看SDIO_COMBO协议</TODO>.
+
+2), "g_CardInfo.MemPresent"好像没用.
+
+<TODO>查</TODO>: RCA是如何设定的? 协议和代码上都是Card给出RCA, 但是Card给出的地址如何保证唯一呢?
+
+15:29 2009-2-12
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, sdspec2.0阅读, 数据传输(读/写/擦除)
+1, 序言
+Memory access commands include block read commands (CMD17, CMD18), block write commands (CMD24, CMD25), and block erase commands (CMD32, CMD33). (自: "4.3.14")
+
+1), The relationship between the various data transfer modes is summarized below. <TODO>重读</TODO>
+(1), 如果复位SD卡(CMD0或CMD15)会中止pending或正在进行的programming操作. 这可能会破坏SD卡数据, host应该负责避免这一问题. 
+CMD15和CMD0不同, 前者是使处于data transfer mode的SD卡进入inactive state(in card identification mode), 只能通过重新上电才能时SD卡恢复到Idle State; 后者是SD卡进入复位状态. 
+(2), 当SD卡在programming时, 参数设置命令(parameter set command)不允许使用. 
+参数设置命令包括: set block length (CMD16), erase block start (CMD32) and erase block end (CMD33).
+
+2), 进入Transfer State
+Sd_Open()
+    ->Sdio_Protocol_Identify()
+        ->Test_Flags()
+            ->Preprocess()
+                ->MemPreprocess(): 发送CMD7
+2, 读
+do_sdio_read()
+    ->Sd_Read(): 不论"do_sdio_read"中sel取值, 最终都是调用此函数.
+        ->Sd_Mem_Read(): 如果读出错, 最多尝试三次. 读完成后, 除了STOP未发送其它命令, 所以会回到"Transfer State"
+            ->Sdio_Drv_ReadOneBlk(): CMD17(READ_SINGLE_BLOCK)
+                ->FillCmdReg(): 填充寄存器, <TODO>看完第五章再分析.</TODO>
+                ->涉及到的dma使用, <TODO>稍后阅读</TODO>
+            ->Sdio_Drv_ReadMultiBlk(): 
+                ->SdioBase_xxxAutoCmdxxx(): 配置使用autocmd, 发送CMD18后会自动发送这个命令. 这个命令目前是CMD12(STOP_TRANSMISSION). 当前命令完成后自动发送CMD12. 
+
+1), 读写都分为signal block, multi block. 标准SD卡以byte为单位, 大容量SD卡以block为单位(每个block固定为512byte). 对于标准SD卡只有CSD设置"READ/WRITE_BLK_MISALIGN"数据传输才能跨越物理块的边界.
+In the case that write partial blocks is not supported, then the block length=default block length (given in CSD).
+2), Sd_Read/Sd_Write接受的地址不论SD/SDHC都是byte为单位的, 地址addr是32位无符号整数只能访问4G空间, 大容量SD卡最大容量是32G, 地址范围不够. 有没有必要修改代码使SDHC读写函数接受块地址呢? 可以在app层分SD和SDHC分别对fat提供接口.
+确认fat层调用SD卡代码时, 以sector(512byte)为单位. 
+
+3, 写
+do_sdio_write()
+    ->Sd_Write()
+        ->Sd_Mem_Read(): 这里的Read用于处理写入起始/结束地址未对齐的问题: 如果地址未对齐, 先读出offset start或offset end所在块的内核.
+        ->Sd_Mem_Write(): 与"Sd_Mem_Read()"类似, 如果写出错, 最多尝试三次. 写完成后, 除了STOP未发送其它命令, 所以会回到"Transfer State"
+            ->Sdio_Drv_WriteOneBlk(): CMD24(WRITE_BLOCK)
+            ->Sdio_Drv_WriteMultiBlk(): CMD25(WRITE_MULTIPLE_BLOCK)
+
+ACMD23(pre-erase): 如果执行多block写操作前执行pre-erase, 可以缩短总写入时间(文档推荐用法). pre-erase命令指出下个写操作会写几个block, 这几个block会提前被擦除. 如果写操作未完成所时, host发送STOP命令, pre-erase命令指明的要提前擦除但未写入的block的内容不确定(可能被擦除, 也可能是原有内容). 如果host没有执行pre-erase, slave会在多block写入时设置pre-erase count=1. pre-erase命令后如果没有跟随CMD25而是其它命令, pre-erase count可能会被修改. 
+<TODO>目前似乎没有使用, 与Feng beizhan讨论</TODO>:
+1), 只有"FillACmdReg"和"StateTran_WithACMD"涉及到此命令. 另外"StateTran_WithACMD"函数未被调用过, 注释中写是协议要求的. 可能看后面协议会涉及到, <TODO>补充</TODO>
+
+4, 擦除
+文档建议一次擦除多个block, 这样提高数据吞吐量.
+擦除命令需要按顺序:
+The host should adhere to the following command sequence: ERASE_WR_BLK_START,
+ERASE_WR_BLK_END and ERASE (CMD38). 
+如果Card收到的命令顺序错误, 应该:
+If an erase (CMD38) or address setting (CMD32, 33) command is received out of sequence, the card shall set the ERASE_SEQ_ERROR bit in the status register and reset the whole sequence.
+If an out of sequence command (except SEND_STATUS) is received, the card shall set the ERASE_RESET status bit in the status register, reset the erase sequence and execute the last command.
+擦除时跳过写保护区域并设置WP_ERASE_SKIP位:
+If the erase range includes write protected sectors, they shall be left intact and only the non protected sectors shall be erased. The WP_ERASE_SKIP status bit in the status register shall be set.
+
+do_sdio_erase()
+    ->Sd_Mem_Erase()
+        ->CMD32(ERASE_WR_BLK_START)
+        ->CMD33(ERASE_WR_BLK_END)
+        ->CMD38(ERASE)
+
+相关命令: pre-erased(ACMD23). 参见写操作.
+
+5, 写保护
+三种写保护
+- Mechanical write protect switch (Host responsibility only)
+- Card internal write protect (Card’s responsibility)
+- Password protection card lock operation.
+1), 机械写保护开关:
+如果机械写保护有效, host负责写保护, SD卡本身并不知道写保护开关的状态.
+2), sd卡内部写保护, 由SD卡负责. (可选)
+3), 下面这个感觉是针对第三种情况的: HCSD不支持这种写保护, 即不支持命令CMD28, CMD29 and CMD30.
+
+0:39 2009-2-13
+(16:50 2009-2-13)
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, sdspec2.0阅读, 数据传输(读/写/擦除), 续
+1, Card Lock/Unlock Operation(4.3.7)
+这个第三种写保护方法, 使用CMD42, 在目前代码中没有实现.
+如果上电之前已经设置了密码(即"PWD_LEN"!=0), SD卡上电后会自动上锁. 
+lock/unlock命令和读写命令同样只在"Transfer State"中使用. 这说明SD卡必须选中(CMD7)才能使用, lock/unlock命令中不需要包含地址信息.
+上电后通过CMD7, CMD13返回的状态"CARD_IS_LOCKED"判断是否lock.
+需要注意上锁时通过ACMD6修改bus width无效, 但是当卡Locked, 要改为4-bit mode: ACMD6 is rejected and still in 4-bit mode. CMD0 change to 1-bit mode"
+"4.3.7.6"提到有两种类型的lock card. <TODO>未看</TODO>
+
+2, "4.3.9"Application-Specific Commands
+1), ACMD: application-specific command. 一般是制造商(manufacturer)定义的命令.
+host发送CMD55(APP_CMD)后的cmd slave会按ACMD处理. slave接收到CMD55和ACMD时的回应会把APP_CMD置位.
+下列ACMD命令是SD卡协议已经规定的, 制造商不能使用: ACMD6, ACMD13, ACMD17-25, ACMD38-49, ACMD51.
+2), General Command - CMD56(GEN_CMD)
+CMD56是vendor定义的读/写命令, CMD56的bit0表示读(0)/写(1), bit31-1可以自己定义. 
+GEN_CMD的传输和单block读写命令相同, 也是只能在transfer state中使用. 
+标准容量SD卡GEN_CMD的BLOCK_LEN由CMD16设置. 大容量SD卡GEN_CMD的BLOCK_LEN固定是512字节.
+The host should confirm CID before issuing CMD56 so that the card supports the format of CMD56.
+<TODO>疑问</TODO>: "4.3.9.2"说这个命令是可选的, 但"4.7.3"和"4.7.4"又写明是mandatory.
+
+3, "4.3.10"Switch Function Command
+1), CMD6是SD memory卡的Fnction switch命令(SDIO使用CCCR切换). 这些Function分为6组, 每组最多支持16个Function, 每组内的Function互斥.
+需要支持Physical Layer Specification Version 1.10的SD卡支持. host需要在使用CMD6之前，确认SD卡SCR寄存器的"SD_SPEC"保存SD卡版本。如果每个Function group都设为Function 0是兼容SD spec1.01的。
+Card access mode: 12.5 MB/sec interface speed (default) or 25 MB/sec interface speed. (highspeed)
+Card command system: Standard command set (default) or eCommerce command set or Vendor Specific Command set.
+CMD6在transfer state中有效, 其设置的function恢复默认值有三种情况：
+只有重新上电; CMD0复位; CMD6的Mode1且每个Function group都设为Function0.
+slave对CMD6的response(timeout是100ms):
+CMD line: R1;
+DAT line: 512位的status(从SD卡角度看，相当于执行了512bit的block read). 如果status的CRC错误host应当使slave重新上电. 返回status后, 最少需要经过8个clock后host才能按新function操作(使用新CMD等).
+CMD6包括两种操作方式:
+Mode 0 (Check function): 用于查询slave是否支持此function.
+Mode 1 (set function): 切换function.
+
+2), 不论是使用Mode0, mode1时如果每个group的function写为0xf, 表示function不变.
+
+23:15 14/02/2009
+(10:35 2009-2-15)
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, sdspec2.0阅读, 数据传输(读/写/擦除), 续
+1, "4.3.10"Switch Function Command, 续
+1), "4.3.10.4" Switch Function Status
+下面这段话大致说的是允许的最大电流和SD卡支持功能之间的关系。最低版本的SD host(1.01)设置"VDD_R_CURR_MIN, VDD_W_CURR_MIN, VDD_R_CURR_MAX and VDD_W_CURR_MAX"时可以支持所有SD卡的默认功能，<TODO>结合CSD寄存器确认</TODO>
+The status bits of the response contain the information of the function group. Maximum current consumption will be used only for the new function added through this command. In this case, VDD_R_CURR_MIN, VDD_W_CURR_MIN, VDD_R_CURR_MAX and VDD_W_CURR_MAX values in the CSD register provides the current consumption when all card functions are set to the default state and can be used by spec 1.01 compatible hosts.
+
+CMD6返回的status分为如下几部分:
+(1), 511-496: "1-65535(1mA-65535mA)"表示当使用399-376所描述的功能时的最大电流功耗(1秒内平均值). "0"表示错误. 
+<TODO>下面这句不明白, 哪个电压?!</TODO>The voltage to calculate current consumption is defined by ACMD41 (SD memory card) or CMD5 (SD I/O card).
+
+(2), 495-400: 对每组Function的支持情况, 对应bit=1表示支持. Function group6-Function group1
+
+(3), 399:376:
+"4.3.10.4.3" Function Table of Switch Command
+status[399:376].
+说明了发送Function查询/切换命令后，返回的结果。
+a, 对于支持的Function group分四种情况。简单可以记成：允许切换或切换成功返回arg设定的Function编号，不允许切换或切换失败返回当前Function编号. 如果arg设置的是0xf返回当前选择的Function.
+b, 对于不支持的Function，arg是0/0xf都返回0，arg是1-0xe都返回0xf.
+
+(4), 375:368:
+status data struct的版本. "0"表示bit511:376有定义; "1"表示bit511:272有定义.
+
+(5), 367:272:
+"4.3.10.4.1" Busy Status Indication for Functions
+前面提到了Function切换时slave会返回status。这里说明返回的status[367:272]是每个Function的Busy stauts: "0"表示对应Function可以切换；"1"表示对应Function忙Mode 1命令发送切换失败。
+
+2), "4.3.10.5" Relationship between CMD6 data & other commands. 
+在CMD6传送过程中, SD卡也可以接受只使用CMD line的命令, 但是结果未知. 建议host使用CMD6时不要使用其它命令, 如果无法得到CMD6返回值, 建议host 发送CMD0(软复位)并重新执行初始化.
+协议中详细讨论了CMD6和CMD12(stop command)的关系:
+建议发送CMD6时不要使用CMD12.
+(1), 发送CMD12时, CMD6的数据已经接收完成(包括host发送CMD12停止位和slave发送CMD6 status data+CRC停止位二者同时). 这时CMD6命令有效.
+(2), 发送CMD12时, CMD6的数据尚未接收完成(host 发送CMD12停止位早于slave发送CMD6的CRC bit[15](CRC的最后一位)). 这种情况下, slave状态不确定, 只有发送CMD0并重做初始化.
+
+3), "4.3.10.6" Switch Function Flow Example
+Figure-4.9这个图很重要, 文档建议按照此流程图进行Function switch, 分四个步骤:
+(1), 判断版本是否>=1.10;
+(2), 根据status[495:400]判断当前SD卡支持哪些功能;
+(3), 如果有Function需要切换, 通过CMD6 mode0查询能否切换;
+(4), CMD6 mode1执行切换, 如果切换成功返回"(3)"; 如果切换失败返回"(3)"重新查询能否切换.
+<TODO>文档上说查询可以切换后, 可能需要切换时实际无法切换, 这是怎样一种情况呢?</TODO>
+<TODO>当前功能切换时直接利用send cmd进行切换, 未按流程, 有机会修改</TODO>
+
+2, "4.3.11" High-Speed Mode (25 MB/sec interface speed)
+对于高速模式, 为了保证时序, 建议host只连接一个SD卡.
+
+3,"4.3.12" Command System
+CMD34-37, CMD50, CMD57是为SD卡Function switch保留的命令. 使用Fuction0时SD卡认为这些命令时非法命令; 切换为vendor command fuction/mobole e-commence是, SD按vendor或SD e-commence文档识别这些命令.
+
+4, "4.3.13" Send Interface Condition Command (CMD8)
+CMD8共48位(包括开始位, 停止位).
+[15:8]: check pattern. 文档建议用"10101010b"做为check pattern. <TODO>查check pattern的作用</TODO>
+如果SD卡支持host设置的电压, 返回r7. 其中包含host给出的电压返回和check pattern. 如果SD卡不支持, 不应response, SD卡仍在idle state.
+
+5, "4.3.14" Command Functional Difference in High Capacity SD Memory Card
+这里列出大容量SD卡和普通SD卡命令功能差异:
+1), 大容量卡只支持block寻址模式, 每个block固定是512字节;
+2), 大容量卡不支持"Partial Access"和"Misalign Access"
+3), Set Block Length, <TODO>没完全理解</TODO>:
+读写命令采用块寻址模式时, block length固定是512字节(与CMD16设置无关). 
+block length大于512字节SD卡会返回BLOCK_LEN_ERROR错误.
+对于标准容量SD卡来说只有CSD的partial block read有效时set length才对memory access command有效.
+自: 4.3.14 Command Functional Difference in High Capacity SD Memory Card
+When memory read and write commands are used in block address mode, 512-byte fixed block length is used regardless of the block length set by CMD16. The setting of the block length does not affect the memory access commands. CMD42 is not classified as a memory access command. The data block size shall be specified by CMD16 and the block length can be set up to 512 bytes. Setting block length larger than 512 bytes sets the BLOCK_LEN_ERROR error bit regardless of the card capacity.
+自: Table 4-20: Block-Oriented Read Commands (class 2)
+In the case of a Standard Capacity SD Memory Card, this command sets the block length (in bytes) for all following  block commands (read, write, lock).Default block length is fixed to 512 Bytes. Set length is valid for memory access commands only if partial block read operation are allowed in CSD. In the case of a High Capacity SD Memory Card, block length set by CMD16 command does not affect the memory read and write commands. Always 512 Bytes fixed block length is used. This command is effective for LOCK_UNLOCK command. In both cases, if block length is set larger than 512Bytes, the card sets the BLOCK_LEN_ERROR bit.
+
+4), 大容量SD卡不支持分组写保护(write-protected group), 向大容量SD卡写入CMD28, CMD29 and CMD30, SD卡返回ILLEGAL_COMMAND错误.
+
+16:54 2009-2-15
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, sdspec2.0阅读, SD卡的其它功能
+1, clock
+时钟可以调整, 关闭. <TODO>没完全理解, 重看</TODO>
+
+2, CRC: <TODO>未看</TODO>
+
+3, "4.6" Error Conditions
+1), "4.6.1" CRC and Illegal Command
+(1), CRC错误：如果SD卡(addressed card)接收命令时CRC出错，此命令不会执行，SD卡状态也不会改变。同时状态寄存器COM_CRC_ERROR置位。
+(2), 指令错误：如果SD卡接收到错误指令，情况类似：SD卡状态不变，状态寄存器"ILLEGAL_COMMAND"置位。
+错误命令包括下面三种情况：
+a, SD卡不支持此类命令。例如只读SD卡不支持写命令。
+b, 当前SD卡状态不允许执行此命令。例如Transfer State中不能执行CMD2。
+c, 未定义命令。例如CMD5。
+
+2), "4.6.2" Read, Write and Erase Timeout Conditions
+对于读/写/擦除来说错误就是timeout, 标准容量SD卡(SCSD)和大容量SD卡(HCSD)要求有差异, 用下表表示:
+        SCSD                            HCSD        备注
+读      min(fn(TAAC,NSAC)*100, 100ms)   100ms       HCSD的TAAC, NSAC, 
+写      min(fn(R2W_FACTOR)*100, 250ms)  250ms       R2W_FACTOR固定.
+擦除        erase_timeout or write_timeout
+                n个块的擦除总时间=n*250ms
+写包括SET(CLR)_WRITE_PROTECT, PROGRAM_CSD, block write command.
+<TODO>没理解</TODO>: The R2W_FACTOR field in the CSD is used to calculate the typical block program time obtained by multiplying the read access time by this factor.
+
+4, 命令
+所有的命令都是48bit长:
+包括开始位(0), 方向(1: host2slave), 6位命令index, 32位的命令参数, 7位crcr和停止位(1).
+6位命令说明最多只能支持64条命令. 目前有三类扩展方法:
+1), APP_CMD: APP_CMD后面跟ACMD, 相当于扩展命令容量到128条命令;
+2), GEN_CMD: 参数里面的31位[31-1]都由vendor定义. 相当于支持2^31次方个vendor的扩展命令;
+3), function group: 每个function group支持16个function. 不同function group可以共存, 同一funcion group内function互斥. 目前只是有高速/低速, SD命令/电子商务命令两组共4个function被占用. 不同function的CMD34-37, CMD50, CMD57定义不同.
+
+5, "4.9" Responses
+呵呵, SD文档终于过半了, 还有57页:)
+Response中第一位开始位(0), 第二位方向(0: slave2host), 最后一位是停止位(1). 不同response类型的长度不同! 除了R3外都使用CRC(CRC7).
+SD卡支持5种类型的reponse(R1, R2, R3, R6, R7), SDIO多了R4, R5两种.
+1), "4.9.1" R1 (normal response command)
+host给slave发送命令后的正常回应, 48bit.
+数据传输过程中, 每个block传输间隙slave可能会把data设为busy. 所以host需要在每个block传输后检查是否busy. <TODO>由软件处理还是硬件处理?</TODO>
+<TODO>不理解</TODO>:
+4.9.2 R1b
+R1b is identical to R1 with an optional busy signal transmitted on the data line. The card may become busy after receiving these commands based on its state prior to the command reception. The Host shall check for busy at the response. Refer to Chapter 4.12.3 for a detailed description and timing diagrams.
+
+2), "4.9.3" R2 (CID, CSD register)
+slave发送CID(host发送CMD2/CMD10), CSD(host 发送CMD9). 136bit.
+
+3), "4.9.4" R3 (OCR register)
+host发送ACMD41时, 返回OCR寄存器值, 48bit.
+
+4), "4.9.5" R6 (Published RCA response)
+host发送CMD3后, slave返回新RCA. 
+这个命令和R1格式相同. arg包括RCA[31:16]和status bits[15:0](23,22,19,12:0)
+
+5), "4.9.6" R7 (Card interface condition)
+如果slave接受host CMD8设定的电压返回R7. 48bit.
+
+6, "4.10" Two Status Information of SD Memory Card
+1), "4.10.1" Card Status
+执行命令的状态和错误信息. R1中包含此信息. <TODO>这部分没有细看</TODO>
+Type:
+•E: Error bit.
+•S: Status bit.
+•R: Detected and set for the actual command response.
+•X: Detected and set during command execution. The host can get the status by issuing a command with R1 response.
+Clear Condition:
+•A: According to the card current state.
+•B: Always related to the previous command. Reception of a valid command will clear it (with a delay
+of one command).
+•C: Clear by read.
+
+2), SD status
+512bit, <TODO>看</TODO>
+<TODO>查AU size作用</TODO>
+
+19:08 2009-2-16
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, sdspec2.0阅读, Card register
+1, "5" Card Registers
+OCR, CID, CSD, and SCR(SD CARD Configuration Register): carry the card/content specific information;
+RCA, DSR: configuration registers storing actual configuration parameters.
+寄存器中保留位SD卡应该返回0.
+
+2, 大致翻完了SD卡规范. 计划用2天看完MMC规范, 周四开始测试.
+<TODO>继续</TODO>
+4.11-4.14未看.
+从第五章开始都未细看.
+
+3, <TODO>疑问</TODO>
+1), AU起什么作用?
+2), FAT在哪个层次实现?
+
+9:57 2009-2-17
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, "MMCV42SysSpecFinal"阅读, Overview
+SD卡设计的时候考虑了与MMC卡协议兼容. 多数内容是一样的, 这里主要描述不同点.
+1, 最大速度416Mbit/sec, 这是8位数据线的最快速度, 如果用4位数据线, 最快速度和SD卡差不多.
+MMC卡容量: 和SD卡类似分为<=2GB和>2GB两种. 前者使用字节寻址, 后者使用512字节寻址(也就是SDHC的块寻址)
+CMD: 初始化阶段是开漏方式; 快速命令传输时使用推拉输出.
+MMC卡上电也是只使用data0. 使用data1-data7时会断开除data3外的上拉电阻, data3上拉要用于SPI CS.
+
+2, "3.4.2" Bus Protocol
+1), MMC分为"Sequential commands"和"Block-oriented commands"两种命令, 前者传送数据时只采用data[0], 且无CRC, 目的是与旧MMC协议兼容. VC0830/VC0816中的sdio controller不支持"Sequential commands"(CMD11, CMD20).
+2), 命令格式同SD卡cmd兼容, 48bit: 开始位(0), 传输方向(1), 8bit index, 32bit arg, CRC(CRC7), 停止位(1).
+3), response也是分为48,136两类, 共r1(r1b), r2, r3, r4, r5五种. SD卡中是1,2,3,6,7. r4, r5分给了sdio. 长度也相同: r2 136bit, 其余都是48bit.
+3), data package format与SD卡"Usual data"相同: 先发LSByte, MSBit. 参SD卡3.6.1.
+
+11:31 2009-2-17
+VC0830学习, VC0830_bootloader, 调试信息
+Msg相当于printk, 无论如何都会显示; MSG是调试输出, 定义DEBUG时显示.
+
+15:20 2009-2-17
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, "MMCV42SysSpecFinal"阅读, MultiMediaCard Functional Description
+1, "4.1" General
+MMC卡有三种模式, 比SD卡的识别和数据传输两个模式多了中断模式(Interrupt Mode)
+Host and card enter and exit interrupt mode simultaneously. In interrupt mode there is no data transfer. The only message allowed is an interrupt service request from the card or the host.
+MMC中断模式对应"Wait-IRQ State"状态.
+MMC总线在识别(包括inactive state)和中断模式中是开漏(Open Drain), 数据传输模式是推拉输出(push-poll). 但是在SD卡中由于要求slave同时回复bcr(Broadcast commands with response)命令, 所以cmd line没有open drain模式(sd spec 4.7.1).
+bamvor: 从后面阅读知道SD/MMC的命令兼容, 二者命令号没有重复.
+
+2, "4.2" Card Identification Mode
+1), CMD15或其他愿意导致SD/MMC进入inactive后如何处理? 进入inactive state后只能是重新上电.
+注: SD卡的状态转移全图在4.8节, Table4-29. 
+
+2), 上电/CMD0后MMC卡处于高阻状态, 使用默认RCA(0x0001), 默认的driver stage register(DSR: 0x404, <TODO>查含义</TODO>), 识别阶段时钟频率是fOD(最大400k)
+对比SD卡: 默认RCA是0x0000, 默认值相同(0x0404):driver stage register setting (lowest speed(0x0400), highest driving current capability(0x0040)), 识别阶段时钟频率是fOD(最大400k).
+DSR是可选的寄存器, 由CMD4设置: MMC卡的DSR都是reversed bit(Table66). SD卡Table6-1中使用了[11:8][3:0], [11:8]定义开关时间, [3:0]定义峰值电流和上升沿时间(t rise type).
+
+(1), CMD0 is valid in all states, with the exception of Inactive State. While in Inactive state the card does not accept CMD0, unless it is used to switch the card into SPI mode.
+
+(2), (17:47 2009-3-16)sdspec2.0 p17:
+During the card identification process, the card shall operate in the SD clock frequency of the identification clock rate fOD
+p123写明fOD是400k.
+"17:47 2009-3-16"end
+
+3), 识别流程:
+(0), SD卡中如果host支持Physics Layer2.0规范一定要在ACMD41前发送CMD8到slave, 如果slave也支持2.0就可以使用2.0中的新功能. slave接收过CMD8后, ACMD41的HCS(host capacity support)才有效.
+(1), CMD1/ACMD41
+a, CMD1(SEND_OP_COND)和SD卡的ACMD41(SD_SEND_OP_COND)类似, 主要都是确定电压范围. 只是SD卡暂时没有支持低电压版本, SD卡多了HCS位判断是否是大容量SD卡(MMC卡只支持小于2GB)的卡. 如果SD/MMC支持host要求的电压范围, response中返回卡具体的电压范围. 如果不支持SD/MMC卡会进入inactive state. 
+b, CMD1/ACMD41都支持查询slave电压, 方法是设置CMD1为0或设置ACMD41的OCR位为0.
+MMC协议建议MMC卡识别阶段使用2.7-3.6电压范围. 
+c, 发送CMD1/ACMD41时都需要查询busy位. 不同之处是MMC卡当busy=0时表示MMC卡完成上电过程, SD卡用busy=1表示SD卡完成初始化过程.
+(2), CMD2: MMC中host发送CMD2给slave后, slave会同时返回CID, slave给host发送CID的同时检查CMD line上CID是否是自己发送的CID, 如果不是, slave应立刻停止CID发送, 等待下次host广播CMD2. bamvor: 由于MMC识别阶段CMD line是open drain状态所以不同slave之间的CMD line是线与, 因此CID大者能先发出CID.
+(3), CMD3: MMC是host给slave指定RCA; SD是slave给host发送RCA, host可以重发CMD3, 这是slave会发送新RCA给host, 这样也能避免不同slave RCA相同. SD slave最后一次发给host的RCA有效.
+(4), "4.2.3" Access Mode Validation (Higher than 2GB of Densities)
+<TODO>细看</TODO>: MMC大容量(>2GB)卡的处理与SD卡不同.
+
+进入中断状态的CMD40在SD卡未使用. 
+
+10:38 2009-2-18
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, "MMCV42SysSpecFinal"阅读, MultiMediaCard Functional Description
+2, "4.2" Card Identification Mode, 续
+CMD2的time out, <TODO>对比SD卡, SD卡中似乎没找到time out</TODO>:
+The time-out condition to recognize completion of the identification process is the absence of a start bit for more than NID clock cycles after sending CMD2. (See timing values in Section 4.13 on page 74.)
+
+3, "4.3" Interrupt Mode, 中断模式, SD卡无. <TODO>SD无中断模式, SDIO中有中断模式, 细看</TODO>
+Supporting MultiMediaCard interrupt mode is an option, both for the host and the
+card.
+The host must ensure that the card is in Stand-by State before issuing the GO_IRQ_STATE (CMD40) command.
+This response is sent in the open-drain mode.
+Upon detection of a start bit, the card will abort interrupt mode and switch to the stand-by state.
+If the host wants to terminate the interrupt mode before an interrupt response is received, it can generate the CMD40 response by himself (with card bit = 0) using the reserved RCA address 0x0000; 
+
+16:35 2009-2-18
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, "MMCV42SysSpecFinal"阅读, MultiMediaCard Functional Description, 续, "Data Transfer Mode"
+1, MMC卡寄存器比SD卡多了EXT_CSD寄存器, 未看.
+2, "4.4.4 Bus Testing Procedure"未看.
+3, 总线宽度(bus width): MMC在EXT_CSD, 通过switch command(CMD6: SWITCH)修改. SD在SCR, 通过ACMD6修改.
+MMC的CMD6包括switch function和修改EXT_CSD两种功能. MMC/SD二者CMD6命令格式不同, SD卡默认把[25:24]设为0, 与MMC卡中switch function设置相同. 使用时要注意. 
+<TODO>修改</TODO>: 目前SD/MMC test code中没有实现Function switch功能. 只是用CMD6修改MMC的bus width.
+
+4, 读数据
+1), stream read: 未看.
+2), 块读: MMC块读分为发count自动停止, 和CMD12停止读取两种.
+
+18:01 2009-2-18
+存储, sd/sdio, 新规范SDXC
+自: http://www.sdcard.org/developers/tech/sdxc
+摘要: 2009年第一季度推出, SDXC规范最大容量为2TB, 最大速度300MB/sec, 09年将达到104MB/sec.
+
+Massive Storage, Incredible Speed
+The next-generation SDXC (eXtended Capacity) memory card specification, pending release in Q1 2009, dramatically improves consumers’ digital lifestyles by increasing storage capacity from 32 GB up to 2 TB and increasing SD interface read/write speeds up to 104 MB per second in 2009 with a road map to 300 MB per second. SDXC will provide more portable storage and speed, which are often required to support new features in consumer electronic devices and mobile phones.
+
+A 2 TB SDXC memory card could store an estimated 100 HD movies or 480 hours of HD recording or 136,000 fine-grade photos. Faster bus speeds will enable professional-level recording in compact consumer camcorders and increase the number of frames shot in a second with SDXC cameras.
+
+The faster bus speeds in the SDXC specification also will benefit SDHC, Embedded SD and SDIO specifications.
+
+18:17 2009-2-18
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, "MMCV42SysSpecFinal"阅读, "Error Protection"
+MMC比SD卡多了ECC校验. ECC未看, 只关注二者都有的CRC.
+CRC7: 基本用来包括命令/response
+SD: The CRC7 check is used for all commands, for all responses except type R3, and for the CSD and CID
+MMC: The CRC7 check is used for all commands, for all responses except type R3, and for the CSD and CID registers.
+The
+
+CRC16: 基本说来用于保护数据
+SD: In the case of one DAT line usage, the CRC16 is used for payload protection in block transfer mode.
+MMC: The CRC16 is used for payload protection in block transfer mode.
+
+18:35 2009-2-18
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc
+SD/MMC的data和cmd线都要有上拉电阻.
+
+19:57 2009-2-18
+项目, 下一步工作安排, <TODO></TODO>:
+1, 2月19日: Feizhan, 816 SD寄存器测试;<TODO>打印830mas</TODO>
+2, 2月27日前完成SD调试, 完善现有sd/mmc代码不完善的地方;
+3, 3月2日-3月6日: SDIO, 很可能是wifi. <TODO>提前打印sdio spec</TODO>
+
+10:02 2009-2-19
+(14:56 2009-2-20)
+(11:27 2009-2-23)
+项目, VC0830, sd/sdio调试, 改进, 现有sd/mmc代码不完善的地方
+大概有三类情况: 流程乱--初始化; 实现不全--sdio, acmd23, switch function; 微调.
+1, <重要>软件要求数据传输时可以使用1bit传输. 目前是识别阶段1bit(协议要求), MemPreprocess()/MmcPreprocess()中改为4bit. MMC的8bit测试没问题. 希望816能测试.
+
+2, 改进"Sdio_Protocol_Identify". 见"15:09 2009-2-12"3. 修改过程参考mas中识别过程流程图. 感觉流程图中如果SDIO初始化失败, 没有初始化MMC, <TODO>查协议是否如此</TODO>.
+
+3, ACMD23未使用, 是否可以提高性能? 自"15:29 2009-2-12"3
+
+4, 实现"Sdio_Drv_ReadOneBlk_like()"/"Sdio_Drv_WriteOneBlk_like()"函数
+1), 实现switch functin. switch function是类似块读的命令. 可以把"Sdio_Drv_ReadOneBlk()"函数改为通用的"Sdio_Drv_ReadOneBlk_like()"函数, 增加一个参数: cmd index. 
+2), CMD27
+
+5, 识别过程中CMD8没有考虑双电压卡, 见"15:09 2009-2-12"1。
+
+6, 实现未实现的函数:
+1), Init_Mem()->"set card to inactive". 现在是即使CMD8的response不正确也是直接向下运行了, 逻辑不对.
+
+7, 与512乘/取余等操作改用位操作(移位,与)得到:
+1), fat->sd app中sector->byte转换
+
+8, MMC_Read/MMC_Write如果"g_CardInfo.CardType == MMC_CARD"return 0, 这逻辑不对啊.
+
+9, MMC卡的Erase会在Write时自动完成. MMC_Erase没必要实现为空函数, 可以直接调用Sd_Mem_Erase(其中已经实现了MMC Erase命令). 
+
+10, SDHC读写是否直接传入块地址, 目前代码无法支持32G以上SDHC卡, 另外两次512乘除(移位)也影响效率, 应该对SDHC做优化. 
+1), app层增加, Sd_Read/Write_partial(addr, len, buf, offset_b, offset_e). addr是块地址, offset_b, offset_e作用同原Sd_Read/Write内部变量. 
+(?)fat接口也通过Sd_Read/Write_partial实现, 只是offset_b, offset_e=0. 
+2), protolcol层增加Sd_Mem_partial_Read/Write, Sd_Mem_Read/Write不变; app层函数通过四个函数重新实现; 因为app用于支持fat, fat直接读512byte, 而且protocol中本也有512byte读取的支持, 所以parttial block在protocol层比较合适. 
+3), driver层函数也需要修改. 对SD和SDHC用不同函数. MMC同理.
+4), 或把32位整数改为64位整数, 但是降低效率. 自: "15:29 2009-2-12"2-2)
+
+10, 返回值意义不清楚:
+1), Sd_Mem_Erase无论擦除成功与否都返回0. ?!!
+
+11, 杂项:
+1), 对不常用分支进行优化. 参考Linux中LIKELY和UNLIKELY函数.
+2), 提供动态生成函数调用关系补丁.
+
+10:05 2009-2-19
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio, sdspec2.0阅读, 续, block read, 类似块读的命令
+1, The SEND_WRITE_PROT command is similar to a single block read command.
+
+2, GEN_CMD (CMD56) is a vendor-specific and optional command. The command operation is defined by this specification. The bus transaction of the GEN_CMD is the same as the single block read or write commands (CMD24 or CMD17) and accepted only in ‘tran_state’.
+
+3, CMD6)(SWITCH_FUNCTION): 
+As a response to CMD6, the SD Memory Card will send R1 response on the CMD line and 512 bits of status on the DAT lines. From the SD bus transaction point of view, this is a standard single block read transaction and the time out value of this command is 100 ms, the same as in read command.
+
+11:31 2009-2-19
+项目, VC0816, 物料, 找Zhang lu领了panasonic 1GB SD卡.
+
+14:12 2009-2-19
+项目, 学习, aasp, AASP_REQUESTMAIN使用方法
+以do_sdio_socket()(sdio\sdio_test.c)为例: 
+1, 定义变量
+	int		sel = 1;
+	Input sel_input	= { toInt, sizeof(int), NULL };
+	/* Register User Interfaces use your program start here */
+	Param arguments[] =  {
+		{"*1", OPTION_INPUT, optional, NULL, "Select Socket: ",0},
+		{0,0,0,0,0}
+	};//Run Just in Use
+2, 
+	sel_input.result = &sel;
+	arguments[0].type = &sel_input;
+3, 得到参数
+	ret = AASP_REQUESTMAIN(arguments, argc, argv);
+	if(ret == -1){
+		ERR(("do_sdio_write arg input failed!\n"));
+	}else{
+		MSG(("do_sdio_write arg input succeed!\n"));
+	}
+
+15:35 2009-2-19
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, 卡的插入和拔出
+卡的插入和拔出也是按照分层方式去做的. 注册是高一级注册低一级的回调函数, 调用时低一级执行完本级处理并回调高一级处理.
+1, 应用层
+Sd_Init()
+    ->Sdio_Protocol_SetNotifyCallBack(&g_SdioAppEventNotify): 注册"&g_SdioAppEventNotify"到协议层"g_pUpLevelNotify".
+插入: 先后执行Sd_Close, Sd_Open;
+拔出: 什么也没做, 对应Sd_Init()的影响. 因为对于应用层来说, Sd_Init()所做的中断初始化与卡是否存在无关. Sd_Open()会在卡插入时重新执行. 
+
+2, 驱动层插入/拔出回调函数通过协议层的注册: 
+Sd_Open()
+->Test_Flags()
+    ->Sdio_Drv_SetNotifyCallBack(&g_DrvNotify): 注册"g_DrvNotify"到驱动层"g_pNotify".
+"g_DrvNotify"插入回调函数只是回调协议层插入函数.
+"g_DrvNotify"拔出回调函数:
+1), reset controller setting.
+2), reset software state and settings.
+3), 回调协议层拔出函数.
+
+3, 调用:
+二级中断在"RegisterSecIsr()"中注册到"hal_sdio_handlers()"
+Sdio_Isr()
+    ->处理二级中断
+        ->SecIsr_CardDetect()
+            ->g_pNotify->pInsertNotify()
+remove没有调用, 只是打出了"Card Remove.\n"信息. <TODO>未调用remove函数会不会影响下次的插入呢? 看Sd_Open代码</TODO>
+
+<TODO>疑问: 如何保证"hal_sdio_handlers"是NCNB的?</TODO>
+
+23:53 2009-2-19
+VC0816, FPGA, storage, sdio, 寄存器检查, reglist: dragon, vreglist.cpp
+0, 816初始化脚本
+include D:\VC0816\Panda\init_script\rv_debug_script\VC0816init_for_fpga_sdram_16M.inc 
+
+1, 复位sd模块, (clkrst模块的sw_reset[14]置位)， 点其他单元格，这个寄存器值会自动写入。
+
+2，检查sd卡default value：
+下面是不容易数位数的。
+            31-24       23-16       15-8        7-0
+int_status	00000000    01110001    11111111    01111111
+            00          71          ff          7f
+errmaker    00000000    01111111    ff          ff
+            00          7f          ff          ff
+sdio_config ff          ff          00000001    11000001
+            ff          ff          01          c1
+default     00          10          00          00
+sdio_mode   00          00          00000111    01111100
+            00          00          07          7c
+default     00          00          03          00
+auto_cmd_ctrl   00      00          10111111    00111111
+            00          00          bf          3f
+
+3，对dragon sdio的修改：d:\VC0816\dragon\VPanel\vreglist.cpp
+const TRegUnit g_V830RegSdio[] = 
+{
+//...
+//	{ V_REGTYPE, "SDIO_PRESENT_STATE",					SDIO_PRESENT_STATE,						0, REG_PROPERTY_RO, 0, 1, 0xffffffff},
+	{ V_REGTYPE, "SDIO_PRESENT_STATE",					SDIO_PRESENT_STATE,						0, REG_PROPERTY_RO, 0, 1, 0xff7fffff},
+//	{ V_REGTYPE, "SDIO_INT_STATUS",						SDIO_INT_STATUS,						0, REG_PROPERTY_W1C, 0, 1, 0x1dff7f},
+	{ V_REGTYPE, "SDIO_INT_STATUS",						SDIO_INT_STATUS,						0, REG_PROPERTY_W1C, 0, 1, 0x0071ff7f},
+//	{ V_REGTYPE, "SDIO_INT_PEND",						SDIO_INT_PEND,							0, REG_PROPERTY_W1C, 0, 1, 0x1dff7f},
+	{ V_REGTYPE, "SDIO_INT_PEND",						SDIO_INT_PEND,							0, REG_PROPERTY_W1C, 0, 1, 0x0071ff7f},
+//	{ V_REGTYPE, "SDIO_INT_MASK",						SDIO_INT_MASK,							0, REG_PROPERTY_RO, 0, 1, 0x1dff7f},
+	{ V_REGTYPE, "SDIO_INT_MASK",						SDIO_INT_MASK,							0, REG_PROPERTY_RO, 0, 1, 0x0071ff7f},
+//	{ V_REGTYPE, "SDIO_SET_MASK",						SDIO_SET_MASK,							0, REG_PROPERTY_WO, 0, 1, 0x1dff7f},
+	{ V_REGTYPE, "SDIO_SET_MASK",						SDIO_SET_MASK,							0, REG_PROPERTY_WO, 0, 1, 0x0071ff7f},
+//	{ V_REGTYPE, "SDIO_SET_UNMASK",						SDIO_SET_UNMASK,						0, REG_PROPERTY_WO, 0, 1, 0x1dff7f},
+	{ V_REGTYPE, "SDIO_SET_UNMASK",						SDIO_SET_UNMASK,						0, REG_PROPERTY_WO, 0, 1, 0x0071ff7f},
+//	{ V_REGTYPE, "SDIO_DMA_START_ADDR",					SDIO_DMA_START_ADDR,					0, REG_PROPERTY_RW, 0, 1, 0xffffffff},
+	{ V_REGTYPE, "SDIO_DMA_START_ADDR",					SDIO_DMA_START_ADDR,					0, REG_PROPERTY_RW, 0xf0000000, 1, 0xffffffff},
+//	{ V_REGTYPE, "SDIO_DMA_END_ADDR",					SDIO_DMA_END_ADDR,						0, REG_PROPERTY_RW, 0, 1, 0xffffffff},
+	{ V_REGTYPE, "SDIO_DMA_END_ADDR",					SDIO_DMA_END_ADDR,						0, REG_PROPERTY_RW, 0xf0000000, 1, 0xffffffff},
+//	{ V_REGTYPE, "SDIO_CONFIG",							SDIO_CONFIG,							0, REG_PROPERTY_RW, 0, 1, 0xffffffc1},
+	{ V_REGTYPE, "SDIO_CONFIG",							SDIO_CONFIG,							0, REG_PROPERTY_RW, 0x00100000, 1, 0xffff01c1},
+//	{ V_REGTYPE, "SDIO_MODE",							SDIO_MODE,								0, REG_PROPERTY_RW, 0, 1, 0x77c},
+	{ V_REGTYPE, "SDIO_MODE",							SDIO_MODE,								0, REG_PROPERTY_RW, 0x0300, 1, 0x77c},
+//...
+};
+默认值测试：
+Reg(0x60032020): 0x0001f800(R) != 0x00000000(D)
+Reg(0x60032028): 0x00000048(R) != 0x00000000(D)
+Reg(0x6003202c): 0x00000048(R) != 0x00000000(D)
+Reg(0x60032030): 0x007fffff(R) != 0x00000000(D)
+0x60032020：
+1), bit[16](buf_dma_wr_ena): 1表示"buffer is not full for dma"，现在没有使用sd卡
+2), bit[15], bit[14:11]分别表示CMD, DATE pin电平，不使用时他们都被拉高。
+
+4，寄存器读写测试：
+写"0x000000ff": 
+Reg(0x60032020) is RO: 0x0001f800(old) != 0x0001fa01(new) if 0xfffe07ff(W)
+Reg(0x60032028) is W1C: 0x00000004(R) != 0 after writing 0x000000ff
+Reg(0x6003202c) is W1C: 0x00000004(R) != 0 after writing 0x000000ff
+Reg(0x6003204c) is RW: 0x000000ff(W) != 0x000000fc(R)
+Reg(0x60032050) is RW: 0x000000ff(W) != 0x000000fc(R)
+
+写"0x55555555": 
+Reg(0x60032020) is RO: 0x010df801(old) != 0x010dfa01(new) if 0xfef207fe(W)
+Reg(0x6003204c) is RW: 0x55555555(W) != 0x55555554(R)
+Reg(0x60032050) is RW: 0x55555555(W) != 0x55555554(R)
+
+写"0xaaaaaaaa":
+Reg(0x60032020) is RO: 0x010dfa01(old) != 0x014cf881(new) if 0xfef205fe(W)
+Reg(0x6003204c) is RW: 0xaaaaaaaa(W) != 0xaaaaaaa8(R)
+Reg(0x60032050) is RW: 0xaaaaaaaa(W) != 0xaaaaaaa8(R)
+
+写"0xffffffff":
+Reg(0x60032020) is RO: 0x014cf881(old) != 0x2001f823(new) if 0xfeb3077e(W)
+Reg(0x6003204c) is RW: 0xffffffff(W) != 0xfffffffc(R)
+Reg(0x60032050) is RW: 0xffffffff(W) != 0xfffffffc(R)
+
+1), 4c, 50，两个都是dma地址，低两位无效。
+2), "0x60032020", "0x60032028", "0x6003202c"出错原因未知.
+
+续: 见"11:16 2009-2-23"1
+
+10:13 2009-2-20
+<TODO>整理, video培训笔记, 看video代码</TODO>
+
+10:15 2009-2-20
+项目, VC0830, 寄存器测试内容
+1, 自: Aiguo 2009/12/29邮件
+刚才忘了告诉大家，我们测试要全面，
+1). 一些边界值和中间值，如0x0， 0xffffffff，0x55aa等
+2). 我们同时要check默认值，默认值最好是上电后就进行check
+3). clock reset后，check默认值
+4). 一些不能测试的寄存器（就是在数据结构中不能check的），我们要单独测试
+
+2, 自: Caijing 2009/12/29邮件
+1.    RO的寄存器也可以在reglist的表格中手动尝试修改(fbz)
+2.    reg property测试的下拉列表中增加“All above”,可以把列表中参考值都测试一遍(sungy)
+3.    default val check时，也考虑maskbit, 因为reserved的某些位mas并没有给默认值。(shuyu)
+
+Hex值后加注符号意义为
+(R)表示从寄存器读出值
+(W)表示写入寄存器的值
+(D)表示寄存器默认值
+(old)表示寄存器初始值
+(new)表示寄存器的新值
+
+10:21 2009-2-20
+项目, VC0830, 模块, 深入学习, padc
+VC0830_PINPAD_MAS_0.50.dot
+7. 	Strap Pins
+"Strap Pins"是上电时读一下状态, 上电后Strap pin恢复为正常功能.
+Strap pin function	Shared PAD	Description
+CPU_CONF[1:0]	LCD_DATA[9:8]	HOST CPU Bus Configuration
+BOOT_CONF[5:0]	LCD_DATA[7:2]	Boot Configuration , for Software Extension
+USB_PHY_SEL	LCD_DATA[1]	Select PHY interface (1 – negedge; 0 - posedge) 
+BOOTSEL	LCD_DATA[0]	CPU Boot Select Mode(0 – ROM; 1- SPI0)
+
+虚惊: 昨天同事发现"USB_PHY_SEL"在rom bootloader没有读, 直接设为1. 如果流片回来USB不能work就麻烦了. 其实我刚来的时候看文档应也能看到这位没有用. 提醒以后读代码时有些关键点要留意: 边界有关的东西都得注意, 比如这种上电需要读状态的pin. 后来发现bootloader发现已经加上了.
+
+14:56 2009-2-20
+项目, 下一步工作安排, VC0830/VC0816, 存储器, sd/sdio/mmc, <TODO>计划</TODO>
+1, 今天计划理清sd每个函数的功能。
+1), 正常操作流程;
+2), CMD0, CMD15对卡的影响. 
+3), 卡进入错误状态实验. 例如进入inactive state.
+4), 观察所有response, SD所有寄存器
+2, 下周一看MMC.
+
+11:16 2009-2-23
+项目, 任务, <TODO></TODO>
+1, <DONE>816寄存器测试, 今天下午完成;
+1), 删除20, 30, 4c, 50寄存器问题. 20寄存器是只读, 不管默认值. 
+2), 28, 3c默认值: 分插卡与否, 在打开RvD但未运行RVD脚本时实验. 在RVD中memory窗口中设置寄存器地址, 查看0x60032028, 0x6003202c寄存器值, 无论插卡与否都是0x00000048. 已经告诉Beizhan.
+3), <TODO>重测devide-sel register</TODO>Lv pin 删除后重测.
+<tips>830寄存器测试</tips>:
+1), 发寄存器测试邮件时写出每个寄存器都是什么问题, 不要按照软件测试写不同数值分类;
+2), 有些寄存器不能用自动化测试工具测试.
+3), 其余见Caijin, Aiguo邮件.
+2, 830文档. 一边看代码一边写文档, 计划周二完成初稿;
+文档中涉及到的bug list从essue check上查. 
+3, 830 sd驱动修改: 看代码同时记录问题
+已发现问题见"10:02 2009-2-19"现有sd/mmc代码不完善的地方
+4, 逻辑分析仪看sd/mmctiming.
+
+11:17 2009-2-23
+公司, 同事信息, 门禁, Duan xiaohui
+找Duan xiaohui([duan.xiaohui@vimicro.com], 测试室8门口)添加了进入816, 830实验室的权限. 
+
+16:19 2009-2-23
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, 疑问
+1, switch, 参见VC0830 SDIO mas "4.17.2 Host access card with pad switch", 基本来说初始化阶段能使用的命令都用automode, 数据传输阶段使用的命令用manual mode.
+1), 0x70: switch mode不理解. 
+2), 寄存器文档,88h: SWITCH_EN bit:
+When host send cmd with data,  or cmd with r1b resp (except cmd12 and auto cmd), this bit should be set to 1'b1
+代码中cmd12也设置了SWITCH_EN, mas中的manual mode命令也不包括CMD12. ?! 费解.
+
+3, "StateTran_WithACMD", "StateTran_WithCMD"实现了SD卡的状态转移, 目前未使用, 感觉应该使用. 如果前两个函数未使用，IsCardIdle()会永远返回1, 判断就没意义了.
+
+4, <DONE>fat与sd接口:
+TMediaDrv SdCardDrv结构体是提供给给Fat文件系统提供接口的Api
+5, <DONE>SD文档: protocol api写什么? 写. app层主要是提供给fat用的, 客户可能直接用protocol层函数.
+
+6, app层没有erase函数, 那fat层的erase是如何实现的? 记得fat的删除只是标记, 这没问题. 问题是如果写入时发现数据需要擦除需要调哪个函数呢?
+7, 选择哪些essue check上的bug到文档? 与用户开发有关的?
+8, <DONE>如何读取response. response3是r1的card status, 不明白硬件为什么这样设计.
+
+9, <DONE>有没有读取r1b的busy?
+写入时如果卡dat0给出busy, 是host硬件检测的. 如果超时会返回int_status[9](resp_r1b_timeout)表示r1b的busy过长. <TODO>超时是超时多长时间?</TODO>: 查没有会返回r1b的命令协议中是否规定了busy timeout时间.
+
+10, <DONE, 转移>高速模式有没有测试?没有.
+
+18:13 2009-2-24
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, 软件bug, volatile, 卡质量对sd host的影响
+1, 典型的volatile使用场合:
+用gcc的优化选项eg －o3，对程序进行编译后，存在如下问题：
+
+static int g_intstatus = 0;
+while(1)
+{
+    if(g_intstatus == 1)
+    {
+       Break;
+    }
+}
+
+Irq:
+    g_intstatus ＝ 1；
+ 在if(g_intstatus == 1)执行的过程中，如果通过irq或其它方式修改了g_intstatus = 1;此时if 语句中还是用第一次执行时的g_intstatus = 0;不会自动更新为g_intstatus ＝ 1；
+
+在不做优化时，没有这个问题；
+所以以后写code时，如果有的flag需要先判断，在判断的过程中被irq或其它修改的情况，需要定义为volatile，eg：
+static volatile int g_intstatus = 0; 
+
+volatle典型用法:
+1) 并行设备的硬件寄存器（如：状态寄存器） 
+2) 一个中断服务子程序中会访问到的非自动变量(Non-automatic variables) 
+3) 多线程应用中被几个任务共享的变量 
+
+2, 2个卡读写有问题. 830的sd host相当于质量一般的读卡器, 好读卡器读写没问题. 更换同品牌同型号卡也没问题. 最后认为是卡的质量问题.
+
+18:20 2009-2-24
+VC0830学习, 模块, bug, 串口丢数据
+今天有个bug最后发现是串口助手的bug, 有些数据没有显示. 建议大家以后用dragon或DNW.
+
+18:24 2009-2-25
+VC0830, sd/sdio/mmc, <TODO>晚上安排0</TODO>
+1, 整理今天新员工培训时SD笔记;
+2, 完成SD文档.
+
+11:14 2009-2-26
+VC0830学习, 模块, 深入了解, 存储器, sd/sdio/mmc, SDIOE1_Spec_1_10_TC2阅读
+Combo Cards can accept CMD15 with RCA=0000, as described in Figure 3, but there is an exception for SD memory only cards. Memory only cards require a non-zero RCA before the host may issue CMD15. Thus, CMD15 shall be issued after CMD3 in the Standby state. In the case of ACMD41, it shall accept RCA=0x0000.
+
+10:05 2009-2-27
+项目, 830 SV的人月安排
+自: Aiguo 2009年2月18日邮件
+艾国    4
+凌明    6
+李栋梁  6
+张健    6
+舒予    3
+吕博学  3
+孙光跃  3
+廖志城  3
+蔡进    3
+周大山  1.5
+冯备战  1.5
+冯雅雅  4
+付娅丽  4
+张璐    4
+共      52
+
+99:99 2099-99-99
+置底, 待做
+2, 整理15日行为综合笔记, 下载ppt.
+4, 还7元饭费。
+
+15:45 2009-2-27
+VC0816调试, 模块, 存储器, sd/sdio/mmc
+1, 加入了Sdio_Protocol_SetBusWidth和testcode.
+位置: "work\VC0816\code\sdio_add_setbuswidth.rar"
+
+16:06 2009-2-27
+同事信息, 于敬芝, 校友
+自: hr 2009年1月16日邮件
+加盟中星微产品2部任软件工程师的于敬芝，直接向软件研发经理李志刚汇报工作。于敬芝女士毕业于北京工业大学计算机应用技术专业并获得硕士学位；加盟中星微之前曾在北京瑞斯康达科技发展有限公司任职；她的办公电话是：010-68948888-7263，Email:yujingzhi@vimicro.com
+
+16:12 2009-2-27
+同事信息, 祝锋, 蓝牙市场(Marketing)
+自: hr 2009年2月20日邮件
+加盟中星微委员会任蓝牙市场经理的祝锋，直接向市场经理李想汇报工作。祝锋先生毕业于中科院专业并获得硕士学位；加盟中星微之前曾在北京七星华创电子股份有限公司、Lenovo、世健系统有限公司任职；他的办公电话是：010-68948888-7268，Email:zhufeng@vimicro.com
+
+祝锋曾在CSR做FAE, 据说是蓝牙1st公司.
+
+17:01 2009-2-27
+VC0816调试, 模块, 存储器, sd/sdio/mmc
+1, FPGA配置文件(cf code): "\\10.0.2.36\sqmshare\Projects\Mobile BU\vc0816\FPGA\cf"
+2, 使用正确的调试脚本: 当前应使用new padc脚本:
+include D:\VC0816\Panda\init_script\rv_debug_script\VC0816init_for_fpga_sdram_16M_NewPadc.inc
+
+18:52 2009-2-27
+VC0816调试, 模块, 存储器, sd/sdio/mmc, 代码修改
+代码: "work\VC0816\code\sdio_padc_modify.rar", 已提交.
+sd调试；
+1，改pad：
+newpadc\padc.c
+padc_gpio_int_register()
+padc_switch_func_sdio()
+
+开始padc_switch_func_sdio漏改了一行。
+
+2，nand padc切换问题。 
+
+3， fat问题
+bootloder\main.c:
+取消Sd_Init();注释。
+这个应该不影响。已取消。
+为了调试也取消了Fat_Init()注释，也已经恢复。(15:42 2009-3-13)这里的意思应该是不能注释Fat_Init()."15:42 2009-3-13"
+
+4，read one block的中断进不去。改为查询模式也过不了。

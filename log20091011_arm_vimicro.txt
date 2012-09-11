@@ -1,0 +1,1420 @@
+
+10:22 2011-10-24
+linaro, qemu, beagle, versatileep, 关注linaro在beagle和arm versatileep板子上的进展, 有对应的qemu模拟器可以运行, 续; 文档, 总结
+1, 实验昨天下载的qemu和img
+1), 编译linaro qemu
+(1), ./configure --prefix=/opt/share/zhangjian/install/linaro/qemu_0.15.50_2011.10 --interp-prefix=/opt/share/zhangjian/install/linaro/gnemul_0.15.50_2011.10 --target-list="arm-softmmu arm-linux-user armeb-linux-user"
+configure结不会显示creating Makefile, 开始还以为是没有configur成功, 其实没问题. 
+(2), make, make install.
+zhangjian@icp882-desktop:/opt/share/zhangjian/install/linaro/qemu_0.15.50_2011.10$ tree
+.
+├── bin
+│?? ├── qemu-arm
+│?? ├── qemu-armeb
+│?? ├── qemu-ga
+│?? ├── qemu-img
+│?? ├── qemu-io
+│?? ├── qemu-nbd
+│?? └── qemu-system-arm
+2), 运行, 出错:
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle$ ../../install/linaro/qemu_0.15.50_2011.10/bin/qemu-system-arm -M beaglexm -drive if=sd,cache=writeback,file=./beagle-ubuntu-desktop.img -clock unix -serial stdio -device usb-kbd -device usb-mouse -usb -device usb-net,netdev=mynet -netdev user,id=mynet
+qemu: hardware error: no boot device found
+CPU #0:
+R00=00000000 R01=00000000 R02=00000000 R03=00000000
+R04=00000000 R05=00000000 R06=00000000 R07=00000000
+R08=00000000 R09=00000000 R10=00000000 R11=00000000
+R12=00000000 R13=00000000 R14=00000000 R15=400140a4
+PSR=400001d3 -Z-- A svc32
+Aborted
+
+3), 难道需要生成一下sdcards? 
+参考: http://releases.linaro.org/images/linaro-n/alip/11.09/
+# These values will change based on your system
+$ SDCARD=/dev/sdb
+$ IMGFILE=overo-nano.img
+$ gunzip ${IMGFILE}.gz
+$ dd bs=4k if=${IMGFILE} of=${SDCARD}
+
+执行: 
+dd bs=4k if=${IMGFILE} of=${SDCARD}
+结果是一样的. 输出文件和源文件大小一样. 
+
+4), (11:38 2011-10-24)
+考虑用linaro-media-tool建立sd卡. 需要如下工具: 
+To run linaro-media-create you'll need to make sure the following packages are
+installed:
+  - parted
+  - dosfstools
+  - u-boot-tools or uboot-mkimage
+  - python-argparse
+  - python-dbus
+  - python-debian >= 0.1.16ubuntu1
+  - python-parted
+  - qemu-user-static >= 0.13.0 (only if you're running on x86)
+  - btrfs-tools
+  - command-not-found
+
+根据提示安装了缺失的软件. 打包, 
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/tool/linaro-image-tools-2011.09$ ./linaro-android-media-create --image_file test.img --dev beagle --system ../../download/image/beagle_11.09/system.tar.bz2 --boot ../../download/image/beagle_11.09/boot.tar.bz2 --userdata ../../download/image/beagle_11.09/userdata.tar.bz2
+文件下载地址"http://releases.linaro.org/platform/linaro-n/android/11.09/beaglexm/". 
+(17:45 2011-11-15)image位置: /opt/share/zhangjian/linaro/beagle/beagle_11.09_create_by_lit.img"17:45 2011-11-15"
+
+如果不是mmc设备就不能用"--mmc /dev/sdX"而是使用"--image_file test.img".
+命令参考了(分别是beagle和VersatileEp的qemu文档)
+https://wiki.linaro.org/Resources/HowTo/Qemu-beagleboard
+https://wiki.linaro.org/PeterMaydell/QemuVersatileExpress
+
+5), 速度很慢. 也许直接在Linux系统跑能快很多. 下载在244服务器直接实验. 
+
+2, 在qemu SOC上运行android到底有没有意义? 
+1), 相比google goldfish, 在真实板子上运行android可能可以做写针对真实板子的调试. 
+2), 学习没有的硬件. 例如在qemu里面研究A9双核(通过vexpress-a9 ARM Versatile Express for Cortex-A9).
+
+3, 结论:
+android成功启动(速度慢, 不能触摸屏和键盘无反应)..
+明天试试直接在10.0.13.244服务器上运行, 估计就没问题了. 
+
+4, (15:52 2011-10-25)
+在244服务器上直接实验(下面命令需要加sudo权限, 否则会提示没有SDL video device): 
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle$ ../qemu/qemu-linaro-0.15.50-2011.10/arm-softmmu/qemu-system-arm -M beaglexm -drive if=sd,cache=writeback,file=./beagle_11.09.img -clock unix -serial stdio -device usb-kbd -device usb-mouse -usb -device usb-net,netdev=mynet -netdev user,id=mynet
+速度比在远程运行快很多. 基本和在实际设备上运行差不多. (占用了244服务器100%的cpu).
+发现也不能使用usb设备, 原因可能是usb controller本身不可用: 系统启动时提示: 
+ERROR : Unsupport USB mode
+Check that mini-B USB cable is attached to the device
+
+完整log: 
+U-Boot 2011.09-rc2 (Sep 26 2011 - 06:35:16)
+
+OMAP36XX/37XX-GP ES1.1, CPU-OPP2, L3-165MHz, Max CPU Clock 1 Ghz
+OMAP3 Beagle board + LPDDR/NAND
+I2C:   ready
+DRAM:  512 MiB
+NAND:  256 MiB
+MMC:   OMAP SD/MMC: 0
+*** Warning - bad CRC, using default environment
+
+ERROR : Unsupport USB mode
+Check that mini-B USB cable is attached to the device
+In:    serial
+Out:   serial
+Err:   serial
+Beagle xM Rev A
+No EEPROM on expansion board
+Die ID #51454d5551454d555400000051454d55
+Net:   Net Initialization Skipped
+No ethernet found.
+Hit any key to stop autoboot:  0 
+
+看了要希望能在qemu里面调试android还需要有工作做. 
+
+16:01 2011-8-18
+VC0882, SV, arm, arm Cortex-A series programming guide, 超全的arm Cortex-A编程手册; 文档
+DEN0013A_cortex_a_series_PG.pdf
+download from arm website. 从linkedin arm group看到的. 
+
+17:09 2011-7-25
+VC0882, arm, 环境, Cortex-A8, 文档, 总结
+AE bianrongguang解决关机bug时, 遇到imprecise data abort, 这样没法知道是谁引起的问题, 用apt timeout打印出有没有寄存器配置timeout引起的data abort.
+
+12:09 2011-4-7
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide), 续, 为了实验openocd对VC0882支持情况实验openocd最新版本
+1, 如果提示找不到libtool，安装既可"sudo apt-get install libtool". 
+安装后运行bootstrap，运行出错，但是configure已经生成，应该不影响编译：
+[zhangjian@icp-desktop openocd-becfbea]$ git submodule init
+fatal: Not a git repository (or any of the parent directories): .git
+2, configure: error: jimtcl not found, run git submodule init and git submodule update.
+3, windows下可以访问，198 Linux服务器不行，感觉是网关的问题，没搞定，做了如下实验。
+1), [zhangjian@icp-desktop openocd]$ route 
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+10.0.12.0       *               255.255.254.0   U     1      0        0 eth0
+link-local      *               255.255.0.0     U     1000   0        0 eth0
+default         10.0.12.1       0.0.0.0         UG    0      0        0 eth0
+2), [zhangjian@icp-desktop openocd]$ sudo route add default gw 10.0.0.3
+[sudo] password for zhangjian: 
+SIOCADDRT: No such process
+3), sudo route del default
+4, 后来在pc下用"http://repo.or.cz/r/openocd.git/"得到了一个".git"目录，复制到198服务器，bootstrap可以通过。
+但是 ./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD_snapshot_20110407 --enable-maintainer-mode
+还是提示同样信息，关闭jimtcl实验：
+./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD_snapshot_20110407 --enable-maintainer-mode --disable-internal-jimtcl
+1), 如"19:14 2010-1-25"文档所述，需要安装libusb和libftdi
+(1), libusb: 
+./configure --prefix=/home/zhangjian/bin/libusb_0_1_12; make; make install
+ PATH=$PATH:/home/zhangjian/bin/libusb_0_1_12/bin/
+(2), libftdi:
+./configure --prefix=/home/zhangjian/bin/libftdi_0_18; make; make install
+ PATH=$PATH:/home/zhangjian/bin/libftdi_0_18/bin/
+2), 
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libftdi_0_18/lib/libftdi.so
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libftdi_0_18/lib/libftdi.so.1
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libftdi_0_18/lib/libftdi.so.1.18.0
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libusb_0_1_12/lib/li
+busb.so  
+5, 即使disable internal jimtcl也不行。
+从http://repo.or.cz/w/jimtcl.git下载最新代码放到openocd的jimtcl目录，不需要disable internal jim，然后就可以编译过了：
+./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD_snapshot_20110407 --enable-maintainer-mode
+=== configuring in jimtcl (/opt/share/zhangjian/development/openocd/openocd-becfbea/jimtcl)
+configure: running /bin/sh ./configure.gnu --disable-option-checking '--prefix=/home/bin/OpenOCD_snapshot_20110407'  '--enable-ft2232_libftdi' '--enable-maintainer-mode' --cache-file=/dev/null --srcdir=.
+6, (19:21 2011-4-7)明天实验openocd调试VC0882. 
+7, (16:22 2011-4-8)为了实验方便，在fc10虚拟机里面重新编译了openocd。
+
+12:30 2011-4-11
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide), 续, 为了实验openocd对VC0882支持情况实验openocd最新版本, 续
+1, 阅读openocd脚本和代码。
+发现omap4的脚本指定了dbgbase(似乎是cortex-a coresight dbg register)，注释说因为读到的base不对，所以需要从外面指定。
+\todo 看openocd如何从romtable中读到base。
+搜了一下代码，src/target/target.c里面有"-dbgbase"，这个参数。看来这里是入口。
+jim tcl里面的target configure, target create都在该文件定义。
+
+10:41 2011-2-10
+嵌入式, arm, mmu管理文档阅读, Arm Architecture Reference Manual for Cortex-A,Cortex-R
+这次看arm文档又有新的收获. 
+1, super section descriptor里面已经包含了四十位地址的映射. 也就是armv7a,r架构最高支持1Tbytes. 和x86的地址扩展似乎一样. 
+关闭mmu时, cache maintenance 按照平映射工作, 也就是说如果我不是平映射, 此操作不会对预期的MVA操作. 原来没意识到这一点, 看分析中很容易就包含假设. 细想arm这样规定是合理的: because MVA=PA while mmu is disable.
+分析问题时千万别忘了假设!
+2, arm建议开关mmu的代码va=pa, 否则取指会有问题? \todo 看linux代码.
+3, (10:03 2011-2-12)
+armv7a架构中tlb可以单独设置cache属性.
+ OMAP3530有三个mmu: mpu, iva2.2, camera, 为什么camera也需要呢.
+omap3530 mmu(iva2.2, camera)也是支持16m, 1m, 64k, 4k四种映射方式. 但属性和arm不同
+
+19:39 2011-04-10
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide), 续, 为了实验openocd对VC0882支持情况实验openocd最新版本, 续; 软件技巧, gdb
+1, 昨天已经实验openocd及其telnet成功, 今天编译了kernel, 实验调试kerel.
+设置断点, 由于符号表是开mmu之后的, 所以打开符号表之前的代码没发通过符号设置断点, 在System.map里面查到stext和__enable_mmu的虚拟地址分别是: 
+c0008000 T stext
+c0008034 t __enable_mmu
+所以断点是(注: gdb中使用"*"表示对后面的地址设置断点).
+#stext
+break *0x80008000
+#__enable_mmu
+break *0x80008034
+break start_kernel
+1), 但是断点没有停, 不知道原因. 
+
+17:13 2010-10-9
+VC0882, arm, Cortex-A8, arm总结: mmu, ttb, assembler
+1, 开mmu何时生效?
+考虑到开mmu时, 后面指令已经取指, 在pipeline中. 所以即使开mmu指令造成memory映射变化, 也不会影响到开mmu指令后面的几条指令. 
+考虑到A8有13级流水线, 也许可以取多条指令(没有考虑ASA: AXI speculative access对A8取指的影响).
+这可能和通常的直觉有差异. 需要注意. 
+
+2, translation table(TTBR0, TTBR1, TTBCR)
+A8中mmu页表管理分为tlb和memory(含L2 cache)两层. 
+首先看tlb有没有, 如果tlb miss, 根据TTBCR配置选择TTBR0, 还是TTBR1. 根据是TTBCR[2:0](N)的大小. 如果N=0, 选择TTBR1, 如果N>0, 根据[31:32-N]是否全为0选择TTBR0, TTBR1. 
+看起来这样很怪. 其实联想arm文档中提到建立TTBR1作为OS kernel页表, TTBR0做为task页表. 且Linux和windowCE的kernel空间都是0xC0000000--0xffffffff, 就容易理解了:
+[31:32-N]是否全0, 实际是区分高低地址, 如下表, 
+0xF     b1111
+0xE     b1110
+0xD     b1101
+0xC     b1100
+0xB     b1011
+0xA     b1010
+0x9     b1001
+0x8     b1000
+0x7     b0111
+
+如果N=1, 地址小于0x80000000时使用TTBR0, 大于使用TTBR1. 这样在某种程度上区分了kernel和用户空间. 但似乎不太彻底. 从目前看, kernel启动过程中的确没有使用这个机制. 我看到的是TTBR0和TTBR1相同. kernel启动后不清楚. 
+
+3, (10:06 2010-10-13)
+embedded assembler和inline assembler. inline实际还会被编译(arm和gnu都是如此): 使用的寄存器可能有变化, 可能在前面插入一些指令以根据设置保护现场, 也可能把你的语句翻译为你预期外的形式. 所以最好确认一下编译结果是你预期的. 相对而言embedded assembler和直接写汇编函数一样.
+
+9:49 2010-10-11
+VC0882, arm总结
+1, 环境移植
+移植工作从rvds3.0到rvds4.0, 从jlink/multiICE到RVI, arm926ej-s到Cortex-A8, console(aasp)的改进. 
+1), rvds4.0环境的移植. rvds4.0启动流程.
+
+2, trace的调试
+1), 连线. 
+2), TPIU timing测试.
+3), 配置trace.
+
+11:33 2010-9-28
+VC0882, VC0718, arm, Cortex-A8, VC0882项目arm总结文档, mmu页表属性; 总结, 文档
+1, 如何查看mmu页表以及memory属性? 
+1), 找到一级页表基址
+读TTB0, TTB1两个寄存器,根据xxx判断当前使用的是哪个寄存器. 
+低5位(需确认)是属性. 看高位表示页表的物理地址, 需要转为虚拟地址. 例如Linux里面页表地址是0x80004019. 说明页表的虚拟地址是0xc0004000. 
+2), 计算虚拟地址的偏移. 
+arm mmu页表以虚拟地址为索引, 所以我们只能通过虚拟地址查到物理地址, 不能反过来查(\todo 有PA 2 VA寄存器么). 
+例如我希望查kernel内核空间0xc0000000是从哪个物理地址映射的. 
+arm架构一级页表是1Mbyte 一个entry, 一个entry占用一个word(4bytes).
+所以0xc0000000 / 1Mbyte * 4byte = 0x3000.
+因此0xc0000000开始的1Mbyte区域对应的页表位置是0x80004000+0x3000 = 0x80007000.
+注: 这里其实也可以口算: 除以1Mbyte就是减去20位2进制数(5位16进制). 0xc0000000去掉5位是0xc00. *4bytes是左移两位. 0xc=0x1100. 左移两位是0x11 0000, 所以最终的结果就是0x3000.
+3), 查看表项. 
+例如查到0x80007000地址的数据是. 0x800xxxxe. 
+4), 可能需要查二级页表. 待续. 
+
+2, Linux中页表属性的设置----寄存器部分
+
+13:01 2010-9-28
+VC0882, VC0718, arm, Cortex-A8, VC0882项目arm总结文档, Cortex-A8 ecosystem; 总结, 文档, 素材
+Cortex-A8 ecosystem, 这个我写了很多次了. 
+A8 cache line refill支持critical word first, 这个在总线上是通过AXI wrapper访问实现的. 
+这里是想说A8 feature和AXI总线的关系. 基于A8的系统总线都是AXI的. 
+
+11:22 2010-8-5
+VC0882, storaget, usb, 低速设备, 低速鼠标枚举出错; 开始认为硬件问题, 后来发现是软件流程问题: 这类问题在arm测试中也出现过; 文档, 总结; 软件修改后问题解决.
+自 issue track "http://10.0.2.208/mantis/view.php?id=9287", jiajihua注释
+1, 从jiajihua注释看, 枚举低速设备使用了全速(full speed)设备的流程, 所以出错. 
+2, (0018782)
+jiajihua 
+2010-08-04 12:36
+这个问题有了初步进展：
+原来能够通过复位的是全速鼠标，而复位无法通过的是低速鼠标。
+原来一直用鼠标作为测试低速的设备，因此应该说uhost还没有通过一个低速设备的测试。
+怀疑是uhost软件对低速设备的操作不正确所致，需要进一步debug。
+ 
+所做的实验和结果：
+(1) 正确的鼠标（双飞燕，全速鼠标）
+在plugin后，USB reset之前，linestate为1，全速设备。
+在UHC2_PRT_CONN_DISABLE状态，linestate[1:0]为1，line_k_r为0，然后跳转为UHC2_PRT_RESET_WAIT_CHIRP状态。
+(2) 错误的鼠标（dell，低速鼠标）
+在plugin后，USB reset之前，Linestate为2，低速设备。
+在UHC2_PRT_CONN_DISABLE状态，linestate[1:0]为2，line_k_r为1，所以不会进入UHC2_PRT_RESET_WAIT_CHIRP状态。
+prt_state_r一直死在UHC2_PRT_CONN_DISABLE状态。
+接低速设备时，uhost不进入UHC2_PRT_RESET_WAIT_CHIRP状态是正确的硬件行为。
+关于低速设备如何操作需要进一步研究。  
+(0018783)
+jiajihua 
+2010-08-04 14:18
+ 问题原因找到了，软件流程上有问题。
+根据EHCI规范4.2.2 Port Routing Control via PortOwner and Disconnect Event中对于port route的流程描述：
+· When the EHCI Driver receives the request to reset and enable the port, it first checks the value 
+reported by the LineStatus bits in the PORTSC register. If they indicate the attached device is a full-
+speed device (e.g. D+ is asserted), then the EHCI Driver sets the PortReset control bit to a one (and sets 
+the PortEnable bit to a zero) which begins the reset-process. Software times the duration of the reset, 
+then terminates reset signaling by writing a zero to the port reset bit. The reset process is actually 
+complete when software reads a zero in the PortReset bit. The EHCI Driver checks the PortEnable bit 
+in the PORTSC register. If set to a one, the connected device is a high-speed device and EHCI Driver 
+(root hub emulator) issues a change report to the hub driver and the hub driver continues to enumerate 
+the attached device.
+· At the time the EHCI Driver receives the port reset and enable request the LineStatus bits might indicate 
+a low-speed device. Additionally, when the port reset process is complete, the PortEnable field may 
+indicate that a full-speed device is attached. In either case the EHCI driver sets the PortOwner bit in the 
+PORTSC register to a one to release port ownership to a companion host controller. 
+设备连接后，正确的处理流程应该为：
+（1） 首先读PORTSC寄存器中Line Status域。
+a) 如果为01b，说明外接的是低速设备，则不走EHCI port reset，直接把控制权交给OHCI。
+b) 如果为10b，说明外接的非低速设备，则执行EHCI port reset。
+（2） 执行EHCI reset，在reset完成后，就可以区分是全速设备还是高速设备了。
+Fandong，请修正软件进行验证。  
+
+11:01 2010-8-17
+VC0882, arm, Cortex-a8, storage, sd, nand, 速度测试; 速度测试与cache关系; 总结, 文档: 开cache后要考虑cache maintenaince时间
+1, 速度与cache关系
+之前zhiming有一次测试sd速度, 发现有些情况下, 开cache后速度反而慢一些. 后来分析时间可以知道是cache clean操作的耗时. 
+开cache时read速度小于关cache read速度. 从数据看除了cache clean时间后还有很大差异(20%-30%). 但是不论是否开cache, write速度都远低于下面class测试的速度. 
+详见"D:\VC0882\document\performance\vc0882_sd_performance".
+
+2, sd class speed测试
+1), class分为0,2,4,6. 自sd spec2.0, "3.4 Speed Class"
+Four Speed Classes are defined and indicate minimum performance of the cards
+? Class 0 - These class cards do not specify performance. It includes all the legacy cards prior to
+this specification, regardless of its performance
+? Class 2 - Are more than or equal to 2 MB/sec performance.
+? Class 4 - Are more than or equal to 4 MB/sec performance.
+? Class 6 - Are more than or equal to 6 MB/sec performance.
+2), 从测试数据看, class4,6和比class2的multi写速度快20%. class2有一次3M/sec的速度, 这个不太正常, 可能是偶然? 基本都是6M左右. read速度差异不大, 可能是因为硬件设计上的瓶颈(normal下最大是12.5M).
+自: D:\VC0882\document\performance\vc0882_sd_performance
+class2 
+[SD   MSG]      Multi Read Speed is: 10402539 bytes/second
+[SD   MSG]      Multi Write Speed is: 6355006 bytes/second
+[SD   MSG]      Multi Read Speed is: 10423220 bytes/second
+[SD   MSG]      Multi Write Speed is: 3578757 bytes/second
+class 4
+[SD   MSG]      Multi Read Speed is: 10402539 bytes/second
+[SD   MSG]      Multi Write Speed is: 7653839 bytes/second
+class 6
+[SD   MSG]      Multi Read Speed is: 10402539 bytes/second
+[SD   MSG]      Multi Write Speed is: 7676251 bytes/second
+
+3, 疑问:
+我的疑问如下: 
+1), 在mmu.txt和nommu.txt中: 
+开cache时read速度小于关cache read速度. 从数据看除了cache clean时间后还有很大差异(20%-30%). 但是不论是否开cache, write速度都远低于下面class测试的速度.
+但开cache的write速度反而和下面红色的写速度接近. 
+2), mmu和nommu的编译选项? Mmu是指mmu, L1, L2都打开么? 
+我担心是软件或硬件, 感觉还是需要查查. 仅仅是建议, 如果需要的时间比较长最好和beizhan讨论一下工作安排. 
+
+4, zhicheng nand 软件读开cache慢是因为开cache后执行速度提高, 第一次查状态没查到, delay后再继续查, 不开cache时第一次就查到状态了.
+
+21:16 2010-8-31
+VC0882, VC0718, arm, Cortex-A8, coresight, FPGA稳定性, 文档, 总结; rvdebugger错误：Error: 0x02410100: The run control operation could not be completed
+1, 718 coresight问题, 借机整理了VC0882遇到的所有情况. lingming邮件提到的: 
+1), Q(Huangwei, 原邮件Support-cores@arm.com邮件"Re: A8 support list (461647)"20100409_1748).
+2), D:\VC0882\document\arm\debug\rvdebugger问题集.doc: 2
+2, zhangjian邮件"答复: 718 Jtag异常，能帮帮忙吗？？"20100831_2117
+在VC0882早期有四个bug(见后)涉及到类似错误, 另外附件中是当时VC0882 FPGA稳定性调试总结, 供你参考.
+可能有如下原因导致此类问题:
+1, 时钟或reset方案问题, 见issue 8114. 
+2, 供电相关: 
+1), 供电不足: 换新电源并调高电压到5.3v左右后好转.
+2), 限流芯片问题: 见issue 8252.
+3), ICE和FPGA台子共地会改善稳定性.见issue 8114 
+3,子板i/o问题也会引起这个问题, 我记得当时是uart子板导致的, 具体可以问guohaifeng. 
+4, arm发出的读或写没有返回, 造成arm挂住, 这样ICE就没法使arm进入debug状态, 
+5, 复位后arm无法从memory取指(例如memory不可读). 
+6, 其他原因, 例如FPGA台子不稳定. 
+
+其实从软件/ICE看到的都是外部行为, 如果IC同事能深入内部结合协议分析, 虽然协议复杂会比较困难, 但是可能会容易定位问题.
+
+注: 
+1, 与coresight相关的四个issue分别是: 
+http://10.0.2.208/mantis/view.php?id=8114
+http://10.0.2.208/mantis/view.php?id=8115
+http://10.0.2.208/mantis/view.php?id=8252
+http://10.0.2.208/mantis/view.php?id=8469
+
+2, VC0882 coresight调试经验: 
+Huangwei邮件"Re: Vc0882 FPGA platform is ready now"20100202_1805
+[YANG ZUOXING] HUANGWEI, 请总结一下
+[huangwei]
+1). nSRST from ICE should be connected. Realview debugger will use this signal to reset Vc0882.
+2). A8 can't run stablely at 48Mhz.
+3). alternative APB-AP and AHB-AP access to debug apb will result in AHB-AP access failure. The reason is not identified yet.
+
+00:39 2010-7-2
+(20:49 2010-7-2)
+(16:13 2010-7-5)
+(21:51 2010-7-7)
+VC0882, 环境总结, arm深入介绍, 文档, \todo
+1, 环境:
+1), 初始化代码：调用库的方式，进入c的方式直接调用main函数. 
+2), os支持：tick(64 bit continueus timer), irq(64bit), malloc(cache line对齐).
+3), mmu, cache：对a8的部分支持。mmu attribute的选择。page table attribute修改函数。
+建议VC0718使用device而不是strongly-ordered, 这样更接近实际情况, 有可能测出更多问题. \todo 加入ic bug, kongyingqi dsb 问题. 
+4), aasp改进. 
+5), emi bootloader, ddrc script.
+6), 实验性小环境: mini_c_env_base(含aasp), mini_c_env_nolib: data abort handler. 
+7), 脚本: regdef script.
+2, arm
+1), mmu page table与axi多通道
+2), cache: 
+(1), 结合"ARM_ARM_7AR"A3.9.2 Memory hierarchy: 从系统架构理解cache. Cortex-A8 dcache和L2是PIPT, icache是VIPT. 所以对于读数据来说, 看到的是物理地址的数据. 即使mmu映射一个物理地址到两个虚拟地址, 也不会有数据一致性问题. 指令是虚拟地址应该是因为取指不需要经过mmu, 另外一般修改下指令也不会修改. 但ARM9 trm又提到VIVT好处: The caches are virtual index, virtual tag, addressed using the Modified Virtual Address (MVA). This enables the avoidance of cache cleaning and/or invalidating on context switch.
+(2), "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf": L1 dcache与L2 dcache无关, 但L1 icache是L2 icache的子集. (bamvor: dcache互不包含就避免了更多的数据一致性问题.)
+(3), number of set = log2(cache size(16k) / cache line size(64byte)) - numberOfWay(4) = 6; 2^6=64
+for VC0830(arm926): 
+CSIZE 				EQU 14	;注意和CACHE_SIZE一致
+CLINE				EQU 5
+NWAY				EQU 2
+NSET				EQU (CSIZE-NWAY-CLINE)  ;7, 2^7=128
+所以目前理解Cortex-A8中tag[31:12], set[11:5], cacheline[4:0].
+way和set一个是纵向平面,一个是横向平面, 这样可以唯一选择一个cache line. 看来这个地方要做一些实验. 见"18:41 2010-7-5"
+3), sync, async data  abort
+thumbee
+neon与l2, PLE
+3, debug
+1), trace
+2), profiler: DUI0414C_rvp_user_guide.pdf
+
+11:45 2010-7-18
+VC0882, arm, Cortex-A8, 文档整理, VC0882 arm文档说明
+1, 我学习中收集和阅读的VC0882 arm文档位置: "\\10.0.2.36\sqmshare\Document\ARM\arm体系结构"的Cortex和debug目录. "D:\VC0882\document\arm". 
+arm release完整文档位于"D:\VC1600WCVS\doc\module\Cortex-A8"和"D:\VC1600WCVS\doc\module\CoreSight"
+arm这块主要是Cortex-A8和Coresight(debug and trace)两部分. 
+
+2, Cortex-A8和Coresight introduction文档:
+36服务器: Document\Arm\arm体系结构\Cortex. "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf", "Cortex-A8 Processor Product Brief.pdf", "CortexA8_Tools.pdf"
+
+3, 详细文档:
+1), VC0882 arm设计文档是"D:\VC1600WCVS\doc\mas\VC0882\CPU_WRAPPER".
+2), ARM_ARM_7AR: "DDI0406B_arm_architecture_reference_manual_errata_markup_4_0.pdf", 
+这个文档是架构文档, 包括arm指令, memory系统架构等等, 附录D是cortex-a8去掉的feature, G和H是armv7与armv6, armv4/v5差异. 可以先看看. 
+3), Cortex-A8 TRM: "DDI0344J_cortex_a8_r3p2_trm.pdf".
+4), Coresight: "DDI0314H_coresight_components_trm.pdf"是coresight各模块的文档. 
+
+4, 项目过程中training和我的学习笔记见: "arm\笔记", "VC0882环境和Cortex-a8介绍.ppt", "arm\vc0882 Cortex-A8及环境调试笔记.txt"
+
+16:17 2010-7-22
+VC0882, arm, 总结
+1, mmu: section, page大小变化. 不建议使用FCSE, 推荐ASID方式. 两个ttb.
+2, cache: L1, L2基本属性. cache与integer和neon的配合. PLD, PLI, PLE.
+3, neon.
+4, coresight: apb-ap, ahb-ap, trace.
+
+11:30 2010-7-24
+(22:37 2010-07-25)
+(17:51 2010-7-26)
+VC0882, arm, 总结, 文档, VC0882 arm使用总结, \todo 与CVS保持同步
+
+initial draft 2010-7-24 zhangjian
+update after arm discusion meeting 2010-7-26 zhangjian
+
+VC0882 Cortex-A8总结, 包括Cortex-A8和armv7A新feature的使用情况, 也包括VC0882中cpu子系统相比之前项目(主要是VC0830)的变化. 
+1, pipeline
+0), integer 13 stages, neon 10 stages, L2 cache 8 stages.
+1), interger是顺序执行的, neon可以乱序. 
+2), integer load/store miss会导致pipeline replay. neon中pipeline会stall.
+3), integer是双发射. NEON似乎也是双发射(确认).
+4), 分支预测: 预测错误的跳转会造成流水线flush, 这样会有13cycle的penelty. 打开对于循环性能的提升很大: \todo 实验memcpy速度(arm performance monitor计数). 
+另外, 在Cortex-A8中如果打开了分支预测, 就不能通过跳转来flush pipeline. 需要使用pipeline flush或isb. 
+
+3, mmu, cache变化
+1), memory sections or pages大小变化
+新增16MB的supersection, 取消了原来1kB的tiny pages:
+Supersections Consist of 16MB blocks of memory. 
+Sections Consist of 1MB blocks of memory.
+Large pages Consist of 64KB blocks of memory.
+Small pages Consist of 4KB blocks of memory.
+2), 两个translation table, 这样可以减少translation table切换的时间. 
+不建议使用FCSE, 推荐ASID方式.
+3), cache的变化.
+(1), Point of coherence, Point of unification:
+The points to which a cache maintenance operation can be defined differ depending on whether the operation is by MVA or by set/way:
+? For set/way operations, and for All (entire cache) operations, the point is defined to be to the next level of caching.
+? For MVA operations, two conceptual points are defined:
+Point of coherency (POC)
+For a particular MVA, the POC is the point at which all agents that can access memory are guaranteed to see the same copy of a memory location. In many cases, this is effectively the main system memory, although the architecture does not prohibit the implementation of caches beyond the POC that have no effect on the coherence between memory system agents.
+Point of unification (POU)
+The PoU for a processor is the point by which the instruction and data caches and the translation table walks of that processor are guaranteed to see the same copy of a memory location. In many cases, the point of unification is the point in a uniprocessor memory system by which the instruction and data caches and the translation table walks have merged.
+The PoU for an Inner Shareable shareability domain is the point by which the instruction and data caches and the translation table walks of all the processors in that Inner Shareable shareability domain are guaranteed to see the same copy of a memory location. Defining this point permits self-modifying code to ensure future instruction fetches are associated with the modified version of the code by using the standard correctness policy of:
+1. clean data cache entry by address
+2. invalidate instruction cache entry by address.
+The PoU also enables a uniprocessor system which does not implement the
+Multiprocessing Extensions to use the clean data cache entry operation to ensure that all writes to the translation tables are visible to the translation table walk hardware.
+
+(2), 架构上支持7级cache, 没有提供类似arm926ej-s中的一条指令清dcache的命令:
+Test and clean DCache - MRC p15, 0, <Rd>, c7, c10, 3
+Test, clean, and invalidate DCache - MRC p15, 0, <Rd>, c7, c14, 3
+
+If the cache contains any dirty lines, bit 30 is set to 0. If the cache contains no dirty lines, bit 30 is set to 1. This means that you can use the following loop to clean the entire DCache:
+tc_loop: MRC p15, 0, r15, c7, c10, 3 ; test and clean
+BNE tc_loop
+The test, clean, and invalidate DCache instruction is the same as test and clean DCache, except that when the entire cache has been cleaned, it is invalidated. This means that you can use the following loop to clean and invalidate the entire DCache:
+tci_loop: MRC p15, 0, r15, c7, c14, 3 ; test clean and invalidate
+BNE tci_loop
+
+注: 以上指令自ARM926ej-s TRM p52-p53.
+armv7A中要求按照cache层次, 从1级cache开始查询, 逐级做dcache或Unified cache的clean/invalidate操作, 例如对于有无L2 cache(即cache size是否为0)的情况可以使用一套code. 
+对于VC0882现有的配置, 可以从"c0, Cache Level ID Register"读出共有两级cache: L1是指令数据分离的cache, L2是unified cache. 
+对于每级cache, 可以通过"c0, Cache Size Selection Register"选择某一级cache, 并读取"c0, Cache Size Identification Registers"得到cache set, way, cache line size, 是否支持write allocate等等. 
+代码参见"dcache_intellectual_clean_and_invalidate".
+这里使用Cortex-A8 RTSM说明大致过程, 可以看出Cortex-A8 RTSM是256k L2 cache. 
+
+3), L1 icache是VIPT, L1 dcache和L2 cache是PIPT, (所以task切换时需要清TLB?). 这个和arm926ej-s不同. 
+L2最小latency是8cycles(ARM training 301v4p7).
+cache与integer和neon的配合. PLD, PLI(A8中实际是NOP), PLE.
+The L2 cache incorporates a dirty bit per quadword to reduce AXI traffic. This eliminates unnecessary transfer of clean data on the AXI interface.
+
+4), mmu页表属性的变化:
+(1), strongly-ordered, device, normal. 882中寄存器使用的是strongly-ordered属性, 实际更合理的是device属性, 否则可能隐藏IC bug(重要!). kongyingqi就因为这个属性发现了一个IC bug: 配寄存器的时候没有配完就返回ok了. 
+(2), sharable: 多核中才会用到. strongly-ordered都是shareable, device是否shareable由页表中TEX,C,B的组合确定, normal memory通过页表中S bit表示是否shareable. 
+(3), mmu: instruction是normal属性?
+(4), XN, 表示这个区域不能被预取或执行:
+Any region of memory that is read-sensitive must be marked as Execute Never, to avoid the possibility of a speculative prefetch accessing the memory region. For example, any memory region that corresponds to a read-sensitive peripheral must be marked as Execute Never.
+(5), nG: =0表示是OS kernel空间, =1表示是进程空间, for ASID.
+
+5), mmu, cache对系统的影响. 
+乱序. 一致性, 系统运行速度(例如gpu中原来不会timeout的会timeout). 
+
+6), 打开mmu和L1, L2 cache后, 
+(1), 会存在乱序访问. 最大26个Outstanding transactions(ARM training 301v4p19,p38,p39).
+因为AXI是多通道的, 而且支持Outstanding transactions.
+(2), memory barrior用于保证顺序. 
+
+4, A8与总线: VC0882使用AXI协议, A8能充分利用AXI的outstanding transaction来减小latency. 而之前的VC0830使用的是AXI lite(vimicro自己定义的一些, 不是amba3中的AXI lite), arm926ej-s只支持ahb bus. 
+multi load store被打断后的行为: 重新传输.
+
+5, neon.
+NEON默认不使用L1 dcache, 可以设置: 
+NEON L1 caching should be enabled for best performance when the L2 cache is off or not present.
+
+6, coresight: apb-ap, ahb-ap, trace.
+arm profiler可以使用trace2的数据, 暂时没有试通. caijin用profiler才RTSM分析数据. 
+
+7, performance monitor
+1), arm internal timer: cyle count
+2), cache miss.
+
+8, clock, reset和power control(Cortex-A8 TRM p360)
+1), arm cpu clk和AXI clk之间什么关系? 整数倍. \todo 查综合频率.
+2), arm reset: 共有5个reset, 包括单独reset debug logic, 其它logic, neon, 相见cortex-a8 trm p363.
+882设计简化为可以选择reset cpu时是否reset debug logic. 
+3), power control: 882中A8是一个power domain. 只能通过是否给clock控制功耗. neon, vfp, etm.
+4), wfi and power control.
+
+9, armv7A的其它新featue
+1), thumb2和thumb2-EE. 
+指令压缩技术, 16bit和32bit混合编程, 不需要切换时间, 减小code size, 性能几乎没有损失. 如果希望减小code size可以考虑使用thumb2. bootloader中是否使用? 
+thumb2-EE用于脚步或解释加速. android2.2 java性能提升. 
+
+10, 其他: 
+1), wfi唤醒与屏蔽irq无关.
+2), sum of absolute difference: USAD8, USADA8.
+USAD8, 2组4个byte, 先组间取差的绝对值, 再累计.
+USADA8, USAD8的结果再加一个word.
+3), 对多核有意义的: yield(表示该核空闲, OS可以用于任务负载平衡), ldrex, strex.
+
+11, cp15里面其它需要注意的寄存器
+1), "3.2.26 c1, Auxiliary Control Register"里面有一些高级控制选项. 
+(1), "speculative accesses"?  AXI
+2), "c12, Interrupt Status Register". fiq, irq, external abort.
+3), "c2, Translation Table Base Control Register"
+[5] PD1 Specifies occurrence of a translation table walk on a TLB miss when using Translation Table Base
+Register 1. When translation table walk is disabled, a section translation fault occurs instead on a
+TLB miss:
+0 = The processor performs a translation table walk on a TLB miss, with secure or nonsecure privilege appropriate to the current Secure or Nonsecure state. This is the reset value.
+1 = The processor does not perform a translation table walk. If a TLB miss occurs with Translation Table Base Register 1 in use, the processor returns a section translation fault.
+[4] PD0 Specifies occurrence of a translation table walk on a TLB miss when using Translation Table Base
+Register 0. When translation table walk is disabled, a section translation fault occurs instead on a TLB miss:
+0 = The processor performs a translation table walk on a TLB miss, with secure or nonsecure privilege appropriate to the current Secure or Nonsecure state. This is the reset value.
+1 = The processor does not perform a translation table walk. If a TLB miss occurs with Translation Table Base Register 0 in use, the processor returns a section translation fault.
+[3] - Reserved. UNP, SBZ.
+[2:0] N Specifies the boundary size of Translation Table Base Register 0:
+b000 = 16KB, reset value
+b001 = 8KB
+b010 = 4KB
+b011 = 2KB
+b100 = 1KB
+b101 = 512B
+b110 = 256B
+b111 = 128B.
+4), 分析系统出错寄存器: DFSR, DFAR, I...
+
+12, 工具
+1), rvct:
+caijin, -O3 -Otime --vectorize -cpu=cortex-A8(表示有neon)等四个参数在一起编译结果中loop unrolling(循环展开)有问题. 给arm发信. 
+
+13, 备用资料
+1), cache: 
+(1), 结合"ARM_ARM_7AR"A3.9.2 Memory hierarchy: 从系统架构理解cache. Cortex-A8 dcache和L2是PIPT, icache是VIPT. 所以对于读数据来说, 看到的是物理地址的数据. 即使mmu映射一个物理地址到两个虚拟地址, 也不会有数据一致性问题. 指令是虚拟地址应该是因为取指不需要经过mmu, 另外一般修改下指令也不会修改. 但ARM9 trm又提到VIVT好处: The caches are virtual index, virtual tag, addressed using the Modified Virtual Address (MVA). This enables the avoidance of cache cleaning and/or invalidating on context switch.
+(2), "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf": L1 dcache与L2 dcache无关, 但L1 icache是L2 icache的子集. (bamvor: dcache互不包含就避免了更多的数据一致性问题.)
+(3), number of set = log2(cache size(16k) / cache line size(64byte)) - numberOfWay(4) = 6; 2^6=64
+for VC0830(arm926): 
+CSIZE 				EQU 14	;注意和CACHE_SIZE一致
+CLINE				EQU 5
+NWAY				EQU 2
+NSET				EQU (CSIZE-NWAY-CLINE)  ;7, 2^7=128
+所以目前理解Cortex-A8中tag[31:12], set[11:5], cacheline[4:0].
+way和set一个是纵向平面,一个是横向平面, 这样可以唯一选择一个cache line. 看来这个地方要做一些实验. 见"18:41 2010-7-5"
+3), sync, async data  abort
+thumbee
+neon与l2, PLE
+3, debug
+1), trace
+2), profiler: DUI0414C_rvp_user_guide.pdf
+
+14, 2010-7-26 meeting minutes
+1), 修改, 实验
+(1), test L2 write allocate 对性能的影响.
+(2), 测试BTB(分支预测)对性能的影响. 
+(3), 882中寄存器从strongly-ordered改为device.
+2), 待确认问题
+(1), Cortex-A8 L2最多可以lockdown几路?
+(2), yanglei, yulijie: SOC designer.
+(3), A8 PLE burst 长度.
+(4), 什么情况必须用strongly-ordered?
+(5), A8里面的write buffer多大? 是否只有L2有write buffer? 
+(6), device属性里面是否严格保证read, write顺序: A8 write buffer中会不会对读写交替是的访问顺序影响. 
+我理解AXI中应该可以通过ID保证顺序.
+(7), ldrd, strd访问apb寄存器? 软件实验结果正确, 但designer(huangwei, jiangbo)认为有问题, 请ICV帮忙仿真.
+(8), 问atmic multi load store 被打断后重传. 如果是重传可能对硬件行为有影响.
+3), 其它: 
+(1), caijin, -O3 -Otime --vectorize -cpu=cortex-A8(表示有neon)等四个参数在一起编译结果中loop unrolling(循环展开)有问题. 给arm发信. 
+(2), check Linux cortex-A8 new features.
+(3), NEON最大运算宽度: 128? 
+(4), outstanding transactions: 能否结合一个例子看看, 到底什么地方出现的乱序, 感觉integer本身应该不会, 应该只在cache和NEON.
+(5), kongyingqi当时发现的问题为什么device属性有问题, strongly-ordered没问题? 
+
+15, (15:00 2010-7-30)
+arm, cache发现的问题.
+1), mengfandong, 非对齐dataabort.
+2), wangzhengwei, pmu normal->sleep, self-modify code.
+3), shuyu cif 0x8xxxxxxx cache,memory一致性问题. 
+4), yuyang dmac部分memory区域没有加cache操作. 
+
+10:16 2010-6-13
+VC0882, FPGA, arm Cortex-A8, L2 cache, 续, 修改memcpy_test软件bug后测试通过; 总结, 文档, 通过memcpy测试cache
+1, 代码修改, 映像, log: 
+D:\work\VC0882\code_backup\code\20100612_L2_cache\2222
+2, 用ddr fifo 4ma和ddr测试固定地址都没有错误. 随机地址出错次数接近(400多次/30000).
+3, 用perl脚本处理
+1) 得到所有错误打印信息: 
+26682: memcpy from 0x011d9e24 to 0x011accac fail@(0x011d9e24: 0x00efff70, 0x011accac: 0x12cb3721)(error count 377)
+perl -ne "if (/([0-9]+):.*(0x[0-9A-Za-z]+).*(0x[0-9A-Za-z]+).*(fail@.*)/) { print \"$1 $2 $3 $4\n\"}"  FPGA8_log20100612_224159.txt > FPGA8_fail.txt
+perl -ne "if (/([0-9]+):.*(0x[0-9A-Za-z]+).*(0x[0-9A-Za-z]+).*(fail@.*)/) { print \"$1 $2 $3 $4\n\"}"  FPGA15_log20100612_231803.txt > FPGA15_fail.txt
+perl -ne "if (/([0-9]+):.*(0x[0-9A-Za-z]+).*(0x[0-9A-Za-z]+).*(fail@.*)/) { print \"$1 $2 $3 $4\n\"}"  FPGA22_log20100612_231719.txt > FPGA22_fail.txt
+2), 看地址是否重叠
+为了直观使用excel比较. 发现所有出错区域都会重叠. 
+D:\work\VC0882\code_backup\code\20100612_L2_cache\2222\log\FPGA_fail_src_dst.xls
+4, 发现是指针运算引入的问题, 我用"UINT32*"指针加offset得到实际操作地址, 这样实际是加了"offset<<2"的offset, 因为指针运算以指针指向的类型的size为单位. 
+5, 修改后memcpy_test随机地址测试1000, 2450次测试分别通过. 这样做30000次测试.
+6, 发信:
+zhangjian邮件"今天L2 cache测试初步pass, 正在继续测试"20100613_1318
+之前随机地址测试的软件有问题, 已修改, 测试1000次未出错(比较没有出错, free也没有出错). 目前在做30000次测试(已4400次都pass)
+FPGA和ACE编号. 
+FPGA20(vc0882_20100612_2130_fpgaNormal2_a8_20100612_L1_32_L2_128_Neon_48M_2fpga_noFd.ACE)和FPGA8(vc0882_fpga2_ddrPhy_fifo_dqs0_20100613_drv8mA.ACE)同时做测试. 
+
+昨天晚上使用下面如下版本实验. 
+FPGA8: vc0882_20100611_2000_fpgac0407_a8_20100612_L1_32_L2_128_48M_2fpga_noFdTv
+FPGA15, 22: vc0882_20100611_2100_fpga4mA_ddrDt_a8_20100612_L1_32_L2_128_No_Neon_48M_USB_2fpga_noFd.ace
+固定测试30000次没有出错, 随机地址30000次有420-450次错误. 早晨看了一下出错的case都是软件造成的错误.
+
+后面会在更多模块实验L2 cache. 
+7, 给VC0882_ICP发信:
+hi, all
+
+用memcpy测试L2 cache初步没有问题, 另外昨天实验cif, de, sd, vdec四个模块跑系统级case没有出错. 大家可以尽快开L2 cache测试. 
+开mmu, L1, L2 cache方法: 在make target中加入"-define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1", 原有"-define=CACHE_OFF=1"(关闭icache, dcache). "-define=ICACHE_ON=1"(在aasp脚本中打开icache)都删除. 详见"D:\VC0882\document\VC0882 environment freshman guide.doc"3.2节. 
+
+测试ACE: vc0882_20100612_2130_fpgaNormal2_a8_20100612_L1_32_L2_128_Neon_48M_2fpga_noFd, 
+
+测试结果请大家填在: D:\VC0882\document\arm\cache测试状态.xls. 如果开cache后需要加delay才能pass也请大家注明. 目前我知道的有uhost, audio, i2c需要加delay. 
+
+hi, lixuelian
+我借用FPGA20在做cache测试, 估计3点之前会完. 如果测试通过, L2 cache的issue就能关闭了. 原来测试L2 cache的台子也在测试(使用beihua修改的ddr fifo版本).
+
+8, (12:50 2010-6-15)
+最后测试通过的映像见: "D:\work\VC0882\code_backup\code\milestone\20100613_L2_cache_DONE"
+
+20:32 2010-6-25
+VC0882, arm, Cortex-A8, cache, venc, VC0882 cache使用总结, 文档
+1, venc cache一直有问题. buffer做1M对齐也有问题. 除非是放到搞地质. 
+把venc的参考frame做1MByte对齐, 然后修改mmu页表access=0禁止访问. 但是这样仍然有错. caijin提到没有做invalidate. 联想到816 daichunquan仿真到arm会预取下一个cache line. 
+malloc区域buffer两边都有0xcdcdcdcd的pattern由于overflow检测, 所以arm有可能预取到buffer中的内容. 但如果malloc的区域(例如caijin, yangmin实验的搞地质)arm就完全没有访问过. 
+写cache debug寄存器程序后, 实验A8是否预取下一个cache line. 
+
+17:10 2010-5-7
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM;RVI, trace2驱动; 文档, 总结
+1, 驱动
+如果提示trace2无法安装驱动, 可以手动选择如下目录安装驱动:
+C:\Program Files\ARM\RVI\Drivers\usb_driver\1.3\39\win_32-pentium
+注: 这个也是RVI的驱动. 
+2, vc0882_20100505_2230_fpgac0301_02041612_2fpga_vc0882_20100505_2230_normal_withDeTvLcdifCifFdDmaEmiSpiSdUartI2cKpdPwmAudifTpi_noNfcUotgUhostVencdecGpu.ace
+3, 可以用script_trace_VC0882.inc配置coresight component regiser. analysis windows可以连接. 但是程序运行时trace不到数据. 
+4, GPIO_A14配置为output.
+GPIO_A_CFG(0x60051000)=0, 选择为normal function.
+GPIO_FS_SYS(0x60051040)=0. 选择trace control.
+
+10:33 2010-5-19
+VC0882, FPGA, arm cortex-A8, Coresight, TRACE, ETM, 续, 根据arm回信实验, TPIU test pattern, 续, TRACE接口信号分析, VTRef=1, ETM trace初步可用; trace调试总结
+1, CoreSight_Architecture_Specification.pdf Chapter Physical Interface说明了coresight对外接口. 其中p143-p144:
+1), Table 13-2 Single target connector pinout
+Pin Signal name                 Pin Signal name
+38 TRACEDATA[0]                 37 TRACEDATA[8]
+36 TRACECTL                     35 TRACEDATA[9]
+34 Logic 1                      33 TRACEDATA[10]
+32 Logic 0                      31 TRACEDATA[11]
+30 Logic 0                      29 TRACEDATA[12]
+28 TRACEDATA[1]                 27 TRACEDATA[13]
+26 TRACEDATA[2]                 25 TRACEDATA[14]
+24 TRACEDATA[3]                 23 TRACEDATA[15]
+22 TRACEDATA[4]                 21 nTRST
+20 TRACEDATA[5]                 19 TDI
+18 TRACEDATA[6]                 17 TMS
+16 TRACEDATA[7]                 15 TCK
+14 VSupply                      13 RTCK
+12 VTRef                        11 TDO
+10 No connection, was EXTTRIG   9 nSRST
+8 TRIGOUT, was DBGACK           7 TRIGIN, was DBGRQ
+6 TRACECLK                      5 GND
+4 No connection                 3 No connection
+2 No connection                 1 No connection
+2), 根据support-sw@arm.com最近几天的邮件和coresight arch spec. VTRef应该从内部输出1. 
+(1), 5月14日: 
+Did you ensure that you are driving the VTREF input to the Trace probe header to the same I/O voltage as the FPGA? If this is not done, the trace probe header's logic 0/1 transition reference voltage will be floating, and any noise or ground bounce will cause false transitions on the trace signals and clock. In our FPGA, this is done as a signal assignment, since all the trace Mictor pins come direct from the FPGA:
+(2), 5月18日:
+The VTRef is critically important though, because this is how the RVT probe decides what's a "0" and what's a "1". If you leave this unconnected you will get garbage trace. I asked you about this in my email of the 13th, but you did not answer that question.
+(3), p150: The VTRef signal is intended to supply a logic-level reference voltage to enable debug equipment to adapt to the signalling levels of the target board.
+Note VTRef does not supply operating current to the debug equipment.
+Target boards must supply a voltage that is nominally between 1V and 5V. With ±10% tolerance, this is minimum 0.9V, maximum 5.5V. The target board must provide a sufficiently low DC output impedance so that the output voltage does not change by more than 1% when supplying a nominal signal current, 0.4mA. Debug equipment that connects to this signal must interpret it as a signal rather than a power supply pin and not load it more heavily than a signal pin. The recommended maximum source or sink current is 0.4mA.
+3), logic 1, logic 0:
+p151:
+13.6.5 Logic 1 input
+This is a signal pin that is at a voltage level and interpreted as logic 1, typically a resistor pull up to VTRef.
+13.6.6 Logic 0 input
+This is a signal pin that is at a voltage level and interpreted as logic 0, typically a resistor pull down to GND.
+4), 看来VTRef必须要改, haifeng感觉直接飞线就可以. 
+2, 和huangwei, dr.yang, zouweiran讨论, 直接给pin12(VTRef)从板子分一个Vcc3.3
+1), 还是用driver4的ACE实验. 四个pattern都过了. 
+2), 用脚本实验, 可以抓到uart接收函数, 但是没有tick
+3, 发信(忘了抄送给yinong)
+VC0882 ETM trace初步可用
+Hi, all
+
+把VTRef是参考电平(pin12)接逻辑1后, TPIU test pattern正确, etm trace初步可用. 
+ACE: vc0882_20100516_0800_fpgac0402_a8_20100517_L1_32_L2_0_No_Neon_Trace_Drive4_2fpga_noFdTv
+考虑到ASIC和FPGA有差异, 希望仿真能完成在882 FPGA和ASIC环境的coresight validation.
+
+后续工作:
+1), 确认etm trace抓到的数据是否完整.
+2), 使用ITM.
+
+trace调试总结:
+1), trace clock和data/control之间要保证足够的setup, hold time. arm提供的一种参考方法是用快1倍的时钟拍数, 保证clock和data/control之间相差90度相位. FPGA是这样实现的. 
+2), trace connector连接: 
+(1), VTRef是参考电平(pin12)需要接逻辑1. 
+(2), logic 1(pin34)接逻辑1, arm建议通过上拉电阻连到VTRef. 
+(3), logic 0(pin30, pin32)接逻辑0, , arm建议通过下拉电阻连到GND.
+3), gpioA的trace pin需要设为默认是trace. 这样才能支持trace系统复位后的执行过程. 
+即0x60051000和0x60051040对应bit为0. 麻烦haifeng修改一下. 
+
+附件是trace调试中使用的脚本:
+1), tpiu_test_pattern.inc: 生成tpiu test pattern, 用csat执行"tpiu_test_pattern_csat.txt"脚本抓取pattern. 详见coresight component trm. 
+"tpiu_test_pattern_PBA8.inc"是PB-A8中测试tpiu test pattern的脚本. 与vc0882脚本的区别是没有trace gpio的设置. 
+2), init_lpddr_micron_128M_etm.inc: 用于ETM trace数据, 包括初始化VC0882 coresight, ddr, 连接rvdebugger到RVT2. 
+
+4, 给arm发信, 问ITM用法
+(20:23 2010-5-25)修改
+hello, Gerard 
+
+After connect VTRef to Vcc through a resistor. I get the right TPIU test pattern in csat. And I get the trace data from the Analysis window in rvdebugger with the script i sent to you in May 10th. 
+Now, I study the rvdebugger trace. and we want to probe some trace signal, but in our FPGA board it is hard to do this, can you give us the trace subboard sch? 
+Here is a question about the script:
+setreg @ETM_CS_TRACE_ID=0x00000001
+What does the ETM_CS_TRACE_ID mean? Is it 0xFC8 DEVICE ID register, 0xFC8 is a read-only register. 
+Meanwhile, I want to use the ITM. There is no trace output in analysis windows or csat at all. Analysis windows and csat is not used at the same time.
+
+At first, I init ITM in the script: 
+connect  "@CSITM_0@RVI"
+setreg @CS_LOCKACCESS=0xC5ACCE55
+setreg @CSITM_CTRL=0x7
+setreg @CSITM_TRCEN=0x1
+setreg @CSITM_TRCTRIG=0x1
+
+//connect  "@CSETM_0@RVI"
+//setreg @ETM_CS_TRACE_ID=0x00000001
+connect  "@CSTPIU_0@RVI"
+setreg @CSTPIU_CURPORTSIZE=0x00008000
+connect  "@CSTFunnel_0@RVI"
+//ITM at funnel 3rd channel. ETM at funnel 0th channel.
+setreg @CSTF_CTRL=0x309
+wait=on
+
+connect "@Cortex-A8_0@RVI"
+//set other module register in our FPGA
+
+//load axf file
+
+//connect to analyzer while csat is not used. 
+//analyzer,connect
+//analyzer,set_size=0x3000
+
+Secondly, I open the lock access while system boot up.
+//0x60008000 is the ITM register base address. 
+set 0x60008fb0=0xC5ACCE55
+
+thirdly, write to the situmulas. Here I have several questions: 
+A, is ITM will automatic generate timestamp whenever SWIT packet is generated? 
+B, in DDI0314H_coresight_components_trm.pdf p303:
+SWIT byte 0: B[4:0] = 5 bits of address, PADDRDBG[7:2]
+what does it mean? 
+
+Do you have a brief configuration and example code like the ple example I get from arm support. 
+
+thanks a lot. 
+
+15:32 2010-4-19
+VC0882, FPGA, arm: Cortex-A8, coresight, 文档
+Huangwei邮件"Re: vc0882: three issues about a8"20100419_1527
+A8/CoreSight 相关文档见下表：
+File Path File name Pages owner 
+A8 相关的文档 　 　 　 
+VC1600WCVS\doc\module\Cortex-A8\doc\ARM_architecture\   
+DDI0406B_arm_architecture_reference_manual    1140 　 
+VC1600WCVS\doc\module\Cortex-A8\doc\ARMv7_architecture\ 
+DDI0406B_arm_architecture_reference_manual      2158 　 
+VC1600WCVS\doc\module\Cortex-A8\doc\trm\pdf_trm\                       
+DDI0344J_cortex_a8_r3p2_trm      764 　 
+VC1600WCVS\doc\module\Cortex-A8\doc\debug_architecture\                     
+IHI0014O_ETM_ArchSpec  476 　 
+IHI0029B__CoreSight_ArchSpec 202 　 
+IHI0031A_ARM_debug_interface_v5    244 　 
+VC1600WCVS\doc\module\Cortex-A8\doc\methodology\                  
+CortexA8S_DFT_Implementation_guide   41 　 
+VC1600WCVS\doc\module\Cortex-a8\doc\implementation_reference_methodology\ 
+CORTEXA8_Express_r2p0_User_guide 52 　 
+VC1600WCVS\doc\module\Cortex-A8\doc\csg DII0163J_cortex_a8_r3p2_csg 104 　 
+CoreSight 相关的文档列表如下： 　 　 　 
+VC1600WCVS\doc\module\CoreSight\docs\                           
+CoreSight_Architecture_Specification 202 　 
+CoreSight_Components_Implementation_Guide 100 　 
+CoreSight_Components_TRM  376 　 
+CoreSight_DK_DesignGuide        130 　 
+CoreSight_DKA8_r2p0_Integration_Manual 110 　 
+Note
+1. Architecture reference 内容较多
+，VC1600WCVS\doc\module\Cortex-A8\doc\ARM_architecture下主要是将ARMv6架构， 我们
+是不是主要focus在
+VC1600WCVS\doc\module\Cortex-A8\doc\ARMv7_architecture上就可以了? 这个文档内容覆
+盖面广，我个人觉得不同的team需要一起看。
+
+22:14 2010-4-29
+VC0882, FPGA, arm cortex-A8, debug, A8 irq测试(测试PLE, CTI, PM Unit中断), 重要, 总结
+0x6000cfe4, 可以触发A8中断, 可以用于测试PLE, CTI, PM Unit中断. 
+0xEF8 958 RW ITCTRL-EOC Core Integration External Output Control
+Register. See Integration External Output Control Register on page 12-58.
+
+10:12 2010-3-9
+VC0882, 最小环境, FPGA稳定性, 串口收发导致armdataabort或undefined nstruction, 续, \todo 加入FPGA稳定性总结; 文档
+1, ZouWeiRan建议互换FPGA和串口子板试试. 
+2, 在test7机器测试. 
+其中昨天FPGA1,11昨天正常. 今天FPGA1 fail两次pas三次.
+6,7,8,10,12昨天fail, 今天正常. 只有FPGA9可以复现昨天问题, 更换好的ddr后解决. 
+另外昨天, 今天两天发现程序会跑到0x0地址. 
+一个程序是在sram中运行正常的nucleus环境, 在ddr中会跳到0地址. 
+一个是下面1), 2)测试中使用ddr(转接板11, 子板8)会导致跳到0地址, 更换ddr后运行正常. 
+另外昨天YinXingJie也遇到程序跳回0地址问题. 
+综合看, 感觉ddr有问题. 所有ddr都是经过QiuXiaoFei, TanJiaLiang测试通过的. 
+
+1), FPGA11
+uart6+ddr1 pass. 
+uart6+ddr(转接板11, 子板8) fail after Application_init return: 0.
+2), FPGA7
+uart6+ddr(转板11, 子板8) fail after Application_init return: 0.
+uart6+ddr1 pass. 
+3), FPGA12 uart6+ddr1 pass.
+4), FPGA8+uart3+ddr1 pass
+5), FPGA6+uart7+ddr2 pass. 昨天在test11fail. 
+6), FPGA10+uart12+ddr1 pass. 昨天fail.
+7), FPGA1
+(1), uart2+ddr(转接板7+子板11). fail(一次dragon死, 一次串口丢数). 昨天在test15 paas.
+(2), uart2+ddr1. fail(串口丢数).
+(3), uart6+ddr1 pass.
+实验3)后, 1), 2)无法复现.
+8), FPGA9+uart11+ddr9 fail(串口丢数). 
+uart11+ddr1 pass.
+
+3, 下次fanzhijun给板子时ddr调电压拨码开关. 
+
+4, 下午实验发现代码有变化会影响, 在一个板子上beizhan编译的sd可以, min的不行. 另一个板子运行min可以. 感觉很奇怪. 后来zouweiran提议把0欧姆换成22欧姆. 效果很好. 
+\todo 加入FPGA稳定性总结. 
+
+5, 明天如果2FPGA没问题, qiuxiaofei发信时同时说明nucleus tick时也没问题. 试试4FPGA.
+
+13:01 2010-2-1
+VC0882, 最小环境, 上周工作总结, 移植aasp到OMAP3530, arm debug
+1, aasp: 目前实现功能和问题. 架构调整. 
+2, armdebug: 仿真没有通过. 给IC同事发了CSAT和RVI文档. 会加上RTCK和ROM.
+开始需要一个比较大的sram(256kbyte). 
+
+15:39 2010-2-4
+VC0882, 最小环境, FPGA, irq, nucleus, armv7 architecture学习, 总结: VC0882介绍资料; Cache, memory system: PoC, PoU
+1, VIM_INT_Driver.c里面的g_priorityHigh, g_priorityMid, g_priorityLow是nuclues的中断优先级. High和Low只是各自填了IRQ_CPU0_VECTOR, IRQ_CPU1_VECTOR. 将来要根据系统需要调整. \todo
+2, dongliang把基本东西都加入了. 完善
+3, 根据"VC1600_MAS_Interrupt_Controller_V0.93"5.4更新寄存器. 
+4, INT_IRQ_Priority在882中无用, 注释, 将来没有就删除. 
+5, 修改cache,mmu代码为cortex-a8. copy from TI uboot
+6, 修改上传CVS:
+1), 根据"VC1600_MAS_Interrupt_Controller_V0.93"5.4更新寄存器. 
+2), 修改cache,mmu代码为cortex-a8. copy from TI uboot
+3), 根据VC0882数量更新: panda_init.s的INT_IRQ_Vectors.
+7, 为修改"main"做准备:
+1), aasp shell: 
+task_aasp_func()->cyg_user_start()->aasp_shell(). 其中task_aasp_func是nucleus task. \todo 到底怎么启动的. 需要看.
+2), 原有"main"函数中硬件初始化部分: 
+INC_Initialize()->Application_Initialize()->InitVC0598()
+3), 需要理解nucleus如何管理memory. rvds4.0文档提到如果OS管理memory分配, 有些注意事项. 
+8, 分析Cortex-a8 cache, mmu(tlb)代码--disable:
+1), old panda os
+;old code for arm926ej-s. reserve for 
+; Disalbe MMU
+MRC p15, 0, a1, c1, c0, 0
+BIC a1, a1, #0
+MCR p15, 0, a1, c1, c0, 0
+; Invalidate TLB
+; 这里面后面两句从arm926ej-s文档看也第一句作用一样, 为什么要重复呢? 
+MOV a1, #0
+MCR p15, 0, a1, c8, c7, 0
+MCR p15, 0, a1, c8, c5, 0
+MCR p15, 0, a1, c8, c6, 0
+2), cortex-a8, ;copy from TI uboot-02.01.03.11/cpu/arm_cortexa8/start.S. copy start
+;/*
+; * Invalidate L1 I/D
+; */
+mov     r0, #0                  ;@ set up for MCR
+;Invalidate TLB和原来一样. 
+mcr     p15, 0, r0, c8, c7, 0   ;@ invalidate TLBs
+;Invalidate all instruction caches to PoU. Also flushes branch target cache.
+mcr     p15, 0, r0, c7, c5, 0   ;@ invalidate icache
+
+;/*
+; * disable MMU stuff and caches
+; */
+mrc     p15, 0, r0, c1, c0, 0
+bic     r0, r0, #0x00002000     ;@ clear bits 13 (--V-)
+bic     r0, r0, #0x00000007     ;@ clear bits 2:0 (-CAM)
+orr     r0, r0, #0x00000002     ;@ set bit 1 (--A-) Align
+orr     r0, r0, #0x00000800     ;@ set bit 12 (Z---) BTB
+mcr     p15, 0, r0, c1, c0, 0
+3), memory and cache
+(1), PoC and PoU: \todo p1246前后也要看
+The points to which a cache maintenance operation can be defined differ depending on whether the operation is by MVA or by set/way:
+? For set/way operations, and for All (entire cache) operations, the point is defined to be to the next level of caching.
+? For MVA operations, two conceptual points are defined:
+Point of coherency (POC)
+For a particular MVA, the POC is the point at which all agents that can access memory are guaranteed to see the same copy of a memory location. In many cases, this is effectively the main system memory, although the architecture does not prohibit the implementation of caches beyond the POC that have no effect on the coherence between memory system agents.
+Point of unification (POU)
+The PoU for a processor is the point by which the instruction and data caches and the translation table walks of that processor are guaranteed to see the same copy of a memory location. In many cases, the point of unification is the point in a uniprocessor memory system by which the instruction and data caches and the translation table walks have merged.
+The PoU for an Inner Shareable shareability domain is the point by which the instruction and data caches and the translation table walks of all the processors in that Inner Shareable shareability domain are guaranteed to see the same copy of a memory location. Defining this point permits self-modifying code to ensure future instruction fetches are associated with the modified version of the code by using the standard correctness policy of:
+1. clean data cache entry by address
+2. invalidate instruction cache entry by address.
+The PoU also enables a uniprocessor system which does not implement the
+Multiprocessing Extensions to use the clean data cache entry operation to ensure that all writes to the translation tables are visible to the translation table walk hardware.
+\todo clean和invalidate又搞混了. 下次接着看. 
+(2), ARMv7-A, the A profile, requires the inclusion of a Virtual Memory System Architecture (VMSA),
+(3), 原来要想保证一致性, 要么是不开cache, 要么是开了cache, 但是用命令保证cache coherency. ARMv7A中加入了Shareable domain:
+The Outer Shareable attribute is introduced in ARMv7, and can be applied only to a Normal memory region in a VMSA implementation that has the Shareable attribute assigned. It creates three levels of shareability for a Normal memory region:
+Non-shareable
+A Normal memory region that does not have the Shareable attribute assigned.
+Inner Shareable
+A Normal memory region that has the Shareable attribute assigned, but not the Outer Shareable attribute.
+Outer Shareable
+A Normal memory region that has both the Shareable and the Outer Shareable attributes assigned.
+这个没看懂, 以后继续看. ARM_ARM_7AR: p144-p145
+(4), ARMv7最多支持7级cache, 每级cache的属性可以通过Cache Type Register和Cache Level ID Register得到. 
+From ARMv7 the architecture defines support for multiple levels of cache, up to a maximum of seven levels. In ARMv6, only the Level 1 caches are architecturally defined,
+A, c0, Cache Type Register (CTR)
+CWG, bits [27:24]: Cache Writeback Granule(微粒). WriteBack时写到memory的最大容量=以2为底y的对数. y的单位是word. 最大值是b1001=9, 所以最大写回大小是2^9=512words=512*4=2kbytes
+ERG, bits [27:24]: Exclusives Reservation Granule. 这个得看"Load-Exclusive and Store-Exclusive instructions"和"see Tagging and the size of the tagged memory block on page A3-20"
+B, Cache Level ID Register: 可以读出7级cache每级cache的情况. 有无cache, 指令cache和数据cache分开还是合一. 
+
+22:24 2010-2-23
+(13:30 2010-2-24)
+VC0882, arm cortex-a8, OMAP3530, coresight, 总结: VC0882 cortex-a8学习资料整理
+1, 从10月开始看. 如果希望本周完成, 今天至少要看完10月的log. 
+下面列出做了哪些事情:
+2, 了解VC0882项目. MRD见1600 CVS.
+3, qemu
+4, sd代码整理, 这个没有做完. 有自己时间安排的原有, 也有VC0816量产的影响. 值得反思. 现在可能没机会做这个工作了. 
+5, 研究调试: 看好openocd这个开源协议栈, 在OMAP3530上可以使用.
+6, arm cortex-a8
+1), 开始还看过一段arm11 debug部分, 确定用cortex-a8后没有继续看其他部分. 
+1), "17:30 2009-10-28". 性能比较: \todo下载此文章给大家. FPGA也可以做类似测试. 
+2), cortex-a8与arm11对比("17:30 2009-10-28", "14:14 2009-10-27"):
+(1), the base restored Data Abort model.
+(2), imprecise/precise data abort
+3), 希望给一个cortex-a8 overview的介绍: 13级流水线, 两级cache等等. 打算用"Cortex-A8 Processor Product Brief.pdf"p2内容, 逐条向大家说明, 重点说明验证中会用到的, 和对软件的影响(thumb-2, cache: 软件读取cp15寄存器判断级数和类型(i/d分开, id统一), 然后配置), 对应用的影响(NEON, thumbEE).
+参"12:55 2009-10-16", \todo 确定这个笔记已经上传, 更新. 
+White Paper作为扩展知识就不详细说了. 
+4), coresight调试架构单独介绍. 结合"DGI0012B_coresight_technology_r1p0_sdg"和VC0882调试结构("A8_and_CS")介绍. 
+软件用途: trace(包括用ITM输出的软件trace), 便于debug. 
+顺便说明VC0882 debug debug部分遇到的问题, 见"13:27 2010-2-24"
+
+7, arm开发板调查. 
+8, mas review. 对比了OMAP3530相关模块. 
+
+9, (18:31 2010-2-26)
+VC0882开发工具"11:19 2010-1-3": rvds4.0文档. 
+
+19:14 2010-1-25
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide)
+0, 本log已保存到"openocd编译使用日志.txt"(36: Document\Jtag_Debugger\openocd).
+1, Linux编译
+1), libusb
+(1), 只能用0.1.x版本. 不能用新版(1.xx)
+http://sourceforge.net/projects/libusb/files/libusb-0.1%20%28LEGACY%29/0.1.12/
+(2), configure; make; sudo make install
+2), libftdi
+(1), http://www.intra2net.com/en/developer/libftdi/download.php
+(2), configure; make; sudo make install
+(3), 为了避免openocd找不到, 直接libftdi到/usr/lib目录
+[dec@localhost libftdi-0.17]$ sudo cp src/.libs/libftdi.* -a /usr/lib/
+3), openocd
+(1), http://openocd.git.sourceforge.net/git/gitweb.cgi?p=openocd/openocd;a=tag;h=cd8ad2e961d3476ddfad3353390ce99a4872bdf1
+(2), ./bootstrap
+生成configure脚本. 打包"openocd_0_4_0_rc1_bootstrap.tar.gz"(36: Jtag_Debugger\openocd).
+(3), ./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD4Cortex-a8
+(4), 加入版本信息, 参"36: SOC\TI OMAP3530\jtag\BeagleBoardOpenOCD.htm":
+[dec@localhost openocd]$ cat doc/version.texi
+@set UPDATED 21 December 2009
+@set UPDATED-MONTH December 2009
+@set EDITION 0.4.0-rc1
+@set VERSION 0.4.0-rc1
+(5), make; sudo make install
+4), 实验:
+(1), 加入驱动规则
+[dec@localhost interface]$ cat /etc/udev/rules.d/50-ftdi.rules
+# udev rules file for OpenJTAG of www.100ask.net
+#
+
+ACTION!="add", GOTO="OpenJTAG_rules_end"
+SUBSYSTEM!="usb_device", GOTO="OpenJTAG_rules_end"
+
+SYSFS{idVendor}=="1457", SYSFS{idProduct}=="5118", MODE="664", GROUP="users", RUN+="/sbin/modprobe ftdi_sio vendor=0x1457 product=0x5118"
+
+LABEL="OpenJTAG_rules_end"
+[dec@localhost interface]$ sudo cp /mnt/hgfs/share/50-ftdi.rules /etc/udev/rules.d/
+[dec@localhost interface]$ sudo udevcontrol reload_rules
+(2), 修改openocd配置文件
+A, jtag配置文件
+Linux中插入ftdi2232后在usbfs中可以看到: 
+cat /proc/bus/usb/devices
+T:  Bus=02 Lev=01 Prnt=01 Port=00 Cnt=01 Dev#=  9 Spd=12  MxCh= 0
+D:  Ver= 2.00 Cls=00(>ifc ) Sub=00 Prot=00 MxPS= 8 #Cfgs=  1
+P:  Vendor=1457 ProdID=5118 Rev= 5.00
+S:  Manufacturer=www.100ask.net
+S:  Product=USB<=>JTAG&RS232
+C:* #Ifs= 2 Cfg#= 1 Atr=80 MxPwr=100mA
+I:* If#= 0 Alt= 0 #EPs= 2 Cls=ff(vend.) Sub=ff Prot=ff Driver=(none)
+E:  Ad=81(I) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+E:  Ad=02(O) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+I:* If#= 1 Alt= 0 #EPs= 2 Cls=ff(vend.) Sub=ff Prot=ff Driver=ftdi_sio
+E:  Ad=83(I) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+E:  Ad=04(O) Atr=02(Bulk) MxPS=  64 Ivl=0ms
+
+说明product name是"USB<=>JTAG&RS232". 根据这些信息从jtagkey.cfg修改:
+[dec@localhost OpenOCD4Cortex-a8]$ cat share/openocd/scripts/interface/100ask.cfg
+#
+# 100ask openjtag
+#
+
+interface ft2232
+ft2232_device_desc "USB<=>JTAG&RS232"
+ft2232_layout jtagkey
+ft2232_vid_pid 0x1457 0x5118
+
+B, 注释限速的语句
+[dec@localhost OpenOCD4Cortex-a8]$ sudo  vim share/openocd/scripts/target/omap3530.cfg
+#jtag_rclk 1000
+#$_TARGETNAME configure -event "reset-start" { jtag_rclk 1000 }
+
+[dec@localhost OpenOCD4Cortex-a8]$ sudo vim share/openocd/scripts/board/ti_beagleboard.cfg
+#jtag_rclk 6000
+
+(3), 运行:
+A, [dec@localhost OpenOCD4Cortex-a8]$ sudo bin/openocd /home/dec/bin/openOCD4Cortex-a8/share/openocd/scipts -f interface/100ask.cfg -f board/ti_beagleboard.cfg
+Open On-Chip Debugger 0.4.0-rc1-dev-snapshot (2010-01-25-22:17)
+For bug reports, read
+        http://openocd.berlios.de/doc/doxygen/bugs.html
+RCLK - adaptive
+Warn : omap3530.dsp: huge IR length 38
+RCLK - adaptive
+trst_only separate trst_push_pull
+Info : RCLK (adaptive clock speed) not supported - fallback to 1000 kHz
+Info : JTAG tap: omap3530.jrc tap/device found: 0x0b7ae02f (mfg: 0x017, part: 0xb7ae, ver: 0x0)
+Info : JTAG tap: omap3530.dap enabled
+Info : omap3530.cpu: hardware has 6 breakpoints, 2 watchpoints
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011140
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011140
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x54011150
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011150
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x540111
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x54011150
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x540111
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x540111c0
+Error: AHBAP Cached values: dp_select 0x10, ap_csw 0xa2000002, ap_tar 0x540111
+Error: JTAG-DP STICKY ERROR
+Error: Read MEM_AP_CSW 0x2800042, MEM_AP_TAR 0x540111c0
+暂时不清楚为什么有这些错误.
+
+B, 连接telnet:
+telnet localhost 4444
+
+Trying 127.0.0.1...
+Connected to localhost.
+Escape character is '^]'.
+Open On-Chip Debugger
+> omap3_dbginit omap3530.cpu
+> halt
+target state: halted
+target halted in ARM state due to debug-request, current mode: Supervisor
+cpsr: 0x400001d3 pc: 0x80e87f18
+MMU: disabled, D-Cache: disabled, I-Cache: enabled
+> arm reg
+System and User mode registers
+      r0: 49020000       r1: 00000003       r2: 00000001       r3: 00000060
+      r4: 80e61780       r5: 80eac2dc       r6: 80eac2dc       r7: 80ea7a64
+      r8: 80e3ffdc       r9: 00000002      r10: 00000018      r11: 00000000
+     r12: 00000000   sp_usr: 00000000   lr_usr: 00000000       pc: 80e87f18
+    cpsr: 400001d3
+.....
+.....
+
+C, 连接GDB:
+[dec@localhost uboot-02.01.03.11]$ cat .gdbinit
+echo Setting up the environment for debugging gdb.\n
+
+# This connects to OpenOcd at localhost:3333
+target remote localhost:3333
+
+# Increase the packet size to improve download speed.
+set remote memory-write-packet-size 1024
+set remote memory-write-packet-size fixed
+
+#omap3_dbginit must be run in OpenOCD after every reset
+monitor omap3_dbginit omap3530.cpu
+#monitor cortex_a8 dbginit
+#monitor mww 0x5401d030 0x00002000
+
+monitor halt
+
+# Load the program executable called "u-boot"
+load u-boot
+
+# Load the symbols for the program.
+symbol-file u-boot
+
+# Set a breakpoint at main().
+#b main
+
+# Run to the breakpoint.
+
+[dec@localhost uboot-02.01.03.11]$ arm-none-linux-gnueabi-gdb
+GNU gdb (Sourcery G++ Lite 2009q1-203) 6.8.50.20081022-cvs
+Copyright (C) 2008 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "--host=i686-pc-linux-gnu --target=arm-none-linux-gnueabi".
+For bug reporting instructions, please see:
+<https://support.codesourcery.com/GNUToolchain/>.
+Setting up the environment for debugging gdb.
+0x00000000 in ?? ()
+The target may not be able to correctly handle a memory-write-packet-size
+of 1024 bytes. Change the packet size? (y or n) [answered Y; input not from terminal]
+target state: halted
+target halted in ARM state due to debug-request, current mode: Supervisor
+cpsr: 0x400001d3 pc: 0x80e87f18
+MMU: disabled, D-Cache: disabled, I-Cache: enabled
+Loading section .text, size 0x1ca68 lma 0x80e80000
+Loading section .rodata, size 0xa38 lma 0x80e9ca68
+Loading section .rodata.str1.1, size 0x524b lma 0x80e9d4a0
+Loading section .data, size 0x17f0 lma 0x80ea26ec
+Loading section .u_boot_cmd, size 0x55c lma 0x80ea3edc
+Start address 0x80e80000, load size 148535
+Transfer rate: 2 KB/sec, 970 bytes/write.
+(gdb)
+如果不halt, 下载速度可以到达27k. 但是下载后没法cont. 
+
+2, Windows编译, ftdi使用官网驱动, 所以不需要libusb. 
+1), http://www.ftdichip.com/Drivers/D2XX.htm, 下载WinXP驱动"CDM 2.06.00 WHQL Certified.zip"(Linux驱动不行, 目前configure ftdi2232处无法通过, 即使可以, 也不能在native win32下使用), 解压到/home/目录, 并把目录中的空格改为"_": "CDM_2.06.00_WHQL_Certified"
+2), ./configure --enable-ft2232_ftd2xx --with-ftd2xx-win32-zipdir=/home/CDM_2.06.00_WHQL_Certified --prefix=/home/bin/OpenOCD4Cortex-a8
+报错: checking for ftd2xx.lib exists (win32)... checking whether ftd2xx library works.
+.. configure: error: Cannot build & run test program using ftd2xx.lib
+同时windows弹出提示"没有找到ftd2xx.dll, 因此应用程序未能启动".
+把"ftd2xx.dll"复制到openocd目录问题解决. 如果之前已经安装了ftdi2232的驱动, "ftd2xx.dll"肯定在系统目录中, 实验: 
+安装openjtag驱动后, 再做configure, 的确没有报错. 
+3), 实验: 
+D:\software\MinGW\home\openocd_compiled_by_zhangjian\OpenOCD4Cortex-a8\win32>bin\openocd.exe -s ..\share\openocd\scripts -f  interface/100ask.cfg -f board/ti_beagleboard.cfg
+其余相同, 下载速度7.6kbyte/s. 
+如果不halt, cont时提示断点有问题. 
+
+注: 工具链位置: "D:\software\CodeSourcery\Sourcery_G++_Lite\arm_2009q3_67_arm_none_linux_gnueabi\bin"
+
+3, 保存映像:
+OpenOCD4Cortex-a8.tar.gz(36: Document\Jtag_Debugger\openocd), 保存了win32和linux openocd(for ftdi2232), windows下程序至少需要ftd2xx.dll(其余dll依赖未实验), 配置脚本位于 share\openocd\scripts修改见上面日志.
+[dec@localhost OpenOCD4Cortex-a8]$ tree -L 3
+.
+|-- linux
+|   |-- bin
+|   |   `-- openocd
+|   `-- lib
+|       |-- libopenocd.a
+|       |-- libopenocd.la
+|       `-- openocd
+|-- share
+|   |-- info
+|   |   |-- dir
+|   |   |-- openocd.info
+|   |   |-- openocd.info-1
+|   |   `-- openocd.info-2
+|   |-- man
+|   |   `-- man1
+|   `-- openocd
+|       |-- contrib
+|       `-- scripts
+`-- win32
+    |-- bin
+    |   `-- openocd.exe
+    `-- lib
+        |-- libopenocd.a
+        |-- libopenocd.la
+        `-- openocd
+
+15 directories, 10 files
+
+
+10:50 2009-11-4
+(21:20 2009-11-4)
+VC1600, VC0882, VC0718, jtag, arm(arm1176) debug, openocd, 项目进展: arm debug(RVI, jlink, openocd), 项目总结
+1, 11月3日进展: 
+arm1176已经可以在rvds4.0下调试简单程序(通过semihost打印), selftest工程运行到main后会失败. 
+遇到的问题是license问题. 到网上重新申请了评估版license(与物理网卡绑定), 关闭虚拟网卡, 在用license wizard4.2配置license, 重启后rvds4.0可以正常连接RVI.
+
+2, 11月4日进展: 
+晚上LiaoZhiCheng, Zhangjian一起实验rvds3.0+jlink+pb1176, openocd+jlink+pb1176两种方式, 都是可以读到id, 但是连接rvds或gdb有问题. (后来用新买的jlinkv8+openocd无问题, 看来和网上说的一样(v7对arm11支持不好)).
+
+3, 下一步实验计划包括: rvds4.0编译运行(简单应用程序selftest), rvds3.0(jlink), eclipse(openocd+jlink, openocd+ftdi2232, openocd+并口)), 实验PB1176 运行Linux.
+
+4, 上面提到的openocd对arm11支持很好, 对a8支持无mmu, 无cache情况, 正逐步完善中. 下面是openocd的简单介绍: 
+openocd是开源的调试代理, 可以通过gdb调试接口在eclipse中调试. 
+openocd支持jlink, 并口, ft2232的jtag(国内130元). 其中ft2232是一个usb转jtag/rs232芯片, 相当于把并口jtag换成了usb口jtag, openocd通过ft2232可以支持arm11和cortex-a8(不完善).
+1), open ocd对arm11支持完整. 已经有s3c6410 cfg.
+2), 对cortex-a8有部分支持. 
+"http://elinux.org/BeagleBoardJTAG"是BeagleBoard使用的调试工具, 可以认为是支持a8的调试器. 
+"http://elinux.org/BeagleBoardOpenOCD"描述了openocd通过ft2232芯片对a8的支持情况, 目前可以支持无MMU, 无cache的应用程序调试(例如u-boot). 
+Linux调试有问题: https://lists.berlios.de/pipermail/openocd-development/2009-August/010184.html
+"http://tincantools.com/product.php?productid=16144"是国外的ft2232 jtag调试小板, 几十$. 
+
+12:37 2009-11-10
+VC1600, VC0882, VC0718, arm debug, jlink, 使用文档
+注: Word版本"Jlink v8 use guide"初稿(v0.1) release: 
+已上传到: “\\10.0.2.36\sqmshare\Share\Linux\doc\arm soc\jtag_debugger”
+见ZhangJian邮件"答复: jlink 使用技巧!!! 务必要看"20091110_2117
+
+0, jlinkv8, 主芯片: AT91sam7s64. ALVC164245x2(245是缓冲器).
+1, 安装jlink4.08安装包. 安装后插入jlink, 驱动位于"安装目录\JLinkARM_V408l\USBDriver\x86", 默认安装目录是"C:\Program Files\SEGGER".
+
+2, 测试jlink驱动:
+运行「开始」菜单->程序->SEGGER->J-Link ARM V4.08l->J-Link Commander, 连接830/816时会显示: 
+SEGGER J-Link Commander V4.08l ('?' for help)
+Compiled Sep 17 2009 09:42:18
+DLL version V4.08l, compiled Sep 17 2009 09:41:55
+Firmware: J-Link ARM V8 compiled Aug 18 2009 09:06:07
+Hardware: V8.00
+S/N : 158000502
+Feature(s) : RDI,FlashDL,FlashBP,JFlash,GDBFull
+VTarget = 2.886V
+Info: TotalIRLen = 4, IRPrint = 0x01
+Info: CP15.0.0: 0x41069265: ARM, Architecure 5TEJ
+Info: CP15.0.1: 0x1D152152: ICache: 16kB (4*128*32), DCache: 16kB (4*128*32)
+Info: Cache type: Separate, Write-back, Format C (WT supported)
+Found 1 JTAG device, Total IRLen = 4:
+ #0 Id: 0x07926F0F, IRLen:  4, IRPrint: 0x0 ARM926EJ-S Core
+Found ARM with core Id 0x07926F0F (ARM9)
+RTCK reaction time is approx. 126ns
+Using adaptive clocking instead of fixed JTAG speed.
+J-Link>
+可以看到target电压是2.886v, 找到一个jtag device(id是0x07926F0F, 926说明是arm926), 如果不使用RVDS, 可能需要根据扫描出的jtag device信息写配置文件. 
+
+3, rvds中添加jlink
+1), Connection Control中选择"Add/Remove/Edit device";
+2), 弹出的"RDI target List"中选择"ADD DLL"
+3), 选择"安装目录\JLinkARM_V408l\JLinkRDI.dll", 
+4), configure: 选中jlinkRDI.dll后, 右键单击选择"Configure Device info", jlink会自动配置. 配置后确定退出, 此时jlinkRDI.dll下会出现arm79_0选项. 
+5), 双击"arm79_0"连接. 
+
+4, jlink RDI是否支持arm11?
+1), jlink RDI提到: "Any core supported by J-Link ARM (ARM7 / ARM9)", 没有写arm11. 
+RVDS的RDI是否支持arm11呢? 如果不支持, 那么RVDS2.2就没法支持arm11了. 
+2), 查keil的uvision只支持arm7,9, cortex-Mx, 没写支持arm11. 
+参考: "http://www.keil.com/arm/mdk.asp"
+3), IAR支持(但并不是通过RDI接口支持的): 
+License Number:
+9614-135-075-5679
+License key: 
+1VCZBWA3JR3FFBMNXHIY5CGUAZTQS9K4QF9QHBW3Z6I3R47EOE0OXGTRBNLN1B7XEEL3BTFJLU2W4AXQG53FZMDSZYDBDXS5HLCUXAYH25PXABGNT1O1AKMDYIRTWAZJDBNZLKRKANL0IE22BS44F1KK4CF5F2UMRQQAUWJN3MFODRRB# Feature: EWARM-EV Version: 17_WIN Temporary license (Licno:9614-135-075-5679), valid 30 days after first use, expires 2009-12-11
+使用参考: http://www.icdev.com.cn/?474/viewspace-3940.html, "用 IAR C/C++ For ARM 编写嵌入式应用的启动细节"
+
+5, jlink使用问题:
+ZhangPu邮件"jlink 使用技巧!!! 务必要看"20091110_1622
+hi all,
+使用时发现有以下技巧与大家分享!
+1,如果rvds连接时等待,处于假死状态,可直接reset板子,使jlink断开,此时rvds恢复操作,然后请断掉rvds的链接重新启动rvds再试!(注意先断掉rvds的连接,防止重启rvds后自动重新连接已经失效的jlink)
+2,如果发现经常连不上cpu,请讲jlink的工作速度调低!方法如附件图片,按顺序浏览!(调整后,保存并重新启动rvds使之有效)
+
+zhangjian: 
+1), jlink RDI conf中可以选择速度, 图片位置: 'H:\work_software\software\DevelopmentTools\jlink\技巧ByZhangPu"
+2), 目前是clk降速到2M. 怀疑是830板子布的不好造成的. \todo 实验RealviewEB板子, 看看能否跑到10M, 如果可以, 将来做板子时需要提醒. 
+
+6, Zhanjian, rvdebugger1.8对jlinkv8支持不好. 
+大家注意: rvdebugger1.8可能对jlinkv8支持不好:  用rvdebugger1.8调试S3c44b0x时, 接管正常, 但是下载映像时提示memory有问题. 
+推荐使用RVDS3.0. 
+另外AXD可以正常使用: 配置方式和rvdebugger一样: 设置clock为2M, no reset. 
+
+16:07 2009-11-17
+项目, 工作总结, 周工作总结, 11月工作总结, 上周工作总结2009年11月9日-2009年11月15日, 下周工作计划2009年11月16日-2009年11月22日, arm debug总结(DBGEN, SPIDEN, SPNIDEN).
+1, 周总结2009年11月9日-2009年11月15日
+1), VC1600: 
+(1), mas review: VC0882 dmac(两次), VC0718 clkrst(两次), pmu.
+(2), arm arch, debug: 回顾自己之前arm arch学习笔记, 与IC huangwei讨论arch debug.
+(3), jtag: 
+A, 自己编译了windows下的openocd, 可以正确连接830并load映像. openocd支持无MMU无cache的cortex-a8, 将来调试会用到. 
+B, 公司arm11 jtag本周最终调通: 问题一是SPIDEN未置高, 一个是板级连接问题. 
+详细情况: IC内部是DBGEN=1, SPIDEN=1, SPNIDEN=0. SPNIDEN这个信号按ARM11 TRM是说不用TrustZone时必须SPIDEN和SPNIDEN都高, 但是ZhouChunLiang问arm公司得到的答复是SPIDEN必须高, SPNIDEN随意. 板级连接需要把TCK下拉, 输入信号上拉(TDI, TMS). 
+C, jlinkv8: 可以正确读出arm11寄存器. jlink使用文档"jlinkv8 user guide.doc", 位置: "\\10.0.2.36\sqmshare\Share\Linux\doc\arm soc\jtag_debugger"
+
+2), sd代码整理和Linux移植
+1), 讨论了830 sd代码整理思路, 整理分两步: 一, 830Linux支持sd卡; 二, 移植Linux协议栈到VC0830工程中. 
+
+3), training(两次)
+1), 598 GE training(11-9);
+2), arm training(11-13), 笔记整理未完. 目前笔记: "\\10.0.2.36\sqmshare\Share\Linux\doc\arm soc\arm体系结构\Cortex\arm arch (cortex-a8) introduction 笔记.txt"
+
+2, 计划
+1), VC1600 mas review. review dma等模块. 同时参与uart和ddrc mas review(主要是确认是否解决之前830和Linux移植中遇到的问题). 
+2), 实验s3c6410(arm11)和TI OMAP3530(cortex-a8)板子, 包括jtag, Linux/android, WinCE6.0等. 
+3), 继续整理上周arm training笔记: 这里面包括继续阅读CoreSight Component文档)
+4), 830 sdio代码整理和Linux移植笔记暂缓. 
+
+3, 其它计划:
+1), 查如何通过两次ROP实现alpha; 查如何通过ROP实现不规则图形的bitblt.  
+2), jlinkv8和ftdi2232实验s3c6410. 
+3), 确认s3c6410代码已加入kernel主线: 将来希望不同系统都用一套kernel代码. 
+4), Linux进程优先级, 又忘了...
+5), arm FCSE(快速上下文切换)机制及其在Linux中的应用. 
+6), 体检报告会寄到公司, 关注结果.<DONE>
+
+18:15 2009-11-25
+arm文档, \todo 给实验室share. 
+O:\bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\SOC嵌入式系统芯片\arm\2009 ARM Technical Symposium
+
+12:55 2009-10-16
+(14:10 2009-10-16)
+(20:57 2009-10-19)
+VC1600, VC0882, arm cortex-a8, reading, 阅读cortex-a8介绍性文档
+三个文档: CortexA8_Tools.pdf, "Cortex-A8 Processor Product Brief.pdf", "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf". 都位于36: "\\10.0.2.36\sqmshare\Share\Linux\doc\arm体系结构\Cortex"
+其中WhitePaper对于内部介绍比较多, 值得再认真看看.
+1, reading"CortexA8_Tools.pdf"
+1), 与Freescale, MEI (Matsushita), Samsung and TI 共同研发.
+bamvor: Matsushita Electric Industrial(Matsushita)就是Panasonic(松下), 2008年改名. 
+The CPU (known as “Tiger” while under development) was launched with four
+public lead semiconductor partners - Freescale, MEI (Matsushita), Samsung and TI – all of whom develop high-integration SoC devices for leading consumer OEMs.
+2), debug and trace
+Integrated CoreSight DAP (for debug) 
+Integrated CoreSight ETM (for trace)
+3), 只能通过debug bus访问CoreSight调试: 
+Of particular note, from a tools perspective:
+ Compilation tools need to align with the enhanced focus on performance
+ NEON, a SIMD coprocessor , results in assembly language extensions and a requirement for new compilation support (such as vectorising compiler)
+ Debug is CoreSight-exclusive (DAP/Debug-bus based rather than TAP/scan-chain based), and while this requires changes to the debug tools (especially to JTAG runcontrol hardware) it also enables a range of new tool features.
+
+“CoreSight” refers to the memory-mapped debug architecture introduced in ARMv7 architecture processors, and is designed to replace conventional debug access and control (i.e. JTAG port/scan-chain/Test Access Port), especially in high-integration multi-core SoC devices. The evolution of the ARM debug architecture, culminating in CoreSight, is further described later in the paper.
+
+4), debug的新feature
+(1), monitor mode: introduced in the ARM9E and carried forward to the Cortex-A8 processor.
+(11:13 2009-12-10)"ARM9E中monitor mode和arm11的不同. 
+arm9e如果处于monitor mode, 在breakpoint或watchpoint会发生instruction/data abort异常而不是停止. arm11是可以在monitor mode通过cp14与jtag通信数据. 
+
+20:43 2009-10-20
+VC1600, VC0882, VC0718, arm1176开发板, cortex-a8开发板, 现有资料总结, 项目总结
+最近和zhicheng一起收集了一些arm architechture和soc资料, 和大家分享:
+资料位置:"\\10.0.2.36\sqmshare\Share\Linux\doc\arm soc"
+1, "arm体系结构"目录, 包括arm9, arm11, cortex-a8的reference manaul.
+其中
+1), Cortex资料都位于"Cortex"目录, 可以通过以下三个文档了解cortex-a8: CortexA8_Tools.pdf, "Cortex-A8 Processor Product Brief.pdf", "White Paper_ Architecture and Implementation of the ARM Cortex-A8 Processor.pdf".
+cortex-a8的reference manual已经下载, 但是"arm architechture reference manaul 7AR"没法下载, 需要这个文档和cortex-a8对照看. 
+2), "arm cortex-a8 debug.txt"介绍了cortex-a8调试架构: 在cortex-a8中使用两线(DIO和CLK)CoreSight进行调试, 不再使用JTAG. CoreSight文档保密看不到. 
+2, "board"目录是开发板目录, 
+1), 包括arm公司的integrator和realview开发板(目前我们在emu arm仿真器上模拟realview并运行Linux kernel, 借此研究kernel).
+2), "BeagleBoard(TI OMAP3530)"目录: 开源的TI OMAP3530开发板, 有板子介绍文档, 原理图和光栅文件. 
+3), "现有arm1176和cortex-a8开发板调查及售价.txt"介绍了部分arm1176和cortex-a8芯片和开发板.
+3, "PrimeCell_arm公司提供的IP": arm公司IP core. 例如今天讨论的VIC IP core"DDI0273_Vector_Interrupt_Controller_PL192.pdf"
+4, 另外VC1600"competitor"也有大量arm soc资料, 我前几天上传了s3c6410的datasheet: 
+"samsung\S3C6410X_UM_Rev1.10.pdf"
+
+9:48 2009-9-26
+VC1600, VC0718, ARM11, 调试, <TODO>整理, 总结</TODO>
+arm1176的jtag调试与arm7,arm9有较大调整:
+写入指令, 数据分别用scan chain4, 5.
+arm11支持在arm core运行状态通过jtag读写core数据.
+

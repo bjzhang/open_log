@@ -1,0 +1,1619 @@
+﻿16:14 2009-1-4
+(10:26 2009-1-5)
+(11:15 2009-1-6)
+VC0830学习, VC0830 bootloader, 代码阅读, 续
+待做：完成2-1)-(1)和2-2)。然后了解bootloader中每个目录和文件的作用。
+今天主要是结合文档，找出文档与代码的对应关系。分析c语言启动阶段的流程，不涉及底层函数。
+参考文档"VC0830_bootloader_V0.3.doc"，以下简称为"文档"。
+1, 相关寄存器和引脚
+===================
+STRAP_PIN(PADC+0x700)保存了启动各种信息，上电复位时从LCD_DATA[0:17]引脚读取至此寄存器。
+文档：
+[17:10]	OTHER_CONF[7:0]	8'b0	Other configuration, latch LCD_DATA[17:10]
+[9:8]	CPU_CONF[1:0]	2'b0	Host CPU Bus Configuration, latch LCD_DATA[9:8]
+[7:2]	BOOT_CONF	6'b0	Boot Configuration, latch LCD_DATA[7:2]
+[1]	USB_PHY_SEL	1'b1	Select PHY interface (default 1 -negedge; 0 - posedge), latch LCD_DATA[1]
+[0]	BOOTSEL	1'b0	Boot Select Mode(default 0 - ROM, 1 - SPI), latch LCD_DATA[0]
+BOOT_CONF配置取决于用户，在"VC0830_bootloader_V0.3.doc"中描述如下：
+STRAP_PIN[2]:  VC0830bootloader判断接下来执行：0为nandboot还是1为usbboot。
+STRAP_PIN[5:3]:判断外部晶振频率：
+	LCD_D[5:3]	000	12M
+			001	13M
+			010	26M
+			011	3.9M
+			100	19.2M
+			101	6M
+			110	6.5M
+			111	24M
+STRAP_PIN[7:6]:决定bootloader使用哪个串口作为标准打印输出。2b’00为串口0，2b’01为串口1，2b’10为串口2。
+
+2, 确定启动模式，继续rom启动还是跳至sdram：
+==========================================
+bootloader进入c语言阶段后，首先做剩余所需初始化，这是所有bootloader的通用做法。
+这里包括pll，uart（考虑到适合所有封装，初始化uart0)，初始化CRC32表（待做，细看crc），在定义__ICACHE_ENABLE__情况下使能ICache（目前在System.h (include)中定义__ICACHE_ENABLE__为1）。
+读取PMU_CTRL寄存器"Boot_flag_sw位"：
+boot flag for software.
+1'b0: software will continue to run in rom
+1'b1: software will jump to sdram after initialization
+mas中该位的默认值是0，也就是默认情况下会继续在rom中运行。
+自"文档"：在3种情况下Boot_flag_sw会被设置为1，分别为：AP模式下，进入sleep时，将Boot_flag_sw设置为1，一旦sleep然后被激活，Boot_flag_sw为1标志此时为sleep激活，否则为芯片上电启动；CP模式下，从LCD_BYPASS 转换为NORMAL时，将Boot_flag_sw设置为1；CP模式下，从SLEEP 转换为NORMAL时，将Boot_flag_sw设置为1。
+
+1), 如果继续rom启动：
+--------------------
+这种方式下VC0830 bootloader目的是引导二级bootloader或nand flash上的映像（例如nucleus这类简单的操作系统）。
+根据PADC_AP_CP_MODE寄存器判断AP或CP模式。如果是CP模式进入while(1)即可。
+AP模式下根据START_PIN[2]确定是NAND boot还是USB boot。
+(1) NAND boot
+.............
+Nand boot需要有NAND flash中已有512 info，如果找不到仍会进入USB boot。
+
+Nand_TryGetInfo()：尝试读取nand flash中的512 info。
+    读取512info成功
+	Vc0830bootloader_Init()：初始化系统，包括pll，timer，sdram，nand flash（含bbt）。
+	Image_LoadCoreFromNandflash()：读取nand flash中core映像到memory，见"21:02 2009-1-7"。
+	Go()：调用"Go"函数跳转至512 info中goAddr指定的地址。
+    读取512info失败，进入USB boot。
+
+(2) USB boot
+............
+结合代码基本了解了usb启动过程，代码是把"vender command"相关内容都交给"udc_mass_process()"处理，其中包括了mode=2（边下载边烧写模式），mode=0,mode=2都在流程图中"g_program_mode?"分支处理。
+USB每接收一次数据（512字节）数据都会调用"Data_ProcessBootFromUsb()"，该函数包含mode=2过程。
+Usb_Boot()
+    usb_dfu_init()：初始化为DFU设备。DFU见下文"10:53 2009-1-6"。
+    while(1):
+	根据"g_usb_end_flag"判断usb操作是否完成：
+	    if "!g_usb_end_flag" -> udc_mass_process()：USB下载及命令执行。
+	    if "g_usb_end_flag"
+		udc_mass_process()//注释中说是为了恢复状态。
+		根据"g_program_mode"指定的program模式进行处理：
+		    "g_program_mode==1":调用"Image_WriteAllImageToNandflash()"把刚才下载的映像烧写到nand flash。
+		    "g_program_mode!=0且"g_info_been_stored==0": 模式1,2都需要烧写nand flash，g_info_been_stored==0表示没有写入过info。这种情况下，把info写入nand flash。如果坏块表没有建立(g_bbt_already_flag==0)，建立坏块表。
+		根据"g_vender_command_mode"判断是继续接收还是执行下载的映像：
+		    "if(!g_vender_command_mode)"：停止USB，读出nand flash中映像，执行程序。
+		    "if(g_vender_command_mode)"：g_usb_end_flag置0，这样就能继续接收usb命令了。
+	如果"udc_mass_process()"中处理到了"SUB_VENDOR_RESET"命令，会设置"g_is_wdog_reset"为1，这样此时调用"Timer_WdogReset()"重启板子。"Timer_WdogReset()"作用是设置watch dog溢出时间并使能watch dog，watch dog溢出后自动重启。
+//Usb_Boot()分析完成。
+
+结合VC0830项目usb测试代码，感觉udc_mass_process()(usb\mass\usb_bulkonly.c)是与PC进行块通信，并处理相应的命令：
+udc_mass_process()
+	udc_int_dpc()：似乎是和USB 中断有关。
+	"g_mass_ctx.umb_state == UMB_IDLE" -> req_cbw():
+		udc_fill_req():	填充usb_req结构体，包括端点地址，方向，传送完成时的回调函数(指cbw_complete，作用是否理解正确？待做，疑问)等等。
+		udc_send_receive_req()
+			udc_req_com(): 是实际传送数据的函数，根据"usb_req.trans_flag"是否是TRANS_FLAG_DMA确定是否使用DMA方式传送数据。
+	"g_mass_ctx.umb_state == UMB_CBW_OK" -> do_cbw():
+		UmscProcess()：根据接收命令(CbOpt)进行相应处理。
+UMB_IDLE和UMB_CBW_OK状态如何切换？
+目前的理解是"cbw_complete()"成功后状态切换到"UMB_CBW_OK"，下次调用"udc_mass_process()"时进入分支二调用"do_cbw()"以便根据命令进行处理。如果调用"cbw_complete()"失败，状态仍是"UMB_IDLE"。感觉初始状态应该是"UMB_IDLE"，USB初始化没有看，待做，看。
+
+待做，疑问：理解"cbw_complete"的作用：
+	udc_req_done()->udc_complete_req()
+
+VC0830 bootloader usb和VC0830 usb的区别感觉是UmscProcess中实现的命令不同，前者主要是多实现了vendor command(switch(CbOpt) case DADCMD_VENDER_O)。
+待做，疑问：U盘模式在哪里实现的？。
+
+2), 如果从sdram启动
+-------------------
+利用"Nand_TryGetInfo"函数从nandflash获得sdram和pll的配置参数，并初始化pll，timer，sdram。
+
+3), 其它函数
+------------
+(1), "Go"(boot\vector.S)：复制实际跳转到sdram。
+待做：细看，汇编还是有差距。
+大致了解了Go的作用：
+a, "Go"的参数是目标跳转地址。
+b, 保存跳转地址到r4，避免被"Icache_CleanupBeforeGo"的返回值覆盖。
+注：根据APCS，r0保存函数的简单返回值，从bootloader.S.dump也可以看到"Icache_CleanupBeforeGo"的返回值保存到了r0：
+2170:	e1a00003 	mov	r0, r3
+c, 为重映射做准备，需要调到rom地址继续运行bootloader：
+根据"PADC_STRAP_PIN"判断是从片内rom还是从spi启动的，据此修改PC值的高位，使程序在rom中继续运行。
+d, 4个nop。等待PC生效。
+e, 修改"PMU_CTRL"中[1],[8],[9:10]进行remap，把sdram映射到0地址。
+f, nop等待remap生效。
+g, 调用"Icache_CleanupBeforeGo"，待做，看。
+h, 跳转到r4地址，运行从PC下载的程序。
+i, 后面的两个nop，据lingming说为了保证指令预取，据说也可以去掉。
+
+10:36 2009-1-5
+项目资料，VC0830，编译c++程序所需的lds脚本修改
+自：发件人: Li Dong Liang，发送时间: 2009年1月5日 10:34
+这是做me编译时的设置
+以前总结过, 再发一次
+添加在连接脚本里面的东西
+有的我也不清楚
+网上找到的
+
+自：发件人: Li Dong Liang，发送时间: 2008年8月14日 18:00
+测试cmmb demux过程中遇到的问题
+1. PC上测试:
+         创建VC工程, 编译,连接,执行, 顺风顺水, 测试demux出来的数据, 一切OK
+2. VC0830上的测试:
+         1). 要将.cpp文件加入到eclipse 工程中, 由于以前没有.cpp的文件, 故
+                   -修改Makefile, 添加cpp 编译指令               
+                   -修改subdir.mk, 添加cpp编译目标,及cpp build命令
+                   -修改config.mk, 添加cpp连接选项; 
+                   -在连接选项中加入了 -lstdc++, 使用gcc连接.cpp文件,同时又用到cpp库的时候需要
+         2). 连接的时候遇到问题:  undefined reference to vtable for "xxx::xxx" 
+                   -通过仔细查看gcc使用相关文档, 觉得问题可能是c 连接c++ 目标文件时,
+                    gcc的隐晦连接规则在起作用, 这部分跟虚函数关系密切, 由于我不太清楚
+                    虚函数的实现机制, 这里看的不太明白.
+                    CDemux类中的虚函数主要用于CDemux的扩展类, 而我们目前仅用到了CDemux这一层
+                    便将CDemux类中的虚函数改成了实函数, 暂时解决了这个问题
+                    (这里可能还需要深入研究一下, 因为如果是复杂的c++程序, 不可能这样改)
+         3). 在C中调用C++函数时, 提示错误: undefined reference to XXX
+                   -这是由于在c++中由于要实现函数的多态性, 其连接时的符号是在原始函数符号加上
+                    前缀和后缀构成的, 而在C中只是在函数名前加一个"_", 例如
+                    C程序中一个函数 foo(), 反汇编一下, 其真实符号为 _foo
+                    C++程序中一个函数 foo(), 反汇编一下, 其真实符号可能为 __Z10fooii
+                   -解决办法: 在cpp文件中, 将函数用 extern "C" {   } 包起来
+                    这样其生成的符号就是C规则的符号了
+                   -在头文件中将函数声明用 extern "C" {   }包起来表示 C++程序要按照C函数
+
+                    调用规则去调用该函数或者全局变量.
+         4). 在cpp文件中使用CDemux定义了一个对象mfx, 而该对象的构造函数没有自动运行
+                   -这个目前我也不知道原因
+                   -在CDemux中添加了一个成员函数 CDemuxConstruct, 功能与构造函数相同
+                    显式的调用该函数
+感觉c++的工具链需要深入的去研究
+
+10:46 2009-1-5
+VC0830学习，VC0830 bootloader，代码阅读，512info与打包程序
+1, 注意：打包程序所使用的*.ini文件中变量名称与bootloader中"typedef struct tag_T512Info"不同，前者两个单词之间用"_"连接，后者是从第二个单词开始首字母大写。
+2, 512info数据来源有三：
+打包程序填写，VC0830 bootloader运行后根据实际情况填写，打包程序根据VC0830 bootloader.Ini File用户配置填写。
+
+14:01 2009-1-5
+项目分工，同事信息，VC0816，Liao zhicheng
+816中Liao zhicheng负责SPI模块。
+组里一般是每个人负责一定的模块，然后再负责其他工作。
+
+10:53 2009-1-6
+VC0830学习，VC0830 bootloader，代码阅读，USB DFU模式
+DFU是Device Firmware Upgrade——设备固件升级。作用是升级USB设备中的固件，bootloader用此模式更新nand flash的image和其它vendor command。
+参考文档：
+"DFU 1.1.pdf"，位置：bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\bus总线\外部总线\USB。
+DFU参考资料，待做，下载：
+自：http://bbs.driverdevelop.com/read.php?tid=42742
+www.usb.org有关于DFU的标准文档. 
+http://atmelwlandriver.sourceforge.net/downloads.html有一个Atmel WLAN Driver的linux源代码, 初始化阶段有用到DFU下载运行时Firmware, 可供参考. 
+我就是靠这两份东西完成DFU的.
+
+11:31 2009-1-6
+软件技巧，SourceInsight, 代码格式化, 关闭SourceInsight特色显示方式
+1, 代码格式化
+自：http://topic.csdn.net/u/20080328/00/d2392b37-d356-4997-8ee3-4cb40fc7e2c6.html
+Windows平台下也有好多人都喜欢用SourceInsight编辑C/C++程序，但是SourceInsight没有提供对代码格式化的功能，如果将Artistic Style集成到SourceInsight中，那就可以为它扩展出代码格式化的功能了。  
+假定AStyle.exe的目录是“C:\ArtisticStyle\”，在该目录下有一个“c.opt”文件是用来保存配置的文件。下面简要地介绍下Artistic Style集成到SourceInsight中的方法。  
+1. 打开你的SourceInsight, 选择菜单“Options-->Custom Commands-->Add”, 输入Artistic Style(可以随便输入一个名字)。  
+2. Run中输入: C:\ArtisticStyle\Astyle.exe --options=c.opt %f  
+3. Dir留空，将Iconic Window, Capture Output, Parse Links in OutPut, File,then Line 四项前打上勾。  
+4. 然后点对话框中右侧的按钮“Menu”， Menu--->Menu-->View-->  <end of menu>, 右侧Insert, OK.  
+5. 此时在SourceInsight中的View菜单下多了个Style的子菜单选项，可以用它来对单个C/C++文件进行格式化。
+
+2, 关闭SourceInsight特色显示方式
+自：http://blog.sina.com.cn/s/blog_56ccf4fb0100c4yp.html
+今天把一个用sourceinsight排版整齐的C文件，偶然用VC打开一看，全乱了。研究了半天，发现SI对每个字符的宽度不太一致。
+    请教同事发现选上"view --> draft view"， 就可以让每个字符的宽度一致了。快捷键是 "Alt + F12"
+
+20:15 2009-1-6
+项目资料，VC0830，待做：
+1, 看SPI控制器中根据marb地址读取EEPROM数据部分——线性地址转为非线性地址。将来有机会看830代码时，看verilog是如何实现的，应该不复杂。还希望知道中断是如何实现的，其延迟来源于何处。
+2, 什么是DLL。
+3, 确认uart0与SPI0是否复用。如果复用在SPI boot情况下需要使用其它uartx。
+
+20:38 2009-1-6
+VC0830学习，VC0830 bootloader，代码阅读，文件介绍
+sys.c定义了pll相关内容
+目前g_para_tab定义了PLL1是480M，CPU是240M情况下如何从xclk切频到pll1的分频值。
+
+11:19 2009-1-7
+在SDRAM初始化前g_first_page_info与USB buf复用，这样没有问题，因为USB接收到的第一个buf就是512 info。
+bootloader.c(boot):
+//最开始时用来读取最初512bytes的info时需要使用的buf，所以数据要放在4K SRAM中
+//为了节省空间复用usb 的一个buf
+extern unsigned char g_DmaNotMallocAddr[528] __attribute__((aligned(32)));
+T512Info*  g_first_page_info=(T512Info*)g_DmaNotMallocAddr;
+注意到这里的声明和后面cyg_start的memset中都没有用宏表示528字节。不是很好。
+
+g_DmaNotMallocAddr在usb_bulkonly.c(usb\mass)中定义:
+//为了bootloader 存储first info 复用，做了改进空间扩大为512+16并且32bytes对齐
+#define DMA_LEN (512+16)
+UINT8	g_DmaNotMallocAddr[DMA_LEN] __attribute__((aligned(32)));
+
+21:02 2009-1-7
+VC0830学习，VC0830 bootloader，代码阅读，"Image_LoadCoreFromNandflash"
+作用是读取core image到sdram。亮点是考虑了nand flash坏块造成的core image损坏情况下的处理。
+如bootloader文档所述，core image最多可以寸8份，，load core image时，如果读第一份core image第n个block crc出错，Image_LoadCoreFromNandflash会从第二份第n个block读出该block，然后再继续从第一份core image读n+1个block。若第二份core image的第n个blobk也crc错误，则读第三份core image的第n个block，以此类推。这样最大限度的避免了nand flash造成的core image无法启动。
+这里说的blobk都是读之前确认bbt中描述的好快，坏块不计数。crc错误后会更新bbt。
+
+16:07 2009-1-8
+VC0830，830bootloader review 会议记录，lingming发送时间：2009-1-8 (星期四) 15:2
+1.      Uart(0, 1 ,2)都要在FPGA上测试一下。  Doing, lingming, zhanglu。
+2.      bootloader工作后（特别是sleep 起来以后），bootloader对pad的使用情况，整理到文档中。 Done，lingming.
+3.      修改，更新pll的条件为，pll_ckd变化则修改。Done,lingming.
+4.      review  512info是否代码（bootloader，打包工具，USB工具是否都一样），是否和文档上的一样。 Doing,zhou dashan。
+5.      检查，sdram不用配置占用pad就能使用。Doing,zhou dashan。
+6.      确认512 info里面信息imageTotalNum项，对于要存储多份core image的是否算了多次，并更新文档。Done, lingming。
+7.      在文档中增加建议，info的storeNum和maxBlockNum要一致。Done，lingming。
+8.      将Crc_InitCrc函数修改为宏。Done，lingming。
+9.      寻找快速计算CRC的算法。Doing, ALL。
+10. 优化确认第几个好块的函数。Doing,liao zhichen。
+11. 为了测试load镜像到sdram的速度，具体受各个部分的影响程度，制作一个只有USB下载的版本，一个只有load的版本，增加打印以及计算代码，让huang yong gang制作两版 bootloader。Doing, lingming。
+大家看看记录的还缺些什么，补充上来吧，谢谢了。
+
+16:41 2009-1-8
+从http://cdimage.ubuntu.com/dvd/current/下载了Ubuntu 9.0.4的DVD。
+
+16:46 2009-1-8
+VC0830，Linux开发，移植，待做：
+1, 今天下午与Liao zhicheng讨论。下周二周三找时间与Ai guo讨论
+1), 下载ubuntu给Liao zhicheng。（完成）
+2), 下载Android最新Linux内核（Liao找地址，Zhang jian回家下载）(完成, 已放到36服务器share\linux\android)；
+3), 两人分别看AT9261(Liao)和s3c2440(Zhang jian)Linux内核启动流程，打算按按启动流程顺序看VC0830最小系统的模块如何移植。
+
+16:48 2009-1-8
+Linux入门资料，张健
+1, Linux操作，推荐《鸟哥——基础篇》
+基本命令(grep(正则表达式), man, ln, info; cp, ls, rm)，shell脚本，一个编辑器（推荐vim或emacs）；
+2, Linux启动基本过程；
+3, Linux Driver基本框架。
+
+19:57 2009-1-8
+VC0830，待做：
+1, 整理bootloader review笔记；
+
+20:45 2009-1-8
+(0:58 2009-1-11)
+(16:26 2009-1-11)
+Linux学习, 移植, 代码阅读, 启动, c语言阶段, setup_arch, "vimicro_Linux移植文档"4-9, UPDATE0218, UPDATE0706
+9, setup_arch()分析
+setup_arch()是具体平台(processor)的配置函数, arm的setup_arch()位于"arch\arm\kernel\setup.c"
+1), 结合代码分析:
+void __init setup_arch(char **cmdline_p)
+{
+    struct tag *tags = (struct tag *)&init_tags;
+    struct machine_desc *mdesc;
+    char *from = default_command_line;
+
+    //配置处理器, 在arm920和arm926中未做实际工作。
+    setup_processor();
+    //利用"lookup_machine_type"找到machine_desc, at9261和s3c2440的位置: 
+    //自"14:25 2008-12-25": 
+    //board-sam9261ek.c(arch\arm\mach-at91)
+    //mach-smdk2440.c(arch\arm\mach-s3c2440)
+    mdesc = setup_machine(machine_arch_type);
+    machine_name = mdesc->name;
+
+    //用于表示硬件启动还是软件复位。
+    //若soft_reboot设置为1, 设置reboot_setup='s', 其初始值是'h'。
+    if (mdesc->soft_reboot)
+        reboot_setup("s");
+
+    //=========================================================================
+    //处理tag开始
+    //tag部分的移植: 
+    //1, bootloader提供正确的tag地址(__vet_atags函数校验);
+    //2, bootloader通过tag提供系统配置参数, 可以包括memory大小, cmdline内容, 
+    //硬件类型(例如lcd型号)等
+    //=========================================================================	
+    //若"__atags_pointer"存在, 保存在tags中；否则，使用"machine_desc"中的定义
+    //s3c2440和at9261都是设为"sdram+0x100"。这个地址记得是文档推荐的。忘了是哪个
+    //文档, <TODO>查</TODO>
+    //1), __atags_pointer由是内核启动时传入的r2寄存器，经过"__vet_atags"
+    //(arch\arm\kernel\head-common.S)函数检验指针是否合法。若不合法把
+    //"__atags_pointer"清0
+    //2), "phys_to_virt"提供内核虚地址(0xc0000000)和物理地址之间的直接映射。
+    //只有内核是直接映射的，所以只能用于内核中。
+    if (__atags_pointer)
+        tags = phys_to_virt(__atags_pointer);
+    else if (mdesc->boot_params)
+        tags = phys_to_virt(mdesc->boot_params);
+
+    /*
+     * If we have the old style parameters, convert them to
+     * a tag list.
+     */
+    if (tags->hdr.tag != ATAG_CORE)
+        convert_to_tag_list(tags);
+    if (tags->hdr.tag != ATAG_CORE)
+        tags = (struct tag *)&init_tags;
+
+    //这段自machine_desc(arch.h)
+	//很少平台有，例如eseries.c, mach-smdk2413.c, mach-vstms.c。
+	//从"smdk2413_fixup(mach-smdk2413.c)"看，fixup函数在bootloader传递tag地址
+	//与预设tag地址(mem_PA+0x100)不同时设置memory的start和size
+    if (mdesc->fixup)
+        mdesc->fixup(mdesc, tags, &from, &meminfo);
+
+    //实际处理tag，arm linux要求第一个tag是ATAG_CORE
+    if (tags->hdr.tag == ATAG_CORE) {
+        ///如果前面fixup函数已经设置了memory参数，用"squash_mem_tags"删除tag中
+        ///memory部分的描述
+        if (meminfo.nr_banks != 0)
+            squash_mem_tags(tags);
+        ///若要在proc文件系统中加入tag入口(定义CONFIG_ATAGS_PROC)调用save_atags
+        ///保存tag信息。at9261和s3c2440都未定义。
+        ///在2.6.27中(init_atags_procfs())必定会为atgs加入proc的entry
+        save_atags(tags);
+        ///调用__tagtable中函数处理所有tag。参考"tag机制"部分
+        parse_tags(tags);
+    }
+    //处理tag结束
+    //=========================================================================	
+
+    ///init_mm: 与移植关系不大, 跳过.
+    init_mm.start_code = (unsigned long) &_text;
+    init_mm.end_code   = (unsigned long) &_etext;
+    init_mm.end_data   = (unsigned long) &_edata;
+    init_mm.brk	   = (unsigned long) &_end;
+
+    ///复制default_command_line到boot_command_line
+    ///default_command_line的初值是Linux内核配置时配置的CMDLINE, 若tag包含
+    ///cmdline, 会替换为tag中的cmdline, 也就是tag中的cmdline高于内核配置中的
+    ///cmdline
+    ///详解: 如果tag里面有cmdline, parse_tags()会调用parse_tag_cmdline()把tag中
+    ///的cmdline copy到default_command_line. 也就是tag中的cmdline高于内核配置中
+    ///的cmdline
+    memcpy(boot_command_line, from, COMMAND_LINE_SIZE);
+    boot_command_line[COMMAND_LINE_SIZE-1] = '\0';
+	///处理cmdline中mem, initrd, 其余复制到cmdline_p, 在start_kernel()->
+	///parse_args()中处理
+    parse_cmdline(cmdline_p, from);
+    ///与移植有关的部分: 根据meminfo得到high_memory; 
+    ///设置uart platform_device结构体; 执行"mdesc->map_io()"
+    paging_init(&meminfo, mdesc);
+    //如果设置mdesc->video_start, 调用request_resource - request and reserve an
+    //I/O or memory resource
+    request_standard_resources(&meminfo, mdesc);
+
+#ifdef CONFIG_SMP
+    smp_init_cpus();
+#endif
+
+    cpu_init();
+
+    /*
+     * Set up various architecture-specific pointers
+     */
+    ///init_irq()和init_machine()分别是中断初始化(注册)和soc芯片初始化(设备注册)
+    ///timer是定时器结构体
+    init_arch_irq = mdesc->init_irq;
+    system_timer = mdesc->timer;
+    init_machine = mdesc->init_machine;
+
+#ifdef CONFIG_VT
+#if defined(CONFIG_VGA_CONSOLE)
+    conswitchp = &vga_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)
+    conswitchp = &dummy_con;
+#endif
+#endif
+}
+
+2), 移植所需工作:
+setup_arch()涉及到的与移植有关工作前面的模块分析中已经提到:
+利用processor_type, machine_type and tag设置系统结构相关内容; 这三个
+bootloader启动时都已经检查过. 所以对于移植来说这里需要注意的是:
+1, 调用mdesc->map_io(), 对于smdk2440是"smdk2440_map_io()";
+2, 设置init_irq, timer, init_machine三个指针. 
+
+12:52 2009-1-9
+(11:49 2009-2-1)
+(14:56 2009-2-5)
+Linux学习, 移植, 参考资料, "vimicro_Linux移植文档"10, DONE
+十, 参考资料
+所有参考资料位于"\\10.0.2.36\sqmshare\Share\Linux\doc".
+1, Linux文档：
+1), Documentation\arm:
+memory.txt，arm linux memory分配文档，"15:24 2008-11-6"有部分分析。
+sansumg-s3c24xx\overview.txt: s3c24xx linux总体介绍。待做：看该目录所有文档。
+
+2, 移植实验指导书（亚嵌AKAE），一本辅导教材，在张健这里。
+
+3, 移植文档
+1), Liao zhicheng文档:
+linux启动分析.doc
+LINUX中位置无关代码的实现原理.doc
+流程图: 内核启动流程图.
+2), porting_to_new_arm_platform=++.pdf
+作者：Deepak Saxena，dsaxena@plexity.net
+用PPT形式介绍了arm linux移植过程。
+3), Linux2.4Startup=++.pdf，linux 2.4启动过程介绍，其中提到的函数大多与移植有关。看起来和"移植实验指导书（亚嵌AKAE）"的条例类似。
+4), ARM_Linux_Kernel_Porting_(MBA2410)=+.pdf，可惜是韩语的，看起来写的不错。先留着，可能可以参考流程。
+5), Linux Kernel Porting 基本概念，流程和方法=++.txt
+6), Linux New Platform Port
+自：http://www.linux-arm.org/LinuxKernel/LinuxNewPlatformPort；
+位置：bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\软件设计\OS操作系统\linux\内核。
+这里还是ContexM3的移植资料，以后可以看看。
+7), 对应移植也有帮助，只是转帖不全，需要找到原帖<TODO>。
+linux 启动代码分析－－kevy
+http://www.cnitblog.com/zouzheng/archive/2008/08/04/47575.html
+ARM-Linux开发环境的介绍：启动的流程
+http://www.cnitblog.com/zouzheng/archive/2008/08/04/47579.html
+8), Kernel Notes for Machine Developers
+http://www.arm.linux.org.uk/developer/kernelnotes.php
+9), "Linux2.4Startup=++.pdf"
+
+4, 内核学习文档
+1), Jollen Blog_Linux Kernel_01_Process Scheduling Introduction=++.pdf
+详细介绍
+http://www.jollen.org/blog/2006/10/jollen_linux_1_1.html
+http://www.jollen.org/blog/2006/10/jollen_linux_1_15.html
+作者的博客"http://www.jollen.org/blog"上面有大量Linux开发资料，内核，驱动，Android等。
+2),KernelAnalysis-HOWTO.pdf
+内核学习入门文档。
+
+13:19 2009-1-9
+待做：
+1, 为了保证进度，周五和周一各要完成"移植实验指导书（亚嵌AKAE）"，45页对应内容的代码分析。
+
+13:34 2009-1-9
+VC0830，Linux开发，移植，文件目录
+移植Linux到新arm平台涉及到的目录有arch\arm\mach-xxx和include\asm-arm\arch-xxx。
+具体，自"http://www.jollen.org/blog/2005/01/linux_kernel_porting_2.html"：
+1. 登錄一個 Machine ID
+2. 編輯 config.in 設定檔與 Makefile.
+linux/arch/arm/config.in
+arch/arm/Makefile
+arch/arm/boot/Makefile
+arch/arm/mach-XXX/Makefile
+3. 修改原始檔如下.
+arch/arm/kernel/entry-armv.S
+arch/arm/kernel/debug-armv.S
+arch/arm/mach-XXX/arch.c
+arch/arm/mach-XXX/irq.c
+arch/arm/mach-XXX/mm.c
+include/asm/arch/dma.h
+include/asm/arch/hardware.h
+include/asm/arch/io.h
+include/asm/arch/irq.h
+include/asm/arch/irqs.h
+include/asm/arch/keyboard.h
+include/asm/arch/memory.h
+include/asm/arch/param.h
+include/asm/arch/system.h
+include/asm/arch/timex.h
+include/asm/arch/uncompress.h
+include/asm/arch/vmalloc.h
+
+15:31 2009-1-9
+VC0830，Linux开发，调试，续
+Running Linux on a software model
+自：https://support.codesourcery.com/GNUToolchain/?@action=confrego&otk=usQ0EE1CCRyOZeAEJvxsikGRAsONZAjO
+似乎和UML类似，网页上有文中提到的Makefile等，以后需要内核调试是可以试试。
+
+16:16 2009-1-9
+待做：
+1, 中断向量的位置，虚地址。
+2, Linux命令行和ATAG谁的优先级高？《移植实验指导书》说是命令行高。
+(13:38 2009-1-11)从"setup_arch"的分析中知道, tag cmdline优先级高于Linux内核配置时CMDLINE变量."13:39 2009-1-11"end
+3, 今天没有完成计划，周末继续"20:45 2009-1-8"，要分析到45页。
+
+17:00 2009-1-9
+保障, 五险一金, 住房公积金转移
+给Clairezhu发邮件：
+clairezhu@via-telcom.com
+个人账号：512129235592
+单位账号：509000928417
+张健，电话：13810498791
+附件：身份证复印件
+
+23:34 2009-1-10
+VC0830，Linux开发，移植，内核启动，tag
+1, 总结，文件作用分析
+atags.c(arch\arm\kernel), atags.h(arch\arm\kernel):
+在proc中加入tag的入口，能从proc文件系统中读出启动时内核的tag信息。可能可以提供给应用程序，便于应用程序得到系统信息(memory大小，根文件系统位置，lcd类型等等)，应用程序应该也有其它手段获得系统启动信息吧。
+"init_atags_procfs"是用于在proc文件系统中加入tag入口。
+当定义CONFIG_ATAGS_PROC有效，否则"init_atags_procfs"会提示未找到tag。
+
+0:00 2009-1-11
+Linux学习，存储器(memory)，memory controller，待做：完整看完文档
+看"mm_struct"时发现了memory controller的文档：memory.txt(documentation\controllers)。
+看了文档开头，memory controller（软件，与硬件上的memory controller无关）目的是把一组task与Linux系统其余部分隔离。memory controller可以控制task或task group能使用的memory大小。因为虽然默认情况下task是能使用全部用户空间，但task内存也可能被换出物理memory。memory controller可以限制task组能使用的memory大小；也可以保证有些task的memory足够用，例如刻录机必须由足够的可用memory，否则可能刻录失败。
+目前mips, ppc, ia64的有些mach中配置了CONFIG_CGROUPS=y。
+
+10:23 2009-1-11
+Linux学习，移植，代码阅读，启动，c语言阶段, local_irq_disable()
+local_irq_disable()定义由两种情况：
+1, "CONFIG_TRACE_IRQFLAGS_SUPPORT"定义时：
+irqflags.h(include\linux)：
+#define local_irq_disable() \
+    do { raw_local_irq_disable(); trace_hardirqs_off(); } while (0)
+trace_hardirqs_off()在未定义"CONFIG_TRACE_IRQFLAGS"时为空。
+
+raw_local_irq_disable()(irqflags.h(include\asm-arm)):
+/*
+ * Disable IRQs
+ */
+#define raw_local_irq_disable()					\
+    ({							\
+        unsigned long temp;				\
+    __asm__ __volatile__(					\
+    "mrs	%0, cpsr		@ local_irq_disable\n"	\
+"	orr	%0, %0, #128\n"					\
+"	msr	cpsr_c, %0"					\
+    : "=r" (temp)						\
+    :							\
+    : "memory", "cc");					\
+    })
+注：
+1, at9261, s3c2440都定义了CONFIG_TRACE_IRQFLAGS_SUPPORT。未找到有任何配置文件定义了"CONFIG_TRACE_IRQFLAGS"。
+2, armv6及以上的raw_local_irq_disable():
+#define raw_local_irq_disable() __asm__("cpsid i	@ __cli" : : : "memory", "cc")
+
+2, "CONFIG_TRACE_IRQFLAGS_SUPPORT"未定义时直接定义体系结构函数。
+
+13:33 2009-1-11
+VC0830，Linux开发，移植，将来需要深入分析的部分, 待做
+1, 存储器管理: marb相关内容; arm存储器管理机制. 
+setup_arch()中启动时的内存管理.
+2, 中断模型.
+3, 视频模块: 包括驱动层: ipp, lcdc等硬件配置; 应用层: 实现各种视频编解码.
+
+13:25 2009-1-12
+软件技巧，Editplus
+"Ctrl+-"：选择本区块内容。
+
+16:27 2009-1-12
+VC0830项目，rom bootloader
+今天bootloader会议，有些内容与Linux移植可能有关，都加了星号，以后需要时查阅。在研发记录簿P17-P18.
+
+17:06 2009-1-12
+(16:30 2009-1-13)
+(16:46 2009-1-18)
+(10:08 2009-1-19)
+(10:34 2009-1-30)
+Linux学习，移植，代码阅读，中断机制, trap_init(), "vimicro_Linux移植文档"7-4
+4, 异常初始化
+trap_init()(arch\arm\kernel\trap.c)分析: 把异常向量处理函数复制到指定地址.
+1), 代码
+--------
+Copy the vectors, stubs and kuser helpers (in entry-armv.S) into the vector page, mapped at 0xffff0000, and ensure these are visible to the instruction stream.
+    //unsigned long vectors = CONFIG_VECTORS_BASE;
+    //"CONFIG_VECTORS_BASE"是配置开发板时确定的, arm9都支持中断向量放在"0xffff0000", 所以"CONFIG_VECTORS_BASE"=0xffff0000.
+	memcpy((void *)vectors, __vectors_start, __vectors_end - __vectors_start);
+	memcpy((void *)vectors + 0x200, __stubs_start, __stubs_end - __stubs_start);
+    //int kuser_sz = __kuser_helper_end - __kuser_helper_start;
+    //从"0x1000-kuser_sz"到"0x1000"
+	memcpy((void *)vectors + 0x1000 - kuser_sz, __kuser_helper_start, kuser_sz);
+Copy signal return handlers into the vector page, and set sigreturn to be a pointer to these.
+    //#define KERN_SIGRETURN_CODE	(CONFIG_VECTORS_BASE + 0x00000500)
+    //signal.h(arch\arm\kernel)
+	memcpy((void *)KERN_SIGRETURN_CODE, sigreturn_codes,
+	       sizeof(sigreturn_codes));
+
+2), 地址分配
+------------
+这里直接假定异常向量基址(CONFIG_VECTORS_BASE)是0xffff0000, 对于arm9及以后CPU没问题.
+(1), 0xffff0000 -- 0xffff0020
+保存8个异常向量的跳转地址.
+arm的7个异常向量及对应处理器模式见"14:52 2008-12-26"1-4)-(2); 再加上0x00000014一共是8个, 所以占空间=8x4=0x20. 0x00000014本来用于处理早期采用26位地址的arm产生地址异常。现在文档中说可以用于未来扩展。自"14:52 2008-12-26"1-4)-(2)
+(2), 0xffff0200 -- 0xffff02ff
+保存异常向量stub跳转地址
+entry-armv.s中注释说vector stubs区不能超过0x300.
+(3), 0xffff0500 -- 0xffff001c
+sigreturn_codes是7个unsigned long的数组. 待做: 查.
+(4), 0xffff0f9f -- 0xffff0fff
+保存"kuser_helper"函数, 是内核提供给开发者的memory辅助操作函数.
+
+17:34 2009-1-12
+Linux学习, 移植, 代码阅读, Linux内核移植总体分析+"machine_desc"分析, "vimicro_Linux移植文档"4-1/2, DONE0206
+四, Linux内核移植分析
+1, Linux内核移植总体分析
+VC0830基本系统包括sdrc, clkrst, padc, uart, irq, rtc, watchdog, timer, marb. 移植时marb和video可能对有些麻烦: 初期可以由bootloader配置好marb, Linux不再修改; video部分不影响内核启动, 暂时不考虑.
+计划参考smdk2440, at91sam9261和Android等移植. 这部分主要分析了smdk2440移植中与内核启动相关的代码, 中断部分分析了pxa和s3c24xx两个移植. s3c24xx有些方法较旧, 分析at91和android移植后完善此文档, 尽量使用Linux中推荐的实现方式. 
+
+1), 一般来说Linux移植有三个层次: CPU, SOC, Board.
+CPU级: 针对某个体系结构的移植, 例如针对arm926ej-s的移植. 包括大量底层操作函数, 例如linux/arch/arm/mm/proc-arm926.S定义了arm926ej-s mmu底层操作函数.
+SOC级: 针对某个SOC芯片的移植, 例如三星s3c2440, 我们的VC0830. 包括内核启动时SOC的初始化, SOC片内硬件设备驱动等, 大多是c语言写成, 少部分是汇编.
+Board级: 针对某个板子的移植, 例如三星smdk2440开发板. 配置memory, flash; 编写板上硬件的驱动程序.
+我们VC0830的移植包括SOC级和板级移植.
+
+2), 后文中反复提到的platform bus是Linux用于嵌入式系统或某些旧硬件的虚拟总线. 嵌入式系统的很多设备不能归入已有的pci, usb等bus, 为了便于管理这些设备, 把它们归入platform bus这个虚拟总线, 所有platform bus下的设备通过platform bus注册到Linux deivce树.
+
+3), smdk2440开发板介绍
+smdk2440是三星s3c2440开发板, 使用sdram, nand flash, 支持串口, 网络, usb, sd卡等外设. s3c2440有两个pll, 一个用于fclk(用于arm920t核), hclk(用于ahb总线)和pclk(用于apb总线); 另一个用于usb.
+smdk2440移植中涉及Linux内核启动的最小系统包括memory, console(uart), interrupt, time/timer, clock. 此外有三部分与移植关系很紧密: struct machine_desc, "setup_arch()"函数, do_initcalls. 后面依次分析.
+
+4), 内核调试
+(1), 内核启动阶段
+i, 使用printk打印
+printk打出的log在"console_init()"后才会把buffer内容输出到终端, 如果内核在这之前死掉, 就看不到信息了. 
+内核是否支持console_init()前输出log呢? 有可能有. 如果没有,可以在"console_init()"之前, 直接向uart寄存器写入数据(区分io mapping前后分别使用物理地址和虚拟地址)这样就能随时输出log.
+ii, 如果内核启动问题较多, 可能需要jtag调试, RVD理论上可以调试内核, 需要实验; 另外网上有人用jtag板子+openocd调试(www.100ask.net)内核, 可以尝试.
+
+(2), 内核启动后:
+VC0830中没有网络芯片, 考虑使用usb gadget的ethernet挂nfs文件系统, 便于将来调试驱动(模块), 应用程序(底层库, Android等).
+
+(3), 使用仿真器(skyeye, qemu), uml(用户模式内核)调试内核的核心部分.
+
+(4), 参考"head.S(arch\arm\kernel)"的这段注释:
+#ifdef CONFIG_DEBUG_LL
+    /*
+     * Map in IO space for serial debugging.
+     * This allows debug messages to be output
+     * via a serial console before paging_init.
+     */
+
+2, "machine_desc"分析
+struct machine_desc(定义在arch.h(include\asm-arm\mach))是描述每个arm linux板子的核心结构体, 每种板子对应一个. 除了clock, 所有板子特有部分都可以通过这个结构体引出, smdk2440的machine_desc在"arch\arm\mach-s3c2440\mach-smdk2440.c"中定义, 结合此定义分析:
+(1), unsigned int		nr;		/* architecture number	*/
+const char		*name;		/* architecture name	*/
+每种arm linux都有一个独立的nr, name, 前面内核前传中已经介绍过.
+smdk2440中: 
+"MACHINE_START(S3C2440,"SMDK2440")"经"MACHINE_START(include\asm-arm\mach\arch.h)"宏替换为
+static const struct machine_desc __mach_desc_S3C2440	\
+ __used							\
+ __attribute__((__section__(".arch.info.init"))) = {	\
+	.nr		= MACH_TYPE_S3C2440,		\
+	.name		= "SMDK2440",
+"MACH_TYPE_xxx"在"二, 内核前传: 3内核启动--汇编部分"有说明.
+
+(2), unsigned int		phys_io;	/* start of physical io	*/
+IO起始地址的物理地址.
+smdk2440: S3C2410_PA_UART
+
+(3), unsigned int		io_pg_offst;	/* byte offset for io page tabe entry	*/
+( IO起始地址的虚地址 >> 18) & 0xfffc
+smdk2440: (((u32)S3C24XX_VA_UART) >> 18) & 0xfffc
+
+(4), unsigned long		boot_params;	/* tagged list		*/
+内核启动参数(tag)的起始物理地址, 使用这个地址时尚未进行memory映射. 参见"setup_arch()"函数分析.
+
+(5), void			(*fixup)(struct machine_desc *,
+					 struct tag *, char **,
+					 struct meminfo *);
+很少平台有，例如eseries.c, mach-smdk2413.c, mach-vstms.c。 "smdk2413_fixup(mach-smdk2413.c)"，fixup函数在tags信息有问题情况下设
+置memory信息
+
+(6), void			(*map_io)(void);/* IO mapping function	*/
+至少包括IO物理地址到虚地址映射. 参见"smdk2440_map_io()"
+
+(7), void			(*init_irq)(void);
+与具体machine相关的中断初始化, 参见"s3c24xx_init_irq()"
+
+(8), struct sys_timer	*timer;		/* system tick timer	*/
+* start_kernel()->time_init()(time.c)-> timer->init()
+* 系统计时定时器结构体, 参考"s3c24xx_timer"的"s3c2410_timer_init()", "
+* s3c2410_gettimeoffset", "s3c2410_timer_setup()"
+
+(9), void			(*init_machine)(void);
+实现板子及其SOC芯片特有的init工作, 参考"smdk2440_machine_init()":
+customize_machine()
+    ->init_machine()(smdk2440_machine_init())
+        ->s3c24xx_fb_set_platdata()
+        ->platform_add_devices()
+        ->smdk_machine_init()
+            ->config LEDs
+            ->设置nand platform_data
+            ->platform_add_devices(): 注册s3c2440通用设备(nand, led4--led7)到platform bus
+            ->s3c2410_pm_init(): 电源管理有效时, 设置"suspend_ops"用于smdk2440平台相关的睡眠状态管理.
+
+smdk2440_machine_init()分析:
+ * customize_machine()->
+ * 1, 保存framebuffer硬件配置信息smdk2440_fb_info
+ * 2, 注册s3c2440的特有硬件设备: usb, lcd, wdt, i2c, iis.到platform_device
+ * 3, smdk系列通用初始化. (注册设备, 设置pm指针)
+                    
+(10), 定义machine_desc时会借助"MACHINE_START"把"machine_desc"放到.arch.info.init区域(include\asm-arm\mach\arch.h)：
+#define MACHINE_START(_type,_name)			\
+static const struct machine_desc __mach_desc_##_type	\
+ __attribute_used__					\
+ __attribute__((__section__(".arch.info.init"))) = {	\
+	.nr		= MACH_TYPE_##_type,		\
+	.name		= _name,
+
+#define MACHINE_END				\
+};
+
+链接时会把所有"machine_desc"放到"__arch_info_begin"--"__arch_info_end":
+vmlinux.lds.S相关代码如下:
+    __arch_info_begin = .;
+        *(.arch.info.init)
+    __arch_info_end = .;
+"__arch_info_begin"--"__arch_info_end"的使用方法参见Liao zhicheng文档"linux启动分析.doc".
+
+(11), <TODO>写的不清楚, 修改</TODO>
+除此开发板的描述结构体machine_desc之外, 内核还可以加入platform级别抽象----抽象了每个SOC芯片. 例如s3c24xx系列在"arch\arm\plat-s3c24xx"目录抽象了不同SOC芯片. 其中cpu.c定义了不同SOC芯片对应的init, map_io, uart, clock等初始化函数. 加入platform后, start_kernel()一般先调用SOC初始化函数, 再调用具体板子的初始化函数.
+
+(12), Linux与移植相关的目录, 括号中是smdk2440对应目录:
+arch\arm\mach-xxx(arm\arm\mach-s3c2440): 针对某个SOC芯片的移植目录, .c文件和私有头文件.
+arch\arm\plat-xxx(arch\arm\plat-s3c24xx): 针对某一类SOC的移植目录(可选). 例如三星的s3c2410, s3c2440,...归为s3c24xx这类平台.
+include\asm-arm\arch-xxx(include\asm-arm\arch-s3c2410): 针对某个SOC的移植目录, 头文件
+
+21:29 2009-1-12
+(11:35 2009-1-13)
+(18:30 2009-1-18)
+Linux学习, 移植, 代码阅读, 中断机制, 数据结构, 中断注册, "vimicro_Linux移植文档"7-1/2, DONE
+七, Linux中断移植, 中断机制详细分析
+s3c2440使用Linux的通用的中断机制中断，参考: "documentation\arm\interrupt".
+1, 数据结构
+1), NR_IRQS, 移植machine相关:
+-----------------------------
+include\asm-arm\irq.h: 若未定义NR_IRQS, 定义为128.
+irqs.h(include\asm-arm\arch-s3c2410): 定义NR_IRQS为系统最后一个中断号加一, 对于2440是"(IRQ_S3C2440_AC97+1)"
+
+2), irq_desc[NR_IRQS]
+--------------------
+kernel\irq\handle.c:
+/*
+ * Linux has a controller-independent interrupt architecture.
+ * Every controller has a 'controller-template', that is used
+ * by the main code to do the right thing. Each driver-visible
+ * interrupt source is transparently wired to the appropriate
+ * controller. Thus drivers need not be aware of the
+ * interrupt-controller.
+ *
+ * The code is designed to be easily extended with new/different
+ * interrupt controllers, without having to do assembly magic or
+ * having to touch the generic code.
+ *
+ * Controller mappings for all interrupt sources:
+ */
+//"[0 ... NR_IRQS-1]="这个定义给多个变量赋同样初值的办法是GNU扩展的吧,查GNU gcc文档,待做.
+struct irq_desc irq_desc[NR_IRQS] __cacheline_aligned_in_smp = {
+	[0 ... NR_IRQS-1] = {
+		.status = IRQ_DISABLED,
+		.chip = &no_irq_chip,
+		.handle_irq = handle_bad_irq,
+		.depth = 1,
+		.lock = __SPIN_LOCK_UNLOCKED(irq_desc->lock),
+#ifdef CONFIG_SMP
+		.affinity = CPU_MASK_ALL
+#endif
+	}
+};
+
+3), struct irqchip
+ack    - required.  May be the same function as mask for IRQs
+         handled by do_level_IRQ. 用于清中断.
+mask   - required. 
+unmask - required.
+rerun  - optional.  Not required if you're using do_level_IRQ for all
+         IRQs that use this 'irqchip'.  Generally expected to re-trigger
+         the hardware IRQ if possible.  If not, may call the handler
+	 directly.
+type   - optional.  If you don't support changing the type of an IRQ,
+         it should be null so people can detect if they are unable to
+         set the IRQ type.
+
+4), 具体的中断处理函数.
+The handler can be one of the 3 standard handlers - "level"(handle_level_irq()), "(edge"handle_edge_irq()) and
+"simple"(handle_simple_irq(), Simple and software-decoded IRQs.)
+在chip.c(kernel\irq)中定义, 注释很清楚, 此外还有handle_fasteoi_irq()(irq handler for transparent controllers).这些函数未具体分析, 待做.
+
+2, 中断注册
+1), s3c2440中断通过三个地方注册:
+(1), start_kerenl()->init_IRQ()->machine_desc.init_irq()(对于s3c2440是"s3c24xx_init_irq()").
+"s3c24xx_init_irq"注册了s3c24xx平台通用的irq.
+
+init_IRQ()(arch\arm\kernel\irq.c)分析.
+ * start_kernel()->
+ * ->s3c24xx_init_irq()
+ * 中断初始化: 
+ * 1, 把所有irq(NR_IRQS个)设为IRQ_NOREQUEST(不能被请求)和IRQ_NOPROBE
+ * (不能probe); 
+ * 2, 调用machine_desc.init_irq()初始化machine中断; s3c24xx中为了统一, 
+ * machine_desc.init_irq()只初始化s3c24xx通用部分.
+
+(2), 通过sysdev_driver注册, 两个位置:
+i, s3c2440_irq_init()(arch\arm\plat-s3c24xx\s3c244x-irq.c)
+通过arch_initcall(s3c2440_irq_init)调用, 注册到s3c2440_sysclass. 注册成功后调用回调函数s3c244x_irq_add()注册了nand和camera两个设备的中断.
+ii, s3c2440_irq_init()(arch\arm\mach-s3c2440\irq.c)
+通过arch_initcall(s3c2440_irq_init)调用, 注册到s3c2440_sysclass. 注册成功后调用回调函数"s3c2440_irq_add"()注册了wdt(watchdog到ac97的中断.
+
+这两个arch_initcall谁先谁后呢? 从Makefile看, 是先加入的mach,后加入的plat. System.map也是如此:
+c0036544 t s3c2440_irq_init
+...
+c003f094 t s3c2442_irq_init
+c003f0b8 t s3c2440_irq_init
+与s3c2442_irq_init在一起那个s3c2440_irq_init是在plat-s3c24xx中定义的.
+
+(3), 注册具体的中断处理handler, 这部分在具体驱动程序中实现. 以lcd(framebuffer驱动, driver\video\s3c2410fb.c)为例:
+i, platform_get_irq(dev,num)(driver\base\platform.c), 从dev得到irq号. 如果platform device的resource存在返回这个设备的第一个中断号(resource.start); 若不存在返回(-ENXIO, 无此设备或地址).
+driver\video\s3c2410fb.c: irq = platform_get_irq(pdev, 0);
+platform_get_irq()通过platform_get_resource(,IORESOURCE_IRQ,)得到irq resource. "
+IORESOURCE_IRQ"指明了resource类型是irq, resource类型在include\linux\ioport.h中定义:
+#define IORESOURCE_IO		0x00000100	/* Resource type */
+#define IORESOURCE_MEM		0x00000200
+#define IORESOURCE_IRQ		0x00000400
+#define IORESOURCE_DMA		0x00000800
+(2), request_irq(), 注册指定中断(irq)的handler(s3c2410fb_irq):
+ret = request_irq(irq, s3c2410fb_irq, IRQF_DISABLED, pdev->name, info);
+
+2), 中断注册一般用"set_irq_chip()", "set_irq_handler()"/"set_irq_chained_handler()", "set_irq_flags()"这些函数.
+1), set_irq_chip(): kernel\irq\chip.c
+2), set_irq_handler()和set_irq_chained_handler()注册handler, 二者都是在include\linux\irq.h中定义的inline, 都是__set_irq_handler().
+"set_irq_chained_handler()"用于注册二级中断, 传递的handle用于处理二级中断. 注册二级中断举例:
+set_irq_chip(IRQ_WDT, &s3c_irq_level_chip);
+set_irq_handler(IRQ_WDT, handle_level_irq);
+set_irq_chained_handler(IRQ_WDT, s3c_irq_demux_wdtac97);
+
+for (irqno = IRQ_S3C2440_WDT; irqno <= IRQ_S3C2440_AC97; irqno++) {
+    set_irq_chip(irqno, &s3c_irq_wdtac97);
+    set_irq_handler(irqno, handle_level_irq);
+    set_irq_flags(irqno, IRQF_VALID);
+}
+其中IRQ_WDT是wdt和ac97的一级中断号, IRQ_S3C2440_WDT和IRQ_S3C2440_AC97是各自的二级中断号.
+
+21:30 2009-1-12
+Linux学习, 移植, 代码阅读
+设备注册顺序(注册class->注册device->注册driver)
+
+10:40 2009-1-14
+Linux学习, 移植, 代码阅读, 启动, c语言阶段, time/timer, 中断, 待做: 未完成.
+分析s3c24xx中timer中断的handler--"s3c2410_timer_interrupt":
+调用time_tick()并返回IRQ_HANDLED。这里主要分析time_tick()(arch\arm\kernel\time.c):
+未定义"CONFIG_GENERIC_CLOCKEVENTS"情况下定义此函数，at9261和s3c24xx都未定义，但Littleton和Zylonite(分别是pxa3xx和pxa27x的评估板)定义了"CONFIG_GENERIC_CLOCKEVENTS"。待做：如果定义了，是如何处理的？可能对移植有影响。
+1, profile_tick()(定义kernel\profile.c):
+/** V_ZJ
+ * oprofile_init()中与arm体系结构版本相关。
+ * 定义CONFIG_OPROFILE情况下, oprofile_start()/oprofile_stop()
+ * (driver\oprofile\oprof.c)会注册/注销timer_hook。
+ * 从oprof.c的注释中看：向写入"/dev/oprofile/enable"1或0会调用oprofile_start()"
+ * /"oprofile_sto[()"开始/停止计时，可能用分析内核性能？参考文档
+ * "basic_profiling.txt (documentation)"
+ */
+没有已知开发板定义了"CONFIG_OPROFILE"。
+
+2, do_leds()
+定义"CONFIG_LEDS_TIMER"下定义do_leds():
+/** V_ZJ
+ * 若干个tick后(对于arm HZ=100)是6个tick用led提示一个系统状态. 
+ * BUG: 如果HZ是2的整数次幂, count就变负数了, 好在arm中一般是100, 不是100估计也
+ * 是1000.
+ */
+include\asm-arm\leds.h: led event提示不同的系统状态. 本文件定义了led event类型和处理函数. 具体可以参考at91_leds_event和mainstone_leds_event.
+
+3, "do_set_rtc()"
+与rtc同步系统时间。
+set_rtc在at9261和s3c24xx未定义，难道说不支持与rtc同步系统时间？不过可以在具体的开发板中支持。
+
+4, 	do_timer(1);
+	write_sequnlock(&xtime_lock);
+#ifndef CONFIG_SMP
+	update_process_times(user_mode(get_irq_regs()));
+
+5, do_timer()杂记:
+timekeeping.c:
+定义"CONFIG_GENERIC_TIME"情况下:
+    change_clocksource()->clocksource_calculate_interval(clock,NTP_INTERVAL_LENGTH);
+timekeeping_init()->clocksource_calculate_interval(clock, NTP_INTERVAL_LENGTH);
+"clocksource_calculate_interval()"涉及到c->cycle_interval().
+未定义"CONFIG_GENERIC_TIME"时没有找到cycle_interval合理赋值的地方. 发现这样分析难度较大, 暂缓分析.
+
+10:57 2009-1-14
+Linux学习，移植，代码阅读, 启动, c语言阶段, initcall, "do_initcalls"分析, "vimicro_Linux移植文档"4-10, DONE
+10, initcall系统函数分析
+1), do_initcalls()是在内核启动过程中需要做的一系列初始化工作, 按照从核心到外设的执行顺序排列. 设备驱动如果直接编译到内核, 它们的module_init()也在这里执行.
+Linux内核中的xxx_initcall宏在include\linux\init.h中定义
+(1), 内核启动时要执行的一系列初始化函数:
+pure initcall是指不依赖于Linux内核其它部分的初始化, 同时pure initcall中初始化的变量不能静态初始化.
+/*
+ * A "pure" initcall has no dependencies on anything else, and purely
+ * initializes variables that couldn't be statically initialized.
+ *
+ * This only exists for built-in code, not for modules.
+ */
+#define pure_initcall(fn)		__define_initcall("0",fn,0)
+
+#define core_initcall(fn)		__define_initcall("1",fn,1)
+#define core_initcall_sync(fn)		__define_initcall("1s",fn,1s)
+#define postcore_initcall(fn)		__define_initcall("2",fn,2)
+#define postcore_initcall_sync(fn)	__define_initcall("2s",fn,2s)
+#define arch_initcall(fn)		__define_initcall("3",fn,3)
+#define arch_initcall_sync(fn)		__define_initcall("3s",fn,3s)
+#define subsys_initcall(fn)		__define_initcall("4",fn,4)
+#define subsys_initcall_sync(fn)	__define_initcall("4s",fn,4s)
+#define fs_initcall(fn)			__define_initcall("5",fn,5)
+#define fs_initcall_sync(fn)		__define_initcall("5s",fn,5s)
+#define rootfs_initcall(fn)		__define_initcall("rootfs",fn,rootfs)
+#define device_initcall(fn)		__define_initcall("6",fn,6)
+#define device_initcall_sync(fn)	__define_initcall("6s",fn,6s)
+#define late_initcall(fn)		__define_initcall("7",fn,7)
+#define late_initcall_sync(fn)		__define_initcall("7s",fn,7s)
+
+#define __initcall(fn) device_initcall(fn)
+
+#define __exitcall(fn) \
+	static exitcall_t __exitcall_##fn __exit_call = fn
+
+(2), "__define_initcall"在同一文件定义, level表示了执行优先级, 0最高, 7s最低.
+<TODO>查"s"("sync")具体起什么作用.</TODO>
+/* initcalls are now grouped by functionality into separate 
+ * subsections. Ordering inside the subsections is determined
+ * by link order. 
+ * For backwards compatibility, initcall() puts the call in 
+ * the device init subsection.
+ *
+ * The `id' arg to __define_initcall() is needed so that multiple initcalls
+ * can point at the same handler without causing duplicate-symbol build errors.
+ */
+
+#define __define_initcall(level,fn,id) \
+	static initcall_t __initcall_##fn##id __used \
+	__attribute__((__section__(".initcall" level ".init"))) = fn
+
+(3), 这些由"__define_initcall"定义的初始化函数在链接脚本中都放在"__initcall_start"--"__initcall_end"之间.
+链接脚本(arch\arm\kernel\vmlinux.lds.S):
+__initcall_start = .;
+	INITCALLS
+__initcall_end = .;
+
+"INITCALLS"定义在include\asm-generic\vmlinux.lds.h:
+#define INITCALLS							\
+  	*(.initcall0.init)						\
+  	*(.initcall0s.init)						\
+  	*(.initcall1.init)						\
+  	*(.initcall1s.init)						\
+  	*(.initcall2.init)						\
+  	*(.initcall2s.init)						\
+  	*(.initcall3.init)						\
+  	*(.initcall3s.init)						\
+  	*(.initcall4.init)						\
+  	*(.initcall4s.init)						\
+  	*(.initcall5.init)						\
+  	*(.initcall5s.init)						\
+	*(.initcallrootfs.init)						\
+  	*(.initcall6.init)						\
+  	*(.initcall6s.init)						\
+  	*(.initcall7.init)						\
+  	*(.initcall7s.init)
+
+(4), 调用:
+--------
+所有由"__define_initcall"定义的初始化函数由do_initcalls()执行, do_initcalls()由系统的第一个内核线程kernel_init()调用:
+kernel_init()->kernel_init()->do_initcalls()->do_initcalls()
+a, do_initcalls()主体是for循环处理从"__initcall_start"到"__initcall_end"的全部初始化函数. 处理后: 显示错误码, preempt_count有无编号, 如果中断被禁止打开中断, 打出提示信息. 
+b, for循环后, 调用flush_scheduled_work(), 把keventd_wq上全部未运行完毕的工作队列运行完成. 
+c, 如果开启了initcall_debug, 在for循环中会显示每个initcall的执行时间并打印更多调试信息, 有利于调试内核. 
+initcall_debug由"__setup"宏定义, 内核启动时设置了"initcall_debug"即可, 不需要传值.
+注: 分析时忽略了preempt_count(抢占计数).
+
+2), 还有console_initcall和security_initcall两个initcall
+console_initcall: s3c24xx的对于函数是"s3c24xx_serial_initconsole()", 它完成console硬件初始化, 注册console设备到Linux内核. 注册成功后会输出printk的log到终端.
+security_initcall具体内容以及是否与移植相关暂未分析.
+#define security_initcall(fn) \
+	static initcall_t __initcall_##fn \
+	__used __section(.security_initcall.init) = fn
+
+3), 移植工作:
+machine相关函数可能需要通过arch_initcall, device_initcall和console_initcall执行. initcall函数本身与移植无关.
+
+13:10 2009-1-14
+手机方案, Google Android, 网址, 续
+主页:
+https://sites.google.com/a/android.com/opensource/
+Get Source, 参考这个网页得到Android代码
+https://sites.google.com/a/android.com/opensource/download
+Android Git:
+http://android.git.kernel.org/
+Using Eclipse
+https://sites.google.com/a/android.com/opensource/using-eclipse
+邮件列表: 
+https://sites.google.com/a/android.com/opensource/discuss
+FAQ:
+http://android-dls.com/wiki/index.php?title=Android_FAQ#Devices:_Ports
+Android代码下载地址是从这里找到的:
+http://www.androidin.com/bbs/viewthread.php?tid=3048
+
+16:03 2009-1-14
+待做:
+1, marb需要考虑, 可以在分析完三个平台后考虑.
+2, 分析完24xx目录下所有文件后, 看《Linux内核注释》第4章  系统初始化内容。重新过一下内核初始化过程。
+3, 看Linux代码情景分析中系统启动部分
+
+16:21 2009-1-14
+VC0830，Linux开发，移植，名词解释
+1, 已知开发板：
+指at91sam9261(经常简写为at9261)，s3c24xx, Littleton, Zylonite. 这四个/类arm 开发板。如果这五个开发板没有涉及到，暂时不分析。
+Littleton和Zylonite(分别是pxa3xx和pxa27x的评估板)。
+
+20:30 2009-1-14
+Linux学习，移植，代码阅读，GPIO, 待做
+参考documentation\arm\samsung-s3c24xx\gpio.txt
+
+20:30 2009-1-14
+Linux学习，移植，代码阅读，DMA, 待做
+documentation\arm\samsung-s3c24xx\DMA.txt有对"DMA Channel Ordering"的介绍, 相关代码:
+struct s3c24xx_dma_order
+s3c24xx_dma_order_set()
+
+23:06 2009-1-14
+下载Android
+1, git-core
+http://kernel.org/pub/software/scm/git/RPMS/i386/
+git-core-1.5.4.2-1.i386.rpm
+待做，看：http://roclinux.cn/?p=184，git教程。
+2, 后来直接下载的git最新代码自己编译的, 编译没有完全通过, 但install(也有错)后不影响android下载.
+
+12:49 2009-1-15
+VC0830，Linux开发，移植，待做:
+1, 看完s3c24xx移植;
+1), s3c24xx下所有文件；
+2), 寄存器的映射，如何映射，何时映射。
+2, 编译android整个repo, 分析android Linux内核代码.
+
+12:54 2009-1-15
+Linux学习，移植，代码阅读，串口, 待做
+
+20:02 2009-1-15
+Linux学习, 移植, 代码阅读, 待做:
+1, sysdev_driver_register等sysdev_xxx函数待看, 看完后重新分析
+现在不明白sysdev_register(&s3c2440_sysdev);和sysdev_driver_register谁先谁后?按我对platform bus的理解应该是先注册device在注册driver
+2, arch\arm\mach-s3c2440\clock.c的sysdev_driver_register等函数.
+3, s3c244x_clk_add未看懂.待做
+
+20:49 2009-1-15
+Linux学习, 移植, 代码阅读, 杂
+1, sysdev_driver_register(&s3c2440_sysclass, &s3c2440_xxx_driver);
+xxx=dma, irq, clk, pm, clk.
+2, s3c2440_irq_driver和s3c2440_clk_driver有两个, 一个在"arch\arm\plat-s3c24xx\s3c244x-xxx.c", 一个在"arch\arm\mach-s3c2440\xxx.c"
+前者是s3c244x通用部分的, 后者是s3c2440特殊部分.
+
+14:33 2009-1-16
+Linux学习, 移植, 代码阅读, pm(电源管理), 待做
+参考资料:"suspend.txt(documentation\arm\samsung-s3c24xx)".
+内核移植初期不需要考虑, 关闭CONFIG_PM即可. 暂时跳过.
+sleep.S(arch\arm\plat-s3c24xx)是pm底层函数, 汇编编写.
+
+14:21 2009-1-19
+Linux学习, 移植, 代码阅读, 启动, c语言阶段, time/timer, 续, <TODO>补充</TODO>
+1, 注册定时器模块的时钟--"timer", 仍以smdk2440为例:
+smdk2440_map_io()->s3c24xx_init_clocks()->(cpu->init_clocks)(xtal)(s3c244x_init_clocks()).
+s3c244x_init_clocks()是struct cpu_table cpu_ids[x]->init_clocks(), x=2,3,4即name_s3c2440, name_s3c2440a, name_s3c2442. 具体分析:
+ * 1, 根据pll配置和xtal计算fclk, pclk, hclk;
+ * 2, 调用"s3c24xx_setup_clocks"注册外部晶振, 两个pll, fclk, pclk, hclk这六个时
+ * 钟到clocks静态全局链表
+ * 3, 调用"s3c2410_baseclk_add()"注册s3c24xx通用的外设时钟到clocks静态全局链表.
+
+s3c2410_baseclk_add()分析:
+ * 1, clk_usb_bus(upll);
+ * 2, 注册需要开启的时钟.
+ * 3, 注册内核启动时不需要开启的时钟, 为了避免这些模块调用DMA时造成的lockup, 注
+ * 册后禁止这些时钟. "timer"是定时器模块的时钟, 也是在这里注册的.
+
+16:39 2009-1-19
+(10:55 2009-2-1)
+Linux学习, 移植, 代码阅读, 启动, c语言阶段, time/timer, 续
+1, Linux时钟模型, 没有定义通用的clk结构体, 在clk.h(include\linux)规定了函数原型和行为: 包括必选函数和可选函数.
+2, s3c2440中clk.id都是-1, 感觉和platform_device.id作用类型, 区分"同一时钟源"下的不同设备.
+3, setup_arch()中设置system_timer指针. 是逻辑上注册clk; time_init()是实际板子time的初始化.
+4, 时钟部分基本完成了.
+
+18:23 2009-1-19
+待做: 1月20日完成其它目前未看的文件.
+
+16:10 2009-1-20
+(19:17 2009-1-23)
+Linux学习, 移植, 代码阅读, console(uart), 注册uart platform device, "vimicro_Linux移植文档"6-3, DONE
+3, 注册uart platform device到platform bus
+这部分只是注册uart到platform bus. 没有实际的初始化, 
+
+1), 函数调用关系
+->mdesc->map_io()(smdk2440_map_io())
+    ->s3c24xx_init_uarts(): 设置uart platform device
+        ->(cpu->init_uarts)(cfg, no)(s3c244x_init_uarts())
+                ->s3c244x_init_uarts()
+                    ->s3c24xx_init_uartdevs("s3c2440-uart", s3c2410_uart_resources, cfg, no);
+"arch_initcall"
+    ->s3c_arch_init()
+        ->platform_add_devices()
+
+(1), s3c_arch_init()分析
+ * do_initcalls()->..arch_initcall..
+ * ->(cpu->init)()(s3c2440_init())
+ * 1, 执行针对某个SOC芯片的初始化((cpu->init)())
+ * 2, 注册uart设备到platform bus.
+
+(2), s3c24xx_init_uartdevs()分析
+s3c2410_uart_resources是uart的寄存器和irq地址等信息, cfg保存了硬件串口编号和寄存器值.
+ * 根据res(s3c2410_uart_resources)设置uart platform_device的值. s3c24xx的uart 
+ * platform_device在"s3c24xx_uart_src"中定义, "s3c24xx_uart_devs"保存设置完成
+ * 的platform_device"s3c24xx_uart_devs"在arch_initcall(s3c_arch_init)中注册到
+ * platform bus.
+
+(3), platform_add_devices()分析:
+用于注册一组platform_device到platform bus, 这里是注册了s3c24xx所有的uart到platform bus.
+
+13:35 2009-1-21
+(18:06 2009-2-2)
+(17:08 2009-2-4)
+Linux学习, 移植, 代码阅读, 序, "vimicro_Linux移植文档"1, DONE0206
+一, 序
+本文档包括VC0830 Linux移植计划, 内核前传(内核c语言阶段之前的移植分析), 与内核移植有关的函数调用关系图, Linux内核移植涉及到最小系统分析, 遗留问题, 代码详细分析(草稿), 参考资料; 
+
+1, Linux移植整体计划:
+涉及到host PC, toolchain, bootloader, kernel(driver), filesystem这五部分.
+
+1), hostPC: 移植需要PC是Linux环境, 目前考虑用ubuntu9.0.4, 先由Liao zhicheng试用, 将来可以做个Linux服务器, 便于大家在工位和实验室编译, 修改内核/驱动.
+
+2), toolchain: 最新的Linux2.6内核适合使用gcc4. 目前使用"arm-iwmmxt-linux-gnueabi-4.1.1-gpl-lgpl"这个编译器(有源代码). 将来如果需要可以用"crosstool"工具编译我们所需的版本;
+
+3), bootloader: 分别按量产和调试阶段考虑:
+(1), 调试阶段: rom boot -> VC0830 bootloader -> kernel
+通过VC0830 bootloader为内核准备启动环境, 复制zImage到sdram. 还可以通过VC0830 bootloader为内核设置不同的启动参数(atag), 便于内核调试/测试.
+
+(2), 量产: rom boot -> vImage
+vImage: vimicro image, 包括头部env_setup和zImage: env_setup()设置寄存器r0-r2, mmu, cache, 把zImage复制到指定地址后控制权交给zImage.
+可以借鉴uImage(u-boot image)或直接使用uImage打包工具. 
+
+4), 内核
+目前分析的是Linux2.6.25.20. 计划使用与Android采用相同版本的内核(2.6.27?).
+2009年1月15日的Android全部代码已放到性下面目录: "\\10.0.2.36\sqmshare\Share\Linux\android\Android_git_200901015"
+
+5), 文件系统(filesystem)
+移植要考虑flash分区和文件系统格式:
+-----------------
+bootloader      : bootloader分区, 用户不可见.
+----------------
+bootloader_param: bootloader 参数分区(可选), 用户不可见.
+-----------------
+kernel          : 内核分区, 用户不可见.
+-----------------
+rootfs(rc0)     : 根文件系统分区: yaffs2,包括基本命令集(busybox),基本函数库等 
+-----------------
+appfs (rc1)     : 应用分区: yaffs2, 存放GUI(Qtopia)或Android等.
+-----------------
+userfs(rc2)     : 用户分区: fat, 与windows交换文件, 用于PC用户的优盘.
+-----------------
+i, 量产时"bootloader", "bootloader_param"和"kernel"三个分区合并为vImage分区.
+ii, Linux有大量符号链接, 需要选择对Linux支持较好的文件系统作为根文件系统分区和应用分区, 对于嵌入式系统来说有jffsx, yaffsx等. yaffs2支持512, 2k flash, 需要找到4k flash的补丁.
+iii, 为了便于与windows交换数据, 用户分区采用fat格式. 用户分区也可以放在sd卡上, 应该允许有多个用户分区.
+rootfs, appfs和userfs三个文件系统分区分别对应rom boot的rc0-rc2三个资源文件.
+
+2, 一些约定
+1), dep: xxx
+表示当定义xxx时, 该函数存在. 否则该函数为NULL.
+2), pt->funcA()(funcB())
+表示"funcB"是"pt->funcA()"这个函数, 下文分析的是"funcB".
+3), 
+funcA()分析
+* funcA()->
+* ->funcC()
+表示funcA函数由funcB函数调用;
+表示funcA函数调用了funcC函数, 用于funcC函数有重名函数, 或funcC是函数指针等不易查找到funcC的情况.
+
+13:40 2009-1-21
+Linux学习, 移植, 代码阅读, memory(sdram), "vimicro_Linux移植文档"4-3, DONE0206
+3, memory
+sdram的初始化在bootloader中完成, 内核启动时bootloader需要提供sdram每个bank的大小, sdram物理起始地址. 内核启动过程中最终要形成memory.txt (documentation\arm)描述的Kernel Memory Layout, smdk2440移植只需要具体指定平台相关的regions边界. 这里只分析与移植有关的几个区域: 
+1), ffff0000---ffff0fff
+用于异常处理. cp15 r1 bit13(V)==1时, 映射异常向量到此区域. 详见"trap_init()"
+
+2), VMALLOC_END---feffffff: Free for platform use, recommended. 
+
+3), VMALLOC_START---VMALLOC_END-1: vmalloc() / ioremap() space.
+(1), VMALLOC_START
+smdk2440中使用arm通用定义(include\asm-arm\pgtable.h):
+#ifndef VMALLOC_START
+#define VMALLOC_OFFSET		(8*1024*1024)
+#define VMALLOC_START		(((unsigned long)high_memory + VMALLOC_OFFSET) & ~(VMALLOC_OFFSET-1))
+#endif
+
+VMALLOC_OFFSET是8M, 目的是为物理地址空间和kernel 虚拟地址空间留个空洞, 避免访问内核直接映射的物理sdram越界时影响vmalloc/ioremap区域的数据.
+
+(2), 文档中要求"VMALLOC_END"必须对齐到2M地址, smdk2440中定义了固定的"VMALLOC_END", vmalloc.h(include\asm-arm\arch-s3c2410):
+#define VMALLOC_END	  (0xE0000000)
+在arm其它arch中也有用"PAGE_OFFSET+偏移"表示VMALLOC_END.
+
+4), PAGE_OFFSET---high_memory-1
+内核直接映射ram区域, arm linux中1:1映射所有ram到此区域.
+(1), PAGE_OFFSET是0xc0000000, 是内核空间起始地址. 0x00000000--0xc0000000是用户空间; 0xc0000000--0xffffffff是内核空间.
+"PAGE_OFFSET"赋值见"二, 内核前传".
+
+(2), high_memory:
+arm把所有memory size加在一起得到的memory结束地址就是high_memory. ULK3中提到的如果内存大于896M不能进行1:1映射的情况是针对x86而言的, arm平台一般不会有如此大的ram, 未考虑这种情况.
+arm具体实现见"bootmem_init()"函数:
+start_kernel()
+    ->setup_arch()(arch\arm\kernel\setup.c)
+        ->paging_init()
+            ->bootmem_init()
+
+bootmem_init()分析: 
+ * 1, 根据meminfo得到系统最大物理memory pfn, 转为虚拟地址即为high_memory, 也就
+ * 是系统memory映射到了"PAGE_OFFSET---high_memory-1";
+ * 2, 查找是否存在initrd, 存在于哪个node中.
+
+14:04 2009-1-21
+VC0830学习, sd卡, 待做
+今天开会, aiguo希望我深入学习sd卡的使用, 希望Linux从sd卡启动起来. 
+sd卡有硬件ecc, ftl? 如果有ftl是否就要使用fat? fat不支持符号链接, 没法放Linux的文件系统.
+
+15:10 2009-1-21
+(18:17 2009-1-23)
+Linux学习, 移植, 代码阅读, console(uart), console_setup(), "vimicro_Linux移植文档"6-1, DONE
+六, s3c24xx console(uart)详细分析
+六-九章是代码详细分析, 时间关系只是分析了主线, 很多细节没有分析, 可能有不准确的地发, 仅供大家参考.
+从这里开始详细分析console(uart)代码
+1, console_setup()
+1), 数据结构
+(1), s3c24xx要求启动时使用命令行"console=ttySAC0"指定使用哪个串口, "ttySAC"是串口名在S3c2410.c (drivers\serial)中定义:
+#define S3C24XX_SERIAL_NAME	"ttySAC"
+(2), "console_cmdline": 静态全局数组, 保存从cmdline传入的所有console. 内核使用其中一个console.
+struct console_cmdline
+{
+	char	name[8];			/* Name of the driver	    */
+	int	index;				/* Minor dev. to use	    */
+	char	*options;			/* Options for the driver   */
+};
+#define MAX_CMDLINECONSOLES 8
+static struct console_cmdline console_cmdline[MAX_CMDLINECONSOLES];
+
+2), 函数分析: 
+obsolete_checksetup()
+    ->console_setup()
+        ->add_preferred_console()
+
+(1), console_setup()
+__setup("console=", console_setup);
+ * 根据从命令行参数, 得到console name, index, options. 调用
+ * "add_preferred_console"设置"console_cmdline".
+
+(2), add_preferred_console()
+ * console_setup()->
+ * 如果console_cmdline[0-MAX_CMDLINECONSOLES]中没有名字是name的console, 在
+ * "console_cmdline[i]"(i是第一个未使用的"struct console_cmdline")中加入(name,
+ * idx, options)这个console. 并设置"selected_console=i".
+ * 如果console_cmdline[0-MAX_CMDLINECONSOLES]中已有名字是name的console 
+ * console_cmdline[i], 设置"selected_console=i".
+
+10:38 2009-1-23
+Linux学习, 移植, 代码阅读, console(uart), printk输出log, "vimicro_Linux移植文档"6-4, DONE
+4, printk输出log
+1), 数据结构
+(1), log_buf是printk输出log的buffer, 它是一个循环缓冲区: 如果缓冲区满, 新log会覆盖旧log. 提供给函数使用的是两个宏. "log_buf_len"是2的整数次幂, 所以"log_buf_len-1"是mask. LOG_BUF是考虑了idx越界问题宏.
+#define LOG_BUF_MASK (log_buf_len-1)
+#define LOG_BUF(idx) (log_buf[(idx) & LOG_BUF_MASK])
+
+(2), 实际定义:
+static char *log_buf = __log_buf;
+static int log_buf_len = __LOG_BUF_LEN;
+ * log_buf_len: printk buffer大小, 默认值在内核配置文件中定义. 内核启动时可以通
+ * 过log_buf_len_setup函数设置
+ * 1, round为2的整数次幂;
+ * 2, 如果设置的len大于已有buf len, 调用alloc_bootmem分配memory. 
+ * 3, 把原有log buf(_log_buf)内容复制到新log buf(log_buf).
+ * __log_buf所占空间是静态分配的, 分配了新log buf, 这些已分配的就浪费了.
+
+(3), 涉及到的函数在三个文件中: 
+kernel\printk.c: 除了console以外的函数.
+drivers\serial\serial_core.c: serial驱动通用函数;
+drivers\serial\s3c2410.c: s3c24xx系列串口驱动.
+
+2, 函数调用关系:
+printk()
+    ->vprintk(): 把log写入buf
+        ->release_console_sem(): 获得console_semaphore时调用.
+            ->call_console_drivers()
+                ->_call_console_drivers()
+                    -> __call_console_drivers()
+                        ->con->write()(s3c24xx_serial_console_write())：向uart输出字符串. 从这里开始是串口驱动相关函数. (包括serial_core.c和SOC自己的串口驱动)
+            ->wake_up_klogd()通过klogd输出log_start-log_end之间的内容到用户空间
+
+(1), vprintk()
+ * 把printk中信息写入到log_buf, 如果没有log level使用"default_message_loglevel".
+ * (vprintk()中找到新行(\n)后, 才会判断有无log level.) 如果"printk_time"为1, 在
+ * log level后输出时间. 时间利用"cpu_clock()"得到.根据注释这个函数得到的是相对
+ * 准确的时间, 但并不是实际时间.
+
+(2), release_console_sem()
+ * release_console_sem可能从任何上下文中被调用. 注意到下面两个调用:
+ * 1, 注册console(register_console()->)时输出注册console前, printk输出到log buf
+ * 的log到串口.
+ * 2, 打印内核信息时(printk()->vprintk()->)时输出到串口.
+ * 功能:
+ * 释放hold console和console driver list的semaphore. semaphore被hold时, printk
+ * 如果有输出会被缓冲, 此后释放semaphore时, release_console_sem会输出已缓冲的数
+ * 据. 如果有信息需要输出到klogd, 唤醒它.
+
+(3), call_console_drivers(_con_start, _log_end)
+ * release_console_sem()->call_console_drivers(_con_start, _log_end)
+ * 1, 得到msg_level
+ * 2, log level后作为输出msg起点(start_print), 从这里开始查找"\n", cur_index等
+ * 于"\n"位置+1;
+ * 3, _call_console_drivers(start_print, cur_index, msg_level);
+ * start_print = cur_index.
+ * 4, 如果"cur_index!=end"跳回2, 否则调用"_call_console_drivers"后函数返回
+
+(4), _call_console_drivers()
+ * call_console_drivers()->
+ *		_call_console_drivers(start_print, cur_index, msg_level)
+ * 如果msg_log_level低于console允许输出的level(console_loglevel)或
+ * "ignore_loglevel"为1("ignore_loglevel"由cmdline赋值, 如果等于1, 忽略log 
+ * level设置永远输出log到console). 并且console_drivers存在, 并且开始结束不等:
+ * 调用"__call_console_drivers()"输出.
+ * 如果start大于end, 需要分两段输出: 先输出start--buf_end; 再输出0--end.
+ * 	否则直接输出start--end.
+
+(5), __call_console_drivers()
+ * _call_console_drivers()->
+ * ->con->write()(s3c24xx_serial_console_write())
+ * 遍历所有"console_drivers", 符合条件则输出start-end之间的log_buf.
+
+(6), con->write()(s3c24xx_serial_console_write())分析
+ * 就是"console.write()"
+ * 从函数参数看, 可能应该是从"struct console"得到"struct uart_port". 但这里是
+ * 直接指定了"cons_uart"为"uart_port"
+ * 参考"serial_pxa_console_write()"中从console得到uart_port的过程
+
+(7), uart_console_write()
+ * s3c24xx_serial_console_write()->
+ * ->putchar()"(s3c24xx_serial_console_putchar())
+ * 使用"putchar()"向port写入从s开始的count个字符.
+ * 英文注释中的"write()"就是"putchar()".
+
+(8), s3c24xx_serial_console_putchar()
+ * uart_console_write()->
+ * 功能: ready时向port发送ch字符.
+ * uart_console_write()的回调函数, 传入的"struct uart_port *port"就是
+ * "cons_uart". 
+
+(9), wake_up_klogd()
+ * release_console_sem()->
+ * 如果log等待队列(log_wait)非空, 唤醒之.
+ * 这样do_syslog()被唤醒, 继续
+
+(10), do_syslog()
+ * sys_syslog()->
+ * log_wait等待队列由wake_up_klogd唤醒, 唤醒条件(log_start - log_end!=0)由
+ * release_console_sem的wake_klogd保证. 唤醒后把log通过"__put_user()"输出.
+
+3), 注:《Linux内核分析及编程》p692-p694. 19.4.4节printk函数分析: 看完这部分之后才知道"release_console_sem()"功能包括输出log到console. 呵呵, 函数名字很有迷惑性. 开始本能的以为只是release console semaphore. 
+
+12:43 2009-1-23
+Linux学习, 代码阅读, kernel与app交换数据
+只分析有MMU的情况:
+1, copy_from_user, copy_to_user: 用access_ok检查是否合法, 如果合法调用__copy_from_user/__copy_to_user. 
+__copy_from_user/__copy_to_user在arch\arm\lib定义.
+
+2, put_user没有"access_ok", 需要使用者自己保证指针合法. 根据字节x不同, 调用__put_user_x(__r2, __p, __e, x). get_user类似.
+
+15:24 2009-1-23
+网址, 公司能直接访问的网站, <TODO>补充</TODO>
+1, vimicro
+2, www.msn.com.cn
+3, 51job
+4, www.zhaopin.com
+
+15:51 2009-1-23
+Fr"16:10 2009-1-20"
+Linux学习, 移植, 代码阅读, console(uart), console_init(), "vimicro_Linux移植文档"6-2, DONE
+2, console_init()
+1), 数据结构
+(1), static struct uart_port *cons_uart: 定义uart端口, 一个uart对于一个uart_port
+struct uart_port在"include\linux\serial_core.c"定义
+ * s3c24xx中用"cons_uart"表示s3c24xx console对应的uart_port. 
+ * 在s3c24xx_serial_console_setup()函数中把s3c24xx_serial_ports[x]设置为
+ * cons_uart.
+ * 在"s3c24xx_serial_console_write()"和"s3c24xx_serial_console_putchar()"使用
+
+(2), "s3c24xx_uart_port"和"s3c24xx_uart_info"
+一个s3c24xx_uart_port对应一个串口, 包括uart_port, s3c24xx_uart_info等. 
+定义(drivers\serial\s3c2410.c):
+static struct s3c24xx_uart_info s3c2440_uart_inf
+static struct s3c24xx_uart_port s3c24xx_serial_ports[NR_PORTS]
+
+(2), struct platform_device *s3c24xx_uart_devs[3]
+分析见"console_setup()"部分.
+
+(3), struct console s3c24xx_serial_console
+描述每个console的结构体, 只需要实现write和setup两个函数.
+在"include\linux\console.h"中定义:
+struct console {
+	char	name[16];
+	/** V_ZJ
+	 * __call_console_drivers()(kernel\printk.c)->
+	 * 把"const char *"地址起始的"unsigned"个字符写入uart.
+	 * 分析参见"uart_console_write()(drivers\serial\serial_core.c)"
+	 */
+	void	(*write)(struct console *, const char *, unsigned);
+	int	(*read)(struct console *, char *, unsigned);
+	struct tty_driver *(*device)(struct console *, int *);
+	void	(*unblank)(void);
+	/** V_ZJ
+	 * register_console()(kernel\printk.c)->
+	 * 配置"struct console *"这个console
+	 */
+	int	(*setup)(struct console *, char *);
+	int	(*early_setup)(void);
+	short	flags;
+	short	index;
+	int	cflag;
+	void	*data;
+	struct	 console *next;
+};
+
+2), 函数调用关系:
+start_kernel()
+    ->console_init()
+        ->s3c24xx_serial_initconsole()
+            ->s3c24xx_serial_init_ports()
+                ->s3c24xx_serial_init_port()
+            ->register_console()
+                ->console->setup()(s3c24xx_serial_console_setup())
+
+(1), console_init()
+ * start_kernel()->
+ * ->(*call)()(s3c24xx_serial_initconsole())
+ * 初始化console设备. 该函数调用的早, 只是做些早期必要的初始化, 复杂配置稍后做:
+ * 1, Setup the default TTY line discipline. 未分析, 粗看与移植无关
+ * 2, 执行con_initcall函数. 粗看了一下, 感觉console_initcall是每个serial设备一
+ * 个. 如果定义了"CONFIG_SERIAL_S3C2410_CONSOLE", 定义: 
+ * console_initcall(s3c24xx_serial_initconsole);
+ * <TODO>查complex setup</TODO>
+
+"console_initcall"分析:
+ * 1, #define console_initcall(fn) \
+ *	static initcall_t __initcall_##fn \
+ *	__used __section(.con_initcall.init) = fn
+ * 2, vmlinux.lds.S:
+ *	__con_initcall_start = .;
+ *		*(.con_initcall.init)
+ *	__con_initcall_end = .;
+
+(2), s3c24xx_serial_initconsole()分析
+ * console_init()->
+ * 从这里开始是串口驱动部分了, 移植从这里开始.
+ * 1, 根据info调用"s3c24xx_serial_init_ports"设置串口: 包括platform_device和
+ * uart 寄存器.
+ * 2, 调用"register_console()"注册s3c24xx_serial_console.
+
+(3), s3c24xx_serial_init_ports()分析
+ * s3c24xx_serial_initconsole()->
+ * 初始化s3c24xx所有的port:
+ * "s3c24xx_serial_ports"中实际只是传递了s3c24xx所有的uart_port; 
+ * "s3c24xx_uart_devs"在"s3c24xx_init_uartdevs()"中设置;
+ * 根据s3c24xx_serial_ports, s3c24xx_uart_info和platform_device调用
+ * "s3c24xx_serial_init_port()"设置s3c24xx所有串口
+
+(4), s3c24xx_serial_init_port()分析
+ * s3c24xx_serial_init_ports()->(当定义CONFIG_SERIAL_S3C2410_CONSOLE时有效)
+ * s3c24xx_serial_probe()->
+ * 1, 根据platdev中的resouce设置"uart_port"的寄存器虚地址, 物理地址,irq,clk等;
+ * 2, 设置s3c24xx_uart_port.info等.
+ * 3, 设置uart寄存器, reset uart fifo.
+ * 疑问: 如果定义了"CONFIG_SERIAL_S3C2410_CONSOLE", 这个函数岂不是执行两次? 一
+ * 次是"console_init()"引起的, 一次是"module_init()"引起的.
+
+(5), register_console()分析
+ * s3c24xx_serial_initconsole()->
+ * ->console->setup(s3c24xx_serial_console_setup())
+ * 1, 把"console"注册到"console_drivers"链表中.
+ * 2, 如果console->name(s3c24xx_serial_console.name)和console_cmdline[i].name
+ * 相同. 执行console->setup(), 设置console->flags |= CON_ENABLED
+ * 3, 调用"release_console_sem()"时会把此前printk输出到log buf的log输出到console
+
+(6), s3c24xx_serial_console_setup()分析
+ * register_console()->
+ * 1, 根据"co->index"选择s3c24xx_serial_ports的某个port为"cons_uart"
+ * 2, 调用"uart_set_options"设置serial console参数.
+ * 返回值必然是0
+
+19:18 2009-1-23
+Linux学习, 移植, 代码阅读, console(uart), "vimicro_Linux移植文档"4-7, DONE
+7, console(uart)分析
+三星uart移植实现的很不好, 全局变量很多, 没有条理, at91和pxa的移植好很多. VC0830 uart移植不打算采用此方法, 所以这里只是简要描述了s3c2440 uart注册, 初始化和printk输出log的过程. 详细分析见"六, s3c24xx console(uart)详细分析".
+
+1), console_setup():
+通过"__setup("console=", console_setup);"把从命令行读到的console name, index, options加入到"console_cmdline"数组中. 为cnosole注册做准备.
+
+2), 注册uart platform device到platform bus:
+s3c24xx_init_uarts()分析: 设置uart platform device结构体;
+s3c_arch_init(): 注册uart设备到platform bus.
+
+3), console_init():
+(1), 初始化console相关结构体，配置uart寄存器，reset uart fifo
+(2), 设置"cons_uart"供"s3c24xx_serial_console_write()"使用
+(3), 比较命令行传入的console(console_cmdline[x])name和index与SOC console结构体设置的name和index是否相同, 如果相同注册console. 成功注册后, 会输出此前printk输出到log buf的log. 此后printk输出到log buf的log只要能获得console semaphore都会输出到console.
+
+4), printk输出log:
+内核启动中printk输出log分为三个阶段:
+console_init()前printk输出的log都被缓冲在buffer中;
+console_init()完成时: 必定会得到console信号量, 此时输出先前buffer中所有log;
+console_init()后: 如果printk能得到信号量, 输出buffer中所有log; 否则缓冲到buf中.
+
+5), console(uart)移植工作:
+(1), 内核启动前uart已经完成初始化, 保证可以使用.
+(2), 填充struct console结构体的write和setup函数;
+(3), 定义SOC自己的console_initcall函数, 其中要重新配置uart寄存器, 注册uart到platform bus, 调用"register_console()"把定义的console结构体注册到"console_drivers"链表;
+
+15:44 2009-1-31
+Linux学习, 移植, 代码阅读, 中断机制, "vimicro_Linux移植文档"4-8, DONE
+8, Linux中断机制分析
+Linux中断处理分为上半部分和下半部分. 其中上半部分抽象了SOC的中断模型, 主要与硬件设备通信, 完成硬件中断最基本的处理(保存数据, 清中断等). 定时器中断已在timer中分析, 这里只分析Linux中断上半部分与移植相关部分.
+s3c2440使用Linux的通用的中断机制中断，参考: "documentation\arm\interrupt".
+
+1), 数据结构
+(1), NR_IRQS, 系统最大中断号:
+include\asm-arm\irq.h: 若未定义NR_IRQS, 定义为128.
+irqs.h(include\asm-arm\arch-s3c2410): 定义NR_IRQS为系统最后一个中断号加一, 对于2440是"(IRQ_S3C2440_AC97+1)"
+
+(2), struct irq_desc, struct irqchip, ...<TODO>补充</TODO>。
+
+2), 初始化中断
+start_kernel()
+    ->trap_init()
+    ->init_IRQ()
+        ->machine_desc.init_irq()(s3c24xx_init_irq())
+1), trap_init()(arch\arm\kernel\trap.c)分析:
+把异常向量处理代码复制到指定地址.
+移植时给出"CONFIG_VECTORS_BASE"即可，CONFIG_VECTORS_BASE=0xffff0000时把中断相关代码复制到0xffff0000-ffff0fff。
+2), init_IRQ()(arch\arm\kernel\irq.c)分析:
+中断初始化. s3c24xx中只初始化s3c24xx共有中断.
+
+3), 注册中断
+(1), 注册中断号
+一般用"set_irq_chip()", "set_irq_handler()"/"set_irq_chained_handler()", "set_irq_flags()"设置某个中断号对应的chip, 某类handler(即edge, level, simple), flags. 其中set_irq_handler()和set_irq_chained_handler()注册handler, 二者都是在include\linux\irq.h中定义的inline, 都是__set_irq_handler().
+"set_irq_chained_handler()"用于注册二级中断, 传递的handle用于处理二级中断. 注册二级中断举例:
+set_irq_chip(IRQ_WDT, &s3c_irq_level_chip);
+set_irq_handler(IRQ_WDT, handle_level_irq);
+set_irq_chained_handler(IRQ_WDT, s3c_irq_demux_wdtac97);
+
+for (irqno = IRQ_S3C2440_WDT; irqno <= IRQ_S3C2440_AC97; irqno++) {
+    set_irq_chip(irqno, &s3c_irq_wdtac97);
+    set_irq_handler(irqno, handle_level_irq);
+    set_irq_flags(irqno, IRQF_VALID);
+}
+其中IRQ_WDT是wdt和ac97的一级中断号, IRQ_S3C2440_WDT和IRQ_S3C2440_AC97是各自的二级中断号.
+
+s3c2440中断通过三个地方注册:
+(1), start_kerenl()
+    ->init_IRQ()
+        ->machine_desc.init_irq()(s3c24xx_init_irq()).
+
+s3c24xx_init_irq()分析:
+ * init_IRQ()->
+ * s3c24xx中断初始化
+ * 1, 清s3c24xx全部中断;
+ * 2, 注册s3c24xx平台通用中断的chip和handler, 设置flags.
+
+(2), 通过sysdev_driver注册, 两个位置:
+a, s3c2440_irq_init()(arch\arm\plat-s3c24xx\s3c244x-irq.c)
+通过arch_initcall(s3c2440_irq_init)调用, 注册到s3c2440_sysclass. 注册成功后调用回调函数s3c244x_irq_add()注册了nand和camera两个设备的中断.
+b, s3c2440_irq_init()(arch\arm\mach-s3c2440\irq.c)
+通过arch_initcall(s3c2440_irq_init)调用, 注册到s3c2440_sysclass. 注册成功后调用回调函数"s3c2440_irq_add"()注册了wdt(watchdog到ac97的中断.
+
+这两个arch_initcall谁先谁后呢? 从Makefile看, 是先加入的mach,后加入的plat. System.map也是如此:
+c0036544 t s3c2440_irq_init
+...
+c003f094 t s3c2442_irq_init
+c003f0b8 t s3c2440_irq_init
+与s3c2442_irq_init在一起那个s3c2440_irq_init是在plat-s3c24xx中定义的.
+
+(2), 注册具体的中断处理handler, 这部分在具体驱动程序中实现. 以lcd(framebuffer驱动, driver\video\s3c2410fb.c)为例:
+i, platform_get_irq(dev,num)(driver\base\platform.c), 从dev得到irq号. 如果platform device的resource存在返回这个设备的第一个中断号(resource.start); 若不存在返回(-ENXIO, 无此设备或地址).
+driver\video\s3c2410fb.c: irq = platform_get_irq(pdev, 0);
+platform_get_irq()通过platform_get_resource(,IORESOURCE_IRQ,)得到irq resource. "
+IORESOURCE_IRQ"指明了resource类型是irq, resource类型在include\linux\ioport.h中定义:
+#define IORESOURCE_IO		0x00000100	/* Resource type */
+#define IORESOURCE_MEM		0x00000200
+#define IORESOURCE_IRQ		0x00000400
+#define IORESOURCE_DMA		0x00000800
+
+ii, 分配struct irqaction并将其注册到系统. "kernel\irq\manage.c":
+request_irq(): 分配struct irqaction, 调用setup_irq()注册irqaction
+    ->setup_irq()
+例如: 注册fb中断(irq)的handler(s3c2410fb_irq):
+ret = request_irq(irq, s3c2410fb_irq, IRQF_DISABLED, pdev->name, info);
+
+4), 中断调用过程:
+vector: 位于0xffff0000的异常跳转指令. 对应__vectors_start--__vectors_end的异常跳转指令. 从这里到irq_handler宏代码都位于entry-armv.S(arch\arm\kernel).
+    ->"vector_stub irq, IRQ_MODE, 4": 利用vector_stub统一处理异常, 并通过"__stubs_start"起始的跳转表, 跳转到"__irq_mode"
+        ->"__irq_usr"或"__irq_svc": 不同处理器模式有不同的中断处理函数
+            ->macro irq_handler: 获得irq号和pt_regs(异常调用过程中保存在堆栈中寄存器起始地址), 进入中断的c语言阶段"asm_do_IRQ".
+                ->get_irqnr_and_base(): 获得irq号: 根据具体SOC芯片中断用汇编实现
+                ->asm_do_IRQ()
+                    ->desc->handle_irq(irq, desc): 借助"desc_handle_irq()"这个wrapper函数调用edge, level, simple等handle_xxx_irq函数. 注释中写着"desc_handle_irq()"是Obsolete, 移植VC0830时需要改进.
+                        ->ack()
+                        ->mask()
+                        ->unmask()
+                        ->handle_IRQ_event()调用request_irq()注册的handler.
+
+这里的desc是前面注册的irq_desc[x]:
+"struct irq_desc *desc = irq_desc + irq;"
+
+5), 由于Linux中断有统一的处理机制, 移植难度不大. 
+(1)，定义中断号，最大中断号；
+(2)，定义chip, 和具体中断处理的handler. chip基本是一个中断控制器通用的。具体中断处理handler在驱动程序中定义。
+(3), 底层中断操作函数。用汇编语言编写，s3c24xx只实现了获得中断号(get_irqnr_and_base)。在entry-macro.S(include\asm-arm\arch-s3c2410)定义, 其中r0为中断号.

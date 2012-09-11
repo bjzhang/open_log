@@ -1,0 +1,182 @@
+﻿13:18 2009-5-2
+<TODO>阅读, 打印</TODO>
+1, memory测试方法
+有空在扳子上实验, <重要>
+http://www.netrino.com/Embedded-Systems/How-To/Memory-Test-Suite-C
+
+2, 
+自: http://linux.chinaunix.net/bbs/thread-1098779-1-1.html
+问: 在内核中内存管理是不是主要由以下几个部分组成的~?
+伙伴系统,SLUB,NUMA
+除了这3个还有其它的系统么?~
+伙伴系统是必要系统么?~   在嵌入式中也会使用伙伴系统?~  
+NUMA只是在多CPU或者服务器级别中才使用的么?~
+现在对内存管理的全貌感觉还差一点~
+T 3T 谢谢大家~
+
+答:
+Buddy System 是为了解决external fragmentation设计的内存分配算法，这个是必要的。
+SLAB/SLUB      是为了解决internal fragmentation设计的内存分配算法，这个也是必要的。
+NUMA  是RAM的一种特性，表示对RAM不同位置的访问时间不同，不应该算是内存管理的子系统
+
+其他应该包括 进程地址空间管理、page cache、页面回收
+
+13:43 2009-5-11
+嵌入式, 调试, jtag, 
+1, 介绍了各种jtag工具, 包括jlink, openocd等等: 
+位置: bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\SOC嵌入式系统芯片\arm
+最低成本的ARM调试解决方案——有关于Wiggler、H-Jtag、OpenOCD、GDB、Insight=+.pdf
+2, jlink链接
+http://www.segger.com/jlink.html
+22:40 2009-05-16
+嵌入式, Linux, 实验utulinux, linux2.6.24
+1, 编译uImage:
+Makefile里面没有规则, 规则在哪里呢? 
+grep, 在"arch/arm/Makefile"和"arch/arm/boot/Makefile", 原来顺序是这样: 
+Makefile:
+include $(srctree)/arch/$(SRCARCH)/Makefile
+其中"SRCARCH"是arch name, 对于arm是"arm". 这样就include "arch/arm/Makefile"
+
+arch/arm/Makefile:
+zImage Image xipImage bootpImage uImage: vmlinux
+        $(Q)$(MAKE) $(build)=$(boot) MACHINE=$(MACHINE) $(boot)/$@
+
+arch/arm/boot/Makefile:
+quiet_cmd_uimage = UIMAGE  $@
+      cmd_uimage = $(CONFIG_SHELL) $(MKIMAGE) -A arm -O linux -T kernel \
+                   -C none -a $(ZRELADDR) -e $(ZRELADDR) \
+                   -n 'Linux-$(KERNELRELEASE)' -d $< $@
+
+$(obj)/uImage:  $(obj)/zImage FORCE
+        $(call if_changed,uimage)
+        @echo '  Image $@ is ready'
+
+1), 发现很长时间不看Linux很多东西都忘了. 复习一下makefile.
+"$<": The name of the first prerequisite. prerequisite means something that is required in advance. 
+"$@": The file name of the target of the rule.
+所以cmd_uimage是... -d $(obj)/zImage $(obj)/uImage, 也就是把zImage转为uImage.
+
+if_changed见"11:17 2008-12-25"
+
+2), 
+# Note: the following conditions must always be true:
+#   ZRELADDR == virt_to_phys(PAGE_OFFSET + TEXT_OFFSET)
+#   PARAMS_PHYS must be within 4MB of ZRELADDR
+#   INITRD_PHYS must be in RAM
+ZRELADDR    := $(zreladdr-y)
+PARAMS_PHYS := $(params_phys-y)
+INITRD_PHYS := $(initrd_phys-y)
+
+So, ZRELADDR=virt_to_phys(0xc0000000+0x00008000)=0x30008000 for arm s3c24xx
+
+arch/arm/mach-s3c2410/Makefile.boot:   zreladdr-y       := 0x30008000
+"mach-s3c2440"是如何定义"zreladdr-y"的呢? <TODO></TODO>
+
+23:24 2009-05-17
+嵌入式, Linux下使用openocd, eclipse等工具, 下载Linux内核到扬创开发板.
+1, 编译putty, 需要低版本gtk, 绕过去:
+1), http://bbs2.chinaunix.net/viewthread.php?tid=117432
+GTK版本太新。新的GTK用了pkg-config，所以没有gtk-config。自己做一个：
+$ more /usr/local/bin/gtk-config
+module="gtk+-2.0"
+if test "$1" = "--version"; then
+        pkg-config --modversion $module
+else
+        pkg-config $* $module
+fi
+
+2), 这里用了2.0后没有的函数, 修改代码中: <TODO></TODO>
+gcc  -g -O2 -Wall -Werror  -DHAVE_CONFIG_H -I/usr/include/gtk-2.0 -I/usr/lib/gtk-2.0/include -I/usr/include/atk-1.0 -I/usr/include/cairo -I/usr/include/pango-1.0 -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include   -I.././ -I../charset/ -I../windows/ -I../unix/ -I../mac/ -I../macosx/  -c ../unix/gtkcols.c
+../unix/gtkcols.c: 在函数‘columns_class_init’中：
+../unix/gtkcols.c:68: 错误：‘GtkWidgetClass’没有名为‘draw’的成员
+../unix/gtkcols.c:79: 错误：‘GtkContainerClass’没有名为‘focus’的成员
+../unix/gtkcols.c:80: 错误：‘GtkContainerClass’没有名为‘focus’的成员
+cc1: warnings being treated as errors
+../unix/gtkcols.c: 在函数‘columns_focus’中：
+../unix/gtkcols.c:428: 警告：隐式声明函数‘gtk_container_focus’
+make: *** [gtkcols.o] 错误 1
+
+19:24 2009-5-22
+博客, <TODO></TODO>
+1, 五月十一日经济观察报,以专业精神各担其责.
+2, 今天在人民日报看到下面新闻, 原来所谓"高仿真,肉眼难以分辩"都是针对第四版人民币仿伪特点而言, 用第五版的光变油墨还是能分辩的.
+温州警方缴获大量冠字号为ED78、JQ13的百元面额假币，仿真度极高，肉眼很难鉴别。但真币在晃动的时候，左下方“100”的油墨会从绿色变成墨蓝色。假币则无法变色。 
+列出典型鉴别假币方法供大家参考.
+
+3, 走出公司才想起出错原因是把不等于写成等于了.
+
+13:37 2009-05-25
+Linux, MSN
+参考: http://www.linuxidc.com/Linux/2008-07/14446.htm
+下载: http://downloads.sourceforge.net/emesene/emesene-1.0.1.tar.gz
+emesene主要是不需要安装, 直接可以运行. 
+
+20:39 2009-05-25
+(11:35 2009-5-30)
+充电, 研发, 博客, 读书"研发困局", <TODO>整理后加入博客</TODO>
+从今天到5月30日难得放五天假. 打算做哪些事情呢?
+1, 读书充电:
+《研发困局》：系统分析中国企业的六大研发困境，提出解决之道————研发管理变革，揭示化为公司研发成功之谜。
+bamvor: 
+1), 哪些企业对标华文呢。<TODO>查对标</TODO>
+2), 国内有哪些著名手机设计公司呢？<TODO>查华为，中兴，宇龙，多普达</TODO>
+(1), 宇龙：
+http://www.yulong.com/about/index.jsp，宇龙官方介绍
+http://163.1010job.com/review/ListCompany.asp?id=32055，宇龙评价
+http://www.yulong.com/about/news.jsp?newsid=209，宇龙动态
+宇龙手机方案名称是酷派(coolpad), 使用winCE或BREW REX开发。BREW相当于是手机中间件，见：
+http://www.wlinkw.com.cn/html/art/02/20080916/32813.html
+http://tech.qq.com/a/20060411/000358.htm
+http://www.eeworld.com.cn/xfdz/2008/0917/article_664.html
+(2), <TODO>总结手机开发平台</TODO>: winCE, symbian, android, Linux族(Qtopia等), J2ME, BREW, 黑莓平台, iphone平台, nucleus, ThreadX族:
+a, http://www.qqread.com/java/2008/06/u412625.html
+手机开发平台指南、教程和资料介绍
+b, http://blog.chinaunix.net/u/21739/showart_312593.html
+手机操作系统及开发平台
+c, http://www.cppblog.com/YGFaith/archive/2009/04/02/78754.html
+iPhone手机开发平台入门介绍和教程
+d, http://www.kuqin.com/mobile/20090315/40117.html
+J2ME移动开发平台搭建篇
+e, http://www.cublog.cn/u/26691/
+据说不错的手机开发博客
+<TODO></TODO>
+http://www.cublog.cn/u/26691/showart_1414021.html
+高效的两段式循环缓冲区, 原文"The Bip Buffer - The Circular Buffer with a Twist" 
+
+2, 研究生阶段学习总结：
+研究生时做的东西都没有留下样机，颇有些遗憾。
+1), 优先总结与求职相关内容, 希望对实验室同学有帮助.
+(1), 法电实习:
+a, 主动;
+b, 系统叙述工作内容;
+(2), 威盛求职: 职位不完全对口时如何处理, RTOS与Linux.
+(3), 风河(Windriver), 群硕; 
+嵌入式Linux技术面试. 对应届生不一定问这么难, 但是可以参考这些思路.
+(4), 闪联: framebuffer概念搞错了.
+2), 大家千万不要学我, 计划太多, 干的太少. 
+
+3, (11:42 2009-5-30)假期临近结束, 几天一晃而过, 又是没干什么. 自己的效率咋就这么低呢?
+
+15:57 2009-05-27
+手机方案, Android, 瑞芯微
+http://www.eetchina.com/ART_8800573551_865371_NT_e6bc764a.HTM
+瑞芯微Android手机平台值得期待，09年中国智能手机芯片破局
+http://news.22shop.com/html/shanzhai/2009/0420/1565.html
+中国首款65mm处理器 瑞芯微RK28处理器面世	
+
+11:52 2009-5-30
+规划, 今年计划
+今天计划的关键是学习Linux内核, 移植Linux到一个arm平台上.
+希望至少完成的目标是支持如下硬件: timer, clock, irq, uart, lcd相关; 如果能支持usb garget对于后面开发很有帮助. 
+此步骤完成后, 就可以准备移植其他所有硬件了. 包括video path全部, video decoder, sd, audio等等. 
+
+23:41 2009-5-30
+整理
+1, http://www.eefocus.com/html/09-05/5311327060403cJqm.shtml
+嵌入式Linux专题
+2, 
+http://www.eetchina.com/ART_8800573133_617687_NT_b586942e.HTM
+联发科TD芯片出货过百万，国产3G终端领跑企业具四大共性
+http://www.eetchina.com/ART_8800572568_617693_NT_453a1266.HTM
+消费电子产品开发者拥抱Android
+3, I.MX 35

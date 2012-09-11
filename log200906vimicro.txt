@@ -1,0 +1,2572 @@
+xx:xx 2009-6-1
+<TODO></TODO>
+VC0830, SV, clkrst, clkswitch, mobile ddr
+282BGA下mobile ddr切频, micron芯片, 具体型号未知. 
+1, 参数在vc0830_sv_memscan中, 说明:
+60-120包括60,120. 120-more, 可用. min-60不可用. 
+pll1 adj: 60-120, 120-more都是0xee8e.
+pll2 adj: 120. 0x41c1. sdrc_adj3不使用. pll1, 2上都是如此, 所以DFV3, DELAY_CYC3是否设定均可.  <TODO>实验验证</TODO>
+
+2, Clkrst_ClkSwitchSetSdrcAdjClk移到get sdram info中. 如果没有参数返回错误. 
+Clkrst_SwitchGetPllInfo与memory vendor有关部分也需要并入. 
+get_sdramInfo会修改原有sdram配置, 切频时前面先get了, 后面再get且修改的话, 也会影响前面. 
+
+3, 切频功能完成, 测试中. 测试完成后上代码, 通知beizhan, 整理代码.
+cpu=bus=120->136, step=4, lliDma=1000, times=5, doing. 
+
+4(14:43 2009-6-1)(16:20 2009-6-1)
+CVS(CVS log见7)
+zhangjian, clkrst, clkswtich
+
+邮件fengbeizhan, lingming, 830qa
+标题: 282BGA mobile ddr切频release
+
+增加对282BGA封装micron mobile ddr切频的支持(core=1.2v, mobile ddr=1.8v). 修改了顶层Makefile.
+
+测试了如下频点: 
+cpu=bus=120->136MHz, step=4MHz, lli dma=1000, times=5 pass
+cpu=bus=136MHz, vdec=181MHz, me播放dongjingpiaoyi, fps =  16.68->21.75
+cpu=bus=140MHz, dma lliautotest 1000 出错5次. 
+
+1), 使用时需要修改include\sys.h, 选择对于封装和memory类型:
+#define _SV282_
+#define MEM_TYPE_VENDOR	MDDR_MICRON
+
+注: 默认配置是
+#define _SV176_
+#define MEM_TYPE_VENDOR	SDRAM_SAMSUNG
+对应176封装下三星sdram配置. 
+
+2), 增加了两个判断memory类型的宏, 目前共有四个宏:
+Clkrst_IsSDRAM(): 判断是否是sdram
+Clkrst_IsPCDDr(): 判断是否是pcddr
+Clkrst_IsMDDr(): 判断是否是mobile ddr
+Clkrst_IsDDr(): 判断是否是ddr
+
+3), micron ddr参数位于clkrst\app\ddr_config_micron.c, ddr_config_micron.h中. 
+
+4), 修改了顶层Makefile, 提高bin文件编译速度. 这个Makefile在编译bin时, 会先生成elf和bin, 再生成dump.S等辅助文件.
+Bin编译完成后, eclipse console会提示:
+#####################Binary finished!##############################
+#####################You can download the image now################
+
+5, 修改rvdebug脚本和打包512info, 别忘了改48寄存器: 
+addr_off[1]         = 0x60000048
+register_value[1]   = 0xee8e
+
+bootloader中CLOCKRST_PLL1_SDRC_ADJ_CLK_CONFIG(0x600000048)寄存器直接在Sdram_Init
+    for(i=0;i<num;i++)
+    {
+        addr = p_config_info->sdramRegAddr[i];
+        value  = p_config_info->sdramRegVal[i];
+        //...
+    }
+中修改, 没有使用Pll_GenModuleClk()函数. 
+
+6, 实验me, 然后提交代码. 
+跑me时, 容易死, 跑dma发现0次后就死了. 编译timer_sv没有问题. 编译vdec试试. 
+1), vdec, 只解了1260frame.
+映像: 1559_vdec_sv_bin_mobileddr_282BGA.pak
+RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+retVal != HXR_OK: rv_depack_add_packet
+
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    1260 input frames, 1259 output frames
+    total time is 134110 ms, average time is 106 ms, fps is   9.43->21.49
+2), me, 又没有问题了. 
+映像: 1612_me_sv_bin_mobileddr_282BGA.pak
+路径: D:\work\VC0830\SV\测试映像和log\20090601\282BGA_mobileDDR_micron
+fps =  16.68->21.75
+
+7, CVS log
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/Makefile,v  <--  Makefile
+new revision: 1.76; previous revision: 1.75
+done
+Checking in clkrst/app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.32; previous revision: 1.31
+done
+Checking in clkrst/app/clock_switch_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.c,v  <--  clock_switch_info.c
+new revision: 1.11; previous revision: 1.10
+done
+Checking in clkrst/app/sdram_config.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.c,v  <--  sdram_config.c
+new revision: 1.9; previous revision: 1.8
+done
+Checking in clkrst/app/sdram_config.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.h,v  <--  sdram_config.h
+new revision: 1.11; previous revision: 1.10
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_micron.c,v
+done
+Checking in clkrst/app/ddr_config_micron.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_micron.c,v  <--  ddr_config_micron.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_micron.h,v
+done
+Checking in clkrst/app/ddr_config_micron.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_micron.h,v  <--  ddr_config_micron.h
+initial revision: 1.1
+done
+Checking in clkrst/subdir.mk;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.22; previous revision: 1.21
+done
+Checking in include/sys.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/include/sys.h,v  <--  sys.h
+new revision: 1.44; previous revision: 1.43
+done
+Checking in sdio/src/sdiodrv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.c,v  <--  sdiodrv.c
+new revision: 1.98; previous revision: 1.97
+done
+Checking in sdio/src/sdiodrv.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.h,v  <--  sdiodrv.h
+new revision: 1.7; previous revision: 1.6
+done
+Checking in sdio/src/sdioprt.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioprt.c,v  <--  sdioprt.c
+new revision: 1.45; previous revision: 1.44
+done
+Checking in sdio/src/sdioprt.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sioprt.h,v  <--  sdioprt.h
+new revision: 1.5; previous revision: 1.4
+
+8, 现在真是状态不好. 写了半天邮件发现忘了说用哪个打包脚本. 
+
+9, 代码位置:
+D:\work\VC0830\SV\测试映像和log\20090601\282BGA_mobileDDR_micron
+
+10:52 2009-6-1
+VC0830, SV, clkrst, clkswitch, 128LQFP切频测试, <TODO>关注进展</TODO>
+wangke测试, 加b layer时播dongjingpiaoyi, 容易出现"software interrupt"错误. 今天上午已经出现多次(大于5次). 昨天没有. 软件硬件和昨天都一样. 
+zhangjian: 重新插拔了cpu板, memory板. 
+
+16:51 2009-6-1
+VC0830, SV, lingming说nfc下earse 0 1 1 会不断出现sd的Card insert中断. <TODO>实验</TODO>
+
+17:04 2009-6-1
+830QA; 816QA; jiang wei; Xu Wen Yan; Qiu Xiao Fei
+
+18:27 2009-6-1
+VC0830, SV, 176LQFP, PCDDR pll2480_bus120MHz参数, 不稳定. 
+明天得先整理clkrst"10:20 2009-6-1"中提高的需要整理的代码了.
+现在代码很不容易维护. 
+
+10:53 2009-6-2
+VC0830, SV, clkrst, clkswitch, shuyu bug, 见"14:20 2009-6-2"3
+
+11:17 2009-6-2
+1, <TODO>打电话问aiguo, 切频测试, 场景, 切多少次</TODO>
+2, 176LQFP切频pll2不稳定, 试验两次都fail, 分别是连续切频到146, 168fail.
+如果直接切频到146, 168没问题, 包括pll2也没问题. 
+
+13:10 2009-6-2
+告诉数据传输
+USB和HDMI都是数字传输, 有什么区别? <TODO>关注</TODO>
+1, 据说USB有重发机制, 如果接收不正确要重发. 如果线好接收成功率高. 
+2, HDMI就是把数丢进去, 不管传输是否正确. 
+
+13:12 2009-6-2
+VC0830, SV, 存在的问题
+1, upsizer, downsizer共用一个buffer.
+size大小有限制.
+2, 手机应用memory不够. 
+
+14:20 2009-6-2
+VC0830, SV, clkrst, clkswitch, CVS更新
+zhangjian, clkrst, clkswitch 
+1, 176LQFP pcddr切频到pll2480_bus120, pass.
+涉及到PTClockSwitchInfo(), Clkrst_ClkSwitchSetSdrcAdjClk(), get_sdramInfo()等函数
+2, clksv中如果输入无效pll cpu bus index会直接退出. 主要用于切频到pll2时切频到不允许的频率. 
+涉及函数: do_clkswitchSV_cpurate(), Clkrst_SysInfoGetPllFreqAry(), Clkrst_SysInfoGetFromIndex()
+3, shuyu bug: 176LQFP sdram 切频会死, 示波器看不到波形, 奇怪. 难道是memory参数完全错了?  发现是修改get_sdramInfo后, 如果clocksource是XCLK_ID时, SysInfo_GetBus()得不到正确bus频率. 
+
+4, CVS log
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/.cdtproject,v  <--  .cdtproject
+new revision: 1.275; previous revision: 1.274
+done
+Checking in clkrst/app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.33; previous revision: 1.32
+done
+Checking in clkrst/app/clock_switch_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.c,v  <--  clock_switch_info.c
+new revision: 1.12; previous revision: 1.11
+done
+Checking in clkrst/app/sdram_config.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.c,v  <--  sdram_config.c
+new revision: 1.10; previous revision: 1.9
+done
+Checking in clkrst/app/system_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.c,v  <--  system_info.c
+new revision: 1.24; previous revision: 1.23
+done
+Checking in clkrst/test/clkrst_test.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.24; previous revision: 1.23
+
+15:16 2009-6-2
+1, mp4样机: 176 pcddr, 60-120是否能用. 
+2, sd卡速度: 看看原来怎么测的.
+速度测试软件_ATTO Disk Benchmark V2.02, 自"\\10.0.2.36\sqmshare\Share\fengyaya\tool\ATTO Disk Benchmark V2.02", 以下简称Bench.
+
+3, panasonic 1G class2
+Bench.
+Bench: 读7.185, 写2.958
+fatspeed(10次): 读8.974, 写2.656
+sd speed(multi): 读9.184, 写3.276.
+
+用读卡器: Bench: 8.861, 3.423. 比830快了22%, 15%. 分析原因. 
+
+4, 
+Bench: 读8.319, 写6.100
+sdspeed(multi): 读11.000, 写10.495
+fatspeed: 读10.542, 写7.254
+用读卡器: Bench: 17.476, 7.374. 
+
+22:53 02/06/2009
+<TODO></TODO>
+对比瑞芯微RK2806主控方案 音悦汇T12。
+
+10:25 2009-6-3
+VC0830, SV, vdec, bus, <TODO>关注</TODO>
+自: fengbeizhan
+bus和vdec相差不能太大, IC不建议vdec:bus超过1.5, 否则二者无法正常协调.
+
+11:36 2009-6-3
+Clkrst_Switch改为支持pll1->pll2->pll1, pll1->xclk->pll1, pll2->pll1->pll2, xclk->pll1->xclk四种, <TODO>测试</TODO>
+
+13:28 2009-6-3
+VC0830, SV, clkrst, clkswitch, 对"15:30 2009-5-23"问题的总结:
+给linchuan邮件"答复: 切频时参数问题"
+1, 问题1: 扫出的memory参数会不会和实际动态切频参数有差异.
+具体情况如下:
+MP4样机(176LQFP+PCDDR)扫得如下参数
+regaddr	    0-60 pcddr
+0x60011000	0x48c211a1
+0x60011004	0x00010023
+0x60011008	0x1959aa95
+0x6001100c	0x000000c3
+0x60011020	0x00000020
+0x600000d0	0x11113013
+0x6001103c	0x000000f0
+0x60011040	0x00000080
+0x60011044	0x0000008f
+0x60011048	0x00000068
+0x6001104c	0x00000080
+0x600000d8	0x00000200
+0x600000d8	0x000001b0
+0x60000048  0x0000e98d
+0x60000148  0x004201c1
+AXD使用这组参数静态切频到pll1, bus=24MHz, bus divider=6没有问题, 
+但动态切频到pll2, bus=24MHz, bus divider=6会串数, 把0x60011020(rd path control)改为0x30问题消失. AXD静态切频时如果x60011020=0x30会串数. 
+同样问题SV板(176LQFP+PCDDR)也存在. 
+当然也可能是pll1, pll2下memory参数不同造成的. 0x60000148寄存器是根据0x60000048得到的, 不是扫出来的.
+(18:25 2009-6-5)181BGA也有这个问题. 60-120的需要把rd_path_control从0x22改为0x32.
+
+2, 问题2: 0x40000000是memory物理地址, 为什么有时不能访问? 
+如果切频后没有跑飞, 0x0, 0x40000000地址都可访问.
+切频后memory跑飞后有两种情况, 一种是只有0x0附近可以访问(感觉数据是对的, 写入会串数), 访问0x40000000提示data abort.; 另一种是0x0附近memory显示相同或混乱数据但不能修改. 0x40000000处无数据(都是"!").
+
+11:36 2009-6-4
+<TODO></TODO>
+修改了Clkrst_MClkInfoGetMClkReg, 实验能否正确处理vdec clk src. 可以的话加入TClock.
+
+17:54 2009-6-4
+VC0830, SV, clkrst, clkswitch, 改进代码
+1, cpu=bus=12->168, step=4MHz, clkSrc=PLL2_ID, times=5, dma=10或0, 
+都在"while ( NULL != oPItor_p ) {"处产生"software interrupt"
+发现是
+"oPItor_p = oPItorGrpp->next(oPItorGrpp);"后面增加了
+oPItor_p->curSystemInfo->clksource_index = dstCpuBusSrc;
+如果oPItor_p是NULL, 这样肯定就有问题了. 对0地址的非法访问. 
+2, 修改后pass:
+1), cpu=bus=12->168, step=4MHz, clkSrc=PLL2_ID, times=5, dma=0, 
+2), cpu=bus=12->168, step=4MHz, clkSrc=PLL1_ID, times=5, dma=0, mediumclockSource=PLL2_ID.
+上次2)没有pass的原因可能是pll2频率选的不好, 这次pll2是取当前pll1 ckd, 频率是60MHz以下的. 本次是pll2-480_cpu20_bus20. 
+3), cpu=bus=12->168, step=4MHz, clkSrc=PLL1_ID, times=1.5(测试到第二次到达168停止), dma=10, mediumclockSource=PLL2_ID
+log: log_20090604111419.log
+
+3, 实验pcddr, 有问题:
+CLKRST_ERR: DDR only support pll1 -> pll2 -> pll1 flow!
+CLKRST: system operation point will switch to :
+CLKRST: xclk pll cpu bus vdec
+CLKRST: 12  488 122 122 120
+CLKRST: xclk    pll_div cpu_bus_div   vclk_div
+CLKRST: 12   0x001801e8      0x0000     0x0011
+CLKRST: Start Switch clk
+##CAUTION: we assume that sdio, per and other module input clk is not changed
+during clock switch. otherwise the internal divider in sdio, and other
+relative module should be reconfigured!!!, see "update_module_divier()"
+for detail.
+<TODO>明天继续debug</TODO>
+
+18:02 2009-6-4
+VC0830, SV, clkrst, "Software Interrupt"的可能性, 0x10异常
+1, memory fail
+例如memory参数不好, memory频率过高, bus压力过大等情况, 如果同时或部分同时出现, 可能出现"Software Interrupt".
+Wangke实验128LQFP封装时, 发现如果板子上电后直接从240_120默认频率切到较高vdec频率, 跑vdec播dongjingpiaoyi到lcd时, 很快出现这个错误. 如果从较低vdec频率开始逐步上升则无此问题. 
+原来我和feibeizhan也发现有类似问题, 当时应该是176LQFP封装, 切频时容易死, 或切频后容易死, 但是不一定报"Software Interrupt"
+
+参考, wangke邮件""
+如果VDEC从较低频率逐渐测到较高的频率（如下表），则播放正常
+
+ARM BUS VDEC 结果1
+120 120 140 pass
+120 120 150  
+120 120 160 pass
+120 120 165 pass 
+120 120 170 pass
+120 120 175 pass
+120 120 180 pass
+130 130 188 pass
+130 130 190  
+130 130 195  
+136 136 200 pass
+
+2, memory非法访问. 
+见"17:54 2009-6-4"1, 对0地址的非法访问.
+<TODO>是否可以像Linux一样打出函数调用关系呢? </TODO>
+
+9:42 2009-6-5
+同事信息, 电话, wangke, 8115
+
+11:49 2009-6-5
+VC0830, SV, video, clkrst, hdmi 720p支持问题
+邮件"答复: hdmi 720p支持问题"20090605_1334
+收件人: Yang Zuo Xing; Shu Yu; Lin Chuan; Yi Nong; Steven Liu; Larry L Xie; Xiang Zhi Hong; zhou dashan
+抄送: Ai Guo; Zhang pu; Chendy; Li Shu Jie; Xu Fei; Zhang Ya Jing; Zhou Zhi Tao
+
+不升压dashan PCDDR只支持到136MHz, 见dashan邮件” 答复: PC DDR 加压136M 参数确定”
+当时测试176LQFP 288_144就不稳定. 详见附件中的两封邮件:
+zhangjian"答复: PC DDR 电压和频率目前在SV台子上的情况"邮件和"PCDDR切频release", 分别提到288_144不稳定, 只保证了不加压时pcddr在120->136稳定.
+Dashan测试不升压144pass, 我认为有偶然性, 我也是dma测到将尽5000次才出错. 
+
+13:39 2009-6-5
+VC0830, SV, 流程,流程, <TODO>写到VC0830总结文档中</TODO>
+感觉我们的流程太差了, 像"11:49 2009-6-5"提到的176LQFP PCDDR支持问题, 像dither问题. 像pll最高只能支持到672MHz问题, 其实都是流程问题. 
+流程问题一般的特点是牵扯若干人, 经常是多个team的若干人, 但是谁似乎也不能承担主要责任.
+
+16:30 2009-6-5
+<TODO></TODO>sdram配置还是有点乱, 整理结构. 
+
+17:21 2009-6-5
+VC0830, SV, 181BGA, 切频问题很多, 和dongliang一起解决
+1, fengyaya, boot三个问题:
+1), 详见lidongliang邮件"898 的一个问题"20090605_1747
+之前fengyaya报告说
+898的一些芯片在1.5V 下工作正常， 
+1.2V下工作异常，主要有三个：
+1. CLOCKRST_PLL_SWITCH:  打印非零
+2. CLOCKRST_PLL_SWITCH 打印后sdram 初始化不能通过
+3. boot830 不能正常boot起来 
+经确认，上述问题存在
+测试了10片898
+2片898存在问题1， 问题2与问题1是相连问题
+1片放宽host interface的约束时序后工作正常
+问题3偶尔出现，还需进一步查
+其它7片正常
+因为这10片之前一直在测试，有可能在使用中有损害
+Fengyaya会随机在898芯片盒中挑出一些来进一步测试一下
+目的在于进一步确认是我们的平台有问题，还是有问题的芯片较多
+
+2), fengyaya邮件"830SV_181+SDRAM32_CPU/BUS/Vdec_TestReport"20090605_1804
+今天李栋梁给解决了181pin_core1.2v的问题，测试了多次都没有再出现错误，我会再多挑一些芯片再测测。
+另外将昨天和今天的fail项测了几个，均pass，
+所以，181pin_core1.2v带vdec的测试，将全部重新测试，我会尽快发出最新的测试结果
+哎，早点找栋梁同学就好了，浪费了很多时间，郁闷~~~
+
+3), 原来baseband流程有问题, 造成biu读写有问题, 所以有可能830 memory工作不正常. 所以容易出现问题. 
+
+2, 181BGA切频是切到pll2_bus132, 会不会引起不稳定呢?
+
+3, <TODO>周一</TODO>
+1), 突然发现lidongliang初始化memory参数:
+D:\VC0830\baseband\trm830\v830memory\v830_memory.c, 181
+与dashan目前参数不同, 周一核对, 并改为新参数. fengyaya用新参数测试两片, 如果差异不大就承认旧参数结果, 否则需要重测. 
+2), 核对其它所有封装memory参数. 除了rd_path_control[6:4]外, 不允许其它不同. 
+
+4, (12:38 2009-6-12)sunguangyue测试sdram自刷新时, 使用zhoudashan参数也觉得不稳定, 用LingMing参数没有问题. 
+<TODO>关注sunguangyue复现问题及解决</TODO>
+
+8:50 2009-6-9
+VC0830, SV, 文档, 周报(0601-0605):
+1, 切频: 整理代码; 支持wangke128切频, fengyaya176, 181切频. 181切频问题: 不稳定;1.5v下176参数好于181参数. 这两个问题的可能原因: 181初始化sdram参数与切频参数不同.
+2, 支持zhulei sd高速模式,
+
+9:06 2009-6-9
+VC0830, SV, 项目总结, <TODO>总结</TODO>
+1, 周报很有必要;
+2, 改进流程;
+3, 合并816,830代码,
+4, 讨论是否修改dragon 与830通信方式.
+
+9:53 2009-6-8
+VC0830, SV, <TODO></TODO>
+周一来了就发现几个事情:
+1, sd卡速度分析<DONE>
+2, dashan参数是282BGA 64M双片 samsung sdram参数.
+需要一个282BGA CPU板.
+
+11:34 2009-6-8
+<TODO></TODO>整理会议记录
+1, 切频代码整理
+2, sd高速下周做. 
+
+15:00 2009-6-8
+VC0830, SV, storage, sdio, <TODO>测试32G sd卡</TODO>
+邮件"答复: about action items for 830"20090608_1707
+xiangzhihong, yangzuoxing
+抄送aiguo, lingming
+
+15:00 2009-6-8
+VC0830, SV, 181BGA使用方法, <TODO>总结到181BGA</TODO>
+181BGA: baseband代码通过DNW transmit功能把
+d:\VC0830\baseband\v830baseband_Data\DebugRel\v830baseband.bin下载。
+
+15:29 2009-6-8
+181BGA, <TODO></TODO>
+1, 0x20用0x22容易死，改为0x32. 0x32更烂， 还是用0x22.
+2, 181
+ 
+17:15 2009-6-8
+VC0830, SV, clkrst, clkswitch, 282BGA, MobileDDR
+支持wangke测试282BGA_MobileDDR_Micron
+0, 282BGA+MicronMobileDDR, core=1.2v, memory=1.8v, 
+1), 
+2支持频率见"10:20 2009-6-1"3邮件.
+2), 映像: D:\work\VC0830\SV\code_image\20090608\image\1644_vdec_sv_bin_282BGA_mddrMicron\1644_vdec_sv_bin_282BGA_mddrMicron.pak
+1, 邮件
+测试命令除了”open 0 0 2”改为”open 0 0 22”, 其余不变. 
+最高频率参考如下文件.
+2, 电源板, 二极管(Q4中的一个)短路, 造成电源供电不能用, usb供电可以. 
+据zouweiran说这个二极管很容易坏. 
+电源或usb通过Q4后是VIN. 
+注: 可能是电源板插错了一排引脚. 
+3, 用socket 282BGA测试
+开始下载映像可以, 插上屏后, go后面就不行了.
+dfu_end
+Write or load image,Done
+Write info,Done
+Scan Bbt,Done
+GoL ˆ0€@€
+拆下屏, 120MHz以上大量错误. 怀疑是socket问题
+4, 找lingming拿了一个282BGA CPU板.
+cpu=bus=120->136, step=4MHz, dma=0, time=5, delay=0, fail.
+delay=1000, pass. <TODO>总结, 发邮件</TODO>
+5, 2:1不行, 250_125都不稳定. 
+1), 换beizhan板(底板80090402020+CPU板80090420100),
+cpu:bus=2:1, cpu=240->264, step=4MHz, dma=10, time=5, pass.
+2), lingming CPU板+zhangjian底板. 
+cpu:bus=2:1, cpu=240->272, step=4MHz, dma=10, time=5, pass.
+解dongjingpiaoyi, -dp -fs -dn 200
+201 input frames, 201 output frames
+total time is 18965 ms, average time is 94 ms, fps is  10.64->20.56
+6, 感觉socket不是很稳定. 
+7, "16:08 2009-6-9"昨天给出的代码切频有个小问题, 为了解决这个问题顺便使用了整理后的代码. 
+映像: D:\work\VC0830\SV\code_image\20090609\image\1605_vdec_sv_bin_282BGA_mobileddrMicron.pak
+
+17:316:08 9 2009-6-8
+<TODO></TODO>
+1, 282 mobile ddr, wangke
+2, 181新参数, fengyaya
+3, sd速度分析, 周二下午出结果;<DONE>
+4, 借32G sd卡. 
+
+9:35 2009-6-9
+VC0830, SV, 今天任务, 至少1,3,4要完成. 
+1, sd卡<DONE>
+1), 速度分析报告;
+回信回给YangZuoXing"about action items for 830"20090607_1653
+2), 测试32G sd卡, 找LingMing确认是否只测试32G sd卡. 测试后是否交测试人员. 
+LiJun邮件"答复: about action items for 830"20090608_1723
+SANDISK MICRO SDHC 16G
+SANDISK MOBILE ULTRA MICRO SDHC 16G
+SANDISK MOBILE ULTRA II SDHC 16G
+SANDISK MOBILE ULTRA II SDHC 32G
+上面这些卡各2只已经入库,谁需要用找步伟签字领出就可以了.
+2, "9:38 2009-6-9"181 debug
+3, 282 sdram 32bit.
+见邮件"2chip 32bit sdram 参数与结果"及"答复: 2chip 32bit sdram 参数与结果"
+1), zhoudashan邮件"2chip 32bit sdram 参数与结果"20090607_1243
+D:\VC0830\vc0830_sv_memscan\sdram\sdram32_svk4s561632_2chip.c
+	288M_144M_36M OK
+	480M_240M_60M OK
+	480M_240M_80M OK
+	480M_240M_120M OK
+	560M_280M_140M OK
+	608M_304M_152M OK
+	672M_336M_168M OK
+注意：
+ 120M的SDRAM 参数用的是 more_120M一组的参数
+ 60M的SDRAM 参数用的是 less_60M一组的参数
+2), fengbeizhan: vdec测试命令"rvplay –f dongjingpiaoyi.rm –dp –dn 2000 –fs
+"
+4, 176 pcddr 136MHz 参数
+5, 周一会议记录整理
+6, 3       clock switch for different scenes                zhangjian
+YangZuoXing"about action items for 830"20090607_1653
+<TODO>等待提供测试需求</TODO>
+7, zhoudashan邮件"282封装PC DDR(两个板子串联) 参数确定"20090609_1814
+Hi :ail
+由于176封装 ,由于SDRAM片选信号为1个，因此最大只能支持一个片子
+我们在282封装下测试两片PC DDR 串联的情况，DMA搬运数据最大支持 到BUS132M，
+BUS 140M扫描不出参数。
+Hi :zhangjian :
+参数在D:\VC0830\vc0830_sv_memscan\sdram\pcDdr16_sv_2chip.c
+注意：这个只保证132M的时候能用，用来给beizhan 他们验证8 BAK 用 
+Hi :DR yang
+1) 我们发现在282封装下 DDR（包括MOBILE ，PC）的频率始终上不去，相关的扫描参数在我们机器上均有记录，
+希望你们这边也看看究竟是什么原因，最大只能到132M，282封装下的SDRAM 好像也跑不过176封装的SDRAM。不知道是封装的原因？还是板子的原因？ 
+
+11:14 2009-6-9
+VC0830, SV, storage, sd速度分析
+由于没有等到response, 这些数据可能不准确
+1, read single: 
+发送cmd, 到data传输完成: 
+211.76, 2.3MByte/S.
+262.24, 1.8MByte/S.
+211.94, 2.3MByte/S
+212.4425
+2, read multi
+blkcnt=0x200
+cmd->data开始   一个blk(us) 总时间(us)  速度(0.25MByte/总时间)
+159.12us        44          22687.12    11.0MByte/s
+159.155us       44.04       22707.635   11.0MByte/s
+
+3, write single
+56.8375us
+
+4, write multi
+cmd->data开始   一个blk(us) 总时间(us)  速度(0.25MByte/总时间)
+12.0025         43.7125
+
+5, 死活找不到write的response, 只有用软件计时的方法了. 
+
+11:41 2009-6-9
+<TODO>现有代码有bug, 修改, 尽量上传所有代码</TODO>
+
+15:24 2009-6-9
+VC0830, SV, video, <TODO>关注bug</TODO>
+fuyali邮件"答复: 上周5会议记录"20090609_1434
+配置: pll1=288, cpu=144, bus=24.
+3.跑vdec码流(rv 720p)，开始就解码的很乱，屏幕很花，解了一点后直接死掉，不停打印
+R fifo empty..
+lcdc Line Empty Clr
+...
+
+19:04 2009-6-9
+VC0830, SV, storage, sd速度分析, 续
+1, sd测速, 怎么下载不了映像了?!!?!
+1), cp电源板, 忘了按电源上的power on.
+2), 未知nand原因, 先下载另一个映像, 再下载当前映像就好了. 
+3), 当时也可能是忘了是cp电源板, 需要按下电源板上的power on按键才能供电. 
+
+20:39 2009-6-9
+VC0830, SV, 周一会议记录补充, <TODO>总结到会议记录</TODO>
+1, merge buffer: pingpang buffer, 把layerA, layerB合并到merge buffer再显示到lcd.
+2, 为什么vdec buffer要跨越两个bank. 因为vdec读YUV数据时需要同时读取Y和UV数据, 放到两个bank中才能同时读写, 避免冲突.
+
+21:02 2009-6-9
+VC0830, SV, storage, sd速度分析, 续
+log: log_20090609190225
+单位均为Kbyte/Sec
+1, 裸读:
+multi速度在9046->9713之间
+single: 1438->1590
+2, 裸写速度在5->388之间, 平均307
+
+9:54 2009-6-10
+VC0830, SV, storage, sd速度分析, 续
+依次测试裸读写速度, sd卡读写速度, udc速度, 读卡器速度
+测试两张卡: 1号卡: Panasonic class 2 1GB sd; 2号卡: ADATA class 6 8GB SDHC.
+测试条件:
+均在无OS下测试, 速度=数据量/时间.
+裸读写速度: 用timer计算从830发送读写命令到830dma完成的时间. 速度=数据量/时间, single和multi分别测试;
+sd卡读写速度: 读写5M数据时间, single和multi分别测试;
+udc速度: 用udc挂载sd卡为PC机优盘, bench软件
+读卡器速度: bench软件.
+bench软件配置: 传输大小1024k to 1024KB, 总长度16MB.
+
+1, 1号卡
+单位KB/s        平均速度    最大    最小
+裸读写      写  3666.4      933     3951
+长度64k     读  9240.7      8972    9284
+bench       写  3001(一次)
+长度64k     读  7005(一次)
+
+裸读写      写  4086.4      2022    4499
+长度256k    读  9639.5      9039    9707
+Sdspeed     写  3280.8(一次)
+长度256k    读  9406.1(一次)
+
+结论: Sdspeed和裸读写速度相差3%. bench比裸读写慢20%左右, 所以sd驱动对速度影响不大, 主要是fat影响. 其次是每次传输block大小, block越大速度越快. 
+问题: single读写速度不稳定. 
+
+log: D:\work\VC0830\SV\sdio\速度测试:
+sd卡速度测试结果.xls, log_20090610104518.txt(从后往前看)
+
+12:46 2009-6-10
+VC0830, SV, clkrst, clkswitch, 支持fengbeizhan测试添加memory参数
+282BGA下希望用ddr, bus=132MHz.
+根据这个需求用zhoudashan发的双片pcddr 132MHz for 282BGA参数. 
+1, #define __528M_264M_132M__ dma lli 100 fail: 5/100.
+2, #define __264M_132M_132M__ dma lli 100 fail: 5/100.
+3, 切频
+pll1=264, bus=132 ==> pll2=1056, bus=132, llidma 100 fail: 2/100.
+4, 找dashan讨论, 应该是用__528M_264M_132M__这组, 没有提供pll2参数, 只能是axd静态切频. 
+用directlliautotest可以, lliautotest不行, 经dashan确认是参数不稳定. 
+在pcddr_config_hynix.c中加入"#error"提示: 
+#elif BANK_NUM==BANK8
+	#error this parameter is not stable, contact zhangjian or zhoudashan for help
+
+16:57 2009-6-10
+VC0830, SV, storage, sdio
+sdio内部sram无法直接看到, 只能通过dma搬出来. dma方向通过cmd_ctrl(0x60032088)[4]direction确定, 1: read; 0: write.
+
+17:28 2009-6-10
+SDIO_DBG:\ Wr\ [0-9a-z]*\ 80\n\n
+SDIO_DBG_LL:\ wr\ mutli:\ [0-9]*us\n\n
+
+17:50 2009-6-10
+VC0830, SV, 电源, 多电压电源板跳线, 测量cpu,memory电压方法, 电源板跳线标注(丝印层)位置
+1, 自LingMing邮件"最终电源板（最后一封）"20090615_1535
+自邮件"答复: 最终电源板（最后一封）"20090615
+现在电源的种类和数目应该都比较多了，需要使用的时候相互协调一下吧。
+特殊电源板用户和使用方法如下：
+不考虑181封装（全部由栋梁管理），128，176，282封装，内存sdram, pcddr, mddr.
+内存电压只和内存种类有关：sdram 3.3V；pcddr 2.5V；mddr 1.8V
+core 电压1.2V，1.5V可选；内存电压为1.8V和2.5V可选：
+a) TI的板子：背部的ID为001张健;002凌明;003凌明;004舒予。0xx 
+使用方法：
+Core 1.2V：跳线J2，J4插上帽子。
+Core 1.5V：跳线J2的右脚飞线到J4的左脚。
+内存电压2.5V：跳线J11，J13插上帽子。
+内存电压1.8V：跳线J11的左脚飞到J13的右脚。
+b) 7830的板子：背部的ID为301凌明。3xx。
+Core 1.2V：跳线J2，J13插上帽子。
+Core 1.5V：跳线J2的右脚飞线到J13的左脚。
+内存电压2.5V：跳线J6，J12插上帽子。
+内存电压1.8V：跳线J6的左脚飞到J12的右脚。
+2. core 电压1.2V，1.5V可选；内存电压为3.3V和2.5V可选：
+a) TI的板子：背部的ID为201朱立英，202蔡进，203冯备战；2xx
+使用方法：
+Core 1.2V：跳线J2，J4插上帽子。
+Core 1.5V：跳线J2的右脚飞线到J4的左脚。
+内存电压3.3V：跳线J11，J13插上帽子。
+内存电压2.5V：跳线J11的左脚飞到J13的右脚。
+3. core 电压1.2V，1.5V可选；内存电压为3.3V和1.8V可选（7830的不能同时支持3.3，2.5）：
+a) 7830的板子：背部的ID为#101傅雅丽;#102张健;1xx
+使用方法：
+Core 1.2V：跳线J2，J13插上帽子。
+Core 1.5V：跳线J2的右脚飞线到J13的左脚。
+内存电压3.3V：跳线J6，J12插上帽子。
+内存电压1.8V：跳线J6的左脚飞到J12的右脚。
+
+2, 测量cpu,memory电压方法:
+cpu: 底板jp35
+memory: 底板jp28, 即使只测量电源板memory电压, 电源板也需要插在底板上. 
+另外, TI和7830板子跳线标注位置不同: TI跳线标注在跳线的左上或右上. 7830标注在右下或左下. 
+
+18:17 2009-6-10
+项目, VC0598, cp, overview
+项目资料位于: "D:\work\VC0598"
+自: VC0598A_Datasheet_0.5.pdf
+1, 处理器是arm926ejs, 16k data, instruction cache, 今天会议提到可能用2k cache? 
+2, highlight
+Advanced 0.13um process with low power design
+Stacked 8MB 32bit 133MHz mobile SDR SDRAM
+High-quality RealVideo decoder up to 720P@25fps and H.264/MPEG4 decoder up to
+D1@25fps
+Support up to 3M pixel camera sensors
+Support up to VGA RGB/MCU LCD panel
+Support Video Conference
+3, Stacked 8MB SDRAM (1.8V 32-bit mobile 133MHZ SDR SDRAM)
+4, video
+1), rv 720p
+2), h.263, h.264, mpeg4: decoder only: d1@25fps; encoder only cif@15fps; both qcif@15fps.
+3), vc1: d1@25fps
+4), 各种视频分辨率(d1, cif, qcif):
+a, QCIF: 176x144, CIF: 352x288
+b, D1, From"http://www.afterdawn.com/glossary/terms/d1.cfm"
+So-called "full resolution" for TV specs. Normally D1 can mean one of the following video resolutions:
+704x576 (TV PAL)
+704x480 (TV NTSC)
+720x576 (DVD-Video PAL)
+720x480 (DVD-Video NTSC) 
+5, 181BGA, 0.13um工艺. 
+6, 这个cp定位也包括3G手机cp, 顺便附上相关的三个链接:
+自2): 3G-324M标准在技术上与H.324/M非常相似，但是它指定H.263作为强制基本标准，而把MPEG-4作为视频编码推荐标准。AMR是音频编码强制标准。
+1), http://www.ed-china.com/ART_8800014632_400001_500006_OT_f368cb0a.HTM
+3G-324M协议可以充分发挥3G的潜力
+2), http://tech.c114.net/167/a144782.html
+3G-324M协议介绍
+3), http://www.c114.net/news/132/a103385.html
+大唐打通首个TD-SCDMA视频电话 图象流畅 2004-12-19
+
+18:42 2009-6-10
+VC0830, SV, video, vdec解码问题, <TODO>关注进展</TODO>
+邮件"答复: pcddr vdec解码问题"20090610, 3封邮件.
+1, Caijin, ZhangLu
+Zhanglu: 测试3次. 一次2290帧fail.二次2853帧解完了,pass;三次2835帧 fail
+Lingming：808以及1793帧都可能失败
+Caijin: 全部解码成功
+是不是需要重新扫一下pcddr的参数？
+
+2, zhanglu:
+换了caijin得 电源板后,一个芯片当掉了
+换了一个芯片,测试了4次,4次均2859帧解完了 
+
+9:56 2009-6-11
+(20:01 2009-6-16)
+VC0830, SV, clkrst, clkswitch, 整理代码
+1, sdram
+阶段一, 可以动态修改配置, 尽量通过数据结构管理配置(新加入配置尽量不用加入新函数).  <DONE>
+阶段二, 用户可以指定选择哪些memory编译, 哪些不编译. 
+2, 代码分配合理, 避免头重脚轻. systeminfo移到driver层, sdram配置保存在单独目录. <DONE>
+3, 函数功能独立, 清楚. 函数名重新review. 很多函数名不准确. <DONE>
+4, 寄存器访问都封装到basefunc层,
+5, 考虑对ADS的兼容性, 计划用宏表示:
+.name=value
+改为
+NAME value
+NAME根据是C99, 还是不支持C99且不支持GNUC的编译器定义(即目前的ADS编译器).
+前一种情况都可以保证struct赋值靠名称对应, ADS编译器无法保证, 所以编译为ADS的代码前需要C99编译通过. 
+6, 规范命名: 都以Clkrst开始
+1), 函数命名: Clkrst_Dir_Func
+7, 尽量少用全部变量. 
+8, 文档文档, 这周还要完成文档.
+9, 增加代码, 至少留好接口:
+1), 支持Linux clock管理所需, 例如引用计数等等;
+2), 支持跨pll的不同模块divider配置, 例如bus(pll2):vdec(pll1)
+3), 支持设置模块divider, 
+4), 支持设置模块parent. 这个有利于优化代码结构;
+5), divider value和reg之间不通过查表自动计算, 全部divider都列出来太多难以管理. 
+6), autoswitch中自动计算推荐cpu,bus比例. 
+根据用户输入的cpu范围, 定义的bus范围*bus尽量不超过prefered值, 必须不超过max值)设置.
+7), 支持用于设置切频到pll2的sysInfo. 
+
+11:43 2009-6-11
+<TODO>完成282 32bit参数</TODO>
+1, MEM_TYPE_VENDER改为SYSTEM_MEM宏
+2, memory参数转换, 正则表达式: 查找"\ *(0x[0-9a-z]*),.*", 替换"\1"
+3, 测试, 编译timer_sv_bin
+1), xclk=12MHz, rd_path_control需要从0x10改为0x20,
+2), 480_240_120, llidma fail: 29/100.
+3), 560_140_140, llidma 5000 pass. 
+4), 608_304_152, llidma fail: 12/100.
+5), 96_12_12, llidma 100 pass
+6), 672_336_168, 672_168_168, 切频fail.
+7), 480_240_60, llidma 1000 pass
+8), 480_240_80, llidma 1000 pass
+rd_path_control需要从0x32改为0x22,***,找linchuan, 讨论上周出现的问题. 
+目前结论: sdrc_mode寄存器如果修改, 需要sdrc_cmd(0x60011014)写入0x110, 即Load Mode Register (MRS). 这样才能更新mode寄存器到sdram芯片中. 
+详见"16:45 2009-6-11"
+9), 实验12M和80M下0x04和0x20两个寄存器的[7:4]都改为3是否可以(静态, 动态). 
+(1), 480_240_80:
+分别从0x23, 0x22改为0x33, 0x32.
+静态动态 dma lliautest 1000 pass. 
+(2), xclk: 
+分别从0x23, 0x10改为0x33, 0x20. pass
+规律是mode[7:4]和rd_path_control[7:4]同时加1.
+4, 疑问, 32M并联为32bit, 是当成是64M么? 是.
+
+14:25 2009-6-11
+同事信息, 板级硬件, ZouWeiRan(邹伟然), 8364
+
+16:29 2009-6-11
+1, dashan邮件, mobile ddr pll2_120, 原来不是有这个参数么? 
+
+16:30 2009-6-11
+VC0830, SV, clkrst, clkswitch, <TODO>上电后切频高较高频率不稳定(zhangjina, fengbeizhan, wangke都有发现), 从低逐渐向高就没有问题, 是否报出</TODO>
+zhanglu问测试方法, 建议她从低往高测试.
+
+16:45 2009-6-11
+VC0830, SV, clkrst, clkswitch
+1, linchuan邮件"答复: 上周5会议记录"20090611_1640
+Hi, all:
+1. 验证sdram上，是否存在动态切换，和静态使用时，sdram参数0x30(0x20)问题，出现问题linchuan负责解决。（ zhangjian，linchuan）；
+这个问题已经发现原因：
+SDRAM的EMR寄存器中有一个CL配置，定义SDRAM的读命令和读数据之间的器件延迟周期。80MHz以上必须为3，80MHz以下可以为2或3
+在830动态切频程序里，
+在80MHz以上，sdrc的CL配置为3
+在80MHz以下，sdrc的CL配置为2
+但是sdrc的CL配置的改变除了配置该寄存器外，还需要对sdram发更改EMR命令，这在我们硬件的动态切频程序中没有提供，所以虽然sdrc的寄存器改变了，但是sdram内部的CL无法改变，一直为3，导致软件的理解出错。
+解决办法：所有频率下，sdrc的CL都配置为3
+带来缺陷：不会带来功能的问题，对于性能，原来如果在80MHz以下，sdrc的CL配置为2，可以使sdram的latency减少一个cycle，现在没有办法，只能和80MHz以上的效率一样。
+这个缺陷同时存在在830和816中
+
+2, zhangjian邮件"答复: 上周5会议记录"20090611_1721
+CL加1配置为3后, Tcas也需要加1.
+这个改法在K4S561632E双片并联静态动态xclk和80MHz都验证通过, 
+(1), 480_240_80:
+0x04, 0x20分别从0x23, 0x22改为0x33, 0x32.
+静态动态 dma lliautest 1000 pass. 
+(2), xclk: 
+0x04, 0x20分别从0x23, 0x10改为0x33, 0x20. pass
+
+17:21 2009-6-11
+VC0830, SV, clkrst, clkswitch, ZhangLu vdec测试
+1, zhanglu测试结果
+zhanglu pcddr 不升压136_136_136fail. 估计是频率太高了. 明天从120_120_120尝试. 
+映像: D:\work\VC0830\SV\code_image\20090612\image\zhanglu20090611测试映像\176_vdec.pak, VC0830.bin, 映像对应的阶段测试结果"vc0830_SV_CPU_BUS_VDEC.xls"
+自zhanglu邮件""20090611_1754
+
+其中core=1.5时, cpu136_bus136_vdec200 5片都pass
+具体结果, zhanglu邮件"vc0830_SV_CPU_BUS_VDEC_176(pcddr)"20090611_1811
+
+从测试结果可见,升压为1.5V以后 cpu:bus:vdec=1:1:n 其中vdec频率为最低时,dma测试 fail. 后来换了一块焊死的cpu板.测试 cpu:bus:vdec=136:136:136 的dma测试,pass.明天多找几块不带socket的板子试试
+
+未升压的176cpu板,带socket的测试,从最低频点 就fail. 不带socket的cpu板,测试了一个cpu:bus:vdec=120:120:140的 pass. 而测试 cpu:bus:vdec=136:136:136 的dma测试,fail. 其中无论是将bus,cpu的pll切到pll1还是pll2,dma测试均fail
+
+2, 估计是socket问题, 改用焊死的176LQFP CPU板.
+1), 80090313045: LvBoxue
+2), 80090504012: 测试(Fuyali)
+3), 80090504010: LingMing
+4), 8009C318061: LiDongLiang
+5), 80090319073: zhangjian
+(17:10 2009-6-15)4010给ZhangLu.
+9071板子在LingMing处. 从Fuyali拿了4012板.
+(19:29 2009-6-16)8061板LingMing借给了六层, 所以改测了Aiguo 176cpu(<TODO>添加编号</TODO>)
+
+15:18 2009-6-12
+VC0830, SV, clkrst, clkswitch, pll计算方法和限制
+Fref = xclk / inDiv, Fref should be within 0.2~6MHz. 自databookchapter8 5.1节
+f = xclk / inDiv * 2 * mainDiv
+f的范围databook给出是480-900, 由于divider按672MHz综合, 所以实际推荐范围是480-672, 低于480MHz经实验也可以使用. 
+
+17:16 2009-6-12
+VC0830, SV, storage, sdio, 电源板, 跳线
+1, 改电源板跳线时, 跳错了线, 造成nand烧写后, 第二次用找不到映像; sd初始化在ACMD41_SD_SEND_OP_COND time out. 
+2, (19:32 2009-6-16)今天在Fengyaya板子上又遇到这个问题, 测量电压是对的. 用另一个sd卡可以使用. 再用Fengyaya sd卡也可以了. 费解. 
+
+17:28 2009-6-12
+VC0830, SV, clkrst, clkswitch, CpuBusVdec频率测试, 续, 282BGA+MobileDDR
+自WangKe邮件"830SV_282+Mobile DDR_CPU/BUS_TestReport"20090612_1647
+1, core=1.2, memory=1.8
+1), vdec最高频率测试(cpu,bus@pll2, vdec@pll1)
+130_130_192: 1/5; 130_130_190: 1/5; 130_130_184: 2/5; 120_120_182: 1/5.
+2), cpu, bus最高频率测试(cpu,bus,vdec@pll1)
+264_132_176: 2/5; 256_128_170.7: 1/5; 248_124_165.3: 2/5;
+324_108_?: 3/5; 318_106_159: 2/5;
+2, core=1.5, memory=1.8
+1), vdec最高频率测试(cpu,bus@pll2, vdec@pll1)
+130_130_190: 2/5; 130_130_182: 2/5; 120_120_180: 1/5;
+2), cpu, bus最高频率测试(cpu,bus,vdec@pll1)
+264_132_176: 1/5; 256_128_170.7: 2/5; 248_124_165.3: 1/5; 240_120_160: 1/5;
+324_108_?: 1/5; 318_106_159: 2/5; 312_104_156: 2/5
+3, 结论: 
+cpu, bus, vdec最高分别大约318, 130, 190; 升压效果不好, LingMing说可能由于mobileddr升压后串扰严重了. <TODO>找linchuan讨论</TODO>
+
+10:20 2009-6-15
+VC0830, sdio
+1, 代码修改, 以block为单位. 支持4G以上卡.
+2, notes: write single block需要等blk finish而不是dma finish中断.
+给xiakai, zhulei发信. 
+
+10:33 2009-6-15
+VC0830, SV, clkrst, clkswitch, 代码整理前上传当前代码到CVS
+1, CVS
+1), 完善切频流程: 加入Clkrst_TestGetSwitchPath()函数
+支持pll1->pll2->pll1, pll1->xclk->pll1, pll2->pll1->pll2, xclk->pll1->xclk, 以及pl11<->pll2, pll1<->xclk 共六种流程. 
+2), 初步分离memory参数: 目前没有memory参数只和自己目录内函数有关. 
+除非定义CLKRST_UNIVERSE_GET_SDRAMINFO时使用默认Clkrst_SdramGetInfo. 
+
+2, CVS log
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.34; previous revision: 1.33
+done
+Checking in clkrst/app/clkrst_app.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.h,v  <--  clkrst_app.h
+new revision: 1.14; previous revision: 1.13
+done
+Checking in clkrst/app/clock_switch_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.c,v  <--  clock_switch_info.c
+new revision: 1.13; previous revision: 1.12
+done
+Checking in clkrst/app/clock_switch_info.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.h,v  <--  clock_switch_info.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in clkrst/app/ddr_config_hynix.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_hynix.c,v  <--  ddr_config_hynix.c
+new revision: 1.6; previous revision: 1.5
+done
+Checking in clkrst/app/ddr_config_hynix.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_hynix.h,v  <--  ddr_config_hynix.h
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/app/ddr_config_micron.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_micron.c,v  <--  ddr_config_micron.c
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/app/ddr_config_micron.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_micron.h,v  <--  ddr_config_micron.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/app/module_clock_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/module_clock_info.c,v  <--  module_clock_info.c
+new revision: 1.27; previous revision: 1.26
+done
+Checking in clkrst/app/module_clock_info.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/module_clock_info.h,v  <--  module_clock_info.h
+new revision: 1.21; previous revision: 1.20
+done
+Checking in clkrst/app/operation_point_iterator.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/operation_point_iterator.c,v  <--  operation_point_iterator.c
+new revision: 1.8; previous revision: 1.7
+done
+Checking in clkrst/app/sdram_config.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.c,v  <--  sdram_config.c
+new revision: 1.11; previous revision: 1.10
+done
+Checking in clkrst/app/sdram_config_181BGAInternal.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_181BGAInternal.c,v  <--  sdram_config_181BGAInternal.c
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/app/sdram_config_181BGAInternal.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_181BGAInternal.h,v  <--  sdram_config_181BGAInternal.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/app/sdram_config_samsung.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_samsung.c,v  <--  sdram_config_samsung.c
+new revision: 1.9; previous revision: 1.8
+done
+Checking in clkrst/app/sdram_config_samsung.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_samsung.h,v  <--  sdram_config_samsung.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/app/system_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.c,v  <--  system_info.c
+new revision: 1.25; previous revision: 1.24
+done
+Checking in clkrst/app/system_info.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.h,v  <--  system_info.h
+new revision: 1.18; previous revision: 1.17
+done
+Checking in clkrst/basefunc/clkrst_basefunc.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+new revision: 1.14; previous revision: 1.13
+done
+Checking in clkrst/driver/clkrst_driver.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_driver.c,v  <--  clkrst_driver.c
+new revision: 1.10; previous revision: 1.9
+done
+Checking in clkrst/driver/clkrst_driver.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_driver.h,v  <--  clkrst_driver.h
+new revision: 1.12; previous revision: 1.11
+done
+Checking in clkrst/test/clkrst_test.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.25; previous revision: 1.24
+done
+Checking in include/sys.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/include/sys.h,v  <--  sys.h
+new revision: 1.48; previous revision: 1.47
+done
+
+后来sdram_config.h没有完全更新成功, 用上周五的备份重新更新后解决. 
+
+12:33 2009-6-15
+VC0830, SV, sdio, clkrst, clkswitch, 电压, ACMD41 timeout
+1, sd问题, 还是上周那个acmd41问题, 见"17:16 2009-6-12". 电源只有2.3左右(用示波器量的). 
+2, 282 mobile 136MHz用自己282cpu实验.
+1), dma:
+(1), me: 1145_me_sv_bin_282BGA_mddr_forZouWeiRan.pak
+136_136_181, fail 1/1000; 5000 pass
+136_136_136, 1000 pass.
+(2), vdec: 1259_vdec_sv_bin_282BGA_mddr_forZouWeiRan.pak
+136_136_181, 5000, pass.
+<TODO>为什么me下第一次1000没过, 第二次做5000过了. me下dma真的比无OS下容易出错么? 关注. 当时fengyaya也有类似问题. </TODO>
+2), me, open, play: 
+115722.67 ms elapsed; 89783.77 ms taken by rv decoder
+1982 frames decoded; 690 frames skipped
+fps =  17.13->22.08
+
+13:26 2009-6-15
+MaGuiJun邮件"答复: xterm03"20090519_1406
+各位工程师：
+老的上网服务器xterm01和02一直负荷比较高，现在MIS新增了第三台xterm03上网服务器
+这台机器是xterm03.vimicro.com ，采用与xterm01和xterm02相同的配置，但使用方法略有不同：
+1.大家可以使用xmanager直接登录xterm03.vimicro.com ，不需要再使用putty和xming的方式 (以后我们也会在Xterm01和02上支持使用Xmanager)
+2.登录协议采用ssh的方式，登录后firefox会自动弹出。
+3.汉字输入法与原来相同
+4.磁盘共享的方式也相同
+5.安全策略与原来也相同
+6.用户名与原来相同，密码为用户名加1234，例如：用户名为adsf，则密码为asdf1234
+还有什么问题，请大家随时给我发邮件联系！
+谢谢大家的支持！
+因为是新上线系统，难免有不足之处，请大家及时反馈!
+我们提供一个xterm服务器负载状态查询页面,大家可以访问http://xterm03.vimicro.com/ganglia 来查看所有xterm服务器状态并选择其一使用.
+谢谢
+信息部 
+
+14:10 2009-6-15
+VC0830, SV, video, sensor, 电源
+zouweiran板子, 电源板j11不接 snr不能用. 可能是sensor供电或使能用的. 
+
+14:26 2009-6-15
+VC0830, SV, clkrst, clkswitch, mobileddr, micron
+目前用的这个Micron mobile ddr是双片16bit, 128Mbyte的. 但是测试时(包括WangKe vdec测试; ZouWeiRan电流测试)都编译的32Mbyte方案.
+
+15:36 2009-6-15
+<TODO>晚上复现问题181不能load的问题.</TODO>
+
+15:41 2009-6-15
+VC0830, SV, storage, sdio
+FengBeiZhan修改memory分配脚本时遇到对sd卡操作时有时出现marb sdio interrupt error. 据beizhan说这说明对sdio,memory访问越界. 
+Vc0830中MARB_SDRAM_SIZE[3:0](0x60010000)描述系统memory大小, 最大支持128Mbyte. 但是没有找到在哪里配置的这个寄存器. 
+
+16:58 2009-6-15
+VC0830, SV, <TODO></TODO>
+1, 32G sd卡, 明天上午完成;
+2, "9:56 2009-6-11"clkrst, clkswitch, 整理代码
+
+20:08 2009-6-15
+1, 6x放在了左上角. 
+2, dragon中为什么没有0x60011020寄存器? 
+3, 测试五次.
+1), boot pass
+2), boot pass
+120->136, dma=10, times=5, fail @ 31. 切频到480_120_120_120.
+3), boot pass
+120->136, dma=10, times=5, 设断点没问题.
+120->136, dma=10, times=5 pass
+120->136, dma=10, times=10, fail @ 23: 512_128_128
+4), boot fail 1st, boot pass
+120->136, dma=10, times=5, pass
+120->136, dma=10, times=5, fail @ 2: 496_124_124
+5), boot pass
+120->136, dma=10, times=5, fail @ 30: 480_120_120
+6), boot pass
+120->136, dma=10, times=5, fail @ 8: 496_124_124
+4, 估计是"10:01 2009-4-16"1-6)问题.
+pll稳定时间需要300us. <TODO>给YangZuoXing发信</TODO>
+实际上大于54.61MHz后, 就有这个问题. 只是181BGA切频到pll2用的是136MHz, 问题比较明显. 
+5, (21:10 2009-6-15)还是不稳定, 继续调试. 
+(9:55 2009-6-16)继续:
+count算错了, 改为, 测试稳定性: 
+if ( 1 == reConfig ) {
+//	while((HAL_READ_REG(CLOCKRST_PLL_STATUS) & 0x1) != 0x1); //wait pll1 stable
+    while((Clkrst_GetPllStatus(pllId) & 0x1) != 0x1); //wait pll stable
+    INT32 cnt = 300 - Clkrst_GetPllWait() /  pll_bus_frq + 1;//加1避免不够300us
+    while(cnt-->0);
+}
+120->136, dma=10, times=10, fail @ 46: 544_136_136
+另: 上次不能boot的问题, 也可能是下载到baseband的映像没有下载全造成的. 
+6, cnt计算改为
+INT32 cnt = 300 - Clkrst_GetPllWait() /  pll_bus_frq + g_ClkrstPllStableAdd;
+g_ClkrstPllStableAdd可以通过命令设置. 
+7, 发现cnt算错了, 上面算出us了, 改为: 
+UINT32 cnt = 300 * pll_bus_frq - Clkrst_GetPllWait()
+            + Clkrst_AppUs2Cnt(g_ClkrstPllStableAddUs, pll_bus_frq);
+while(cnt-->0);
+while大于10个clk, <TODO>准确计算clk时间, 需要用cpu, clk计算. 目前是假设cpu和bus clk相同</TODO>
+这样修改后, 每次切频delay 1s, 仍然在fail:
+120->136, dma=10, times=10, fail @ 27: 528_132_132
+8, 在切pll后也delay, "1209_vdec_sv_bin_181BGA_fixPllStableBug_在切pll前后都delay", dir: "D:\work\VC0830\SV\code_image\20090616"
+1), 切前后delay1s(g_ClkrstPllStableAddUs=100000):
+120->136, dma=10, times=10, pass
+2), 切前delay1.3ms, 后delay1ms(g_ClkrstPllStableAddUs=100):
+120->136, dma=10, times=10, pass
+3), g_ClkrstPllStableAddUs=1:
+120->136, dma=10, times=10, pass
+4), g_ClkrstPllStableAddUs=0:
+120->136, dma=10, times=10, pass.
+5), 换回没有后delay的
+120->136, dma=10, times=10, fail @ 4
+说明不是"预热"能解决问题的.
+9, 为了排除是否与后delay有关. 排除次数问题. 
+测试"120->136, dma=10, times=20", 比较A: "1131_vdec_sv_bin_181BGA_fixPllStableBug"和B: "1209_vdec_sv_bin_181BGA_fixPllStableBug_在切pll前后都delay"差异. 
+fail @  num 后面注的频率是切频目标频率. 用rvdebug观察, 一般是切频到pll2后的Clkrst_SwitchGenCpuBus()函数死. 
+1), 
+B: 120->136, dma=10, times=20, pass
+A: 120->136, dma=10, times=20, fail @ 90: 480_120_120
+2), 
+B: 120->136, dma=10, times=20, pass
+A: 120->136, dma=10, times=20, fail @ 27: 512_128_128
+3), 
+B: 120->136, dma=10, times=20, pass
+reset
+A: 120->136, dma=10, times=20, fail @ 31: 496_124_124
+4), 
+B: 120->136, dma=10, times=20, pass
+reset
+A: 120->136, dma=10, times=20, fail @ 1: 480_120_120
+不确定是否与封装有关: 
+181BGA下必现: 因为切频到pll2=528, cpu=bus=132, 这个bus频率较高, pll可能完全没有稳定. 在282封装下也有类似问题. 其它封装暂时没有发现. 
+
+10, 发信: JiangBo, ZhaoGang, LvPin, YangZuoXing, AiGuo, 830qa. zhangjian邮件"pll和切频bug"20090616_1342
+问题一: pll stable bug
+1, 切pll前必须加入足够的延时才能保证pll稳定, 目前总延时(pll内部stable cnt + 软件while循环)大约300us. 这和IC描述一致.
+2, 切频到pll后, 需要等至少几个clk. 否则即使切pll前delay 1s也会死. 这有点奇怪, 按IC说法应当是切pll前等足够时间使pll稳定. 
+
+问题一的实验过程:
+测试"120->136, dma=10, times=20", 比较A(切pll前delay)和B(切pll前后都delay)差异. 
+fail @  num 后面注的频率是切频目标频率. 用rvdebug观察, 一般是切频到pll2后的Clkrst_SwitchGenCpuBus()函数死. 
+1), 
+B: 120->136, dma=10, times=20, pass
+A: 120->136, dma=10, times=20, fail @ 90: 480_120_120
+2), 
+B: 120->136, dma=10, times=20, pass
+A: 120->136, dma=10, times=20, fail @ 27: 512_128_128
+3), 
+B: 120->136, dma=10, times=20, pass
+reset
+A: 120->136, dma=10, times=20, fail @ 31: 496_124_124
+4), 
+B: 120->136, dma=10, times=20, pass
+reset
+A: 120->136, dma=10, times=20, fail @ 1: 480_120_120
+
+问题二: 板子上电后, 直接切到较高频率会死, 从240_120_120逐步切频就没有问题, 感觉cpu"预热"了就好用. zhangjian, fengbeizhan, wangke都发现此问题. 
+
+补充: 是, 第二批181片子. socket板 
+
+11, 代码, 映像和log
+总目录: D:\work\VC0830\SV\code_image\20090616\pll_stable_bug
+D:\work\VC0830\SV\code_image\20090616\pll_stable_bug\1209_vdec_sv_bin_181BGA_fix代码: PllStableBug_在切pll前后都delay\20090616_1355_Clkrst_pllStableBug.rar
+
+12, (21:20 2009-6-16)
+zhangjian邮件"答复: pll和切频bug"20090616_2119. 这是对JiangBo邮件的回复.
+1, 我对QA如何进行clock switch测试还不太了解： "120->136, dma=10, times=20"是什么意思呢？
+下午邮件写的比较简略, 我详细解释一下. 
+切频测试: 我们把pll1->pll2->pll1, pll1->xclk->pll1, pll2->pll1->pll2等等这样都看成是”一次”切频. 用自动切频程序在不同频点之间按指定顺序进行切频和dma测试. 测试切频是否正常. 
+"120->136, dma=10, times=20"表示从cpu=bus=120->136->120(step=4MHz), 这样连续切频, 每次切频后做10次dma lli测试. 120->136->120这个过程一共做20次. 
+2, 另外，”切频到pll后, 需要等至少几个clk.”，请问软件是如何判断切频已经完成的（我原来的理解是clock switch过程中ARM无法得到新的instruction，所以就停在那里，一旦ARM可以继续运行了，就说明切频完成了，不知道这个理解对不对？？？），
+软件也是如此理解的流程: 写入CLKRST_PLL_SWITCH(0x60000020)后, 开始切频流程, arm可以继续执行软件就认为切频完成了, 但是在181BGA上, 如果直接执行后面的语句, 有时会死. 具体位置: 用rvdebug跟了几次, 一般是死在pll1切到pll2再切回pll1之前, 配置cpu,bus divider的函数里面. 
+3, 所谓”等至少几个clk”又是如何等的呢？
+是一次while循环(大约是10个clk). 之前实验过等100次, 1000次while都可以. 最后发现等1次while也可以. 但是不做这个while循环必定不行. 
+4, 然后又做了什么操作，导致不等的话就会死掉？
+这个不确定, 感觉和死在写cpu,bus divider寄存器中. 没有证明. 
+5, 测试是在PLL1和PLL2之间进行的吗？切频后死在PLL1 Channel上还是PLL2 Channel上，还是两者都有？
+181BGA测试pll1->pll2->pll1切频. 观察了三次, 都死在从pll2准备切到pll1过程中. 
+不过在282BGA中的类似现象中, 感觉是死在pll1->pll2->pll1这个切频之后, 因为我在pll1->pll2->pll1切频后加入delay就不会死. 
+
+13, zhangjian邮件"答复: pll和切频bug"20090617_1259, 
+1), lvpin问题:
+切频后（配置CLKRST_PLL_SWITCH(0x60000020)）后，如果不加delay，接下来会做什么操作？是修改SDRC的参数吗？
+从pll2切回pll1时，程序具体死在什么地方，固定吗？程序放在什么地方？
+2), 回复:
+从pll2切回pll1时, 依次做如下操作: re-generate pll1, configure cpu, bus pll1 divider, cpu bus pll1 ratio; configure sdrc, clock switch to pll1. 昨天用redebug调试时, 三次都死在configure cpu, bus divider函数(Clkrst_SwitchGenCpuBus)中
+具体位置不确定. 今天测试在使用181板子, 稍后和测试协调板子, 并确定具体死在什么位置.
+
+20:18 2009-6-15
+VC0830, SV, storage, sdio, memory bank(新memory分配方案), <TODO>关注进展</TODO>
+FengBeiZhan邮件"答复: memory bank"20090615_1800
+由于以前的memory分配方案里，physical and virtual 是一一对应的，sd 可以用cb，且配置到dma地址里，而现在的physical and virtual是不对应的，在sd里必须用自己分配的ncnb空间；
+在脚本里添加如下参数用于控制：
+ /*cb memory physical virtual: 0:  physical == virtual  1:physical != virtual  */
+ __cb_memoryPhViInfo = 1;
+但是这样会影响sd的效率，请大家讨论；
+
+10:58 2009-6-16
+VC0830, SV, clkrst, clkswitch, memory扫描参数
+只要下面的参数是扫描出来的, 其余是根据memory datasheet确定. 
+1, ddr: dll(adj0,1,2,3), pll_sdrc_adj
+2, sdram: adj0,2,3
+
+11:03 2009-6-16
+VC0830, SV, clkrst, clkswitch, zhulei切频不稳定的回信
+1, 现象
+zhulei转发邮件"答复: 功耗管理接口描述"20090615_2003
+
+在rdk中定义如下枚举类型：
+//power manager
+ enum POWER_MANAGE_TYPE{
+    CLK_POWER_MP3 = 0,
+    CLK_POWER_MP4  = 1,
+    CLK_POWER_480P  = 2,
+    CLK_POWER_SOFTPARSER  = 3,    
+    CLK_POWER_720P  = 4,        
+    CLK_POWER_RESERVED = 0x7fffffff
+};
+功耗管理函数声明：
+int  VIM_Power_Manager(enum POWER_MANAGE_TYPE type)；
+目前，支持上述5个频点，这五个频点分别对应
+Pll   cpu    bus    vdec          type
+384    48    48     gate       CLK_POWER_MP3
+384    96    48     64         CLK_POWER_MP4
+480    240   120    120        CLK_POWER_480P
+600    300   100    gate       CLK_POWER_SOFTPARSER
+576    288   144    192        CLK_POWER_720P
+
+其余模块可能还有需要gate的地方，需要进一步确定
+第一组频点切换后不会死机，可能低频下运行不稳定，需要找到死机的地方确认
+
+在主界面上，通过按键去调用VIMC_POWER_MANAGER();测试各频点是否有效工作。 请再
+调试一下吧。
+从144/288切到以下频点情况：
+    CLK_POWER_MP3 = 0,-->失败，死机
+    CLK_POWER_MP4  = 1, -->失败，死机
+    CLK_POWER_480P  = 2, --》能工作 120/240
+    CLK_POWER_SOFTPARSER  = 3,    -->失败，死机
+    CLK_POWER_720P  = 4, -->能工作   144/288    
+
+2, 答复
+zhangjian邮件"答复: 功耗管理接口描述"20090616_1120
+1, EVB板与样机memory参数不同. 请按下面步骤确定样机memory参数是否稳定:
+1), 按需要(例如384_48_48)使用我们给出的memory扫描程序扫描样机参数. Pcddr的pll_sdrc_adj, adj0,1,2,3这个参数都是扫描出的. 不同bus divider需要重新扫描pll_sdrc_adj.
+非扫描参数中sdrc_mode(0x60011004)bit[6:4]CL在任何频点下都应该相同, 否则无法动态切频. 
+2), 静态切频做dma测试确认memory是否可用.
+3), 动态切频, memory压力测试确定memory是否稳定. 例如vdec解10m 720p到lcd.
+youhai有相关工具. 
+2, pll在480->672MHz工作稳定. 在480MHz以下暂时未发现不稳定. 
+
+14:00 2009-6-16
+<TODO>下午安排</TODO>
+1, 开始整理代码. 写出整体思路. 
+
+15:17 2009-6-16
+分析FengYaYa测试结果. 查282BGA mobile ddr bus=100MHz 是否稳定
+1, core=1.5, memory=2.5
+1), cpu=bus=vdec=100Mhz, dma lli 5000 pass.
+2), cpu=200MHz, bus=vdec=100MHz, 
+(1), autoswitch: dma=10, time=20, pass.
+(2), dma lli 5000 pass.
+memory=2.5是后来发现的, 当时是我给Fengyaya搭的环境, 所以Fengyaya这个测试还得继续测. 
+
+15:47 2009-6-16
+VC0816, SV, 项目状态
+ChenYing邮件"答复: 816 sv验证准备事宜"20090616_1446
+LQFP176的ES预计将于本周六发货，可能将在下周一或下周二到北京。
+COB的EVT和SV板也将可能在下周一或下周二到北京。周一希望较大。
+请大家在本周五前完成所有的软件硬件准备工作。多谢！
+816截止目前为止，一路有惊无险，大家克服了很多困难，按时完成了工作。在此预祝芯片测试工作也一切顺利，早日到达第一个milestone （ 样品ready并开始量产）。
+
+15:56 2009-6-16
+VC0830, SV, storage, sdio, 测试32Gsd卡
+YangZuoXing邮件"about action items for 830"20090607_1653, item 10.
+1, 同事信息, 步伟(BuWei), 8111, 借16G, 32G sd卡. 
+暂时没找到. 
+
+16:47 2009-6-16
+VC0830, SV, storage, nand速度, 双plane, <TODO>看双plane是啥意思</TODO>
+zhulei那边nand裸读11.8m, 加双plane后(接近)16m
+
+19:15 2009-6-16
+VC0830, SV, clkrst, clkswitch, CpuBusVdec频率测试, 181BGA, 无vdec下cpu,bus最高频率测试
+自FengYaYa邮件"830SV_181pin_CPU/BUS_TestReport"20090619_1808
+1, core=1.2
+1), cpu:bus=1:1
+cpu=bus=136MHz, 5/5
+2), cpu:bus=3:1
+cpu330_bus110: 2/5; 318_106: 2/5; 312_104: 1/5;
+2, core=1.5
+1), cpu:bus=1:1
+cpu=bus=136MHz, 5/5
+2), cpu:bus=3:1
+426_142: 2/5; 414_138: 2/5; 408_136: 1/5;
+
+20:24 2009-6-16
+项目, VC0820, cp, 手机
+YiNong邮件"转发: 请看878手机产品宣传"20090413_1143
+魅影M9
+http://www.shanzhaiji.com/html/newmobile/200904/10-1150.html
+http://www.shanzhaiji.cn/mobile/20090404/9681.html
+另: "18:17 2009-6-10"598 overview
+
+20:40 2009-6-16
+(9:34 2009-6-17)
+(10:13 2009-6-20)
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 分析Clkrst整体代码结构, <TODO>文档总结</TODO>
+<TODO>有空和LingMing讨论830 windowCE 时钟,切频是怎么做的</TODO>
+1, app层
+1), clkrst_app_public.h: clkrst以外模块只需要include这一个头文件.
+2), clkrst_app_switch.c/h(clkrst_app.c/h中提取切频相关函数): cpu,bus切频API, 完成cpu,buspll1<->xclk, pll1<->pll2切频流程. 
+3), operation_point_iterator.c/h -> clkrst_app_operation_point.c/h: 工作点切换, 目前只用于连续切频测试. 希望将来用于场景切换, 加入根据用户需要和/或系统负载切换工作点的功能, 参考clkrst.c中相关代码. 
+依赖: sysinfo.c, driver, basefunc
+4), module_clock_info.c/h -> clkrst_app_module_clock.c/h
+管理830内部所有时钟(目前没有考虑vdec, audio, video). 提供时钟操作函数.
+其中的TDivider和TFreq移到driver层.
+module_clock_info.h允许其它几个文件include.
+
+2, memory配置目录(属于app层, 但是目录独立).
+sdram_config.c/h -> clkrst_app_memory_config.c/h: 提供memory配置通用接口.
+
+3, driver层;
+1), clkrst_driver.c/h: .c保存无法归类的driver操作函数: TFreq.
+.h是driver层对外接口, 上层只需要include这一个头文件. 
+2), system_info.c -> clkrst_loapp_systeminfo.c
+核心是TSystemInfo结构体, 描述了系统切频(场景转换)时所需的最少参数(cpu,bus,vdec divider, cpu bus clock source及配置). 提供的get函数, 搜索组合函数, 将来也要提供set函数. 
+把divider本身的操作独立出来放到driver层clkrst_drv_divider.c/h
+3), clkrst_drv_divider.c/h(新建): 负责所有divider的操作. 包括divider value和divider register转换. 维护divider列表(目前是静态表, 将来可能是动态计算的).
+ratio也放到这层, radio是根据div计算的. 用频率计算可能有误差. 
+
+4, basefunc层;
+clkrst_basefunc.c/h: 提供clkrst模块和sdrc模块全部寄存器操作函数. 
+
+5, 总图
+
+app    clkrst_app_switch operation_point_iterator
+                module_clock_info.c
+memory
+
+
+7, 文档
+与core电压, memory电压有关, 切频稳定性与core电压有关, 切频实验和测试前一定写明这
+两个电压. 
+
+8, 判断是否是c99:
+defined __STDC_VERSION && __STDC_VERSION >= 199901L
+
+9, 修改:
+1), 适当的地方列出到底支持哪些频率. 
+
+9:50 2009-6-17
+<TODO>中午实验Lvpin问题, 确定具体死在什么地方</TODO>
+
+14:42 2009-6-17
+VC0830, SV, clkrst, clkswitch, CpuBusVdec频率测试, 282BGA
+WangKe, FengYaYa, ZhangLu 282BGA测试映像: 
+D:\work\VC0830\SV\code_image\20090609\image\1605_vdec_sv_bin_282BGA_mobileddrMicron.pak
+
+13:03 2009-6-18
+VC0816, SV, 任务分配
+FengBeiZhan邮件"816 sv 验证的任务分配及事项"20090618_1302
+hi，all
+如下是816 sv 验证的任务分配及事项，请大家仔细check自己对应的部分，有什么问题及时找我和aiguo。
+VC0816 SV Verification 
+Module Software owner Test owner
+cpu_subsystem
+arm(cache)      zhoudashan
+clkrst/切频     zhangjian
+interrupt       zhoudashan
+Timer & Watchdog zhoudashan
+video_subsystem
+sif             zhangpu/shuyu
+ipp             zhangpu/shuyu
+lcdc            zhangpu/shuyu
+lcdif           zhangpu/shuyu
+TVEN            zhangpu/shuyu
+jpeg            decode zhuliying
+jpeg            encode zhuliying
+memory_subsystem
+sdrc            zhoudashan
+marb            zhoudashan
+dmac            zhoudashan
+sdram           zhoudashan
+storage_subsystem
+udc             sunguangyue
+sdio            fengbeizhan
+nfc             liaozhicheng/lingming
+peripheral_subsystem 
+uart            suanguangyue
+aud             lvboxue
+TPI             lvboxue
+kpd             lvboxue
+i2c             lvboxue
+Spi             liaozhicheng
+pwm             liaozhicheng
+padc            zhoudashan
+other_subsystem
+me/decode lib   zhoudashan/lidongliang/caijin
+bootloader      liaozhicheng/lingming
+autotest        shuyu 　
+
+1)816 sv 验证中，工作量最大的是如下模块：
+a）clkrst/切频
+b）me/decode lib
+c）padc
+除以上3个模块外，其他的模块sv 和fpga差别不大，工作量比较小；
+2）对于padc模块，dashan只负责通用的功能，具体各个模块对padc的使用，由各个模块owner负责；
+3）以上分配方案中许多模块由多个负责人，但最终将会由第一负责人负责；
+4）video pclk的sv 分配，zhangpu现在就可以着手开始了；
+5）video 视频文件过2次ipp，也需要zhangpu/shuyu来完成；
+6）driver spec没有完成的，也要按照如上的负责情况完成；
+7）buxue负责的audio等程序，现在可以开始给816里移植了；
+总之：我们希望尽快完成816 funtion的验证，初步计划2个星期完成功能的验证；
+
+13:18 2009-6-18
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, memory代码整理
+认真分析, 理清思路, 今天下午一定把代码整理好, 晚上要编译通过, 开始测试. 明天一边测试一边写代码. 
+1, 影响memory参数的因素:
+型号, 电路连接关系(几个chip, 串并联), 系统板类型, cpu封装, 频率, clocksource, busdivider. 
+1), 型号, 电路连接关系是随memory板确定而确定的. 相同memory板放到同一文件, 如果为已有memory板加入新参数, 只能通过下面定义的参数区分. 
+typedef struct tag_TMemoryBoardParm
+{
+    enum MEM_BOARD_IDenum boardId;
+    char *name;//对memory板name, 一般与TMemoryInfo名称除封装以外的名字相同
+    enum MEM_ID id;
+    //为了简化, 电路连接关系直接用两个变量表示.
+    UINT32 numOfChip;
+    enum MEM_CONNECT_TYPEenum connect;//串联(SERIES), 并联(PARALLEL)
+    UINT32 reserved;//可能还和电阻, 电容大小有关.  
+} TMemoryBoardParm, *PTMemoryBoardParm;
+
+另外还有与memory参数无关, 但系统需要了解的属性
+//memory属性, memoryBoardID是主键. 
+typedef struct tag_TMemoryAttr
+{
+    enum MEM_BOARD_IDenum id;
+    enum MEMORY_TYPE	type;	//TODO: 改为MEM_TYPEenum
+    enum MEM_VENDORenum		vendor;
+    enum MEM_BANKNUMenum	bankNum;
+    enum MEM_BITWIDTHenum	bitWidth;
+    UINT32 speed;//速度
+    UINT32 size;//memory 大小.
+} TMemoryAttr, *PTMemoryAttr;
+
+2), 系统板类型和cpu封装是memory与cpu之间电路特性, 
+系统板类型和cpu封装有时有必然联系. 例如mp4板必然是176LQFP.
+UINT32 系统板类型;
+包括SV, MP4, MOBILE
+UINT32 cpu封装;
+包括128, 176, 181, 282
+3), 剩下的频率, divider和clock source是与具体系统状态有关.
+clocksource理论上没有影响, 实际有差异
+busdivider只在ddr下, 影响pll_sdrc_adj. pll1, pll2参数整体不同, 但对应bit相同. 
+
+16:16 2009-6-18
+VC0830, SV, storage, sdio, 问题很多, <TODO>整理, 总结</TODO>
+1, beizhan sv板用了fpga映像, 等不到命令response.
+出这个问题的原因是现在perl强制要求eclipse build参数-sdram=xx的xx必须存在, 如果build参数写成-sdram -sv, perl可能把-sv当作参数处理了, 所以造成sv未定义, perl就定义了_FPGA_.
+2, boxue audio_sv sd卡等不到命令:
+282BGA+sdramSamsung(板子全套都是zhangpu的)
+1), 查板子, boxue底板有问题. cpu板, 电源板无问题.
+2), 用我的板子跑boxue编译的audio_sv仍有问题
+3), 编译sdio
+(1), 串口乱码
+(2), 单步跟踪sd, fat, mount成功. sdio pass
+(3), 查串口, 发现per不对, 是clock_init()写错的. 
+sv中per是bootloader配置的. 只有fpga中是vc0830_main.c的clock_init()配置的.
+4), 发现定义了_FPGA_
+(1), clean, 重新编译. 发现是830macro.h中写入的是FPGA
+(2), 注意到.cdproject没有更新, 更新后, 是正常编译为__SV__.
+这个问题就是上面的问题1. 保留的旧的.cdproject, 希望复现. 
+位置: "D:\work\VC0830\SV\其它bug和问题相关文档\20090618_cdproject造成编译sv但830macro.h定义FPGA"
+5), 编译后在uart_init()中跑飞. 是ncnb malloc中read寄存器跑飞.
+找feizhan帮忙看, 
+6), beizhan
+(1), 释放memory有不严谨的地方. 但应该与这个bug无关.
+(2), 实验多次,
+一般都是死在_SearchFreeSpace的
+if ((HAL_READ_MEM32(start + CHUNK_SIZE_POS) >= size) &&
+    (HAL_READ_MEM32(start + CHUNK_SIZE_POS) - size <= MIN_GAP))
+一次没死(设断点调试), 一次在_SearchFreeSpace()函数的第二个while死循环. 
+用rvdebug查看start=0x01000000时, 读0x01000000+20地址内容发现不正确. 所以造成第一次HAL_READ_MEM32(start + CHUNK_SIZE_POS)读出的是不存在的地址. 
+beizhan据此认为是memory分配问题. 但是在beizhan本机没有问题. 
+7, FengBeiZhan邮件"auido环境的机子"20090619_1128
+实验室昨天测试audio的那个机子弄好了；把cvs删除后重新check，编译就ok了。
+
+3, zhangjian #8板子, nand烧写后, 重启提示sdram参数错误. 下载并运行映像:
+nand, resetnand 正常
+ftl, format, 正常. 
+此后烧写正常.
+
+21:11 2009-6-18
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, memory代码整理, 续
+1, 还需要的修改
+1), 改文件名<DONE>
+2), 加入允许用户自由选择任意memory参数功能. 这个参数可以用于切频. 
+比较简单的办法是把g_MemoryInfo[]第一个设为用户自定义. 这样搜索时最容易搜索到这个. 
+
+2, review后
+//review后把封装也定义为PACKAGE_TYPE
+
+22:47 2009-6-18
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, memory代码整理, 续, <DONE>
+1, sdram改完了, 明天改ddr, 得加入adj数组.
+2, 加入set cur board等函数. 
+3, 测试memory切频同时, 修改函数名称. 
+
+13:12 2009-6-19
+(9:52 2009-6-20)
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 文档, 命名规则
+1, 文件名:
+clkrst模块中除了memory配置, 文件名按clkrst_level_filename.c命名, 例如clkrst_drv_system_info.c, 
+memory配置目录: mem_type_vendor_other.c/h, mem_config.c/h
+other可选. 
+2, 变量名:
+CpuBusPll1缩写为Cb1, CpuBusPll2缩写为Cb2, 
+VdecBus缩写为Vb
+3, 函数名:
+Clkrst_filenameAbr_func.
+filenameAbr指文件名除了clkrst和level外的缩写. clkrst_drv_system_info.c函数命名时Clkrst_SysInfo_xxx.c
+
+15:56 2009-6-19
+VC0830, SV, 资产, 从Fengbeizhan处借了mobile ddr给ZouWeiRan, 使用1-2天. 
+
+16:35 2009-6-19
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 文档, 讲稿
+1, clkrst实现的功能:
+目前clkrst并没有实现所有功能. 只是满足当前需要. 
+1), 模块时钟管理, 除了video, audio以外的时钟都由clkrst模块管理.
+video, audio将来也需要由clkrst模块管理这样便于系统做时钟,电源管理. 例如video不用的时候可以考虑关pll3.
+
+2, 杂项
+Clkrst_SwitchPll12Pll1: 
+现在必须是给出TSystemInfo后, 先调用Clkrst_SwitchMakeInfo计算module divider, 再调用Clkrst_SwitchPll12Pll1切频. 
+
+3, 限制:
+1), xclk只考虑了12MHz情况. 
+
+4, memory支持动态修改是指用正确的打包工具, 或脚本初始化memory后. 如果系统编译memory与实际memory不同, 可以修改切频参数. 与切频无关的配置参数. 不能动态修改. 
+
+18:19 2009-6-19
+VC0816, SV, 项目进展, 项目delay
+1, LinChunFen林春芬邮件"答复: VC0816 LQFP封装delay通知"20090619_1814
+很不幸,LQFP176的VC0816TEST预计在周六的晚上才会出来,因此只能够周一出货.
+LQFP144的VC0816PWNA ASECL尽力在6/23前出货.
+Sorry!
+(zhangjian注: 以下为LinChunFen转贴aseglobal的Vincent Liang邮件) 
+由於VC0816是全新的WAFER & DEVICE 
+所以我們在一開始的設定上與參數的確認上花了比較多的時間 
+VC0816TEST目前是在Molding stage 
+預計是6/20晚上才會出來 
+PC說星期六出貨需要在早上9:00以前就準備好 
+星期天沒有辦法出國外 
+所以會來不及這個禮拜出貨 
+會於星期一出貨 
+
+VC0816PWNA 
+我會請產線盡最大的能力 
+盡量提早出貨給VIM 
+target is 6/23 or 6/21. 
+
+2, 注: 日月光集團, www.aseglobal.com, 是做封装和测试的公司. 网页介绍说是"世界第一大封装与测试公司. "
+
+18:43 2009-6-19
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 疑问
+1, 是否可以改为像原来那种确定切频参数时一起确定memoryparm呢? 
+原来是这样. 
+后来改为在cfg_sdrc获取. 修改原因是memory parm会根据systemInfo变化. 
+现在memory info, memory parm都是const类型. 
+现在考虑的是Clkrst_Mem_GetMemoryInfo中copy一份所需memory参数. 这样TMemoryParm就不能删除clkrst_pll_sdrc_adj变量. 如果是copy一份, 可以避免重新查找clkrst_pll_sdrc_adj, 重新计算sdrc_refresh. 查找clkrst_pll_sdrc_adj()的Clkrst_Mem_GetSdrcAdj()是允许fail的. cfg_sdrc中允许fail不好, 因为cfg_sdrc时已经在切频流程中, 如果不能获得参数就不应该切频了. 
+2, 如果确定了copy方案
+1), 确认目前clockswitchinfo的memory parm是否有结构体. memory parm只能是dst和medium各保存一份, 不能任意malloc.
+2), Clkrst_Mem_GetSdrcAdj()就最好不要调用全局变量了. 全局变量调用的越少越好. 
+
+20:25 2009-6-19
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, <TODO></TODO>
+1, 先编译通过.
+2, 再修改
+3, 寄存器调用由basefunc完成.
+4, 规范函数名称. 
+
+20:32 2009-6-19
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 疑问
+1, TMemoryParm是否需要memory type呢? 
+2, clockswitchinfo中是否需要memory info呢? memory info中有没有切频所需参数呢? 
+TMemoryInfo.pll2sysInfop, 是在什么时候赋给clockswitchinfo呢? 
+在Clkrst_SwitchGetPllInfo()中通过g_Mem_CurMemInfop得到. 
+3, <TODO></TODO>需要保证g_Mem_CurMemInfop不是空, 添加clkrst_test中选择infop函数. 
+4, clkrst_CheckSysInfoOverflow需要检查溢出, 这样看, 还是需要memory info中列出频率范围的. 或者针对特定clock source判断是否溢出. 
+判断溢出的函数可以返回TFreq(min,max表示范围)及对于memory parmp. 便于getmemoryinfo函数选择.
+
+9:19 2009-6-20
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 疑问
+Q: 解决clkrst_drv_system_info.c的g_PreferedMax和g_Clkrst_PllCpuBusVdecMax
+1, 把Clkrst_SysInfoPrintCpuBus(), getPreferedIndex()从drv system info移到app. 
+得到g_PreferedMax的函数在clkrst_app_module_clock.c中提供. 
+2, review clkrst_drv_system_info.c, 
+1), 哪些函数适合放到app层.
+2), 哪些文件适合放到其它文件? 
+ratio能否都移到clkrst_drv_divider.c/h? 
+3, 把systeminfo和clkrst_drv设为平级, divider比它们第一级. system info和clkrst_drv之间不要相互调用. 
+
+13:21 2009-6-20
+VC0830, SV, Linux移植文档, Linux移植计划, driver开发工作量分析
+不包括串口, timer, clock等基础模块. 以video工作量为1, 其它主要工作指除了代码阅读, 移植以外的工作.
+模块    工作量  接口/库     其它主要工作
+video   1       framebuffer 
+(不含snr)
+sensor  0.7     v4l2        
+audio   0.7     alsa        使用alsa-lib和shell脚本控制audio设备
+vdec    2       gstreamer   涉及到内核和应用程序(gsteamer是多媒体库)通信, 性能
+                            优化等. 
+sd      1       sd          
+cmmb    1.7     v4l2        使v4l2支持cmmb(v4l2只支持dvb, 不支持cmmb)
+pmu     2       ?           通过sys支持电源管理, 建立电源管理规则
+kpd     0.5     input
+tpi     0.5     input
+spi     
+
+16:43 2009-6-20
+<TODO></TODO>
+有没有什么方法能保证4字节对齐? 
+
+10:54 2009-6-21
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 必须要整理的部分
+1, 支持ads编译:
+结构体变量名用宏; <TODO>这点需要确定rvdt3.0是否支持c99.
+2, 函数名; <DONE>
+3, basefunc.
+4, 文件include关系. 高层只能include一个底层文件<DONE>
+
+14:50 2009-6-21
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 文档, 讲稿
+1, p3: vc0830时钟及clkrst实现的功能. 
+bus clk指memory clk和ahp clk. 切频时sdio, per等module寄存器访问仍从pll1或xclk访问. module的memory操作(含dma)从cpu,bus的clock source访问. 
+例如cpu,bus切频到pll2, 访问sdio 寄存器走的时pll1(pll1_bp=0), sdio dma走的时pll2.
+这里有点奇怪, 因为切频时gate了m_clk_gt, 应该表示寄存器不能访问了, 怎么还能修改divider呢? 除非m_clk_gt没有gate寄存器. 
+2, p5: clkrst代码结构
+clkrst_drv_system_info.c
+
+10:09 2009-6-22
+(13:15 2009-6-22)
+VC0816, SV, 项目进展, 续, COB到京及焊接, <TODO>关注</TODO>
+1, ChenYing邮件"816 COB封装PCB已经到达北京（SV 20PCS)"20090622_1001
+816 COB封装PCB已经到达北京（SV 20PCS),将马上交Lvhaifang。全部按照设计方案加工。
+另外，对于EVT板，由于EVT板太大，超过机器加工能力，所以换了一台精度稍低的机器，试着焊接了两块COB，一块COB SDRAM的6个电源地double bonding全部变成了singgle bonding， 另一块SDRAM 6个电源地有三个从double bonding变成了single bonding。请AE和系统try一下看是否可用。
+
+2, ChenYing邮件"答复: 816 COB封装PCB已经到达北京（SV 20PCS)"20090622_1152
+Hi！Larry,
+原理图等文档他们上周就发了，但是AE的邮箱出问题退回来，Zhouruhui刚又转了一次给你。你查一下。
+PCB：由于EVB遇到下面邮件描述的问题，和老房商量了一下，争取LQFP144的芯片回来的当天提供给你PCB。预计LQ144的芯片本周四或本周五能到北京。
+COB的按照上周大家商量的由于EVB太大，超过机器加工能力。就直接用176芯片焊接的EVB代替COB的EVB，将在两周左右后开始提供。
+COB就在SV板上验证了。
+任何问题，请再联系我。
+Hi！Fangruming，
+回来的那两个没完全按照设计加工的COB 焊接的EVB，请也加工一下，可以提供给AE试一下看SDRAM是否可正常工作。多谢！
+
+3, FangRuiMing"答复: 816 COB封装PCB已经到达北京（SV 20PCS)"20090622_1304
+两块COB EVB已经拿去焊接，后天返回。
+
+10:39 2009-6-22
+VC0816, SV, ckkrst, 830与816 clock比较
+1, 816除了audio, lcd以外的模块divider与830有变化:
+1), 830是pll出来后两级divider 共8x32=256倍;
+2), 816是pll出来先除以2, 再一级divider, 共2x32=64倍.
+3), 模块少了vdec多了jpeg. 也就是830切频流程中vdec部分不需要了. 
+2, audio用pll2/5
+3, lcd用pll1或pll2/2/2
+也就是说lcd需要和audio或cpu,bus协调. 830中cpubus, lcd, audio三个各自处理的方式需要修改. 
+4, 问Huangyongguang 7006, usb是否是pll给的12MHz.
+
+11:19 2009-6-22
+<TODO></TODO>
+1, include
+2, Clkrst_ClkSwitchSetSdrcAdjClk和Clkrst_Switch_CfgMem可以移到memory_config.c
+3, 从CVS更新了代码, 需要先与代码整理前代码比较, 再与代码整理后代码比较. 
+
+14:08 2009-6-22
+软件技巧, sourceinsight, 显示文件完整路径
+source insight中如何显示文件完整路径?
+首先project->project setting中"Project source directory"下面一定指明工程代码目录, 这个可不是工程目录. 别搞错了. source insight顶部会显示文件路径.
+1, 文件在"Project source directory"下, source insight会显示相对路径. 
+2, 如果不在"Project source directory"中, 会显示绝对路径. 绝对路径过长就会只显示头尾路径, 中间省略. 如果想看到省略的文件名, 只能通过Project窗口的filename看到. 
+bamvor: 发现自己还是挺细心的, 如果当初自己没有设置"Project source directory"也就不会发现这个了. 在使用软件方面还是挺有感觉的. 
+
+14:55 2009-6-22
+VC0830, SV, clkrst, clkswitch, 整理代码, 续
+1, 正在修改set_module_freq<DONE>
+2, 最好取消get_module_prefered_div_base, <DONE>已改名. 
+3, module clock中很多调用了clock switch函数.<DONE>
+make xxx clock函数移到module clock中. TClk_Init不应该使用clock switch info.
+4, 如果切频fail是否需要重新调用make module divider呢?  目前切频流程保证切频时不会fail. (除了担心medirm clock info的memParm得不到)<DONE>取消
+5, Clkrst_SysInfo_GetCur希望是不切频时返回当前systemInfo, 切频时返回即将使用的systeminfo. 这样实现很难受, 决定直接修改: 切频时根据传入的systeminfo设置对应clock sourc, core clk. <DONE>Clkrst_SysInfo_GetCur()已删除
+6, 是否取消g_moduleclock? <DONE>: 为了简单暂不取消
+7, 删除了cpu1, cpu2合并为cpu, 添加了bus.
+它们的所有函数都需要重写. 
+1), bus的最小频率需要加入到mem_config.x中. 
+2), 更新systype时更新cpu,bus最大最小频率. <DONE>
+3), cpu,bus加入get_div, get_freq函数. set parent函数. <DONE>
+
+15:08 2009-6-22
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 疑问
+Q: 为什么memory参数copy一份到clock switch info, TClk不copy呢? 
+A: 前者有些与频率相关需要修改, 但memory parm是只读的, copy得到的是完全针对这个频率的. 后者结构体较大, 每次切频时直接修改结构体, 所以不需要copy.
+
+15:57 2009-6-22
+测试set_module_freq
+
+21:29 2009-6-22
+VC0830, SV, usb下载映像, 打包工具, <TODO>总结</TODO>
+下载打包的pak映像时如果连Init Cmd都没有提示, 说明bootloader没有找到512info, 可能是打包的512info有问题. 
+
+21:58 2009-6-22
+VC0830, SV, 编译, <TODO>总结</TODO>
+由于没有更新config.mk或Makefile造成如下编译错误: 
+/cygdrive/c/DOCUME~1/ZHANGJ~1/LOCALS~1/Temp/ccOvAPEX.s: Assembler messages:
+/cygdrive/c/DOCUME~1/ZHANGJ~1/LOCALS~1/Temp/ccOvAPEX.s:810: Error: invalid literal constant: pool needs to be closer
+当时没有保存结果, 所以错误原因未知. 
+
+22:53 2009-6-22
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, <TODO></TODO>
+1, 修改Clkrst_TClk_PrintCoreClk: 使用Tclock.
+2, basefunc. <DONE>
+3, ads
+4, update_module_divier移到module clock.
+5, 文档. 
+
+10:54 2009-6-23
+VC0816, SV, clock讨论
+1, 
+pll1: panel: 12, 24, 20, 27; cpu将就panel?
+pll2: audio: 122.88, 112.896
+2, panel默认12MHz. 
+
+12:58 2009-6-23
+VC0830, SV, <TODO>任务</TODO>
+1, 测试32G sd卡;
+2, 发信说明clock bug. 
+1), 在gongliang笔记本上. 忘了copy回来. 
+2), 验证不同pll下相同bus divider有不同配置. 
+3), 发信. 
+3, clkrst, 见"22:53 2009-6-22"
+
+13:48 2009-6-23
+VC0816, SV, clkrst, <TODO>任务</TODO>
+1, video pclk产生. 提前在830上提供好接口, 并测试通过. <DONE>
+2, main中配置时钟. pclk=24MHz. <DONE>
+3, 816_sv_memscan中切频程序. <取消>由dashan负责.
+4, 切频. <DOING>
+
+14:50 2009-6-23
+VC0830, SV, clkrst, 电流测试
+给zouweiran加入mddrMicron, <DONE>
+720_360_120不稳定. 
+
+18:00 2009-6-23
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 文档
+mem_config.c
+//适合加压超频时使用.
+//如果用户bus溢出, 用min/max参数代替. 
+//#define Clkrst_Mem_AllowBusOverflow()	(1)
+#define Clkrst_Mem_AllowBusOverflow()	(0)
+
+21:03 2009-6-23
+VC0830, SV, clkrst, clkswitch, 整理代码, 续, 上传CVS, 代码位置
+1, CVS log
+Checking in app/clkrst.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst.c,v  <--  clkrst.c
+new revision: 1.10; previous revision: 1.9
+done
+Checking in app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.35; previous revision: 1.34
+done
+Checking in app/clkrst_app.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.h,v  <--  clkrst_app.h
+new revision: 1.15; previous revision: 1.14
+done
+Checking in app/clkrst_app_public.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_public.h,v  <--  clkrst_app_public.h
+new revision: 1.5; previous revision: 1.4
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.c,v
+done
+Checking in app/clkrst_app_module_clock.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.c,v  <--  clkrst_app_module_clock.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.h,v
+done
+Checking in app/clkrst_app_module_clock.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_module_clock.h,v  <--  clkrst_app_module_clock.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_operation_point.c,v
+done
+Checking in app/clkrst_app_operation_point.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_operation_point.c,v  <--  clkrst_app_operation_point.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_operation_point.h,v
+done
+Checking in app/clkrst_app_operation_point.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_operation_point.h,v  <--  clkrst_app_operation_point.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.c,v
+done
+Checking in app/clkrst_app_switch.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.c,v  <--  clkrst_app_switch.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.h,v
+done
+Checking in app/clkrst_app_switch.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app_switch.h,v  <--  clkrst_app_switch.h
+initial revision: 1.1
+done
+Checking in basefunc/clkrst_basefunc.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/basefunc/clkrst_basefunc.c,v  <--  clkrst_basefunc.c
+new revision: 1.5; previous revision: 1.4
+done
+Checking in basefunc/clkrst_basefunc.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+new revision: 1.15; previous revision: 1.14
+done
+Checking in subdir.mk;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.23; previous revision: 1.22
+done
+Checking in test/clkrst_test.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.27; previous revision: 1.26
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.c,v
+done
+Checking in driver/clkrst_drv.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.h,v
+done
+Checking in driver/clkrst_drv.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv.h,v  <--  clkrst_drv.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_divider.c,v
+done
+Checking in driver/clkrst_drv_divider.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_divider.c,v  <--  clkrst_drv_divider.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_divider.h,v
+done
+Checking in driver/clkrst_drv_divider.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_divider.h,v  <--  clkrst_drv_divider.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_public.h,v
+done
+Checking in driver/clkrst_drv_public.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_public.h,v  <--  clkrst_drv_public.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.c,v
+done
+Checking in driver/clkrst_drv_system_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.c,v  <--  clkrst_drv_system_info.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.h,v
+done
+Checking in driver/clkrst_drv_system_info.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_system_info.h,v  <--  clkrst_drv_system_info.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_type.h,v
+done
+Checking in driver/clkrst_drv_type.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_drv_type.h,v  <--  clkrst_drv_type.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_config.c,v
+done
+Checking in memory/mem_config.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_config.c,v  <--  mem_config.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_config.h,v
+done
+Checking in memory/mem_config.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_config.h,v  <--  mem_config.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_mddr_micron.c,v
+done
+Checking in memory/mem_mddr_micron.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_mddr_micron.c,v  <--  mem_mddr_micron.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_mddr_micron.h,v
+done
+Checking in memory/mem_mddr_micron.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_mddr_micron.h,v  <--  mem_mddr_micron.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_pcddr_hynix.c,v
+done
+Checking in memory/mem_pcddr_hynix.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_pcddr_hynix.c,v  <--  mem_pcddr_hynix.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_pcddr_hynix.h,v
+done
+Checking in memory/mem_pcddr_hynix.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_pcddr_hynix.h,v  <--  mem_pcddr_hynix.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_samsung.c,v
+done
+Checking in memory/mem_sdram_samsung.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_samsung.c,v  <--  mem_sdram_samsung.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_samsung.h,v
+done
+Checking in memory/mem_sdram_samsung.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_samsung.h,v  <--  mem_sdram_samsung.h
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_vimicro_BGA181.c,v
+done
+Checking in memory/mem_sdram_vimicro_BGA181.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_vimicro_BGA181.c,v  <--  mem_sdram_vimicro_BGA181.c
+initial revision: 1.1
+done
+RCS file: /doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_vimicro_BGA181.h,v
+done
+Checking in memory/mem_sdram_vimicro_BGA181.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/memory/mem_sdram_vimicro_BGA181.h,v  <--  mem_sdram_vimicro_BGA181.h
+initial revision: 1.1
+done
+
+23:17 2009-6-23
+VC0816, SV, 初始调试, clkrst
+1, 奇怪怎么刚才可以启动, 现在怎么串口都错了. 后来发现是common_def中有"ifndef FPGA, #define FPGA", 和830 sv一样的问题!!!
+2, dma问题: dashan测试dma时发现dma无法正常工作, 检查是由于系统时钟被gate. <TODO>查具体是哪个时钟被gate</TODO>
+这本来是我的工作, 我忽略了, 以为dma不需要clk. 
+3, 改完了代码, 量video量不到. 编译video模块尝试. 挂载sd卡fail后串口不正常. 去掉sd, fat video又编译不过. 最后只能是把sd_init和fat_init暂时注掉.
+仍然不行. 应该是uart自身引起的. 
+"uart pdma malloc fail!". beizhan下午调过, 当时没注意原因. 
+4, CVS:
+zhangjian clkrst, clkswitch
+1, 加入系统时钟初始化. 
+2, 支持pclk切频.
+5, CVS log:
+Checking in bootloader/main.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/bootloader/main.c,v  <--  main.c
+new revision: 1.21; previous revision: 1.20
+done
+Checking in clkrst/clkrst.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/clkrst.h,v  <--  clkrst.h
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.2; previous revision: 1.1
+done
+Checking in include/common_def.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/include/common_def.h,v  <--  common_def.h
+new revision: 1.5; previous revision: 1.4
+done
+Checking in sdio/src/sdiobase.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/sdio/src/sdiobase.c,v  <--  sdiobase.c
+new revision: 1.8; previous revision: 1.7
+done
+Checking in sdio/src/sdiobase.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/sdio/src/sdiobase.h,v  <--  sdiobase.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in sdio/src/sdiodrv.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/sdio/src/sdiodrv.c,v  <--  sdiodrv.c
+new revision: 1.14; previous revision: 1.13
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst.c,v
+done
+Checking in clkrst/app/clkrst.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst.c,v  <--  clkrst.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_module_clock.c,v
+done
+Checking in clkrst/app/clkrst_app_module_clock.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_module_clock.c,v  <--  clkrst_app_module_clock.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_module_clock.h,v
+done
+Checking in clkrst/app/clkrst_app_module_clock.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_module_clock.h,v  <--  clkrst_app_module_clock.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_public.h,v
+done
+Checking in clkrst/app/clkrst_app_public.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_public.h,v  <--  clkrst_app_public.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc.h,v
+done
+Checking in clkrst/basefunc/clkrst_basefunc.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv.c,v
+done
+Checking in clkrst/driver/clkrst_drv.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv.h,v
+done
+Checking in clkrst/driver/clkrst_drv.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv.h,v  <--  clkrst_drv.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_divider.c,v
+done
+Checking in clkrst/driver/clkrst_drv_divider.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_divider.c,v  <--  clkrst_drv_divider.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_divider.h,v
+done
+Checking in clkrst/driver/clkrst_drv_divider.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_divider.h,v  <--  clkrst_drv_divider.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_public.h,v
+done
+Checking in clkrst/driver/clkrst_drv_public.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_public.h,v  <--  clkrst_drv_public.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_type.h,v
+done
+Checking in clkrst/driver/clkrst_drv_type.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_type.h,v  <--  clkrst_drv_type.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/test/clkrst_test.c,v
+done
+Checking in clkrst/test/clkrst_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+initial revision: 1.1
+done
+
+Removing bclkrst.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/bclkrst.h,v  <--  bclkrst.h
+new revision: delete; previous revision: 1.4
+done
+Removing clkrst.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/clkrst.c,v  <--  clkrst.c
+new revision: delete; previous revision: 1.3
+done
+Removing clkrst_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/clkrst_test.c,v  <--  clkrst_test.c
+new revision: delete; previous revision: 1.1
+done
+6, 代码
+D:\work\VC0816\code\20090624\20090624_0035_clkrst初始代码.rar
+
+10:40 2009-6-24
+VC0816, SV, clkrst, clkrst 第一版release
+发送邮件"816 clkrst v0.1 release"20090624_1128
+1, main.c中配置如下模块时钟
+per(含spi): 24MHz
+iclk: 40MHz.
+snr: 12MHz
+sdio: 24MHz
+pclk: 12MHz
+
+2, pclk配置接口
+1), 全局命令: setfreq, 可以设置模块频率. 目前支持pclk频率设置.
+module clk index: 0表示pclk
+value: 频率值. 单位Hz
+2, 编程接口
+#include "clkrst\app\clkrst_app_public.h"
+PTClock clkp;
+TFreq freq;
+//获得模块TClock指针
+clkp = Clkrst_TClk_Get(PCLK_ID);
+//设置频率(单位Hz): 最大, 最小, 期望频率, 后两项如果设为0, 表示与max相同. 
+freq.max = max;
+freq.min = min;
+freq.freq = prefered;
+//设置模块频率为freq.freq, 返回值为实际设置的频率. 0表示失败. 
+Clkrst_TClk_SetFreq(clkp, &freq);
+
+11:35 2009-6-24
+VC0816, SV, storage, sdio, 调试, <TODO>总结</TODO>
+1, ACMD41问题(与830 SV相同)
+ACMD41无反应, 后来发现是sd电源和VDD28_ON未连接. 不连接是只有1.5v. 
+连接后, sd open成功. 读写有问题, beizhan再继续查. 
+
+2, 初始化成功后, 发现读写有问题
+1), data没有跳线;
+2), 仍然不行, 怀疑是否sd没有请求? beizhan与HanJinFei查, 发现没有问题;
+3), beizhan和我一起查到816 FPGA时我加入了对lock pin的处理, 现在是lock pin状态不对导致没有实际进行读写. 
+
+3, beizhan增加了"document/board/svBoardNotice.txt"文件, 描述816 SV中需要注意的问题:
+FengBeiZhan邮件"答复: 816 clkrst v0.1 release"20090624_1334
+sd可以用了，现在video可以调试了；
+添加如下文件，用来记录sv班级的跳线和注意事项，请大家添加自己模块的注意事项；
+D:\VC0816\Panda\document\board\svBoardNotice.txt
+sd的注意事项已经添加：
+1)sd
+a)jp29 跳线连通；
+b）sw1、sw2 拨到On上；            
+
+16:26 2009-6-24
+VC0830, SV, 如果没有焊nand芯片, 会造成通过bootloader下载映像时在Init cmd后无反应. <TODO>总结</TODO>
+
+17:57 2009-6-24
+VC0816, SV, clkrst, dragon编译不过
+1, 首先保证eclipse编译正常, 昨天在增加代码, 编译时很多warning
+1), include文件找不到, eclipse居然没报错. 
+2), 新增函数有些没有在头文件中加入声明. 
+2, dragon中两个cpp文件引用的bclkrst.h已改名basefunc\clkrst_basefunc.h.
+
+18:13 2009-6-24
+VC0830, SV, clkrst, zouweiran电流测试, <TODO>关注进展</TODO>
+Zouweiran报说BGA282, mobile ddr 240_120下me播放视频data abort.
+经检查发现, 去掉电流表后, 系统稳定很多, dma lli 1000 pass. me视频虽然出错, 但不会data abort:
+rm_error: 
+rm parser error!! pError=0x00000000 result=0x80040091 msg=Unexpected stream number in packet.
+play stop
+22864.32 ms elapsed; 10586.35 ms taken by rv decoder
+510 frames decoded; 0 frames skipped
+  fps =  22.31->48.18 
+注: 电流表三个: 一个用于测bus电流, 一个cpu电流, 一个总电流. 
+
+10:15 2009-6-25
+Linux移植计划, Android
+给LiDongLiang, LiaoZhiCheng邮件"Linux移植计划--关于Android, kernel版本. "20090625_1029
+Linux移植计划--关于Android, kernel版本. 
+目前android使用Linux2.6.29内核进行开发, 包括msm(HTC G1 SOC), omap, goldfish(android模拟器 SOC)三个分支都是.
+android 1.5对应哪个kernel版本还没有查. 我考虑我们可以以最新Linux2.6.29为目标进行移植, 将来用androidrelease出来对应Linux2.6.29的版本. 大家觉得呢? 
+最新android全部代码已上传36服务器"Share\Linux\android\Android_20090625_0018"目录, "Share\Linux\android"的android_common-d89050258f0133ae56d586dd6d7345d473c9a216.tar, goldfish_common-b10edef14984cc56182d8014815a4e47518c2cdc.tar分别是android, goldfish Linux 2.6.29起始tag的snapshot
+此说明已更新至"Share\Linux\readme.txt"
+
+10:33 2009-6-25
+VC0816, SV, 板子分配情况
+FengBeiZhan邮件"板子分配情况"20090625_1028
+母板 cpu_176（cob） owner 电源 sdram
+80090624032 80090623025 fuyali 默认已配 默认已配
+80090624031 80090624034 zhangpu/shuyu 默认已配 默认已配
+80090624036 80090624037 zhoudashan/zhangjian 默认已配 默认已配
+80090624035 80090624038 liaozhicheng 默认已配 默认已配 
+80090623024 80090623026 lvboxue 默认已配 默认已配
+那位板子用完了，或是暂时不用，请及时告知大家，以便于协调使用。
+切忌：关于电源板，各个板子上的跳线都不一样，这个没有关系，因为这是从不同的电源板子上修改过来的，如果还不放心，请测量如下脚：
+1）右上角最边上的core电压：1.2v
+2）右下角最边上的sdrc电压：3.3v
+
+15:44 2009-6-25
+VC0830, SV, clkrst, mas, databook
+clkrst模块mas错误: pll12setv[29]写0表示on. 
+实际应该是1表示on. Lvpin, JiangBo已经确认. 
+
+16:43 2009-6-25
+<TODO></TODO>
+1, 所有用PLL2_ID的地方都要留意. 因为cpu,bus已经不能在pll2上运行了. 
+2, 已修改到Clkrst_SwitchGenCpuBus
+3, 加入memory配置. <DONE>
+4, "10:27 2009-6-26"
+加入所有module clk doing.
+5, 816中有没有dll, 没找到pll power on/off寄存器. 但是有dll stable time?
+<TODO>找dashan, linchuan确认</TODO>
+6, dashan没有给phy_mux_sel, Clkrst_Switch_CfgMem中暂时未设置此参数. 
+(16:05 2009-6-26)后来发现是mas版本太低, 已经没有这个寄存器了. 
+7, TClock
+1), 模块最高频率. 考虑在TClock中:
+freq - > pfreq, efreq
+前者表示prefered freq range, 后面表示extreme freq range(硬件限制). 加压测试时, 可以把efreq适当调大. 
+2), module_set_div, 考虑设置per <DONE>
+3), 实现per_set_freq, <TODO>
+4), 如下模块clock下一步加入:
+//to be implemented
+//static TClock m_clk_audc;
+//static TClock m_clk_auds;
+//static TClock m_clk_clkrst;
+//sub module
+//static TClock m_clk_spi0;
+//static TClock m_clk_pwm;
+//static TClock m_clk_padc;
+//static TClock m_clk_uart1;
+//static TClock m_clk_tpi;
+//static TClock m_clk_kpd;
+8, 830 clkrst模块与服务器merge. 但不要上传服务器. 等到830b再做. 
+9, (18:50 2009-6-26)
+编译pass. 需要测试, 并加入autoswitch命令. 
+10, (11:12 2009-6-29)
+还是应该给出memory最大最小频率, clkrst_app_operation_point.c的OpItor_ResetCommon()也需要. 
+
+23:00 2009-6-27
+Linux移植, 这是早期的想法, 直接记在手机上的, 可以看出移植计划是很有连续性的
+定linux移植项目计划, 考虑到时间紧,订每步计划,估时间,所需资源(人,物);紧凑做好每步; 
+驱动方案: vdev等需考虑android实现方式. 同查君正, 瑞芯.
+能让人看到我们移植成果需要 :内核boot, 点亮lcd, storage(最好是sd)
+
+12:59 2009-6-29
+总结, 编程, 编译错误, 未定义(undefined reference to ...) 错误原因: 
+1, 宏定义错误:
+在函数中使用了宏, 编译器提示没有定义. 可能是这个宏定义函数没有定义. 比如, 我有一次我宏和宏对于的函数写成一个名字了.
+2, Makefile中没有包含*.c, 但使用这个函数的文件include了对于头文件. 这样编译时没有错误, 链接时出错. 
+
+14:23 2009-6-29
+文档, 添加一个memory信息需要添加:
+g_MemoryInfo, g_Mem_Attr, g_Mem_Max_Freq. g_Mem_Prefered_Max_Freq, 比较麻烦. 
+
+Clkrst_MemInfo_Get, Clkrst_MemInfo_GetCur, Clkrst_MemInfo_GetCurType
+
+15:39 2009-6-29
+VC0816, SV, clkrst, 移植830clkrst代码到816
+1, 
+1), iclk get parent freq不对: 发现是pll1d2.parent为空.  <DONE>
+2), uart->get_freq不对. <TODO>
+3), 切到xclk上正确, 切回pll1上, 0x0附近读写, memory完全出错, 0x40000000不可见(都是"!")
+0x60011000  3AB211A0 00000033 1959AA95 00000514 
+0x60011010  00000000 00000000 00000000 00000000 
+0x60011020  00000020 00000007 00000000 00000000 
+0x60011030  00000000 00000000 00000000 000000F0 
+0x60011040  00000000 00000000 00000000 00000000 
+0x60011050  00000000 00000000 00000000 FFFFFFFF 
+0x60011060  FFFFFFFF 00000000 E5801000 E59F0228 
+0x60011070  E59F1244 00000022 00000000 00000000 
+0x60011080  00000000 00000000 00000000 00000000 
+4), 发现是写0x48: pll_sdrc_adj时写到了0x40: pll_cpu_bus, 又是宏写错了. 
+5), 修改后, 发现切频后memory正常, 但是程序飞了. 查程序发现update_module_divier把core clk也执行set_div, 但是它们实际没有这个函数, 所以出问题. 
+6), 直接切到xclk有问题. 是一个针对xclk处理change clock source没有考虑clock source不能修改parent问题. 将来都使用xclk_clk得到xclk频率. 
+其实细想: pll1, 2的parent是xclk, 不应该直接用XCLK_FREQ. <TODO></TODO>
+<TODO></TODO>: 查刘淼书, 使用GPRS时对串口偏差的要求. 830有无此问题. 
+7), 
+(1), phyudc在不能产生24MHz时, 没有把divVal和divReg都置为无效. 
+(2), 发现自己coding还是需要多多练习, sysclkinfo这个函数的问题是自己给自己挖的坑, 当时先加入pclk时, 临时实现了一个get_module_div函数放在clkrst_app_module_clock.c中, 后来在clkrst_basefunc.c实现了完整函数但是函数名是get_module_divReg, 自己也忘了要删除前面那个函数了. 解决造成sysclkinfo中除了pclk模块以外, 都由于读寄存器不正确导致频率错误. Clkrst_Div_MClkReg2Val()也是同理. 自己给自己挖了坑. 
+8), 注意看图. module使用xclk时, xclk也是先除了2的. 我说怎么串口会是乱码呢, 感情divider完全算错了. 
+
+9), 建立DmaLliautoest函数
+(1), <TODO>与dashan讨论dma</TODO>
+是addrSize还是addrSize + 1000??//为什么830使用cb malloc, 816使用ncnb malloc? 
+如果没有问题删除dma_test.c中与Dma_Lliautotest重复的代码. 
+(2), 又遇到dma完成后死的问题. 回忆上次原因: 是dma操作的memory超出了dma申请的memory. 所以dma操作退出后出问题. <TODO>总结</TODO>
+
+10),***发现问题!
+(1), 切频120->168->120. step=12MHz, dma=10, 到20th, 480_120_120死. 
+切频120->168->120. step=4MHz, dma=10, delay=100, 到14th, 672_168_168死. 
+(2), 会不会和示波器有关? 去掉测量memory频率的探头. 
+切频120->168->120. step=4MHz, dma=100, 6th 死. 560_140_140.
+(3), dma恢复为使用ncnb malloc.
+120->168->168, step=4, dma=5, pass
+120->168->168, step=4, dma=0, pass, 不做dma没有死, 说明和dma无关. 需要进一步实验. 不过使用ncnb malloc后dma速度没觉得慢. 经确认, 确实是用ncnb malloc分配的. 
+
+11), 修改pll,cpu,bu max至750, 400, 200. 测试:
+cpu=300->336->300, step=12, cpu:bus=3:1, dma=5000, delay=0, pass
+336_168, dma=5000, pass.
+
+12), (10:23 2009-6-30)
+但是今天测试cb dma lli也pass:
+cb, ncnb: cpu=300->336, step=12, cpu:bus=3:1, dma=10, pass
+cb: cpu_bus_vdec=168_168_168, dma=5000, pass.
+昨天为什么不行呢? 
+360_180 dma 5000 pass
+380_126 dma 5000 pass
+
+13), (13:19 2009-6-30)(上下都是16M方案, samsung 32M memory板)
+加入超频autoswitch, itrator group选择3:
+over clock test: pll(900), cpu(400), bus (200) overclock
+测试cpu=330->370, step=10, cpu:bus=2, dma=5000, delay=0, fail @ 370_185, 一次错误, 4990次数后dma没有正常退出.  
+测试cpu=330->400, step=10, cpu:bus=3, dma=5000, delay=0, fail @ 380_126.6, 死在940次dma之后. 
+
+14), samsung 32M 方案
+编译后发现在uart pdma malloc中就死了, 后来发现是rvdebug脚本用成16M了, 用32M脚本仍然不行, 更新CVS, 发现32M脚本有修改. 可能原来的32M脚本有问题.
+注: 当时用错rvdebug脚本时, 运行完rvdebug脚本, 对大于16M的memory, 显示的数据都相同, 而且写入后显示区域的memory都会变化. 
+测试cpu=330->370, step=10, cpu:bus=2, dma=5000, delay=0, pass
+测试cpu=330->400, step=10, cpu:bus=3, dma=5000, delay=0, fail @ 380_126.6 1100次
+
+15), hynix 16M.
+
+16:38 2009-6-29
+VC0830, VC0816, SV, clkrst, 切频, 所谓"动态切频, 静态切频"
+切频时是否需要保证sdram中数据不被破坏对切频本身没有影响, 只影响memory配置方式. 
+1, 如果切频memory参数不能立即更新, 需要在设置sdrc switch begin和end之间配置memory参数, 而且, ClkrstBase_SetPhyMuxSel(memParmp->phy_mux_sel); [28]一定写0.
+2, triger
+#define Clkrst_SetNormal2Bypass()       HAL_WRITE_REG32(CLOCKRST_PLL_SWITCH, 1)
+#define Clkrst_SetBypass2Normal()       HAL_WRITE_REG32(CLOCKRST_PLL_SWITCH, 0)
+
+19:47 2009-6-29
+VC0830, SV, clkrst
+希望尽早与YouHai他们使用一套代码. 今天Youhai切频pll2有问题, 找我帮忙看代码怎么改. 发现ZhuLei使用的还是我原来的代码结构, 看起来很难受. 要是一套代码就没有这么费事了.
+
+22:44 2009-6-29
+(15:30 2009-6-30)
+VC0816, SV, clkrst, 移植830clkrst代码到816, 续, <TODO></TODO>
+"15:39 2009-6-29"中相关TODO
+1, clkrst的__SV__改名为CLKRST_TREE, 因为暂时没空针对ads修改, 但不能影响ads编译. <DONE>详见"15:52 2009-6-30"1
+2, sub module改为切频时尽量保持原有频率.  
+3, pclk set freq区分能否修改audio. 
+4, ads问题稍后考虑. 不支持C99的结构体命名. 
+5, 需要增加一个命令设置cpu,bus最大和推荐频率. 
+
+22:54 2009-6-29
+VC0816, SV, clkrst, 移植830clkrst代码到816, 续, <TODO>明日计划</TODO>
+1, 明天先要和dashan讨论dma, 
+2, 再确认切频稳定性. <DONE> 重点实验360_180, 380_126.6高频. 
+3, 完成"22:44 2009-6-29"TODO1.
+4, 上传CVS
+
+15:14 2009-6-30
+VC0830, SV, clkrst, clkswitch API, <TODO>关注</TODO>
+目前dongliang在main.c中调用Clkrst_Switch切频, 这个切频函数只能放在多数模块后面, 因为在pll1上面的模块都是假设自己是24M输入时钟配置的, 切频后不一定是24MHz. 如果在模块初始化之前切频, 模块clock配置不正确. 
+但是audio模块相反, 因为dongliang目前是pcddr切频需要用到pll2, 切频后audio的pll2变化, audio需要重新配置. 
+<TODO>如果需要切频前备份audio配置, 切频后恢复</TODO>
+
+15:52 2009-6-30
+VC0816, SV, clkrst, clkswitch, 代码修改, notes
+1, 关注CLKRST_TCLOCK宏. 
+这个宏表示使用clkrst中tclock结构体及相关函数, 包括切频, 自动切频, 模块时钟管理是. 不定义这个宏时不支持这些功能. 另外不定义这个宏时, 保证ads编译通过. 其它模块使用clkrst的模块时钟管理时, 也需要定义这个宏. 
+2, panel freq被修改的原因是默认屏的clk没有设置. 
+
+20:36 2009-6-30
+ubuntu, 网址, 下载, http://packages.ubuntu.com/hardy/
+
+22:36 2009-6-30
+VC0816, SV, clkrst, v0.2 release
+至816qa邮件"816 clkrst v0.2 release"20090630_2335
+(新增测试命令后面的文字是CVS注释)
+
+Clkrst v0.2已上传CVS. 
+我的板子上用COB176, 三星32Mmemory测试, cpu最高到370MHz, 会进一步测试. 
+performance测试中需要的panel和audio同时使用这个切频流程稍后会提交. 
+新增命令测试如下: 
+
+(zhangjian, clkrst, clkswitch, v0.2)
+1, cpu,bus切频命令: clksv, 使用方法与830相同
+切频API: Clkrst_Switch(), 具体说明见clkrst\notes.txt
+
+2, 管理如下模块的clock: xclk, pll1, pll2, cpu, bus, iclk, jclk, snr_clk, per_clk, phy_udc, nfc, sdio, pclk, uart0, timer_clk, 使用svclkinfo可以查看这些模块的时钟: 
+        xclk   12.0 MHz
+    pll1_clk  532.0 MHz
+    pll1div2  266.0 MHz
+    pll2_clk  648.0 MHz
+pll2fout2div2  162.0 MHz
+   pll2fout5  129.6 MHz
+    xclkdiv2    6.0 MHz
+Cpu Bus Clock Source is PLL1.
+     cpu_clk  133.0 MHz
+     bus_clk  133.0 MHz
+        iclk   38.0 MHz
+        jclk   53.2 MHz
+     snr_clk   11.5 MHz
+     per_clk   19.0 MHz
+phyudc_clk's clock is INVALID at this clock source
+     nfc_clk   29.5 MHz
+    sdio_clk   22.1 MHz
+    pclk_clk   27.0 MHz
+   uart0_clk  115.2 KHz
+   timer_clk 1000.0 KHz
+目前pclk仍然在pll2上, 不能与audio同时使用, clkrst v0.3会保证panel和audio可以同时使用. 
+
+3, 自动切频测试命令: autoswitch
+1), 不超频情况下(pll<=672, cpu<=360, bus<=168) 
+cpu min freq(MHz): (Int)/[12] cpu最低频率
+cpu max freq(MHz): (Int)/[168] cpu最高频率
+cpu freq step(MHz): (Int)/[4] cpu频率step
+cpu bus ratio(1,2,3,4): (Int)/[1] cpu:bus比例, 2表示2:1
+times: (Int)/[5] 自动切频共测试几次
+itIndex(0,1,2,... ): (Int)/[2] 迭代器编号, 不超频情况下选择0,1,2均可, 推荐2, 完成cpu最低频率->cpu最高频率->cpu最低频率的测试过程. 
+pesudoSwitch: (Int)/[0] 用于测试. 取默认值0即可. 
+destination clock source(0: pll1; 3: xclk): (Int)/[0] 切频目的clock source, 取默认值pll1. 
+dmaTimes: (Int)/[10] 切频后做几次dma
+delay(us): (Int)/[0] 切频后是否delay
+
+2), 超频情况下(pll<=900, cpu<=400, bus<=200) 
+建议pll,bus,bus超过或接近(pll<=672, cpu<=360, bus<=168)时使用.
+只有"itIndex(0,1,2,... ): (Int)/[2]"必须选择3, 表示修改pll,cpu,bus范围到(pll<=900, cpu<=400, bus<=200), 其余用法相同. 
+
+注: 所有与SV clock有关代码都用CLOCK_TCLOCK宏区分. 其它模块使用TClock结构体或除clkrst.c以外的函数, 也需要用宏CLOCK_TCLOCK. panel, uart, i2c, timer中相关部分已经修改. 
+
+4, CVS log:
+Checking in bootloader/main.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/bootloader/main.c,v  <--  main.c
+new revision: 1.27; previous revision: 1.26
+done
+Checking in clkrst/app/clkrst_app_module_clock.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_module_clock.c,v  <--  clkrst_app_module_clock.c
+new revision: 1.8; previous revision: 1.7
+done
+Checking in clkrst/app/clkrst_app_module_clock.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_module_clock.h,v  <--  clkrst_app_module_clock.h
+new revision: 1.4; previous revision: 1.3
+done
+Checking in clkrst/app/clkrst_app_public.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_public.h,v  <--  clkrst_app_public.h
+new revision: 1.5; previous revision: 1.4
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app.c,v
+done
+Checking in clkrst/app/clkrst_app.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app.h,v
+done
+Checking in clkrst/app/clkrst_app.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app.h,v  <--  clkrst_app.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_operation_point.c,v
+done
+Checking in clkrst/app/clkrst_app_operation_point.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_operation_point.c,v  <--  clkrst_app_operation_point.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_operation_point.h,v
+done
+Checking in clkrst/app/clkrst_app_operation_point.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_operation_point.h,v  <--  clkrst_app_operation_point.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_switch.c,v
+done
+Checking in clkrst/app/clkrst_app_switch.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_switch.c,v  <--  clkrst_app_switch.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_switch.h,v
+done
+Checking in clkrst/app/clkrst_app_switch.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/app/clkrst_app_switch.h,v  <--  clkrst_app_switch.h
+initial revision: 1.1
+done
+Checking in clkrst/basefunc/clkrst_basefunc.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc.h,v  <--  clkrst_basefunc.h
+new revision: 1.3; previous revision: 1.2
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc.c,v
+done
+Checking in clkrst/basefunc/clkrst_basefunc.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc.c,v  <--  clkrst_basefunc.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc_public.h,v
+done
+Checking in clkrst/basefunc/clkrst_basefunc_public.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/basefunc/clkrst_basefunc_public.h,v  <--  clkrst_basefunc_public.h
+initial revision: 1.1
+done
+Checking in clkrst/driver/clkrst_drv.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv.c,v  <--  clkrst_drv.c
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/driver/clkrst_drv.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv.h,v  <--  clkrst_drv.h
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/driver/clkrst_drv_divider.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_divider.c,v  <--  clkrst_drv_divider.c
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/driver/clkrst_drv_divider.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_divider.h,v  <--  clkrst_drv_divider.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/driver/clkrst_drv_public.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_public.h,v  <--  clkrst_drv_public.h
+new revision: 1.2; previous revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_system_info.c,v
+done
+Checking in clkrst/driver/clkrst_drv_system_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_system_info.c,v  <--  clkrst_drv_system_info.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_system_info.h,v
+done
+Checking in clkrst/driver/clkrst_drv_system_info.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/driver/clkrst_drv_system_info.h,v  <--  clkrst_drv_system_info.h
+initial revision: 1.1
+done
+Checking in clkrst/subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/test/clkrst_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.5; previous revision: 1.4
+done
+Checking in dmac/dmac.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/dmac/dmac.c,v  <--  dmac.c
+new revision: 1.4; previous revision: 1.3
+done
+Checking in dmac/dmac.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/dmac/dmac.h,v  <--  dmac.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in dmac/dmac_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/dmac/dmac_test.c,v  <--  dmac_test.c
+new revision: 1.7; previous revision: 1.6
+done
+Checking in i2c/i2c_drv.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/i2c/i2c_drv.h,v  <--  i2c_drv.h
+new revision: 1.3; previous revision: 1.2
+done
+Checking in include/regdef.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/include/regdef.h,v  <--  regdef.h
+new revision: 1.35; previous revision: 1.34
+done
+Checking in include/sys.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/include/sys.h,v  <--  sys.h
+new revision: 1.17; previous revision: 1.16
+done
+Checking in marb/bsdrc.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/marb/bsdrc.h,v  <--  bsdrc.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in timer/timer.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/timer/timer.c,v  <--  timer.c
+new revision: 1.4; previous revision: 1.3
+done
+Checking in timer/timer.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/timer/timer.h,v  <--  timer.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in uart/uart_base.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/uart/uart_base.c,v  <--  uart_base.c
+new revision: 1.9; previous revision: 1.8
+done
+Checking in uart/uart_base.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/uart/uart_base.h,v  <--  uart_base.h
+new revision: 1.8; previous revision: 1.7
+done
+Checking in video/panel/panel.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/video/panel/panel.c,v  <--  panel.c
+new revision: 1.43; previous revision: 1.42
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_config.c,v
+done
+Checking in clkrst/memory/mem_config.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_config.c,v  <--  mem_config.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_config.h,v
+done
+Checking in clkrst/memory/mem_config.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_config.h,v  <--  mem_config.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_hynix.c,v
+done
+Checking in clkrst/memory/mem_sdram_hynix.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_hynix.c,v  <--  mem_sdram_hynix.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_hynix.h,v
+done
+Checking in clkrst/memory/mem_sdram_hynix.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_hynix.h,v  <--  mem_sdram_hynix.h
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_samsung.c,v
+done
+Checking in clkrst/memory/mem_sdram_samsung.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_samsung.c,v  <--  mem_sdram_samsung.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_samsung.h,v
+done
+Checking in clkrst/memory/mem_sdram_samsung.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/clkrst/memory/mem_sdram_samsung.h,v  <--  mem_sdram_samsung.h
+initial revision: 1.1
+done
+
+5, 发现timer.h的#ifdef和#endif不配对:
+Checking in timer.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0816/Panda/timer/timer.h,v  <--  timer.h
+new revision: 1.3; previous revision: 1.2
+done
+
+6, 代码:"D:\work\VC0816\code\20090630", "20090630_2322_clkrst_v0.2_完整项目代码.rar"中包括编译运行正常的video_sv映像. 
+
+23:29 2009-6-30
+VC0816, SV, clkrst, clkswitch, <TODO>周三应该能基本完成</TODO>
+1, v0.3主要是同时支持panel和audio. 
+(21:34 2009-7-3)Clkrst_Init()中调用Clkrst_TClk_Init()设置PClk在pll1上."21:34 2009-7-3"end
+2, 写clkrst API文档. 
+
+15:25 2009-8-5
+项目, 工作总结, 6月工作总结
+1, clkrst, clkswitch:
+1), 完善切频代码, 支持其它封装, 例如BGA181. 整理切频代码, 改进了代码结构, 把数据结构和流程分离, 便于用户加入memory参数, 切频频点, 自动切频方式等等. 
+2), 进入816项目, 移植830clkrst模块代码到816. 

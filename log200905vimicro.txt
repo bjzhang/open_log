@@ -1,0 +1,2028 @@
+﻿11:57 2009-5-4
+VC0830, SV, storage, sdio, zhulei: 4G sd卡, 复制大文件出错, sd卡代码自动复位后完成
+后来直接用的手动模式, 见"15:26 2009-5-12"
+(22:12 2009-7-28)参见"10:36 2009-5-13"可能由于write single时没有等blk finish中断, Xiakai bug可能也是这个原因. <TODO>发信</TODO>
+
+15:44 2009-5-4
+VC0830, SV, clkrst, 切频到pll2
+1, <DONE>目前svclkinfo没有考虑cpu,bus在pll2的情况. 
+
+2, 代码修改完成, 测试pll1->xclk->pll1
+clkswitch切频测试流程:
+1), 测试常用cpu,bus频点能否工作:
+cpu=12->168, step=4MHz, cpu:bus:vdec=1:1:1, dma=10, times=5, pass.
+2), 测试切频是否稳定, dma=0时不进行dma操作, 无停顿连续切频. 
+cpu=12->168, step=2MHz, cpu:bus:vdec=1:1:1, dma=0, times=5, pass.
+
+3, xclk(12MHz)下不能使用pcddr? <TODO>总结</TODO>
+Lin Chuan邮件"the PC DDR working in XCLK", 20090504_1657
+Hi. All
+由于在极低频率下，830内部只有XCLK或者XCLK的反向。而DDR的写数据需要一个时钟的90度相位延迟，否则将出现hold问题。所以DDR无法支持在XCLK下直接工作，需要PLL能够产生一个可以90度相位延迟的时钟。
+在SV板上实验结果，也证明了这个限制。
+(22:14 2009-7-28)<TODO>疑问</TODO>: 为什么pll2=480, cpu=bus=120时可以工作, 此时divider是2, 应该也只有clk和clk反"22:14 2009-7-28"
+
+4, (19:10 2009-5-4)
+pll1->pll2->pll1可以切了. 但是pll2时bus为什么是12M呢? 不对. 
+修正invalid宏
+(14:57 2009-5-5)后来发现是没有改switch type, 所以还是切到了xclk.
+
+16:24 2009-5-4
+VC0830, SV, storage, sdio, 有些板子sd卡不能用
+guangyue板子sd卡也不能用. 目前是boxue(原来可用), guangyue板子sd卡不能用. 怀疑接触不好, 有空找lv haifang修理. 
+
+9:42 2009-5-5
+VC0830, SV, storage, sd, 三个176LQFP VC0830芯片sd卡不能用
+用fengyaya 176socket实验
+(23:20 2009-5-10)已解决详见"17:57 2009-5-7"
+
+9:50 2009-5-5
+VC0830, SV, clkrst, clkswitch, 根据pll1_sdrc_adj配置pll2_sdrc_adj
+0, cfg_sdrc. clk_gen_cpu_bus<DONE>, clk_switch_to_pll
+1), 
+sdramInfo->clkrst_pll1_sdrc_adj_clk = 0xe98d;
+sdramInfo->clkrst_pll2_sdrc_adj_clk = ?
+e98d
+1110 1001 1000 1101
+[14]    PLL1_DFV3 = b1
+[13:12] PLL1_DELAY_CYC3 = b10
+[10]    PLL1_DFV2 = b0
+[9:8]   PLL1_DELAY_CYC2 = b01
+[2]     PLL1_DFV = b1
+[1:0]   PLL1_DELAY_CYC = b01
+
+420141
+0100 0010 0000 0001 0100 0001
+[22]    PLL2_DFV3 = b1
+[21:16] PLL2_DELAY_CYC3 = b10
+[14]    PLL2_DFV2 = b0
+[13:8]   PLL2_DELAY_CYC2 = b01
+[6]     PLL2_DFV = b1
+[5:0]   PLL2_DELAY_CYC = b01
+
+1, SysInfo_GetOnePllCpuBusFreq没有考虑pll2.
+2, Clkrst_GetCkdCpuBus, Clkrst_SetCkdCpuBus, Clkrst_GetPll2CkdCpuBus, Clkrst_SetPll2CkdCpuBus等向reverse bit写入数据, 这样不好, 需要修改. 
+
+14:39 2009-5-5
+VC0830, SV, clkrst, vdec不稳定, 参见"10:36 2009-5-13", me和vdec下rvplay差异主要是timeout造成.
+1, feng beizhan说现在跑vdec没有上周四之前稳定.
+查代码. 测试vdec. 
+2, 用zhanglu测试映像"1053_me_sv_176LQFP_for_144_152clswitchTest.pak"
+我用有问题. 但zhanglu今天跑没事. 我的板子问题?!
+再重新实验, 又没有问题了, 难道刚才下错了映像?
+3, 用"1508_vdec_sv_bin_sdram.pak"也没问题. 
+刚才可能是示波器有干扰. 
+4, 现在sd卡不能用. 费解. 暂时放下. 
+
+5, "1647_vdec_sv_bin_sdram_cvsnew.pak", 没有播完:
+VDEC  SD:/>rvplay -f dongjiaopiaoyou_720p_9m.rmvb -dp
+[VDEC_MODULE]->do_vdec_play_rv()
+[VDEC_MODULE]MESSAGE:aasp_requestMain succeed!
+
+filename=dongjiaopiaoyou_720p_9m.rmvb
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+retVal != HXR_OK: rv_depack_add_packet
+
+Video stream in 'dongjiaopiaoyou_720p_9m.rmvb' decoding complete:
+    width is 1280, height is 720
+    840 input frames, 839 output frames
+    total time is 88242 ms, average time is 105 ms, fps is   9.52->17.24
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+
+6, 用"1606_vdec_sv_bin_sdram_pll2.pak"实验. 如果不行就用0430 "1053_me_sv_176LQFP_for_144_152clswitchTest.pak"测试. 
+除了fps是"9.52->17.14". 其余都相同. 
+
+7, 用"1053_me_sv_176LQFP_for_144_152clswitchTest.pak"测试. 
+Store Clear layer A with v fifo.
+retVal != HXR_OK: rm_parser_get_packet
+
+Video stream in 'dongjiaopiaoyou_720p_9m.rmvb' decoding complete:
+    width is 1280, height is 720
+    2859 input frames, 2859 output frames
+    total time is 292364 ms, average time is 102 ms, fps is   9.80->18.33
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+
+8, 用我自己最新代码编译me, 也可以. 
+VDEC  SD:/>rvplay -f dongjiaopiaoyou_720p_9m.rmvb -dp
+[VDEC_MODULE]->do_vdec_play_rv()
+[VDEC_MODULE]MESSAGE:aasp_requestMain succeed!
+
+filename=dongjiaopiaoyou_720p_9m.rmvb
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+V fifo full.
+retVal != HXR_OK: rm_parser_get_packet
+
+Video stream in 'dongjiaopiaoyou_720p_9m.rmvb' decoding complete:
+    width is 1280, height is 720
+    2859 input frames, 2859 output frames
+    total time is 292129 ms, average time is 102 ms, fps is   9.80->18.35
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+VDEC  SD:/>
+
+现在感觉编译me播放就没问题. 编译vdec就有问题. 统一流程:
+clkrst: clksv 152
+video: open 0 0 22
+vdec: rvplay -f dongjiaopiaoyou_720p_9m.rmvb -dp
+
+9, 用cvs上最新代码, 分别编译me和vdec. 
+1), 1733_me_sv_bin_sdram_cvsnew_sdioNucleus0.pak
+retVal != HXR_OK: rm_parser_get_packet
+
+Video stream in 'dongjiaopiaoyou_720p_9m.rmvb' decoding complete:
+    width is 1280, height is 720
+    2859 input frames, 2859 output frames
+    total time is 291995 ms, average time is 102 ms, fps is   9.80->18.37
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+
+2), RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+retVal != HXR_OK: rv_depack_add_packet
+
+Video stream in 'dongjiaopiaoyou_720p_9m.rmvb' decoding complete:
+    width is 1280, height is 720
+    840 input frames, 839 output frames
+    total time is 88260 ms, average time is 105 ms, fps is   9.52->17.23
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+
+10, 为了证明vdec和me结果不同, 再实验我自己代码的me和vdec:
+1), "1743_me_sv_bin_sdram.pak", 没有"V fifo full"
+retVal != HXR_OK: rm_parser_get_packet
+
+Video stream in 'dongjiaopiaoyou_720p_9m.rmvb' decoding complete:
+    width is 1280, height is 720
+    2859 input frames, 2859 output frames
+    total time is 292532 ms, average time is 102 ms, fps is   9.80->18.35
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+
+2), "1754_vdec_sv_bin_sdram.pak",
+
+14:57 2009-5-5
+VC0830, SV, clkrst, 切频到pll2, 续
+续"15:44 2009-5-4"
+1, sdram切频到pll2. 功能初步完成.
+cpu: 120->20->120 ..., dma=10, times=10, pass.
+但是没有使用与pll1 sdrc adj clk 0xe98d对应的0x00420141, 而是使用的默认的0x0x00414141. 这是默认值. 
+(23:22 2009-5-10)当时没有set bit[8], 所有写入的0x00420141没有正确生效. 现在其实是用的"0x004201c1".
+
+21:45 2009-5-5
+VC0830, SV, clkrst, clkswitch, ddr pll1->pll2->pll1切频
+1, 使用原有参数不行, 需要dashan帮忙搜索
+在vc0830_sv_memtest_e2prom_icache加入代码: 
+zhangjian, clkrst, clkswitch, 搜索PLL2_SDRC_ADJ_CLK_CONFIG(0x60000148)
+add CPU_BUS_PLL2 for switch pll2 and search memory parameter @ pll2
+
+10:40 2009-5-6
+VC0830, SV, storage, sdio
+邮件: liu zixi, lv pin, lv haifang, yang zuoxing, lingming, feng beizhan, aiguo
+抄送: 830qa
+标题: VC0830 SV 282BGA, 182BGA封装下sd/nand share无法测试
+VC0830 SV底板sd卡低四位sd_d0--sd_d3与sd_data0--sd_data3始终连接, 这样测试sd卡与nandflash share时, 没法确定sd卡是从nand data0-data3获得数据还是从sd_data0--sd_data3获得数据, 造成sd卡与nandflash share无法测试. 
+如果不改板子, 282, 181下sd卡与nand share无法测试. (mmc卡与nand share可以测试).
+
+thanks
+zhangjian
+
+11:37 2005-5-6
+VC0830, SV, clkrst, clkswitch
+如果是div不同影响pll2配置, 规定把pll2配置为pll1相同bus div(4)试验.
+
+1, 实验ddr参数, pll1和pll2下ddr先采用同一频率.
+1), 
+#define __60M_120M__  //包括120M
+#ifdef __240M_60M__
+//按照自己要新修改的频率进行计算，并设置成自己的值
+unsigned int pll1Ckd=0x140190;		//0x140190
+unsigned int ckdCpuBusSdrc=0x3300;  //4:1
+unsigned int ckdPer=0x44004400;		//0x44004400
+unsigned int ckdSdr=0xe88f;
+#endif
+
+2, 现在
+20090506_1737_clkrst_ddr_24-24-24pass.rar
+
+3, beizhan ddr需要支持的频率:
+60, 80, 96, 120, 132, 136
+
+4, 现在打包切频, 
+24M可以, 120M可以. 但60, 80, 122, 132, 136都不行. 
+120M用的是60-120参数. 
+
+5, 60-119M, sdrc_rd_path_control=0x40不行, 改为0x30也不行. 
+<TODO>问dashan</TODO>
+
+6, 120->136, step=2, 1:1:1, dma=5000, times=5. doing
+log: log_20090506192151.log
+pak: 1919_timer_sv_bin_pcddr_pll12pll2switch.pak
+
+16:32 2009-5-6
+VC0830, SV, rvdebug
+rvdebug运行映像失败原因:
+1, 可能memory配置不好, 检查方法:
+向sdram/ddr写入0x12345678, 看写入是否正常. 
+
+10:43 2009-5-7
+VC0830, SV, clkrst, clkswitch, <TODO>明天开会讨论, 是否都由我们做</TODO>
+zhulei需求, 讨论后我做1,2, zhulei做3,4,5
+我们需要一个这样的接口:
+1. 用户输入pll1,pll2,pll3的频率
+2. 用户可选择cpu，bus所在的pll
+3. 用户选择audio所在的pll
+4. 用户选择phy和lcdp所在的pll
+5. 用户选择各个模块的频率（可列出当前所选pll下所有频率，包括占空比不是1：1的）
+
+11:30 2009-5-7
+VC0830, SV, clkrst, clkswtich, vdec, me, 测试文件
+位置: \\10.0.2.36\sqmshare\Share\fengbeizhan\bitstream\rv\tokyo_720p_10m.rm
+东京漂移. 这是一个9.4Mbit码流.
+本机:
+D:\work\VC0830\SV\video\fengbeizhan, 里面一个10m码流, 一个20m码流. 
+
+15:02 2009-5-7
+VC0830, SV, clkrst, clkswitch
+测试结果
+filename=tokyo_720p_10m.rm
+retVal != HXR_OK: rm_parser_get_packet
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    2783 input frames, 2783 output frames
+    total time is 293694 ms, average time is 105 ms, fps is   9.52->20.41
+这个结果是合理的. 
+Feng beizhan邮件"答复: 830稳定性测试"20090430_1918中ddr 504_126_126_168测试结果是display19.5, no display 20.72.
+
+15:22 2009-5-7
+VC0830, SV, clkrst, ddr clkswitch
+1, 
+已测试频点
+cpu:bus=1:1, cpu: 24, 120->168(step=2M).
+cpu:bus=2:1, cpu: 240-296(step=4M).
+
+2, (21:09 2009-5-7)
+1), sdram: 有示波器时, 切频到64M不稳定(切频成功, dma大量错误或AASP无法正常工作).
+2), sdram, 168_168_168, 播放dongjingpiaoyi有错, 无法播放完成:
+映像: "D:\work\VC0830\SV\code_image\20090507\image\2120_me_sv_sdram.pak"
+filename=tokyo_720p_10m.rm
+RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+retVal != HXR_OK: rv_depack_add_packet
+
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    838 input frames, 837 output frames
+    total time is 85886 ms, average time is 102 ms, fps is   9.80->19.31
+3), pcddr, 虽然div相同. 但ddr(应该还是sdrc_adj_clk影响)配置不同. 
+例如90x6可以, 但90x4不行. 24x6可以, x4不行. 而且80, 24 bus=4, 但sdrc_adj_clk不同. 
+
+3, 代码:
+1), 位置: 20090507_2238_pcddr_pll1switchpll2_pass.rar
+log: log_20090507190806.log, 209437--215271.
+autoswitch: cpu:bus=1:1, 120->136, step=1M, times=2, doing.
+说明至少120->136M, div=4时, pcddr切频, memory运行稳定. 
+2), CVS: 
+key improvement:
+1, 支持从pll1->pll2, 目前主要测试了使用pcddr情况下pll1->pll2->pll1切频: 
+已测试频点(pcddr)
+autoswitch: cpu:bus=1:1, 120->136, step=1M, times=2, doing.
+说明至少120->136M, div=4时, pcddr切频, memory运行稳定. 
+2, 加入宏Clkrst_IsSDRAM()和Clkrst_IsPCDDr()判断是否是sdram, pcddr.
+
+clkrst\test\clkrst_test.c:
+*	  2009-05-03:
+*		removed: USING_INDEX.
+
+clkrst\app\clkrst.c
+//20090507, change pll wait counter from 0x9fff to 0x3fff. former is overflow
+
+clkrst\app\clkrst_app.c
+*	  2009-05-04:
+*		add pll1->pll2->pll1 flow
+*		to be removed: clkrst_MakeClockSwitchInfo(), print_cpu_bus_ratio()
+*		rename make_clockSwitchInfo to Clkrst_SwitchMakeInfo, pll1_xclk_switch
+*	  to Clkrst_Switch, clk_pll_switch to Clkrst_SwitchPll12Pll1
+*		rewrite clk_switch_to_pll1 to clk_switch_to_pll for switching to pll1
+*	  and pll2.
+*	  2009-05-07:
+*		如果是PCDDR, busdiv=2时, clkrst_CheckClockSwitchInfo会报错 
+
+clkrst\app\clock_switch_info.c
+*	  2009-05-07:
+*		add Clkrst_ClkSwitchSetSdrcAdjClk for both pll1 and pll2.
+
+clkrst\app\system_info.c
+*	  2009-05-04:
+*		add SysInfo_GetPllDiv for SysInfo_GetBus, SysInfo_GetCpu. return 
+*	  SysInfo_GetPllDiv according to TSystemInfo.clocksource
+*		add SysInfo_GetPll in order to get accurate pll Hz.
+*		remove TCpu_bus_divider g_cpu_bus_div_array using TDivider 
+*	  g_cpu_bus_div_array instead. 
+*	  2009-05-06:
+*		add SysInfo_CpuDivVal, SysInfo_BusDivVal.
+
+clkrst\app\sdram_config.h
+*	  2009-05-04:
+*		rewrite get_sdramInfo. using bus frequency Hz instead MHz. 避免pll不能
+*	  被MHz整除时bus计算有误差.(关键是区分60MHz这个临界点)
+*		add comment "//20090507, ddr对低频支持不好, 目前60M以下参数只支持24M和48M" at 
+*	  g_SdramInfo_pcddr_hynix_min_60_32M_16bit in pcddr_config_hynix.c
+*		add clkrst_pll1_sdrc_adj_clk and clkrst_pll2_sdrc_adj_clk in TSdramInfo
+*		add Clkrst_IsSDRAM() and  Clkrst_IsPCDDR() macro
+*	  2009-05-07:
+*		add new pcddr(more_120) info from dashan VC0830_sv_memscan macro 
+*	  PC_DDR_INCREASE_VOL_275V in pcddr_config_hynix.c. for all more_120 pcddr
+*	  info. not only for PC_DDR_INCREASE_VOL_275V 
+
+clkrst\driver\clkrst_driver.c:
+*	  2009-05-05:
+*		.h: add cb2_div2divider for cpu, bus pll2 divReg to divVal. add make_cpu_bus_div2.
+*	  2009-05-07:
+*		modify Clkrst_DrvPllCkd2Freq. using UINT64 instead to avoid overflow
+
+4, 测试:
+log: log_20090507190806.log, 215838--216559
+1), sdram
+(1), 672_168_168_168:
+RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+retVal != HXR_OK: rv_dep_add_packet
+Video strem in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    173 input frames, 172 output frames
+    total time is 19417 ms, average time is 112 ms, fps is   8.93->15.90 
+(2), 608_152_152_152:
+filename=tokyo_720p_10m.rm
+retVal != HXR_OK: rm_parser_get_packet
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    2783 input frames, 2783 output frames
+    total time is 291276 ms, average time is 104 ms, fps is   9.62->18.83
+
+2), pcddr
+filename=tokyo_720p_10m.rm
+retVal != HXR_OK: rm_parser_get_packet
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    2783 input frames, 2783 output frames
+    total time is 293627 ms, average time is 105 ms, fps is   9.52->20.40
+
+17:57 2009-5-7
+VC0830, SV, storage, sdio, guangyue sd不能mount的176LQFP有问题. 
+邮件: "转发: VC0832 ESD test result", 20090507_1832
+和lvpin, liu zixi一起调试.
+现象sd不能用的芯片, sd_clk0有一个1.x v电压上浮. sd_clk1无问题.
+发现两个问题: sd clk管脚歪了, 176LQFP socket不好用. 
+调正芯片管脚, 更好另一个176 LQFP CPU板后, 问题解决. 
+
+18:43 2009-5-7
+VC0830, SV, clkrst, clkswitch
+2, release code<DONE>
+3, 修改Clkrst_SysInfoGetPll1FreqAry<DONE>
+//TODO: 用SysInfo_GetOnePllCpuBusFreq重写此函数. 
+//将来如果需要直接切频到pll2(例如cpu,bus--pll2, vdec--pll1), 就可以很方便的限制
+//busdiv大小. 
+4, (11:00 2009-5-8)软件上需要对pcddr下切频加以限制. <TODO>现在get sdram info 已经可以判断该频点下有无memory参数, 可以把这个功能加入到get pll cpu bus info函数中</TODO>
+
+10:51 2009-5-8
+VC0830, SV, clkrst, clkswitch, pcddr, 发信
+Hi, all
+1, 使用SDRAM或PCDDR切频需要分别修改sys.h的宏"MEM_TYPE_VENDOR"为"SDRAM_SAMSUNG"和"PCDDR_HYNIX". 不切频不需要修改这个宏. 
+
+2, PCDDR切频: pll1->pll2->pll1
+命令: clksv. 如果切频到cpu=bus=120->136这些频率, 用户只有cpu频率需要自己输入, 其余都用默认值即可. 
+目前pcddr切频支持cpu=bus=120->136M(step=1M)且bus divider=4的频点和144_24_24_24频点. 其它频点未进行稳定性测试. 
+由于pcddr不支持很低的频率, 切频到xclk不稳定, 所以只能采用pll1->pll2->pll1这个流程. 
+
+3, pcddr rvdebug脚本还不能用. 如果需要调试可以用axd切频或用烧写nand映像切频. 切频后使用"include D:\VC0830\VC0830\SV_init_script\VC0830init_for_fpga_sdram_onlyRunProgram.inc"load映像. 
+pcddr 512info: "D:\VC0830\vc0830_bootloader\DfuPack\K9F1G08U0A\bootloader_pcddr16_120M". 512info中pcddr参数与VC0830_SV参数相同. 目前120M参数使用more_120M参数. 
+
+4, sdram可以采用pll1->pll2->pll1或pll1->xclk->pll1两个流程. clksv命令的mediumClkSrc参数选择. 
+
+Hi, dashan
+
+麻烦你修改一下rvdebug的pcddr脚本: "D:\VC0830\VC0830\SV_init_script\VC0830init_for_fpga_pcddr.inc", 我按512info修改后, 仍然不行. 
+
+11:29 2009-5-8
+VC0830, SV, storage, guangyue sd卡用我的电源板就可以. 他的不行. <TODO>关注进展</TODO>
+
+11:34 2009-5-8
+(14:00 2009-5-8)
+VC0830, SV, clkrst, clkswtich, pcddr, <TODO></TODO>
+1, 测试pcddr所有频点. 
+修改pcddr时列出的频点: 使用get one pll cpu bus frq实现. 
+对于所有不可用或不好用的频点, print时加字符串说明. 
+1), TSystemInfo.flag加入flag. 需要同时修改flag用法. 
+2, 招人讨论pcddr sdrc_adj_clk.
+
+13:45 2009-5-8
+VC0830, SV, 稳定性测试, pcddr, vdec, 超频
+1, aiguo邮件"稳定性测试", 20090508_1308
+Hi,beizhan
+Core 1.5v, ddr 2.8(2.75不变也可以)，我们试试这个频点cpu:bus:vdec = 288:144:192。
+就用zhangjian现在的切频程序。
+
+2, zhangjian:
+映像: 20090508, 1040_me_sv_bin_pcddr.pak.
+结论: 不升压时, 288_144的memory有一点不稳定
+1), 576_288_144_144, dmalliautotest 1000 pass
+2), 576_288_144_192, dma lliautotest 5000, fail with one error:
+4965  Soure address:0xa2b95a, Dest addreas:0xc139d9, Length:0xa0ded, Channel:1,  lli num:5, test failed!!!
+解dongjingpiaoyi, 第一个frame就报HW_TIMEOUT.
+3), 576_296_148_148, dmalliautotest 1000 fail with data abort
+
+3, dashan邮件"PC DDR 电压和频率目前在SV台子上的情况"20090513_1548
+得出如下结论：
+1）升压core 和sdram 电压后，能冲的最高频率有提升。不加压，SV板子最高到144M，加压后，SV板子最高到156M
+2）加压后搜索出的参数和不加压搜索出的参数基本一致。说明还是板子的电气特性是影响工作频率的重要因素，而并不是搜索算法本身影响频率参数
+3）新老SDRAM 搜索算法搜出来的数据基本一致，无太大差别
+bamvor: 我回信:
+不加压时288_144可能不是很稳定:
+在我的板子上测试pll576_cpu288_bus144_192这个频点, lliautotest 5000, 有一次错误:
+4965  Soure address:0xa2b95a, Dest addreas:0xc139d9, Length:0xa0ded, Channel:1,
+
+15:10 2009-5-8
+VC0830, SV, srorage, sdio, zhanglu不能用sd卡
+1, 现象:
+Clk,Uart init Done
+Icache
+AP Mode...
+Read Info OK
+Init cmd
+Find BBT
+Env init done
+Load.
+GoCard Event.
+Card Remove.
+
+2, 更新代码后, 编译pcddr vdec, me都无问题.
+编译sdram vdec也没有问题. 
+
+15:36 2009-5-8
+VC0830, SV, 寄存器, dragon, reglist
+VC0830_sdram.c: 
+#elif (CUR_SDRC_CHIP == SV_181_Internal_8M)
+	static const unsigned int g_sdrc_conf[][2] = {
+
+VC0830reglist.cpp
+CLOCKRST_CKD_SDR_CONFIG -> CLOCKRST_PLL1_SDRC_ADJ_CLK_CONFIG
+CLOCKRST_PLL2_CKD_SDR_CONFIG -> CLOCKRST_PLL2_SDRC_ADJ_CLK_CONFIG
+
+16:09 2009-5-8
+VC0830, SV, clkrst, clkswitch
+caijin: 304_152_152->240_120_120 切频后svclkinfo不正确
+我更新代码后, caijin再更新代码问题解决. 原因未知.
+
+17:37 2009-5-8
+VC0830, SV, storage, sdio, 供电与TI电源板, 文档
+邮件"sd卡不能用可能是供电问题", 20090508_1741
+sd卡不能用可以先检查电源板供电: 
+我发现有2个板子sd卡不能用问题是由于JP49电压被拉低(应该是3v). 替换好的电源板就可以. 
+请weiran尽快查查是什么原因. 
+(10:58 2009-5-11)
+zouweiran反馈: 我的电源板就是电压低了, 只有2.4v. weiran只是调高电压, 说可能是片子本身问题造成输出电压下降.
+
+18:38 2009-5-8
+VC0830, SV, clkrst, <TODO>周一</TODO>
+1, <TODO>SysInfo_GetOnePllCpuBusFreq原型已修改, 函数内容未修改</TODO>
+2, (22:44 2009-5-10)
+<TODO>例会前实验pcddr所有支持的频率. </TODO>
+<TODO>pcddr参数处理放到get sdram中</TODO>
+
+23:13 2009-5-10
+VC0830, SV, clkrst, 注意事项
+<TODO>设置systemInfo时同时写入systemInfo->clocksource</TODO>
+
+23:18 2009-5-10
+VC0830, SV, clkrst, <TODO>总结现有待做</TODO>
+1, 自"15:44 2009-5-4"1:
+目前svclkinfo没有考虑cpu,bus在pll2的情况. 
+
+10:34 2009-5-11
+VC0830, SV, <TODO>今日任务</TODO>
+1, 确定pll2频点, dashan扫描对应的pll1频点, 给zhangjian参数后实验pll1, pll2下面是否都可以. 如果可以zhangjian加入cpu,bus--pll2, vdec--pll1流程. 
+2, sd os写不能写入; <DONE>: 见"16:44 2009-5-11"
+3, "10:43 2009-5-11"内容.
+
+11:02 2009-5-11
+VC0830, SV
+代码修改(include\sys.h):
+1, 删除SD_MANUALREQUEST
+2, 删除CLOCK_SWITCH_OFFVIDEO:
+do_video()(video\video_test\video_test.c)
+	#ifndef CLOCK_SWITCH_OFFVIDEO
+		//Vdieo_Preview();
+	#endif
+3, 把SV_FIX_MMC_INIT_FAIL从sys.h移到sdio\subdir.mk
+当同时定义了__SV__, SV_FIX_MMC_INIT_FAIL, CLKRST_CLKTREE三个宏时定义__SV_FIX_MMC_INIT_FAIL__, 这个宏使Sdio_Drv_SetBusCLk()(sdio\src\sdiodrv.c)函数配置FOD频率时先尽量降低sdio input clk. 这样可以改善占空比. 
+4, 删除, 容量和位宽与切频无关, <TODO>问lingming和哪个参数有关</TODO>:
+//define memory size and width
+//#define 	SYS_MEMORY_SIZE_16M
+#define 	SYS_MEMORY_SIZE_32M
+//#define 	SYS_MEMORY_SIZE_64M
+
+#define 	SYS_MEMORY_WIDTH_16BIT
+//#define 	SYS_MEMORY_WIDTH_32BIT
+
+/**
+ * clkrst internal definition. 
+ */
+//处理封装和sdram/ddr配置的冲突
+//目前看sdram容量不影响参数, 暂时不使用
+#if 0
+#ifdef _SV128_
+	#if defined(SYS_MEMORY_SIZE_32M) | defined(SYS_MEMORY_SIZE_64M)
+		#error sys.h: 128 package only support 16M sdram, define "SYS_MEMORY_SIZE_16M" instead
+	#endif
+#endif
+#endif 
+5, 删除了LINGMING_NEW_SDRAM_INFO和sdram_config_samsung.c相关内容. 
+
+11:35 2009-5-11
+VC0830, SV, clkrst
+<TODO></TODO>: memory与稳定性有关与性能无关的参数.
+
+16:44 2009-5-11
+VC0830, SV, storage, sdio, 解决OS下不能写入的问题
+1, SdioBase_Obtain_Semaphore3share实际并没有起作用. 
+默认改为关. 用宏区分.
+(20:59 2009-5-11)去掉SdioBase_Obtain_Semaphore3share及其interrupt_disable/enalbe仍然不行
+2, 注释OS_SUPPORT_DMA可以. 说明与此有关, 从这里开始查. 
+3, OS_SUPPORT_DMA拆分为OS_SUPPORT_DMA_WR, OS_SUPPORT_DMA_RD.
+1), 只有"OS_SUPPORT_DMA_RD"时, 也是读可以, 写不可以. 
+说明OS_SUPPORT_DMA和OS_SUPPORT_DMA_RD有问题. 
+2, 只有"OS_SUPPORT_DMA_WR"时, read crc error.
+4, 把errstate也加入了nucleus, 仍然不行. 明天继续查, 感觉是没有把读写相关所有都加入nucleus造成的. cmd可以暂时不加入. 
+
+16:53 2009-5-11
+VC0830, SV, clkrst, 编译错误
+1, clkrst/test/../app/../driver/clkrst_driver_type.h:37: error: expected identifier before numeric constant
+因为同时定义了CLKRST_DEBUG debug开关和enum. 二者有冲突, 删除了CLKRST_DEBUG调试开关. 
+2, clkrst/test/clkrst_test.c:747:1: error: pasting "(" and "CLKRST_INFO" does not give a valid preprocessing token
+把
+	#define Clkrst_Dbg(printLevel, ...) 	\
+		do {	\
+			if ( printLevel >= g_Clkrst_CurPrintLevel ) {	\
+				HALPrint(##printLevel##_MSG __VA_ARGS__);	\
+			}	\
+		} while(0)
+改为
+	#define Clkrst_Dbg(printLevel, ...) 	\
+		do {	\
+			if ( printLevel >= g_Clkrst_CurPrintLevel ) {	\
+				HALPrint(printLevel##_MSG __VA_ARGS__);	\
+			}	\
+		} while(0)
+即可. 
+
+17:08 2009-5-11
+VC0830, SV, clkrst, 
+1, 基本测试完成: Clkrst_SysInfoGetPllFreqAry
+代码: 
+
+19:01 2009-5-11
+嵌入式, 调试, multiice支持的arm体系结构
+最高支持到arm10, 不支持cortex. 
+http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.faqs/ka4103.html
+
+20:02 2009-5-11
+VC0830, FPGA, 调试, SV回到FPGA实验dither, 遇到问题, <TODO>总结</TODO>
+详见fengbeizhan "答复: 830fpga台子" 20090511_2003
+1, 程序跑不起来，死在sdio里面
+zhangjian: 板子跳线问题.
+2, 程序跑起来了，preview后程序就停了
+fengbeizhan最后查明是sv宏导致的. <TODO>问是否编译的-sv的target, 怎么查到的?</TODO>
+3, Dragon编译不过
+原因是zhangjian注释了clk_init. <TODO>问这个函数是谁加的, 希望与clkrst_init合并</TODO>
+4, (18:56 2009-7-22)VC0816, SV, storage, sdio, dashan可能是编译了SV导致sd停在等DMA中断处. 估计与上面fengbeizhan遇到问题相同. 
+
+20:09 2009-5-11
+VC0830, SV, 181BGA可以调试, 
+摘要:
+1, 181需要与baseband配合使用.
+2, 181sdram使用1.8v供电, 若用2.5会有奇怪问题.
+
+自lidongliang邮件"181 调试"20090511_2009
+181平台已经可以供大家调试
+
+目前只有一套（181板子目前我们只有一套）
+ 
+相比176，282等，操作起来麻烦了一点点
+但不影响大家使用
+ 
+初步测试
+1. aasp shell 可用
+2. 181 mount SD卡，读写文件没有问题
+3. VDEC播放rm 960*544.rm  文件没有问题
+4. video使用标准屏没有问题
+ 
+注意一下几点：
+1. 181需要与baseband平台配合使用，刚加电的时候jtag是找不到arm的，因为此时830中en_vdd_core没有打开
+Baseband跑起来以后，会给830加电，如果看到830板子上面红灯亮了，表示arm可用，此时可以使用jtag了
+2. 181内部的sdram工作在1.8V电压, 所以在2.5V供电的时候会有很多怪问题
+3. 下载代码使用VC0830init_181.inc， 我已经提交
+ 
+目前我的平台上面跳线，电压都已经调好，大家直接使用即可
+明天我不在，大家使用时有什么不明白的，找lingming或caijin
+硬件上面找zouweiran解决
+ 
+Caijin可以明天试试720P
+如果不能出错可以跟踪一下
+看看内存是否耗尽了
+目前CB内存大概1.5M，  NCNB内存大概4.7M
+参考830 sv sdramAssign.xls
+
+10:34 2009-5-12
+VC0830, SV, clkrst, dragon编译错误解决
+1, CVS log:
+zhangjian clkrst, biu
+temporaly fix dragon compile error:
+V830Plane error LNK2019: 无法解析的外部符号 _set_clockrst_pll_switch@4 ，该符号在函数 _clk_init@0 中被引用
+discuss with dongliang later.
+
+2, 邮件: zhangjian邮件"答复: fpga台子"20090512_1110
+
+dragon编译错误解决, 请owner看下这样修改是否影响功能. 
+
+错误: 
+V830Plane error LNK2019: 无法解析的外部符号 _set_clockrst_pll_switch@4 ，该符号在函数 _clk_init@0 中被引用
+set_clockrst_pll_switch是在*.s中定义的函数, windows下肯定无法使用. 
+
+我修改clk_init()(vc0830\clkrst\app\clkrst.c)暂时解决问题．
+#ifndef WIN32
+		set_clockrst_pll_switch(0);
+#endif
+
+这个函数只在biu和baseband调用:
+D:\VC0830\code\cvsnew\VC0830\dragon\V830Panel\V830BiuDlg.cpp(431):	clk_init();
+D:\VC0830\code\cvsnew\VC0830\dragon\V830Panel\V830BiuDlg.cpp(674):	clk_init();
+D:\VC0830\code\cvsnew\VC0830\baseband\trm830\cmdV830.c(640):	clk_init();
+
+另外请owner看下这个clk_init和clock_init()(vc0830\bootloader\vc0830_main.c)作用是否一样, 如果一样, 我会把二者合并, 放到vc0830\clkrst\app\clkrst.c.
+
+15:26 2009-5-12
+VC0830, SV, storage, sdio问题
+现在等不到cmd的现象很像xiakai(8497), zhulei bug. 
+zhulei:
+呵呵，硬件请求pad的问题一直没有解决，现在我全部改成软请求了！呵呵
+xiakai:
+282封装sd, nand可以不share, 也用的手动模式.
+
+16:32 2009-5-12
+VC0830, SV, <TODO>提高sd优先级</TODO>
+
+18:05 2009-5-12
+VC0830, SV, clkrst, clkswitch vdec
+直接修改vdec divider:
+向CKD_VCLK_CONFIG(0x60000050)写入divider. 
+divider reg
+2		0x00
+3		0x01
+4		0x11
+5		0x12
+6		0x22
+7		0x23
+8		0x33
+9		0x34
+10		0x44
+11		0x45
+12		0x55
+13		0x56
+14		0x66
+15		0x67	
+16		0x77
+修改后, 可以用svclkinfo查看是否是预期频率.
+
+10:36 2009-5-13
+VC0830, SV, storage, sdio, 调试Nucleus下sd卡
+1, 把有所cmd都用手动模式.
+1), Sdio_Drv_ReadMultiBlk中设断点一步一步走没问题.
+但在调用Sd_Mem_Read处设断点会出现:
+Response start time out: 18.
+2), 在等命令之前设断点, 也没问题. 如果等命令那里立刻F5继续运行. 也会有timeout.
+估计是等命令时间问题. 
+3), 感觉是timeout问题. 
+(15:05 2009-5-13)
+延长了response time out后仍然后cmd24(write)time out.
+4), 
+
+2, 为什么只有WriteOneBlk等SecIsr_BlkFinish(1)中断, 其余都等SecIsr_DmaTransEnd(5)中断?！
+
+3, 请教lvpin:
+1), read都等dma;
+2), write single等blk
+3), write multi等autocmd.
+
+4, 综合3和效率, cmd和single block都不使用OS.
+除了cmd0, padc是auto还是manual都可以. 
+
+5, 168_168_168
+64k:
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    101 input frames, 101 output frames
+    total time is 10094 ms, average time is 99 ms, fps is  10.10->20.67
+
+256k:
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    101 input frames, 101 output frames
+    total time is 10094 ms, average time is 99 ms, fps is  10.10->20.67
+速度一样, 发现很多都是读的一个blk.
+
+6, 结论, 见"11:02 2009-5-14".
+
+7, 
+代码: 20090513_1849_sdOSPass.rar
+D:\work\VC0830\SV\code_image\20090513
+1), 修改clkrst打印信息输出方式, <TODO>总结, 加入文档</TODO>
+参考Linux中printk输出级别, 可以用setDbg控制输出级别. 如果希望任何情况都输出请直接用HALPrint
+(1), clkrst\driver\clkrst_driver_type.h
+	#define CLKRST_ERROR_MSG	"CLKRST_ERR: "
+	#define CLKRST_INFO_MSG		"CLKRST: "
+	#define CLKRST_DEBUG_MSG	"CLKRST_DBG: "
+	#define CLKRST_DEBUG_LL_MSG	"CLKRST_DBG_LL: "
+
+#ifndef WIN32
+	#define Clkrst_Err(...) Clkrst_Dbg(CLKRST_ERROR, __VA_ARGS__)
+	#define Clkrst_Msg(...) Clkrst_Dbg(CLKRST_INFO, __VA_ARGS__)
+	#define Clkrst_Dbg(printLevel, ...) 	\
+		do {	\
+			if ( printLevel >= g_Clkrst_CurPrintLevel ) {	\
+				HALPrint(printLevel##_MSG __VA_ARGS__);	\
+			}	\
+		} while(0)
+#endif // undef WIN32 end
+
+	enum CLKRST_PRINT_LEVEL {
+		CLKRST_DEBUG_LL = 0,	// clkrst low level debug
+		CLKRST_DEBUG = 1,
+		CLKRST_INFO = 2,
+		CLKRST_ERROR = 3,
+	};
+(2), Clkrst_Dbg可以选择这四个level. 
+Clkrst_Err和Clkrst_Msg分别对应CLKRST_ERROR, CLKRST_INFO level.
+(3), 修改后删除了原有在clkrst\subdir.mk的CLKRST_DEBUG宏.
+
+2), key improvement:
+(1), add setDbg cmd in clkrst module:
+default level is 1. set print level to 0 will display all print message include low level debug message. 
+(2), sdio: only using OS in multi read/write.
+sdio\src\sdobase.h: SDIO_NUCLEUS_SUPPORT: support nucleus.
+
+3), cvs log:
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/.cdtproject,v  <--  .cdtproject
+new revision: 1.256; previous revision: 1.255
+done
+Checking in clkrst/app/clkrst_app.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.25; previous revision: 1.24
+done
+Checking in clkrst/app/module_clock_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/module_clock_info.c,v  <--  module_clock_info.c
+new revision: 1.25; previous revision: 1.24
+done
+Checking in clkrst/app/module_clock_info.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/module_clock_info.h,v  <--  module_clock_info.h
+new revision: 1.19; previous revision: 1.18
+done
+Checking in clkrst/app/system_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.c,v  <--  system_info.c
+new revision: 1.20; previous revision: 1.19
+done
+Checking in clkrst/app/system_info.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.h,v  <--  system_info.h
+new revision: 1.15; previous revision: 1.14
+done
+Checking in clkrst/driver/clkrst_driver.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_driver.c,v  <--  clkrst_driver.c
+new revision: 1.8; previous revision: 1.7
+done
+Checking in clkrst/driver/clkrst_driver.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_driver.h,v  <--  clkrst_driver.h
+new revision: 1.10; previous revision: 1.9
+done
+Checking in clkrst/driver/clkrst_driver_type.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/driver/clkrst_driver_type.h,v  <--  clkrst_driver_type.h
+new revision: 1.3; previous revision: 1.2
+done
+Checking in clkrst/subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.19; previous revision: 1.18
+done
+Checking in clkrst/test/clkrst_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.19; previous revision: 1.18
+done
+Checking in sdio/sdio_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/sdio_test.c,v  <--  sdio_test.c
+new revision: 1.63; previous revision: 1.62
+done
+Checking in sdio/src/sdioapp.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioapp.c,v  <--  sdioapp.c
+new revision: 1.51; previous revision: 1.50
+done
+Checking in sdio/src/sdiobase.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiobase.c,v  <--  sdiobase.c
+new revision: 1.21; previous revision: 1.20
+done
+Checking in sdio/src/sdiobase.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiobase.h,v  <--  sdiobase.h
+new revision: 1.4; previous revision: 1.3
+done
+Checking in sdio/src/sdiodrv.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.c,v  <--  sdiodrv.c
+new revision: 1.94; previous revision: 1.93
+done
+Checking in sdio/src/sdiodrv.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.h,v  <--  sdiodrv.h
+new revision: 1.3; previous revision: 1.2
+done
+Checking in sdio/src/sdioprt.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioprt.c,v  <--  sdioprt.c
+new revision: 1.43; previous revision: 1.42
+done
+
+8, 测试:
+0), 给Caijin发邮件"无OS时, vdec报错RVDEC_HW_TIMEOUT"20090514_1100
+我发现无OS时, vdec容易解不完, 今天实验是168_168_168下, 播dongjingpiaoyi. 无OS下只能解到1718frame.
+原来我试过类似的case, 无OS下vdec只能解到739 frame. 都是报RVDEC_HW_TIMEOUT错误. 有OS下vdec都能解完. 
+
+1), me_sv_bin
+(1), rvplay -f tokyo_720p_10m.rm -dn 100
+D:\work\VC0830\SV\code_image\20090514\image\1023_me_sv_bin
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    101 input frames, 101 output frames
+    total time is 9934 ms, average time is 98 ms, fps is  10.20->20.84
+(2), rvplay -f tokyo_720p_10m.rm
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    2783 input frames, 2783 output frames
+    total time is 261249 ms, average time is 93 ms, fps is  10.75->20.90
+
+2), vdec_sv_bin
+D:\work\VC0830\SV\code_image\20090514\image\1030_vdec_sv_bin
+(1), rvplay -f tokyo_720p_10m.rm -dn 100
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    101 input frames, 101 output frames
+    total time is 9961 ms, average time is 98 ms, fps is  10.20->20.63
+(2), rvplay -f tokyo_720p_10m.rm
+Video stream in 'tokyo_720p_10m.rm' decoding complete:
+    width is 1280, height is 720
+    1719 input frames, 1718 output frames
+    total time is 166708 ms, average time is 97 ms, fps is  10.31->20.19
+
+3), 无OS下vdec下解不完, 提示:
+RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+retVal != HXR_OK: rv_depack_add_packet
+为什么会有这种差异呢? 
+
+4), Caijin回信:
+刚看了代码
+Os下，timeout的判断标准是等待1s
+无os下，100ms
+我以前认为720p也应该都是100ms以内解完，所以设置了100ms
+后来应shuyu要求，增加到1s，但没有同时改无os下的参数
+我现在都改成1s
+
+11:29 2009-5-13
+aasp_cmdwait即do_xxx_test中调用的"AASP_CMDWAIT(subcmds, sub_shell_name);"
+subcmds是在xxx_test.c中定义的Subcmd结构体. 
+
+15:33 2009-5-13
+杨惠华 yanghuihua@vimicro.com
+上海, 做wince vdec.
+
+9:59 2009-5-14
+VC0830, SV, storage, sdio, <TODO>测试181sdio</TODO>
+1, 邮件
+1), lidongliang邮件""20090513_1949. 说明了181BGA25号演示的主要内容.
+2), fengbeizhan邮件"答复: 181 封装25日之前要给重要客户演示"20090514_0957
+
+10:39 2009-5-14
+VC0830, SV, 一定要选择封装
+给830qa邮件"编译sv时请大家选择封装"20090514_1102
+Hi, all
+大家如果编译sv, 一定要在include\sys.h选择对应的封装:
+1, 176和282封装的sensor i2c不同, sdram参数不同, 如果没有选对会造成sensor不能用, 切频不稳定.
+2, 如果四个封装都没有选, clkrst模块(clkrst\app\module_clock_info.c)会因为无法确定i2c切频后默认频率主动报错. 
+
+Thanks
+zhangjian
+
+11:02 2009-5-14
+VC0830, SV, storage, sdio, debug
+1, 给"'Cai Jin'; 'Feng Bei Zhan'; 'Ai Guo'; '830QA'"邮件"OS下sd卡不能写入问题解决"20090514_1320
+Hi, all
+
+OS下sd卡不能写入问题解决, 错误原因: 
+(1), OS下Write single block等到dma finish(二级中断5)就返回了, 与lvpin讨论, 应当等blk finish(二级中断1)(Write single block中blk finish中断在dma finish中断之后). 修改: 只在multiread/write中使用OS信号量, single read/write不使用.
+(2), sd二级中断的errstate原来没有释放信号量, 如果读写出错, 无法返回. 
+修改: 在err state中加入Activate_HISR代码. 
+
+sdio模块OS开关从sdiodrc.c移到sdio\src\sdiobase.h:
+定义SDIO_NUCLEUS_SUPPORT表示在定义NUCLEUS时sdio支持OS. 默认打开. 
+
+另外这个bug与获得padc采用auto还是manual无关(cmd0任何情况下都是manual方式). 
+可以用sdio\src\sdiobase.h的宏"#define SDIO_MANUAL"开关. 默认是关闭————使用auto方式. 
+
+我这两天会解决sdio问题, 大家使用sd卡中如果有其它bug, 麻烦给我回信
+1, 得不到padc, 在下面while死等:
+while (1)
+{
+    val = Padc_GetPadCState();
+    if (val == 3) //3 sd use
+    {
+        break;
+    }
+}
+2, 有的sv板不能用sd卡.
+
+thanks
+
+zhangjian
+
+2, (13:18 2009-5-15)
+pll1, sdram: 168_168_168, 播放dongjingpiaoyi, audio似乎没有开:
+162025.85 ms elapsed; 127849.13 ms taken by rv decoder
+2601 frames decoded; 182 frames skipped
+  fps =  16.05->20.34
+我怎么知道sd卡OS机制有没有起作用?
+
+11:22 2009-5-14
+(15:21 2009-5-20)
+VC0830, SV, clkrst, clkswitch, 切频API说明
+给fengbeizhan邮件"切频API说明"20090514_1440.
+给"lifei, zhulei, 830qa"邮件
+这里描述了切频API和memory参数配置. pcddr切频必须选择pll1->pll2->pll1这个流程. 
+sdram切频建议使用pll1->xclk->pll1流程. 
+1, API原型: int Clkrst_Switch(PTSystemInfo sysInfop, UINT32 clkSrc, UINT32 delay): 
+clkrst\app\clkrst_app.c
+
+2, 
+*     完成pll1->xxx->pll1切频流程, cpu, bus必须处于xclk或pll1, 没有考虑处于pll2
+*	的情况. 
+*	  必须在"clkrst_Init"之后调用
+
+3, 参数
+*	  sysInfop: 提供系统切频需求, 包括: xclk, pll_ckd,cpu_bus_div,vclk_div. xclk
+*	必须给出, 目前可以使用XCLK_FREQ宏获得. 可以参考system_info.c定义的TSystemInfo, 
+*	例如g_SystemInfo_12_672_168_168_168是pll672, cpu=bus=vdec=168MHz的配置. 
+*	  clkSrc: 选择切频流程. XCLK_ID: pll1->xclk->pll1; PLL2_ID: pll1->pll2->pll1, 
+*   对于pcddr, 会强制选择PLL2_ID.
+*	  delay: 切频后是否delay, 目前没有delay没法发现不稳定, 建议delay=0.
+
+4, 切频中memory的配置:
+1), 切频使用的memory在clkrst\app\memoryType_config_memoryVendor.c中定义.
+memory参数一般分为min-60, 60-120, 120-max三组. 边界包括与否见TSdramInfo.sdrc_min_freq, sdrc_max_freq.
+例如三星sdram参数在sdram_config_samsung.c中定义. 181BGA内部的32bitsdram在sdram_config_181BGAInternal.c (clkrst\app)定义. 现代pcddr在"ddr_config_hynix.c (clkrst\app)"定义.
+2), 不同参数通过在include\sys.h中定义"MEM_TYPE_VENDOR"选择, 目前支持: 
+SDRAM_SAMSUNG, PCDDR_HYNIX, SDRAM_181BGAINTERNAL三种. clkrst\app\sdram_config.h中根据"MEM_TYPE_VENDOR", 选择上述xxx_config_xxx.c中定义的memory参数.
+
+5, 自动计算sysInfop
+SysInfo_GetOnePllCpuBusFreq()(clkrst\app\sysinfo.c)函数可以根据cpu频率, cpu:bus, vdec:bus等参数返回PTSystemInfo. 函数说明:
+*  \brief
+*     根据cpu, bus, vdec等频率, 比例要求返回PTSystemInfo.
+*	  必须在"clkrst_Init"之后调用
+*
+*  \parameter
+*	  cpu: 预期cpu频率.
+*	  busCond: 用condFunc表示的bus频率要求. 一般用cpu:bus ratio. 目前支持cpu:bus
+*	=1:1, 2:1, 3:1, 4:1. 对应cpuBus11, cpuBus21, cpuBus31, cpuBus41. 如果为NULL, 
+*	表示无要求, 会返回第一个合理的bus频率
+*	  vdecCond: 用condFunc表示的vdec频率要求. 一般用vdec:bus ratio. 目前支持
+*	vdec:bus=1:1, 3:2, 4:3, 2:3, 3:4, 如果为NULL, 表示无要求, 会返回第一个合理的
+*	bus频率
+*	  clkSrc: cpu, bus在那个pll上. 目前只支持pll1. clkSrc=PLL1_ID.
+*	  rangeArrayp: pll, cpu, bus, vdec频率最大值. 只搜索小于最大值的组合. 
+*
+*	  condFunc: bus, vdec都通过condFunc判断是否是符合要求的频率. 返回1表示符合要求.
+*	原型: "typedef INT32 (*condFunc)(void *p);", 在SysInfo_GetOnePllCpuBusFreq中
+*	参数p是当前搜索到的systemInfo.
+
+6, 测试命令:
+1), svclk(do_clkswitchSV_cpurate()(clkrst\test\clkrst_test.c):
+切频命令
+*	Usage		:	1, 输入cpu频率, 程序会列出所有符合g_PreferedMax的pll,cpu,
+*					bus组合; 
+*					2, 选择pll, cpu, bus列表index. 
+*					3, 选择vdec divider
+*					4, 切频
+2, autoswitch(do_clkswitchAutoSwtich()(clkrst\test\clksrt_test.c):
+自动切频测试命令. 
+
+14:28 2009-5-14
+VC0830, SV, clkrst, clkswitch
+1, CVS
+zhangjian, clkrst, clkswitch
+加入适当注释. 
+clkrst\app\clkrst_app.c
+*	  2009-05-14:
+*		to be removed: clk_pll_switch_by_index. 这个函数直接调用Clkrst_SwitchPll12Pll1
+*	  是旧方法, 现在必须是给出TSystemInfo后, 先调用Clkrst_SwitchMakeInfo计算module divider
+*	  在调用Clkrst_SwitchPll12Pll1切频. 
+*		to be removed: print_clk_switch_info_by_index, get_num_of_g_ClockSwitchInfo, 
+*	  get_num_of_cpu_bus_ratio, print_cpu_bus_ratio, get_cpu_freq_by_index, 
+*	  print_all_clk_switch_info
+
+2, CVS log
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.26; previous revision: 1.25
+done
+Checking in clkrst_app.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.h,v  <--  clkrst_app.h
+new revision: 1.12; previous revision: 1.11
+done
+Checking in system_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.c,v  <--  system_info.c
+new revision: 1.21; previous revision: 1.20
+done
+Checking in system_info.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.h,v  <--  system_info.h
+new revision: 1.16; previous revision: 1.15
+done
+
+15:03 2009-5-14
+VC0830, SV, BGA181, 使用方法, 文档, 总结
+multiice能连上, 但rvdebug连不上. 
+后来aiguo发现是baseband没有完成对cp的初始化. 先复位baseband即可. 
+cp打出如下信息(串口与830配置相同, 115200, 8n1): 
+*************************************************************************
+  Starting Vimicro ARMBootloader Version Special for VC0830...
+  DOWNLOAD_ADDRESS=0x0c400000, BOOT_ADDRESS=0x0c000000
+  built 17:32:22, Feb 04 2008
+                                                Change by Lv Haifang     
+*************************************************************************
+Cache(Internal RAM) Cell Test.
+Set0~3 is tested!
+TagRAM0~3 is tested!
+LRU is tested!
+4KB internal SRAM test.
+Cache Test:OK!
+Memory Test(c400000h-c500000h):O.K.
+
+KM29U128T is found.
+*------------------------------------------------------------------------
+*                SerialNo:0x 1d00000                                          
+*                COM:115.2kbps,8Bit,NP,UART0 
+*                RO_Limit=0x       0
+*                RW_BASE =0x c400000
+*------------------------------------------------------------------------
+Waiting for Download code....
+
+Timeout
+
+Boot From Nand Flash
+Loading binrary code from NandFlash...
+1:  fe 2:  bb 3:   4 4:   0
+
+Now, Reading[FILESIZE: 310270 bytes]
+Checksum: OK
+
+Starting program...
+Init NF_FatInit
+
+Init Usb_InitEnv
+it Usb_InitEnv
+
+Init GlobalBuf
+GlobalB
+
+Init GlobalBuf
+delay ... 
+CLOCKRST_PLL_SWITCH: 0x0 
+0:/>
+
+15:21 2009-5-14
+<TODO>定义CLKRST_CLKTREE时, 编译baseband有错</TODO>
+
+15:30 2009-5-14
+VC0830, SV, storage, sdio, 181BGA
+复制一个800k文件, 一个63M文件在pc上比较, pass.
+
+17:00 2009-5-14
+VC0830, SV, clkrst, clkswitch, 181BGA
+0, 用法:
+1), 181BGA使用内部的8M 32bit sdram.
+2), 先开cp电源(181BGA CPU板上红灯不亮), 再开baseband电源(插入usb供电).
+baseband上电后, 四个灯都亮, 此时在初始化. 稍后四个led都闪表示在download. 稍后4led灭, beep. 此时就可以用rvdebug了(181BGA CPU板上红灯亮). 
+
+1, pll1480_240_120->pll2480_120_120->pll1_132_132, dma lliautotest 5000 退出后dataabort:
+4910..4920..4930..4940..4950..4960..4970..4980..4990..[DMA_MODULE]MESSAGE:Random test over
+data abort
+2, 实验直接在120M, 不切频时. dma lli 5000.
+dma完成后fail.
+3, size
+const unsigned int addrSize = 0x50000;//dma size
+const unsigned int randRange = 1024 * 1024 / 4;//通过AASP_RAND取dma起始地址范围
+改为
+const unsigned int addrSize = 0x28000;//dma size
+const unsigned int randRange = 1024 * 1024 / 8;//通过AASP_RAND取dma起始地址范围
+改为
+const unsigned int addrSize = 0x10000;//dma size
+const unsigned int randRange = 1024 * 1024 / 20;//通过AASP_RAND取dma起始地址范围
+都是dma后 data abort.
+4, 跟踪代码, 发现是free时出现的data abort.
+两次都是在free后面的free_r 2712行fail.
+5, (18:21 2009-5-14)lingming更新了链接脚本, 重新实验. 
+更新链接脚本后仍然不行. 
+
+18:55 2009-5-14
+VC0830, SV, clkrst, clkswitch, BGA181, 续"17:00 2009-5-14", <TODO>文档, 总结</TODO>, 调试内存相关错误
+1, 把dma_test.c, dmac.c中原有根据封装确定不同memory大小改为通过memory容量确定. 
+SDRAM8M, SDRAM16M等等, 这些宏是eclipse在编译时定义在"../build/830Macro.h"的.
+封装改为memory容量. 
+2, 之前错误的原因是设置的addrSize和randRange不合理, 造成dma读写超出已分配的空间, 写坏了其它数据(memory链表?), 从而data abort. <TODO>学习malloc和free算法, 查看具体是哪里出错</TODO>
+//dma地址和size配置说明
+//addrSize+1000是DMA src, dst buffer大小, randRange是产生随机数r的范围
+//dma搬移 src+r1 -> dst+r2, 大小是size=r3的数据. r1,r2,r3是三次产生的随机数r.
+//为了保证dma搬移不会超出已经malloc的范围, 我们设置addrSize:randRange=2:1.
+3, 测试:
+1), cpu=bus=132, dma=1000, pass.
+2), cpu=bus=121->132MHz, step=1M, dma=100次, time=5, pass.
+3), cpu=bus=60->132MHz, step=4M, dma=100次, time=5, pass.
+4), 切频到96_12_12_12, fail at 切频函数.
+5), 复位:
+pll_cpu_bus, dma lli 
+132_132_132, 5000   pass
+120_120_120, 5000   pass
+80_80_80, 5000      pass
+60_60_60, 5000      pass
+24, 12 switch fail
+4, dashan提供了120M参数. 
+rd path control0x22不行, 0x32才行. 
+请教dashan: dashan那里可以. (axd切频, rvdebug dma lli)
+5, 后来发现adj0(0x60011040)不论rvdebug脚本, 还是切频流程, 都没有写进去. 
+我实验了176LQFP sdram和181 sdram, 没有实验pcddr. 
+可能是adj0不同造成rd path control不同. <TODO>例会讨论</TODO>
+6, 60->132M, 切频可以. 60M以下12, 48 可以切, 48 fail. 60M以下没有做DMA.
+7, CVS:
+zhangjian clkrst, clkswitch, 
+1), 把lliautotest(dma_test.c)完全用Dma_Lliautotest()(dmac.c)实现, 便于其他模块调用.
+2), add sdram_config_181BGAInternal.c/h for 181BGA 32bit sdram configuration
+
+8, CVS log
+Checking in app/clkrst_app.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.27; previous revision: 1.26
+done
+Checking in app/sdram_config.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.h,v  <--  sdram_config.h
+new revision: 1.9; previous revision: 1.8
+done
+Checking in app/system_info.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/system_info.c,v  <--  system_info.c
+new revision: 1.22; previous revision: 1.21
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_181BGAInternal.c,v
+done
+Checking in app/sdram_config_181BGAInternal.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_181BGAInternal.c,v  <--  sdram_config_181BGAInternal.c
+initial revision: 1.1
+done
+RCS file: /public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_181BGAInternal.h,v
+done
+Checking in app/sdram_config_181BGAInternal.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config_181BGAInternal.h,v  <--  sdram_config_181BGAInternal.h
+initial revision: 1.1
+done
+Checking in subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.20; previous revision: 1.19
+done
+Checking in test/clkrst_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/test/clkrst_test.c,v  <--  clkrst_test.c
+new revision: 1.20; previous revision: 1.19
+done
+
+20:36 2009-5-14
+VC0830, SV, clkrst, clkswitch, <TODO>看dashan脚本和我的脚本有何区别</TODO>
+dashan: 可能是没有写memory映射. 
+
+22:19 2009-5-14
+<TODO>例会</TODO>
+1, sd卡进展
+2, 181切频进展. 
+sdram adj0没有写入. Lingming说是逻辑做错了, 后来修的. 只改成了只写.
+
+10:00 2009-5-15
+VC0830, SV, 181BGA(898), 898芯片Demo事宜
+0, 
+1), 830 181BGA对外称为898芯片. 
+2), lidongliang和lizhigang组一起去见客户. 
+
+1, 客户需求
+tong.xiangjie@zte.com.cn邮件至"Li Zhi Gang""答复: 898芯片Demo事宜"20090514_1439
+李工： 
+昨天我们在电话里已经做了长时间沟通了，今天再用邮件补充一下。我们公司拟采用贵司898解决方案项目的重要性，我这里就不重复了。为了确保项目研发的顺利推进和我们共同利益的实现，希望把前期的工作做的充分一些，做到心中有数，应我们部门领导和项目组的要求，希望就如下事宜在我们硬件投版前得到明确确认，请中芯微兄弟务必支持！ 
+（一）由于硬件一旦出现问题，对项目进度的影响是非常大的，甚至直接关系到项目成败。鉴于此重要性，希望中芯微兄弟帮忙做如下工作： 
+（1）芯片级功能模块验证： 
+测试项目                                   测试的模块/接口 
+1.LCD能正常显示图像（包括BYPASS模式）；    测试VC0898的LCD接口和Host接口 
+2.摄像头可以预览图像；                     测试VC0898的sensor模块 
+3.可以检测SD，并能进行读写；               测试VC0898的SD模块 
+4.通过MIC可以录音；                        测试音频输入通路 
+5.用耳机和speaker播放MP3的同时，           测试VC0898的的输出通路和内部音频模块 
+  VC0898可以将外部输入的音频进行混音 
+  后播放； 
+6.USB模块； 
+7.芯片功耗参考值和说明； 
+以上需求是基于想了解贵司新流片IC是否满足项目设计，请中芯微必须给出一个实事求是的评估和报告！ 
+（2）参考设计电路： 
+请中芯微硬件电路设计同事必须确认好参考设计的可行性，尽可能不出现578设计中出现的反复！ 
+（3）时间点： 
+李工提供的时间点基本上是满足我们硬件设计要求的，这个月20日。我们也预期本月20日完成硬件系统和原理图设计，月底投版。 
+（二）项目资源保证情况： 
+应该说，贵司的系统开发工作量也是相当巨大的，为了保证我们项目的如期完成，请说明的贵司在898项目开发上资源投入，如何Match我们的项目计划？做了哪些准备和资源投入？ 
+（三）项目计划： 
+上次也沟通过，个人觉得还比较粗，希望我们项目经理和贵司项目负责人，再在一起仔细Check一下，希望双方在项目起来后，能同步上，避免出现瓶颈！ 
+其他有没有补充的，请项目经理杰杰和丁总补充，谢谢！！
+
+2, Aiguo邮件"答复: 898芯片Demo事宜"20090514_1647
+    181的演示19号就去，因此我们的时间非常紧张，下面把任务确认一下：
+1）zhangjian，明天把sd card搞定，切频能搞定最好，如果不能也没有太多关系，我们演示时可以不支持切换频率；
+2）sunguangyue，明天把usb搞定，u－disk进行大数据量copy没有问题；
+3）boxue，明天把audio相关的资料准备好，尽可能把各个场景考虑到；
+4）zhangpu，明天把一款的dbi panel的bypass搞定，最好能够显示一张图片，这个和dongliang一起完成；
+5）caijin，明天把me搞定，尽量能够播放1024x576大小的视频，准备几个比较好的视频。
+6）shuyu和beizhan，帮忙给dongliang找几个alpha blending的图片，教会dongliang使用，video conference最好也能演示；
+7）dashan，如果需要sdram参数帮忙扫描；
+8）zhanglu，如果需要测试，zhanglu帮忙测试;
+9）dongliang，明天还要安排zouweiran进行电流测试;
+
+3, 发信sd, 切频进展----181BGA切频release
+1, sd卡在fat下使用正常. 
+2, 181切频: 在sys.h中定义_SV181_, 且"#define MEM_TYPE_VENDOR	SDRAM_181BGAINTERNAL". 目前支持cpu=bus=60,80,100,120,121->132MHz. 60M以下不稳定.
+181BGA切频软件会默认使用pll1->pll2->pll1这个流程. 
+
+11:12 2009-5-15
+VC0830, SV, clkrst, clkswitch, 以后一定注意, 所有memory vendor type都不能注释, <TODO>重要, 总结</TODO>
+昨天sys.h的
+#define SDRAM_181BGAINTERNAL 2
+写成了
+#ifdef _SV181_
+#define SDRAM_181BGAINTERNAL 2
+#endif
+这样如果有代码判断
+#if MEM_TYPE_VENDOR==SDRAM_181BGAINTERNAL
+未定义SDRAM_181BGAINTERNAL时, 这个语句也为真. 
+以后一定注意, 所有memory vendor type都不能注释. 
+
+15:48 2009-5-15
+VC0830, SV, 启动时程序跑飞, <TODO>继续整理</TODO>
+1, 运行此命令后跑飞
+ 000000E8 E321F013  MSR      CPSR_c,#0x13
+
+16:11 2009-5-15
+VC0830, SV, 
+zhangjian strorage, sdio
+1, 如果手动申请padc, 超过"g_SdioDrvParam.padcWaitCnt"次数后, 直接返回, sdio卡会初始化失败. 避免死在sd卡初始化中. 
+2, sd卡open时会先后尝试clock 和invert clock. 
+3, 可以用setpara设置sdio clock和get padc中的count.
+4, 去掉了"SdioBase_DmaStart()"的getpadc, 在手动模式中, 会在read/write single/multi block开始处调用Sdio_Drv_ObtainPadc申请padc, 函数结尾释放padc.
+
+文件log: 
+1, sdio module
+sdio\notes:
+20090515: add new TSdioParam, Sdio_Drv_SetParam, Sdio_Drv_GetParam for set padcWaitCnt and clkEdge. old struct and function will be removed. 
+
+
+16:35 2009-5-15
+VC0830, SV, 128LQFP, 
+1, fuyayi邮件"答复: 830 SV test"20090515_1606
+Sorry，事情太多忙晕了，忘了128没jtag的，口头跟我说过又忘了。
+下次还是交付测试的时候写在邮件里吧，很容易忘记。。。。。。。。
+可是现在我的板子拽不进去pak文件，提示：
+Write info,Done
+Scan Bbt,Done
+GoCard Event.
+Card Remove.
+software interrupt
+2, zhangjian:
+发现是没有加入-sdram=16M参数. 
+其实也说明我们的系统没有保护, 即使128封装按sdram32M编译也没有报错. 
+
+<TODO>总结</TODO>128LQFP注意事项
+1, pin少很多, 对照pinlist看.
+2, 没有jtag, 只能下载nand映像. 如果需要调试可以先在其它封装下调试. 其它封装都支持16M sdram, 所以可以调试. 
+3, 编译时eclipse build加入对于"-sdram=xxM",参数. 由于128封装最大支持16M memory, 所以一般用"-sdram=16M"
+
+17:19 2009-5-15
+1, frame, 前面的frame rate是实际frame rate, 后面是vdec的frame rate
+2, rm_util.h (me\src\libsrc\rmlib):
+	#define FILEIO_OPT 	2
+	#define DEFAULT_RMFILE_BUFFER_SIZE (1024*1024)
+表示需要数据时, 预读1M空间.
+FILEIO_OPT:
+0: 不预读;
+1: 预读, 返回时copy到其它buf;
+2, 预读, 返回指针, 节省copy时间.
+
+18:44 2009-5-15
+VC0830, SV, storage, sdio, 使用统一buffer
+定义"SDIO_UNIVERSAL_BUF"
+关cache时, 开cache时有问题. 
+关cache时速度快很多:
+time1-time0(us)=551111
+total=5242880
+total=5242880
+Multi Read Speed is: 9513292 bytes/second
+time1-time0(us)=1484995
+total=5242880
+Multi Write Speed is: 3530570 bytes/second
+[SDIO_MODULE]MESSAGE:Speed test over!
+
+10:33 2009-5-18
+VC0830, SV, Makefile, 提高me等bin的编译速度
+对Makefile做了如下修改
+diff -u -r1.72 Makefile
+--- Makefile   11 May 2009 09:01:52 -0000   1.72
++++ Makefile   18 May 2009 02:25:57 -0000
+
+1, 把VC0830.txt的工作从elf target中分离
+@@ -64,6 +64,7 @@
+
+ # objdump file (usually for disassemble code)
+ DUMP               :=      $(BUILD)/$(NAME).dump
++DUMP_D               :=      $(BUILD)/$(NAME).txt
+ 
+ # size file (usually for code size evaluate)
+ SIZE               :=      $(BUILD)/$(NAME).size
+
+2, 生成binary移到紧挨elf之后, 把VC0830.txt, VC0830.dump.S等耗时, 用的少的target放到后面. 
+@@ -176,7 +177,9 @@
+ ###################################
+ 
+ # Default
+-all: cleantemp $(OBJECTS) $(DRIVERLIB) $(SIZE) $(DEPEND)                                           
++#move binary before SIZE; seperate objdump -d from elf and move to after BINARY
++#all: cleantemp $(OBJECTS) $(DRIVERLIB) $(SIZE) $(DEPEND)                                            $(DUMP) $(BINARY)
++all: cleantemp $(OBJECTS) $(DRIVERLIB) $(BINARY) $(DUMP_D) $(SIZE) $(DEPEND) $(DUMP) 
+ 
+3, binary中加入echo语句, 提示用户binary编译完成.
+@@ -219,6 +222,8 @@
+ 
+ $(BINARY): $(EXECUTABLE)
+    $(CP) -O binary $< $@
++   $(echo) #####################Binary finished!##############################
++   $(echo) #####################You can download the image now################
+ 
+4, 同"1".
+@@ -230,7 +235,9 @@
+-   $(DP) -D ./build/VC0830.elf > VC0830.txt
++#   move to $(DUMP_D) target
++#   $(DP) -D ./build/VC0830.elf > VC0830.txt
++
+
+@@ -243,6 +250,9 @@
++
++$(DUMP_D): $(EXECUTABLE)
++   $(DP) -D $< > $@
+
+10:55 2009-5-18
+还是开了cache就不行. 
+
+10:58 2009-5-18
+VC0830, SV, dragon, sdio, timer
+1, sdio:
+恢复TSdioParam中注释的变量, dragon中使用. 
+<TODO>fix</TODO>: dragon中自己写了setparam等函数. 移到vc0830\sdio中. 
+
+2, fix video调用timer函数问题
+1), timer.h加入EXTERN C
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef __cplusplus
+}
+#endif
+
+2), 
+zhangjian dragon, sdio, timer
+fix dragon compile errror:
+V830Plane error LNK2019: 无法解析的外部符号 _Timer_Timer0Start@0 ，该符号在函数 _Video_FixTearingTrigger@0 中被引用
+V830Plane error LNK2019: 无法解析的外部符号 _Timer_Timer0TargetValueSet@4 ，该符号在函数 _Video_FixTearingTrigger@0 中被引用
+V830Plane error LNK2019: 无法解析的外部符号 _Timer_Timer0Stop@0 ，该符号在函数 _Video_FixTearingTrigger@0 中被引用
+
+3, gnuc和vc对64位整数扩展不同, 需要修改
+1), __int64 long long C/C++中的64位整数
+自: http://www.608088.com/show-1462-1.html
+
+acmer发表于89天 9小时 2分钟前 
+来源：www.608088.com  标签：c
+ 
+　在做ACM题时，经常都会遇到一些比较大的整数。而常用的内置整数类型常常显得太小了：其中long 和 int 范围是[-2^31,2^31)，即-2147483648~2147483647。而unsigned范围是[0,2^32)，即 0~4294967295。也就是说，常规的32位整数只能够处理40亿以下的数。
+那遇到比40亿要大的数怎么办呢？这时就要用到C++的64位扩展了。不同的编译器对64位整数的扩展有所不同。基于ACM的需要，下面仅介绍VC6.0与g++编译器的扩展。
+VC的64位整数分别叫做__int64与unsigned __int64，其范围分别是[-2^63, 2^63)与[0,2^64)，即-9223372036854775808~9223372036854775807与 0~18446744073709551615(约1800亿亿)。对64位整数的运算与32位整数基本相同，都支持四则运算与位运算等。当进行64位与 32位的混合运算时，32位整数会被隐式转换成64位整数。但是，VC的输入输出与__int64的兼容就不是很好了，如果你写下这样一段代码：
+1 __int64 a;
+2 cin >> a;
+3 cout << a;
+        那么，在第2行会收到“error C2679: binary '>>' : no operator defined which takes a right-hand operand of type '__int64' (or there is no acceptable conversion)”的错误；在第3行会收到“error C2593: 'operator <<' is ambiguous”的错误。cout,cin对于__int64无能为力，写法较复杂，不过也经常不用。那是不是就不能进行输入输出呢？当然不是，你可以使用C的写法：
+scanf("%I64d",&a);
+printf("%I64d",a);
+就可以正确输入输出了。当使用unsigned __int64时，把"I64d"改为"I64u"就可以了。
+OJ通常使用g++编译器。其64位扩展方式与VC有所不同，它们分别叫做long long 与 unsigned long long。处理规模与除输入输出外的使用方法同上。对于输入输出，它的扩展比VC好。既可以使用
+1 long long a;
+2 cin>>a;
+3 cout<<a;
+也可以使用
+scanf("%lld",&a);
+printf("%lld",a);
+
+使用无符号数时，将"%lld"改成"%llu"即可。 
+
+2), bamvor: 修改"include\common_def.h":
+#ifndef UINT64
+#ifdef WIN32
+	#define UINT64	unsigned __u64
+#else
+	#define UINT64	unsigned long long
+#endif // WIN32 end
+#endif // UINT64 end
+
+13:06 2009-5-18
+VC0830, SV, Storage, sdio
+Hi,caijin
+
+我在修改sd代码: 去掉里面的ncnb buffer, me遇到如下错误
+ME  SD:/>play
+[ME_MODULE]<-mp_play_file() with 0
+ME  SD:/>[SDIO]DBD: R: c 1
+[SDIO]DBD: R: 9dc1 7fe
+[SDIO]DBD: R: a5bf 1
+rm_error:
+rm parser error!! pError=0x00000000 result=0x80040091 msg=Unexpected stream number in packet.
+
+MP_ERROR:media_player_video_buffer_filled() retrun =0x00000032play stop
+[SDIO]DBD: R: 95c2 1
+[SDIO]DBD: R: 95c3 1
+[SDIO]DBD: R: b 1
+[SDIO]DBD: R: 95c4 7fe
+[SDIO]DBD: R: 9dc2 1
+“[SDIO]DBD: R: c 1”表示sd读取sd卡第c个sector开始的1个sector. (1sector=512byte)
+在fat下复制文件没问题. 什么情况下会报” MP_ERROR:media_player_video_buffer_filled() retrun =0x00000032”错误呢?
+
+谢谢
+
+Zhangjian
+
+17:19 2009-5-18
+1, 
+#define SDIO_UNIVERSAL_BUF
+#define SDIO_PRT_NCNB_BUF
+关cache.
+VDEC  SD:/>rvplay -f 1.rm -dn 3000
+[VDEC_MODULE]->do_vdec_play_rv()
+[VDEC_MODULE]MESSAGE:aasp_requestMain succeed!
+
+[SDIO]DBD: R: 1e1 1
+[SDIO]DBD: R: 95c1 1
+filename=1.rm
+[SDIO]DBD: R: 95c2 1
+[SDIO]DBD: R: 95c3 1
+[SDIO]DBD: R: 95c4 1
+[SDIO]DBD: R: 95c5 1
+[SDIO]DBD: R: 95c6 1
+[SDIO]DBD: R: 95c7 1
+[SDIO]DBD: R: 95c8 1
+[SDIO]DBD: R: 95c9 1
+[SDIO]DBD: R: 95ca 1
+[SDIO]DBD: R: 95cb 1
+[SDIO]DBD: R: 95cc 1
+[SDIO]DBD: R: 95cd 1
+[SDIO]DBD: R: 95ce 1
+[SDIO]DBD: R: 95cf 1
+[SDIO]DBD: R: 95d0 1
+[SDIO]DBD: R: 95d1 1
+[SDIO]DBD: R: 95d2 1
+[SDIO]DBD: R: 95d3 1
+[SDIO]DBD: R: 95d4 1
+[SDIO]DBD: R: 95d5 1
+[SDIO]DBD: R: 95d6 1
+[SDIO]DBD: R: 95d7 1
+[SDIO]DBD: R: 95d8 1
+[SDIO]DBD: R: 95d9 1
+[SDIO]DBD: R: 95da 1
+[SDIO]DBD: R: 95db 1
+[SDIO]DBD: R: 95dc 1
+[SDIO]DBD: R: 95dd 1
+[SDIO]DBD: R: 95de 1
+[SDIO]DBD: R: 95df 1
+[SDIO]DBD: R: 95e0 1
+[SDIO]DBD: R: b 1
+[SDIO]DBD: R: 95e1 1
+[SDIO]DBD: R: 95e2 1
+[SDIO]DBD: R: 95e3 1
+[SDIO]DBD: R: 95e4 1
+[SDIO]DBD: R: 95e5 1
+RVDEC_HW_TIMEOUT
+Fatal Error, Decode end!
+[SDIO]DBD: R: 1e1 1
+[SDIO]DBD: W: 1e1 1
+[SDIO]DBD: R: 5c 1
+[SDIO]DBD: W: 5c 1
+[SDIO]DBD: W: 149 1
+[SDIO]DBD: W: aa941 20
+[SDIO]DBD: R: aa961 1
+[SDIO]DBD: W: aa961 1
+[SDIO]DBD: W: 5c 1
+[SDIO]DBD: W: 149 1
+[SDIO]DBD: R: 1e1 1
+[SDIO]DBD: W: 1e1 1
+[SDIO]DBD: R: 1e1 1
+[SDIO]DBD: W: 1e1 1
+[SDIO]DBD: W: 5c 1
+[SDIO]DBD: W: 149 1
+[SDIO]DBD: W: aa981 1
+[SDIO]DBD: W: 5c 1
+[SDIO]DBD: W: 149 1
+[SDIO]DBD: R: 1e1 1
+[SDIO]DBD: W: 1e1 1
+retVal != HXR_OK: rv_depack_add_packet
+
+Video stream in '1.rm' decoding complete:
+    width is 1280, height is 720
+    1 input frames, 0 output frames
+    total time is 4166 ms, average time is 0 ms, fps is    inf->0.00  
+
+[VDEC_MODULE]<-do_vdec_play_rv() with 1
+VDEC  SD:/>
+
+2, 读到"[SDIO]DBD: R: 95e5 1"出错, 
+
+17:33 2009-5-18
+VC0830, SV, 181BGA, <TODO>修改makefile?</TODO>
+为了节省181BGA空间, Caijin直接替换了video的subdir.mk, 如果我们的sys.h是makefile, 就可以很简单解决这个问题. 我这边的切频也是————以后memory配置会越来越多, 应当是有哪些memory compile和link哪些. <TODO>提建议</TODO>
+Caijin邮件"答复: 898芯片Demo事宜"20090518_1721
+附件是为砍掉屏的一些配置作的修改，覆盖原来的video目录中相应文件
+暂时没想到好的办法对subdir.mk中的编译文件，用宏控制
+而编译了，似乎就会被链接，即使*.o是不需要的
+有点奇怪。
+有时间再研究这个问题
+
+17:55 2009-5-18
+VC0830, SV, 更新代码
+zhangjian 
+1, fix 181BGA ads baseband compile error
+2, replace timer_uint64 with UINT64 in timer.h
+
+18:25 2009-5-18
+VC0830, SV, 128LQFP, sdram参数
+1, 上午288_144频率第一次切频死, 下午dashan再实验没问题, 连续切频(10次)也可以. 
+2, 128封装 sdram clk在r13, tp8(r13右上)
+
+10:50 2009-5-19
+VC0830, SV, clkrst, clkswtich, 128LQFP
+128MHz切频.
+最好能到168. 希望能解5M码流. 
+等dashan结果. 
+
+13:22 2009-5-19
+1, 发现从"read4_203_1"偏移了3个byte. 偏移后, 除了缺少的3个byte, 其余完全相同.
+再试一次, 仍然是偏了3个byte.
+观察地址:
+writefile,raw,gui "D:\work\VC0830\SV\code_image\20090519\image\1138_vdec_udc_sv_bin_SdUniversalBufRd\sd\read4_203_1_retry_2"=0x82a3cf..+512
+"0x82a3cf"不是4byte对齐, 不符合dma要求. 
+改为: 
+writefile,raw,gui "D:\work\VC0830\SV\code_image\20090519\image\1138_vdec_udc_sv_bin_SdUniversalBufRd\sd\read4_203_1_retry_2"=0x82a3cc..+515
+数据正确. 
+
+2, 修改sd中buf类型:
+sdiocommondef.h: typedef UINT32 TSdioBufType;
+不行, 地址有问题, 没有细查<TODO>查具体原因</TODO>, 改为: 
+typedef unsigned char* TSdioBufType;
+typedef定义类型后, rvdebug会直接显示地址上的数据. 这样看buf指针方便很多. 便于看出是否对齐, 并与sdio dma比较. 
+
+3, vdec读文件中buf很多是不对齐的情况. 
+1), sdio代码中根据对齐与否分别处理. 
+
+4, 比较各种方法:
+1), prt buf ncnb还是cb. 
+2), prt buf大小
+3), prt buf是cb时, 地址对齐时使用统一buffer, 不对齐时做一次cpy.
+
+14:52 2009-5-19
+VC0830, SV, clkrst, pwm
+1, liaozhicheng, 调试pwm, 发现所有寄存器的值都是寄存器地址. 
+这是由于clk被disable或gate了. pwm只有m_gate, 把"PWM_CLK"打开即可. 
+<TODO>修改clock_init和clk_init, 并合并, 修改后,编译dragon看是否能通过</TODO>
+
+14:56 2009-5-19
+项目, VC0830, VC0816, jtag, 使用方法:
+fengbeizhan"答复: jtag"20090519_1455:
+提醒大家一下，jtag不用的时候也要下电，不能带电插拔jtag；上次见到修jtag的人，给出的原因主要是这2点。
+
+15:26 2009-5-19
+VC0830, SV, clkrst, clkswitch, 配置方法, <TODO>总结, 文档</TODO>
+我们是在sys.h中定义"#define MEM_TYPE_VENDOR TYPE_VENDOR", 目前包括:
+SDRAM_SAMSUNG
+PCDDR_HYNIX
+SDRAM_181BGAINTERNAL
+
+在clkrst\app\sdram_config.h中根据MEM_TYPE_VENDOR选择不同memory参数, 并定义memory最大最小频率, CLKRST_CURRENT_MEM_TYPE宏. 
+
+18:17 2009-5-19
+VC0830, SV, me, rv, 不对齐的情况, <TODO>caijin修改后测试me性能</TODO>
+1, rm parser
+2, buffer中可能部分数据满足需要, copy后给fat. 这个地址可能不对齐. 
+3, <TODO>caijin已部分修改, 测试</TODO>
+
+18:32 2009-5-19
+VC0830, SV, clkrst, clkswtich, <TODO></TODO>:
+dongliang给zouweiran的181映像svclkinfo有问题, <TODO>debug</TODO>
+
+10:27 2009-5-20
+VC0830, SV, 电源, 830上电过程, cp电源板使用方法, 串口无信息时首先查看电源板led是否正常
+昨天发现的我这个电源板的问题:
+我这是TI的电源板. 
+我这个板子是改过的cp电源板, 830电源由baseband发power keep控制. 按电源板的sw1, 也可以达到同样目的. 
+这点可以从原理图(vc0898svca-3720-dem-pwr-v080-VA7830.pdf)中看到:
+参考"DataBook_chapter_07_power management_0.2.pdf", p67的图:
+1, SW1按键默认是低电平, SW1置高时, 通过两二极管Q2, 给PWR_EN上升沿, 给电源板的EN_DCDC1(使能L1输出--VDD28--J1--VDD28_ON), EN_LDO2(使能VLDO2--VDD18--J4--VDD18_ON), EN_DCDC2((使能L2输出--VDD12--J2--VDD12_CORE); EN_VDD_CORE也可以使能它).
+
+2, 点亮对应led
+1), PWR_EN通过U2(TPS62240DDCR)给VDD12L, VDD12_PMU. VDD12L点亮D14
+2), VDD18会点亮D12
+3), VDD28会点亮D11
+
+3, 830 power on
+1), VDD28为高后, POWER_ON/OFF为高. POWER_ON/OFF是底板和cpu板的POWER_OFFN. 如果POWER_OFFN由高->低, 会进入power off流程:
+When the same power on/off button is pressed down by user again, POWER_OFFN signal will change from high to low. If VC0830 is in SLEEP or IDLE mode, PMU ill change mode from SLEEP to NORMAL or from IDLE to NORMAL . And then, POWER_OFFN will interrupt ARM. And ARM will start the POWER_OFF flow, including power off PMU domain and PSO domain.
+
+2), VC0830上电后, 对于176LQFP PMU wait 50ms后, 使能POWER_KEEP.
+对于282BGA, 通过VDD_PMU给PMU供电, 进而使能POWER_KEEP.
+POWER_KEEP在电源板上也通过二极管Q2连接到PWR_EN, 即830 PMU上电后, 会保证PWR_EN.
+<TODO>对于282, en_vdd_core似乎通过pmu单独控制, 继续学习</TODO>
+
+4, VPWR来源:
+DC_5V和USB_VBUS  ----二极管Q4---> VIN ---0欧姆电阻--> VOUT ---> VPWR
+
+5, 对830 PMU了解仍然不够深入, <TODO>有空找dongliang讨论</TODO>　
+
+6, (14:45 2009-6-11)
+今天遇到一个问题, cp电源板(#102)当ap电源用, 给282BGA供电. 如何弹出优盘(即上电时正确读到strap pin)成了问题. 经过实验和分析, 如下方法最合适:
+按下电源板power on, 再打开电源板开关, 这样就可以弹出优盘. 
+原来还尝试过如下方法, 发现不一定好用:
+打开电源板开关->按下底板复位->按下电源板power on->松开底板复位, 这时会弹出优盘->松开电源板power on. 有时按下电源板power on时板子就直接启动了. 
+
+11:34 2009-5-20
+<TODO></TODO>
+1, 实验sd卡优化对me的影响;
+2, 回信: fuyali: 282切频如何测试. 
+
+13:39 2009-5-20
+VC0830, SV, strorage, sdio, me
+me尽量给对齐的数据, sd中如果buf地址是4byte对齐, 可以省一次copy, 提高me效率.
+代码, 映像: "D:\work\VC0830\SV\code_image\20090520\me_rm播放_sd性能优化"
+1,2的区别是"rm_fileread2()(Rm_util.c (me\src\libsrc\rmlib)"
+#if 0
+		memmove(pFile->bufaddr, pFile->bufaddr + (pFile->fileoffset - pFile->beginpoint), (pFile->endpoint - pFile->fileoffset)); 
+		if(pFile->tell_func(pFile->filehandle) != pFile->endpoint)
+			pFile->seek_func(pFile->filehandle, pFile->endpoint, SEEK_SET);
+		readbytes = pFile->read_func(pFile->filehandle, pFile->bufaddr + (pFile->endpoint - pFile->fileoffset), pFile->bufsize - (pFile->endpoint - pFile->fileoffset));
+		pFile->beginpoint = pFile->fileoffset;
+		pFile->endpoint += readbytes;	
+
+		*buffer = pFile->bufaddr /*+ (pFile->fileoffset - pFile->beginpoint)*/;
+		readbytes = (pFile->endpoint - pFile->fileoffset)  < size ? (pFile->endpoint - pFile->fileoffset) : size;
+#else
+		if(pFile->tell_func(pFile->filehandle) != pFile->fileoffset)
+			pFile->seek_func(pFile->filehandle, pFile->fileoffset, SEEK_SET);
+		readbytes = pFile->read_func(pFile->filehandle, pFile->bufaddr, pFile->bufsize);
+		pFile->beginpoint = pFile->fileoffset;
+		pFile->endpoint = pFile->fileoffset + readbytes;	
+
+		*buffer = pFile->bufaddr /*+ (pFile->fileoffset - pFile->beginpoint)*/;
+		readbytes = (pFile->endpoint - pFile->fileoffset)  < size ? (pFile->endpoint - pFile->fileoffset) : size;
+#endif
+1, 1332_me_sv_bin, 即"if 1"的情况:
+not aligned: 209
+sync = 2: 13
+"filethread msg: 7": 5
+
+2, 1342_me_sv_bin_if0, 即"if 0"的情况:
+not aligned: 210
+sync = 2: 12
+"filethread msg: 7": 7
+注: "1406_me_sv_bin_if0_undefSDIO_UNIVERSAL_BUF"是, sdio不定义"SDIO_UNIVERSAL_BUF"宏的映像. 定义SDIO_UNIVERSAL_BUF, mutli 读速度是"9636035 bytes/second", 不定义是"5469469 bytes/second"
+
+3, CVS:
+zhangjian storage, sdio:
+define "SDIO_UNIVERSAL_BUF" in sdiobase.h in order to ussing universal buffer in sdio module. when the buffer address is aligned to 4 byte. 
+
+4, CVS log:
+cvs commit: warning: unrecognized response `stty: standard input: Invalid argument' from cvs server
+Checking in clkrst/subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/subdir.mk,v  <--  subdir.mk
+new revision: 1.21; previous revision: 1.20
+done
+Checking in config.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/config.mk,v  <--  config.mk
+new revision: 1.104; previous revision: 1.103
+done
+Checking in include/common_def.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/include/common_def.h,v  <--  common_def.h
+new revision: 1.12; previous revision: 1.11
+done
+Checking in me/src/libsrc/rmlib/rm_util.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/me/src/libsrc/rmlib/rm_util.h,v  <--  rm_util.h
+new revision: 1.15; previous revision: 1.14
+done
+Checking in sdio/sdio_test.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/sdio_test.c,v  <--  sdio_test.c
+new revision: 1.65; previous revision: 1.64
+done
+Checking in sdio/subdir.mk;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/subdir.mk,v  <--  subdir.mk
+new revision: 1.8; previous revision: 1.7
+done
+Checking in sdio/src/sdioapp.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioapp.c,v  <--  sdioapp.c
+new revision: 1.54; previous revision: 1.53
+done
+Checking in sdio/src/sdioapp.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioapp.h,v  <--  sdioapp.h
+new revision: 1.4; previous revision: 1.3
+done
+Checking in sdio/src/sdiobase.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiobase.h,v  <--  sdiobase.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in sdio/src/sdiocommondef.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiocommondef.h,v  <--  sdiocommondef.h
+new revision: 1.4; previous revision: 1.3
+done
+Checking in sdio/src/sdiodrv.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.c,v  <--  sdiodrv.c
+new revision: 1.96; previous revision: 1.95
+done
+Checking in sdio/src/sdiodrv.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdiodrv.h,v  <--  sdiodrv.h
+new revision: 1.6; previous revision: 1.5
+done
+Checking in sdio/src/sdioprt.c;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioprt.c,v  <--  sdioprt.c
+new revision: 1.44; previous revision: 1.43
+done
+Checking in sdio/src/sdioprt.h;
+/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/sdio/src/sdioprt.h,v  <--  sdioprt.h
+new revision: 1.4; previous revision: 1.3
+done
+
+14:32 2009-5-20
+软件, lifei@vimicro.com, 给lifei发了clkrst代码和文档(切频API和memory参数配置文档). 20090520_1527
+
+16:13 2009-5-20
+VC0830, SV, <TODO>总结</TODO>
+MP4样机板子, 里面nand有映像, 造成jtag接管后load程序后, 程序跑飞. 
+liming最后没办法, 把nand几个data pin短了, 这样rom bootloader读不出正确数据, 只能弹出优盘. 
+
+17:18 2009-5-20
+VC0830, SV, storage, fat, sdio
+看fat是否能保证buffer4字节对齐情况下, 一直按字节对齐处理数据
+1, 发现如果f->_tdata+f->relpos不是4字节对齐, 会造成buffer不对齐. 
+f->_tdata+f->relpos是原来读过的数据, fat为了不浪费, 直接利用已有数据. 
+
+18:30 2009-5-20
+<TODO></TODO>
+1, fat测试命令: 读写造成的buf和len都不对齐. 感觉还是这样. 
+2, caijin, me, sd卡一次读尽量大的数据. 不分次
+3, 切频提交测试. 
+
+20:10 2009-5-20
+VC0830, SV, clkrst, clkswitch, EVB
+shuyu EVB板(MP4方案, 176LQFP), 切频程序只能到280_140. 用_SV282_编译, 能到288_144(没有继续向上冲). 现在sdram_config_samsung.c中_SV282_配置是当初lingming扫出的176和282中和的配置. _SV176_配置是后来dashan专门为SV 176封装扫描的参数, 提升了SV 176性能. 
+
+15:54 2009-5-21
+VC0830, SV, clkrst, clkswitch, vdec切频命令
+<取消>这个后来没有做, 816和830中的setfreq和这个类似. 816的pclk pll2的setfreq支持修改pll. 
+
+16:41 2009-5-21
+实验evb板, pcddr 切频. 
+0, zhulei共享文件夹: "\\10.0.12.232\820、830资料"
+1, 与sv电源板不同
+2, pcddr需要5v供电. 从EVB板电源引出了5v电源, 直接接到pcddr上面. 
+3, evb板, pcddr 288_144, dma lli 3400 次pass.
+4, 估计是zhulei移植我代码时, 流程有问题. 
+5, 求证lingming, dashan
+1), lingming给zhulei的是mp4样机的, mp4样机的参数与SV板 pcddr参数差异较大.
+min-60, 120_max差异大. 
+6, 后来发现是zhulei移植get_sdramInfo函数时, 没有注意单位. 所以get_sdramInfo获得的参数不正确. zhulei在mp4样机上用SV pcddr参数也能用. 但应该没有用dashan扫出的mp4样机参数优化. 
+
+10:43 2009-5-22
+VC0830, SV, clkrst, clkswitch, CpuBusVdec频率测试, 128LQFP, 176LQFP, 181BGA
+测试方法见""
+1, 176LQFP(32M PCDDR, 不升压core=1.2)
+1), 自: zhanglu邮件"答复: CPU BUS VDEC测试"20090521_1806
+只测试了一片: 
+bus最高频率: 144_144. 但136_136, 272_136, 140_140fail, dashan在check, <TODO>关注结果</TODO>
+cpu最高频率:336_112.
+
+2, 181BGA+内部32bit 8M sdram, 不升压core=1.2
+1), 自: fuyali邮件"答复: 830 SV test"
+无socket, 一片. 
+bus最高频率: 136_136
+cpu最高频率: 330_110
+
+3, 128LQGP+16M sdram, 不升压core=1.2
+bus最高频率: 164_164(1/10), 160_160(2/10), 156_156(3/10), 152_152(2/10), 148_148(1/10), 144_144(1/10). 不收敛, <TODO>关注</TODO>
+cpu最高频率: 324_108(5/10), 330_110(5/10)
+
+10:44 2009-5-22
+VC0830, SV, rvdebug连不上, <TODO>总结</TODO>
+如果multiice能连, rvdebug连不上, 提示不能进入debug状态云云, 可能是cpu问题(坏片子, cpu板没插好, cpu放到socket时放歪了或引脚没有对齐引脚短路等)
+
+11:50 2009-5-22
+cpu,bus切频到pll2, <TODO>主要就差Clkrst_Switch函数了</TODO>
+1, TSystemInfo是否需要修改?
+1), 问题: Clkrst_SwitchMakeInfo的make_module_TClock()需要根据parent(pll1, xclk等)计算divider. 但是sysInfop中pll只有一个, 而且在dstClkSrc==PLL2_ID时是pll2. 
+切频的时候可以跳过make_module_TClock(). 但如果重新配置pll1还是需要. 而且print时也需要. 
+2), TSystemInfo结构体是用于表示系统状态的. 主要为切频服务. 将来可能要向pmu靠拢. 
+TClock主要是为了表示系统时钟树. 
+
+18:56 2009-5-22
+<TODO></TODO>切频后uart不对. 
+1, pll1 getdiv, freq.函数
+
+23:29 2009-5-22
+VC0830, SV, clkrst, clkswitch, 切频cpu,bus到pll2
+0, 编译通过, 继续review代码
+1, 调试:
+1), make_clksource_TClock()
+看"g_Clock[i]->id == PLL1_ID"时, 
+    g_Clock[i]->get_div(g_Clock[i]);
+    g_Clock[i]->get_freq(g_Clock[i]);
+执行是否正确.   
+原有"get_pll_freq_from_TClock"计算不正确. 
+
+2), 代码修改后c_clk_cpu4pll1和c_clk_cpu4pll2是否受影响, 不确定, <TODO></TODO>
+
+2, autoswitch还没有修改. 工作量较大. 
+
+11:00 2009-5-23
+VC0830, SV, clkrst, clkswitch, pcddr
+1, 240_120 -> 288_144, vdec = 192.
+
+11:33 2009-5-23
+VC0830, SV, clkrst, MP4样机切频问题
+1, 赋值方式得修改. 统一在sdram.c中根据频率配置参数. 
+TSdramInfo应当是从const的. 
+2, SV板子用pll2_480_120_120(busdiv=2), 也不行. 
+3, 还是用24MHz参数. 问题及总结见"15:30 2009-5-23"
+4, 测试288_144频点:
+1), 288_144, 切频10次, dma=0, pass
+2), 288_144, 切频5次, dma=100, pass
+3), 288_144, dma=5000, pass
+5, CVS:
+zhangjian, clkrst, clkswitch, mp4 demo board
+加入了MP4样机参数, 在include\sys.h中用"#define BOARD_TYPE MP4_BOARD"表示. sv板用SV_BOARD表示. 目前只有定义MEM_TYPE_VENDOR为PCDDR_HYNIX时, 而且才有区别. 
+使用hynix pcddr的mp4样机参数位于clkrst\app\ddr_config_hynix.c.
+6, CVS log:
+Checking in clkrst/app/clkrst_app.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clkrst_app.c,v  <--  clkrst_app.c
+new revision: 1.29; previous revision: 1.28
+done
+Checking in clkrst/app/clock_switch_info.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/clock_switch_info.c,v  <--  clock_switch_info.c
+new revision: 1.9; previous revision: 1.8
+done
+Checking in clkrst/app/ddr_config_hynix.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_hynix.c,v  <--  ddr_config_hynix.c
+new revision: 1.5; previous revision: 1.4
+done
+Checking in clkrst/app/ddr_config_hynix.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/ddr_config_hynix.h,v  <--  ddr_config_hynix.h
+new revision: 1.2; previous revision: 1.1
+done
+Checking in clkrst/app/sdram_config.c;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.c,v  <--  sdram_config.c
+new revision: 1.7; previous revision: 1.6
+done
+Checking in clkrst/app/sdram_config.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/clkrst/app/sdram_config.h,v  <--  sdram_config.h
+new revision: 1.10; previous revision: 1.9
+done
+Checking in include/sys.h;
+/doing/public/methodology/ic-arch-verif/fpga_verif/VERIFY/VC0830/VC0830/include/sys.h,v  <--  sys.h
+new revision: 1.43; previous revision: 1.42
+done
+
+15:30 2009-5-23
+VC0830, SV, clkrst, clkswitch, 已解决, 总结见"13:28 2009-6-3"
+1, MP4样机24M参数中: 0x60011020(sdrc_rd_path_control)0x20静态可以, 动态不可. 动态0x30可以. 这是TCAS设置问题.
+1), 静态0x30是否可以? 不可以. 串数. 写入addr的数据, 实际写到addr-4. 
+怀疑60M以下可能都有类似问题. 
+2), 当时SV板使用24M参数时, 也是如此, dashan扫出的rd_path_control是0x21, 我改成0x30才可以. 为什么扫出的参数和切频实际用的参数有差异? 
+3), 另外axd下rd_path_control设为0x30时, memory test没有错误, 但memory实际会串数. memory test的算法需要修改. 
+4), sdram切频时也发现rd_path_control配置问题. 详见lingming, linchuan 2009年4月15日, 2009年4月16日邮件"切频时参数问题".
+
+2, 切频后memory跑飞时, 只有0x0附近可以访问, 访问0x40000000提示data abort. 如果切频后没有跑飞, 0x0, 0x40000000都可访问. 
+
+18:51 2009-5-23
+VC0830, SV, clkrst, clkswitch, <TODO></TODO>
+1, <TODO>程序莫名其妙跑死</TODO>
+2, "14:36 2009-5-24"整理内容:
+1), 寄存器读写都放到clkrst_basefunc.c/h
+2), 如果将来支持其它xclk, 需要修改:
+(1), XCLK_FREQ, 切频时, 
+(2), 计算pll ckd函数--"Clkrst_DrvPllFreq2Div"
+20:00 2009-05-25
+VC0830, SV, databook, 阅读笔记, <TODO></TODO>
+1, 128LQFP最大支持sdr 16M memory, 176LQFP sdr/ddr 64M, 181BGA 内置mobile sdr 8M, 282BGA sdr/ddr 128M,  
+
+
+
+22:27 2009-5-28
+工作日志, 整理方法, <TODO>整理后, 加入博客</TODO>
+今天看了看我到公司以来公司工作日志的字数已经有6万字了:)
+我从2005年7月开始的工作日志, 已超过3.24M, 至少有30万字了(打算写个脚本统计). 这么多的日志, 如何检索, 整理是个大问题. 
+这段时间要想想这个事情.
+
+12:07 2009-5-30
+规划, 六月工作, <TODO>整理前面待做</TODO>
+1, clkrst. 整理代码同时对比学习Linux clock移植, 如果时间允许,可以考虑开始移植.
+2, sd支持高速模式, 整理代码. 如果可能学习Linux sd卡驱动移植. 
+
+9:40 2009-5-31
+(14:00 2009-6-3)
+VC0830, SV, 封装, clkrst, clkswitch, 181BGA测试
+1, 181BGA说明:
+181BGA内置32bit 8MByte 133MHz sdram.
+2, Fengyaya邮件"830SV_181+SDRAM32_CPU/BUS_1.2v_TestReport"20090527_1648
+1), bus最高电压: 168_168(9/10), 160_160(1/10).
+2), cpu最高电压: 312_104(1/10), 306_102(8/10), 300_100(1/10).
+
+9:40 2009-5-31
+VC0830, SV, clkrst, clkswitch, CpuBusVdec频率测试, 续, 176LQFP测试
+Wangke邮件"830SV_176+PCDDR16_CPU_BUS_TestReport"20090527_1739
+1, core=1.2
+1), bus最高电压: 144_144(1/4), 140_140(1/4), 136_136(1/4), 132_132(1/4)
+2), cpu最高电压: 318_106(1/4), 306_102(3/4).
+2, core=1.5
+1), bus最高电压: 156_156(2/4), 152(1/4), 148(1/4).
+2), cpu最高电压: 396_132(1/4), 390_130(2/4), 384_128(1/4).
+
+9:52 2009-5-31
+VC0830, SV, clkrst, clkswitch, CpuBusVdec频率测试, 续, 282BGA
+1, zhoudashan邮件"答复: 282 package ddr 参数和切频"20090527_1829
+PC DDR 282封装  core 1.5v  ,SDRAM 未加压
+CPU :BUS
+288M :144 M FAIL
+144 M:144M FAIL
+240 M:120M FAIL
+264 M:132M FAIL
+从目前来看，PC DDR 在282 封装下稳定性交差
+2, lingming邮件"答复: 282 package ddr 参数和切频"20090527_1830
+现在Mobile ddr能工作在126M。
+
+9:56 2009-5-31
+<TODO>整理切频代码, 支持lingming搜索pcddr参数</TODO>
+
+13:13 2009-5-31
+VC0830, clkrst, clkswitch, 切频cpu,bus到pll2
+1, 我自己的底板, dma0次后会出现"software interrupt", 同样代码boxue板子没事.  <TODO>切频调试后, 查原因</TODO>
+2, 修正了切频到pll2后无法切回的问题. 
+代码: 20090531_1348_VC0830_clkrst_SwitchPll2SdramPass.rar
+20090531_1348_clkrst_SwitchPll2SdramPass.rar
+3, <TODO>下一步切频</TODO>
+1), pcddr切频到pll2等待了lingming参数. 
+2), 修改切频函数, 感觉改为switch to xclk和switch to pll两个函数较好. Clkrst_Switch直接调用这两个函数. 
+3), 加入autoswitch流程, 
+
+22:50 2009-5-31
+VC0830, SV, storage, sdio, 支持高速模式
+1, youhai播放30m码流需要; 竞争对手sd卡支持高速模式, 读速度是20-25m.
+2, 调了一下午, 回来才想起可能是卡不支持, 明天直接用4G卡实验. 基本先清buf.
+3, (10:31 2009-6-1)从fengyaya处借了pny 4G和Adata 8G sd卡. 
+4, 能等到命令, 等不到dma. 
+
+22:15 2009-7-28
+项目, 工作总结, 5月工作总结
+1, Clkrst, clkswitch
+1), 5/4-5/8, 五天, 添加切频到pll2 code, pcddr参数.
+2), 本月除了sd卡时间都用于切频了, 还包括BGA181切频等.
+
+2, storage, sdio, 4天
+1), 解决有些板子sdio不能使用的问题, 电源不应小于3.0v. 见"17:37 2009-5-8"
+2), OS下sdio不能写入. 见"16:44 2009-5-11"
+3), 如果用户memory4字节对齐, 直接使用此memory进行读写, 这样读速度能提高70-80%. (速度提升是和dongliang没有优化memcpy之前对比的, dongliang优化后未比较). 参见"13:39 2009-5-20"等.
