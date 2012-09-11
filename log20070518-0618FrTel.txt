@@ -1,0 +1,1278 @@
+10:22 2007-5-18
+CC2420.c代码中与ack有关的部分：
+uint8_t is_ack_enable;
+int CC2420_send(TOS_MsgPtr pMsg) 
+	if (is_ack_enable)
+	  pMsg->fcfhi = CC2420_DEF_FCF_HI_ACK;
+	else
+	  pMsg->fcfhi = CC2420_DEF_FCF_HI;19:08 2007-05-18
+
+19: 15 2007-05-18
+待解决问题, 待做
+1, 为什么send_pkt.length要设置为"实际内容长度+1"。
+原来没有注意今天佳露测试邻居表程序，发现如果length设为1，接收端没有接到数据（接收到数据长度是0）。
+2, pxa2xx-fb: probe of pxa2xx-fb failed with error -22
+节点1启动时停在这里不动。第一次遇到！
+
+19:10 2007-05-18
+待做, 重要（已转移）
+1, 把佳露的邻居表程序加入到我的test_toc_mac.c中。(完成)
+2, 发邮件问单播多播(地址辨识)问题. 已解决，见"19:55 2007-05-18"
+(20:30 2007-05-18)
+3, 整理并翻译"19:24 2007-05-18"
+4, 看BMAC及CC1000代码
+5, 决定是使用结构化设计方法，还是rosiphy（UML）。找软工概要设计，详细设计到实现的规范。（完成）
+
+19:15 2007-05-18
+地址辨识
+经实验，默认情况下：节点收到的信息无论是否是自己的，都会上报。
+
+19:24 2007-05-18
+关于地址辨识, 单播, 多播, 整理并翻译
+P41
+Address Recognition
+CC2420 includes hardware support for address recognition, as specified in [1]. Hardware address recognition may be enabled / disabled using the MDMCTRL0.ADR_DECODE control bit. Address recognition is based on the following requirements, listed from section 7.5.6.2 in [1]:
+? The frame type subfield shall not contain an illegal frame type
+? If the frame type indicates that the frame is a beacon frame, the source PAN identifier shall match macPANId unless macPANId is equal to 0xFFFF, in which case the beacon frame shall be accepted regardless of the source PAN identifier.
+? If a destination PAN identifier is included in the frame, it shall match macPANId or shall be the broadcast PAN identifier (0xFFFF).
+若数据侦中有短地址，它应该匹配和mac短地址或广播地址(0xFFFF)匹配。否则如果有扩展地址，应该匹配扩展地址。
+? If a short destination address is included in the frame, it shall match either macShortAddress or the broadcast address (0xFFFF). Otherwise if an extended destination address is included in the frame, it shall match ExtendedAddress.
+? If only source addressing fields are included in a data or MAC command frame, the frame shall only be accepted if the device is a PAN coordinator and the source PAN identifier matches macPANId.
+如果上述任何一个条件都不满足，CC2420执行地址辨识————丢弃该侦，并且把RXFIFO中该侦的内容清除。
+If any of the above requirements are not satisfied and address recognition is enabled, CC2420 will disregard the incoming frame and flush the data from the RXFIFO. Only data from the rejected frame is flushed, data from previously accepted frames may still be in the RXFIFO.
+The IOCFG0.BCN_ACCEPT control bit must be set when the PAN identifier programmed into CC2420 RAM is equal to 0xFFFF and cleared otherwise. This particularly applies to active and passive scans as defined by [1] which requires all received beacons to be processed by the MAC sublayer.
+Incoming frames with reserved frame types (FCF frame type subfield is 4, 5, 6 or
+7) is however accepted if the RESERVED_FRAME_MODE control bit in MDMCTRL0 is set. In this case, no further address recognition is performed on these frames. This option is included for future expansions of the IEEE 802.15.4
+standard.
+If a frame is rejected, CC2420 will only start searching for a new frame after the rejected frame has been completely received (as defined by the length field) to avoid detecting false SFDs within the frame.
+The MDMCTRL0.PAN_COORDINATOR control bit must be correctly set, since parts of the address recognition procedure requires knowledge about whether the current device is a PAN coordinator or not. 
+P65 
+MDMCTRL0 (0x11) - Modem Control Register 0
+11 ADR_DECODE 1 R/W Hardware Address decode enable.
+0 : Address decoding is disabled
+1 : Address decoding is enabled
+
+19:55 2007-05-18
+地址辨识
+看CC2420 driver log："MDMCTRL0 is 2e2"
+查赋值：
+void CC2420_set_parameters( )
+    g_current_parameters[CP_MDMCTRL0] = ((0 << CC2420_MDMCTRL0_ADRDECODE) |
+       (2 << CC2420_MDMCTRL0_CCAHIST) | (3 << CC2420_MDMCTRL0_CCAMODE)  |
+       (1 << CC2420_MDMCTRL0_AUTOCRC) | (2 << CC2420_MDMCTRL0_PREAMBL));
+把地址辨识设为0，所以前面失败。
+再看代码，发现CC2420_enable_ack会调用CC2420_enable_AddrDecode，后者设置地址辨识为有效。经测试的确如此：使用" 9: set and get address."设置地址，在允许ack"10: enable ack"，此时只有地址是设置的地址或广播地址（0xffff），才会接收，其余信息不会接收，该功能由硬件实现，所以其它地址的数据不会产生FIFOP中断。
+
+09:34 2007-05-21
+待做
+自"18:50 2007-05-17", "19:10 2007-05-18"和"15:25 2007-05-15"
+1, PHY和MAC层（CC2420驱动测试）
+(1), CSMA－CA，ACK（完成，重发需要在驱动层实现，待做）
+(2), 实现BMAC，参考tinyOS的CC1000代码，以及论文。
+(3), (5-15测试)write_poll_read的发送周期缩短至100-200ms，poll周期相应缩短（死，进一步测试，待做；解决write_poll_read收到负数，收到乱码的问题。
+(4), CC2420的休眠，在CC2420 11节中提到了power up/power down模式，但是没有查到驱动>如何实现，也没有找到CC2420datasheet中的详细描述； 新待做：CC2420_start，CC2420_stop。佳露查tinyOS
+(5), 驱动测试文档。（阶段完成，待完善）
+(6), 总结驱动查错。发maillist
+(7), (09:39 2007-05-22)佳露完成建立开发环境的文档。（完成）
+另外：整理并翻译"19:24 2007-05-18"
+2, FISCO概要设计；
+(1), MAC queue，如果有多个数据需要同时发送，会不会丢侦。bamvor: 考虑在应用层实现一个发送队列，只由一个线程接收；发送同理。
+(2), 学习CC2420的抓包软件
+(3), 本周三完成概要设计初稿。
+3, 节点测试，节点到达后开始，预计5天完成。
+4, 实现FISCO，6.20前完成
+5, 测试FISCO，6.20前完成测试文档。预计一个月完成测试。
+
+10:23 2007-05-21
+待做
+忘了待昨天整理好的代码，今晚带着。
+
+11:21 2007-05-21
+CC2420驱动分析
+CC2420_send
+
+count_retry = MAX_SEND_TRIES;//设置最大再发送尝试次数，原有代码是8。
+count_send_restart = MAX_RESTART_TRIES;//设置最大发送重启次数，原有代码是10。
+
+13:56 2007-05-21
+CC2420, MAC退避
+Mac_initial_backoff()，MAC初始退避时间，返回1-16之间的随机数（查get_random_bytes的来源，待做）。在发送前开始。时间是：
+CC2420_set_initial_timer(Mac_initial_backoff() * CC2420_SYMBOL_UNIT);
+#define CC2420_SYMBOL_UNIT         10
+Mac_congestion_backoff()，MAC剩余退避时间，返回1-64之间的随机数。
+何时使用：
+1, 发送初始退避过程中，有数据需要接收（SG2_GPIO0_CC_FIFOP中断），停止原有计时，开始MAC剩余退避。
+timer_start((Mac_congestion_backoff( ) * CC2420_SYMBOL_UNIT) + CC2420_ACK_DELAY);
+2, CC2420_try_to_send函数中：
+(1)当CCA有效，但是CC2420_send_packet函数中启动发送失败后：
+CC2420_state = PRE_TX_STATE;
+CC2420_set_backoff_timer(Mac_congestion_backoff() * CC2420_SYMBOL_UNIT);
+(2)当CCA无效：CC2420重启发送以及再发送：
+每次CC2420重启发送，包括清空RXFIFO，设置MAX_SEND_TRIES次再发送，设置定时器（模式是TIMER_RESTART，时间是"Mac_congestion_backoff() * CC2420_SYMBOL_UNIT"。
+每次再发送的定时器模式是TIMER_BACKOFF，退避时间是"Mac_congestion_backoff() * CC2420_SYMBOL_UNIT"。如果超过MAX_SEND_TRIES*MAX_RESTART_TRIES=80次发送尝试，仍没有成功，认为发送失败。
+
+13:56 2007-05-21
+发送，如果"is_ack_enable"有效，启动定时器等待ack。期间如果收到ACK。
+           CC2420_state = POST_TX_ACK_STATE;   
+           tx_buf_ptr->ack = 1;
+           tx_buf_ptr->strength = data[length-2];
+           tx_buf_ptr->lqi = data[length-1] & 0x7F;
+           is_packet_receiving = FALSE;
+           CC2420_packet_sent();
+           printk(KERN_DEBUG "recv ACK!\n");
+           printk(KERN_INFO "valid ack\n");
+           return SUCCESS;
+
+FCF的bit0-2是Frame Type，CC2420Const.h有定义：
+#define CC2420_DEF_FCF_TYPE_BEACON 0x00
+#define CC2420_DEF_FCF_TYPE_DATA   0x01
+#define CC2420_DEF_FCF_TYPE_ACK    0x02
+
+CC2420, p42: 19 Acknowledge Frames。CC2420会自动发送确认侦。
+
+15:02 2007-05-21
+如何使用poll
+    struct pollfd pfd;
+
+    printf("close and reopened in NON-blocking mode\n");
+    close (tosmac_dev);
+    tosmac_dev = open(TOSMAC_DEVICE,O_RDWR|O_NONBLOCK);
+    if ( tosmac_dev < 0)
+    {
+        fprintf(stderr, "Open %s error.\n", TOSMAC_DEVICE);
+        exit(1);
+    }
+    pfd.fd = tosmac_dev;
+    pfd.events = POLLIN | POLLRDNORM;
+
+    int timeout = 200; 	//unit: ms
+    switch ( poll (&pfd, 1, timeout) ) {
+        case 0:
+            printf ("timeout\n");
+            break;
+        case -1:
+            printf ("poll error \n");
+            exit (1);
+        default:
+            if (pfd.revents & POLLIN) {
+                read(pfd.fd, &recv_pkt, sizeof(TOS_Msg));
+                for(i = 0; i < recv_pkt.length; i++)
+                    printf("%02x ", recv_pkt.data[i]);
+            }
+            break;
+    }
+
+
+15:14 2007-05-21
+疑问，待做
+1, beacon含义
+2, 收到ack后如何处理？
+
+15:24 2007-05-21
+与佳露讨论后：
+网络层信息的ack的timeout时间需要可以自行设定，而且onehop，twohop的timeout时间也可以不同。但是这与MAC层ack不同，MAC层的ACK只要是单播都需要ack。现有程序中，不论收到ack与否，对于write成功返回没有影响。。
+需要修改的地方：
+1, 如果没有收到ack，需要重发。佳露说重发次数相对固定，一般不需要更改，问佳亮博士，是否需要修改，待做。如果改成可变的，可能造成与以后的驱动不兼容，在CC2420 driver test report中说明！！！
+如果最终没有收到ack，需要write返回发送失败，可以调用"CC2420_send_failed"
+        case TIMER_ACK:
+            if (current_state == POST_TX_STATE) {
+                printk(KERN_DEBUG "No ACK received\n");
+                tx_buf_ptr->ack = 0;
+                CC2420_state = POST_TX_ACK_STATE;
+                CC2420_packet_sent();
+            }
+            break;
+2, 查CC2420_DEF_FCF_HI_ACK的作用
+3, 收到确认侦后，如果read，会有什么结果？
+17:31 2007-05-21
+完成CSMA-CA，修改如下：
+在CC2420_send函数中修改代码：
+1, 如果设置is_ack_enable有效（通过test_tos_mac"10: enable ack"）：如果没有收到ack重复实验MAX_RESENDS次，可以考虑通过ioctl设置，但是cmd编号有与后的驱动冲突的危险。
+2，如果设置is_ack_enable无效，按原有功能执行。
+日志，程序和驱动见"/media/NEW/log/Imote2/log/cc2420/csma-ca/0521"
+测试时使用的#test_tos_mac_0518-1_ioctl。
+test_tos_mac_0521_CSMA-CA未测试，仅仅删除了recv和send中与main重复的代码。
+另外，还需要加入佳露邻居表的算法。
+
+
+09:44 2007-05-22
+1, 佳亮博士给的代码中似乎没有睡眠，查。
+2, CAMS-CA有问题。
+现在如果发送错误地址，write函数无法返回：
+driver log是：
+<7>timer is TRANS
+只重试了两次，
+3, 接收方收到单播信息后，发送ack，但是发送方没有收到ack。如果处理？
+如果发送方认为没有收到ack，再次发送信息，接收方根据保存的seq和源地址，判断是否是同一个侦。放在MAC层但是不在驱动中实现。应用层MAC需要完成的重发机制留待与佳亮博士讨论BMAC后，做完成MAC的设计之后完成，待做。
+4, 物理层乱发？是否可行。物理层能否自己发同步侦。
+查CC2420休眠机制。
+5, BMAC的作用？是否仅仅是功耗。
+CC2420待机和收发的功耗相差多大？
+
+11:20 2007-05-23
+今日待做
+1, 完成CSMA-CA，无ack的再发送由应用层MAC完成，见"09:44 2007-05-22"3。修改的CSMA-CA代码位于CC2420.c文件CC2420_send函数的bamvor.add.20070521和bamvor.add.20070521.end之间，原有代码是bamvor.comment.20070521到bamvor.add.20070521之间的注释部分。（加入项目最终文档）
+2, check昨天需要check的BMAC问题；
+3, 问张宇概要设计文档问题；
+4, 下午小组讨论，安排后面的时间。
+
+12:25 2007-05-23
+1, CC2420发送过程：
+STXON命令-12个符号周期-硬件自动产生的Preamble和SFD-MAC侦长度MAC负载数据-硬件自动产生CRC。Preamble的长度和SFD内容可以修改。Preamble长度最大是16个0。
+SFD从接收到SFD字节到CRC发送完成中保持高电平，其余时间是低电平。
+MDMCTRL1.CORR_THR：Demodulator correlator threshold value, required before SFD
+search. Should always be set to 20.
+既然物理层无法修改，佳亮博士说的长前导是在tinyOS的CC1000中是如何实现的？
+CC1000是一个RF收发器，没有协议。它的前导是01010101....，在tinyOS中是由软件实现的：
+preamblelen = ((PRG_RDB(&CC1K_LPL_PreambleLength[lplpowertx*2]) << 8)
+               | PRG_RDB(&CC1K_LPL_PreambleLength[(lplpowertx*2)+1]));
+换句话说，用原有CC1000方式实现BMAC或低功耗监听不可能。但是可以借鉴BMAC的思想。
+2, 查CC2420功耗管理。CC2420datasheet, 6.10 Power Supply, p13-p14
+Voltage regulator off (OFF)	0.02-1uA	Voltage regulator off
+Power Down mode (PD)		20uA	Voltage regulator on
+Idle mode (IDLE)		426uA	Including crystal oscillator and 
+					voltage regulator
+receive mode			18.8 mA
+transmit mode			8.5-17.4mA 
+可见idle和收发数据的功耗相差40倍。CC2420总状态机见P45 Figure25. Radio control states. 发送接收完成后CC2420回到RX_CALIBRATE状态。除了power down模式意外的其它模式都可以用SRFOFF回到idle状态。
+可以通过查询FSMSTATE，得知当前RF状态机的状态。FSMSTATE属于配置寄存器：
+0x2C FSMSTATE R Finite State Machine State Status Register
+CC2420启动速度很快，没有数据传输时可以位于power down模式。
+所有寄存器的值保存在CC2420.c的uint16_t   g_current_parameters[14];，数据索引值以枚举方式定义于CC2420Const.h。现在对于FSMSTATE没有支持，可以加入到g_current_parameters，使用现有CC2420_read_reg函数读出FSMSTATE。
+3, 测量CC2420从power down到idle状态的时间。
+p12
+Crystal oscillator start-up time 1.0 ms 16 pF load
+修改CC2420.c
+uint8_t CC2420_oscillator_off( )
+{
+    uint8_t status;
+    status = CC2420_cmd_strobe(CC2420_SNOP);
+    status = CC2420_cmd_strobe(CC2420_SXOSCOFF);
+    //bamvor.add.20070523
+    if ( !status & (1 << CC2420_XOSC16M_STABLE) )
+        return FAIL;
+    //bamvor.add.20070523.end
+    return SUCCESS;
+}
+把晶振控制命令加入到头文件：TOSMac.h，linux/tosmac.h。和ioctl函数中。
+经测试，开晶振后需要把CC2420设为RX模式(SRXON)，才能正常发送。时间典型是3.1ms，最长小于7ms。
+(15:30 2007-05-23)
+BMAC计划, 待做：
+1, RX_CALIBRATE到idle再到RX_CALIBRATE时间；RX_CALIBRATE的功耗。
+2, 查battary。查tinyOS中CC2420的lpl。
+3, CCA更新的间隙是多大(DIFFS)。软件发包时能否小于这个间隙，使接收端认为信道一直被占用。
+看CC2420 p51，CCA的几种模式：
+0 Reserved
+1 Clear channel when received energy is below threshold.
+2 Clear channel when not receiving valid IEEE 802.15.4 data.
+3 Clear channel when energy is below threshold and not receiving valid IEEE 802.15.4 data
+如果使用模式1，就没有DIFS时间，就有可能模拟出类似BMAC的效果。
+4, 增长CC2420_TMIT_DELAY，避免发送超时。
+5, CC2420_set_initial_timer(Mac_initial_backoff() * CC2420_SYMBOL_UNIT);长于查询TX_ACTIVE（发送是否结束）的周期。查询TX_ACTIVE的周期需要自己加入，待做。
+现有想法是在CC2420_timer_irq_handler函数中加入。
+6, /opt/tinyos-2.x/tos/chips/cc2420有低功耗监听(lpl: low power listenning内容，代码很多没有细看。
+
+16:16 2007-05-23
+wsn, FISCO的组成部分
+0, join(基本功能，也是此项目要实现的内容）；
+1, PAN间merge；
+2, local reorganiztion.  switch role.；
+3, departure。
+
+17:28 2007-05-23
+项目计划, 待做
+1, 下一阶段时间安排：
+(1), 5.23-6.1: 
+a, 完成概要设计和详细设计（具体内容见下面的说明），组内讨论两次，下周一第一次讨论；
+b, 完成节点测试（3人，从5.28开始四天时间完成）；
+c, 完成FISCO数据结构及其算法（佳露）；
+(16:26 2007-05-23)待做*** 告诉佳露add这样不行，很不灵活。传地址。
+d, 测试CC2420的抓包软件。
+(2), 6.4-6.21
+FISCO编码，只完成join部分。
+2, 设计阶段文档的主要内容：
+(1)总体设计
+需求规定（暂缓）
+运行环境（暂缓）
+基本设计概念和处理流程（包括MAC和网络层两层）
+结构
+(2)接口设计：外部接口（如何查表得到与邻居的关系等为将来做路由协议做准备），内部接口；
+(3)详细流程图
+(4)系统数据结构设计(佳露）
+(5)系统出错处理，使用错误代码和trace等方式。
+
+19:11 2007-05-23
+tinyOS
+http://www.tinyos.net/tinyos-2.x/doc/html/install-tinyos.html
+Installing TinyOS 2.0
+包括tinyOS代码，avr和msp430工具链的下载(包括430的jtag)。
+
+19:36 2007-05-23
+MAC layer, implementing low power listenning ( BMAC, reference the paper and
+CC1
+000, CC2420 code in tinyOS.
+CC2420 is compatalble with 802.15.4. it is not a raw RF transiver. So, we can
+not implement BMAC with the similar structure in tinyOS CC1000. Here is our
+draft
+design. 
+1, Receiver: using CCA mode 1 in p51 CC2420 datasheet. we can use periodical
+poll ( using timer) to  know whether there are data transmition or not.
+Transmiter: CC2420_set_initial_timer should be longer than the Receiver poll
+period. 
+2, check the power cimsumption in power down, idle and RX_CALIBRATE mode. if RX_CALIBRATE mode  power sumption is similar with idle. we can this mode as sleep mode. otherwise using idle,  or power down mode instead. but the total time interval for entering and exiting power down is typically 3.1ms, max 7ms. P.S. need to write a function to get current FSMSTATE for the experiment above.
+3, in addition. reference CC2420 Radio Stack.htm for low power listening in
+tinyOS CC2420. ***
+
+14:21 2007-05-24
+draft for software design
+1, preliminary design
+2, detailed design
+
+structure:
+three layers PHY, MAC and network layer.
+1, PHY
+by CC2420 hardware;
+2, MAC
+Implement  CSMA-CA and low power listenning in MAC layer. Just in driver. Not in application level.
+(1)CSMA-CA 
+transimiter wait ack, receiver auto send ack is coded and tested in tos_mac(C2420) driver.
+resend when reception ack is fail is to be coded by Linux application.
+(2)BMAC. reference the 2007-05-24 log.
+postpone because of the limited period of project.
+3, network layer
+Implement FISCO in network layer.
+only coded and tested join of FISCO because of the limited period of project.
+
+different method:
+1, one process in MAC. multithread in network
+MAC process send and recv packet. resend if no ack received when unicast. build
+write and read queues. when write queue is empty, poll and read. 
+network layer: main thread daemon is a daemon thread. It write and read with MAC layer through write and readueues. and it can create thread if the task is complex or necessary.
+2, two thread in MAC. multithread in network.
+MAC: one write thread. one read thread.  remains is similar with method one.
+
+17:39 2007-05-24
+待做
+1, 学习PMIC，看能否测量电流。
+2, MAC的重发机制可以在TOSMac.c中实现，这样直接调用CC2420_send，就避免了修改CC2420.c文件。
+
+19:20 2007-05-24
+下午16点-现在，与佳露一起完成imote2使用文档。
+
+4:22 2007-5-25
+http://www.xbow.com/support/technicalsupport.aspx
+imote2硬件支持
+新旧板子不同之处。
+新调试板在windows下会认出com7, com8. 旧调试板是com3, com4。都是第二个串口调试信息。
+
+11:14 2007-5-27
+draft for software design, continued
+id:
+1, seq number
+2, temp short address
+3, short address
+
+interface:
+1, outter interface
+interface for debug
+interface for routing and other high layer.
+2, inner interface
+puzzle
+
+21:07 2007-5-27
+项目进展
+周五佳露提出这段时间她工作比较少可以先把FISCO路由协议的join部分实现。MAC层由我稍候实现，这样可以提高项目进度。
+实际上，这段时间一直是我这边进度压力比较大，自己就是限于自己这点事，没有考虑在这种情况下如改善组内的分工。实际上，FISCO这个项目明显是分层的，FISCO路由协议位于网络层，而与硬件相关的是PHY和MAC。前段时间项目遇到的困难是MAC层，后来重点问题（"0System not idle"）解决后，网络层的开发完全可以继续。
+失分！
+
+21:39 2007-5-27
+项目计划
+周一。
+1, 小组讨论概要设计；
+2, bamvor提出再招聘的问题，现在的进度看如果完全招一个兼职，一旦项目比预期快，如果我实验室有别的安排，不能续签，可能招的兼职不好安排。如果liama那个人合适其实很好。
+3, 着手测试多节点之间的邻居表是否正确。如果正确，才能进行下一步的测试。
+4, 修改驱动输出信息。改为收发包时输出收发包的序列号这样便于调试。现在是收到包后输出data[0]数据。
+5, (15:56 2007-5-28)待做：
+重新测试唤醒节点的时间，最大限度减少测试方法本身对结果的影响。连续多次进行“睡眠，唤醒”操作，只有当操作失败才中断。在连续测试前和连续测试后获得系统时间。预计连续测试100次。
+
+16:59 2007-05-29
+项目进展, 节点下载
+完成273节点的下载和./configure
+
+
+
+17:04 2007-5-30
+待做
+张健
+1, 完成软件设计文档，周五下班之前完成：
+1.1 画出状态机；
+1.2 模块描述（包括状态机状态描述，"packet transmission layer"中read和write线程），模块的输入，输出，模块功能描述。
+1.3 描述与FISCO无关的数据结构；
+1.4 出错处理。debug interface，使用一个中心节点进行监控和收集信息。
+问佳亮博士需要什么调试信息；初稿完成后，问张宇。
+1.5 看TCP/IP中状态机的实现方法；
+1.6 (21:25 2007-5-31)接口设计
+2, 查功能：PMIC
+家璐：
+参数修改接口：例如LDBR timeout，直接控制发包的接口；
+调试要注意的内容：边界，重复，每个msg和state都需要测试，列表反应测试进展。
+3, (13:28 2007-5-31)新待做
+1), 看佳亮博士写的测试需求。
+2), 看《实战Linux编程精髓》调试部分。
+
+19:18 2007-5-30
+家璐开始就想到了现在的结构，而我为了追求程序结构“清晰”，用了复杂的方法（见preliminary design v1.2），而且我的结构的最大问题是"packet transmission layer"和"main task layer"没有相互独立。
+
+19:30 2007-5-30
+软件设计文档, 继续
+重画了网络层的模块关系图。明天按“17:04 2007-5-30”继续，希望周四完成大部分。
+
+19:32 2007-5-30
+节点测试：
+发现如果电池板插在调试板上，可以给节点正常供电。
+
+14:07 2007-6-1
+Neighbor Table Format的长度是否是31, 原文是39。
+Discovery Table是否释放？
+one-hop, two-hop数据结构中，没有说明使用链表。
+数据结构的操作函数：名称，参数，返回值，功能描述。
+
+16:30 2007-6-1
+把IfGateway等If信息，改为isGateway；
+把DATA FORMAT改为Local Info；
+message format中data length按照周四你的解释，单位是4字节，加入了"the unit is 4bytes"的说明。
+23:04 2007-06-01
+待做
+提取NEW/log/Imote2/fisco/test_tos_mac_get_neighbor_table.c的get_neighbor_table函数到现有最新的test_tos_mac.c函数
+
+23:17 2007-06-01
+preliminary design, modified
+1, how to read packet from FIFO. and the data is not broken;
+IMPORTMANT, need to reconsider the message length in MAC and network layer and read ,write function.
+2, add "#define" parameter for debug. like FDEBUG;
+3, how to avoid handle invalid message to main task layer. add magic mask to message?
+
+23:47 2007-06-01
+待做
+建立程序框架的计划:
+1, 不考虑收发包最大长度的情况下测试网络层程序框架; 硬件先使用scull和scullpipe模拟. 再用Imote2节点测试. 最终达到从"main task layer"收发正确的数据, 但是data数据长度限于28以下.
+2, 实现128字节以下的总数据收发. 允许收发数据以一定倍数变化. 状态机仍然是每次处理一个状态.
+3, 测试消息驱动的调试接口.
+
+
+0:56 2007-6-3
+未完, 待做
+Doctor jialiang:
+    I've read preliminary design1.5. It is necessary to add ARP table into data structure. But it is unrelated with FISCO, so i move it to packet transmission layer.
+
+11:56 2007-6-3
+待做
+对调试状态和调试信息还没有想清楚，在最后一章统一说明。所有相关内容可能都需要修改。
+
+11:30 2007-6-4
+项目进展
+信号强度过滤暂缓：佳亮博士认为如果是接收信息时，如果信号强度过低就不回复ack比较好。但是现在ack是硬件回复的。
+
+09:53 2007-06-05
+待做
+尝试使用dbug调试工具
+
+10:37 2007-06-05
+mkfifo
+POSIX表示权限的常量，"/usr/local/arm/3.4.1/arm-linux/include/sys/stat.h"：
+#define S_IRUSR __S_IREAD       /* Read by owner.  */
+#define S_IWUSR __S_IWRITE      /* Write by owner.  */
+同编译器include/bits/stat.h：
+#define __S_IREAD       0400    /* Read by owner.  */
+#define __S_IWRITE      0200    /* Write by owner.  */
+这个信息也可以在"man 2 open"查到
+
+10:41 2007-06-05
+项目计划
+我本周的工作，参考"preliminary_design_v1_6.doc"：
+1, 完成FISCO本身以外的编码，包括PTL，debug interface.
+2, 基于PTL测试邻居表，保证驱动和PTL的正确性。
+下周一前完成工作报告。
+
+14:13 2007-06-05
+项目文档，概要设计
+现有源MAC地址放在received packet FIFO数据的最开始，采用下面的结构：
+struct {
+    int MAC_address;
+    FISCO_Msg_t FISCO Msg;
+}
+即每次向MTL传递的FIFO数据都包括MAC地址和FISCO数据两部分。虽然仅仅是new节点才会使用MAC地址（需要加入到discovery Table中），底层每次都传递MAC地址实际是一种浪费。new节点需要MAC地址加入到discovery Table的目的是避免下面情况：new节点出现merge情况时，一个FISCO地址对应多个MAC地址。
+
+14:37 2007-06-05
+signal无法打断系统调用，参见"FISCO_timer_test.c"，家璐男朋友的解决方法是使用sigaction，使用SA_INTERRUPT，但是在编译器bits/sigaction.h的定义：
+# define SA_INTERRUPT 0x20000000 /* Historical no-op.  */
+查"Historical no-op"的含义。
+家璐男朋友blog原文：
+自: http://hi.baidu.com/nasi
+也Geek了一把
+2007-06-05 02:15
+这年头都流行赶时髦，apple的crazy ones还狠狠的夸了一把想法诡异的人...
+今天偶也做了一把Geeker。本来一个挺简单的事，搞的非常复杂。最开始的动机很简单，就是为了写一个程序研究signal在multi-threaded程序里面的各种反应，结果发现SIGALRM不能interrupt系统调用。那还得了？结果alarm、itimer都用了，还是不work。翻书吧...
+搬来UNP和APUE翻了许久，终于在一个角落里面找到了，是一个flag搞的鬼。据说是多个版本的*nix实现的不一致，有的work有的不work。想要都work，就得自己动手写一个signal()。哎，只好自己写一个my_signal()了（已经养成职业病鸟，黑侠真传），果真work了。
+
+其实这还不是贴篇博的主要动机，动机是我想把代码记在空间上以免以后忘记了。但是空间的排版能力是在不允许我漂漂亮亮的贴个代码上来。虽然是兄弟组，但是也别怪我用些手段了...
+嘿嘿，看看效果如何：
+
+#include <stdio.h>
+#include <signal.h>
+#include <unistd.h>
+
+typedef void sigfunc_t(int);
+
+void sig_alarm(int sig);
+sigfunc_t* my_signal(int signo, sigfunc_t *func);
+
+int main()
+{
+    char s[1024];
+    sigfunc_t* prev;
+    
+    prev = my_signal(SIGALRM, sig_alarm);
+    alarm(5);
+    
+    read(0, s, sizeof(s));
+    
+    alarm(0);
+    my_signal(SIGALRM, prev);
+    
+    return 0;
+}
+
+void sig_alarm(int sig)
+{
+    return;
+}
+
+sigfunc_t* my_signal(int signo, sigfunc_t *func)
+{
+    struct sigaction act, oact;
+
+    act.sa_handler = func;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+
+    if (signo == SIGALRM) {
+#ifdef SA_INTERRUPT
+        act.sa_flags |= SA_INTERRUPT;
+#endif
+    } else {
+#ifdef SA_RESTART
+        act.sa_flags |= SA_RESTART;
+#endif
+    }
+    if (sigaction(signo, &act, &oact) < 0)
+        return (SIG_ERR);
+    return (oact.sa_handler);
+
+
+17:13 2007-06-05
+待做, 概要设计
+家璐发现leader接收到LDAU信息后的处理有个小问题。需要修改流程图和概要设计文档。
+
+18:26 2007-06-05
+使用mkfifo和两个线程读写有问题。只有第一次写入的数据可以读出。统一使用open打开还不可以，因为POSIX手册说：
+       O_RDWR Open  for  reading  and writing. The result is undefined if this
+              flag is applied to a FIFO.
+用两个线程尝试，然后实验pipe。
+
+21:46 2007-06-05
+把读线程的读函数的长度从3改为BUFSIZ:
+read(opened_file, fifo_data, BUFSIZ);
+原来两次读出末尾的数据的情况消失. 但是原因未知, 与上面修改无关.
+
+23:02 2007-06-05
+测试FISCO_pipe_test.c
+
+01:30 2007-06-06
+完成PTL测试(使用标准输入输出模拟CC2420的收发),明天测试有节点的结果. 然后测试邻居表, 希望周四下班前完成.
+
+10:42 2007-06-06
+和家璐讨论了一个小时。
+家璐做了一个链表传送数据，模拟有PTL情况下数据的接收和发送。这个链表元素大小是18个字节。
+问题：
+1, 有系统调用情况下（例如阻塞read），信号如何保证是中断系统调用在信号处理后继续，而不是在信号处理后重启系统调用。
+2, 家璐说多线程情况下，信号会发给谁不一定，看家璐的程序，待做。
+达成共识的两个方案：
+1, 方案1，使用pthread flag机制，wait_condition。上层函数等待flag有效后，读取数据。每次收发数据时
+2, 方案2，使用usleep睡眠，定期查询是否有数据。每次收发数据都是固定18个字节。
+但是我突然想，如果说问题1在单一进程的情况下可以解决，那么可以通过命名管道与其他两个独立的进程进行通信。问家璐。尝试，待做。
+(11:55 2007-06-06)
+经过讨论，家璐认为可以用命名管道这个方案。唯一需要注意的是注意进程的启动顺序。
+
+13:57 2007-06-06
+项目文档, 概要设计
+家璐分析ARP功能，佳亮和我三人讨论结果，ARP解析时根据是否是gateway进行不同的操作。详见日志。
+
+14:07 2007-06-06
+谭小姐（九层，SDC）
+建行卡，身份证，学生证复印到一张纸，周四下班前。
+
+15:45 2007-06-06
+FISCO_FIFO_test.c使用基本标准输入输出模拟收发包，通过。见"$Imote2/fisco/0606/"
+但是测试时不能再用标准输入给MTL输入信息，否则PTLr会认为是写给PTLr的，因此进入接收程序，但是由于MTL在等待输入信息，无法处理PTLr的输入信息，因此从这里开始只有PTL在接收数据，MTL无法进行下一步的工作。
+
+16:35 2007-06-06
+下午完成使用PTL节点的收发测试。
+晚上完成加入定时器处理的FISCO_FIFO_test.c，通过标准输入输出模拟tosmac。"参考家璐加入timer的程序"
+周四加入其它所有应有的功能，下午测试邻居表。
+周五和家璐互通进展。
+
+18:05 2007-06-06
+待做
+test_tos_mac.c文件的TOSMAC_MB，没有引用tos_mac_sub.h的内容，是自己定义的。
+晚上把test_tos_mac.c中由tos_mac_sub.h声明的内容删除。并且在output_pkt中删除对于TOSMAC_MB的考虑
+
+18:35 2007-06-06
+char* rfifoname
+下面语句
+oops(rfifoname,1);
+写成了
+oops("rfifoname",1);
+
+18:47 2007-06-06
+现在又出现了"0System not idle"，而且原有成功的收发程序也无法正常工作。
+FISCO_FIFO_test.c测试尚未完成。
+
+19:51 2007-06-06
+是驱动的问题，原来在update目录的驱动是错误的。
+
+20:09 2007-06-06
+(gdb) l 200
+195         while(1) {
+196             printf("PTLw: blocking read from MTL.\n");
+197             memset(fifo_data, 0,  BUFSIZ);
+198             read(sfifo_dfd, fifo_data, BUFSIZ);
+199             printf("PTLw: size of fifo_data is %d.\n", strlen(fifo_data));
+200             printf("PTLw: read message done, sending.\n");
+201     #ifdef TOS_MAC
+202             memcpy((void*)(send_pkt.data+1), fifo_data, strlen(fifo_data));
+203             send_pkt.data[0] = TOSMAC_MB;
+204             send_pkt.length = 1 + strlen(fifo_data);
+(gdb) b 202
+Breakpoint 1 at 0x8f78: file FISCO_FIFO_test.c, line 202.
+(gdb) cont
+Continuing.
+
+Program received signal SIGPIPE, Broken pipe.
+0x400c16d0 in ?? ()
+(gdb) 
+查man signal.h
+Signal    Default Action Description
+SIGPIPE   T              Write on a pipe with no one to read  it.
+       T      Abnormal  termination  of the process. The process is terminated
+              with all the consequences of _exit() except that the status made
+              available to wait() and waitpid() indicates abnormal termination
+              by the specified signal.
+
+节点日志：
+[root@Imote2-18 /root]#./gdbserver6.6 hostPC:2345 tosmac/FISCO_FIFO_test_0606  
+Process tosmac/FISCO_FIFO_test_0606 created; pid = 1426
+Listening on port 2345
+Remote debugging from host 192.168.99.100
+rfifo fifo already exist, continue.
+sfifo fifo already exist, continue.
+create received message process successful.
+create sending message process successful.
+MTL: waiting for read from PTL:
+reading message from tos_mac device.
+PTLw: blocking read from MTL.
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+MTL: the received message is <   0*0.1s sending time pas>.
+MTL: sending message according to the received message: 
+MTL: message error. send error.
+MTL: write to sending message pipe
+ MTL: write done.
+MTL: sent message to PTL.
+MTL: waiting for read from PTL:
+PTLw: size of fifo_data is 28.
+PTLw: read message done, sending.
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+MTL: the received message is <   0*0.1s sending time pas>.
+MTL: sending message according to the received message: 
+MTL: message error. send error.
+MTL: write to sending message pipe
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+PTLr: write to MTL       PTLr: write done.
+reading message from tos_mac device.
+
+20:24 2007-06-06
+用节点发送一个magic bit正确的消息，在202行的memcpy设置断点，程序停在了"PTLw: read message done, sending."怀疑是memcpy的问题。
+
+20:40 2007-06-06
+由于先前使用键盘测试正确，怀疑是"#ifdef TOS_MAC"内的语句有问题。先尝试一个FIFO的情况，用FIFO读取tosmac数据，并显示到stdout。依次单独尝试读写FIFO。
+
+09:38 2007-06-07
+今日计划：
+0, SG2bamvor包中驱动源代码是原始代码，昨天只是发现tos_mac.ko有问题，没有查源代码是否正确。做事总是丢三落四，失分，改进。今天状态不好时，打一个升级包，包括include/linux/tosmac.h和CC2420.c，使用diff和patch。
+1, 解决PTL基本框架的问题。昨日测试接收数据到MTL没有问题，现在的问题是发送。对比原有发送函数，保证使用正确。例如message init似乎没有执行。上午完成。
+2, 加入定时器。另外，用read函数的返回值判断读取是否完成。
+
+10:31 2007-06-07
+待做
+关于MAC负载数据，把data[0]-data[2]内容移到data数组外面，给明确的名称。但是仍然保持char类型，这样对于原有格式是兼容的。但是形式上更清楚。
+
+10:54 2007-06-07
+昨天的原因就是由于msg没有初始化造成的。
+把
+    msg_init(&send_pkt);
+    send_pkt.addr = 0xFFFF;
+    send_pkt.type = 0x04;
+    send_pkt.group = 0x7d;
+加入到s_pid_process函数后，使用write_poll_read函数测试通过：
+代码和日志见"$Imote2/fisco/fifo/06071053"：node_FIFO_log是有PTL层节点日志，可以看到PTL和MTL处理msg的过程，node_tester_log使用write_poll_read函数测试PTL功能。
+
+12:08 2007-06-07
+压力测试有问题。sleep结果不正确。
+
+14:07 2007-06-07
+请教家璐的问题：
+关于open函数
+1, fisco_collect宏中的open函数的第二个参数"0"，是否表示O_RDONLY：
+fd = open(READ_FIFO, 0);
+如果是这样，为什么
+fisco_send()宏的open函数的第二个参数也是"0"，向FIFO写入数据，不应该使用"1"(只写)么：
+fd = open(WRITE_FIFO, 0); 
+bits/fcntl.h：
+#define O_WRONLY            01
+2,为什么每次对FIFO操作后，都要关闭FIFO。如果一直打开，在程序退出时关闭是否可以？
+
+16:02 2007-06-07修改概要设计文档
+（完成）gateway:
+1, member MBNS, MBAR, LDAA, MBAA, 类似；
+2, LDAU只作转发，与Leader处理不同。
+3，MGNT暂时没有考虑。
+
+17:14 2007-06-07
+如果MTL睡眠，在正常的接收频率下会接收到两次同样的消息，一直没有查到原因。
+现有代码保存到"$Imote2/fisco/fifo/06071725"，使用06071053继续开发。
+
+17:28 2007-06-07
+写bootloader烧写文档。周一前给张宇。(完成, 在日志中)
+
+18:00 2007-06-07
+对"14:07 2007-06-07"的回复。
+问题1：
+         Open中的flags还没有置，因为还没有考虑好除了O_RDONLY和O_WRONLY还需要加其他的什么选项，所以在代码中先写的0作为stub
+         另外，代码还没有开始调试，里面很多地方都是stub
+问题2：
+         FIFO有阻塞和非阻塞两种，非阻塞的这里就不说了，说一下阻塞的
+         阻塞的FIFO会遇到2个地方阻塞，一是open，二是read
+         理论上说，open的时候，如果FIFO的另一端没有打开，就会阻塞；read的时候，如果FIFO中没有数据，就会阻塞
+         但是，有些时候，一旦FIFO中有了数据，被读出来以后，再用read去读的时候，read不会阻塞，而是返回0，说明没有读到什么数据
+         这样的话，阻塞模式的FIFO从另一种意义上来说就变成了非阻塞的，这和使用的初衷相违背
+         所以一般使用阻塞模式的FIFO，都是把阻塞放到open上，有数据需要读写再开FIFO，读完或者写完就关掉，这是比较常见的用法
+
+谢谢
+bamvor: 
+觉得自己对于做软件还很没有入门。前面所述问题其实我自己发现了两次。当时没有想到用open+read/write/close的方法，只是想一次把数据读出来，于是读取BUFSIZ大小的数据。就是自己想到的方法总是绕远，而且似乎是回避问题而不是解决问题。
+
+18:08 2007-06-07
+下一步
+1, 使用open-read/write-close方法对FIFO进行读写；(完成, 现有使用方法)
+2, MAC读FIFO数据时，先读包头，然后根据head length和data length读取后面的数据。(完成)
+3, 实现ARP表；(取消, 不在PTL实现, 改在MTL实现)
+4, 测试邻居表(完成小规模测试)
+
+10:34 2007-06-08
+1, 测试FIFO_out, FIFO_in(完成)
+
+11:22 2007-06-08 
+$Imote2/fisco/fifo/06081122
+FIFO测试。
+
+11:48 2007-06-08
+原有poll的头文件是
+#include "../../include/linux/poll.h"
+但是编译器会提示, 隐含声明poll，但是如果使用：
+#include <poll.h>                       //for poll
+会提示POLLRDNORM未定义，
+poll.h->sys/poll.h->bits/poll.h中，可以看到，需要定义__USE_XOPEN才可以使用POLLRDNORM：
+#ifdef __USE_XOPEN
+/* These values are defined in XPG4.2.  */
+# define POLLRDNORM     0x040           /* Normal data may be read.  */
+# define POLLRDBAND     0x080           /* Priority data may be read.  */
+# define POLLWRNORM     0x100           /* Writing now will not block.  */
+# define POLLWRBAND     0x200           /* Priority data may be written.  */
+#endif
+加入了features.h文件但是仍然不行。根据"14:31 2007-04-28"，如果没有POLLRDNORM，会丢包。所以还是使用#include "../../include/linux/poll.h"，但这是一个潜在问题，待做，解决。
+
+14:07 2007-06-08
+阻塞在open上，这样就意味着必须PTL和MTL同步。违反初衷。
+思，与家璐讨论。
+
+15:22 2007-06-08
+节点测试文档补充, bootloader烧写：
+1, 硬件连接：
+imote2的调试板和调试板需要在TRACE32启动前上电，并启动节点。否则TRACE32执行命令或运行脚本时会提示"target processor in reset"错误。^
+2, 下载bootloader，
+pxa27x.cmm与blob映象需要在同一个目录；
+选择运行脚本，脚本会提示是否烧写，回车即可，进度条消失后，烧写完成。大约需要2-3分钟。
+
+17:21 2007-06-08
+修改概要设计文档（完成）
+message format中flag位加入"isNewLeader"标志位。用于LDAU时确定是否需要增加nld，详见相关代码。
+
+15:43 2007-6-9
+待做
+tosmac/Makefile中
+ARMCC改为arm-linux-gcc
+
+21:12 2007-06-09
+测试周五完成的FISCO_FIFO_test.c，测试通过。代码，编译结果和日志保存在"$Imote2/fisco/fifo/06092125/"。把FIFO操作封装为FIFO_in和FIFO_out。还需要加入FIFO_init，这样便于统一FIFO的操作，待做。
+
+21:33 2007-06-09修改概要设计文档（取消）, ARP
+把ARP完全实现在PTL层，discoveryTable的MAC地址删除。ARP表中的FISCO地址由16位FISCO地址和8位pantition
+id组成。(18:06 2007-07-23)后来与佳亮博士商量，认为这样并不简单，最终ARP删除，直接在neighbor table和discovery table中保存mac地址。
+
+
+
+12:23 2007-06-10
+今日计划：
+1, 完成没有ARP表的整体框架。测试邻居表（都是广播消息，不需要ARP）；
+1.5看家璐邮件.
+2, 加入ARP表。
+3, 测试长度超过28字节的数据.
+
+不要发送或接收后立刻释放TOS_Msg. 这样不便于调试.
+
+15:22 2007-06-11
+修改include/linux/tosmac.h
+注释了
+//bamvor.comment.200706010
+//        __u8 strength;
+//        __u8 lqi;
+//        __u8 crc;
+//        __u8 ack;
+//        __u16 time;
+这样如果data段长度变化，也不会对数据读写有影响。
+注释了"tos_mac_sub.c"使用上述数据的代码。
+
+17:10 2007-06-11
+待做
+不适当的设定驱动中"TOSH_DATA_LENGTH"的大小，会对驱动收发包有什么影响？
+
+20:43 2007-06-11
+决定TOS_Msg始终使用最大长度, 这样从CC2420读出数据时一定会读正确. 因为驱动中使用的是驱动所支持的最大长度(116). 应用程序设置的最大长度只要小于这个就可以. 不过要加6, 这6个字节就是信号强度等, 直接把这6个字节放在data段后面, 这样便于处理.(驱动就是这样处理的, 到现在才明白用意, 加入驱动测试文档! 待做). 但是FISCO还是要用变长的, 虽然现在其最大长度是短于TOS_Msg.data长度3字节. 将来可以很容易实现把超长FISCO数据分段收发. 
+
+20:54 2007-06-11
+init_process中PTL_FISCO_ptr默认长度改为HEAD_BL+1, 也就是有一字节负载数据, 这样不会浪费空间. 
+
+21:35 2007-06-11
+待做
+1, PTL中加入对函数运行是否成功的判断.
+2, 加入PTL_DEBUG
+3, FDPRINT, add'\n' if necessary
+
+21:48 2007-06-11
+完成read packet函数. 检查.编译调试.
+
+22:45 2007-06-11
+家璐: 同一进程的多线程通信效率高于多进程通信效率***.
+我当时使用多线程而不是多进程仅仅是为了提高可移植性.
+家璐那篇论文可以放到项目总结的文档中, 待做.
+
+02:26 2007-06-12
+错误提示:
+FISCO_FIFO_test.c:519: error: structure has no member named `fisco_msg_head'
+FISCO_FIFO_test.c:519: error: incompatible type for argument 1 of `memset'
+不明白. 暂时把代码改为
+//    memset(PTL_FISCO_ptr->fisco_msg_head, 0, sizeof(*PTL_TOS_Msg_ptr->fisco_msg_head));
+    if ( !PTL_FISCO_ptr->fisco_msg_data ) {
+        free(PTL_FISCO_ptr->fisco_msg_data);
+        PTL_FISCO_ptr->fisco_msg_data=NULL;
+    }
+    memset(PTL_FISCO_ptr, 0, sizeof(*PTL_TOS_Msg_ptr));
+(03:37 2007-06-12)
+上面的错误是”PTL_TOS_Msg_ptr->fisco_msg_head”,  这么明显的错误, 当时却没发现.
+
+编译代码大约用了1小时. 主要是指针错误: 例如指针类型不正确. 
+
+04:31 2007-06-12
+进展
+Clear_packet有问题
+
+05:03 2007-06-12
+有了基本接收功能, 但是遇到发送
+time passed 112 (0.1)s
+53      MTL: the second b
+time passed 122 (0.1)s
+会死.
+节点:
+MTL: the received message is <22*0.1s sending ti>.
+MTL: sending message according to the received message:
+MTL: please input a string to send.
+the received packet is:
+the magic bit is 53.
+Length:27 Fcf: 0x0108 Seq#:38 DestPAN:ffff DestAddr:ffff TypeID:04 GroupID:00
+Data: 20 31 32 32 2a 30 2e 31 73 20 73 65 6e 64 69 6e 67 20 74 69 6d 65 20 70 61 73 00
+invalid message
+the received packet is:
+the magic bit is 53.
+Length:27 Fcf: 0x0108 Seq#:38 DestPAN:ffff DestAddr:ffff TypeID:04 GroupID:00
+Data: 20 31 32 32 2a 30 2e 31 73 20 73 65 6e 64 69 6e 67 20 74 69 6d 65 20 70 61 73 00
+read success, dsn: <56>
+Unpacket: <0>
+FISCO_msg_len is : <24>
+new_alloc_len is : <4>
+unpacket success: <0>
+PTLr: write to MTL
+sizeof (*PTL_FISCO_ptr) is : <20>
+时间不对. 说明问题还很多. 只能明天解决了.
+
+10:19 2007-06-12
+待做, 修改概要设计文档
+更新ARP表时, 没有考虑源地址可能是source@或gateway@. 如果只按sourceFISCO@和sourceMAC@更新ARP表, 会丢掉getawayMAC@.
+//    ARP: update the corresponding sourceFISCO@ entry in ARP table according to real source MAC @:
+//    if gateway@ exist and gateway@ != local@
+//        use gateway@ as source addr
+//    else if source@ == local@
+//        use source@ as source addr
+
+
+16:36 2007-06-12
+待做, 项目计划, 会议, 修改概要设计文档
+下午从14点到16点多. 讨论了一下内容:
+1, 我和家璐各自陈述原定计划进展;
+2, 讨论与上次文档不同的部分: 
+1)多线程改为多进程, ARP表. 张宇认为: 由于不同进程不共享变量, 所以不同进程共享数据有难度. 例如ARP表, 需要使用共享内存区. 这个操作是比较复杂和容易出错的. 张宇认为ARP表放在共享内存区非常不好, 应该避免. 后来讨论的结果是把ARP表融合到FISCO中，就是佳亮博士在仿真中作的那样。
+对于ARP表的处理：
+(1)，PTL向硬件发包，从FIFO读出的数据，前两字节是dstMAC@. 写入TOS_Msg对应位置。FIFO数据放在从[3]开始TOS_Msg.data, data[1], data[2]保存srcMAC@.
+(2)，PTL从硬件收包，向FIFO写入数据的前两字节是srcMAC@，MTL用此建立discoveryTable3, 近期计划
+1)张健：根据讨论结果修改PTL；测试大于28字节data数据的收发，预期长度是20-40字节；测试10个节点的邻居表。
+2)家璐：ip地址改为32位。neighbor Table和discovery Table加入source MAC地址。重新测试。
+4，下周二或周三开会，定下一步计划。
+张健的任务：
+1), 测试FISCO；
+2), 信息收集（通过一个监控节点，使用FD状态，读回邻居表等节点信息）
+3)，查PMIC功能。
+
+17:53 2007-06-12修改概要设计文档（完成）
+把ARP移到MTL层后，家璐考虑原有代码的变化，发现两跳地址分配时中间的gateway需要把new节点加入neighborTable。
+(18:13 2007-07-23)IMPORTMANT: Otherwise this node do not know the mac address of LDAA.dst when recv the LDAA message from MyLeader.
+
+22:53 2007-06-12
+FISCO_FIFO_test.c保存在“$Imote2/fisco/fifo/06122249”. 在测试从硬件接收数据并写入FIFO. 使用write_poll_read配合其测试. 接收到数据的dsn正确, 但是data段每次都相同. 如果使用send函数, 可以看到每次接收了不同的数据. 如果两边都使用write_poll_read, 结果正确. 困惑?待做
+
+12:04 2007-06-13
+FIFO_out, FIFO_in，如果读出数据小于所需数据，仅仅提示，不是直接返回-1。FIFO读入和输出的返回值-1表示出错。>=0的值表示实际读写的数据量。
+
+12:17 2007-06-13
+继续测试变长zhen
+
+13:20 2007-06-13
+待做, 加入项目文档
+节点电池是1.6v(1.6*3=4.8)时不能启动的原因：
+The Intel Mote 2 platform can be powered using primary batteries with a voltage range of 3.2 - 4.5 V (e.g. 3 AAA alkaline batteries).
+
+13:48 2007-06-13
+PMIC使用
+#!/bin/bash
+
+echo VBAT: `date +%s` `cat /proc/pmic/VBAT` >> /root/winkOut.log
+sleep 60
+modprobe m41t62
+ledconfig -o
+sleep 1
+ledconfig -r
+sleep 1
+echo 60 > /sys/bus/i2c/devices/1-0068/alarm
+echo off > /proc/pmic/SHUTDOWN
+
+查m41t62
+
+14:26 2007-06-13
+PMIC
+源文件位于：
+"linux-2.6.14/drivers/platx": pmic_battery.c, pmic_core.c和pmic.h。
+可以用过proc文件系统控制PMIC：
+/proc/pmic，只知道向SHUTDOWN，写入"off"，可以关机。有硬件或软件中断时可以唤醒。但是现在RTC(m42t61)不会使用，所以软开机没有成功。
+
+15:33 2007-06-13
+对crossbow工程师CC2420的问题：
+A，CC2420
+1，关于low power listenning. 从文档"CC2420 Radio Stack"可以看到，TinyOS下CC2420驱动支持Asynchronous Low Power Listening Implementation或CC2420AckLplP / CC2420NoAckLplP，Linux下CC2420是否支持。 
+2，CC2420 CC2420_read_RAM函数是否可以使用。我看到注释是"not being tested yet"。我们需要读取64位地址。
+3，CC2420进入退出powe down模式的实际时间。我们在增加了开关CC2420振荡器的ioctl函数。 测试CC2420从某状态（因为现在没有函数直接读取FSM状态，所以CC2420当前状态未知）到Power down状态再到RX_CALIBRATE状态的时间。发现典型时间是3m，最长小于6m。这个时间是否正常。我们看到CC2420文档中提到CC2420晶体起振很快，可以关闭振荡器以降低功耗。
+B，PMIC
+PMIC的RTC是否有驱动，如何使用？只看到了SG2的RTC使用方法。我们希望用RTC唤醒节点。
+C, usbNet: 
+按照文档在windows下安装usbnet驱动没有成功，按文档选择网络适配器后，没有找到设备。
+(16:48 2007-06-13)佳亮博士的问题
+1.         The backoff mechanism in CSMA /CAis not coded as it represents in standard. In the driver, the residual backoff slot is not reused when backoff is interrupted by an imcoming signal.
+2.         No retransmission in unicast when no ack is received.
+3.         No Mac source address in mac frame
+4.         No verification of reception of duplicated mac message (related to retransmission)
+5.         No MAC queue for storing received mac packets. It happens that a packet is overwritten when two consecutive packets are received.
+Here above are my remarks, I’m sure Zhang Jian has more than these!
+Jialiang
+
+16:14 2007-06-13
+待做
+A, test_tos_mac.c中需要测试的函数(15:12 2007-06-14)完成
+time_accuracy_test，未通过
+send_vl，(15:12 2007-06-14)通过
+poll_test, 通过
+old_arg_warning, 通过
+B, (17:42 2007-06-13)
+1，看家璐代码中FIFO读数据代码。
+(1)写入FIFO后，读FIFO时如果分两次读出FIFO数据，是否必须写FIFO处于打开状态才可以（这是我在fc6上做的实验）。(16:30 2007-06-16)不是. 现有方法是写FIFO写完后关闭, 读FIFO, 一次读出所有数据. "16:30 2007-06-16"end
+(2)读FIFO没有打开时，写FIFO能否打开。
+2，更新tosmac.ko，家璐下载的10个节点，还有8个没有更新。
+C, (21:03 2007-06-13)
+1, 节点名子还是得改位从1-30顺序的编号, 这样编号和ip地址是对应的. 便于网络连接
+2, 把加载CC2420驱动加入rc.d的脚本中. 把tos_mac_tools.sh加入搜索路径. 
+
+16:28 2007-06-13
+项目进展
+现有CC2420驱动的修改是在非阻塞读取数据后，无论有无数据可以读取都修改CC2420_state = IDLE_STATE。而不是在非阻塞下不考虑CC2420_state。这样没有破坏CC2420_state的功能，不会对将来调试驱动有不好的影响。
+
+17:20 2007-06-13
+项目, blob下载文件系统出错, 重要经验***
+问题：把SG2Release1_0:image目录下的blob烧写到公司新买的节点中，用此blob下载文件系统时，到达4.1M左右时，出现传输错误，有频繁的重试，由此实际传输速度会逐渐下降。使用1k-xmodem（windows下超级终端有）和xmodem都是如此。使用xmodem时从4.1M--4.3M，好像重试了200次以上。
+解决：发现使用自己编译的blob就没有问题（SG2FT2007-6-8.tar.gz: blob/blob_2s_debuginfo），估计张宇停止时下载到10M，我中间看过一次当时是7M多，下载正常。源代码和编译方法来自platx网站。
+来源：是liama（中法联合实验室）发现的这个问题，blob是张宇帮他们下载的。张宇查找问题原因，确定问题与调试板无关。开始以为是节点板有问题。后来把SG2Release1_0:image目录下的blob下载到法电自己买的30个新节点的一个节点，也有问题。
+总结一下定位问题的过程：
+               节点
+                |
+       ----------------------
+      |                      |
+     硬件                   软件
+      |                      |
+  ---------         -----------------
+  |       |         |     |         |
+调试板  节点板  文件系统 内核 bootloader(blob)
+
+我分析这个问题时没有考虑到blob的问题，如果是我自己分析，可能不会这么快找到原因，下次可以考虑先画一个系统框图，逐步排除，优先检查与出问题的部分（节点板，文件系统），问题有关的（硬件有连接关系（调试板），软件有依赖关系（blob））。当时验证内核是否可以启动，是为了证明blob下载影响到内存这个过程是否正确。
+
+21:49 2007-06-13
+测试
+最大接收的数据长度是发送值减1. 在驱动中查原因. 待做.
+
+23:38 2007-06-13
+接收fifo, 接收变长数据正确. 代码和日志: "$Imote2/fisco/fifo/06132336"
+
+00:59 2007-06-14
+节点, 网络设置, ssh
+如果配置PC机USBnet的ifconfig步骤出错, 或者配置好的机器ping不通正确的节点. 可以重起节点. 可以解决上述问题. 
+
+15:12 2007-06-14
+变长包测试通过, 用的时间太长了，大约8小时......，期间多次被打断。
+1, 通过驱动设置包长度：
+ioctl(tosmac_dev, TOSMAC_IOGETMAXDATASIZE, 0));
+ioctl(tosmac_dev, TOSMAC_IOSETMAXDATASIZE, new_max_ds);
+现在测试的最大长度是50字节。收发40-60字节的结果都正确，超出部分未发送。
+2, 如果加入magic bit，复制数据的起点就后移一个字节。
+3, 接收比发送字节少一个字节，需要查驱动的问题。暂时的解决方法是write函数的count设置为TOS_Msg.length+1。周末在驱动中加入长度信息，进行跟踪。待做。
+4, 代码和日志保存在"$Imote2/fisco/fifo/06141519"
+
+15:38 2007-06-14
+待做：
+多进程时无法调试？
+想在r_pid_process的"memcpy(fifo_data, recv_pkt.data+1, recv_pkt.length-1);"设置断点，但是没有成功。在"printf("reading message from tos_mac device.\n");"设置也没有成功。是不是要选择设置断点的进程。否则gdb无法确定对哪个进程进行调试？
+把断点设在"FIFO_in"函数也不行：
+(gdb) b FIFO_in
+Breakpoint 1 at 0x98c0: file FISCO_zjFIFO.c, line 39.
+
+17:47 2007-06-14
+待做
+完成2.1-2.8
+
+18:06 2007-06-15
+一次从FIFO中读出所有数据，验证MTL写入FIFO的数据是否能正常读出。代码, 编译结果和日志. "$Imote2/fisco/fifo/06151805"
+待做，如果完成进度，把现在从FIFO中分次读出数据改为一次读出所有数据再进行处理，这样提高系统效率。
+
+18:55 2007-06-15
+项目进展
+如果读出FIFO，关闭，再读FIFO，FIFO中剩余数据会丢失。家璐的方法：
+家璐代码中是一次读出MAC addr和fisco包头，没有考虑fisco有负载数据的情况。
+使用上面提到的一次读出读取数据，但是暂时不考虑两个包重叠的情况，遇到仅仅报错。待做。在"#ifdef READ_ALL_FIFO"内修改。
+
+14:44 2007-06-16
+项目更新
+Imote2开发包SG2FT2007-6-8.tar.gz更新, “tos_mac_tools.sh”加入了挂载nfs的功能. 更新文件保存在SG2FT2007-6-8.tar.gz同目录(/media/NEW/wsn/imote_ft_release)的update目录下.
+
+15:28 2007-06-16
+项目进展, fisco, PTL进展
+发送一个负载数据, 由test_tos_mac: recv接收, 数据接收正确. 只是发送是write函数的count需要写"TOS_Msg.length+1". 代码, 编译结果和日志见: "$Imote2/fisco/fifo/06161522". 打开了地址辨识功能, 日志用可以看到第3次发送数据, 由于地址错误没有成功. 
+
+16:27 2007-06-16
+待做, 下一步计划(已转移, 见"15:50 2007-06-17"):
+1, 顶层加入接收包的代码. 测试发送接收多字节负载数据. 6.16下午完成
+(17:12 2007-06-16)
+如果测试变长数据,
+打算把send_vl函数中产生一定长度字符串的功能封装为一个函数(位于tos_mac_sub.h):
+void packet_test_string(int str_len, void *ts_ptr, void *ts_item_ptr);
+但是, 现在测试fisco的简单场景暂时还不需要测试有负载数据的情况. 所以先测试没有负载数据的fisco收发, 然后测试fisco前四个场景. 然后再做这个工作, 我做东西总是容易偏离预定目标. "17:12 2007-06-16"end
+2, 6.16晚上完成场景1测试. 
+3, 6.17至少完成3个场景测试. 
+
+17:58 2007-06-16
+完成仅仅针对MAC addr, fisco header的MTL. 晚上回去测试. 
+
+11:43 2007-06-17
+从fisco本身提示信息看, N2L成功. 在New L存在下N2M成功.
+修改了PTL的输出信息, string -> hex, 未测试.
+下午按照测试文档要求, 并且查看节点状态. 
+
+15:50 2007-06-17
+待做, 下一步计划:
+"16:27 2007-06-16"合并至此
+2.1-2.4这4个测试场景都是一跳测试, 现有程序可以测试. 2.5-2.8这4个场景都是两跳测试, 需要修改节点发射功率和对PTL层对信号强度进行过滤. 这样才能营造出两跳地址分配的情况. 
+1, 6.17完成2.1-2.4测试.
+2, 6.18上午完成两跳地址分配环境的建立;
+6.18下午开始测试2.5-2.8, 有问题及时和家璐沟通. 
+3, 6.20讲硬件是否用ppt?, 6.18问佳亮博士, 间隙时间做. 
+4, 测试第3章
+
+01:11 2007-06-18
+2leader_onePtt_not-kown-eachother
+意外的情况. 
+节点1配置为leader, 开启节点2, 当节点2收到一条LDBR后, 关闭节点1并重起之. 这两个节点变为两个不同的leader, 二者pid不同. 这很奇怪. 查, 待做. 
+
+0:30 2007-06-18
+没有找到one-hop地址过期时间
+(10:07 2007-06-18)
+fisco.c
+p = fisco_buf_getavail(oh_buf, time(0), OH_TIMEO);
+#define OH_TIMEO 5
+
+01:35 2007-06-18
+再次出现一跳有leader时, new配置为leader的情况. 
+很可能是FIFO的问题,
+
+10:07 2007-06-18
+待做
+(14:25 2007-06-18)1和2转移到"13: 48 2007-07-18"。3修改。
+1，PTL过滤fisco包，由用户控制丢弃一些包，测试fisco的出错处理。
+2, 模拟两跳环境：PTL层设置发射功率，控制驱动层对信号强度进行过滤。
+3，家璐：命令行方式配置leader, member, first leader, gateway, 利用N2L, N2FL, N2M, M2G状态，从指定配置文件读取信息。改为：通过L_INIT配置leader；命令行配置各种timeout。
+
+13:48 2007-06-18
+项目进展, 项目最后任务
+0, 佳亮博士和家璐修改概要设计文档后，对照我的日志看是否有遗漏。
+1, 建立开发包，19日给张宇。
+1), read Setup instruction for imote2-c.doc
+add gcc, gdb howto
+2), the structure of release packet.
+dev:
+cross-tools, bootloader, kernel, app, 
+download:
+src directory.
+3), update test_tos_mac.c test_tos_mac, tos_mac_tools.sh
+2，测试:
+1)功能测试：5个节点邻居表，Test_list.doc第二部分：几个节点8个功能测试；
+(1)模拟不可靠的无线传输。"10:07 2007-06-18"1
+(2)模拟两跳地址分配的方法。A, PTL层通过配置好的邻居表，访问一跳节点。邻居表设置为不通的节点，不能直接通信。B, 使用"10:07 2007-06-18"2方法。
+2)数据收集，满足"3)"需求，看张宇邮件。
+3)性能测试：30个节点以上邻居表，Test_list.doc第三部分。
+4)PMIC功能。
+5)test bed总文档。邻居表代码（有无PTL）
+
+14:44 2007-06-18
+修改概要设计文档（完成）
+1, FSM图中，加入L_INIT状态。
+2, bamvor: 家璐现有实现方式好像不是标准的状态机的运行方式。等待消息是在一个确定状态中等待的。有空与张宇博士讨论。(18:17)2007-07-23折中的办法是在M_MSG_HANDLE, L_MSG_HANDLE, G_MSG_HANDLE才接收调试信息，待做。加入概要设计文档。
+
+
+15:32 2007-06-18
+项目经验, 失分***
+有些想法没有列入项目文档，造成后面自己测试的被动。
+1, 设置初始状态，本来想的是设置节点的初始状态和参数，这样可以灵活配置节点。但是这个功能没有写入文档，所以家璐没有实现，主要是自己缺乏写文档的经验；
+2, 没有定义公用文档。诸如MAC地址。另外，输出fisco包，数据结构操作等函数都与fisco放在了同一个文件，结构不好，而且不便于复用。
+
+15:42 2007-06-18
+待做
+项目问题
+fisco运行过程中会退出。
+
+15:48 2007-06-18
+1, 把FINFO和FERROR分别定义为标准输出和标准错误输出
+修改后代码如下：
+fisco_framework.h
+#define FINFO stdout
+#define FERROR stderr
+
+#ifdef FISCO_DEBUG
+#define FDPRINT(f_output_t, ferr_msg, ferr_num) \
+            fprintf(f_output_t, "%s: <%d>\n", ferr_msg, ferr_num); \
+            PAUSE()
+#else
+#define FDPRINT(ferrno, ferr_msg, ferr_num) 
+#endif/* FISCO_DEBUG end*/
+2, 加入drop_msg函数，模拟信号质量差的情况。要避免在fisco_PTL.c中直接访问fisco包的内容。
+
+16:20 2007-06-18
+周三10点：
+针对没做过嵌入式开发介绍嵌入式开发，包括：
+1, 嵌入式开发框架
+2, 硬件能力
+3, 软件支持程度
+目的：了解，而不是能够开发。
+ppt，英语。
+打算也听其他内容，了解了解wsn相关内容，所以需要周二完成8个case的测试，所以需要今天完成前4个测试，和PTL MAC地址过滤功能。
+
+18:13 2007-06-18
+c语言, 编译错误
+修改
+fisco_utils.c:96: warning: comparison is always false due to limited range of data type
+代码的95，96行：
+    if (    object_pack->type == ( MSG_DEBG - 1 )
+         && object_pack->mac == mac
+后想起，fisco.h中：
+...
+        MSG_DEBG = 0xff,
+} fisco_msg_t;
+原有MSG_DEBG = 0x9999，而object_pack->type也就是fisco_pack_t->type是无符号8位数，原有定义显然超出了范围。另外，c逻辑运算是得到结果就停止运算，由于" object_pack->type == ( MSG_DEBG - 1 )"永远是假，所以编译器会提示他下面这句"&& object_pack->mac == mac"永远是false。
+
+18:20 2007-06-18
+下午进度：
+1, is_drop_msg。修改头文件结构，把fisco.h和tosmac.h都放到fisco_framework.h中。
+
+18:42 2007-06-18
+fisco的FIFO名称与fisco_PTL不同。所以用家璐新的fisco代码无法正常工作。
+
+19:00 2007-06-18
+停在NEIGHBOR_FIND不动，原因未知，问家璐。
+[root@localhost fisco_jialu_20070618]# ./fisco
+Fisco begin...
+[State] W_LDBR
+        W_LDBR: Collect LDBR 0
+[State] NEIGHBOR_FIND
+
+
+23:07 2007-06-18
+gcc有说明.
+doc文档要修改的地方, 如下: 
+			2.节点中，测试程序均位于/tosmac中；主机中测试程序均位于/usr/src/SG2Release1_0/buildTree/platx/linux-2.6.14/drivers/tosmac中。
+改为
+			2.节点中，测试程序均位于/tosmac中；主机中测试程序均位于/dev/linux-2.6.14/drivers/tosmac中。
+其他类似路径. 
+
+
+		[root@SG2-3 rcS.d]#echo "/usr/sbin/sshd" >> S55sshd.sh  （55代表Host启动sshd的优先级）                        
+改为
+		[root@SG2-3 rcS.d]#echo "/usr/sbin/sshd" >> S55sshd.sh  （55代表节点启动sshd的优先级）                        
+
+
+	    控制起始和终止时间则：./RfmToLeds 0 500（起始时间0，终止时间500），CntToLedsAndRfm类似。能正常收发则节点正常。
+改为:
+删除. 0, 500没有作用.
+
+00:36 2007-06-19
+1, 之前的问题原因是我把READ_FIFO和WRITE_FIFO名字写反了. 当时直接使用cat命令读fisco_send_fifo都不行, 但是cat fisco_recv_fifo有数据. 于是查看fisco.c发现了这个错误. 太马虎了. 家璐的提醒我在PC上测试要开fserver, 就是要保证fifo被打开, 从而正确使用 fifo.
+2, data lenght: 1073807360. 不对, 查. 看做完的节点log
+

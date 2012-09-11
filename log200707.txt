@@ -1,0 +1,1241 @@
+10:57 2007-07-03
+用了33分钟完成了58行的GPCTL_test.c, 没有编译错误, 一次编译运行通过. 要继续努力, 希望这个月完成3000行代码, 且写200行代码没有错误. 
+
+12:03 2007-07-03
+fisco.c: ROLE_LED_SWITCH
+1, case ROLE_LEADER:后面没有加break, 造成first leader, leader, gateway三者状态一样.
+2, 加入对于ROLE_NULL和其他状态的处理，因为编译fisco时提示：
+arm-linux-gcc fisco.c fisco_framework.c fisco_utils.c -g -Wall -o fisco -D__FISCO_MAIN -D__DEBUG__ -DOUTPUT_LOG_FILE
+fisco.c: In function `main':
+fisco.c:262: warning: enumeration value `ROLE_NULL' not handled in switch
+fisco.c:318: warning: enumeration value `ROLE_NULL' not handled in switch
+fisco.c:329: warning: enumeration value `ROLE_NULL' not handled in switch
+fisco.c:795: warning: enumeration value `ROLE_NULL' not handled in switch
+fisco.c:883: warning: enumeration value `ROLE_NULL' not handled in switch
+测试led_switch.c时，role是整数类型，所以没有这个提示，以后测试要注意，变量类型不要有变化，经验。
+
+12:44 2007-07-03
+GPCTL_test.c完成后，融入到fisco代码树，到初步测试完成（仅仅测试了member和first leader场景），用了105分钟，难道是因为饿了造成效率这么低？
+
+11:03 2007-07-05
+最近一周效率都非常低，基本没有什么进展，感觉原因有二：
+1，工作状态最近一个月都没有调整好，最近一周下午一犯困基本没有进展；
+2，调试工具开发没有总体计划，作一步算一步，所以效率底。
+重新整理项目计划：
+1，总体：本周完善调试工具，下周完成中规模功能测试，下下周完成大规模性能测试；
+2，调试工具：
+(1)，总体进展：sniffer方面已经完成；控制部分：a邻居表有问题；b启动程序时可以处理任意长度和任意数量参数；c没有加入发射功率的调整；查询方面工作较多，关键是查discovery table和节点状态，LED指示需要完善。日志文件方面，需要按照系统时间保存，开发fisco_log工具（有选择显示log文件）；MTL_tools加入参数处理，如果有输入参数，处理输入参数后直接返回；
+(2)，控制部分：a邻居表：昨天修改为可选发送接收后只能有一个节点工作正常，对比原有代码进行修改，需要半天；b部分直接使用Unix/Linux编程实践教程中shell的处理程序，预计需要半天；c需要半小时；
+(3)，查询。 简单信息尽量用LED指示, 复杂信息用查询：
+a 现有家璐最后的程序没有查询功能，计划加入获得包括邻居表在内的系统信息的函数，并且设置调试状态下，退出NEW节点时不删除discovery table。由于家璐的不是所有状态都阻塞在同一个读数据宏(fisco_recv)，现在就是在fisco_recv后面的包处理语句中加入调试包(MSG_DEBG)；另外还需要加入错误处理。需要一天。
+b LED：现在要加入的功能如下: PTL层没有启动MTL状态下三个LED闪烁，MTL_ON和MTL_OFF之间由MTL控制LED，只有当节点执行MTL_OFF后才能再由PTL控制LED，这样便于观察MTL运行状态。需要2小时。
+(4)，日志文件：节点根据系统时间建立日志文件，这样日志便于管理，(2)b完成后需要1小时。开发fisco_log工具，可以选择是否显示包具体信息，需要2小时。
+(5)，MTL_tools, 加入命令行, 这样支持脚本调试; 需要1小时。
+(6)，查FIFO出错的原因。如果读到数据小于MTL负载数据报错。需要半天。
+总时间是两天半，也就是说需要周末一个整天时间。
+
+15:43 2007-07-05
+函数指针理解很差。function_pointer_test.c错误太多了。
+
+16:22 2007-07-05
+经过考虑，感觉MTL_tools中几个工具都很简单，不一定非要做成独立的函数。如果使用独立函数，函数需要传入arg(argc, argv)。现有负载数据是全局变量这也不好。
+MTL_tools功能描述：
+1，如果没有命令行参数，列出现有工具，供用户选择，处理完成了继续列出现有工具。
+2，如果有命令行参数，第一个参数是工具类型，后面参数是该工具所需参数。执行成功返回0，失败返回-1。
+
+MTL_tools.c:
+start:
+get function num
+run function according to function num
+save data to send_fifo
+if is_arg_input 
+    exit program
+else 
+    goto start
+
+get function num:
+if num of arg >= 2 
+    function_num = the 2nd arg
+else 
+    list function num and short description
+    user input function num
+
+list function num(display_func_num):
+display function number from PTL_START to PTL_END in debug_t in fisco_framework.h
+(need add function short description to in fisco_framework.c 
+
+if error using exit_MTL function to exit.
+exit_MTL(int exit_num)
+    save log file
+    exit using exit_num
+
+data structure
+typedef unsigned char fisco_preload_t;
+struct __fifo_data{
+    mac_t mac;
+    fisco_pack_t fisco_head;
+    fisco_preload_t *fisco_preload;
+} fifo_data;
+
+(18:21 2007-07-05)
+此函数尚未挽成，完成MTL_ON部分，然后继续往后写，然后修改fisco_PTL.c和其他程序，因为新加入了fisco_preload_len。
+
+16:02 2007-07-06
+编译MTL_tools-2.c过程中遇到的错误：
+1, fisco_framework.h:
+extern debug_des debug_description[MTL_END+1];
+写成了：
+extern debub_des debug_description[MTL_END+1];
+2, fisco_framework.c:
+debug_des debug_description[MTL_END+1];
+写成了：
+debub_des debug_description[MTL_END+1];
+3, MTL_tools-2.c中
+包含的文件MTL_tools-2.h写成了MTL_tools.h
+4, MTL_tools-2.c中
+case RX_THRESHOLD和case TX_power中，声明新变量，但是没有使用{}。编译器报"parse error"
+5, MTL_tools-2.c中，send_pack是结构体，但是访问变量使用的却是"->"，研二编程少真是一个大问题。
+6, FDPRINTx的参数个数写错若干次；FERROR多次写成ERROR
+7, new_buf = NULL;写成了new_buf == NULL;
+同样两行由于new_buf是数组，编译器报"error: incompatible types in
+assignment"，改为new_buf[0] = '\0';。这个错误还不是太弱智。
+8, typedef struct  {
+    debug_t type;
+    char string[20];
+} debug_des;
+的string写成了sting。
+9. parse_func_num中，return (int)i写成了return (int)debug_t。debug_i是枚举类型。
+10, printf("%d: %s\n", (int)i, debug_description[i].string);
+写成了
+printf("%d: %s\n", (int)i, debug_description[i].string):{
+错误之多，感觉是研一做兼职之前的水平。
+11, 
+    for ( i = PTL_START+1; i < PTL_END; i++ ) {
+写成了
+    for ( i = 0; i < MTL_END; i++ ) {
+应该仅仅是显示PTL层的调试信息（MTL_tools是为了控制其他节点的PTL)
+(16:50 2007-07-06)
+12, [root@Imote2-08 tosmac]#./MTL_tools-2 MTL_OFF      
+Segmentation fault
+[root@Imote2-08 tosmac]#./MTL_tools-2 MTL_OFF      
+Segmentation fault
+原因是MTL_OFF没有参数，但是下面的语句却要输出参数：
+        case MTL_OFF:
+            for ( i = 1; i < send_pack.fisco_preload_len; i++ ) {
+                FDPRINT1(FINFO, "%d", send_pack.fisco_preload[i]);
+            }
+            FDPRINT0(FINFO, "\n");
+            break;
+13, RX_STRENGTH, TX_POWER中没有处理的当数据超出范围的情况。后面输出负载数据信息时也没有考虑。
+14, 节点8启动gdbsever的错误：
+Remote side has terminated connection.  GDBserver will reopen the connection.
+Remote debugging using MTL_tools-2
+readchar: Socket operation on non-socket
+今天网络连接速度也很慢。
+使用节点18也有同样的问题，加入logFrTel0619-.txt。
+15, 为了解决问题使用gcc编译
+错误位置如下：
+111                 send_pack.fisco_preload[0] = MTL_OFF;
+(gdb) 
+
+Program received signal SIGSEGV, Segmentation fault.
+0x08048a2c in main (argc=1, argv=0xbfbb8294) at MTL_tools-2.c:111
+111                 send_pack.fisco_preload[0] = MTL_OFF;
+再仔细看程序发现了问题，send_pack.fisco_preload是指针，在MTL_ON和MTL_OFF的处理都没有预先分配空间所以出错。
+另外改正了一个潜在问题：
+FDPRINT2(FERROR, "allocate memory %d bytes for fisco_preload fail when use %d
+MTL_tools.\n", send_pack.fisco_preload_len, func_num);
+中的func_num原有是send_pack.fisco_preload[0]，但是如果执行这个语句即使上send_pack.fisco_preload[0]还没有赋值，所以如果出错，都会是显示0。
+16，如果输入没有的调试类型
+[root@localhost fisco]# ./MTL_tools-2_x86 sd 13
+invalid debug type.
+save data to send_fifo
+the data need to write to fifo is: 
+段错误
+在switch的default中加入exit_MTL(1)即可。
+17，经过106分钟的调试终于把解析或输入参数这部分完成了，这是原定1小时要完成的任务。由于同时修改了FIFO，估计MTL_tools-2需要今天晚上才能完成。周末完成其他内容。
+
+10:42 2007-07-07
+MTL_tools-2.c/h
+删除了fisco_preload_len, 因为fisco_pack_t.data_len描述负载数据长度.
+说明对整个项目缺乏把握.
+
+10:49 2007-07-07
+fisco.h, fisco_pack_t
+data_len改为uint16_t, 原有代码是addr_t(uint32_t), 可能是佳露修改fisco地址从16位到32位时, 修改的. 按概要设计文档data_len是16位的.
+uint16_t    data_len;	//bamvor.modified.2007-07-07 
+另外, 文档中data_len单位是4bytes, 可能是佳露后来修改的, 但实际使用时还是单位1byte比较方便. 修改概要设计文档, 待做.
+
+16:42 2007-07-07
+1, fisco只在文件输出信息没有在屏幕输出信息的原因是没有使用FDPRINT语句. 
+2, fisco_framework加入FDPRINT2-FDPRINT5语句, 
+3, 修改输出包的格式, 以连续的"-"开始和结束. 这样便于fisco_log处理.
+
+
+20:25 2007-07-07
+MTL_tools_0704信息发不出去, 经查是数据长度不正确造成的. 错误原因是fisco_PTL没有更新, 原有fisco_PTL的数据长度是32位的.
+
+20:45 2007-07-07
+现在计数都是偶数的, 查到底是没有记录奇数侦还是计数有问题..
+(10:44 2007-07-08)
+对比fisco的MTL-PTL和MTL(fisco)日志($Imote2/log/fisco/07081032), 在PTL中MTL输出信息是奇数的, 但是奇数和偶数的信息是一致的. 发现如果定义了OUTPUT_LOG_FILE, FDPRINT中会分别输出到文件和标准输出, 所以count会两次增一, 修改: 
+FDPRINT1(FINFO, "RECEIVE PACK (count = %d)\n", recv_count++);\
+改为
+FDPRINT1(FINFO, "RECEIVE PACK (count = %d)\n", recv_count);\
+recv_count++
+
+11:19 2007-07-08
+leader LDBR保存不全的原因是现在是fflush只在状态机运行一次后更新, 状态机如果处于接收包的状态会阻塞等待. LDBR的发送由定时器负责, 所以LDBR发送后如果状态机处于阻塞接收包状态, 但没有收到包, 不会执行fflush. 
+修改方案:
+1, 删除原有fisco中使用的fflush, 这部分由FDPRINTx函数负责;
+2, FDPRINTx宏加入FFLUSH宏: 执行fprintf函数一定次数后, 执行fflush;
+
+11:35 2007-07-08
+print_hex_pack和print_pack的fprint函数改为FDPIRNTx函数.
+
+15:24 2007-07-08
+如果在FFLUSH中使用FDPRINT0, 编译时的提示:
+fisco.c:256: warning: implicit declaration of function `FDPRINT0'
+fisco.c:274: warning: implicit declaration of function `FFLUSH'
+......
+fisco_utils.c: In function `print_pack':
+fisco_utils.c:100: warning: implicit declaration of function `FFLUSH'
+fisco_utils.c:114: warning: implicit declaration of function `FDPRINT0'
+链接时的错误:
+/tmp/cci8rggm.o(.text+0xe4): In function `main':
+/usr/src/Imote2/imote2_ft_release/dev/app/fisco/fisco.c:256: undefined reference to `FDPRINT0'
+/tmp/cci8rggm.o(.text+0x188):/usr/src/Imote2/imote2_ft_release/dev/app/fisco/fisco.c:264: undefined reference to `FDPRINT0'
+/tmp/cci8rggm.o(.text+0x3ec):/usr/src/Imote2/imote2_ft_release/dev/app/fisco/fisco.c:274: undefined reference to `FDPRINT0'[root@localhost fisco]# ./buildFISCO.vi fisco_framework.h
+
+17:28 2007-07-08
+"$Imote2/fisco/backup/fisco_07081623.tar.gz"
+修改了FFLUSH, 为建立fisco_log打了基础.
+
+17:31 2007-07-08
+待做, 今天必须要完成的工作:
+1, MTL_tools可以处理命令行参数, fisco_log需要按时间保存;
+2, 节点状态切换时, 输出fisco状态.
+3, 建立fisco_log_tools, 可以选择是否显示包和节点详细信息; 
+另外, 可选:
+4, fisco可以响应SIGKILL, SIGQUIT等重要信号.
+
+20:05 2007-07-08
+psudocode of fisco_log_tools.c
+get output mode and log file name from cmd line
+if no log file name 
+    exit
+if no output mode using default mode instead
+open log file given by cmd line
+//set initial sectio type is normal
+is_sec_end = 1;
+while is not end_of_file
+    read line from log file save in line_buf
+    get the section type(sec_null, packet, detail, sec_end) from line_buf
+    if ( section type is not normal and is not sec_end ) 
+        is_sec_end = 0
+        output according to section type and output mode
+    else if ( section type is sec_end ) 
+        output this line
+        is_sec_end = 1
+    else if ( is_sec_end == 0 )
+        output as last circle
+    else if ( section type is sec_null )
+        determine whether output or not according to output mode
+    else 
+        error
+while end
+program end
+
+variable:
+1, int mode: output mode. output mode is OR bit op result from section type which definite in fisco_framework.h
+#define SEC_NULL	1
+#define	PACKET	2
+#define	DETAIL	4
+2, char *log_file: log_filename
+3, line_buf: the line read from log file. the max line length of it is not limited. 
+4, int is_sec_end: whether this secion end or not. compare with LOG_TAIL( in
+fisco_framework.h). 
+   int is_output: whether output this section or not.
+
+10:50 2007-07-09
+开始找到了fisco_log_tools出现段错误的位置，修改后正确。但是现在却改不回去了。。。怎么也没有段错误了。
+
+11:56 2007-07-09
+parse_mode可以处理单个mode，但是输入多个mode，仍然只处理了第一个。使用gdb跟踪：
+gdb fisco_log_tools_x86 --args "-m "NORMAL|PACKET" 123"
+103                 if ( !strncmp(mode_string, mode_s[i].mode_name, strlen(mode_s[i].mode_name))){
+发现每次比较的都是mode_string，应该比较mode_string_pt。
+
+13:33 2007-07-09
+修改了parse_mode函数使其更简洁。
+下面这句起的作用是当到达mode_string结尾时，不再要求有"|"分隔：
+        if ( *mode_string_pt == '|' ) {
+            mode_string_pt++;
+        } else if ( mode_string_pt >= mode_string + strlen(mode_string) ) {
+            continue;
+原有代码如下：
+fisco_framework.h
+#define PACK_R  "PACK_RECV\0"
+#define PACK_S  "PACK_SEND\0"
+#define LOG_HEAD        "----------\0"
+#define LOG_TAIL        LOG_HEAD
+#define NORMAL          1
+#define PACKET          2
+#define DETAIL          4
+
+typedef struct __mode_struct_t {
+    int mode;
+    char* mode_name;
+} mode_struct_t;
+extern mode_struct_t mode_s[3];
+
+fisco_log_tools.c
+static int parse_mode(char *mode_string)
+{
+    char *mode_string_pt = mode_string;
+    int mode = 0;
+
+    while ( mode_string_pt < mode_string + strlen(mode_string) ) {
+        int i;
+        for ( i = 0; i < sizeof(mode_s)/sizeof(mode_s[0]); i++ ) {
+            if ( !strncmp(mode_string_pt, mode_s[i].mode_name, strlen(mode_s[i].mode_name))){
+                mode |= mode_s[i].mode;
+                mode_string_pt += strlen(mode_s[i].mode_name);
+                break;
+            }
+        }
+        if ( *mode_string_pt == '|' ) {
+            mode_string_pt++;
+        } else if ( mode_string_pt >= mode_string + strlen(mode_string) ) { 
+            continue;
+        } else {
+            fprintf(stderr, "parse mode error.\n");
+            mode = -1;
+            break;
+        }
+    }
+    return mode;
+}
+
+
+14:57 2007-07-09
+调试print_mode函数：
+1, 初始alloc=80情况下这个函数实际没有出错，开始出错原因是使用parse_mode函数出了错：
+if ( ( mode = parse_mode(optarg) ) > 0  ) {
+原来写成了
+if ( ( mode = parse_mode(optarg)  > 0 ) ) {
+所以只要parse_mode返回大于0的数，mode都是1。
+2, 测试alloc不足的情况，把alloc初始值改为2，把mode_s[2].name从"DETAIL"改为"DETAIL12345678901234567890"。
+(1)输出字符串的末尾有乱码：
+"the output mode is: PACKET|DETAIL "，查代码发现字符串末尾没有使用\0，是笔误。
+        if ( *(mode_string-1) == '|' ) {
+            *(mode_string-1) = ' ';
+        }
+改为
+        if ( *(mode_string-1) == '|' ) {
+            *(mode_string-1) = '\0';
+        }
+(2)把
+while ( remain < strlen(mode_s[i].mode_name + 1 ) ) {
+改为
+while ( remain < strlen(mode_s[i].mode_name) + 2  ) {
+原来的"+1"在strlen函数内，实际上提供的remain比字符串长度还小一。但是需要的是字符串长度+2。因为这个字符串后面要加入"|"，加入"|"指针要移到下一个地址，所以需要字符串长度+2。
+测试通过：alloc和remain变化正确，mode字符串输出正确。
+把alloc和mode_s[2].name改回20和"DETAIL"。
+
+16:23 2007-07-09
+fisco_log_tools.c中出错时不能直接退出，因为有存储空间需要释放。
+(17:08 2007-07-09)
+在main中加入了exit_func标签，不区分是否是正常退出。在print_mode函数中加入err标签，只有当程序数错时才执行。
+
+18:08 2007-07-09
+加入SEC_NULL和SEC_END. 不过没有考虑清楚sec_type_t使用unsigned char还是int，如果使用unsigned char，get_sec_type就不能有-1的返回值。现在使用的是unsigned char.
+
+00:39 2007-07-10
+调试完整的fisco_log_tools.c, get_sec_type函数有问题
+
+14:41 2007-07-10
+查，fisco.c中flag和route的作用。待做。
+
+14:53 2007-07-10
+下列函数没有完成：
+"$Imote2/fisco/backup/fisco_07101613.tar.gz"
+1, P_STATE(&g_data): print_state(fisco_data_t *g_data);
+output fisco_data_t excluding neighbor_table
+2, P_NEIGHBOR(&g_data, k);                 //bamvor.add.2007-07-10
+k = g_data.neighbor_num;
+g_data.neighbor_table[k].role = ROLE_LEADER;
+g_data.neighbor_table[k].addr = getter.src_addr;
+g_data.neighbor_table[k].gateway = 0;
+g_data.neighbor_table[k].mac = mac;
+g_data.neighbor_num++;
+3, P_DISCOVERY
+4, P_BUF
+但是在＃ifdef OUTPUT_LOG_FILE以及对应#else中加入了宏定义：
+    #define     P_STATE(data)
+    #define     P_NEIGHBOR(data, k)
+    #define     P_DISCOVERY(data)
+    #define     P_BUF(buf)
+
+08:56 2007-07-12
+下午实验对策:
+1, MTL_tools, 直接保存前5个参数到全局二维数组, 这样几个tools就可以使用.
+当时没想到这个办法把改了一部分的代码又改回去, 反思, 总结. （完成）
+2, 读FIFO, 改为open后睡眠100毫秒(english ?, 待做).(完成)
+3, fisco状态输出没法简化, 好在实现并不困难. fisco_log_tools是同样情况.
+4, fisco_log需要按时间保存, MTL_tools发送参数时先发送程序名, 再发送剩余参数个数, 和剩余参数. 
+5, 简单的邻居表.
+
+10:02 2007-07-12
+MTL_tools.c 宏定义"#define ARG_LEN 80;", 多加了引号, 编译时出现很多错误.
+
+10:09 2007-07-12
+MTL_tools.c调用get_dst_addr需要修改。完成：只有当没有命令行输入时才调用get_dst_addr, 否则直接从命令行赋值。
+
+10:14 2007-07-12
+使用fisco_PTL_0707_log和fisco_0708_fisco_log_tools测试. 21次时出现NULL包, 之后连续几个包都是NULL, 没有出现原来的NULL, 2, 26情况. 
+使用fisco_PTL_0712_FIFO和fisco_0708_fisco-log-tools测试. "$Imote2/fisco/backup/fisco_07121021.tar.gz", 到297次LDBR都正常，约24分钟。
+
+11:09 2007-07-12
+MTL_tools.c
+把data_len赋值位置改为tools函数内，发现preload长度都是0。找大的原因是：原有代码运行tools后，会清空s_fifo_data和s_fisco，这就把刚刚赋值的data_len又清零了。另外，从逻辑上变量复位也应该在所有代码之前。
+
+12:20 2007-07-12
+1102个包正常，大约91分钟。
+
+12:20 2007-07-12
+fisco_log有多余的包
+如果fisco_PTL在后台运行，就没有问题。如预想一样，这个问题是由于fisco_PTL的干扰，但是为什么会有这个干扰就奇怪了，因为fisco_PTL并没有开启OUTPUT_LOG_FILE编译选项。待查。
+代码和日志"$Imote2/fisco/backup/fisco_07121323.tar.gz"
+14:25 2007-07-12
+完成MTL_send.c和MTL_recv.c
+"$Imote2/fisco/backup/fisco_07121425.tar.gz"
+
+15:02 2007-07-12
+待做
+        addr_t              laddr_table[MAX_LADDR_NUM];
+        uint8_t             laddr_num;
+需要单独输出
+
+15:46 2007-07-12
+fisco state未完成
+"$Imote2/fisco/backup/fisco_07121546.tar.gz"
+
+19:05 2007-07-12
+希望sniffer节点不接收控制命令， 但是修改没有成功，原因是没有加入命令行参数使其有效is_rc_handle），待测试。
+
+09:00 2007-07-13
+待做
+现有discovery table是静态分配的, 无法释放. 这不符合设计要求. 
+
+09:25 2007-07-13
+fisco.c修改完成, 测试通过.
+
+10:23 2007-07-13
+fisco_log_tools, 需要区分DETAIL细节信息, 例如节点邻居表, 地址分配缓冲区(one-hop buffer, two-hop buffer), fisco_data_t其它信息.
+
+10:49 2007-07-13
+到MBAR时, fisco出错退出
+
+15:47 2007-07-13
+待做：
+1, PTL_DB_handle加入transmition power的处理。重要性：低。
+2，修改函数。除非特殊情况不要使用全局变量。尤其是PTL_DB_handle的处理方式：现有对于调试信息所需的修改都是修改的全局变量，这点很不好，考虑用联合。重要性：低。
+3，前面未完成的内容；
+4，待续。
+
+
+16:07 2007-07-13
+前面写的FIFO出错是因为家璐代码中FIFO写入分两次写入（第一次MAC，第二次fisco_head），但是我是一次读出的。这样第二次写入的数据我实际没有读取。
+
+
+17:50 2007-07-13
+问题：
+路云川的程序似乎是每次都使用同一个配置文件。直接修改config.txt也不行。
+
+18:31 2007-07-13
+待做：会用数字但是不知道如何比较数字大小。test.sh
+
+neighbor.sh运行也没有效果。 
+
+22:03 2007-07-15
+Linux, 脚本学习, egrep
+涉及到：函数，管道，if语句，egrep，正则表达式
+pathmunge () {
+        if ! echo $PATH | /bin/egrep -q "(^|:)$1($|:)" ; then
+           if [ "$2" = "after" ] ; then
+              PATH=$PATH:$1
+           else
+              PATH=$1:$PATH
+           fi
+        fi
+}
+(代码自/etc/profile)
+看/bin/egrep: -q表示quiet, $1是要加入的路径，"(^|:)$1($|:)"表示$1这个路径是否包含在"echo $PATH"的结果----路径中。"^"表示行的开始，"$"表示行的结束。":"是PATH中路径的分隔符.
+
+00:10 2007-07-16
+这次并不是MBAR后节点死，节点29的MTL层发送了MBAR，但是leader（节点16）没有收到。怀疑是（节点29）PTL问题。查看发现节点29PTL代码版本不正确，应该是fisco_PTL_0712-2_FIFO, 实际是fisco_PTL_0712_FIFO.
+进一步实验，sniffer收到了MBAR，但是leader节点没有收到，只有leader使用串口或把fisco_PTL由ssh终端开启，观察leader节点的PTL层是否收到
+
+09:07 2007-07-16
+ln, 符号链接, 多次符号链接
+在/usr/src/imote2_ft_release/dev/目录下，建立下面的符号链接，方法一成功，方法二失败。
+ln -s -f /usr/src/Imote2_linux-2.6.14 linux-2.6.14
+ln -s -f ../../Imote2_linux-2.6.14/ linux-2.6.14 
+
+09:29 2007-07-16
+去掉fisco节点状态日志有正常。说明是节点状态函数的问题，现在需要定位错误位置。
+
+10:23 2007-07-16
+同样没有状态日志情况下，测试4次，一次失败，三次正常。
+"$Imote2/log/fisco/07161021"
+leader（节点16）接收到MBAR后fisco_log没有新的信息，但是PTL正常接收数据。
+"$Imote2/log/fisco/07161033"
+把fflush频率改为每次后。节点16可以第二次接收到MBAR时，有正确的回应。
+(10:54 2007-07-16)
+再次试验"Imote2/log/fisco/07161045"
+两次都没有出错，结合刚才的日志。估计是MBAR和LDBR冲突造成的
+不过这个问题与刚才那个问题不矛盾，不是主要问题，稍后解决，待做***。
+
+11:08 2007-07-16
+BUG修改
+s_pid_process
+判断发送数据长度是否符合要求的语句：
+             && ( fisco_preload_data_len + 3 ) <= TOSH_DATA_LENGTH ) {
+改为
+             && ( fifo_ret + 1 ) <= TOSH_DATA_LENGTH ) {
+因为fifo数据是目的MAC+fisco_head+fisco_preload，MAC层负载数据是Magic_bit+源MAC+fisco_head+fisco_preload，后者仅比前者多一。
+
+11:22 2007-07-16
+fisco_PTL_0716_detail，修改了前面数据长度报错问题和data写成date的问题。
+fisco_0716-3_fisco-state-log，重新加入记录节点状态的功能，每次FDPRINT都fflush。
+"$Imote2/fisco/backup/fisco_07161258.tar.gz"
+
+15:10 2007-07-16
+是在语句出的错"FDPRINT1(FINFO, "new addr : %x\t", pbuf->new_addr);"
+
+18:20 2007-07-16
+代码"$Imote2/fisco/backup/fisco_07161828.tar.gz"
+位置图和LED灯：
+          29(RG, gateway)
+
+
+
+
+16(G, leader)
+
+            28(R,member)     24(BG,first leader)
+
+
+             8(control node)
+
+
+                   23(BG, first leader)
+
+21:09 2007-07-16
+问题；
+1, 现有MAC addr是从何处获得的？应该是使用节点id，但现在不是。
+(22:18 2007-07-16)PTL层是节点id，说明是fisco层出的错。
+2，node_23:
+Change 10002 member to gateway[State] L_MSG_HANDLE
+gateway后面没有回车
+3, 角色，包类型应该显示字符串而不是数字。
+4，找邻居程序
+
+10:49 2007-07-17
+代码和日志见"$Imote2/log/fisco/07171115". 系统是大端
+代码"$Imote2/fisco/backup/fisco_07171223.tar.gz"
+s_pid_process有一个语句写错了：
+send_pkt.addr = ((fifo_data[1]<<8)&0xff00) + (fifo_data[0]&0xff);
+写成了:
+send_pkt.addr = ((fifo_data[1]<<8)&0xff00) + (fifo_data[0]&0xff);
+造成MAC地址错误（高8位和低8位反了）。
+CC2420中对于大端，小端的处理方法很巧妙：用下面的语句判断是大端还是小端，自"byteorder.c"：
+int is_host_lsb(void)
+{
+   const uint8_t n[2] = {1,0};
+   return ((*(uint16_t*)n) == 1);
+}
+很巧妙。可以把代码中对应部分也如此判断。另外还需要修改：FIFO中直接读写MAC地址，而不通过fifo_data.
+
+15:29 2007-07-17
+1，PTLw: dst addr is 8 0.有错，8是源地址。(完成)
+
+16:29 2007-07-17
+进展:
+代码"$Imote2/fisco/backup/fisco_07171632.tar.gz"
+1，使用脚本neighbor.sh判断邻居。
+2, 现在是fisco显示的地址有错。PTL层地址正确。
+
+17:10 2007-07-17
+终于完全解决了MAC地址不正确的问题。
+代码"$Imote2/fisco/backup/fisco_07171710.tar.gz"
+日志"$Imote2/log/fisco/07171703"
+关键是理清了思路，因为对MAC地址做大小端的转换只会发生在。s_pid_process, r_pid_process只是传递数据，并没有修改。原来在s_pid_process都是按大端处理的，但是实际应该是小端，所以按大端处理时，fisco层显示的地址就出错了。 
+
+
+17:28 2007-07-17
+修正MAC地址错误后，MTL_tools.c也需要修改。
+顺便修改了输出preload data时没有输出参数间空格的问题。因为负载数据中参数用'\0'分隔，它是空，不会显示内容，修改输出到'\0'时输出" "。
+
+18:23 2007-07-17
+"$Imote2/log/fisco/07171808"现在唯一正确的日志（从LED上看）
+"$Imote2/fisco/backup/fisco_07171824.tar.gz"
+
+08:47 2007-07-17
+昨天print_buf出错的原因是，没有考虑指针是NULL的情况，还要查其他地方有没有类似问题，待做。
+
+08:19 2007-07-18
+2007-07-17总结，这几天上午下午已经都有进展，效率略有提高。
+昨天主要是完成了neighbor.sh，这个功能等云川完成读取fisco包功能后，做成GUI。
+另外一个进展是终于想明白MAC地址的错误。拖了将近一天的时间。
+另外感觉现在还是用命令行好用一些。
+下一步：现有找邻居是单个节点发送，其余接收，测试一个节点需要10s，30个节点需要300s=5min。从效率上看，邻居表还是使用有收发的程序比较好，这样可以提高建立邻居表的速度。这样需要做出基本的quiry，虽然这个quiry是在邻居表程序中运行的，但结构仍然要符合MTL本身的规范。
+
+
+11:01 2007-07-18
+节点：
+18，16, 12, 6, 21, 30
+使用的是新电池。
+
+12:21 2007-07-18
+GDB调试，命令行参数。
+偶然看到gdbserver的提示信息，才想到如何使用命令行。
+[root@Imote2-21 tosmac]#./gdbserver6.6 fisco 
+Usage:  gdbserver COMM PROG [ARGS ...]
+        gdbserver COMM --attach PID                                             
+                                                                                
+COMM may either be a tty device (for serial debugging), or                      
+HOST:PORT to listen for a TCP connection.                                       
+[root@Imote2-21 tosmac]#./gdbserver6.6                 
+节点：
+[root@Imote2-28 tosmac]#./gdbserver6.6 192.168.99.100:2345 MTL_tools_0712-2_dst-mac 0 0 240
+Process MTL_tools_0712-2_dst-mac created; pid = 1306
+Listening on port 2345
+Remote debugging from host 192.168.99.100
+1th arg: 0.
+2th arg: 0.
+3th arg: 240.
+4th arg: .
+5th arg: .
+input arg is 240.
+preload data length is 2.
+control message send successful.
+argument mode end, exit.
+
+Child exited with retcode = 0 
+
+Child exited with status 0
+GDBserver exiting
+
+PC端：
+(gdb) target remote 192.168.99.128:2345
+Remote debugging using 192.168.99.128:2345
+0x40000a40 in _start () from /lib/ld-linux.so.2
+------------------------
+使用break指令设置了三个断点
+------------------------
+(gdb) cont
+Continuing.
+
+Breakpoint 1, main (argc=4, argv=0xbe82ad54) at MTL_tools.c:43
+43          if ( argc >= 2 ) {
+(gdb) cont
+Continuing.
+
+Breakpoint 2, main (argc=4, argv=0xbe82ad54) at MTL_tools.c:90
+90              if ( cmd_i >=0 && cmd_i < (sizeof(MTL_tools)/sizeof(MTL_tools[0]) ) ) {
+(gdb) cont
+Continuing.
+
+Breakpoint 3, main (argc=4, argv=0xbe82ad54) at MTL_tools.c:115
+115                 memcpy((void*)s_fifo_pt, (void*)s_fisco_preload, s_fisco.data_len);
+(gdb) cont
+Continuing.
+
+Program exited normally.
+
+
+12:54 2007-07-18
+配置节点用了两个小时。
+下列节点配置了GDB：
+30， 22， 26，21，6，7。
+
+14:32 2007-07-18
+开始实验共14个节点：
+12 16 18 21 22 23 24 25 26 27 28 29 30
+另外8是控制和sniffer节点。
+
+14:48 2007-07-18
+多个节点对于广播开启fisco的消息没有反应，原因未知。(07-18)原因配置脚本中fisco的符号链接设置错误。"ln -s -f fisco_0716-4_mac"：结果是生成了fisco_0716-4_mac指向自身的链接。但是在笔记本上并没有这个问题：
+[bamv26@localhost log]$ ln -s test
+ln: 正在创建指向“test”的符号链接“./test”: 文件已存在
+看来是busybox的BUG，去哪里报告BUG？待做。(07-18结束)
+待做，还是直接写一个控制LED的程序比较好。
+
+15:48 2007-07-18
+(08:22 2007-07-19)
+待做，修改
+1，MTL_tools自动插入时间，精确到秒。
+2，PTL日志要写入文件，同时也要输出到标准输出。
+3，PTL中始终显示包的信号强度。
+
+16:18 2007-07-18
+12, 16, 22, 23, 24, 25 ,27, 28, 29, 30
+16:18: 27-23，但是27成了FL
+16:19: 29-23但FL
+
+16:30 2007-07-18
+做第二次实验：
+广播fisco，只有23没有进入。重起23。
+这两次都没有做出gagteway，再次尝试，如果这次仍然没有就要跟踪具体节点的信息了。
+
+16:40 2007-07-18
+第三次实验
+广播MTL_recv_0712，30无反应重启之。
+终于有一个gateway出现（节点12），估计很有可能是信号强度248取的不合适。
+待做：加入LED灯的控制。PTL日志同样写入，且任何情况下都记录信号强度。
+
+16:52 2007-07-18
+第四次实验
+广播MTL_recv_0712，25无反应重启之。
+改信号强度为245
+
+17:04 2007-07-18
+第五次实验
+广播MTL_recv_0712，12无反应重启之。
+改信号强度为240
+16成为FL后没电了
+
+08:08 2007-07-19
+待做：
+整理昨天日志；
+
+08:09 2007-07-19
+节点30没电了。
+
+09:36 2007-07-19
+fisco_PTL.c完成，需要修改fisco_framework.h/c，使日志独立，且根据配置文件决定是否输出到标准输出。
+检查FNAME不能是空。（完成）
+neighbor可以控制发几次消息。
+(11:12 2007-07-19)
+编译时出了无数错误：
+fisco_framework.h:76: error: parse error before string constant
+fisco_framework.h:76: warning: type defaults to `int' in declaration of `sprintf'
+fisco_framework.h:76: error: conflicting types for 'sprintf'
+.....
+原因仅仅是修改的LOG_FILE_OPEN没有加入"\"
+
+11:20 2007-07-19
+再次出现：
+Remote side has terminated connection.  GDBserver will reopen the connection.
+Remote debugging using fisco_PTL_0719_log
+错误原因是gdbserver使用方法错误"./gdbserver6.6 192.168.99.100:2345 fisco"写成了"./gdbserver6.6 fisco 192.168.99.100:2345"
+PTL要是加入日志，节点需要有时间才行。所以还是要做时间同步。
+运行是出席那段错误，原因是没有打开日志文件。现在对于下面这个地址还是不会使用，还有很大的效率可以提高：
+Program received signal SIGSEGV, Segmentation fault.
+0x40058e08 in ?? ()
+
+14:12 2007-07-19
+虽然在给云川讲结构化设计方法，但自己考虑的却很不好。比如最早的FIFO操作。现在的日志文件。一会儿继续测试日志文件是否确实没有问题。
+待做：
+1，如何让云川建立起结构化的设计思想？实验室那本书行不行，晚上看。
+2，周六完善FIFO和日志文件等。
+日志的具体要求：可以独立的选择PTL和MTL日志的输出方式：包括是否输出到标准输出，是否写入到文件。输出的内容多少：尤其是可以选择MTL输出fisco包和节点状态。
+
+14:20 2007-07-19
+测试日志的要求：N2FL，N2M2G，N2L
+
+15:15 2007-07-19
+下面代码可能是判断数字大小的方法
+if [ `cat /proc/gpio/gpio102` -eq 0 ]; then
+  exit 0
+fi
+待做：尝试，如果是，修改脚本
+
+15:24 2007-07-19
+根据云川的建议修改日志的格式为："keyword : string"；
+原来自己虽然想要软件处理这些日志，但是并没有很好的考虑通用性。
+
+15:26 2007-07-19
+fisco_PTL需要使用LED驱动。但是在rcS.d的基本结束前，还没有加载这个驱动。又没有找到何处加载的驱动，暂时只能自己加载这个驱：
+if [ ! -e /proc/gpio ]; then
+  modprobe gpiomon
+fi
+参考节点"usr/bin/isSG2"
+这样暂时解决了问题，过程如下，但奇怪的是原有系统加载gpio的命令信息在PTLr和PTLw之间出现，后来发现是自己的S98tosmac.sh脚本中加载了gpio驱动，现在还是这样，做得东西总是没有攒成团...
+加载gpio的命令信息在PTLr和PTLw之间出现的原因是PTLr和PTLw分别是独立于fisco_PTL的两个进程输出的，另外运行"fisco_PTL&"，它是后台运行的。
+osmac(CC2420) config start                                                     
+load tosmoc drive                                                               
+rmmod: tos_mac.ko: No such file or directory                                    
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/tosmac/tos_mac.ko                 
+TOSMAC driver is loading...                                                     
+This board is IMote2                                                            
+TOS-MAC driver installed                                                        
+load PTL deamon process                                                         
+tosmac config end                                                               
+fisco_recv_fifo fifo already exist, continue.                                   
+fisco_send_fifo fifo already exist, continue.                                   
+no message want to drop. argc is less than 3.                                   
+------------------------------PTL config starting-------------------------------
+set mac address: 12.                                                            
+enable auto ack.                                                                
+set transmition power: 31.                                                      
+set max data size: 50.                                                          
+handle the PTL debug message.                                                   
+---------------------------------PTL config end---------------------------------
+create recv process                                                             
+PTLr: the max data size in driver is 50.                                        
+create received message process successful.                                     
+create send process.                                                            
+PTLr: reading message from tos_mac device.                                      
+create sending message process successful.                                      
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/i2c/i2c-core.ko                   
+insmod: cannot insert
+`/lib/modules/2.6.14_r1.0/kernel/drivers/i2c/i2c-core.ko's
+PTLw: mac addr is 12                                                            
+PTLw: blocking read from MTL.                                                   
+modprobe: failed to load module gpiomon                                         
+INIT: Entering runlevel: 2 
+
+15:49 2007-07-19
+50字节的长度不够用。测试116长度。
+
+16:04 2007-07-19
+待做，LED控制函数
+
+16:16 2007-07-19
+不得已还是加入了fisco_MTL.c/h，早就想加入，等前面工作完成后在详细考虑。
+
+17:25 2007-07-19
+设置系统时间，开始去网上查
+后来发现看帮助就可以：
+[root@Imote2-08 tosmac]#date --help                                             
+BusyBox v1.00 (2005.04.07-12:08+0000) multi-call binary                         
+                                                                                
+Usage: date [OPTION]... [MMDDhhmm[[CC]YY][.ss]] [+FORMAT] 
+下面语句是设置时间为2007年7月19日17点19分15秒：
+date -s 071917192007.15
+由neighbor.sh自动发送时间
+TIME=`date +%m%d%H%M%S`
+
+18:14 2007-07-19
+未完成：
+1，发送参数控制send发送次数
+2，远程控制LED灯
+3，不急：一次杀死fisco_MTL
+
+22:46 2007-07-19
+待做，下载：
+http://www.eetchina.com/ARTP_8800472465_617693.HTM
+开发社群面临分裂危机，Java手机将何去何从？
+moto： 摩托罗拉采用MIDP
+
+摩托罗拉公司想藉由采用Mobile Information Device Profile(MIDP)的Java子集来实现Java的统一。“实现统一的唯一途径便是利用共通程序代码基础，而我们在基于MIDP的Java执行环境方面拥有10年的丰富经验。”摩托罗拉公司蜂巢式事业部研究员Mark VandenBrink指出。
+http://www.cellphone.eetchina.com/ARTP_8800472445_2000002.HTM
+DI65纳米基带芯片成功试产，将进入中国3G市场
+上网时间: 2007年07月18日
+
+台积电表示，该公司已成功使用65纳米技术为美国公司Analog Devices Inc(ADI)试生产基带芯片。ADI副总裁Christian Kermarrec表示，由台积电65纳米技术制造的ADI基带晶片将进入内地3G通讯市场。
+
+ADI目前是最重要的TD-SCDMA芯片提供商之一，是大唐在TD芯片上的主要合作伙伴，得到了大唐的重要支持。
+
+此文章源自《手机设计》网站： http://www.cellphone.eetchina.com/ART_8800472445_2000002_NT_de6df2d1.HTM
+
+22:51 2007-07-19
+修改，暂时注释了处理第三个参数的语句（位于MTL_tools.c fisco_PTL.c的MTL_ON）。这个问题上班时间以外解决，下午低效率的原因是没有明确的思路
+
+23:16 2007-07-19
+MTL_tools.c:
+又是段错误，错误原因又是没有使用LOG_FILE_OPEN*宏。
+
+23:18 2007-07-19
+明天需要先实验基本，测试是否fisco fisco_PTL都工作正常。
+MTL_tools发送一个MTL_send参数，控制发送次数成功。
+"$Imote2/fisco/backup/fisco_07192320.tar.gz"
+
+08:05 2007-07-20
+节点12没有设置MTL_send->MTL_send_0719-2，可能其它节点也没有设置。
+待做：写节点配置脚本
+
+08:27 2007-07-20
+重要待做，其余见output.TODO.ft：
+0, 在满足小于一个包长度情况下：可以任意个处理命令行参数
+1, "21:44 2007-07-04"周末编写Makefile
+2, 解决下面情况，参考man waitpid的范例修改is_process_exist函数－－
+用宏而不是直接通过位运算得到status。
+                    if  ( is_process_exist(&MTL_pid) ==  1 ){
+                        fprintf(FERROR, "bamvor: not considered. FIXIT. exit. date 2007-06-28\n");
+                        perror("wait MTL end");
+                        return -1;
+3, LED控制函数。
+10:02 2007-07-20
+待做：reboot_test.c
+编译未通过，测试通过后加入远程重启的功能（完成见07-26日志）。
+
+12:04 2007-07-20
+由于脚本配置错误，从11点到现在才可以开始测试。
+
+13:41 2007-07-20
+上午测试受到电池问题的严重困扰，邻居表没有测完就只有6个有电了。
+后来邻居表建立的很不规则，似乎USB线对网络信号的干扰很大。下午主要是分析日志文件和改进测试环境（加入isMTLalive, isPTLalive函数，通过LED指示节点是否活着）。
+15:52 2007-07-20
+待做：
+1，remote reboot
+2，inteligent neighbor found.
+
+16:28 2007-07-20
+间距60cm信号强度大约下降15。
+
+17:47 2007-07-20
+测试read_FIFO_pack
+读到的read_pack.fisco_head.hdr_len是0，经查是read_pack在mac和fisco_head的"空隙"造成的这个问题，由于是32位系统，地址4字节对齐，有空闲是正常的。只有修改代码从：
+FIFO_in(rfifo_name, (unsigned char*)&read_pack, sizeof(read_pack.mac)+sizeof(read_pack.fisco_head)+i);
+//i=sizeof(read_pack.fisco_head.data_len);
+改为：
+    unsigned char* const fifo_data;
+    unsigned char* fifo_data_pt = fifo_data;
+    memcpy(fifo_data_pt, (unsigned char*)&read_pack.mac, sizeof(read_pack.mac));
+    fifo_data_pt+=sizeof(read_pack.mac);
+    memcpy(fifo_data_pt, (unsigned char*)&read_pack.fisco_head, sizeof(read_pack.fisco_head));
+    fifo_data_pt+=sizeof(read_pack.fisco_head);
+    memcpy(fifo_data_pt, (unsigned char*)read_pack.fisco_preload, sizeof(read_pack.fisco_head.data_len));
+    fifo_data_pt+=sizeof(read_pack.fisco_head.data_len);
+    FIFO_in(rfifo_name, fifo_data, fifo_data_pt-fifo_data);
+
+
+
+18:05 2007-07-20
+read_pack.fisco_head.hdr_len以4字节，read_FIFO_pack函数没有考虑这一点。
+问题，write部分输出10个包之后有段错误
+
+18:17 2007-07-20
+删除重建fifo后,结果基本正确:
+日志见"$Imote2/log/fisco/0720fifo" ,代码"$Imote2/fisco/backup/fisco_07201818.tar.gz".
+问题:
+1,不论下面那个代码
+                 memcpy(fifo_data_pt, (unsigned char*)&read_pack.mac, sizeof(read_pack.mac));
+                fifo_data_pt+=sizeof(read_pack.mac);
+//                memcpy(fifo_data_pt, (unsigned char*)&read_pack.mac, 2);
+//                fifo_data_pt+=2;
+write的输出结构都是
+255 255 0 0 6 1 15 ...
+都有缝隙,但read读取正确.PC测试通过后需要在节点测试. 看是否有这个问题.
+今天下午4点半以后,虽然谈不上效率高, 但总比昨天郁闷要很多, 明天上午继续努力!
+
+22:50 2007-07-20
+问题， 待做
+1， 改为下句可以正确输出：
+//                        printf("%d ", ((unsigned char*)&read_pack)[temp_i]);
+                        printf("%d ", fifo_data[temp_i]);
+但是不明白原因。
+2，另外仍然找不到段错误。
+
+15:33 2007-07-21
+重写了fisco_PTL.c的s_pid_process，未调试。总是做事做一半，估计今晚也没有时间调了。周日能不能完成任务又是问号。不该走私。
+
+00:41 2007-07-22
+参考实战Linux编程精髓p441 genflags2str函数分析自己的函数fisco_log_tools.c的parse_mode和print_mode函数，感觉print_mode写更好一些。实际改进这两个程序，待做.
+周日计划:
+1, s_pid_process通过（完成）
+2, remote reboot
+3, remote LED
+4, 验证现有系统.
+1-3上午完成.
+
+13:36 2007-07-22
+调试s_pid_process：
+1，gdb如何调试一个进程？参考家路的方法。
+2，测试s_pid_process能否正确发送FIFO包到tosmac，使节点进入leader后观察发送LDBR是否正常。没有LDBR，并且只有在标准输出有s_pid_process的一条信息："PTLw: blocking read from MTL."，日志文件中无此信息。似乎s_pid_process整体不正常。
+
+13:58 2007-07-22
+为了能在PC上测试。需要注释所有与tosmac硬件有关的语句，s_pid_process上有对TOS_MAC宏定义原有代码进行完善即可，但r_pid_process代码比较乱，为了节约时间暂时注释了r_pid_process，实现一个空函数代替之。
+另外LED操作部分也不能使用，编译时去掉"-DUSING_LED"选项即可.
+(14:08 2007-07-22)
+这样不行，与tosmac有关代码很多。需要一一修改。程序结构太不好了。只有把s_pid_process单独提取出来测试
+gcc s_pid_process_test.c fisco_framework.c fisco_FIFO.c tos_mac_sub.c
+fisco_utils.c -g -Wall -o s_pid_process_test_x86 -DOUTPUT_LOG_FILE
+
+14:19 2007-07-22
+调试s_pid_process:
+64                  free(s_pack.fisco_preload);
+(gdb) 
+*** glibc detected *** /usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/s_pid_process_test_x86: munmap_chunk(): invalid pointer: 0x080485b5 ***
+======= Backtrace: =========
+/lib/libc.so.6(cfree+0x1bb)[0x4d42367b]
+/usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/s_pid_process_test_x86[0x804886c]
+/usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/s_pid_process_test_x86[0x8048e4a]
+/lib/libc.so.6(__libc_start_main+0xdc)[0x4d3cff2c]
+/usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/s_pid_process_test_x86[0x8048791]
+======= Memory map: ========
+00630000-00631000 r-xp 00630000 00:00 0          [vdso]
+08048000-0804c000 r-xp 00000000 03:07 321986     /usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/s_pid_process_test_x86
+0804c000-0804d000 rwxp 00003000 03:07 321986     /usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/s_pid_process_test_x86
+0857e000-0859f000 rwxp 0857e000 00:00 0 
+4c9eb000-4ca04000 r-xp 00000000 03:03 1024789    /lib/ld-2.5.so
+4ca04000-4ca05000 r-xp 00018000 03:03 1024789    /lib/ld-2.5.so
+4ca05000-4ca06000 rwxp 00019000 03:03 1024789    /lib/ld-2.5.so
+4d3ba000-4d4f1000 r-xp 00000000 03:03 1024790    /lib/libc-2.5.so
+4d4f1000-4d4f3000 r-xp 00137000 03:03 1024790    /lib/libc-2.5.so
+4d4f3000-4d4f4000 rwxp 00139000 03:03 1024790    /lib/libc-2.5.so
+4d4f4000-4d4f7000 rwxp 4d4f4000 00:00 0 
+4d892000-4d89d000 r-xp 00000000 03:03 696159     /lib/libgcc_s-4.1.1-20061011.so.1
+4d89d000-4d89e000 rwxp 0000a000 03:03 696159     /lib/libgcc_s-4.1.1-20061011.so.1
+b7fb9000-b7fba000 rw-p b7fb9000 00:00 0 
+b7fcf000-b7fd0000 rw-p b7fcf000 00:00 0 
+bfbcc000-bfbe1000 rw-p bfbcc000 00:00 0          [stack]
+
+Program received signal SIGABRT, Aborted.
+0x00630402 in __kernel_vsyscall ()
+(gdb) 
+Single stepping until exit from function __kernel_vsyscall, 
+which has no line number information.
+
+Program terminated with signal SIGABRT, Aborted.
+The program no longer exists.
+由于s_pack没有清零，所以第一次运行时s_pack.fisco_preload并不是NULL是一个无效的指针，执行free函数会出错。 在while前面加入memset(&s_pack, 0, sizeof(pack_data))即可
+
+14:25 2007-07-22
+又忘了加"LOG_FILE_OPEN"，造成段错误，没有建立fifo，所以fifo读失败
+
+16:23 2007-07-22
+现有输出结果：
+PTLw: blocking read from MTL.
+PACK_SEND (count =     9 ) --------------------------------------------
+mac : 65535
+head_len : 6    type : LDBR     data_len : 24
+src_addr : 10000        dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 123       nap : 1         nld : 1         flag : 0_0_0_0_0_0_0_0
+-----------------------------------------------------------------------
+PTLw: src addr is 254 255.
+The packet want to send is :
+dst_addr : 65535.
+preload_length : 51.
+83 254 255 6 1 24 0 0 0 1 0 255 255 255 255 255 255 255 255 255 255 255 255 123 1 1 0 136 241 102 8 50 0 0 0 10 0 0 0 100 81 254 255 50 0 0 0 160 76 160 76
+PTLw: message sent.
+包正确，但是tosmac负载数据不正确，写入的数据是：255 255 6 1 24 0 0 0 1 0 255 255 255 255 255 255 255 255 255 255 255 255 123 1 1 0 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
+怀疑是写入方式有问题：
+现在是把fisco_head和fisco_preload一次写入
+            memcpy(send_pkt.data+3, &(s_pack.fisco_head),
+                   fifo_ret - sizeof(src_MAC_addr));
+改为分次写入，继续调试，不明白为什么会出下面的警告：
+[root@localhost fisco]# gcc s_pid_process_test.c fisco_framework.c fisco_FIFO.c tos_mac_sub.c fisco_utils.c -g -Wall -o s_pid_process_test_x86 -DOUTPUT_LOG_FILE 
+s_pid_process_test.c: 在函数 ‘s_pid_process’ 中：
+s_pid_process_test.c:60: 警告：初始化指针时目标与指针有/无符号不一致
+tos_mac_sub.c: 在函数 ‘output_pkt’ 中：
+tos_mac_sub.c:62: 警告：初始化指针时目标与指针有/无符号不一致
+涉及到的语句都是tosmac负载数据首地址的赋值，从TOS_Msg定义上看类型没有问题：
+"char *send_pkt_data_pt = send_pkt.data;"
+typedef struct __TOS_Msg
+{
+......
+__s8 data[TOSH_DATA_LENGTH+6];
+} TOS_Msg;
+(16:33 2007-07-22)
+修改后运行正确。代码"$Imote2/fisco/backup/fisco_07221641.tar.gz"，日志"$Imote2/log/fisco/0722fifo"
+
+17:29 2007-07-22
+终于找到了段错误的原因：
+自己重新定义了fifo_data，但这个指针没有分配空间。
+在PC机上是最后才出错，在节点上运行开始就出错了
+17:33 2007-07-22
+为了确定为什么fisco_PTL的s_pid_process为什么运行不正常。
+直接在节点上运行#./s_pid_process_0722_test和./fisco_FIFO_0722_test write fisco_send_fifo，出了编译器从gcc换为arm-linux-gcc，其余都没有变化。运行正常。
+加入对TOS_MAC硬件支持，运行正常：
+日志："$Imote2/log/fisco/0722fifo"，代码:"Imote2/fisco/backup/fisco_07221748.tar.gz"。其中s_pid_process_0722_test_with_tosmac_on_node和sender_node_08分别是发收的日志。
+进一步尝试发现如果使用./fisco_FIFO_0722_test write fisco_send_fifo发送包，通过./fisco_PTL_0722_s-pid把包发送出去，08节点接收也正常。
+这就奇怪了，到底是哪里的问题？
+
+20:17 2007-07-22
+继续分析，如果启动fisco和#./fisco_PTL_0722_s-pid，包无法发出。看来问题在这里详细跟踪。
+
+22:12 2007-07-22
+终于找到了问题。是read_FIFO_pack的bug，如果没有fisco负载数据，函数不会返回。
+解决过程：把原有s_pid_process也放入s_pid_process_test.c，通过命令行选择运行新旧s_pid_process。发现旧s_pid_process可以正常接收到fisco发送的包，但s_pid_process新版不行，用gdb跟踪。发现程序要求读取负载数据时read返回值不能是0，但是如果负载数据本身是0，read_FIFO_pack是永远无法返回的。
+属于边界问题。还告诉家路说要注意边界问题，自己都没有注意，感觉自己快把所有基本问题都遇到了从没有分号，括号不匹配到段错误（没有正确分配空间，或使用未初始化的指针），再到边界错误。再接再厉！专家就是犯了自己领域所有错误的人！
+(23:10 2007-07-22)
+使用节点30和节点26测试。日志见"$Imote2/log/fisco/0722fifo/finish",代码"$Imote2/fisco/backup/fisco_07222311.tar.gz"
+
+00:46 2007-07-23
+修改MTL_send.c和MTL_recv.c。100ms间隔太短，会丢包，设为200ms无此问题。
+日志"$Imote2/log/fisco/0722fifo/neighbor"
+代码"$Imote2/fisco/backup/fisco_07230047.tar.gz"
+从node_recver_PTL-MTL_log，可以看出198数据包造成邻居表失败。
+
+13:52 2007-07-25
+贺明的问题：麻烦帮我看一下布局布线还存什么问题，还有就是原理图中最上面的充电和放电线路的电流比较大，有可能在几个A，是不是把线宽加成双倍，现在线宽1mm。文件位于PIC目录下。
+
+08:59 2007-07-26
+完成原有的reboot_test.c。并改名为cmd_test.c。
+出现的都是简单的编译错误。还需要加强练习。
+例如：
+1，
+    execl_ret = execl(cmd, cmd, NULL);
+    printf("execl return value is %d.\n", execl_ret);
+    if ( execl_ret == -1 ) {
+的if语句写成了"if ( execl == -1 ) "编译起会提示指针与整数比较；
+2，fprintf，没写文件指针。fprintf("....");
+看起来现在的实现方式和fisco_PTL.c中一致，今天试一下为什么不能远程reboot。
+
+16:03 2007-07-26
+查fread，发现fread需要通过feof或ferror判断是文件结束还是出错。查ferror，发现不少好东西，ferror可以返回当前stream遇到的错误。fileno可以从FILE*指针返回文件描述符（整数）
+(16:54 2007-07-26)
+结合原来遇到的fgets读文件错误，测试ferror函数。现在才完成。
+主要耽误时间的地方有两个，程序功能没有完全想清楚。修改时缺乏全局观念，具体是：现一个功能要想基本算法，想需要什么函数，变量。函数，变量记得声明，变量记得初始化。函数记得加入所需头文件。
+如果fgets使用的FILE*不支持读操作，fgets后，调用ferror，得到错误号是1，代表的含义是Operation not permitted。这样fgets也很好用。
+
+10:53 2007-07-27
+Linux, 驱动, 主设备号和辅设备号
+<linux/kdev_t.h>定义了设备号与主辅设备号转换的函数。
+MAJOR(dev_t dev);和MINOR(dev_t dev);可以获得主辅设备号。MKDEV(int major, int minor);可以获得设备号。
+看这个文件，可以学很多东西：
+#ifdef __KERNEL__
+#define MINORBITS       20
+#define MINORMASK       ((1U << MINORBITS) - 1)
+
+#define MAJOR(dev)      ((unsigned int) ((dev) >> MINORBITS))
+#define MINOR(dev)      ((unsigned int) ((dev) & MINORMASK))
+#define MKDEV(ma,mi)    (((ma) << MINORBITS) | (mi))
+
+#define print_dev_t(buffer, dev)                                        \
+        sprintf((buffer), "%u:%u\n", MAJOR(dev), MINOR(dev))
+
+#define format_dev_t(buffer, dev)                                       \
+        ({                                                              \
+                sprintf(buffer, "%u:%u", MAJOR(dev), MINOR(dev));       \
+                buffer;                                                 \
+        })
+
+/* acceptable for old filesystems */
+......
+1, MINORMASK的定义很巧妙。
+2，format_dev_t的作用？查，待做
+
+
+11:11 2007-07-27
+软件技巧, vi, cat, 去掉^M的方法, windows(dos)与Linux文本转换
+1，vi，:1,$s/按下Ctrl+v+m//g
+2, cat sourcefile | tr -d "^M" > dst_file
+tr是转换或删除字符。
+
+11:53 2007-07-27
+Linux使用技巧, vi
+从n1到n2行进行替换
+:n1,n2s/objective/wanted/gc
+n2后面一定要加"s".
+
+14:07 2007-07-27
+编写write_FIFO_pack
+出现下面错误：
+[root@localhost fisco]# ./fisco_FIFO_readtest_x86_0727 write testfifo
+testfifo fifo already exist, continue.
+mac : 65535
+head_len : 6    type : LDBR     data_len : 15
+src_addr : 10000        dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 123       nap : 1         nld : 1         flag : 0_0_0_0_0_0_0_0
+----------------------------------------------------------------------
+*** glibc detected *** ./fisco_FIFO_readtest_x86_0727: double free or corruption (fasttop): 0x09a80018 ***
+======= Backtrace: =========
+/lib/libc.so.6[0x4d41fefd]
+/lib/libc.so.6(cfree+0x90)[0x4d423550]
+./fisco_FIFO_readtest_x86_0727[0x80492cb]
+/lib/libc.so.6(__libc_start_main+0xdc)[0x4d3cff2c]
+./fisco_FIFO_readtest_x86_0727[0x8048701]
+======= Memory map: ========
+00e76000-00e77000 r-xp 00e76000 00:00 0          [vdso]
+08048000-0804b000 r-xp 00000000 03:07 321981     /usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/fisco_FIFO_readtest_x86_0727
+0804b000-0804c000 rwxp 00002000 03:07 321981     /usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/fisco_FIFO_readtest_x86_0727
+09a80000-09aa1000 rwxp 09a80000 00:00 0 
+4c9eb000-4ca04000 r-xp 00000000 03:03 1024789    /lib/ld-2.5.so
+4ca04000-4ca05000 r-xp 00018000 03:03 1024789    /lib/ld-2.5.so
+4ca05000-4ca06000 rwxp 00019000 03:03 1024789    /lib/ld-2.5.so
+4d3ba000-4d4f1000 r-xp 00000000 03:03 1024790    /lib/libc-2.5.so
+4d4f1000-4d4f3000 r-xp 00137000 03:03 1024790    /lib/libc-2.5.so
+4d4f3000-4d4f4000 rwxp 00139000 03:03 1024790    /lib/libc-2.5.so
+4d4f4000-4d4f7000 rwxp 4d4f4000 00:00 0 
+4d892000-4d89d000 r-xp 00000000 03:03 696159     /lib/libgcc_s-4.1.1-20061011.so.1
+4d89d000-4d89e000 rwxp 0000a000 03:03 696159     /lib/libgcc_s-4.1.1-20061011.so.1
+b7e00000-b7e21000 rw-p b7e00000 00:00 0 
+b7e21000-b7f00000 ---p b7e21000 00:00 0 
+b7fb6000-b7fb7000 rw-p b7fb6000 00:00 0 
+b7fcb000-b7fcd000 rw-p b7fcb000 00:00 0 
+bf8a2000-bf8b8000 rw-p bf8a2000 00:00 0          [stack]
+已放弃
+上google搜索"double free or corruption", 看到三种可能的错误原因：
+1，free同一个区域两次；
+2，free了一个还被指针引用空间；
+3，引用realloc前的指针
+检查代码发现，由于把read_FIFO_pack修改为write_FIFO_pack把下面的语句
+ret:
+    return -(write_count!=want);
+err:
+    if ( p_data_pt->fisco_preload != NULL ) {
+        free(p_data_pt->fisco_preload );
+    }
+    return -(write_count!=want);
+改为
+err:
+    if ( p_data_pt->fisco_preload != NULL ) {
+        free(p_data_pt->fisco_preload );
+    }
+ret:
+    return -(write_count!=want);
+当时想的是可以少写一次而且结构更清楚，但是这样会造成err后面的语句实际即使没有出错也会执行。测试时write_FIFO_pack函数外还有free函数，所以造成两次free同一个指针，修改上面代码后，问题解决。
+不过，这个问题也是代码健壮性不好的反应。在free前应该检测指针是否不是NULL，free后应该把指针设为NULL。
+
+17:12 2007-07-27
+MTL_tools-2没问题了。
+代码：fisco_07271712.tar.gz
+上次写的MTL_tools-2.c除了没有写入FIFO外，对于send_pack包也没有初始化。严重的遗漏
+
+11:55 2007-07-30
+Linux, 信号处理(signal)
+signal(信号编号, 信号处理函数或SIG_IGN或SIG_DFL)
+SIG_IGN表示忽略信号处理，SIG_DFL表示使用该信号的默认处理方式
+
+14:32 2007-07-30
+c编程, 关于预定义(参考前面PCI驱动部分）, #define
+刚才突然想到其实原来看到的用"##"替换的预定义，例如:
+#define pci(mode, size)	pci_##mode##(size)
+此时pci(read, 5), 会被替换为pci_read(5)。
+这其实也是替换，只不过替换的不是一个单独字符串，是一个字符串的一部分
+
+14:46 2007-07-30
+软件技巧, mozilla firefox
+按Ctrl+Shift+t可以打开firefox中上一次关闭的标签页.
+
+14:36 2007-07-31
+Linux, 脚本, shell, Makefile
+$?表示上一次指令执行的结果,0表示成功,1表示是失败.原来写uClinux On LEON时不知道这个含义，今天是偶然看鸟哥的Linux私房菜看到的。22:39 2007-08-01
+Linux, 驱动, 字符设备, cdev, Imote2
+struct cdev位于linux/cdev.h，此外该文件还包括cdev操作函数，struct cdev定义如下:
+struct cdev {
+        struct kobject kobj;
+        struct module *owner;
+        struct file_operations *ops;
+        struct list_head list;
+        dev_t dev;
+        unsigned int count;
+};
+继续看Linux设备驱动，文中说file结构体位于linux/fs.h，但是没有找到，查，待做。
+
+22:51 2007-08-01
+NULL和offsetof的定义
+可以看到在c和c++中NULL的定义不同。
+在linux/posix_types.h，linux/stddef.h中。
+#undef NULL
+#if defined(__cplusplus)
+#define NULL 0
+#else
+#define NULL ((void *)0)
+#endif
+
+#undef offsetof
+#ifdef __compiler_offsetof
+#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#else
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+

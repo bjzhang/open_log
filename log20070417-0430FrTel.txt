@@ -1,0 +1,1432 @@
+
+10:14 2007-04-17
+项目总体计划
+第一阶段：使用CC2420收发数据。时间：--5.1
+第二阶段：实现FISCO协议，并进行简单的测试――――使用2-3个节点测试。4周。
+第三阶段：30个节点的测试。6.24前得到实验数据。
+近期计划，考虑到现有系统提供了很好的开发环境，结合项目需求，"18:31 2007-04-16"内容修改如下：
+Linux方面：
+能否直接利用现有的文件系统：
+1, USB下载文件（包括编译成模块的驱动文件）；（完成使用ssh网络传输文件，USB下载文件取消，使用ssh）
+2,USB模拟网口，希望给大家提供windows下cygwin+网口的开发环境。（可以ping通，ssh成功）
+3, gdb串口调试
+4, 使用NFS文件系统，这样开发环境就更好用。
+5, 使用mkfs.jffs2建立自己的文件系统，插空做。
+(16:30 2007-4-18)再次失败，参数见0704181430/readme，启动时的错误信息显示eraseblock超出了范围。现在对block指的内容不太明白。
+无线网络方面：
+1, CC2420的驱动程序支持到什么程度，实现CC2420的收发。
+项目计划, CC2420测试内容见(15:42 2007-04-19)
+2, 使用什么MAC, PHY协议。佳露说platx现在不支持802.15.4。Linux支持802.11。希望尽量使用现有协议；
+3, FISCO需要广播，需要使用支持广播的协议。查TCP/IP是否支持广播。
+4, 远期：分析简单路由协议的实现方法。
+
+10:53 2007-04-17
+配置文件系统
+应该是输入"./configure"进行配置，当时输入的是"./configure --help"，详见"log\filesystem\configure"，然后reboot，见同一个文件。
+问题，配置pmic没有成功，可能是iic总线驱动有问题：
+Starting pmic module...
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/i2c/i2c-core.ko
+insmod: cannot insert
+`/lib/modules/2.6.14_r1.0/kernel/drivers/i2c/i2c-core.ko's
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/i2c/busses/i2c-pxa-pwr.ko
+insmod: cannot insert
+`/lib/modules/2.6.14_r1.0/kernel/drivers/i2c/busses/i2c-ps
+modprobe: failed to load module pmic
+depmod: QM_MODULES: Function not implemented
+查I2C：
+[root@SG2-3 i2c]#ls                                                             
+busses       chips        i2c-core.ko  i2c-dev.ko                               
+[root@SG2-3 i2c]#ls chips/                                                      
+eeprom.ko   m41t62.ko   max123x.ko  pcf8574.ko                                  
+[root@SG2-3 i2c]#ls busses/                                                     
+i2c-pxa-pwr.ko  i2c-pxa.ko   
+i2c-core.ko和i2c-pxa-pwr.ko都在文件系统中，但是编译出错。
+i2c-pxa-pwr.ko位于在busses目录，对应Makefile中：
+obj-$(CONFIG_I2C_PXA)           += i2c-pxa.o i2c-pxa-pwr.o
+(11:17 2007-04-17)
+I2C被编译为模块。
+"CONFIG_I2C_PMIC_DA9030"，但是在Makefile中并没有对它的编译选项，再查。暂时不考虑功率管理问题，待做。
+
+11:37 2007-04-17
+配置USBnet
+参考"Setting up USBnet"文档，Imote2：
+[root@SG2-3 i2c]#echo "Configure the usb0 Ethernet net device with IP: 192.1689"
+ifconfig usb0 192.168.99.101 nConfigure the usb0 Ethernet net device with IP: 11
+[root@SG2-3 i2c]#ifconfig usb0 192.168.99.101 netmask 255.255.255.0 up          
+ "Configure the default gatewa[root@SG2-3 i2c]#                                 
+[root@SG2-3 i2c]#echo "Configure the default gateway to be our Linux host: 1926"
+route add default gw 192.168.9Configure the default gateway to be our Linux hos0
+[root@SG2-3 i2c]#route add default gw 192.168.99.100                            
+route: SIOC[ADD|DEL]RT: File exists                                             
+[root@SG2-3 i2c]#ifconfig usb0 192.168.99.101 netmask 255.255.255.0 up          
+[root@SG2-3 i2c]#route add default gw 192.168.99.100                            
+route: SIOC[ADD|DEL]RT: File exists                                             
+[root@SG2-3 i2c]#route del default gw 192.168.99.100                            
+[root@SG2-3 i2c]#route add default gw 192.168.99.100  
+验证是否连通，ping自己，两个IP都成功：
+[root@SG2-3 i2c]#ping -c 4 192.168.99.100                                       
+PING 192.168.99.100 (192.168.99.100): 56 data bytes                             
+64 bytes from 192.168.99.100: icmp_seq=0 ttl=64 time=1.3 ms                     
+64 bytes from 192.168.99.100: icmp_seq=1 ttl=64 time=1.9 ms                     
+64 bytes from 192.168.99.100: icmp_seq=2 ttl=64 time=1.1 ms                     
+64 bytes from 192.168.99.100: icmp_seq=3 ttl=64 time=1.1 ms                     
+                                                                                
+--- 192.168.99.100 ping statistics ---                                          
+4 packets transmitted, 4 packets received, 0% packet loss                       
+round-trip min/avg/max = 1.1/1.3/1.9 ms  
+[root@SG2-3 i2c]#ping -c 4 172.17.0.144                                         
+PING 172.17.0.144 (172.17.0.144): 56 data bytes                                 
+64 bytes from 172.17.0.144: icmp_seq=0 ttl=64 time=1.7 ms                       
+64 bytes from 172.17.0.144: icmp_seq=1 ttl=64 time=1.4 ms                       
+64 bytes from 172.17.0.144: icmp_seq=2 ttl=64 time=1.5 ms                       
+64 bytes from 172.17.0.144: icmp_seq=3 ttl=64 time=1.6 ms                       
+                                                                                
+--- 172.17.0.144 ping statistics ---                                            
+4 packets transmitted, 4 packets received, 0% packet loss                       
+ping佳露没有成功：
+[root@SG2-3 i2c]#ping -c 4 172.17.0.75                                          
+PING 172.17.0.75 (172.17.0.75): 56 data bytes                                   
+                                                                                
+--- 172.17.0.75 ping statistics ---                                             
+4 packets transmitted, 0 packets received, 100% packet loss                     
+初步判断网络接通，下一步考虑使用什么协议传递文件，并可以与其他机器连接，而且把配置文件加入启动脚本。见下面ssh协议部分，windows下的USBnet未完成，见(19:15 2007-04-19)，待做。
+
+11:53 2007-04-17
+802.15.4还不支持？
+Setting up 802.15.4
+From Platformx Wiki
+[edit]
+Status
+
+Started 6-19-2006. 
+
+14:09 2007-04-17
+基础实验, 入门手册
+简单的文件传输实验(使用ssh和scp)和arm-linux-gcc测试：
+1, 建立简单的hello intel mote2，并编译
+[root@localhost programming]# cat helloworld.c 
+int main()
+{
+    printf("hello intel mote2!\n");
+    return 0;
+}
+[root@localhost programming]# arm-linux-gcc helloworld.c -o helloworld
+[root@localhost programming]# file helloworld
+helloworld: ELF 32-bit LSB executable, ARM, version 1 (ARM), for GNU/Linux 2.4.3, dynamically linked (uses shared libs), for GNU/Linux 2.4.3, not stripped
+2, 从imote2板子接收这个文件，并运行，保存运行结果：
+[root@SG2-3 /root]#scp root@192.168.99.100:$hostImote2/programming/helloworld \ 
+> /root/                                                                        
+root@192.168.99.100's password:                                                 
+helloworld                                    100% 7419     7.3KB/s   00:00     
+[root@SG2-3 /root]#./helloworld                                                 
+hello intel mote2!                                                              
+[root@SG2-3 /root]#./helloworld >> helloworldRes 
+3, 把运行结果传到PC机：
+[root@SG2-3 /root]#scp helloworldRes \                                          
+> root@192.168.99.100:$hostImote2/programming/                                  
+root@192.168.99.100's password:                                                 
+helloworldRes                                 100%   19     0.0KB/s   00:00     
+4, 使用ssh登录到PC机(192.168.99.100)查看helloworld运行结果，退出。[root@SG2-3 /root]#ssh 192.168.99.100                                           
+root@192.168.99.100's password:                                                 
+Last login: Tue Apr 17 13:46:13 2007 from 192.168.99.100                        
+[root@localhost ~]# cd /root/                                                   
+[root@localhost ~]# ls                                                          
+anaconda-ks.cfg  install.log         minicom.log                                
+Desktop          install.log.syslog  scsrun.log                                 
+[root@localhost ~]# cd /media/NEW/log/Imote2/programming/                       
+[root@localhost programming]# cat helloworldRes                                 
+hello intel mote2!                                                              
+[root@localhost programming]# exit
+Connection to 192.168.99.100 closed
+[root@SG2-3 /root]#
+5, 备注：PC机连接到imote2时没有成功。
+[root@localhost programming]# ssh 192.168.99.101
+ssh: connect to host 192.168.99.101 port 22: Connection refused
+解决方法见后面的文档。
+
+14:43 2007-04-17
+软件, 技巧, network, ssh
+根据"Connection refused port 22"：
+自: http://www.linuxforums.org/forum/linux-networking/38732-connection-refused-port-22-a.html
+This is a little confusing.
+
+So you are running sshd on your local Linux machine? And when you try to connect to your local Linux machine from an outside source the connection is refused? Yes?
+
+Are you behind a router or other firewall, or does your local Linux machine have an IP that is routable? How about if you ran a port scan (nmap or whatever) against your local machine? Does 22 show open?
+sshd配置（含生成密匙的过程）见"$Imote2/log/filesystem/ssh/sshd_setup_log"。
+再从PC机登录，由于imote2板子没有密码，无法登录：
+[root@localhost programming]# ssh 192.168.99.101
+root@192.168.99.101's password: 
+Permission denied, please try again.
+把imote2板子的root密码修改为"123"后登录成功：
+[root@localhost programming]# ssh 192.168.99.101
+root@192.168.99.101's password: 
+
+Processing /etc/profile... Done
+[root@SG2-3 /root]#exit
+Connection to 192.168.99.101 closed.
+经过实验，可以用scp传送文件。
+查ssh能否不使用密码。查如何在板子启动时启动sshd。
+
+15:28 2007-4-17
+进展, Linux内核, 文件系统
+下载第二板板子，测试使用自己生成的文件系统是否正确。
+现在两块板子使用的内核都是$Imote\compileResult\0704161547\zImage，文件系统位于0704171511目录。
+两次启动都停在了init处，详见"bootLog_bamvorKernelandFs.TXT"和"bootLog_bamvorKernelandFs2.TXT"
+从输出信息看：
+Empty flash at 0x0069ffa0 ends at 0x0069ffa4
+可能是文件系统的大小设备不正确，明天继续尝试，待做。
+
+17:23 2007-04-17
+网络, ssh, 自动登录
+根据文档"ssh记住密码，自动登录"	和"Getting started with SSH"。"ssh记住密码，自动登录"的内容来自"Getting started with SSH"。当时没有说明。抄袭很不好。
+1, 重新生成密匙，passphrase是"FrTelImote2"
+(18:13 2007-04-17)
+ssh不需要密码登录没有成功。
+后来sshd无法启动，删除Imote2的/root/.ssh/目录下除了known_hosts以外的所有文件。
+2, 见"10:40 2007-04-18"ssh无密码登录
+
+18:34 2007-04-17
+ssh登录方法：
+ssh 目标机IP地址或主机名 -l 客户端登录名
+例如
+本机是192.168.99.100，用户是bamv26，目标机(Imote2)是192.168.99.101，只有root用户。命令如下：
+ssh 192.168.99.101 -l root
+如果本机是root用户，"-l root"可以不写
+现在的问题是sshd命令在profile文件中，只有登录后才能启动这个命令。明天把sshd最后放在启动网络的脚本中。
+
+18:38 2007-04-17
+今日总结：
+1, USBnet
+2, ssh登录和传送文件
+明日计划：
+1, NFS文件系统（暂缓）
+2, 周二周三sshd放在imote2用户登录前启动（完成）。保证将来只使用网口时可以远程登录imote2开发板需要先看linux启动时登录前调用脚本的顺序。明天问，Linux下通过网络发信息的办法。这样可以即使不登录也可以向目标主机发送数据（不是必须完成的目标）。
+3, 看CC2420所有相关资料（看完802.15.4和CC2420中文介绍，待看英文完整资料，待做）。
+
+10:40 2007-04-18
+文件系统, ssh无密码登录
+接"17:23 2007-04-17".
+今天来公司后，不甘心ssh无密码登录未成功，打开ssh_config和sshd_config查看。发现"AuthorizedKeysFile .ssh/authorized_keys"，于是修改配置文件。最后成功的过程如下：
+保存了PC机的/etc/ssh/ssh_config 
+把PC机root生成的公匙(/root/.ssh/id_rsa.pub，psssphrase是"FrTelImote2")复制到Imote2节点的"/root/.ssh"，并改名为"authorized_keys"。这要与"/etc/ssh/sshd_config"的设置保持一致：
+PubkeyAuthentication yes        
+AuthorizedKeysFile      .ssh/authorized_keys
+修改sshd_config文件后，需要重启sshd服务。
+另外，PC机"id_rsa"需要设置为不允许他人读取，例如"600"，否则会有下面的警告。
+[root@localhost ssh]# ssh Imote2-1 
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@         WARNING: UNPROTECTED PRIVATE KEY FILE!          @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+Permissions 0644 for '/root/.ssh/id_rsa' are too open.
+It is recommended that your private key files are NOT accessible by others.
+现在需要使用ssh-agent和ssh-add记录passphrase，过程如下，解释见"Getting started with SSH"：
+[root@localhost ssh]# /usr/bin/ssh-agent /bin/bash
+[root@localhost ssh]# ssh-add
+Enter passphrase for /root/.ssh/id_rsa: 
+Identity added: /root/.ssh/id_rsa (/root/.ssh/id_rsa)
+[root@localhost ssh]# ssh-add -l
+2048 0f:28:1e:a7:e1:32:aa:7d:c0:2b:a9:34:56:a2:60:c8 /root/.ssh/id_rsa (RSA)
+为了方便使用把imote2地址"192.168.99.101"加入hosts：
+[root@localhost ssh]# cat /etc/hosts
+# Do not remove the following line, or various programs
+# that require network functionality will fail.
+127.0.0.1               localhost.localdomain localhost
+::1             localhost.localdomain localhost
+192.168.99.101   Imote2-1
+注：由于已经解决了ssh不需要密码登录问题，所以删除了imote2节点root密码，需要直接修改/etc/passwd的root行，删除第一和第二个冒号之间的部分，修改结果：
+root::0:0:root:/root:/bin/sh
+
+11:47 2007-04-18
+在Imote2启动时启动sshd
+rcx.d目录的脚本是按照Sxx中xx的大小按顺序执行的。 Fedora Core 6的sshd在/etc/rcx.d/S55sshd或/etc/rc.d/rcx.d/S55sshd中启动，所以建立"/etc/rcS.d/S55sshd.sh"
+[root@SG2-3 /root]#cat /etc/rcS.d/S55sshd.sh                                    
+#                                                                               
+#sshd.sh   start sshd services.                                                 
+#                                                                               
+                                                                                
+#add by bamvor.for sshd services. 2007-4-18.                                    
+#the Snum(S55) is reference the Fedora Core 6 /etc/rc2.d/S55sshd                
+echo "start sshd"                                                               
+/usr/sbin/sshd       
+启动成功。把/etc/profile中启动sshd的命令删除。
+注：rcx.d中的x表示启动级别。其中级别0是关机，6是重启，5是xwindows。
+
+11:55 2007-04-18
+上午完成ssh无密码远程登录，比计划慢。下午可以先找imote2对于CC2420的支持。同时下载文件系统。抽空做NFS。
+
+15:26 2007-04-18
+1, TOSMAC_DEVICE的定义：
+/dev目录：
+crw-rw-rw-    1 root     root     240,   0 Jan  1 00:03 tosmac
+include/linux/tosmac.h:#define TOSMAC_DEVICE   "/dev/tosmac"
+2, 问题。在"tos_mac.mod.c"文件中：
+static const char __module_depends[]
+__attribute_used__
+__attribute__((section(".modinfo"))) =
+"depends=pmic";
+但是现在pmic模块加载没有成功，可能会有影响。
+3, 问题。编译器：
+Makefile中定义了"ARMCC=iwmmxt_le-gcc"，后面的收发程序使用这个编译器，应该可以直接改为arm-linux-gcc。
+iwmmxt_le-gcc 是Intel XScale® 技术的英特尔® IXP4xx 处理器上运行 (MontaVista) LE 应用版时使用的编译器。
+
+
+17:09 2007-04-18
+自: http://tech.groups.yahoo.com/group/intel-mote2-community/message/140
+RE: [intel-mote2-community] Imote2 Inquiry.
+1, NEW/wsn/无线传感网络/intel_Mode_2/A Lightweight Camera Sensor Network Operating on Symbolic Information。
+适当时候可以问他们使用的是否是Linux操作系统。待做。
+2, 同一目录，Wireless Sensor Networks in Industry
+无线传感器网络介绍，很好=++。
+
+18:37 2007-04-18
+向第二板Imote2板子，烧写demo的文件系统。做的修改如下：（未成功，待做）
+1, 第一次启动时/root/configure，会自动配置板子为imote2；
+2, 修改USBnet的IP地址，否则两块板子有冲突。
+修改/etc/network/interfaces
+auto lo
+iface lo inet loopback
+ 
+auto usb0
+iface usb0 inet static
+address 192.168.99.101
+netmask 255.255.255.0
+gateway 192.168.99.100
+
+注：第一块Imote2板子的编号是56，第二板Imote2板子的编号是48。
+
+18:57 2007-04-18
+Imote2-1发送，结果见"CntToLedsAndRfm_log_2007-4-18"，Imote2-2接收，结果见"RfmToLed_log_200704018。可以正常通信，但是LED灯没有闪烁。
+发现两个现象足以证明的确发生了通信：
+1, 中途中断CntToLedsAndRfm程序，RfmToLed程序不再有显示；
+2, 两个Imote2节点的天线如果非常近，信号强度(Strength)会在10一下。如果两个节点放在开阔区域，信号强度在240以上。
+
+19:06 2007-04-18
+今天总结：
+1, 完成PC机ssh远程无密码的登录Imote2-1节点，以后传文件就很方便了；
+2, 两个Imote2节点成功通信参"Courting LEDs TinyOS MAC test"
+但是遗留问题还很多：
+1, NFS文件系统；
+2, arm-linuux-gdb和arm-linux-gdbsever
+3, CC2420驱动具体实现了哪些功能，需要进行全功能的测试；
+4, 解决Imote2节点通信时LED灯没有反应的问题。
+
+10:48 2007-04-19
+IMPORTANT
+power up imote2: press power button on the Imote2 main board on the other side of the usb header. 
+
+15:42 2007-04-19
+项目计划, CC2420测试内容
+1, selection of channel*:（有，tosmac_ioctl: TOSMAC_IOSETCHAN，看CC2420_tune_preset，待做）
+频点的选择；
+2, transmission power*:（有）
+大小；是否可调；
+见"16:54 2007-04-20"
+3, reception power sensibility*，取消。
+接收灵敏度；CC2420 p10
+Parameter Min. Typ. Max. Unit Condition / Note
+Receiver Sensitivity -90 -95 --  dBm PER = 1%, as specified by [1] Measured in 50 Ω single endedly through a balun. [1] requires –85 dBm
+4, CC2420 send and receive interfaces**;（有）
+CC2420, p13. Current Consumption(receive mode) 18.8 mA
+新待做***：TOS_Msg是否是MAC层数据，位于CC2420.h.
+5, sleep/active mode，在拓扑图之后，待做:
+只需要看是否实现了下列功能：
+(1)CC2420的休眠，在CC2420 11节中提到了power up/power down模式，但是没有查到驱动如何实现，也没有找到CC2420datasheet中的详细描述；
+新待做：CC2420_start，CC2420_stop。佳露查tinyOS
+(2)MAC层休眠，活跃和休眠之间切换的时间；
+(3)BMAC（叫一个人的时间长过他睡觉的时）查，待做。佳露问
+6, DIFS/SIFS/*IFS duration，测试CC2420之后做：
+参书P62，不太明白。
+待做，查:
+CC2420_DEF_FCF_TYPE_BEACON
+CC2420_ACK_DELAY，可能是SIFS或EIFS
+CC2420_TMIT_DELAY，可能是DIFS
+查时间单位。
+读程序发现似乎已经实现了冲突检测，补充，优先待做。
+7, measurement of transmission distance for different powers（暂缓）.
+需要在使用网络的区域进行实际测试。细化，待做。
+8, Energy module in Imote: read residual energy:（暂缓）
+(1)读取剩余电量，现在想到的方法是监测电压；需要先做实验得到电压随实现变化的曲线，然后根据区域进行剩余电量的估计。
+另外需要知道射频模块与主板其它模块的功耗关系。
+(2)(4-20)新电池板可以通过一个电源管理芯片从IIC总线发送电压和电流信息，完成CC2420驱动测试后，查该芯片，待做。
+(3)参CC2420,p53, 30 Battery Monitor
+9, CA-CSMA（与6相同）:
+时间，忘了当时是怎么说的。
+参"16:54 2007-04-20"4
+
+16:16 2007-04-19
+待做
+1, 现在只能保证两个节点中先插入的节点与PC机网络连通(能ping通，能使用ssh)。
+(18:14 2007-4-19)现在Imote2-1，也需要重新配置ssh，sshd没有启动。
+2, 继续尝试gdb（编译完成，没有测试）。参"嵌入式Linux的GDB远程调试的实现=+.txt"。
+3, NEW/wsn/无线传感网络/cc2420/目录有CC2420的资料，需要研究CC2420的开发环境，包括抓包软件。
+4, Imote2 maillist。对前一个问题表示感谢（完成）；问windows下USBnet为什么不行。（完成）
+5, 下载小组下讨论时把今天找到的datasheet给大家.
+6, (18:51 2007-04-19)看imote2 yahoo group其他资源。
+到今天通过别人发的邮件才知道yahoo group中FILES的含义，从里面找到很多原来一直没有找到的文档。明天建立NFS文件系统和GDB之后一定把所有资料都看一下，从xbow开始看***，待做。
+
+16:29 2007-04-19
+编译GDB
+配置gdb：第一次运行configure时提示没有找到arm-linux-gcc，于是把arm-linux-gcc 3.4.1的路径加入其中。
+
+17:17 2007-04-19
+自:
+佳露在windows下安装USBnet时，下载了demo的文件系统但是没有配置，系统没有找到USBnet的硬件。
+使用前必须配置：
+/root/configure
+否则Imote2某些特有功能无法正常测试。
+
+18:43 2007-04-19
+电池板(Battary Board)
+参"battery-board-rev1.1.pdf"
+可以测量电压和电流，但是不是现在拿到的电池板，明天问张宇。(4-20)张宇也不很清楚，但是现在这个板子不是最终的产品。
+The switching regulator supports an input range from 2.5V to 5V and is able to source a maximum of 600mA. The output of the switcher is set to 3.3V and is connected to the VBAT input on the Intel Mote 2 platform.
+The board also includes a Fuel-gauge IC (MAXIM DS2745) to measure the battery voltage and current. This IC is connected to the Intel Mote 2 through the I2C bus. The board includes a power switch and allows the following two startup configurations for the Intel Mote 2, which can be selected by populating or removing the 0-ohm R11 resistor.
+
+
+
+18:49 2007-04-19
+调试板(debug-board.pdf)
+The second serial port can be configured to connect to FFUART regular, FFUART crossover, I2C or SSP1 ports. This mapping is controlled by the SW5 switch on the board and is labeled accordingly. The power supply can be controlled by the SW6 switch to select on of the following options:
+         • Option 1 : USB power drives VBAT to power the mote (marked as “PWR”)
+         • Option 2 : VBAT is not driven (marked as “No PWR”)
+
+
+18:59 2007-04-19
+文档
+stargate-interposer-board.pdf
+Stargate Interpose board可以把Stargate和Imote相连。
+
+19:15 2007-04-19
+下午佳露尝试winXP下的usb net但是没有成功，由于两人对这部分都不了解，所以发邮件问mailist，两人都先做别的，过两天根据情况决定是否继续尝试winXP下的usb net。
+Hi all
+
+I have some problem in setup the usb net in windows. according to the file "Setting up USBnet" From Platformx Wiki.
+after Select Network adapters from the list, there is no  Network adapters in my window. And i also try to load the linux.inf file, but winXP said there is no specific hardware you need.
+to solve this problem, i flash the kernel image and filesystem image from SG2Release1.0, but the problem also exist.
+
+Thank you.
+Regard
+Zhangjian
+
+10:30 2007-04-20
+待做，今后三个工作日计划，4-20, 4.23, 4.24：
+1, 完成对于一个imote2节点的gdb和nfs（4-20上午完成）；
+2, 按"15:42 2007-4-19"中的优先级分析CC2420驱动。
+3, 完成多个imote2节点的gdb，nfs和ssh功能。远期计划：编写对于imote2节点的自动配置脚本：通过ssh传到imote2节点后，设置所有环境，使用diff和patch给文件打补丁。
+
+10:41 2007-04-20
+文件系统, jffs2, 待做
+Partition Tables
+Http://embedded.seattle.intel-research.net/wiki/index.php?title=Partition_Tables
+Set the size of the fs.jffs2 by doing a menuconfig from the platx directory. It is in the Platx Build Options menu.
+
+10:49 2007-04-20
+文件系统, NFS
+imote2节点上挂载NFS:
+[root@SG2-3 /etc]#mount -t nfs bamvorPC:/home /mnt/nfs                          
+mount: RPC: Unable to receive; errno = Connection refused 
+但是可以ping通，可以使用ssh。
+在PC机测试NFS：
+[root@localhost /]# mount 192.168.99.100:/home/bamv26/ /mnt
+mount: mount to NFS server '192.168.99.100' failed: RPC Error: Program not registered.
+像是RPC服务的问题，后来根据远峰2410文档成功设置了NFS：
+(11:26 2007-4-20)
+参考远峰2410文档(YF2410-IIlinux.pdf)设置NFS
+[root@localhost NFS]# setup
+选择系统服务中的nfs，退出
+[root@localhost NFS]# more /etc/exports 
+/usr/src/Imote2/NFS/ (rw)
+注：原来用远峰2410开发板时这样设置不行，当时还指定了其它权限：
+/YF2410/root_dir/root_zj 192.168.1.106(rw,sync,no_root_squash)
+192.168.1.134(rw,sync,no_root_squash)，以后重做远峰2410开发板的实验，待做。
+执行"/etc/rc.d/init.d/nfs restart"重启nfs服务。
+[root@localhost NFS]# /etc/rc.d/init.d/nfs restart
+关闭 NFS mountd：                                          [失败]
+关闭 NFS 守护进程：                                        [失败]
+关闭 NFS quotas：                                          [失败]
+关闭 NFS 服务：                                            [确定]
+启动 NFS 服务：                                            [确定]
+关掉 NFS 配额：                                            [确定]
+启动 NFS 守护进程：                                        [确定]
+启动 NFS mountd：                                          [确定]
+设置后在PC机挂载nfs，其中"192.168.99.100是本机地址（由usb0设备定义）"：
+mount 192.168.99.100:/usr/src/Imote2/NFS/ /mnt
+可以看到/mnt目录的内容与/usr/src/Imote2/NFS/目录的内容相同。
+在imote2节点上挂载nfs
+mount bamvorPC:/usr/src/Imote2/NFS/ /mnt/nfs
+为了每次系统启动是自动加在nfs在/etc/rc.d/rc.local中加入下面的语句：
+#add by bamvor. for nfs filesytem start up. used by imote2 development board.
+#2007-4-20
+/etc/rc.d/init.d/nfs restart
+(12:07 2007-4-20)
+为了自动挂载nfs文件系统：
+[root@SG2-3 /lib]#cat /etc/rcS.d/S45mountnfs.sh                                 
+#add by bamvor. for mount nfs filesystem. 2007-4-20                             
+mount bamvorPC:/usr/src/Imote2/NFS/ /mnt/nfs/                                   
+[root@SG2-3 /lib]#chmod 777 /etc/rcS.d/S45mountnfs.sh 
+ 
+11:36 2007-04-20
+运行gdb出错：
+./gdbserver: error while loading shared libraries: libthread_db.so.1: cannot opy
+在google中搜索'"error while loading shared libraries: libthread_db.so.1"'（包括双引号）有两个帖子很有用：
+1, 嵌入式Linux系统的GDB远程调试的实现"http://www.hhcn.com/cgi-bin/topic.cgi?forum=6&topic=346":
+2, http://sources.redhat.com/ml/gdb/2005-02/msg00074.html
+"howto build gdb / gdbserver for x86 host with arm-linux target?"
+后者没有细看，下午看，现在太饿了，待做。
+编译GDB的时候搞成静态的就好了.我想编译选项里应该有. 要不你就在Makefile里加上CFLAGS += -static
+LDFLAGS += -static
+这两个的其中一个应该就可以了,不过还是两个都加上吧.
+如果加入CFLAGS或LDFLAGS的static选项，编译会出错：
+/usr/local/arm/3.4.1/lib/gcc/arm-linux/3.4.1/../../../../arm-linux/bin/ld:
+cannot find -lthread_db
+collect2: ld returned 1 exit status
+make: *** [gdbserver] 错误 1
+怀疑是arm-linux-gcc的库有问题。
+后来这个问题没有解决，以后有时间研究，待做。
+
+12:02 2007-04-20
+gdb, 继续
+"/usr/local/arm/3.4.1/arm-linux/lib"中包含有"libthread_db.so.1"，所以把该目录所有内容复制到/usr/src/Imote2/NFS/lib。
+[root@SG2-3 /]#mount bamvorPC:/usr/src/Imote2/NFS/lib /lib    
+后出问题：
+[root@SG2-3 /lib]#ls                                                            
+ls: /lib/libc.so.6: version `GLIBC_2.3.4' not found (required by ls)  
+既然这样不行，所以建立符号连接
+[root@SG2-3 /lib]#ln -s /mnt/nfs/lib/libthread_db.so.1 libthread_db.so.1
+此后gdbserver启动成功：
+[root@SG2-3 nfs]#./gdbserver 
+Usage:  gdbserver COMM PROG [ARGS ...]
+        gdbserver COMM --attach PID
+
+COMM may either be a tty device (for serial debugging), or 
+HOST:PORT to listen for a TCP connection.
+继续按"嵌入式Linux的GDB远程调试的实现"操作，调试成功，log:"/media/NEW/log/Imote2/log/gdb/".
+gdb编译运行所有log见"/media/NEW/log/Imote2/log/gdb/"目录。
+
+13:57 2007-04-20
+文件系统, GDB调试
+试验NFS和GDB是否配置正确，同样可以作为使用方法，加入"入门文档"
+1, NFS文件系统在启动时已经正确挂载：
+[root@localhost /]# ssh root@Imote2-1
+
+Processing /etc/profile... Done
+[root@SG2-3 /root]#ls /mnt
+cf     nfs    ramfs  sd     usb
+[root@SG2-3 /root]#ls /mnt/nfs/lib/
+Mcrt1.o                   libdl.so.2                libnss_nisplus.so
+crt1.o                    libg.a                    libnss_nisplus.so.2
+.....
+列出的文件就是PC机/usr/src/Imote2/NFS/lib的内容。
+2, gdb调试：target, list, cont等命令正确，但是run命令有问题：
+(gdb) run
+Starting program: /media/NEW/log/Imote2/programming/helloworld 
+Don't know how to run.  Try "help target".
+(gdb) cont
+The program is not being run.
+(gdb) load /media/NEW/log/Imote2/programming/helloworld
+You can't do that when your target is `exec'
+等CC2420驱动工作完成后，解决这些问题，待做。
+
+15:02 2007-04-20
+分析CC2420驱动(tos_mac)
+1, 自: include/linux/tosmac.h
+Important:
+TOSMAC driver is a non-standard character device.
+重要信息：tos_mac是一个非标准的字符设备。
+2, 关于ioctl：
+/*IOMAGIC for TOSMAC driver*/
+#define TOSMAC_MAGIC   0xF4
+(14:50 2007-5-13)0XF4是幻数，与设备相关。参LDD中p139。
+Documentation/ioctl-number.txt是部分幻数定义。//"14:50 2007-5-13"
+3, 查RfmToLeds.c中ACCEL_TEST的含义。待做
+4, 收到的"Data: 17 0 85"，就是数据包。TOS_Msg的定义见"10:18 2007-04-27"1
+5, 主设备号和设备文件所在位置同样在该头文件中定义。
+#define TOSMAC_MAJOR    240
+#define TOSMAC_DEVICE   "/dev/tosmac"
+6, 数据包的长度
+enum {
+        // size of the header not including the length byte
+        MSG_HEADER_SIZE = 9, //offsetof(struct TOS_Msg, data) - 1,
+        // size of the footer
+        MSG_FOOTER_SIZE = 2,
+        //size of TOSMSG FOOTER
+        TOSMSG_FOOTER_SIZE = 6,
+        // position of the length byte
+        LENGTH_BYTE_NUMBER = 1,
+};
+//size of payload data
+int TOSH_DATA_LENGTH;
+// size of the full packet
+int MSG_DATA_SIZE;
+// size of header(including length byte) and payload data
+int MSG_HEADER_DATA_SIZE;
+// size of the whole TOSMSG
+int TOSMSG_SIZE;
+TOSH_DATA_LENGTH是payload data，是否指MAC层负载数据？查，待做。
+长度之间的关系有三处，分别位于TOSMac.c和CC2420.c。"TOSMac.c"line 235-239：
+case TOSMAC_IOSETMAXDATASIZE:
+    TOSH_DATA_LENGTH = arg;
+    MSG_DATA_SIZE = 10 + TOSH_DATA_LENGTH + sizeof(uint16_t);
+    MSG_HEADER_DATA_SIZE = 10 + TOSH_DATA_LENGTH;
+    TOSMSG_SIZE = MSG_HEADER_DATA_SIZE + TOSMSG_FOOTER_SIZE;
+(10:34 2007-4-26)
+在"case TOSMAC_IOSETMAXDATASIZE"中，除了data数据的MSG_DATA_SIZE=12。但是在test_tos_mac.c使用的数据结构中，除了data的数据大小是16。这里有矛盾，说明没有考虑strength,lqi,ack,crc等数据，需要修改，见"10:18 2007-04-27"4
+如果TOSMSG_SIZE=127（第一字节数据是侦长度，不知是否包括在TOSMSG_SIZE中），TOSH_DATA_LENGTH=127-6-10-2-10=99字节，根据上面分析结果修改，待做。
+7,（16:07 2007-4-20)tosmac_open与container_of
+参linux/kernel.h和http://modal-echoes.blogspot.com/
+/**
+ * container_of - cast a member of a structure out to the containing structure
+ *
+ * @ptr:        the pointer to the member.
+ * @type:       the type of the container struct this is embedded in.
+ * @member:     the name of the member within the struct.
+ *
+ */
+#define container_of(ptr, type, member) ({                      \
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+(15:04 2007-5-13)
+container_of返回ptr所属结构体type的指针。ptr在结构体type中的名称由member给出。返回的结果保存在filp->private_data中，便于后面的程序访问tosmac_device结构体。参见下面的代码：
+tosmac_open函数的
+    struct tosmac_device *dev;
+    dev = container_of(inode->i_cdev, struct tosmac_device, cdev);
+    filp->private_data = dev;
+
+tosmac_device位于TOSMac.h：
+struct tosmac_device {
+    struct semaphore sem;
+    struct cdev cdev;
+    int devno;
+    wait_queue_head_t rq;
+};
+//"15:04 2007-5-13"
+
+15:16 2007-04-20
+待做
+1, 学习LED灯的使用。在控制台通过proc文件系统控制LED见"10:58 2007-05-11"
+2, 学习pmic的使用, 重要
+
+16:34 2007-04-20
+分析CC2420驱动(tos_mac), 续
+tosmac_open方法中的down和up是获得和释放信号量，学习，周末，待做。
+
+16:54 2007-04-20
+分析CC2420驱动(tos_mac), 续
+1, TOSMac.c, TOSMac.h. 总体分析。
+(15:34 2007-5-13)修改
+本文件实现驱动程序框架。与CC2420相关但与SG2/IM2不相关内容由CC2420.c/h实现，与CC2420相关且与SG2/IM2相关内容由SG_CC2420.c/h实现，Linux定时器使用由ostimer.c/h实现。AM.h定义了TOS_Msg类型，声明收发包全局变量为外部变量。完善，待做。
+CC2420_start()
+C2420_poll()
+CC2420_read()，完成
+rx_packet即由AM.h声明为外部变量：extern TOS_Msg rx_packet，定义位于CC2420.c。
+CC2420_send(), 发送函数由tosmac_write调用。
+tosmac_ioctl()全部，其中ioctl命令位于"drivers/tosmac/TOSMac.h"
+CC2420_stop()
+init_MUTEX()
+init_waitqueue_head()，见"10:02 2007-04-26"3
+CC2420_init()
+cdev_init()
+cdev_add()
+2, tosmac_write()函数中去掉了信号量的获取和释放，为什么？查，待做。
+3, tosmac_ioctl的TOSMAC_IOSETPOWER是控制发送功率。
+CC2420_set_rf_power：
+/*************************************************************************
+* SetRFPower
+* power = 31 => full power    (0dbm)
+*          3 => lowest power  (-25dbm)
+* return SUCCESS if the radio power was successfully set
+*************************************************************************/
+uint8_t CC2420_set_rf_power(uint8_t power)
+{
+   g_current_parameters[CP_TXCTRL] = (g_current_parameters[CP_TXCTRL] &
+                                    (~CC2420_TXCTRL_PAPWR_MASK)) |
+                                    (power << CC2420_TXCTRL_PAPWR);
+   //第一个参数是地址，第二个参数是16位数据
+   CC2420_write_reg(CC2420_TXCTRL, g_current_parameters[CP_TXCTRL]);
+   return SUCCESS;
+}
+CC2420_write_reg的定义位于SG2_CC2420.c，查SSDR_P。
+使用SPI总线发送数据时先发送低位再发送高位。
+功耗的大小，CC2420datasheet, P52：
+PA_LEVEL TXCTRL register Output Power [dBm] Current Consumption [mA]
+31 0xA0FF 0 17.4
+27 0xA0FB -1 16.5
+23 0xA0F7 -3 15.2
+19 0xA0F3 -5 13.9
+15 0xA0EF -7 12.5
+11 0xA0EB -10 11.2
+7 0xA0E7 -15 9.9
+3 0xA0E3 -25 8.5
+Table 9. Output power settings and typical current consumption @ 2.45 GHz
+
+4, CC2420.c，这些是mac层的退避(backoff)机制
+Mac_initial_backoff()
+Mac_congestion_backoff()
+详见"11:21 2007-05-21"
+
+18:05 2007-04-20
+分析CC2420驱动(tos_mac), 续
+1, CC2420, p11
+Data latency 2 μs Processing delay in receiver. Time from complete transmission of SFD until complete reception of SFD, i.e. from SFD goes high on transmitter until high on receiver.
+2, CSMA-CAp51, The clear channel assessment signal is based on the measured RSSI value and  a programmable threshold. The clear channel assessment function is used to implement the CSMA-CA functionality specified in [1]. CCA is valid when the receiver has been enabled for at least 8 symbol periods.
+Implementing CSMA-CA may easiest be done by using the STXONCCA command strobe, as described in the Radio control state machine section on page 44. Transmission will then only start if the channel is clear. The TX_ACTIVE status bit (see Table 5) may be used to detect the result of the CCA.
+
+18:36 2007-04-20
+今日进展
+1, 完成对于单节点的gdb和nfs文件系统；
+2, CC2420完成大部分。未完成的内容；
+  5, sleep/active mode
+  6, DIFS/SIFS/*IFS duration
+  9, CA-CSMA
+周一计划，按"10:30 2007-04-20"，继续完成步骤二，计划周一完成现有需要功能的测试程序，晚上下班前给本组演示。
+
+11:26 2007-04-23
+项目计划, 待做
+1, test CC2420，文档发组内成员。
+2, 查gcc对于c++的编译，调试环境。根据现有仿真器的程序分析。
+3, 学习FISCO算法，读伪码。
+4, 多个节点到达后，建立开发环境，自动配置脚本。
+5, 编写邻居表的程序（佳露）。
+6, windows下超级终端传送文件，远期使用intel xscale开发工具。
+7, 在PC机显示连接图（通过指令定时传回，用matlab画图）
+远期：节点到达以后： 看新节点有什么不同。
+
+14:29 2007-04-23
+Imote2节点，CC2420驱动调用格式：
+read函数，参"RfmToLeds.c"：
+read(tosmac_dev, &recv_pkt, sizeof(TOS_Msg));
+tosmac_dev是设备名，不需要改变；
+recv_pkt是数据包；
+sizeof(TOS_Msg)指包的大小，不需要改变。
+write函数，参"CntToLedsAndRfm.c"：
+write(tosmac_dev, (TOS_Msg*)&send_pkt, 4);
+前两个参数同read，"4"指数据包中data段的大小；
+ioctl函数，参TOSMac.c：
+ioctl (tosmac_dev, cmd, arg);
+tosmac_dev是设备名，不需要改变；
+cmd是指令名，参TOSMac.c 102行开始的switch-case部分，例如"TOSMAC_IOSETADDR"；
+arg是参数，参TOSMac.c 102行开始的switch-case部分，例如，如果cmd是"TOSMAC_IOSETCHAN"，arg是要设置的16位地址。
+
+14:57 2007-04-23
+编写CC2420驱动测试程序，参考"11:26 2007-04-23"1和"15:42 2007-04-19"
+测试内容和要求：
+1, selection of channel（频点的选择）：
+现有驱动中有channel和frequency的选择分别对应驱动中ioctl函数的TOSMAC_IOSETCHAN:, TOSMAC_IOGETCHAN, TOSMAC_IOSETFREQ和TOSMAC_IOGETFREQ。channel就是预置频点的选择，参CC2420 P51：
+IEEE 802.15.4 specifies 16 channels within the 2.4 GHz band, in 5 MHz steps, numbered 11 through 26. The RF frequency of channel k is given by :Fc = 2405 + 5 (k-11) MHz, k=11, 12, ..., 26
+调用的函数是"CC2420_tune_preset"，该函数本身有操作是否成功的返回值，但上层驱动没有保存这个返回值。
+function prototype: chSel()
+测试方法：1, 单个节点逐一测试16个频点是否设置成功，先set，再get，成功后显示某频点设置成功。2, 16个频点的收发实验，使用两个节点：节点A发送要跳频的频点，然后节点A和节点B同时调频，节点A跳频成功后，发送广播，验证节点B是否调频成功，节点B收到信息后，发送确认侦。
+2, transmission power*（发送功率），参见"16:54 2007-04-20"
+现有驱动中使用ioctl的TOSMAC_IOSETPOWER和TOSMAC_IOGETPOWER设置和读取发送功率。which call CC2420_set_rf_power and CC2420_get_rf_power respectively. the power value and corresponding current reference "16:54 2007-04-20". 
+function prototype: transPower()
+Testing method: the node A (trans) set the rf, get rf power and send a message to node B. Node B send ack to node A.
+3, reception power sensibility*，取消。
+function prototype: 
+4, CC2420 send and receive interfaces**;（有）
+CC2420, p13. Current Consumption(receive mode) 18.8 mA
+新待做：TOS_Msg是否是MAC层数据，位于CC2420.h.
+function prototype: sendAndRec()
+Testing goals: 1,send and rece sync; 2,different data length send and rece. 3, max data length. 
+Testing method: 1, two nodes send data at the same time, after 5bytes * 100times, read data, check whether receive the data or not; 2, test different data length and max length.
+5, sleep/active mode，在拓扑图之后，待做:
+6, DIFS/SIFS/*IFS duration，测试CC2420之后做：
+7, measurement of transmission distance for different powers（暂缓）.
+8, Energy module in Imote: read residual energy:（暂缓）
+9, 数据侦的格式：使用TOS_Msg包格式，data数据中，第一个字节定义为flag，flag等于255时，表示测试CC2420驱动。
+
+18:11 2007-04-23
+佳露在linux下进行开发，顺便整理和建立开发环境，把相关文档和代码建立在imote2_environment目录下。没有加入platx wiki的内容，等佳露需要学习时整理
+
+18:41 2007-04-23
+明天继续完成测试程序。
+后天开始c++编译调试。
+
+10:12 2007-04-24
+TOS_Msg解释, TOS_Msg与TinyOS中对应结构兼容
+自: 佳露, 如果需要进一步解释，可以用google搜索。
+struct __TOS_Msg
+{
+        __u8 length;
+        __u8 fcfhi;//file control flag hi8
+        __u8 fcflo;//file control flag lo8
+        __u8 dsn;  //
+        __u16 destpan;  // destPAN
+        __u16 addr;     // destAddr
+        __u8 type;
+        __u8 group;
+        __s8 data[TOSH_DATA_LENGTH]; // default size of data[] is 28
+        __u8 strength;
+        __u8 lqi;  //link quality indicator, like strength
+        bool crc;  //
+        bool ack; 
+        __u16 time; 
+};
+
+
+10:24 2007-04-24
+项目要求，待做
+自: 佳露
+sleep, active(idle, transmit, rece)。希望sleep功耗很低，到可以忽略的程度。至少做到二者功耗的明显差异。
+
+11:10 2007-04-24
+分析CC2420驱动(tos_mac), 续
+tosmac_poll：(16:57 2007-5-11)把由poll, select, epoll三个系统调用设置的事件加入等待队列，如果事件发生函数返回 //"16:57 2007-5-11"
+调用关系：
+tosmac_poll -> CC2420_poll -> poll_wait
+对poll的解释：
+自: http://bbs.chinaunix.net/viewthread.php?tid=794458
+1, 如果当前不可读，那么在sys_poll->do_poll中当前进程就会睡眠在等待队列上，这个等待队列是由驱动程序提供的（就是poll_wait中传入的那个）。当可读的时候，驱动程序可能有一部分代码运行了（比如驱动的中断服务程序），那么在这部分代码中，就会唤醒等待队列上的进程，也就是之前睡眠的那个，当那个进程被唤醒后do_poll会再一次的调用驱动程序的poll函数，这个时候应用程序就知道是可读的了。
+2, POOL方法就是用来支持非阻塞式的访问，当然是立即返回，但是它会把这次请求放入一个等待队列中，当某个条件满足时，内核会通知应用程序（应用程序的select函数会感知），然后就会接着select操作 
+还需要看驱动，ldd3rd的对应章节，待做。(16:56 2007-5-11)poll, select, epoll三个系统调用都会调用驱动程序中的poll函数//"16:56 2007-5-11"
+(11:20 2007-4-25)
+POLLIN和POLLRDNORM的定义位于"include/asm/poll.h"
+POLLIN There is data to read.
+When  compiling with _XOPEN_SOURCE defined, one also has the following, which convey no further information beyond the bits listed above:
+POLLRDNORM  Equivalent to POLLIN.
+(14:55 2007-4-26)
+LDD. 3rd, p164
+POLLIN: This bit must be set if the device can be read without blocking.
+POLLRDNORM: This bit must be set if "normal" data is available for reading. A readable device returns (POLLIN | POLLRDNORM). 
+与此对应，对于可写的设备（Imote2中没有这个功能：
+POLLOUT: This bit is set in the return value if the device can be written to without blocking.
+POLLWRNORM: This bit has the same meaning as POLLOUT, and sometimes it actually is the same number. A writable device returns (POLLOUT | POLLWRNORM).
+从非阻塞设备读数据的过程参见LDD, 3rd, P166。
+(16:52 2007-5-11)
+经过上面对于tosmac_poll函数的完成运行过程，对于CC2420_state并没有影响（不会修改CC2420_state为IDLE_STATE）。
+
+12:15 2007-04-24
+项目进展, 待做
+与佳露讨论：
+omnet++使用c++，是一个很理论的仿真器。
+jialiang博士使用的仿真器是他自己编写的基于java的仿真器，FISCO也是基于java仿真。佳露认为对这两个仿真器中的任何一个做仿真程序和CC2420驱动程序的接口的工作量都是很大的，难以实现。
+现在的问题是：
+为什么要做评估c++程序在imote2节点编译和调试，是为了FISCO，还是为了中法联合实验室。如果针对FISCO，应该评估imote2节点对于java的支持。
+评估的同时需要考虑移植基于仿真器程序的难度（包括编写接口的难度）等。
+CC2420初步测试完成后，问jialiang和张宇博士。
+
+15:50 2007-04-24
+查usbnet
+http://www.linux-usb.org/usbnet/
+cdc_subset
+
+18:21 2007-04-24
+使用Imote2电池板，感觉如果不是全新的碱性电池，都无法让他启动。(5-13)后来发现有一块当时使用的电池板没有接保险丝。
+
+19:00 2007-04-24
+今日进展
+1, 发现现在的TOS_Msg定义于AM.h，和原来有所不同。尤其是data的长度从默认的28改为116+6。参见"10:18 2007-04-27"
+2, 不知为什么，自己写的程序在minicom登录的界面下无法正常的回车。尝试了\r, \n都不行。今天查又没有这个问题了，奇怪。
+3, 其余没有进展，明天的压力很大。
+
+10:01 2007-04-25
+Imote2, 修改文件系统
+修改/etc/profile
+#add by bamvor. for nfs mount. 2007-4-25
+mount -t nfs 192.168.99.100:/usr/src/Imote2/NFS/ /mnt/nfs
+
+10:19 2007-04-25
+分析CC2420驱动(tos_mac), 续
+Imote2, CC2420驱动, tos_mac
+使用
+        printf("send %d bytes data", sizeof(send_pkt));
+        printf("\n");
+正常回车。
+
+10:38 2007-04-25
+项目待做
+查如果使用串口读写文件
+
+11:12 2007-04-25
+分析CC2420驱动(tos_mac), 续
+不再使用系统时间进行同步
+先使用非阻塞模式打开，判断是否有节点发送数据，如果没有，发送数据。
+
+11:16 2007-04-25
+分析CC2420驱动(tos_mac), 续
+CC2420驱动
+1, 查poll的用法；
+2, 查对于fifop标志位的支持。
+3, 查对修改fifop溢出字节的支持。
+4, 查TOS_Msg到底在何处实现。参"10:18 2007-04-27"
+现有TOS_Msg在include/linux/tosmac.h实现，为了tos_mac驱动相符，加入了原来没有实现的变量，但是data的长度仍然的默认的TOSH_DATA_LENGTH(28)，AM.h中的MAX_TOSH_DATA_LENGTH=116是最大值。
+/* modified by bamvor. using TOS_Msg from AM.h instead, which used by tos_mac 
+ * driver. 2007-4-25
+ */
+typedef struct __TOS_Msg
+{
+...
+        __s8 data[TOSH_DATA_LENGTH];
+        __u8 strength;
+        __u8 lqi;
+        __u8 crc;
+        __u8 ack;
+        __u16 time;
+} TOS_Msg;
+
+12:05 2007-04-25
+经过修改RfmToLed.c和CntToLedsAndRfm.c，现在运行的结果与原来文件系统中包含的程序相同。
+下午做非阻塞实验，然后做fifo的实验。
+CC2420 poll查询的是读还是写？(5-13)读
+
+
+13:47 2007-04-25
+分析CC2420驱动(tos_mac), 续, read函数：
+函数调用关系：tosmac_read -> CC2420_read，后面通过中断完成，如果是阻塞模式等待中断完成，如果是非阻塞模式直接返回有无数据。中断的下半部分是"CC2420_read_packet"，当FIFOP置位后，从RXFIFO读取数据。
+CC2420_read_packet
+      ->CC2420_read_RXFIFO(SG2_CC2420.c)->ssp_flush
+                                        ->SSDR_P
+      ->CC2420_flush_RXFIFO（待做）
+      ->CC2420_recv_failed（待做）
+      ->CC2420_RXFIFO_done->CC2420_packet_sent->wake_up_interruptible
+                          ->CC2420_packet_rcvd->wake_up_interruptible
+ok_to_read是个关键，与中断调用有关，我从这里开始查中断函数。中断函数的下半部分机制参见"13:59 2007-04-25"。现有驱动中使用tasklet做为中断下半部分函数，优点是速度快，但是要求该函数必须是原子操作。
+    _is_packet_receiving = is_packet_receiving;
+
+    if (_is_packet_receiving) {
+        tasklet_schedule(&read_packet_tasklet);
+    } else {
+        is_packet_receiving = TRUE;
+    }
+is_packet_receiving表示是否正在接收包，TRUE表示正在被接收。如果正在接收，把本次接收加入tasklet调度队列(tasklet_schedule(&read_packet_tasklet))。如果没有在接收，把is_packet_receiving设为真，保证本次接收完成前的"CC2420_read_packet"函数调用会加入到tasklet调度中。此后的语句，只有本次接收前没有正在接收的数据时才会执行（即is_packet_receiving=FALSE时才会执行：
+    if (!_is_packet_receiving) {
+//      printk(KERN_INFO "packet is being read\n");
+      if (!CC2420_read_RXFIFO (&len, (uint8_t*)rx_buf_ptr)) {
+          is_packet_receiving = FALSE;
+//        printk(KERN_INFO "read_RXFIFO failed\n");
+          CC2420_flush_RXFIFO();
+          CC2420_recv_failed();
+         // tasklet_schedule(&read_packet_tasklet);
+          return;
+      }
+
+在"CC2420_packet_rcvd"中is_packet_receiving被置为FALSE。
+
+13:59 2007-04-25
+分析CC2420驱动(tos_mac), 续, tasklet
+CC2420_read_packet使用了tasklet.
+1, tasklet introduction
+LDD 3rd, P275
+The Linux kernel has two different mechanisms that may be used to implement bottom-half processing, both of which were introduced in Chapter 7. Tasklets are often the preferred mechanism for bottom-half processing; they are very fast, but all tasklet code must be atomic. The alternative to tasklets is workqueues, which may have a higher latency but that are allowed to sleep.
+Tasklets must be declared with the DECLARE_TASKLET macro:
+DECLARE_TASKLET(name, function, data);
+name is the name to be given to the tasklet, function is the function that is called to execute the tasklet (it takes one unsigned long argument and returns void), and data is an unsigned long value to be passed to the tasklet function.
+P202
+2, tasklet function
+void tasklet_schedule(struct tasklet_struct *t);
+Schedule the tasklet for execution. If a tasklet is scheduled again before it has a chance to run, it runs only once. However, if it is scheduled while it runs,it runs again after it completes; this ensures that events occurring while other events are being processed receive due attention. This behavior also allows a tasklet to reschedule itself.
+
+15:07 2007-04-25
+分析CC2420驱动(tos_mac), 续, CC2420_read_RXFIFO
+1, CC2420.c line 578:
+1)CC2420_read_RXFIFO (&len, (uint8_t*)rx_buf_ptr)
+len等于MSG_DATA_SIZE，MSG_DATA_SIZE在AM.h中定义为外部变量，在TOSMac.c中的init函数初始化或在设置"TOSMAC_IOSETMAXDATASIZE"时更新：
+MSG_DATA_SIZE = 10 + TOSH_DATA_LENGTH + sizeof(uint16_t);
+rx_buf_ptr是TOS_MsgPtr类型。
+2)static struct ssp_dev SG2_ssp_dev;
+struct ssp_dev {
+        u32 port;
+        u32 mode;
+        u32 flags;
+        u32 psp_flags;
+        u32 speed;
+};
+3)自旋锁(spinlock)，见LDD 3rd，P116
+static DEFINE_SPINLOCK(SG2_ssp_lock);
+"DEFINE_SPINLOCK"位于"include/linux/spinlock_types.h"，是定义自旋锁的宏。
+spin_lock_irqsave(&SG2_ssp_lock, flag);
+spin_unlock_irqrestore(&SG2_ssp_lock, flag);
+spin_lock_irqsave在获得自旋锁前保存中断状态到flag变量，再禁止中断。spin_unlock_irqrestore执行相反的过程。
+***You must also call spin_lock_irqsave and spin_unlock_irqrestore in the same function; otherwise, your code may break on some architectures. LDD, 3rd p120.
+2, SPI总线相关：参"PXA27x_Developers_Manual.pdf"第八章。include/asm/arch-pxa/ssp.h是SSP的驱动，相关pxa的寄存器定义位于include/asm-arm/arch-pxa/pxa-regs.h。
+include/asm/arch-pxa/ssp.h:void ssp_flush(struct ssp_dev *dev);
+SSP是Synchronous Serial Protocol，同步串行协议，支持下面四种协议：
+• Texas Instruments (TI) Synchronous Serial Protocol
+• Motorola Serial Peripheral Interface (SPI) protocol
+• National Semiconductor Microwire
+• Programmable Serial Protocol (PSP)
+1)GPCR(SG2_GPIO39_CC_SFRM) = GPIO_bit(SG2_GPIO39_CC_SFRM);
+GPCR是gpio输出复位寄存器。GPIO_bit用于确定是某个端口的第几位，二者都位于"include/asm-arm/arch-pxa/pxa-regs.h"：
+从stargate2.h的注释看，这个引脚是片选(CSn)，低电平有效。
+(1)#define GPCR(x)         __REG2(0x40E00024, ((x) & 0x60) >> 3)
+含义是先取端口号，再计算出该端口的地址，对于本程序结果是"0x40E00028"，与PXA手册PP1103页的GPCR1地址相符。与此对应GPSR是GPIO输出置位寄存器。这样的使用方法和blackfin类似，msp430等单片机不同（只有一个输出寄存器，复位置位通过写入0或1实现）。
+(2)#define GPIO_bit(x)     (1 << ((x) & 0x1f))
+SG2_GPIO39_CC_SFRM定义于include/asm-arm/arch-pxa/stargate2.h
+#define SG2_GPIO39_CC_SFRM  39
+(1 << ((x) & 0x1f)) = ( 1 << ( 0x27 & 0x1f ) = 1 << 0x07 = 0x0e，这个地方不明白，PXA271的IO是32个一组，0x07表示是第二组IO的第7位，但是0x0e没有查到含义，待做。似乎是这个端口的顺序号(感觉类似于P0.e，即P0口的第15引脚)，前面"0x1f"应该是屏蔽了端口号。
+(3)__REG2定义于"include/asm-arm/arch-pxa/hardware.h"，先借助__REG()宏实现对IO的物理地址到虚拟地址的映射－－从40000000起始的地址映射到0xf2000000起始的地址（具体见同一个文件）
+2)SSDR_P() is difinited in "include/asm-arm/arch-pxa/pxa-regs.h"，通过"?:"三元操作符选择需要的端口。SSP Data register (SSDR_x)的地址位于P510，对它的读写分别是对接收FIFO的读操作和对发送FIFO的写操作。
+CC2420的寄存器访问见CC2420 p27, 13.2，CC2420的寄存器地址见CC2420 datesheet P62-P83。
+SSDR_P((&SG2_ssp_dev)->port) = (CC2420_RXFIFO | 0x40);
+CC2420_RXFIFO是CC2420接收缓冲器的地址，0x40表示读（CPU与CC2420通信时，先发送8位数据，其中第七位表示访问类型，0表示寄存器读写，1表示RAM读写，第6位表示读写操作，0 for write, 1 for read，读写寄存器时第0-5位表示寄存器的地址。
+SSDR_P((&SG2_ssp_dev)->port) = 0;
+CC2420, P29. The command strobe register is accessed in the same way as for a register write operation, but no data is transferred. That is, only the RAM/Register bit (set to 0), R/W bit (set to 0) and the 6 address bits(in the range 0x00 through 0x0E) are written.
+MAIN (0x10) - Main Control Register:
+0 XOSC16M_BYPASS 0 R/W Bypasses the crystal oscillator and uses a buffered version of the signal on Q1 directly. This can be used to apply an external railrail clock signal to the Q1 pin.
+根据上面文字，该命令是把外部晶振屏蔽，使用从Q1引脚输入的时钟。不太理解，查，待做。
+while(SSSR_P((&SG2_ssp_dev)->port) & (SSSR_BSY| SSSR_TFL));
+    status = SSDR_P((&SG2_ssp_dev)->port);
+    pktlen = SSDR_P((&SG2_ssp_dev)->port)
+while表示等待CC2420接收完成，把接收到的状态字保存在status。CC2420 RXFIFO中首先保存的是接收到数据侦的长度，该长度保存在pktlen。
+然后，判断接收的数据侦是否大于FIFO的容量128字节(pktlen > 16)，如果大于继续接收16字节，且保存数据。如果不大于FIFO的容量，直接接收pktlen大小的数据。
+这里的SPI与原来我所使用的SPI的区别是下面是接收代码。有价值的片段，整理，待做：
+        for(i = 0; i < pktlen; i++)
+          SSDR_P((&SG2_ssp_dev)->port) = 0xFF;
+SSDR_P((&SG2_ssp_dev)->port) = 0xFF;根据原来使用SPI的经验，是通过输出没有意义的数据强制SPI工作，从而接收SPI从设备发来的数据。由于PXA的SSP接口有发送和接收各16*32大小的FIFO，所以不需要每次都读取FIFO的数据，可以在所有数据（小于CC2420FIFO的最大大小－－16字节）都接收后一次读到内存中（每次读一个字节的数据，一共读出pktlen字节）：
+        while(SSSR_P((&SG2_ssp_dev)->port) & (SSSR_BSY | SSSR_TFL));
+        for(i = 0; i < pktlen; i++) {
+           temp32 = SSDR_P((&SG2_ssp_dev)->port);
+           *data++ = temp32;
+//CC2420_read_RXFIFO分析完成，CC2420_write_FXFIFO与此类似，后面不再分析。
+
+19:03 2007-04-25
+今日总结：
+1, 修改了include/linux/tosmac.h的TOS_Msg定义，使现有的CntToLedsAndRfm.c和RfmToLeds.c可以完成和文件系统中对于文件相同的功能。
+2, 用了很大的精力深入分析CC2420代码，基本函数都已经有了了解，明天很快可以完成分析，开始实际测试，争取明天完成测试。
+
+10:02 2007-04-26
+今日计划, 待做：
+1, 完成read函数，总结read函数层次；
+2, 查CC2420全球唯一的64位地址（完成），查CC2420是否是全双工。
+2, 读write函数；
+3, CC2420驱动测试，收发功能要测试能够依次接收多侦，能够接收超过FIFO容量的侦；
+
+10:52 2007-04-26
+分析CC2420驱动(tos_mac), 续, CC2420_RXFIFO_done
+1, CC2420_RXFIFO_done会先判断fifo是否溢出，如果没有溢出继续判断crc校验是否正确：
+tx_buf_ptr->ack = 1;
+tx_buf_ptr->strength = data[length-2];
+tx_buf_ptr->lqi = data[length-1] & 0x7F;
+is_packet_receiving = FALSE;
+2, CC2420_packet_rcvd的作用主要是copy rx_buf to rx_packet
+把strength等信息加入到了data信息TOSH_DATA_LENGTH之后：
+    i = TOSH_DATA_LENGTH;
+    rx_packet.data[i++] = rx_buf_ptr->strength;
+    rx_packet.data[i++] = rx_buf_ptr->lqi;
+    rx_packet.data[i++] = rx_buf_ptr->crc;
+    rx_packet.data[i++] = rx_buf_ptr->ack;
+    rx_packet.data[i++] = (rx_buf_ptr->time>>8) & 0xFF;
+    rx_packet.data[i++] = rx_buf_ptr->time & 0xFF;
+3, wake_up_interruptible是唤醒。
+include/linux/wait.h定义了"wake_up_interruptible"
+#define wake_up_interruptible(x)        __wake_up(x, TASK_INTERRUPTIBLE, 1,
+NULL)
+(15:35 2007-4-26)
+(1)inq：wake_up_interruptible(&inq)唤醒的是由"CC2420_poll"函数中"poll_wait(filp, &inq, wait);"加入等待队列的进程。inq是等待队列，有两种建立方法，DECLARE_WAIT_QUEUE_HEAD宏是静态方法，下面的rq和wq同样；tosmac_init使用的是动态方法：
+init_waitqueue_head(&(tosmac_dev->rq)); 其中"tosmac_dev->rq"是wait_queue_head_t类型。tosmac_dev的分析待做。
+除了poll_wait，wait_event_interruptible等一系列wait_event函数是通常用于把进程加入等待队列的函数。这些wait_event函数都有一个condition参数，当condition变真时，进程停止睡眠。wake_up_interruptible和wait_event_interruptible是成对使用的，LDD3rd, P160有一个范例。
+bamvor: 既然通过判断condition是否为真决定是否退出睡眠，那么队列的作用是什么？是否是当条件为真时，优先把队头的进程唤醒。看LDD书第六章，做实验，待做。
+(2)rq：现有驱动中以阻塞方式打开的设备时，使用rq等待队列。
+由CC2420_read函数的wait_event_interruptible(rq, recv_done == 1)加入等待队列，判断条件是"recv_done"是否等于1
+wake_up_interruptible(&rq);当CC2420发送成功（"CC2420_packet_rcvd"）或失败（"CC2420_recv_failed"）时调用，调用前会给recv_done置一。
+CC2420接收失败的原因可以根据下面的分析函数调用关系，待做。
+CC2420_recv_failed<-CC2420_read_packet
+                  <-CC2420_irq_handler
+(3)wq, 未完，待做
+//(15:35 2007-4-26)结束
+3, 查CC2420_irq_handler和CC2420_timer_irq_handler作用，由谁调用。(5-13)见后面相关文档。
+
+11:58 2007-04-26
+Linux, GNU, 中国映像
+http://www.linuxforum.net/
+中国Linux论坛，有Linux相关网站中国映像的链接。很好的网站，收藏。***
+
+12:10 2007-04-26
+分析CC2420驱动(tos_mac), 续, CC2420.c, CC2420_init
+/* 
+ * CC2420_init( ) is called when driver is installed.
+ * It will turn CC2420 oscillator on, setup SPI port.
+ */
+申请FIFOP和SFD两个中断，二者的handlder都是"CC2420_irq_handler"。
+CC2420_irq_handler是CC2420的总状态机，
+SG2_GPIO114_CC_FIFO是空状态，没有处理，也就是说当CC2420中FIFO有数据，但是FIFOP没有中断时，不做任何处理。
+"wait_event_interruptible"及相关内容，见当天文档。
+
+13:40 2007-04-26
+Imote2, 待做
+"Ralph Kling" <rkling@xbow.com>
+RE: [intel-mote2-community] Re: Imote2 Inquiry.
+The software in the TinyOS 1.x distribution supports mesh networking on the Imote2.
+下载The software in the TinyOS 1.x distribution
+
+14:49 2007-04-26
+无线传感网络, 待做
+xinzhou提到context，说是一种技术，用于wsn
+
+15:13 2007-04-26
+分析CC2420驱动(tos_mac), 续, 未完成, 待做
+设计一个实验测试阻塞和非阻塞方式打开tos_mac的区别。
+1,
+节点A：非阻塞方式打开设备，读数据，由于此时没有节点发送数据，所以read函数会立
+即返回-EAGAIN，调用poll方法；节点A发送数据通知节点B向节点A发送数据。此后再次
+
+15:31 2007-4-26
+分析CC2420驱动(tos_mac), 续, 查, 待做
+如果CC2420要发送数据时，有数据需要接收，如何处理？
+
+16:54 2007-04-26
+待做
+1, 包中strength, lqi, crc, ack四个变量没有计算在包长度中，但是应用程序可以调用到。原因是什么，会不会有问题。
+2, 查CC2420有无64位全球唯一地址。加入驱动分析文档，待做。
+(17:35 2007-04-26)
+现有驱动支持短地址的读写：通过ioctl函数的TOSMAC_IOSETADDR和TOSMAC_IOGETADDR。前者通过CC2420_set_short_addr调用写RAM的函数CC2420_write_RAM实现。
+另外CC2420_read_RAM函数的注释中说CC2420_read_RAM没有经过测试，因此无法读取64位全球唯一地址。
+0x167-0x160 MSB LSB IEEEADR 64-bit IEEE address of current node, used for address recognition.
+RAM地址的分配见CC2420 datasheet p31。
+
+17:15 2007-04-26
+文档, CC2420, 相关
+这两个文档都有有用***
+1, Background Research Report.pdf
+是一个用于物体追踪的wsn背景研究，其中有CC系列收发芯片的比较，很有用。
+2, Sensor Network Programming with CC2420 and Atmega128(Micaz).pdf
+文档中提到价格是$7.2，查现在的价格，待做。
+
+18:10 2007-04-26
+分析CC2420驱动(tos_mac), 续, tosmac_init
+tosmac_init:
+   ->设置包长度
+   ->申请和清空tosmac_dev结构体
+   ->初始化互斥信号量：init_MUTEX(&tosmac_dev->sem);
+   ->CC2410_init，获取信号量后开始操作。
+                ->HPLCC2420_init设置CC2420用到引脚；
+                ->CC2420_set_parameters
+                ->HPLCC2420_start，SPI总线参数设置，power on(VREG_EN)，
+                ->开CC2420晶振(CC2420_SXOSCON)，晶振开启后。CC2420进入idle状态
+                ->CC2420_set_regs，把CC2420_set_parameters设置参数写入CC2420
+                ->设置16位地址（注1）和频点（11）
+                ->CC2420_rx_mode，使CC2420进入接收模式
+                ->设置CC2420为非阻塞模式，设置rx_buf_ptr。
+                -> 初始化序号和其它变量。
+                ->申请FIFOP和SFD中断，这两个中断都由CC2420_irq_handler处理
+                ->申请CC2420_OST_IRQ中断，由CC2420_timer_irq_handler处理（注3）
+                ->timer_init
+                ->释放信号量。
+   ->注册字符设备
+注1：16位短地址TOS_LOCAL_ADDRESS由local_addr设置（module_param(local_addr, ushort, S_IRUGO);），另外还有主设备号和辅设备号可以在加载模块时设置。将来可以编写脚本或modprobe.conf中设置16位短地址。
+注2：频点和发送功率都位于"CC2420Const.h"，发送功率由CC2420_set_parameters函数设置，保存在g_current_parameters[CP_TXCTRL]，查发送功率的大小，待做。
+注3：CC2420_OST_IRQ不明白中断的含义，
+include/asm-arm/arch-pxa/stargate2.h:#define CC2420_OST_IRQ  IRQ_OST_4_11
+include/asm-arm/arch-pxa/irqs.h:#define IRQ_OST_4_11      PXA_IRQ(7)
+细读CC2420_timer_irq_handler，待做。
+
+19:14 2007-04-26
+今日总结:
+1, 深入分析了tos_mac设备驱动中的read函数，读完大部分。
+2, 完成init函数的分析；
+明日计划：
+继续完成今天的测试计划。现在对于CC2420的驱动已经有了大致的了解。后面的进展会很一些。等测试完所有待测内容和原有需要在完成拓扑图和阅读FISCO之前完成的内容后，再进一步阅读驱动，为后面的工作打基础。
+
+10:18 2007-04-27
+关于TOS_Msg数据结构
+1, TOS_Msg的定义。源自"15:02 2007-04-20"
+应用层次：linux/tosmac.h
+#define TOSH_DATA_LENGTH  28
+typedef struct __TOS_Msg
+{
+        __u8 length;    // data length include header and footer
+        __u8 fcfhi;
+        __u8 fcflo;
+        __u8 dsn;
+        __u16 destpan;  // destPAN
+        __u16 addr;        // destAddr
+        __u8 type;
+        __u8 group;
+        __s8 data[TOSH_DATA_LENGTH];
+} TOS_Msg;
+TOSH_DATA_LENGTH详见"15:02 2007-04-20"6。
+TOS_Msg的大小是38字节。802.15.4规定MAC层数据必须小于127字节。不能修改TOS_Msg数据结构，因为TOS_Msg是与TinyOS兼容的。
+驱动层次：AM.h，唯一区别是用MAX_TOSH_DATA_LENGTH代替了TOSH_DATA_LENGTH。
+2, linux/tosmac.h:#define TOSH_DATA_LENGTH  28
+TOSH_DATA_LENGTH是预定义。编译时预定义被替换，所以"linux/tosmac.h"TOSH_DATA_LENG
+TH在程序运行时不再起作用。该文件包含于应用程序中，所以应用程序中的TOS_Msg的data数组大小由该值决定；
+在RfmToLeds.c和CntToLedsAndRfm.c文件的msg_init函数有这样的语句：
+memset(pMsg->data, 0, TOSH_DATA_LENGTH);
+这时的TOSH_DATA_LENGTH仍然是预定义，不是int型变量。
+3, 驱动中的TOSH_DATA_LENGTH：
+AM.h:extern int TOSH_DATA_LENGTH;
+TOS_Mac.h:int TOSH_DATA_LENGTH;
+这是驱动运行时实际起作用的TOSH_DATA_LENGTH。驱动程序中TOS_Msg的data数组大小是MAX_TOSH_DATA_LENGTH(116)决定的：
+__s8 data[MAX_TOSH_DATA_LENGTH + 6];
+4, 修改data大小：驱动程序中修改的data大小(ioctl TOSMAC_IOSETMAXDATASIZE)修改的TOSH_DATA_LENGTH变量。TOSH_DATA_LENGTH的最大值是AM.h定义的：
+__s8 data[MAX_TOSH_DATA_LENGTH + 6];
+其中MAX_TOSH_DATA_LENGTH=116。现有驱动中能够接收的MAC侦长度，最大是116+6+16=138字节***。
+现在不理解为什么多加6。这6个字节的大小与data数组后面的strength, lqi, crc, ack, time的总大小相同。另一方面，"15:02 2007-04-20"6的
+MSG_DATA_SIZE = 10 + TOSH_DATA_LENGTH + sizeof(uint16_t);又表明没有考虑strength, lqi, crc, ack四个数据。综合起来，可能多出的6个字节最初是为了给"strength, lqi, crc, ack, time"留出空间，虽然现在不完全相符，但是不影响使用。这一阶段完成后，需要深入分析，远期待做。
+
+12:07 2007-04-27
+远期待做. 需要在加载模块前判断是否加载了模块。
+现在想到的办法是查看sys信息。
+
+15:00 2007-04-27
+很偶然的情况下，先开节点id号为1的节点，立刻开节点id号为2的节点，id=1的节点能得到下面的结果：
+[root@SG2-3 tosmac]#./neighbor                                                  
+0System not idle                                                                
+Receive ID = 2                                                                  
+.��.}.   
+(15:05 2007-04-27)
+交换两个节点的id号，id=1的节点能得到下面的结果：
+[root@Imote2-1 nfs]#./neighbor 
+Receive ID = 2
+(��}(
+(16:09 2007-4-27)
+给Imote2-2下载0704161106内核后，除了原有现象外，id=2的节点有下面的问题
+[root@Imote2-1 nfs]#./neighbor 
+Receive ID = 1
+
+��}
+
+
+16:04 2007-04-27
+从Imote2启动后的sys文件系统中可以看出，pmic已经正常启动。
+启动脚本中看到的错误可能是因为pmic重复加载
+
+10:21 2007-04-28
+poll系统调用
+linux/poll.h:
+struct poll_table_struct;
+typedef struct poll_table_struct {
+        poll_queue_proc qproc;
+} poll_table;
+asm-arm/poll.h
+struct pollfd {
+        int fd;
+        short events;
+        short revents;
+};
+注：poll系统调用与驱动中的poll方法不同。前者调用后者。
+
+10:25 2007-04-28
+poll example
+http://docs.blackfin.uclinux.org/doku.php?id=select_and_poll
+
+11:14 2007-04-28
+test_tos_mac_poll_2007-4-28
+test_tos_mac 3 poll success log
+
+11:34 2007-04-28
+使用poll函数后，(neighbor_poll.c)。先开的节点可以收到后开节点的数据。
+二者的随机延时都是rand()%2000+1000
+
+12:22 2007-04-28
+修改timeout时间为0-500ms后，节点2可以收到节点1的id，但是反之不行。
+neighbor_poll_200704281220.c为源文件，neighbor_poll_log200704281220是节点2的运行日志。
+感觉收发中，发送的次数太少，似乎难以收到数据。下一步：
+1, 把timeout继续改小；
+2, write改为连续写；
+
+14:14 2007-04-28
+项目进展
+一，现有信息：
+1, 中午佳露提醒：使用了poll函数的结果，是否比使用select更好？
+现在是否定的。neighbor_poll.c只能做到2收到1的信息，但是1无法收到2的信息。
+待做：交换1，2节点的id号。
+2, 佳露说在仿真上，现有建立邻居图的算法(neighbor*.c)没有问题。从仿真器与实际硬件的差异考虑问题；
+二，思路：
+1, 从节点底层直接分析出问题的原因。"12:22 2007-04-28"
+2, 从顶层向下分析。
+
+14:31 2007-04-28
+前面的描述的现象都是id2先启动，id1后启动。刚才重复做了id1先启动，id2后启动的实验。结果见"neighbor_poll_log200704281431"。发现在id2启动后，id1节点输出的信息都是"timeout is 415ms."，没有poll函数输出的结果。
+现有poll函数结果有switch函数判断，每个状态都有输出信息，包括default状态。
+观察代码发现当poll成功时(default)，只有当"pfd.revents & POLLIN"为真时才会输出信息。输出信息发现，现有信息是64：
+timeout is 277ms.       poll SUCCESS. return value is 64
+查asm-arm/poll.h：
+#define POLLRDNORM      0x0040
+
+
+14:50 2007-04-28
+1, 加入pfd.events = POLLIN;
+id1：
+timeout is 335ms.       timeout
+timeout is 386ms.       poll SUCCESS. return value is 1
+Receive ID = 2
+2, 把pfd.events改为POLLIN|POLLRDNORM，对于的revents检测也是"POLLIN|POLLRDNORM",这样和驱动更相符。但是结果没有进展。现在是谁先开，谁能收到对方的id。把Imote2-2（现有id2）的程序也改为现在的程序。修改后，两节点收发时，先是2多次收到1的数据，后来1收到一次2的数据，再往后两个节点都没有收到对方的数据。当时执行的是"neighbor_poll 0 500"
+3, 现在看来可能是随机时间有了问题。
+4, 使用"neighbor_poll 0 500"开始是1接到2的信息，后来是2接到1的信息，在往后一直都是timeout。看来需要分析一下这个算法中收到这个对方信息的概率了。也许select函数也是这样的情况。
+5, 查CC2420收发的时间。待做
+6, check rand。待做。
+
+15:37 2007-04-28
+是否有必要：
+如果收到信息后，直接
+15:44 2007-04-28
+1, 会不会是节点收发信息中间的pritnf等辅助函数导致接收失败？
+2, 不是用poll或select如何？现有驱动中，只要收到了信息都会处理。尝试写信息后开始sleep。
+
+16:36 2007-04-28
+在收到数据后加入"sleep(t_offset%5+2);"，感觉有些效果。把两个节点都下载为同样的程序。
+先开的节点：
+timeout is 370ms.       timeout
+0System not idle
+timeout is 413ms.       Receive ID = 1  sleep startend
+timeout is 26ms.        Receive ID = 1  sleep startend0System not idle
+后开的节点在上面节点收到第一次id后，收到对方的id
+timeout is 293ms.       timeout
+timeout is 335ms.       Receive ID = 2  sleep startend
+timeout is 386ms.       timeout
+timeout is 492ms.       timeout
+
+下面都用sleep尝试
+如果不用sleep, poll和select，没有成功，但也可能是实验时间短。
+
+17:34 2007-04-28
+查Imote2-2节点出现"0System not idle"信息的原因, 待做
+使用arm-linux-gdb调试并没有发现这个问题。难道是两个节点同时连接一个主机造成的？
+
+17:41 2007-04-28
+和张宇沟通
+张宇提出使用多线程的方式一个线程阻塞模式接收，一个线程发送。
+可以参考socket程序或tinyOS程序。
+bamvor: 当时佳露提出用多线程。但我告诉佳露CC2420不支持全双工后，佳露就没有考虑多线程，似乎是我误导了佳露。失分。
+
+18:31 2007-04-28
+在佳露机器上仍然有上面的问题。
+今日总结：
+1, 使用neighbor.c POLL预定义时偶然情况下，能够出现相互收到id的情况。随机延时是0-500ms。
+明日计划：
+1, 上午：使用多线程对现有代码进行改造。
+2, 下午给佳露讲节点配置；
+30日写CC2420驱动文档。
+
+10:59 2007-04-29
+gcc, 编译多线程的程序, multithread
+arm-linux-gcc -o test_tos_mac test_tos_mac.c -g -lpthread
+
+11:34 2007-04-29
+使用多线程对现有代码进行改造
+阻塞能收不能发
+
+12:22 2007-04-29
+接上
+向节点1下载新编写的程序。
+1, 怀疑是阻塞的接收阻碍了发送。注释接收线程，单独测试发送。
+注释后，可以接收。但是如果节点2发送，节点1停止显示发送数据的信息，即使停止节点2的程序也不行。有可能是底层驱动中接收和发送有冲突。
+CC2420.c的CC2420_irq_handler函数：
+   case SG2_GPIO0_CC_FIFOP:
+//      printk(KERN_INFO "IRQ type is FIFOP\n"); 
+       if(CC2420_state != IDLE_STATE || non_blocking_mode) {
+         // if we're trying to send a message and a FIFOP interrupt occurs
+         // and acks are enabled, we need to backoff longer so that we don't
+         // interfere with the ACK
+         if (is_ack_enable && (CC2420_state == PRE_TX_STATE)) {
+           if (timer_is_running()) {
+             timer_stop();
+             timer_start((Mac_congestion_backoff( ) * CC2420_SYMBOL_UNIT)
+                         + CC2420_ACK_DELAY);
+           }
+         }
+        ....
+也就是说，如果有数据需要接收，永远无法开始发送。
+两个解决办法;
+1), 既然接收优先级高于发送，那么发送的频率其实可以降低，这样CC2420的接收就有空闲；
+2), 修改上面的代码：当多次退避仍无法发送时，停止接收，强行发送。但是这样对驱动的影响很难说，可能会引入新的问题。
+另外，如果1)可以解决，也需要还原出错的程序，实际进行调试，查看是否这个问题。如果1)不能解决，做下面的实验。
+2, 再次试验非阻塞接收。
+
+12:48 2007-04-29
+加入usleep后，只能接收，不能发送。
+
+13:28 2007-04-29
+从现在的情况看，似乎是底层的读写冲突。
+是否跟踪底层？是否修改驱动？
+或者是修改现有建立邻居表的算法。
+bamvor: 最开始节点2是如何接收到节点1数据的？
+
+17:38 2007-4-29
+下午给佳露演示gdb实验时，遇到了下面的问题：
+[root@Imote2-1 nfs]#./gdbserver6.6 192.168.99.100:2345
+./gdbserver6.6: error while loading shared libraries: libthread_db.so.1: cannot open shared object file: Error 40
+后来发现是因为编译的文件没有加入-g参数。
+
+18:15 2007-04-29
+突然想到是否是由于对用一个设备进行操作有了冲突。
+加入信号量试一试。
+
+19:03 2007-04-29
+read后加入sleep，加入了线程对文件操作的互斥量，似乎可以了。
+日志见$Imote2/log/cc2420/test_tos_mac_200704291905_log
+
+19:30 2007-04-29
+注意了一下节点2(48号节点)模块删除和卸载的信息：
+[root@Imote2-2 tosmac]#rmmod tos_mac                                            
+TOSMAC driver is unloading...                                                   
+Unloading is done.                                                              
+[root@Imote2-2 tosmac]#modprobe tos_amc                                         
+modprobe: module tos_amc not found.                                             
+modprobe: failed to load module tos_amc                                         
+[root@Imote2-2 tosmac]#modprobe tos_mac                                         
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/i2c/i2c-core.ko                   
+insmod: cannot insert `/lib/modules/2.6.14_r1.0/kernel/drivers/i2c/i2c-core.ko's
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/i2c/busses/i2c-pxa-pwr.ko         
+insmod: cannot insert `/lib/modules/2.6.14_r1.0/kernel/drivers/i2c/busses/i2c-ps
+Using /lib/modules/2.6.14_r1.0/kernel/drivers/tosmac/tos_mac.ko                 
+TOSMAC driver is loading...                                                     
+This board is IMote2                                                            
+TOS-MAC driver installed                                                        
+[root@Imote2-2 tosmac]#
+发现：
+TOSMAC driver is unloading...                                                   
+Unloading is done.    
+和
+This board is IMote2
+TOS-MAC driver installed  
+是节点1(56号节点)没有的。
+难道是节点1的驱动是我更新过的？
+
+19:42 2007-04-29
+但是经检查发现，两个节点的驱动是一样的。
+都复制为现有驱动后，两个节点tos_mac模块载入和卸载的显示信息仍然不同（和前面一样）。(2007-5-13)这是由于节点1使用ssh登录后内核的printk信息级别与使用串口登录不同。
+
+19:44 2007-04-29
+有一方收到一次数据后就会两个就都死了
+节点1
+4 bytes send
+4 bytes send
+4 bytes send
+02 00 ffffff85 
+节点2
+0System not idle                                                                
+0System not idle                                                                
+4 bytes send                                                                    
+4 bytes send     
+
+节点2
+4 bytes send
+4 bytes send
+4 bytes send
+0System not idle
+00 00 ffffff85 
+节点1
+[root@Imote2-1 tosmac]#./test_tos_mac
+CC2420(TOSMAC) driver test: 
+insert module tos_mac first (modprobe tos_mac)
+ 0: imote2_time_sync
+ 1: bacic send test
+ 2: bacic recv test
+ 3: poll test
+ 4: multithread test
+ 5: duplex tramsmition test
+ 6: channel test
+Select function to test
+4
+4 bytes send
+4 bytes send
+
+感觉是收到数据造成的。
+
+13:54 2007-04-30
+项目进展, 项目计划
+1, 关于邻居表：与佳露讨论，两人突然发现：原来现有neighbor算法并不符合佳露的意图：佳露希望发一次数据，然后无条件的等待一段时间，然后读出所有收到的数据。现在的算法是发一次数据，等待数据接收当接收到数据或者超过最长等待时间返回，如果收到数据，读出本次收到的数据。说明这两天的工作很大程度上浪费了，先前的沟通，由于两个领域不同，所以两人理解有差异。但是这同时解释了为什么我使用sleep后双方能收到数据————这暗合了佳露的算法，只是没有考虑同时读回多侦。待做，下一步：测试驱动能否正确保存收到的多侦数据；按照上面算法改写程序，测试结果。
+2, 关于FISCO协议，由于邻居表这个很简单的算法两人理解都有差异，两人共同认为，张健应该先理解FISCO协议，再做后面的东西。
+3, CC2420驱动的文档只能放到五一期间解决了，但是今天还是要做基本的测试。
+
+14:21 2007-04-30
+FISCO
+1, 里面多次提到随机数，我想到两类办法：1, 直接截取64位全球唯一地址的一部分作为随机数的结果；2. 使用64位全球唯一地址或系统时间作为rand函数的种子。
+
+15:37 2007-04-30
+五一安排
+1, 看完FISCO;
+2, 写CC2420驱动文档；
+3, 学习如何使用USBnet;

@@ -1,0 +1,2049 @@
+22:51 2007-08-01
+NULL和offsetof的定义
+可以看到在c和c++中NULL的定义不同。
+在linux/posix_types.h，linux/stddef.h中。
+#undef NULL
+#if defined(__cplusplus)
+#define NULL 0
+#else
+#define NULL ((void *)0)
+#endif
+
+#undef offsetof
+#ifdef __compiler_offsetof
+#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#else
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+
+16:11 2007-08-02
+调试可以处理任意多个命令行参数的MTL_ON功能
+char **arg
+*arg = (char*)malloc(len);
+写成了
+*arg = (char)malloc(len);
+2, FDPRINT0(FERROR, "preload data is not end with '\\0'.\n");
+写成了
+FDPRINT0(FERROR, "preload data is not end with '\0'.\n");
+3, FDPRINT2(FINFO, "execute %s fail with error: %s", *arg, strerror(errno));
+写成了
+FDPRINT1(FINFO, "execute %s fail with error: %s", *arg, strerror(errno));
+4, is_delim(*pos)
+写成了
+is_delim(pos)
+5, 16:10编译运行正常，但是无法确定参数是否正确，需要调试。
+ 由于不会调试其他线程。建立FISCO_PTL_DEBUG宏，可以直接在这里运行r_pid_processs，s_pid_process。同样原因，把从string中获得命令行参数的功能移到PTL_DB_handle的MTL_ON之前，同时把这个内容封装为函数parse_arg。后者这个修改，还是对结构改进有帮助的，一是应该封装为函数，二是这于是否fork没有关系。
+5, void parse_arg(const char* data, const char** arg);
+写成了
+void parse_arg(const char* data, const char** arg)
+6, 
+char **arg
+void parse_arg(const char* data, char** arg);
+parse_arg((char*)(data+1), arg);
+如果写为
+char **arg
+void parse_arg(const char* data, const char** arg);
+parse_arg((char*)(data+1), arg);
+会提示
+fisco_PTL.c:760: warning: passing arg 2 of `parse_arg' from incompatible
+pointer type
+不明白。
+7,                 switch(MTL_pid) {
+                    case 0:
+里面少了{
+8, 
+get_str_len函数的
+while ( is_delim(*pos++) );
+写成了
+while ( is_delim(*pos) );
+9, while ( is_delim(*pos++) );
+改为
+while ( !is_delim(*pos++) );
+再改为
+因为is_ddelim是宏定义：
+#define is_delim(x)     ( x == ' ' || x == '\n' || x == '\t' || x == '\0' )
+前面的写法实际是每次pos都会自增四次。
+while ( !is_delim(*pos)) ){
+    pos++;
+}
+10, (18:13 2007-08-02)
+FDPRINT2(FINFO, "the %ith argument: %s.\n", i, *(start++));
+改为
+FDPRINT2(FINFO, "the %dth argument: %s.\n", i, *(start++));
+11, 把parse_arg函数中，直接访问arg的部分删除。
+12, parse_arg函数while结束后加入：
+*(start++) = NULL;
+否则不满足execv要求的**arg以NULL结尾的要求。
+错误提示是：Bad address
+（execute MTL_recv fail with error: Bad addresst）
+13, (18:44 2007-08-02)
+the process state is R
+MTL create successsfull 1604.
+DELIMITER: NEIGHBOR_RECV
+
+Segmentation fault
+但是单独运行MTL_recv没有这个错误。
+
+19:16 2007-08-02
+1, 把free_list(start);
+改为
+free_list(arg);
+因为start指针的起始地址会变化，arg才是真正的起始地址。
+2, 在free_list函数的
+    free(arg);
+后面加入
+    arg = NULL;
+保证不会误用无效的指针。
+3, 
+    while(*current_arg != NULL ) {
+        free(*(current_arg));
+    }
+改为
+    while(*current_arg != NULL ) {
+        free(*(current_arg++));
+    }
+4, 错误：
+DELIMITER: NEIGHBOR_RECV
+the process state is R
+MTL create successsfull 1647.
+free(): invalid pointer 0xbe978bd4!
+
+Segmentation fault
+
+20:50 2007-08-02
+整理今天遇到的所有错误，下周有针对性的练习：
+今天的错误主要是指针的问题。需要专门练习。
+最后这个错误估计是由于二维空间没有分配。(08-03的确如此)
+
+22:31 2007-08-02
+1, if ( len < str_start - str  + 1 )
+改为
+if ( len < str_start - str + strlen(*arg) + 1 )
+没有加"strlen(*arg)"，等于完全没有起作用。
+改为while(...)
+避免一次re-alloc后仍然不够，前段时间还用过这个方法。现在状态不好。
+
+23:15 2007-08-02
+突然发现在arg2str上面用的时间很多，这就不划算了。完全可以用简单方法实现的，这个函数暂时只是测试用。失分。
+(23:33 2007-08-02)
+不过这个函数是从MTL_tools-2.c中提取出来的，那里面很简单的原因是发送数据有最大的限制长度。但是以硬件来限制软件的算法这样好不好呢？
+
+23:52 2007-08-02
+如何传递指针？
+看Linux编程实践精解。
+(00:13 2007-08-03)
+只要指针是分配过的，就不会出现上面的问题。不能传递没有分配空间的指针或空指针.
+char** new_start = (char**)realloc(start, alloc_arg<<1);
+改为
+char** new_start = (char**)realloc(arg, alloc_arg<<1);
+*alloc函数只能对由他们分配的指针或空指针操作，上面的start不是*alloc分配的。arg才是
+同时下面的
+start = new_start;
+也要改为
+arg = new_start;
+(00:33 2007-08-03)
+还是有错，经过查找，parse_arg函数开始也有一处：
+start = (char**)realloc(arg, alloc_arg);
+00:57 2007-08-03
+很有可能是
+char** new_start = (char**)realloc(arg, alloc_arg);
+应该写为
+char** new_start = (char**)realloc(arg, alloc_arg*sizeof(char**));
+
+01:05 2007-08-03
+gdb) p arg
+$12 = (char **) 0x8a9b008
+(gdb) p start
+$13 = (char **) 0x8a9b010
+(gdb) step
+240                 char** new_start = (char**)realloc(arg, (alloc_arg<<1)*sizeof(char**));
+(gdb) 
+241                 if ( !new_start ) {
+(gdb) 
+244                 arg = new_start;
+(gdb) 
+245                 alloc_arg<<=1;
+(gdb) 
+247             len = get_str_len(pos);
+(gdb) p arg
+$14 = (char **) 0x8a9b038
+是不是start也需要跟着改？
+(01:12 2007-08-03)
+分配和重分配空间的大小改为length*sizeof(char*)
+
+12:19 2007-08-03
+白天回过神来，再看Unix_Linux编程实践教程的smsh2例子，又想起Linux编程实践精解讲的内容：realloc只是保证原有内容不变，并不保证指针不变，所以最好使用索引而不是直接记录地址，昨天晚上是进入死胡同了，应该早点睡的。另一方面，如果编程基本功好，不会在小错误上浪费太多时间，好的状态就能利用于解决自己不了解的问题。
+(12:35 2007-08-03)
+改为索引方式，原有代码：fisco_08031230.tar.gz。从昨天下午三，四点到现在，都是在调式fisco_utils.c中char**arg与char*转化的函数（char*中用空格分隔字符串）。在parse_arg遇到了很大的困难。
+预计一个小时完成，如果不犯困的话。
+写完代码，找昨天那个增加系统内存分配的命令。
+
+13:07 2007-08-03
+现在开始
+
+13:58 2007-08-03
+13:21的时候状态不好，去打水，看了10分钟报纸。之前走私10分钟，没有严重走私。现在开始14:00
+
+14:25 2007-08-03
+待做，查，为什么在arg[arg_size]也可以访问？应该是到arg[arg_size-1]。
+Breakpoint 1, parse_arg (data=0x8049a70 "123 12 1 asdf 2444 kdjdicdd 22")
+    at fisco_utils.c:232
+232             int len = 0;
+(gdb) p arg[0]
+$1 = 0x850a018 "123"
+(gdb) p arg[1]
+$2 = 0x850a028 "12"
+(gdb) p arg[2]
+$3 = 0x0
+(gdb) p arg[3]
+$4 = 0x11 <Address 0x11 out of bounds>
+(gdb) cont
+Continuing.
+
+Breakpoint 1, parse_arg (data=0x8049a70 "123 12 1 asdf 2444 kdjdicdd 22")
+    at fisco_utils.c:232
+232             int len = 0;
+(gdb) p arg[0]
+$5 = 0x850a018 "123"
+(gdb) p arg[1]
+$6 = 0x850a028 "12"
+(gdb) p arg[2]
+$7 = 0x850a008 "1"
+(gdb) p arg[3]
+$8 = 0x850a050 "asdf"
+(gdb) p arg[4]
+$9 = 0x0
+(gdb) p arg[5]
+$10 = 0x11 <Address 0x11 out of bounds>
+(gdb) p sizeof(arg)
+$11 = 4
+
+14:30 2007-08-03
+arg2str和free_list调试完成。现在开始调试其他有问题的函数。预计1小时完成。今天希望能够完成邻居表的测试。
+
+14:48 2007-08-03
+命令行提示符探索
+在argv[argc]后有很多内容，感觉都是环境变量，为什么会有，是固定的都是这些么，查，待做。
+Starting program: /usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/fisco_utils_0803-2_x86 123 334 555
+main (argc=4, argv=0xbfc21324) at fisco_utils.c:348
+348         char *string=NULL;
+(gdb) p argv[0]
+$1 = 0xbfc22876 "/usr/src/src2/Imote2/imote2_ft_release/dev/app/fisco/fisco_utils_0803-2_x86"
+(gdb) p argv[1]
+$2 = 0xbfc228c2 "123"
+(gdb) p argv[2]
+$3 = 0xbfc228c6 "334"
+(gdb) p argv[4]
+$4 = 0x0
+(gdb) p argv[3]
+$5 = 0xbfc228ca "555"
+(gdb) p argv[5]
+$6 = 0xbfc228ce "SSH_AGENT_PID=2833"
+(gdb) p argv[6]
+$7 = 0xbfc228e1 "HOSTNAME=localhost.localdomain"
+(gdb) p argv[7]
+$8 = 0xbfc22900 "DESKTOP_STARTUP_ID="
+(gdb) p argv[8]
+$9 = 0xbfc22914 "SHELL=/bin/bash"
+(gdb) p argv[9]
+$10 = 0xbfc22924 "TERM=xterm"
+(gdb) p argv[10]
+$11 = 0xbfc2292f "HISTSIZE=1000"
+(gdb) p argv[11]
+$12 = 0xbfc2293d "KDE_NO_IPV6=1"
+(gdb) p argv[12]
+$13 = 0xbfc2294b "GTK_RC_FILES=/etc/gtk/gtkrc:/home/bamv26/.gtkrc-1.2-gnome2"
+(gdb) p argv[12]
+$14 = 0xbfc2294b "GTK_RC_FILES=/etc/gtk/gtkrc:/home/bamv26/.gtkrc-1.2-gnome2"
+(gdb) p argv[13]
+$15 = 0xbfc22986 "WINDOWID=56635592"
+(gdb) p argv[14]
+$16 = 0xbfc22998 "USER=bamv26"
+(gdb) p argv[15]
+$17 = 0xbfc229a4 "LS_COLORS=no=00:fi=00:di=00;34:ln=00;36:pi=40;33:so=00;35:bd=40;33;01:cd=40;33;01:or=01;05;37;41:mi=01;05;37;41:ex=00;32:*.cmd=00;32:*.exe=00;32:*.com=00;32:*.btm=00;32:*.bat=00;32:*.sh=00;32:*.csh=00"...
+
+15:16 2007-08-03
+解决"invalid next size"问题，昨天按下面的内容操作后，问题解决，只是当时不知道apache。
+shwr: http://blog.chinaunix.net/u1/40230/article_57748.html
+[notice] child pid 11972 exit signal Segmentation fault (11)
+*** glibc detected *** free(): invalid pointer: 0x0a7206cc ***
+*** glibc detected *** free(): invalid next size (fast): 0x09e87e90 ***
+
+google了一下，发现以前也有人碰到过，通过修改内核参数，加大共享内存即可，于是我也尝试了一下：
+
+web#sysctl -a|grep shm
+kernel.shmmni = 4096
+kernel.shmall = 2097152
+kernel.shmmax = 33554432
+
+web#sysctl -w kernel.shmmax = 67108864
+
+然后重启apache，以后就很少报告……
+(23:24 2007-08-03)
+sysctl是在系统运行时修改内核参数的工具，shmmni，shmall和shmma文件位于/proc/sys/kernel/。具体如何知道可以设置哪些参数以及参数的含义呢？还需要查apache，待做。
+vi /etc/sysctl.conf：
+See sysctl(8) and sysctl.conf(5) for more details.
+sysctl.conf(5)是conf的说明。
+(13:53 2007-08-05)节点上的对应目录是"/proc/sys/kernel"
+
+16:55 2007-08-03
+刚才饿了，和刘成去超市买东西，一起吃。争取五点半之前完成fisco_utils.c在节点上的测试。并且完成MTL_send接收测试次数和时间间隔的修改。
+
+17:18 2007-08-03
+1, 把str2arg的alloc_arg和arg2str的alloc的初始值设为宏定义。
+#define INIT_ARG_NUM 6
+#define INIT_STR_LEN 80
+2, 另外string没有释放，没有设为NULL。
+3, fisco_utils.c节点测试通过.代码位置"$Imote2/fisco/backup/fisco_utils.tar.gz".
+
+08:40 2007-08-04
+整理无用编译结果。(08:45)
+
+09:11 2007-08-04
+Linux, 调试, gdb
+set varible 表达式
+设置变量的值，例如
+set varible i = 2
+设置i的值为2。
+
+09:17 2007-08-04
+MTL_tools-2_x86_0727如果用普通用户就有段错误，用root就没有。
+[bamv26@localhost fisco]$ ./MTL_tools-2_x86_0727 
+MTL: please input function number:
+段错误
+[bamv26@localhost fisco]$ su
+口令：
+[root@localhost fisco]# ./MTL_tools-2_x86_0727 
+MTL: please input function number:
+1: RX_THRESHOLD
+2: TX_POWER
+3: MTL_ON
+4: MTL_OFF
+(11:45 2007-08-05)
+原因是MTL_tools-2_x86_0727的日志文件保存在"/root/tosmac/"的fisco_MTL_log和fisco_PTL_log，普通用户在root目录下只有读权限没有写和执行权限。所以无法访问上面两个文件，因而出现段错误。这和原来遇到的问题一样都是Linux执行权限造成的问题。
+其一：研一，如果不是root，编译Linux内核会有错误。
+其二：编译Imote2 Linux，有个脚本没有执行权限，无法执行，编译报错。
+研一就意识到的问题，现在概念也不清楚。是该整理思路的时候了。包括整理原来学的数据结构，c语言抽象思维，软件设计师等内容。找到工作之前做新东西的目的是复习就有内容。
+
+09:49 2007-08-04
+Linux, 调试, gdb
+调试一个进程，节点：
+[root@Imote2-26 tosmac]#ps aux | grep fisco_PTL_0804_r-pid_parse-arg 
+ 1330 root        496 S   ./fisco_PTL_0804_r-pid_parse-arg 
+[root@Imote2-26 tosmac]#./gdbserver6.6 192.168.99.100:2345 --attach 1330
+Attached; pid = 1330
+Listening on port 2345
+Remote debugging from host 192.168.99.100
+PC机，与前面相同：
+[bamv26@localhost fisco]$ arm-linux-gdb fisco_PTL_0804_r-pid_parse-arg 
+GNU gdb 6.6
+Copyright (C) 2006 Free Software Foundation, Inc.
+GDB is free software, covered by the GNU General Public License, and you are
+welcome to change it and/or distribute copies of it under certain conditions.
+Type "show copying" to see the conditions.
+There is absolutely no warranty for GDB.  Type "show warranty" for details.
+This GDB was configured as "--host=i686-pc-linux-gnu --target=arm-linux"...
+(gdb) target remote 192.168.99.126:2345
+Remote debugging using 192.168.99.126:2345
+0x400c1470 in _start () from /lib/ld-linux.so.2
+(gdb)
+但是还是不会调试execv启动的代码，待做。 
+
+10:49 2007-08-04
+        FDPRINT2(FINFO, "the %dth argument: %s.\n", i, *(start++));
+改为
+        FDPRINT2(FINFO, "the %dth argument: %s.\n", i, start[i-1]);
+改为
+        FDPRINT2(FINFO, "the %dth argument: %s.\n", i, *start);
+        start++;
+        i++;
+1，这个问题出现多次了，FDPRINT系列函数当OUTUT_LOG_FILE有效时，会输出两次，都是直接使用上面的参数，所以如果有start++这种可以累计的操作，OUTUT_LOG_FILE有效或无效时结果会不同。还是要修改这个函数为sprintf+print，如果有时间的话，待做。
+2，修改1没有考虑前面while循环中需要判断*start是否为空。
+
+12:12 2007-08-04
+sfifo无法发送数据
+(13:12 2007-08-04)
+(13:40 2007-08-04)
+1, 刚才的错误原因read_FIFO_pack函数下面语句的错误。和write_FIFO_pack的错误一样，当时是后者从前者复制的代码，调试后者时发现错误，但是只是修改了后者的代码，没有修改前者的。经验***：发现问题时，应该想一想其它代码有问题同样或类似的问题。这似乎和编程能力关系不大，是解决问题的能力。
+待做：这次写了一些实用函数。原来2006年学习c语言和研一做兼职时也有一个函数库，看，合并。
+err:
+    if ( p_data_pt->fisco_preload != NULL ) {
+        free(p_data_pt->fisco_preload );
+        p_data_pt->fisco_preload = NULL;
+    }
+ret:
+    return -(read_count!=want);
+应该改为
+ret:
+    return -(read_count!=want);
+err:
+    if ( p_data_pt->fisco_preload != NULL ) {
+        free(p_data_pt->fisco_preload );
+        p_data_pt->fisco_preload = NULL;
+    return -(read_count!=want);
+代码
+2, if ( ( fifo_ret = read_FIFO_pack(sfifoname, &s_pack) ) > 0 ) {
+改为
+if ( ( fifo_ret = read_FIFO_pack(sfifoname, &s_pack) ) < 0 ) {
+先处理错误，如果没有错误在解析FIFO报文。
+read_FIFO_pack开始是会返回一个正值，表示读取了多少字节的数据。后来改为如果正确返回0，错误返回-1。但是代码每个跟着修改。感觉现在的水平似乎和刚上研一做光栅时差不多。
+3, (14:32 2007-08-04)
+但是，后面的代码又需要用到read_FIFO_pack的返回值----读到多少数据。所以不能这样改。当时没有在s_pid_process直接获得FIFO报文长度的原因是希望fisco_PTL层对于fisco包没有直接的操作。fisco_head, fisco_preload长度都是在fisco_head结构体中。
+
+15:38 2007-08-04
+修改代码后在PC机测试。
+
+15:50 2007-08-04
+FIFO操作是个问题。测试500ms间隔的MTL_send，10次发送三次实验正确，20次发送有一半实验正确。100次发送是发送端丢一个包，接收端丢5个包。10次发送也有失败的时候。
+间隔700ms测试，10次发送10次没有失败。
+
+17:59 2007-08-04
+发现str2arg的问题：
+调试单工邻居表时发现有时fisco_PTL接收的参数开始正确，结尾有乱码。查str2arg代码后发现：
+        arg[arg_num] = (char*)malloc(len);
+        if ( arg[arg_num] == NULL ) {
+            FDPRINT1(FERROR, "allocate memory %d bytes error.\n", len);
+            goto err;
+        }
+        strncpy(arg[arg_num], &data[pos], len);
+没有考虑加入'\0'，第一句需要修改，strncpy后面需要加入：
+        arg[arg_num] = (char*)malloc(len+1);//2007-08-04
+        arg[arg_num][len]='\0';//bamvor.add.2007-08-04
+编译后再测试，问题解决。其实这个问题开始也出现过，当时没有注意。问题不是每次都出现的原因是未初始化的区域也可能是全0的。现有代码：fisco_08041759.tar.gz。
+今天效率不高，晚上考虑先练100行以内的程序，再继续测试。
+
+21:44 2007-08-04
+c语言, 编程, 指针, libc
+strcpy函数，需要先保存传入的目的指针。
+1, 位置：snapgear-p29/uClibc/libc/string/wstring.c。这不是原来看的那个。
+Wchar *Wstrcpy(Wchar * __restrict s1, const Wchar * __restrict s2)
+{
+        register Wchar *s = s1;
+
+#ifdef __BCC__
+        do {
+                *s = *s2++;
+        } while (*s++ != 0);
+#else
+        while ( (*s++ = *s2++) != 0 );
+#endif
+
+        return s1;
+}
+2，上次看的是这个，只摘录了c语言部分。位置：snapgear-P29/microLibc/string/string.c
+char * strcpy(d, s)
+char *d;
+const char * s;
+{
+   char *dr = d;
+   while ((*dr++ = *s++));
+   return d;
+}
+下面是同一个文件的strcmp，与c1相与的目的是如果两次字符串都空时会结束比较。
+int strcmp(d, s)
+const char *d;
+const char * s;
+{
+   char *s1=(char *)d, *s2=(char *)s, c1,c2;
+   while((c1= *s1++) == (c2= *s2++) && c1 );
+   return c1 - c2;
+}
+
+23:14 2007-08-04
+0, 现有代码fisco_08042315.tar.gz
+1，明天要测试。(11:24 2007-08-05)三个节点测试通过。
+2，下周计划周一周二复习和编写使用链表队列的FIFO，替换现在的系统FIFO。
+
+11:54 2007-08-05
+Linux, 正则表达式, ls, grep 
+列出目录下以PTL_或MTL_开始的文件，部分结果如下：
+[root@localhost fisco]# ls | grep ^[PM]TL_
+MTL_neighbor
+MTL_neighbor_0704_multi-arg
+PTL_config_file
+PTL_config_file_control
+
+11:56 2007-08-05
+下午先整理完8月日志。再做其它。并留一小时锻炼。
+1, "09:49 2007-08-04"如何调试execv启动的程序？遗留问题，长远待做。
+2, "10:49 2007-08-04"FDPRINT改为sprintf+print，后来没有实现。
+3, 完成PAC的437，443代码，待做。
+
+23:56 2007-08-05
+下午睡了两个小时。今天的缺觉算是都不过来了。
+晚上效率不高，找到桌子后，脖子舒服一些。完成queue.h和qlist.c，未测试。
+明天还有上午可以利用，希望可以完成PAC
+P443的checkout.c的学习和测试。然后利用两天完成FIFO替换（改原有代码结构，加入新的FIFO算法）。下周还需要完成LDAU的测试，实际就是检验测试工具是否好用。
+
+13:19 2007-08-06
+为了去公司的路上有事做，尝试电子书，用了35分钟的时间。明天晚上如果有时间可以尝试视频转换，还有复制toeic的音频。 在E6上看doc文档，设置字号是小二，页边距是1厘米，E6上面用全屏适合宽度的模式会很合适。
+
+15:17 2007-08-06
+代码基本读懂了。编译没有通过。原因未知。
+
+09:24 2007-08-07
+今明天主要任务是测试完成LDAU（实质任务是测试测试环境是否好用）。
+1，明确测试内容和方法。
+2，实际测试
+
+10:41 2007-08-07
+需要测试LDAU的内容：
+1，一跳地址分配，当当前address pool用尽时，向所有neighbor leader发送LDAU，更新nap(number of address pool)和nld(number of leader)。两跳地址分配当没有可以复用的地址时，向所有neighbor leader发送LDAU，更新内容同上。
+
+13:04 2007-08-07
+上午效率低，下午加油。睡了半小时(15-45)。如果总是这样懈怠，仅有的时间又会过去，到时刚刚进入状态就又有其它事情了。(16:43)下午问了jack THOMSON进展，和刘成练练英语。项目本身进展不大。现在开始做实验。晚上还是要用时间进行coding练习。
+
+13:57 2007-08-07
+1, NewLead的作用，不明白
+2, 一个partition中的所有节点都是共用一个address space。一跳分配是分配一个地址，两跳分配是分配一个address pool
+3, LDAU出现异常这段代码不理解。
+// abnormal
+if (g_data.init_ldr_addr > getter.tmp_addr) {
+    getter.tmp_addr=(g_data.nap-1)*ADDR_POOL_LEN+MAX_TEMP_ADDR;
+}
+if (getter.flag & FLAG_NEWLEAD) {
+    g_data.nld++;
+}
+g_data.nap++;
+P_STATE(&g_data); //bamvor.add.2007-07-10
+
+for (i=0; i<g_data.neighbor_num; i++) {
+    if (g_data.neighbor_table[i].role == ROLE_LEADER) {
+        //don't send it back
+        if (g_data.neighbor_table[i].addr == getter.src_addr)
+            continue;
+        putter = getter;
+        putter.src_addr = g_data.addr;
+        putter.dst_addr = g_data.neighbor_table[i].addr;
+        putter.gtw_addr = g_data.neighbor_table[i].gateway;
+        putter.nap++;
+        tomac = g_data.neighbor_table[i].mac;
+        fisco_send();
+        usleep(100*1000); //bamvor.add.2007-08-06
+    }
+}
+
+17:29 2007-08-07
+打水15分钟。
+测试用代码：
+fisco_08071729.tar.gz
+
+17:44 2007-08-07
+测试信号强度：
+距离是一块砖：246 245 247
+距离是两块砖：232 239 233
+定在243
+      30
+26 27 28 29
+只是26和28之间偶尔有连接，其余正常。
+
+11次时控制节点出错。 同时28节点成为member不成功。把30移动到26附近，用30节点做为27的member。两跳地址分配也很困难
+
+
+23:18 2007-08-07
+初次使用perl感受:
+1, 看王伟的代码，感觉不陌生；
+2，查mainual，"man perl"，手册分门别类。"man 手册名"即可，当时是要查二维数组怎么用，看到perllol手册会讲arrays of arrray，于是"man perllol"，里面有例子。很快解决王伟的问题；
+3，perl用法简述：
+(1), 文件开始和其它shell一样，指明shell："#!/usr/bin/perl"。
+(2), 运行方法：./perl文件，或"perl perl文件"
+(3)，perl举例：查找DELAYS，CORNERS和MODES数组中字符串组合符合RUNS数组的情况。符合输出0，不符合输出0。
+#!/usr/bin/perl
+
+@DELAYS = ("max", "min");
+@CORNERS = ("w", "b", "wlt", "bht");
+@MODES = ("func", "shift", "capture", "jtag");
+
+@RUNS = (["max","w", "func"], ["min", "b", "func"]);
+
+foreach $d (@DELAYS) {
+    foreach $c (@CORNERS) {
+        foreach $m (@MODES) {
+            my $skip=0;
+            if (exists($RUNS[0])) {
+                for $i (0..1) {
+                    if ($d eq $RUNS[$i][0]
+                        && $c eq $RUNS[$i][1]
+                        && $m eq $RUNS[$i][2]) {$skip=0}
+                    else {$skip=1}
+                    print "$d ";
+                    print "$c ";
+                    print "$m:\t";
+                    print "$skip\n";
+                }
+                }
+            } else {$skip=0};
+        }
+    }
+}
+
+00:37 2007-08-08
+由于没有显示fisco MTL启动参数，难以找到对应信息。两跳地址分配不容易成功的原因没有找到。First Leader发出了LDAU，gateway也收到并转发了，但是Leader没有收到，难道是因为与LDAU包冲突么？
+明天依次查这两个问题。
+
+8:59 2007-8-8
+关键字: 手机, 射频, EDGE
+EDGE手机的设计和测试
+Fr: http://www.ed-china.com/ART_8800021962_400001_500015_TS.HTM
+EDGE(Enhanced Data Rates for Global Evolution)技术规范是在欧洲建立的，在GPRS(通用分组无线业务)和HSCSD(高速电路交换数据)数据协议中都增加了一种新的调制方案，使EDGE这些数据业务的数据率提高到原来的3倍。EDGE用于GPRS时，称作EGPRS(增强型GPRS)，HSCSD则称ECSD(增强型电路交换数据)。
+
+09:32 2007-08-08
+1, 29节点没电了，换新电池。
+2, 1块砖，信号强度240。
+控制节点再次失效，重启fisco_PTL后正常。
+(10:07 2007-08-08)
+原来所说的sleep会影响睡眠，今天尝试并没有问题。把neighbor.sh中所有read改为sleep 1，除了send后面那个改为比send时间略长的时间
+(11:51 2007-08-08)
+两跳失败的原因没有查到。看0808日志。
+
+10:37 2007-08-08
+远程重启没有问题。MTL_tools MTL_ON node_id /sbin/reboot
+
+20:45 2007-08-08
+上午两跳地址分配问题分析：实际问题的关键就是收到LDAA经常超过了两跳地址分配的timeout，如果把时间改长，应该就可以了，不过随之而来两个问题：
+其一：为什么会这么慢？按理说不致于，因为都是收到信息就反馈的，加入gettimeofday进行分析。
+其二：出现了LDAA没有收到的情况下，fisco应该如何处理？bamvor: 按fisco协议，新节点收到LDAA后应该回应MBAA，LDAA发送节点收到MBAA后，删除buf中的地址，并把MBAA源节点加入邻居表。LDAA源节点等MBAA的时间称为对于一跳和两跳分配分别称为OH_TIMEO和TH_TIMEO。MBAA源节点等待LDAA的timeout成为TIMEO_LDAA，现有系统对于一跳和两跳分配都是一样的，似乎两跳大于一跳更合理。bamvor：做了fisco项目这么久，连fisco基本协议都没有掌握.......失分，不过这也说明通过测试来了解协议是个很好的办法，实习经验。
+下面是没回实验室之前，在路上想的原因，如果不是后来认真分析日志和sniffer的结果，可能又会误入歧途，这次实习中想当然的情况可以不少啊，要注意改正（失分，实习经验）：
+第一次两跳成功后，再次做两跳实验，LDAU和LDAA只间隔了100ms，按现在单工neighbor需要700ms间隔才能保证不丢包看，LDAU和LDAA之间以及LDAU之间也需要保证700ms。但是这个问题的原因是什么，是哪个环节造成的系统效率低，查。用gettimeofday应该没问题。时间这么长。//
+不过，确实要考虑一个问题，就是感觉现在fifo的效率下降了，原来实验时MTL_send200ms连续发包都没问题。。
+
+21:43 2007-08-08
+把两跳地址分配中的LDAA等待时间改为10(TH_LDAA_TO)，一跳时间仍是5(OH_LDAA_TO)
+
+21:51 2007-08-08
+为了调试到底在那个地方引起了低效率，需要加入gettimeofday在必要的位置。主要是包的时间和FIFO时间，所以在收包后和发包前应该记录时间，FIFO前后记录时间。fisco_PTL加入一个指令，用于给这个时间复位。这并不需要记录实际的日期和时间。
+1, 
+control node                fisco node
+reset timer when control 
+node boot
+send time reset command ->
+save time using control     reset timer
+node local timer            when event occurs, save current time
+(13:19 2007-08-10)复位整个的时间需要接收和发送进行进行进程间通信，这个现在还没有还没掌握，学习（属于面试准备），待做。"13:19 2007-08-10结束"
+2, display(13:38 2007-08-10)(14:17 2007-08-10)修改
+recv packet: src mac, dst mac, strength, sequence number
+send pakcet: src mac, dst mac, transmition power
+修改了P_SEND_PACK, P_RECV_PACK，对于fisco层，如果没有相应数据就写-1，但这样是个隐患，因为strength, power, seq num都是无符号字符类型，现在等于必须要用有符号数的显示方式显示，如果。
+如果直接同步时间也好，这样代码更改少。
+
+23:23 2007-08-08
+用了一个小时买东西，回宿舍洗漱。
+
+01:09 2007-08-09
+本来是困了，说看会电影清醒一下。结果看完了。不自觉。不过心情还好，明天继续努力！
+
+13:24 2007-08-10
+昨天以状态不好为借口看“品三国”。基本没做什么。
+
+13:30 2007-08-10
+1，read_FIFO_pack读取FIFO三次，FIFO_out只读一次，是否这个原因造成系统效率降低？看系统时间验证，后来没有做，遗留问题；
+2，FIFO改为非阻塞如何？需要可以用poll。
+
+13:56 2007-08-10
+法电实习，无线传感网络项目，BUG，遗留问题
+    //FIXME: if r_pid_process change addr or power when it received remote 
+    //control command, this process do not know the variable is changed.
+    unsigned short src_MAC_addr = ioctl(*tosmac_dev_pt, TOSMAC_IOGETADDR, 0);
+    unsigned short transimition_power = ioctl(*tosmac_dev_pt, TOSMAC_IOGETPOWER, 0);
+
+15:21 2007-08-10
+原来记的服务器开机顺序找不到了。做事总是差一点。
+服务器编号：刀片机从上到下是1-4，1号刀片机上面那个台式机是5号机。
+关机顺序：
+1，关1－4；
+2，关5；
+3，关盘阵（在最下面），关第一个开关时会有强排风，关第二个开关就关了。
+
+袁老师那个服务器不会关，看起来是关的，靠实验室服务器这边的电源插座没关，我关了。
+UPS不会关。按了一下OFF后。关闭了屋子的总闸，UPS关闭。
+
+(10:44 2007-08-19)
+原来师姐写给我的服务器开机顺序
+1, 先开后面最下面的盘阵；
+2, 开1号机，5分钟后开2-4号机；
+3, 开5号机；
+4, 开网关。
+候哥：最后运行脚本：su
+eda()zhu
+运行/tools/license/下run开头的脚本。具体名字和位置记不太清了，肯定在tools下，可以找找。
+注：su时候只能是先登录服务器其它机器，然后用候哥或罗仁贵师兄用户登录大edalinux1，这时su才能成功，否则会提示密码错误，实际是罗仁贵师兄设置的限制。如果使用候哥台式机直接登录到edalinux1也可以su。
+
+15:33 2007-08-10
+定义struct timeval time;在main中，编译提示：
+fisco_PTL.c:363: warning: passing arg 1 of `get_time_interval' from incompatible pointer type
+fisco_PTL.c:363: warning: passing arg 1 of `get_time_interval' from incompatible pointer type
+改为全局变量后：
+fisco_PTL.c:81: error: 'time' redeclared as different kind of symbol
+/usr/local/arm/3.4.1/lib/gcc/arm-linux/3.4.1/../../../../arm-linux/sys-include/time.h:184: error: previous declaration of 'time' was here
+fisco_PTL.c:81: error: 'time' redeclared as different kind of symbol
+/usr/local/arm/3.4.1/lib/gcc/arm-linux/3.4.1/../../../../arm-linux/sys-include/time.h:184: error: previous declaration of 'time' was here
+查time.h，有time函数：
+extern time_t time (time_t *__timer) __THROW;
+__THROW是什么含义？查，待做
+
+15:41 2007-08-10
+修改文件后出现两处错误：
+一是前面提到的time变量；
+二是使用P_RECV_PACK宏时，有一个变量有错recv_pkt写出了recv_pack。
+
+10:34 2007-08-11
+Linux, serial port, minicom
+How to capture txt in minicom?
+Ctrl+a+z: entering help menu, press l enter "capture file ON/OFF" option
+input capture file name and ess enter 
+
+10:53 2007-08-11
+TODO:
+review other TODO and add program to display preload data in fisco_PTL. using configure file to configure display which data.
+
+11:27 2007-08-11
+TODO:
+1, node 30 dead.(not dead)
+2, backup log file from 27 28 30 node.1, (finish)
+
+15:51 2007-08-11
+刚才出问题的原因可能是实验方法问题，LDAU或MBAR被发到原有leader节点，但那个节点当时实际已经是new节点。
+例如：节点27启动fisco->两跳地址请求成功成为leader->关闭fisco->重做两跳地址请求。
+1，会出现负值。（完成）
+2，改为周一上午10点给张宇打电话，商量我何时去公司。（完成，周四去公司）
+
+16:32 2007-08-11
+测试出现负数的原因。
+gcc tos_mac_sub.c fisco_framework.c -g -Wall -DTOS_MAC_SUB_TEST -DTIME_INTERVAL_TEST -o tos_mac_sub_0811_x86
+还没有找到原因
+
+10:26 2007-8-10
+网站
+http://www.kenwell.org/
+玩玩下吧
+很多c++，java和心理学书籍。
+
+20:00 2007-8-12
+Linux, sendmail使用
+自: http://linux.chinaunix.net/bbs/thread-905394-1-1.html
+今天我老师给了我一个超难的问题：就是在sendmail中（/etc/mail中）有个ACCESS.db和ACCESS文件，一般配制就用 makemap hash access.db 〈 access就行了，但老师要我把ACCESS.db的文件还原出来，我实在找不到方法能把哈希算法给反解出来！！！
+我已经找到方法了，原来makemap这个命令有一个参数就是-u，我用了makemap -u hash access.db > access就解出来了，这个答案就分享给大家吧。
+
+20:02 2007-8-12
+网址, 
+1, http://linux.chinaunix.net/bbs/forum-42-1.html
+ChinaUnix, Linux, 嵌入式系统
+2, http://linux.chinaunix.net/bbs/forum-23-1.html
+ChinaUnix, Linux, Linux手机
+3, http://linux.chinaunix.net/bbs/forum-32-1.html
+ChinaUnix, Linux, Fedora/Redhat
+
+10:51 2007-08-12
+待做
+1, "logFrTel0720-.txt" "9:52 2007-7-26"
+2, "logFrTel0720-.txt" "3:13 2007-08-02"待做：看路云川的GUIgtk.rar
+3, 路云川计划。
+
+11:10 2007-08-12
+输出时间信息前加入PTLr或PTLw。否则很难判断时间。
+
+11:11 2007-08-12
+另外需要在open FIFO后测量时间。
+
+16:58 2007-08-12
+查get_time_interval出负数的原因。
+struct timeval
+  {
+    __time_t tv_sec;            /* Seconds.  */
+    __suseconds_t tv_usec;      /* Microseconds.  */
+  };
+[root@localhost fisco]# ./tos_mac_sub_0812 ms
+init time is 1186937650, 457965.
+current time is 1186939782, 315730.
+current time is (lu)2131857ms   (ld)2131857ms.
+current time is 1186939792, 523666.
+current time is (lu)2142065ms   (ld)2142065ms.
+current time is 1186939802, 535446.
+current time is (lu)4292824407ms        (ld)-2142889ms.
+current time is 1186939812, 584371.
+current time is (lu)4292834456ms        (ld)-2132840ms.
+(13: 16 2007-08-13)
+发现是在原有运算过程中超出了长整数的运算范围，但是最终结果并未没有超出范围。1000000 * (1186939802 - 1186937650) = 2152000000超过了长整数范围，所以结果变为负数。
+        return (unsigned long)(
+                ( 1000000 * (t_current.tv_sec - tstart_ptr->tv_sec)
+                + t_current.tv_usec - tstart_ptr->tv_usec
+                ) / 1000
+                             );
+把代码改为，这样只有当最终结果超出范围时，才会溢出：
+                sec / milli_sec * (t_current.tv_sec - tstart_ptr->tv_sec)
+                + (t_current.tv_usec - tstart_ptr->tv_usec + 5*milli_sec/10)
+                  / milli_sec
+现有注释：
+/*
+ * Using isolate equation for compile optimization. The three equation can 
+ * be combined into one form, but the compile cannot caculate the const during 
+ * compiling. 
+ */
+//FIXME: this code do not handle the overflow error. When it occurs, return 
+// value is meaningless.
+
+14:15 2007-08-13
+修改P_SEND_PACK和P_RECV_PACK的错误：
+1, c语言, 结构体, ->, &
+fisco_PTL.c:410: error: invalid type argument of `->'
+代码：
+P_RECV_PACK(&recv_fisco_head, preload, src_mac_addr, recv_pkt.addr, real_strength, recv_pkt.dsn, count);
+"->"的优先级是1, "&"（取地址）的优先级是2，所以需要加括号，把P_RECV_PACK宏从
+        print_preload(preload, fisco->data_len);\
+改为
+        print_preload(preload, (fisco)->data_len);\
+保证运算的优先级。
+2, 这两个宏中没有考虑负载数据是NULL的情况。fisco里面的这两个宏没有改。
+14:36 2007-08-13
+改PTL_DEBUG内的FDPRINTn为宏PTL_PRINT使用c99特点的宏。这样能代码能简化很多，而且可以关闭PTL层无用的信息。
+
+14:52 2007-08-13
+计划，待做
+今天完成LDAU，周二张宇，钥匙，小票等。
+周二开始两天之内，完成Makefile；完成后编译PAC那个程序，熟悉队列，传递大量数据的队列。
+周三至周五每天2-3小时托业。
+进入学习状态后，详细先前写好的计划（个人发展）。并联系周中华孔露：FPGA学习，c编程（可能需要LLinux，小段帮我刻一张FC6）。
+本周生活方面要注意睡眠，常规是12点前，最晚是12:30
+
+15:17 2007-08-13
+节点30死，是没电了。
+
+17:44 2007-08-13
+用等边三角形！
+看到根二距离节点接收单工邻居表结果无规律。在想如何使节点间距离都是相等的，这时想到了等边三角形。实验结果很好。怎么早没有想到？
+
+18:04 2007-08-13
+30
+
+
+
+29
+
+        26
+
+28
+
+        25
+
+
+18:28 2007-08-13
+1， find_mac_in_neighbor_table函数如果没有找到邻居，会返回0xffff。调用这个函数的地方对此没有处理。这就会造成MEMBER广播LDAA。
+节点28收到LDAA的原因未知。
+2，为什么第二次实验时，节点25会收不到LDBR
+
+10:04 2007-08-14
+待做
+1，日志文件的排序软件。考虑用awk？
+
+10:11 2007-08-14
+待做，自9:52
+C99宏风格（完成）
+is_process_exist
+实验远程LED控制（不成功，原因是需要把echo的信息重定向到到文件，重定向符号">"会被看成是对PC的操作，另外exec*只能执行命令，好像没法支持重定向。如果做成虚拟串口就好了，以现在的了解恐怕不可能，查虚拟串口，长远待做）
+
+11:06 2007-08-14
+C99宏风格修改完成，错误如下：
+1, 没加分号。不应该出现的小错误。说明基本功还是不行。
+2, 这个错误是当时不明白的地方。查"..."含义，待做
+#define PTL_DPRINT(f_output_t, ...) FDPRINT(f_output_t, __VA_ARGS__)
+写成
+#define PTL_DPRINT(f_output_t, ...) FDPRINT(f_output_t, ...)
+编译器提示：
+fisco_PTL.c:191: error: parse error before '...' token
+
+14:03 2007-08-14
+测试一跳和两跳引起的LDAU。23 24 25 27 28 29 30用的是新电池
+        27
+
+
+        30
+
+
+
+        29
+
+26               24
+
+        28
+
+25               23
+
+25, 26互相不是邻居
+24能发给23，23不能发给24
+ 
+14:45 2007-08-14
+fisco_PTL BUG
+启动两次没有的进程，再执行MTL_OFF会出错。
+[root@Imote2-23 tosmac]#./fisco_PTL
+no message want to drop. argc is less than 3.
+------------------------------PTL config starting-------------------------------
+set mac address: 23.
+enable auto ack.
+set transmition power: 31.
+set max data size: 50.
+handle the PTL debug message.
+---------------------------------PTL config end---------------------------------
+PTLr: the max data size in driver is 50.
+PTLr: reading message from tos_mac device.
+PACK_RECV (count =     0 ) --------------------------------------------
+src_mac : 8     dst_mac : 23    strength : 220          seq_num : 138
+preload_data : 03_31_33_00
+head_len : 6    type : DEBG     data_len : 4
+src_addr : ffffffff     dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 255       nap : 255       nld : 255       flag : 0_0_0_0_0_0_0_0
+-----------------------------------------------------------------------
+the 1th argument: 13.
+display arguments end.
+execute 13 fail with error: No such file or directory.
+this process should not return, exit.
+PTLr: reading message from tos_mac device.
+the process state is S
+MTL create successsfull 1337.
+PTLr: reading message from tos_mac device.
+PACK_RECV (count =     1 ) --------------------------------------------
+src_mac : 8     dst_mac : 23    strength : 220          seq_num : 139
+preload_data : 03_31_33_00
+head_len : 6    type : DEBG     data_len : 4
+src_addr : ffffffff     dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 255       nap : 255       nld : 255       flag : 0_0_0_0_0_0_0_0
+-----------------------------------------------------------------------
+MTL already lanuch, pid 1337.
+PTLr: reading message from tos_mac device.
+^[[A^[[APACK_RECV (count =     1 ) --------------------------------------------
+src_mac : 8     dst_mac : 23    strength : 218          seq_num : 140
+preload_data : 04
+head_len : 6    type : DEBG     data_len : 1
+src_addr : ffffffff     dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 255       nap : 255       nld : 255       flag : 0_0_0_0_0_0_0_0
+-----------------------------------------------------------------------
+/proc/0/status: No such file or directory
+Killed
+
+15:48 2007-08-14
+收到多余的LDAA问题。
+节点配置为member后，可能还会收到多余的LDAA。这时节点当然在邻居表中找不到目的地址，函数返回0xffff这样就变成了广播LDAA。后面一个问题好解决，关键是前一个问题，为什么会多发LDAA？
+(16:42 2007-08-14)
+多个LDAA的原因：
+member第一次发送MBAR没有回应，member第二次发送。这时Leader才读到第一次MBAR，尔后读到第二次MBAR，所以进行了两次地址分配。
+是否由于FIFO阻塞读造成leader读包被打断后，当再一次收到数据时才结束open状态。
+
+20:36 2007-08-14
+1，在fisco层次预防广播LDAA问题。需要对所有查找邻居表mac地址的程序进行修改，如果返回广播地址0xffff，说明没有找到mac地址。
+2，找类似问题：
+1), fisco_find_discovery_onehop。从新节点接收LDBR的个数大于0进入，所以此结果必有地址返回。fisco_find_discovery_twohop，fisco_min_addr_in_neighbor_table，fisco_get_leader_addr同理只要前面软件正确，此处不会出错。
+
+21:22 2007-08-14
+待做，fisco PTL死的问题
+
+21:59 2007-08-14
+leader处理MBAR时，考虑下面的情况：
+同一个new节点MBAR到leader，leader这边由于负载过重造成第一个MBAR和第二个MBAR处理时间过短。这时要避免对同一个new节点重复分配地址。
+所以加入了"fisco_buf_t* fisco_buf_find_old_addr(fisco_buf_t* pbuf, addr_t
+addr, time_t now, int time_out);"
+23:11 2007-08-14
+1，fisco未验证；
+2，PTL错误需要设置b line if  pid == 0 调试
+3, 两次杀死进程的问题也需要跟踪，确定第一次是否起作用。如果起作用，也是加个延时就可以
+
+09:09 2007-08-15
+整理日志还是放在晚上好。
+今日计划，晚饭前完成：
+1，查PTL两个错误，1小时；
+2，测试一跳LDAU，1小时；
+3，测试两跳LDAU，2小时；
+4，更新文档，半小时；
+
+09:44 2007-08-15
+对比代码，发现当exec返回时没有退出，修改程序时遗漏了这句话：
+                            exit(1);
+
+
+09:58 2007-08-15
+Linux, vi, 显示行号
+":set number"/":set nu"
+可以在":help set"（查某个命令的帮助）看到set的强大功能。set用于设置系统选项（options）。原来我知道的使用鼠标":set mouse=a"也是。
+
+10:45 2007-08-15
+查之前出现的proc/0/status，查不到。用gdb调试时不是没有错误就是gdb本身有下面的错误，暂时放弃，先改程序。
+gdb调试时出现
+"
+Ignoring packet error, continuing...
+Reply contains invalid hex digit 116
+"
+从网上查问题原因可能是gdb版本问题，见gdb debug.txt。但是我这个是比较新的，而且arm-linux-gdb和gdbserver都是由同一个版本编译的，为什么不行呢？
+感觉这次用gdb，有很多问题。另外还是不会用串口调试，待做。
+另外网上有人说可以直接用arm-linux-gdb，编译尝试，待做。
+
+15:07 2007-08-15
+下午从13:50开始学习。
+现在700ms也不能保证FIFO正常工作了。为什么？（已解决，见"20:06 2007-08-15"）
+
+16:09 2007-08-15
+1, 有可能是过于频繁写入文件造成的系统效率低。
+2, 但为什么recv命令在MTL发出去很晚才被节点收到原因未知。
+把发送间隔改为3s，这样就没有影响。说明是控制节点接收send信息和发送recv信息造成的冲突影响了recv信息的发送。
+
+17:18 2007-08-15
+琢磨半天测量时间问题，FIFO比下午开始时快了700ms收发也没问题了。
+莫名奇妙就好了。也没有备份原来的程序，所以无从比较。这几天都没有备份！
+完成回来再实验。不知道为什么会满。难道把文件重写提高了文件系统的效率？或者是日志文件太大了影响了J2FFS的效率？
+现在有版本是"fisco_08151720.tar.gz".
+
+20:06 2007-08-15
+浆糊的时候换换脑子还是很好的
+吃饭时路上想，会不会因为日志文件太大造成系统效率低？因为删除很大的日志文件后就没有这个问题了。
+
+21:23 2007-08-15
+文档修改：
+1，one-hop-remain说明与last_alloc的区别
+2，开发包中保留最后版本的文件。删除中间版本。
+
+21:27 2007-08-15
+fisco_data_t加入one_hop_remain变量保存因两跳地址分配address pool 变化而引起的地址浪费。该变量记录还能使用的一跳地址，一跳分配时优先考虑该地址是否可用。分配后如果该地址下次分配到达address pool边界，使该变量无效。此后仍使用last_alloc分配
+
+21:59 2007-08-15
+       26
+
+
+
+       30
+
+24
+
+       29
+
+23             25
+
+       28
+
+
+
+       27
+
+除了27-28-29-30-26保持一跳外。其余不规则。
+26有24
+27无23
+23有25
+
+23:26 2007-08-15
+查one_hop_remain是否正确
+
+23:41 2007-08-15
+两跳LDAU成功，一跳失败的原因是one_hop_remain处理不正确
+
+00:41 2007-08-16
+刚才没有LDAU其实不是错误。而是没有考虑前一个alloc_oh还有剩余时，再出现一个两跳分配，这时如果再有地址没用完的情况，直接修改了alloc_oh。应该是建立一个alloc_oh的数组，由于这个数组一般不会长，所以不需要做成队列形式。
+实际是队列还没有掌握，队列学习（待做）
+
+09:10 2007-08-16
+完成最简单的LDAU测试：一跳和两跳引起的LDAU，且地址发送到neighbor leader
+最后几天的一点经验***：1, FIFO会影响系统效率，阻塞FIFO要求两端都打开才能进行操作，但是这时如果需要LDBR，这时定时器会打断FIFO的阻塞模式（猜测），在LDBR前面很短时间收到的包可能会读不到，直到下次FIFO再收到包时才能再收到前一个包和新的包；2, neighbor.sh中read可以用sleep替换，原来实验sleep不行的原因可能是日志文件太大了，FIFO效率降低造成的；3, 节点可以摆成等边三角形，感觉用新电池时可以可靠的保证一条连通。两条不能直接通。
+法电实习至此结束。
+
+9:19 2007-8-16
+待做
+1, 看博客http://blog.chinaunix.net/u/22617/index.html
+2, 找uboot移植，文章，希望下周开始做。
+
+10:39 2007-8-17
+FPGA, 下载, xilinx
+ISE7下载实验室那个小板时，并口设置的是EPP模式；
+ISE4下载白德风那个板子时，并口设置的是ECP模式。
+原因未知，现在知道的只是并口工作模式与JTAG能否正常工作密切相关，但是应该用哪个工作模式就糊涂了，原来一直认为都是应该用EPP模式的。查，远期待做。
+
+15:37 2007-8-17
+计划，待做
+1, 如果做u-boot到2.6内核的移植，可能最大困难就是要学习nand flash的操作。可以看。这部分知识目前只看到THOMSON在用；
+2, Linux移植。内核中工作不多，主要是驱动的修改。这很适合我。
+3, 学习2410 test code很必要，在巩固编程能力的同时熟悉了2410，同时熟悉和查找u-boot和Linux移植资料。然后在适当时机开始u-boot和linux移植。
+
+17:06 2007-8-17
+待做：
+1, 写测试报告。直接在文档上改就可以。周末发给张宇。
+2, 同时给佳亮博士：测试报告和项目文档。
+
+16:14 2007-08-19
+只有edalinux3和5可以telnet通，是不是其它的启动有问题？
+
+10:40 2007-08-20
+本周coding学习计划，待做已转移：
+1, 静态链表；
+2, proc文件系统，移植platx的gpiomonitor到arm或leon(platx/gpiomon.c)；由于没有嵌入式2.6内核。先在PC机学习proc文件系统。
+
+21:14 2007-08-20
+冯守博面试经验
+要注意细节。比如：使能信号如果是边沿触发，那么这个信号所需要持续的时间是多长？时间由FIFO决定。守博感觉是setup time和hold time.
+
+22:20 2007-08-20
+Linux, proc, 文件系统
+Documentation/filesystems/proc.txt，有多proc文件系统用途的详细说明，包括下面的内容。
+1.1   Process-Specific Subdirectories
+所有进程相关信息，包括进场状态，内存使用等。当初找进程信息时，找到这个位置有猜的成分。如果早点看文档就好多了。
+2.3   /proc/sys/kernel - general kernel parameters
+这里面还有对printk级别的解释：
+[bamv26@localhost Documentation]$ cat /proc/sys/kernel/printk
+6       4       1       7
+四个数字依次对应含义如下：
+console_loglevel：高于此级别的信息会被显示到终端。（级别越高值越小）；
+default_message_level：如果printk没有指明log级别，按此级别处理；
+minimum_console_loglevel：终端log级别可以设定的最小值（也就是可以设定的最高log级别）
+default_console_loglevel：console_loglevel的默认值。
+不过"15:16 2007-08-03"的问题仍然没有解决。
+
+10:16 2007-08-18
+编程练习计划：
+练习一个排序方法，并将这个方法用于日志文件管理。日志文件管理要求可以对一个日志文件进行排序，也可以对多个日志文件进行合并和排序操作。
+排序方法使用表排序，先实现严书上P269页的表排序和重排算法。再应用于日志文件。
+今天完成排序算法。
+
+11:16 2007-08-21
+Linux, Linux2.6内核向2410平台的移植
+struct s3c2410_platform_nand位于include/asm-arm/arch-s3c2410/nand.h，作用是/* timing information for controller, all times in nanoseconds */，查其余三个变量的作用。
+struct s3c2410_platform_nand {
+        /* timing information for controller, all times in nanoseconds */
+
+        int     tacls;  /* time for active CLE/ALE to nWE/nOE */
+        int     twrph0; /* active time for nWE/nOE */
+        int     twrph1; /* time for release CLE/ALE from nWE/nOE inactive */
+
+        int                     nr_sets;
+        struct s3c2410_nand_set *sets;
+
+        void                    (*select_chip)(struct s3c2410_nand_set *,
+                                               int chip);
+};
+
+
+
+22:36 2007-08-21
+改flash分区需要知道bootloader是如何分区的，印象中可以利用df命令，查看。还有一个办法是查看vivi中load指令的含义。
+
+23:01 2007-08-21
+远峰bootloader是u-boot。没有查到分区信息，估计可以引导linux。查load命令。
+
+16:30 2007-08-22
+下载内核后，用df命令没有看到flash分区，但是能看到文件系统的大小是53384k。
+
+19:30 2007-08-22
+从flash数据手册(ds_k9f12xxx0a.paf)中p7可以看出，1page=512Byte, 1block=32page=	16kByte
+
+19:51 2007-08-22
+s3c2420Linux文档中：1.4.1的内容没有作。
+
+20:04 2007-08-22
+使用blob Linux编译方法和项目未解决问题.doc的方法，使配置文件生效：
+make smdk2410_defconfig
+
+20:44 2007-08-22
+编译，报错：
+arch/arm/mach-s3c2410/devs.c:118: error: elements of array `partition_info' have incomplete type
+mtd_partition定义于include/linux/mtd/partitions.h
+struct mtd_partition {
+        char *name;                     /* identifier string */
+        u_int32_t size;                 /* partition size */
+        u_int32_t offset;               /* offset within the master MTD space */
+        u_int32_t mask_flags;           /* master MTD flags to mask out for this partition */
+        struct nand_oobinfo *oobsel;    /* out of band layout for this partition (NAND only)*/
+        struct mtd_info **mtdp;         /* pointer to store the MTD object */
+};
+后来看s3c2410移植文档发现，没有加入包括"linux/mtd/partitions.h"在内的三个头文件。
+
+21:05 2007-08-22
+设置tftp服务：
+1，安装tftp server:
+[root@localhost YF2410]# rpm -ivh tftp-server-0.32-4.i386.rpm 
+warning: tftp-server-0.32-4.i386.rpm: Header V3 DSA signature: NOKEY, key ID db42a60e
+Preparing...                ########################################### [100%]
+   1:tftp-server            ########################################### [100%]
+2, 修改/etc/xinetd.d/tftp文件的disable选项为yes
+可以用如下命令进行修改：
+sed -e '14,15s/no/yes/g' /etc/xinetd.d/tftp > /etc/xinetd.d/tftpback
+mv /etc/xinetd.d/tftpback /etc/xinetd.d/tftp
+3, 重启xinetd.d，发现与RHEL4不同，不是"service xinetd.d restart"
+查现有名称：
+[root@localhost linux-2.6.14]# /sbin/service --status-all
+acpid (pid 2474) 正在运行...
+amd 已停
+......
+winbindd 已停
+wpa_supplicant 已停
+xfs (pid 2606) 正在运行...
+xinetd (pid 2517) 正在运行...
+ypbind 已停
+yum-updatesd (pid 2641) 正在运行...
+可以看到是"xinetd"，重启该服务：
+[root@localhost linux-2.6.14]# service xinetd restart
+停止 xinetd：                                              [确定]
+启动 xinetd：                                              [确定]
+验证tftp是否启动，下面两个方法都可以：
+[root@localhost linux-2.6.14]# chkconfig --list | grep 'tftp'
+        tftp:           启用
+[root@localhost linux-2.6.14]# netstat -a| grep tftp
+udp        0      0 *:tftp                      *:*    
+查chkconfig和xinetd的含义，待做。
+xinetd见"23:13 2007-8-22"
+
+22:27 2007-08-22
+找"Warning: bad configuration page, trying to continue\n"提示的原因：
+位于"arch/arm/kernel/compat.c"的函数build_tag_list
+
+static void __init build_tag_list(struct param_struct *params, void *taglist)
+{
+        struct tag *tag = taglist;
+
+        if (params->u1.s.page_size != PAGE_SIZE) {
+                printk(KERN_WARNING "Warning: bad configuration page, "
+                       "trying to continue\n");
+                return;
+        }
+......
+}
+
+void __init convert_to_tag_list(struct tag *tags)
+{
+        struct param_struct *params = (struct param_struct *)tags;
+        build_tag_list(params, &params->u2);
+}
+
+函数convert_to_tag_list在arch/arm/kernel/setup.c文件的下面函数调用
+void __init setup_arch(char **cmdline_p)
+{	
+        struct tag *tags = (struct tag *)&init_tags;
+        struct machine_desc *mdesc;
+......
+        mdesc = setup_machine(machine_arch_type);
+......
+        /*
+         * If we have the old style parameters, convert them to
+         * a tag list.
+         */
+......
+        if (mdesc->boot_params)
+                tags = phys_to_virt(mdesc->boot_params);
+......
+        if (tags->hdr.tag != ATAG_CORE)
+                convert_to_tag_list(tags);
+......
+}
+分别查找：
+
+1, machine_arch_type是一个宏定义于"include/asm-arm/mach-types.h"
+#ifdef CONFIG_ARCH_S3C2410
+# ifdef machine_arch_type
+#  undef machine_arch_type
+#  define machine_arch_type     __machine_arch_type
+# else
+#  define machine_arch_type     MACH_TYPE_S3C2410
+# endif
+# define machine_is_s3c2410()   (machine_arch_type == MACH_TYPE_S3C2410)
+#else
+# define machine_is_s3c2410()   (0)
+#endif
+所以传入"setup_machine(machine_arch_type);"的有可能是未定义宏或MACH_TYPE_S3C2410
+setup_machine定义在arch/arm/kernel/setup.c，作用是通过汇编语言编写的函数lookup_machine_type查找机器类型，成功则返回machine_desc类型结构题，若未找到则进入死循环。
+(1)lookup_machine_type函数的c语言定义是：
+extern struct machine_desc *lookup_machine_type(unsigned int);
+在arch/arm/kernel/head.S实现，对应c语言入口位于"ENTRY(lookup_machine_type)"，汇编语言现在还不熟悉，稍后看，待做。
+(2)machine_desc结构体定义于include/asm/mach/arch.h。
+实际的执行情况是返回了机器类型，所以这里在"#ifdef CONFIG_ARCH_S3C2410"之前，没有定义过machine_arch_type宏。
+
+下面需要分析"tags = phys_to_virt(mdesc->boot_params);"，仅仅读代码效率不高，如果有kgdb的支持，会方便很多。
+考虑到现在不清楚这个Warning是否有大的影响，再加上不熟悉汇编，没有kgdb，暂定这个问题的查找，待做。
+
+23:20 2007-08-22
+c语言函数学习，待做已转移：
+strcasecmp和strncasecmp，忽略大小写的比较字符串。这样fisco里面包和字符串的转换又可以简化了。
+编程练习：下载libc源代码，自己编写这个函数。
+
+10:35 2007-8-22
+9:50-现在，太阳能等项目文档，已发给何勇，朱超。
+
+15:58 2007-8-22
+使用windows下的tftp工具tftpd32，只要开发板设置的serverip和tftp32的serverip(在本地连接的TCP/IP设置)，一致，且和clientip(开发板ip)在一个网段内即可。其余完成与使用Linux tftp工具相同。
+(22:17 2007-8-22)
+一定要开tftpserver! 如果没有开server，tftp的下载进度提示符"Loading:"后面提示符是"T"，正常下载是"#"。
+
+16:54 2007-8-22
+查系统日志，得到下列信息，分别出自下面两个文件。但这两个分区信息有矛盾。
+kernel/drivers/mtd/nand/s3c2410nd.c: 
+bon_notify_add  0
+bon0: 00000000-00030000 (00030000) 00000000
+bon1: 00030000-00100000 (000d0000) 00000000
+bon2: 00100000-01ef0000 (01df0000) 00000000
+bon3: 01f00000-03ffc000 (020fc000) 00000000
+kernel/drivers/mtd/mtdpart.c: 
+Creating 2 MTD partitions on "NAND 64MiB 3,3V 8-bit":
+0x00100000-0x02200000 : "root"
+0x02200000-0x04000000 : "user"
+另外，proc文件系统内也有记录：
+# cat bon
+      position          size       flag
+bon0: 00000000-00030000 (00030000) 00000000
+bon1: 00030000-00100000 (000d0000) 00000000
+bon2: 00100000-01ef0000 (01df0000) 00000000
+bon3: 01f00000-03ffc000 (020fc000) 00000000
+这是由kernel/drivers/mtd/nand/s3c2410nd.c的bon_read_proc函数实现。
+这个信息应该是对的，上面矛盾那个待查，待做。
+***这部分代码可能是被注释的，重看，待做!!!。
+下午嵌入式学习到17:12, 共1h40'。
+
+18:31 2007-8-22
+kernel/drivers/mtd/nand/s3c2410nd.c文件的实际代码从651行开始，作用是实现对具体flash器件的操作。
+同目录的bon.c实现了flash的基本函数，bon_proc_info(由bon_read_proc函数调用）和read_partition_info函数都会输出flash的分区信息。
+
+21:41 2007-8-22
+内核过大，超过了现有内核分区的738k。
+下载后，只能使用bootm启动。下载和日志见"zImage_2054"，这次是直接接到网络，但是需要每次都设置ipaddr,gateway；如果直接由bootloader引导，结果如下：
+                Shenzhen Yuanfeng Computer Technology Co.Ltd
+                        Copy Right Reserved
+IRQ Stack: 33fc149c
+FIQ Stack: 33fc249c
+1
+1
+DRAM Configuration:
+Bank #0: 30000000 64 MB
+1
+NAND:64 MB
+*** Warning - bad CRC, using default environment
+
+In:    serial
+Out:   serial
+Err:   serial
+Hit any key to stop autoboot:  0
+zImage magic = 0x016f2818
+NOW, Booting Linux......
+Uncompressing Linux...
+
+ran out of input data
+
+ -- System halted
+从"ran out of input data"看，应该是超出分区范围所致。
+考虑一下是否要移植新的bootloader***
+
+22:23 2007-8-22
+有一个warning：
+Warning: bad configuration page, trying to continue
+
+23:13 2007-8-22
+Linux, 守护进程, xinetd
+http://bbs.chinaunix.net/viewthread.php?tid=592498
+在linux中一些不长期使用的服务（不重要的服务？）没有被作为单独的守护进程在开机时启用，linux把这些服务监听端口全部由一个独立的进程 xinetd集中监听，当收到相应的客户端请求之后，xinetd进程就临时启动相应服务并把相应端口移交给相应服务，客户端断开之后，相应的服务进程结束，xinetd继续监听。要开telnet服务器，只需配置xinetd即可。
+看介绍守护进程XINETD与SOCKET程序的含义"http://linux.ccidnet.com/art/9513/20070622/1122531_1.html"做为编程练习，待做。另外参考"http://www.linuxpk.com/42146.html"Xinetd完全指南，看，待做。
+
+23:27 2007-8-22
+分析代码后发现一时难以分析出，上网搜索：
+自: http://lists.arm.linux.org.uk/pipermail/linux-arm/2003-July/005809.html
+That means the kernel expects a tagged list of parameters
+from the bootloader (typically command line, memory size and
+stuff like that), but the bootloader hasn't actually set it
+up where the kernel expects it.
+
+The code about all that is in arch/arm/kernel/setup.c, and I
+am pretty sure there's documentation on Russell's ARMLinux
+website as well (in the Developer section).
+但是到"http://www.arm.linux.org.uk/developer/"一时没有找到对于的文档，完成每日编程练习后继续找，继续找，待做。
+
+23:30 2007-8-22
+网址, 论坛, 嵌入式, Linux
+http://bbs.cedn.cn/forumdisplay.php?fid=48&sid=eqlU9Q
+中国电子开发网俱乐部  » linux专题论坛
+
+13:49 2007-8-23
+http://www.linuxsir.org/bbs/showthread.php?t=247373
+用bon part进行分区。
+
+14:22 2007-8-23
+昨天查flash分区绕了一大圈，其实在vivi下直接用bon part分区，bon part info查分区信息即可。原有分区分析是：
+No: offset      size            flags     bad
+---------------------------------------------
+0: 0x00000000  0x00030000      00000000    0
+1: 0x00030000  0x000d0000      00000000    0
+2: 0x00100000  0x01df0000      00000000    4
+3: 0x01f00000  0x020fc000      00000000    0
+内核空间太小，改为接近2M，重新分区，过程详见"vivi_flash.txt"。
+分区大小依次是1M, 3M, 40M, 20M。另外：
+1, mtd_partition的mask_flags表示要屏蔽的flag，如果.mask_flag=MTD_WRITEABLE，表示不允许写，也就是设置为只读。如果对根文件系统的分区设置为只读，这样可以保护根文件系统。用户文件应该仅仅保存在用户分区。
+2, arch/arm/mach-omap1/board-osk.c里面定义flash分区时使用了很多宏，例如MTDPART_OFS_APPEND，移植2.6内核和文件系统初步成功后，学习这些用法，待做。
+
+15:41 2007-8-23
+昨天由于sed使用不正确使/etc/xinetd.d/tftp变成了空文件。重新安装也不行。今天从网上下载了tftp 0.39-1，安装(rpm -ivh filename.rpm -U)仍然不行。想到会不会是由于/etc/xinetd.d/tftp已经存在，rpm为了保持原有配置所以没有写入新的文件。于是删除这个空文件，再次安装(rpm -ivh filename.rpm --force)。rpm安装过程中重建了这个空文件。
+
+17:58 2007-8-23
+网址, 
+http://blog.chinaunix.net/u1/42456/article_59898.html
+arm Linux移植等。好，看，待做已转移。
+http://blog.chinaunix.net/u1/42456/showart_332530.html
+UDA1341不能录音的解决方法
+
+19:28 2007-8-23
+待做：
+直接用电源点接到液晶屏的power，看是否亮。如果屏是好的，尽量还是用现有这个。
+
+16:50 2007-08-23
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, vivi
+用vivi命令行重新分区，但是启动时提示"Warning: this binary is not compressed linux kernel image"，内核无法启动，日志见0823/bootloader_loadzImage。
+vivi/arch/s3c2410/smdk.c定义了flash分区。
+
+17:20 2007-08-23
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, vivi
+vivi代码中的lib/boot_kernel.c的copy_kernel_img函数的nand_read_ll函数是flash读函数，也许以后有用。
+
+17:25 2007-08-23
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, vivi
+vivi, 查找vivi是如何引导操作系统的
+发现vivi是根据自己代码中定义的kernel分区的偏移地址和大小来启动内核的，现在内核超出vivi定义的大小，看来是没法使用现有版本的vivi引导内核的，只有重新编译bootloader，考虑用哪个bootloader。
+下面是当时查找的过程，函数调用顺序如下：
+boot_or_vivi -> run_autoboot -> exec_string("boot") -> execcmd。
+exec_string函数会根据传入参数找到对应的命令并执行之，由于这时参数个数只有一个。所以执行的boot命令是command_boot的case 1的情况(command_boot是boot命令对应的函数，定义于lib/boot_kernel.c）。
+1, vivi下的命令都用下面的结构保存（include/command.h）：
+typedef struct user_command {
+        const char *name;
+        void (*cmdfunc)(int argc, const char **);
+        struct user_command *next_cmd;
+        const char *helpstr;
+} user_command_t;
+例如boot：
+user_command_t boot_cmd = {
+        "boot",
+        command_boot,
+        NULL,
+        "boot [{cmds}] \t\t\t-- Booting linux kernel"
+};
+2, execcmd定义如下：
+void execcmd(int argc, const char **argv)
+{
+        user_command_t *cmd = find_cmd(argv[0]);
+
+        if (cmd == NULL) {
+                printk("Could not found '%s' command\n", argv[0]);
+                printk("If you want to konw available commands, type 'help'\n"); 
+                return;
+        }
+        /*printk("execcmd: cmd=%s, argc=%d\n", argv[0], argc);*/
+
+        cmd->cmdfunc(argc, argv);
+}
+3, command_boot原型如下：
+void command_boot(int argc, const char **argv)
+可以学习这里的函数指针使用方法，
+关键是这两行：
+void (*cmdfunc)(int argc, const char **);
+cmd->cmdfunc(argc, argv);
+
+注：查一个函数，如果是c语言编写的，一般用下述方法：
+grep -R function ./* | grep "\.h"，这样找到对应的头文件。
+(1) 如果同一目录下存在同名的c文件，funciton一般就在这个文件中。
+(2) 如果是宏定义，一般在找到的头文件中。
+(3) 如果不是上面两个情况，一般可以用头文件中定义的函数原型进行搜索，搜索结果中的c文件中且没有extern修饰符的就是函数的定义了。
+(4)如果没有找到对应头文件，一般是静态函数，只在一个文件中使用直接搜索这个函数名即可。
+
+9:42 2007-8-24
+手机厂商，查，待做
+自: 评论：
+在IC这一块印度相比中国还差的远,中国至少有spreadtrum,t3g这样的平台厂商,多媒体芯片方面中国有vimicro,chipnuts等,射频方面有RDA.
+文章: 印度正在崛起，手机领域的“新中国”！
+http://forum.cellphone.eetchina.com/FORUM_POST_1200039797_0.HTM
+
+9:43 2007-8-24
+手机平台，查，待做
+基于SmartNX Mobile(TM)操作系统的智能手机，松讯达中科电子（深圳）有限公司的TC102已于日前通过国家CTA入网测试并开始量产上市。该款手机是基于智多微电子NX200智能手机平台进行开发的，采用了智多微电子最新推出的 C7280 多核移动多媒体应用处理器。
+自: 首款SmartNX Mobile智能手机量产上市，本土移动操作系统能否掀起市场波澜？
+http://www.cellphone.eetchina.com/ART_8800474433_2000006_NT_c97558b6.HTM
+
+10:32 2007-8-24
+u-boot
+If you are running Linux on your host system we recommend either kermit or cu as terminal emulation programs. Do not use minicom, since this has caused problems for many users, especially for software download over the serial port.
+
+10:59 2007-8-24
+s3c2410, nand flash学习
+BOOT AND NAND FLASH CONFIGURATIONS
+1. OM[1:0] = 00b : Enable NAND Flash controller auto boot mode
+2. NAND Flash memory page size should be 512Bytes.
+3. NCON : NAND Flash memory address step selection
+   0 : 3 Step addressing
+   1 : 4 Step addressing
+OM的作用见memory controller部分P198。
+使用nand flash启动时的flash映射见P220。
+After auto-boot, nFCE will be inactive.
+在PCB原理图上找OM的位置：双击2410芯片选择edit pin，把引脚按名称排序。找到OM0，OM1点右键选择jump，即可定位两个引脚。可以看出OM0, OM1都接了地。所不同的是OM0多一个下拉电阻。为什么，查，待做。
+(21:00 2007-09-06)2410 nand flash引脚说明见2410 datasheet 1-20(p120)"21:00 2007-09-06end"
+
+11:40 2007-8-24
+上午学习至此。2410nand flash使用基本了解了。但是那几个时间参数仍然不明白。下午主要是开始移植u-boot 1.2。
+
+13:44 2007-8-24
+网址, 在线阅读，估计是学校买的，查，待做
+http://proquest.safaribooksonline.com:80/home
+
+14:30 2007-8-24
+u-boot在ram中运行：
+具体过程见"u-boot\0824\AXD_u-boot_ram_log"，起始地址是从include/configs/smdf2410.h文件CFG_LOAD_ADDR宏看到的(0x33000000)。
+第一次做loadbinary(lb)时，System Output Monitor的Debog Log选项卡会显示Warning，说映象有错，没管它，继续进行，可以启动u-boot。后来这个Warning也不出出现了。这样对flash的移植就有了基础。继续加油！
+AXD运行bin文件的方法参考了"ARM ADS中的AXD 调试经验集锦"，axf文件与bin文件的区别见"ARM映象文件及执行机理001"。
+ARM映象...这个文档属于"ARM学习报告"，查所有文档，待做。
+
+14:53 2007-8-24
+待做，练习编程的同时需要建立宏观的概念：
+1, ARM SOC体系结构（VLSI026）
+2, 深入理解计算机系统。守博推荐。感觉不错。
+
+15:21 2007-8-24
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, s3c2410存储器
+相关寄存器
+nBE[3:0] O Upper Byte/Lower Byte Enable(In case of 16-bit SRAM)，如果是SDRAM直接设为无效即可，具体说明见nWBE
+nWAIT requests to prolong a current bus cycle. As long as nWAIT is L, the current bus cycle cannot be completed.
+nWAIT一直用于访问低速设备（自4510文档，查，待做）
+nWAIT PIN OPERATION
+If the WAIT corresponding to each memory bank is enabled, the nOE duration should be prolonged by the external nWAIT pin while the memory bank is active. nWAIT is checked from tacc-1. nOE will be deasserted at the next clock after sampling nWAIT is high. The nWE signal have the same relation with nOE.
+nOE (Output Enable) indicates that the current bus cycle is a read cycle.
+nWE (Write Enable) indicates that the current bus cycle is a write cycle.
+nWBE[3:0] O Write Byte Enable
+nGCS[7:0] Output (General Chip Select) are activated when the address of a memory is within the address region of each bank. The number of access cycles and the bank size can be programmed.
+
+15:29 2007-8-24
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot移植, 存储器
+待做：解决里面的疑问：
+修改board/YF2410/lowlevel_init.S：
+BWSCON是bus width and wait control寄存器，除了bank0以外，b1-b7都可以设置，是否使用UB/LB(1bit)，是否允许WAIT状态(1bit)，总线宽度(2bits)。u-boot中2410芯片的开发板都使用Bx_BWSCON(x=1..7)表示这4bit。
+flash映射到bank1-bank5设置为16位宽，为什么不设为8位宽？flash的datasheet可以看到K9F1208U0M的08就表示8位宽。bank6-bank7是sdram是32位宽。不明白为什么B3_BWSCON要使用WAIT和UB/LB。
+(16:36 2007-8-24)
+看了半天也不理解，想到看ADS2410boot.ini这个文件做为参考，从这个可以看出bank1是flash，bank6-bank7是SDRAM，晚上具体计算flash时间，结合文档看懂。再找到u-boot中CPU的时钟，算出u-boot应该填的合适的值。
+spp vector_catch,0x00
+spp semihosting_enabled,0x00
+sreg psr,0x60000013
+
+//WTCON
+smem 0x53000000,0,32
+//MPLLCON, 79M?
+smem 0x4C000004,((0x47<<12)+(0x1<<4)+0x2),32
+
+//GPHCON
+smem 0x56000070,0x280000,32
+//GPHUP
+smem 0x56000078,0x0,32
+//BWSCON，这里也是所有flash设为16位宽，SDRAM设为32位宽。
+smem 0x48000000,((2<<28)+(2<<24)+(1<<20)+(1<<16)+(1<<12)+(1<<8)+(1<<4)+0),32
+//BANKCON0
+smem 0x48000004,((3<<13)+(3<<11)+(7<<8)+(3<<6)+(3<<4)+(3<<2)+3),32
+//BANKCON6
+smem 0x4800001c,((3<<15)+(1<<2)+1),32
+//BANKCON7
+smem 0x48000020,((3<<15)+(1<<2)+1),32
+//REFRESH
+smem 0x48000024,((1<<23)+(0<<22)+(0<<20)+(3<<18)+(2<<16)+1113),32
+//BANKSIZE
+smem 0x48000028,0x32,32
+//MRSRB6
+smem 0x4800002c,0x30,32
+//MRSRB7
+smem 0x48000030,0x30,32
+(21:55 2007-8-24)
+还是不明白，上网查，待做。
+
+20:14 2007-8-24
+下午学习状态不好，晚饭后看了看重案六组和粟裕回忆录。后来想到其实也可以回宿舍洗衣服。另外应该找一些长知识的视频。例如百家讲坛等。
+
+20:44 2007-8-24
+用了半个小时写了函数指针的测试程序，有一个错误。
+(21:00 2007-8-24)原有函数指针测试函数是func-ptr.c。除了函数指针定义本身的
+int (*)(function)，有问题外，还有很多语法错误，变量名错误等。
+思，待做，查远峰测试程序里面那个函数指针的具体含义。
+
+22:09 2007-8-24
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot移植
+2410Linux文档中把BANKSIZE从0x32改为0x31，表示两个BANK是64M的。但是现在板子上实际是两个32M存储器。感觉应该写成0x30。疑问***，待做。
+
+22:36 2007-8-24
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot移植
+主要参考这个blob，是以1.1.4为基础进行的移植。
+http://blog.chinaunix.net/u1/43047/
+
+10:47 2007-8-27
+看ARM汇编。今明两天的任务是完成u-boot flash启动代码的修改，使其可以从nand flash启动。周三-周五完成u-boot flash读写函数。
+
+11:20 2007-8-27
+u-boot
+http://hi.baidu.com/wangy0919/blog/item/fcc666d33abc8a023af3cff5.html
+总结：
+1. bootm的作用是可以加载用uboot工具制作的kernel 和ramdisk ,这个工具就是uboot/tools/mkimage
+利用他，可以 gz, bzip2, none等压缩方式压缩kernel 和ramdisk.，mkimage 在压缩时在起头部加入了0x40字节的校验码。 所以在bootm源码中， 先从头部取出64个字节来校验， 如通过校验，再将其后面的内容搬到内存a处，再从a处读取，启动内核。
+
+这里要说一下，ramdisk，也可以说是我的一个发现， 刚开始用bootm成功启动是很偶然的，碰巧我设置的参数是用nfs启动，后来试了几次，老是不行，加载ramdisk时，说Bad Magic Number幸好我勤于记录， 才发现刚才成功了是因为用nfs启动的，猜想出现这个情况很可能与kernel类似，因为之前我看uboot/readme有点印象。
+
+果然 ，看了一下readme，才发现ramdisk也要用mkimage 才行。
+
+如果你不用ramdisk作为根文件系统， 那就不用这个了。
+
+2.kernel加载的地址是30008000, 是不能改的， 这个在include/configs/smdk2410.h中作了定义，
+#define CFG_LOAD_ADDR 0x30008000 /* default load address */
+
+你可以修改试试。
+将ramdisk映像下载到内存的位置，可以不是0x30800000 ,可以自己指定。
+有错误之处还请各位高手指点！！ 
+
+11:56 2007-8-27
+学u-boot到11:30，下午要完成u-boot无nand flash的启动代码。
+
+15:37 2007-8-27
+没有其它事了，安心看u-boot。
+如果碰到沙沙，王洋等提一下建找工作信息交流平台的事。例如用已有的QQ群。
+(18:19 2007-8-27)u-boot学习结束，按现在进度估计需要三天才能完成u-boot有nand的移植。
+
+14:49 2007-08-27
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot
+关于_armboot
+自: u-boot-1.2.0/doc/README.ARM-memory-map
+_armboot_start contains the value of TEXT_BASE (0xA07E0000); it seems
+TEXT_BASE and _armboot_start are both used for the same purpose in
+different parts of the (ARM) code.
+Furthermore, the startup code (cpu/<arm>/start.S) internally uses
+another variable (_TEXT_BASE) with the same content as _armboot_start.
+I agree that this mess should be cleaned up.
+
+15:22 2007-08-27
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot文档README
+Linux HOWTO: 引导Linux，感觉很细，网上的文档基本没有超出它的范围的，找前两天看到的那篇分析是ppt，现在整理文档的习惯不好了，待做，今天完成u-boot无nand启动后整理文档。
+Standalone HOWTO部分讲解如何编译在u-boot直接运行的应用程序。
+Minicom warning部分，作者不建议用minicom的原因，如果使用minicom的设置方法。
+Implementation Internals部分：好像是解释u-boot内部的。
+U-Boot will use R8 to hold a pointer to the global data
+待做：看http://www.denx.de/twiki/bin/view/DULG/Manual
+
+16:20 2007-08-27
+u-boot代码学习
+start.S
+查：.balignl 16,0xdeadbeef。待做
+1, 定义异常处理；
+2, 切换CPU到SVC32模式
+        mrs     r0,cpsr
+        bic     r0,r0,#0x1f
+        orr     r0,r0,#0xd3
+        msr     cpsr,r0
+
+MRS: Move PSR status/flags to register Rn: = PSR
+BIC: Bit Clear Rd: = Rn AND NOT Op2
+ORR: OR Rd: = Rn OR Op2
+0x1f=00011111
+cpsr[7:0]=xxx00000
+0xd3=11010011
+cpsr[7:0]=11x10011
+在2410手册和920参考手册上都没有看到CPSR(current programme status register)的各位的说明，参李驹光ARM书P16-P17。(12:55 2009-6-11)CPSR文档位于ARM ARM p49 "A2.5 Program status registers"。"12:55 2009-6-11"end
+CPSR低8位的是："I, F, T, M4, M3, M2, M1, M0"，依次表示是否禁止软件中断，是否禁止快速终端，是否是THUMB模式，处理器运行模式。M4-M0是10011时表示SVC模式（管理模式，或称为软件中断模式，为什么进入这个模式？查）
+(23:21 2007-10-24)
+CPSR标志位见S3C2410手册p88：
+N：是31位的值，也就是表示是否是负数。N=1表示是负数；
+Z：表示是否全零；
+C：表示进位；
+V：表示溢出，仅当以2的补码运算溢出时有效。
+"23:21 2007-10-24".end
+3, 禁止看门狗，中断，设置时钟：
+(1)根据是2400还是2410指明寄存器地址：看门狗控制寄存器，中断屏蔽寄存器，二级中断屏蔽寄存器（仅对2410），时钟分频寄存器。
+ldr     r0, =pWTCON
+表示把pWTCON的赋给r0寄存器？"ldr r0, pWTCON不可以么？"，ICE仿真。
+WTCON, arm2410 p440, [5]表示看门狗是否有效。
+INTSUBMSK, arm2410 p371. 仅低11位([10:0])有效，所以屏蔽INTSUBMSK只需要写入0x3ff。
+CLKDIVN, arm2410 p245
+HDIVN [1] 0: HCLK has the clock same as the FCLK.   0
+          1: HCLK has the clock same as the FCLK/2.
+PDIVN [0] 0: PCLK has the clock same as the HCLK.   0
+          1: PCLK has the clock same as the HCLK/2.
+4, 初始化
+        /*
+         * we do sys-critical inits only at reboot,
+         * not when booting from ram!
+         */
+#ifndef CONFIG_SKIP_LOWLEVEL_INIT
+        bl      cpu_init_crit
+#endif
+(1)设置arm920t的控制寄存器
+MCR, arm2410, p540, arm2410附录
+MCR/MRC{cond} P15,opcode_1,Rd,CRn,CRm,opcode_2	
+例如可以查到使指令缓存和数据缓存无效的指令，使TLB无效的指令：
+Invalidate ICache & DCache	SBZ	CR p15,0,Rd,c7,c7,0
+nvalidate TLB(s)		SBZ	MCR p15,0,Rd,c8,c7,0
+SBZ表示Rd寄存器的值必须全部是0。TLB是translation lookaside buffers
+MVA表示modified virtual address(arm2410 p541)，从文档看，在缓存和TLB中使用MVA，找例子，待做。
+位13(V)，表示异常地址的起始地址，位于0x00000000(V=0)还是0xffff0000(V=1)。这里V=0，印象中v=1的情况好像可以用于Linux建立虚拟内存机制之后。
+位9(R),8(S)会影响MMU protection system，例如，不明白，待查。这里是00
+AP(00), S(0), R(0), No access No access Any access generates a permission fault
+这里开启了指令缓存，关闭了MMU和数据缓存。设置系统为小端模式。
+(2)设置RAM时序，这部分是板子相关的，由开发板的lowlevel_init.S负责。
+进入lowlevel_init.S的代码如下，查ip, lr的含义。
+        mov     ip, lr
+        bl      lowlevel_init
+        mov     lr, ip
+        mov     pc, lr	
+lr是R14寄存器，ip没查到。关键是没有查到手册中哪里介绍寄存器。难道查ARM9TDMI的？待做。从代码上看，lr保存的应该是进入cpu_init_crit前的PC指针，因为"mov     pc, lr"像是从子程序恢复的命令。从代码运行过程看，应该也是回到了cpu_init_crit调用后的那条指令。
+
+21:07 2007-08-27
+147         ldr     r0, =SMRDATA
+148         ldr     r1, _TEXT_BASE
+149         sub     r0, r0, r1
+150         ldr     r1, =BWSCON     /* Bus Width Status Controller */
+151         add     r2, r0, #13*4
+152 0:
+153         ldr     r3, [r0], #4
+154         str     r3, [r1], #4
+155         cmp     r2, r0
+156         bne     0b
+1, 这里的SMRDATA和_TEXT_BASE似乎都是符号，为什么ldr命令不同，查寻址方式。
+2, 149的含义是得到的是从SMRATA到_TEXT_BASE的大小，不明白，从后面看r0是SMRDATA标号开始的13个寄存器的起始地址，看来得ARM地址映射以及TEXT_BASE的资料，查，待做。
+3, 151行表示r0地址加上13个寄存器的地址，代码中从SMRDATA标号开始的保存是是13个寄存器的值，每个寄存器占一个字。152-156是循环，给13个寄存器赋值。
+
+22:54 2007-08-27
+今日总结：
+1，嵌入式Linux学习4小时20分钟；
+2，晚上投简历用了2小时，主要是觉得投GUI这个不是自己最核心想做的；
+3, 还有看迷失和长征。
+明日计划：
+1, 实习半小时解决；
+2，u-boot无flash启动代码下午前完成；
+3, 每日改进：早晨8点起床，学习时间延长到6小时。
+
+16:39 2007-8-28
+网址, 博客, 嵌入式Linux，好
+http://hi.baidu.com/wangy0919
+Linux&ARM驱动之家
+包括bootloader，内核移植等内容，看里面所有内容。
+待做，看：调试技术: Linux core dump file
+
+9:30 2007-8-29
+看邮箱。今日计划，理解vivi nand flash代码，并移植到u-boot。如果有时间，希望做编程练习。
+
+9:49 2007-8-29
+网址, 嵌入式Linux
+http://www.hzlitai.com.cn/bbs/index.asp?boardid=11 
+立泰电子ARMSYS2410/2440产品相关
+
+11:49 2007-8-29
+找了两篇其中一篇是2410的文章(S3C2410完全开发流程)，对硬件和vivi都有介绍，需要找代码，和文章的后半部分，应该还包括linux移植等文章。另一篇是专说vivi的ViViBootLoaderBySimba。下午只看汇编部分讲解。完成u-boot nand flash启动。
+
+14:27 2007-8-29
+(14:27-14:29)找候哥。研一新生可能这样安排，董老师，彭老师，包括金辉等带学生，我自己要不要争取，现在最关键的问题是我很难说会不会去实习。考虑和周中华聊聊。如果本周保证了30小时学习的话。
+
+14:57 2007-8-29
+继续分析vivi。
+
+9:15 2007-8-30
+看邮件20分钟
+开始vivi nand flash代码详细阅读和移植到u-boot。今天学习时间希望不少于7小时，补上前天欠的一小时。
+
+13:23 2007-8-30
+下午开始学习。上午学到11:40。中午休息时间有点长。
+
+15:44 2007-8-30
+先做u-boot1.2.0移植。有时间的话看看git和cvs，总是用release版有时新的修改自己就用不上了。
+
+15:42 2007-8-31
+汤姆森面试，总结，待做
+1, 职位：嵌入式Linux软件开发，应用程序；
+2, 面试：先后两人面试。
+第一人笔试c语言和面试。
+(1)笔试内容是c语言基础，堆栈（函数调用与堆栈使用，前置加，见下），c语言基础（语法，效率（见下）），编程题（单链表有序插入运算，待做）.
+堆栈：
+extern char a[6];
+static char b[6] = "12345";
+void test(忘了)
+{
+    静态，动态的指针和数。
+    动态分配内存。
+}
+问题：上面变量的指针和指针指向的变量位于何处？静态存储区，堆，栈，都不是。
+
+int i=5;
+printf("%d, %d", i, ++i);
+与
+printf("%d, %d", ++i, i);
+的结果是否相同？
+按汤姆森工程师说法，前者结果是6,6；后者结果是5,6。原因是变量入栈顺序不同。
+(8:43 2008-10-28)bamvor: 可能因为变量是由右至左入栈。语句一中++i先入栈所以结果是6,6，语句二中++i后入栈，所以结果是5,6。"8:43 2008-10-28"
+
+评价下面代码各自的优缺点：
+(a)
+for 
+    if condition
+        //execution1
+    else
+        //execution2
+(b)
+if condition
+    for 
+    //execution1
+else        
+    for 
+    //execution2
+
+(2)面试，主要是问的法电项目，问了很多和协议有关的地方。后来才知道我来做的是和协议栈有关的内容。
+
+第二人面试，project manager。没有问具体问题。我的提问也一般，因为对网络了解较少。
+3, 问题：第一人面试时开始宏观介绍的不好，说明没有完全投入进去，上次新岸线就说的不错。没有要第二人的联系方式或名片，这个问题以后要注意。
+
+13:22 2007-08-28
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot代码学习
+lowlevel_init.S
+接昨日
+按lowlevel_init.S的注释，这些寄存器是从flash中读出的，但是上次系统运行时u-boot是在ram中运行的。自己的感觉这些寄存器都在ram中。
+        /* make r0 relative the current location so that it */
+        /* reads SMRDATA out of FLASH rather than memory ! */
+查arm存储器映射。
+
+13:44 2007-08-28
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, u-boot代码学习
+start.S
+5, 配置堆栈
+执行cpu_init_crit后是nor flash情况下的rellocation，参考"u-boot_startup_code_relocation.html". TEXT_BASE是距离sdram最大空间512K的地址0x34000000-0x80000=0x33f80000，为什么这么取值不明白。
+配置堆栈这部分是从_TEXT_BASE减去堆栈的大小。最后把地址保存到sp。说明这里的堆栈是向上增长的。
+CFG_MALLOC_LEN和CFG_GBL_DATA_SIZE定义在include/configs/YF2410.h文件中：
+/*
+ * Size of malloc() pool
+ */
+#define CFG_MALLOC_LEN          (CFG_ENV_SIZE + 128*1024)
+#define CFG_GBL_DATA_SIZE       128     /* size in bytes reserved for initial
+data */
+#define CFG_ENV_SIZE            0x10000 /* Total Size of Environment Sector */
+
+CFG_MALLOC_LEN=2^16+128K=192K
+6, clear bss
+segmen，把bss段数据清零，从_bss_start到_bss_end，在./board/YF2410/u-boot.lds说明。
+clbss_l:str     r2, [r0]                /* clear loop...                    */
+        add     r0, r0, #4
+        cmp     r0, r1
+        ble     clbss_l
+ble
+clbss_1，表示如果比较结果小于或相等转到clbss_1运行。这里实际是把_bss_end的数据也清零了，学习link文件，待做。
+7, (15:00 2007-08-28)_start_armboot
+8, 后面有两部分内容，一是"cpu_init_crit"的定义，前面已经分析过。二是中断处理，这又分三部分一是S_FRAME_SIZE等定义。二是进入退出过程中保存和恢复现场的宏。三是实际遇到这些异常的处理方法。例如定义了CONFIG_USE_IRQ情况下，irq处理过程是：得到栈指针，保存现场，执行irq，恢复现场。do_irq定义于"cpu/arm920t/interrupts.c"，	。在2410和920t相关文件中没有找到CFG_TIMERBASE。
+void do_irq (struct pt_regs *pt_regs)
+{
+#if defined (CONFIG_USE_IRQ) && defined (CONFIG_ARCH_INTEGRATOR)
+        /* ASSUMED to be a timer interrupt  */
+        /* Just clear it - count handled in */
+        /* integratorap.c                   */
+        *(volatile ulong *)(CFG_TIMERBASE + 0x0C) = 0;
+#else
+        printf ("interrupt request\n");
+        show_regs (pt_regs);
+        bad_mode ();
+#endif
+}
+这部分需要在了解ARM异常处理后阅读，现在不影响移植u-boot，查，待做。
+
+15:21 2007-08-28
+后面应该就是c语言部分了
+void start_armboot (void)函数定义在"lib_arm/board.c"
+看到这行注释："/* compiler optimization barrier needed for GCC >= 3.4 */"。，但是有人的blog上面说如果用3.4编译tftp会有问题。arm启动代码汇编部分阅读至此。感觉汇编部分现在还需要修改的就是把flash内容复制到ram中了。
+
+17:34 2007-08-28
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, 编译vivi
+编译vivi，烧到flash上可以启动。估计明天完成u-boot nand flash启动应该没问题。主要就是读懂vivi代码后，复制过去。可能的问题是u-boot1.2支持nand flash，最好c代码能合并在一起，否则后面u-boot flash命令可能有问题。
+不需要修改的原因是guides.txt中指明smdk2410的配置是针对64Mnand flash，64M
+SDRAM的。
+只需要修改顶层Makefile，指定交叉编译环境arm-linux-, 及其库，linux头文件：
+CROSS_COMPILE   = /usr/local/arm/2.95.3/bin/arm-linux-
+LINUX_INCLUDE_DIR       = /usr/local/arm/2.95.3/arm-linux/include/
+ARM_GCC_LIBS    = /usr/local/arm/2.95.3/lib/gcc-lib/arm-linux/2.95.3
+编译时，下面两个选项没有选：
+Enable simple memory test (CONFIG_BOOTUP_MEMTEST) [N/y/?] (NEW) n
+Support MD5 (CONFIG_MD5) [N/y/?] (NEW) n
+vivi运行日志见vivi.txt，flash分区似乎有问题，bon part info和part show的结果不同，后者分区总和小于64M，解决，待做。
+不过这里看到用bon part info的flash信息像是我在第一次下载vivi后自己分的区(0, 192k, 1M, 31M)，当时再启动2410板子就无法启动了，重新下载后才可以启动。
+
+10:00 2007-08-29
+嵌入式，arm, s3c2410, 远峰开发板学习（续）, vivi nand flash启动
+arch/s3c2410/head.S是vivi第一阶段启动代码。
+分析vivi启动代码，重点是从nand复制vivi全部代码的具体含义，何时使用这个代码。
+include/s3c2410.h是s3c2410芯片寄存器地址定义，这里的定义和原来分析过的mizi
+Linux2.6内核"include/asm-arm/arch-s3c2410/S3C2410.h"文件内容是类似的，参文档"14:19 2006-11-27"的"嵌入式，arm, s3c2410, 远峰开发板学习（续）"及以下内容。
+
+11:22 2007-08-29
+c语言，数据结构，链表
+代码自vivi
+总是不看数据结构，下面add_command函数看了半天才明白。今天的编程练习就订为练习单链表基本操作，待做。
+typedef struct user_command {
+        const char *name;
+        void (*cmdfunc)(int argc, const char **);
+        struct user_command *next_cmd;
+        const char *helpstr;
+} user_command_t;
+
+static user_command_t *head_cmd = NULL;
+static user_command_t *tail_cmd = NULL;
+
+void add_command(user_command_t *cmd)
+{
+        if (head_cmd == NULL) {
+                head_cmd = tail_cmd = cmd;
+        } else {
+                tail_cmd->next_cmd = cmd;
+                tail_cmd = cmd;
+        }
+        /*printk("Registered '%s' command\n", cmd->name);*/
+}
+
+11:42 2007-08-29
+c语言
+parseargs，unparseargs和我兼职时写的函数功能类似，但功能强一些，更好些。做为阅读代码联系，待分析，待做。
+例如使用strcat把argv中的字符串加入到一个字符串中，中间加上空格。比我的简洁，库函数用的还是少啊。
+
+13:48 2007-08-29
+vivi第一阶段启动过程在"S3C2410完全开发流程"第四部分"bootloader vivi"里面说的很清楚，下面除了分析复制nand flash vivi到ram以外，其它代码基本不做分析。不过里面涉及到的UART使用，汇编的print函数等，还是很实用的，可以做为汇编学习的例子。例如：
+1，十六进制转为字符，这里使用了和跳转表类似的方法。
+        .align  2
+HEX_TO_ASCII_TABLE:
+        .ascii  "0123456789ABCDEF"	
+PrintHexNibble:
+        adr     r2, HEX_TO_ASCII_TABLE
+        and     r0, r0, #0xF
+        ldr     r0, [r2, r0]    @ convert to ascii
+        b       PrintChar
+可以和"ARM SOC体系结构"书上p56的例子对比理解，上面没有考虑超限的问题，这不安全。
+	BL	JUMPTAB
+	...
+JUMPTAB:
+	ADR	r1, SUBTAB
+	CMP	r0, #SUBMAX	@check if exceed the table limit
+	LDRLS	pc, [r1, r0, LSL, #2]	@r0 left shift 2 bit, and set r1[newr0]
+					@to pc 
+	B	ERROR
+SUBTAB:	DCD	SUB0
+	DCD	SUB1
+	DCD	SUB2
+
+2，UART发送一个字符：
+PrintChar:
+TXBusy:
+        ldr     r2, [r1, #oUTRSTAT]
+        and     r2, r2, #UTRSTAT_TX_EMPTY
+        tst     r2, #UTRSTAT_TX_EMPTY
+        beq     TXBusy
+        str     r0, [r1, #oUTXHL]
+        mov     pc, lr
+
+14:59 2007-08-29
+vivi和u-boot都有把flash复制到ram的代码，但是执行的位置和作用不完全相同。
+vivi的copy_myself，在关看门狗，屏蔽中断，设置时钟，UART，LED后。作用是把nand flash内容复制到ram。且比较二者前4k是否相同。
+u-boot的CONFIG_SKIP_RELOCATE_UBOOT位于关看门狗，屏蔽中断，设置时钟，cpu_init_crit之后，作用是，vivi没有。
+现在的想法是理解vivi代码后，在u-boot的CONFIG_SKIP_RELOCATE_UBOOT加入NOR，NAND reloate的配置选项。
+主要要还要比较二者代码重定位后的执行内容是否相同。
+(15:17 2007-08-29)
+0xf830=0x1111 1000 0011 0000
+含义如下15: 允许nand；12: 初始化ECC；11: 片选无效；[10:8]: TACLS=0；[6:4]: TWRPH0=3；[2:0]: TWRPH1=0;
+查nand flash命令可以在"ds_k9f12xxx0a.pdf"的p9 command sets查到。例如复位是第一周期内写入0xff即可.
+不明白为什么调用nand_read_ll前要使nand flash复位，查，待做。
+调用nand_read_ll使用了ARM过程调用标准，查，待做。
+代码基本看完，现在需要查:
+1, 比较二者代码重定位后的执行内容是否相同。
+2, u-boot已有nand flash启动代码能否复用。
+
+09:26 2007-08-30
+vivi copy_myself需要修改的地方
+402 ldr     r1, =0x33f00000
+
+10:06 2007-08-30
+Makefile
+vivi下如果使用"make smdk2410"，是直接使用arch/def-configs/smdk2410这个配置文件进行编译，Makefile中是这样实现这个功能的： 
+%: ./arch/def-configs/%
+        $(MAKE) distclean
+        cp arch/def-configs/$* ./.config -f
+        $(MAKE) oldconfig
+        $(MAKE)
+
+10:17 2007-08-30
+vivi中nand flash分区信息位于：
+arch/s3c2410/smdk.c的default_mtd_partitions部分。
+
+10:32 2007-08-30
+现在不明白的是如果on_the_ram的地址在flash范围内，既然nand flash XIP，那是怎么执行的呢？
+(11:33 2007-08-30)搞错了地址。on_the_ram和main都在sdram范围内。那为什么要加nop?
+
+11:03 2007-08-30
+修改u-boot
+1, 加入CONFIG_S3C2410_NAND_BOOT，里面实现复制u-boot从flash到ram的功能；
+2, vivi源代码中：
+408         ldr     r1, =0x33f00000
+这里的0x33f00000在下面两个文件中都有。作用是vivi放在ram中的起始位置。
+./arch/Makefile:    TEXTADDR    = 0x33f00000
+./arch/vivi.lds:  
+SECTIONS {
+  . = 0x33f00000;
+  .text          : { *(.text) }
+  .data ALIGN(4) : { *(.data) }
+  .bss ALIGN(4)  : { *(.bss)  *(COMMON) }
+}
+在u-boot中，起始位置通过标号_TEXT_BASE得到变量TEXT_BASE的值，TEXT_BASE在"board/YF2410/config.mk"定义。所谓将其改为：
+ldr r1, _TEXT_BASE
+
+16:28 2007-08-30
+(10:29 2010-1-6)
+arm学习, APCS(arm过程调用标准), APCS寄存器定义
+1, "ARM SOC体系结构"p151-153是APCS介绍，其中涉及到APCS寄存器使用约定，之前困惑的a1, fp, sp, ip, lr的都是APCS定义的。待细看，待做。
+p249-p260是CP15和MMU的介绍，看，待做。
+ARM920t=ARM9TDMI+CP15+数据缓存+数据MMU+指令缓存+指令MMU+AMBA接口
+2, APCS寄存器
+1), r0-r3: a1-a4 函数参数, 临时寄存器(由函数调用者保存)
+2), r4-r8: v1-v5 寄存器变量(被调用者保存), 实际保护现场到底保存了哪些寄存器是编译器根据具体情况确定的. 
+3), sb/v6: 静态基/寄存器变量6, sl/v7: 堆栈限/寄存器变量7; 
+r11/fp frame pointer: "ARM stack backtrace.pdf"说明了fp(frame pointer)的作用. 位置: "36: \Linux\doc\arm soc\arm体系结构\".
+r12/ip 临时寄存器/新sb内部链接单元调用;
+r13/sp: 堆栈指针.
+r14/lr: 链接地址/临时寄存器
+r15/pc.
+
+18:44 2007-08-31
+修改u-boot
+待做。CONFIG_DEBUG_LL部分还没有完成
+
+20:22 2007-08-31
+Linux, vi命令, set
+":set number", number可以缩写为nu。显示行号。不显示行号是"set nonumber", "set nonu".
+
+20:24 2007-08-31
+vivi, u-boot nand flash boot, copy_myself分析
+1, 把u-boot从flash复制到sdram
+330         @ copy u-boot to RAM
+331         @bamvor.modified.2007-08-31
+332         @ldr     r0, =VIVI_RAM_BASE
+333         ldr     r0, _TEXT_BASE
+334         @bamvor.modified.2007-08-31.end
+335         mov     r1, #0x0
+336         mov     r2, #0x20000
+337         bl      nand_read_ll
+338
+339         tst     r0, #0x0
+340         beq     ok_nand_read
+
+根据APCS如果参数中没有浮点数r0, r1, r2依次表示参数。看vivi"arch/s3c2410/nand_read.c"可知nand_read_ll的三个参数依次是ram起始地址，flash起始地址，要复制内容的大小。这里的flash起始地址用于直接访问nand flash，所以是flash自身的地址，不是ARM存储器映射的地址。当然要从0开始。要复制内容的大小设为0x20000=2*2^16=128K，这足够了，我带有底层调试信息的vivi不到70k，现有的u-boot 96K。
+程序执行后，返回值保存在r0。如果返回值是0进入ok_nand_read部分，后面是校验（见下）。如果返回值不是零在底层调试开启情况下输出提示信息。
+APCS对返回值规定如下(ARM SOC体系结构 p153)：
+简单的结果（如整数）通过a1返回。更复杂的结果通过存储器返回。指定存储器位置的地址通过a1作为附加的第一变元有效的传递到函数。呵呵，对复杂情况不了解，有时间可以试试。这里的a1是APCS的名称，就是r0。
+2, 校验。比较bootSRAM和SDRAM前4k是否相同。前者是ARM启动时硬件从nand复制到ram的，数据正确。后者是我们自己利用nand_read_ll复制的。如果二者不同，说明我们复制的数据有错。
+
+21:29 2007-08-31
+待做
+DW_STACK_START未解决；
+看"今天"那个u-boot文章，为什么要把r2-r9清零。clear_loop作用。
+(23:22 2007-08-31)
+@ clear memory
+@ r0: start address
+@ r1: length
+mem_clear:
+......
+        mov     pc, lr
+这是vivi原文注释。但是"mem_clear"标号和结尾的"mov     pc, lr"说明这是子程序调用。vivi head.S中没有调用"mem_clear"的代码，说明这部分不会被调用。暂时不加入这部分，这是与文档不一致的地方。
+
+23:57 2007-08-31
+编译到最后出错：
+ cd /usr/src/s3c2420-linux/bootloader/u-boot-1.2.0 && arm-linux-ld -Bstatic -T /usr/src/s3c2420-linux/bootloader/u-boot-1.2.0/board/YF2410/u-boot.lds -Ttext 0x33F80000  $UNDEF_SYM cpu/arm920t/start.o \
+                        --start-group lib_generic/libgeneric.a board/YF2410/libYF2410.a cpu/arm920t/libarm920t.a cpu/arm920t/s3c24x0/libs3c24x0.a lib_arm/libarm.a fs/cramfs/libcramfs.a fs/fat/libfat.a fs/fdos/libfdos.a fs/jffs2/libjffs2.a fs/reiserfs/libreiserfs.a fs/ext2/libext2fs.a net/libnet.a disk/libdisk.a rtc/librtc.a dtt/libdtt.a drivers/libdrivers.a drivers/nand/libnand.a drivers/nand_legacy/libnand_legacy.a drivers/sk98lin/libsk98lin.a post/libpost.a post/cpu/libcpu.a common/libcommon.a --end-group -L /usr/local/arm/3.4.1/lib/gcc/arm-linux/3.4.1 -lgcc \
+                        -Map u-boot.map -o u-boot
+lib_arm/libarm.a(_udivsi3.o)(.text+0x8c):/usr/src/s3c2420-linux/bootloader/u-boot-1.2.0/lib_arm/_udivsi3.S:67: relocation truncated to fit: R_ARM_PLT32 __div0
+lib_arm/libarm.a(_umodsi3.o)(.text+0xa8):/usr/src/s3c2420-linux/bootloader/u-boot-1.2.0/lib_arm/_umodsi3.S:79: relocation truncated to fit: R_ARM_PLT32 __div0
+make: *** [u-boot] 错误 1
+
+14:22 2007-09-01
+1, 昨晚链接出错的原因就是编译器的问题，用3.4.1不行，3.3.2就可以，很奇怪。这和注释里面提到的需要用3.4以上编译起矛盾；
+2, u-boot启动成功，但是flash类型和容量都不正确。
+日志和文件见u-boot 0901

@@ -1,0 +1,924 @@
+
+2:14 2007-5-8
+CC2420
+Low current consumption (RX: 18.8 mA, TX: 17.4 mA)
+
+14:15 2007-5-8
+Know problems
+Fr: Readme_Release_1.0
+http://embedded.seattle.intel-research.net/wiki/index.php?title=Readme_Release_1.0
+  - Standard 802.15.4 not configured
+  - TinyOS MAC driver for the 802.15.4 radio
+      - needs code review – probable memory management and error handling
+        issues
+
+18:48 2007-5-8
+今天发现上次写的多线程使用sleep的程序有问题，决定修改后测试，但是不能耽误太多时间。
+
+18:57 2007-05-08
+项目计划, 下午小组讨论结果
+1,建立CC2420收发的基本框架。
+(1) 单工收发实验，一个节点发送，一个节点接收。保证节点收发的基本功能。使用test_tos_mac.c的send和recv方法。
+(2)测试发送数据时能否接收数据。应用程序中仅仅是定时发送数据，是否正确接收通过驱动程序输出的信息判断。参考Linux设备驱动。希望这个步骤排除驱动程序的问题。
+(3)多线程双工收发实验。一个线程发送，睡眠（1s）；另一个线程阻塞读或者poll(timeout=200), read。
+bamvor: 也可以考虑进程发送，线程接收。
+2, 提高收发效率。
+缩短发送后的睡眠时间，缩短poll方法的timeout时间。
+3, 其他：
+(1)解决"0System idle"。
+(2)节点模块加载的时显示的信息不同可能是因为节点Linux内核printk输出信息级别不同。查新下载节点的printk输出信息级别。使所有内核消息出现在控制台, 通过简单地输入:
+(13:13 2009-2-5)
+# echo 8 > /proc/sys/kernel/printk (设置console level为最高级别8, 这样包括debug在内的信息都会输出, 参见"22:20 2007-08-20")
+"13:13 2009-2-5"end
+dmesg 命令将缓存区的整个内容返回给 stdout, 不管它是否已经被读过.
+
+20:16 2007-05-08
+项目计划, 续
+1, CC2420驱动(tos_mac)的输出信息可以改为输出级别是8，把Linux默认级别改为7，这样平时就不会看到驱动输出的结果。
+2, 最好使用proc或sysfs。参考Linux设备驱动。
+(15:41 2007-05-09)
+加载模块的提示信息不同的原因是因为使用了ssh登录，使用串口登录就没有问题。可能是ssh登录时对于内核打印信息的控制不同，另外ssh登录时，cat /proc/kmsg也没有任何内容。
+另外"0System not idle"信息仍然有。
+
+
+20:39 2007-05-08
+802.15.4, CC2420
+使PC机可以加入802.15.4网络：PC机通过usb接口连接到单片机开发板(fpga)
+http://linux-802-15-4.sourceforge.net/
+http://sourceforge.net/project/showfiles.php?group_id=101969
+但是最后更新是2005年1月，项目提到的zigbee并没有进一步的说明或文档。
+
+10:08 2007-05-09
+Imote2 node test process. TODO. 待做; 手册, 总结, 文档;  网络, ssh
+1, change hostname
+echo Imote2-# > /etc/hostname
+2, add hostPC IP address
+echo "192.168.99.100  hostPC" >> /etc/hosts
+3, ssh(need to update***, reference "11:11 2007-05-09")
+(1)copy sshd_config file
+[root@Imote2-2 ssh]#scp \
+> hostPC:/media/NEW/log/Imote2/log/filesystem/ssh/sshd_config \                 
+> ./sshd_config                                                                 
+root@hostpc's password:                                                         
+sshd_config                                   100% 2465     2.4KB/s   00:00
+(2)config sshd
+[root@Imote2-2 ssh]#ssh-keygen -t rsa -f /etc/ssh/ssh_host_rsa_key              
+Generating public/private rsa key pair.                                         
+Enter passphrase (empty for no passphrase):                                     
+Enter same passphrase again:                                                    
+Your identification has been saved in /etc/ssh/ssh_host_rsa_key.                
+Your public key has been saved in /etc/ssh/ssh_host_rsa_key.pub.                
+The key fingerprint is:                                                         
+db:52:52:00:7a:61:da:98:f7:fb:19:02:cf:3d:22:3e root@Imote2-2  
+[root@Imote2-2 ssh]#ssh-keygen -t dsa -f /etc/ssh/ssh_host_dsa_key              
+Generating public/private dsa key pair.                                         
+Enter passphrase (empty for no passphrase):                                     
+Enter same passphrase again:                                                    
+Your identification has been saved in /etc/ssh/ssh_host_dsa_key.                
+Your public key has been saved in /etc/ssh/ssh_host_dsa_key.pub.                
+The key fingerprint is:                                                         
+7e:ea:bb:e1:ea:de:f6:71:36:88:b6:7c:9f:78:96:b5 root@Imote2-2
+(2)start sshd when linux boot
+[root@Imote2-2 rcS.d]#cat S55sshd.sh                                            
+#                                                                               
+#sshd.sh   start sshd services.                                                 
+#                                                                               
+                                                                                
+#add by bamvor.for sshd services. 2007-4-18.                                    
+#the Snum(S55) is reference the Fedora Core 6 /etc/rc2.d/S55sshd                
+echo "start sshd"                                                               
+/usr/sbin/sshd  
+[root@Imote2-2 rcS.d]#chmod 755 S55sshd.sh
+
+11:11 2007-05-09
+网络, ssh登录
+两个节点使用sshd时都提示找不到host key。怀疑是内核有问题，使用之前一直使用的0704161106内核。后来发现如果设置了passphrase，sshd无法正常启动。这应该是ssh_config或sshd_config文件的配置有问题－－没有允许passphrase。现在也不需要无密码登录。暂缓解决这个问题，待做。
+1, 为了统一现在两个节点使用的都是0704161106内核和demo的文件系统。CC2420驱动使用默认配置编译保存在"0705091145/tos_mac.ko"。
+2, ssh
+(1)现有sshd_config配置文件：
+Protocol 1
+HostKey /etc/ssh/ssh_host_key
+(2)
+[root@Imote2-2 ssh]#ssh-keygen -t rsa1 -f /etc/ssh/ssh_host_key                 
+Generating public/private rsa1 key pair.                                        
+Enter passphrase (empty for no passphrase):                                     
+Enter same passphrase again:                                                    
+Your identification has been saved in /etc/ssh/ssh_host_key.                    
+Your public key has been saved in /etc/ssh/ssh_host_key.pub.                    
+The key fingerprint is:                                                         
+03:36:3c:42:66:36:a5:56:f1:19:b1:37:aa:c9:65:2e root@Imote2-2                   
+(3)节点2（48号）启动sshd后，PC机ssh连接出错：
+[root@localhost root]# ssh Imote2-2
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that the RSA1 host key has just been changed.
+The fingerprint for the RSA1 key sent by the remote host is
+03:36:3c:42:66:36:a5:56:f1:19:b1:37:aa:c9:65:2e.
+Please contact your system administrator.
+Add correct host key in /root/.ssh/known_hosts to get rid of this message.
+Offending key in /root/.ssh/known_hosts:6
+RSA1 host key for imote2-2 has changed and you have requested strict checking.
+Host key verification failed.
+删除了PC机中/root/.ssh/known_hosts中与Imote2-2或192.168.99.102有关的行。
+(4)PC机ssh连接节点2：
+[root@localhost root]# ssh Imote2-2
+The authenticity of host 'imote2-2 (192.168.99.102)' can't be established.
+RSA1 key fingerprint is 03:36:3c:42:66:36:a5:56:f1:19:b1:37:aa:c9:65:2e.
+Are you sure you want to continue connecting (yes/no)? yes
+Warning: Permanently added 'imote2-2,192.168.99.102' (RSA1) to the list of
+known hosts.
+root@imote2-2's password: 
+
+Processing /etc/profile... Done
+[root@Imote2-2 /root]#
+
+12:03 2007-05-09
+把节点2的tos_mac改为自己编译的。完成
+
+13:48 2007-05-09
+电池板
+不能用那个电池板是因为没有保险丝，郁闷。
+
+13:52 2007-05-09
+下午
+1, 写，sleep 1s；阻塞read。
+2, 驱动printk
+14:48 2007-05-09
+现在接收端信号强度是0。两个节点都是如此。
+难道是现在的驱动程序有问题？，待做。
+
+16:19 2007-05-09
+tosmac_write->CC2420_send
+找到了"printk("0System not idle\n");"，位于CC2420.c。当current_state不等于IDLE_STATE时会输出该信息。current_state由CC2420_state赋值。
+什么情况下CC2420_state会等于"IDLE_STATE"？
+1, CC2420_read，非阻塞模式下接收到数据后。
+    if(!non_blocking_mode) {
+      if(wait_event_interruptible(rq, recv_done == 1)) {
+        CC2420_state = IDLE_STATE;
+      }
+      recv_done = 0;
+    }
+2, CC2420_init，CC2420初始化后。
+3, CC2420发送，接收失败后：见CC2420_send_failed，CC2420_recv_failed。
+4, CC2420_packet_sent和CC2420_packet_rcvd
+之前频繁出现"IDLE_STATE"时，重新卸载和插入模块后就可以解决问题，实际上是调用了CC2420_init函数。
+
+16:44 2007-05-09
+待做
+1, 需要细读case SG2_GPIO0_CC_FIFOP. ***
+2, 查mac退避。查收发优先级。
+(17:02 2007-05-09)
+3, 启动大概需要40s，修改blob的等待时间，这样启动时间可以缩短到32s。
+
+17:51 2007-05-09
+加入printk后，只能看到CC2420产生了FIFOP中断，没有看到对于tasklet的调用。
+参：tos_mac_bamvor-test_tos_mac_block-send和tos_mac_bamvor-test_tos_mac_block-send-200705091746。前者没有加入是否调用taklet的"printfk(KERN_DEBUG "entering bottom half");"。
+(19:52 2007-5-9)
+突然发现上面的语句写错了，多加了f－－printfk。
+
+18:23 2007-05-09
+分析CC2420驱动(tos_mac), 续, CC2420_flush_RXFIFO
+该函数与"CC2420_read_RXFIFO"类似。
+CC2420_flush_RXFIFO->修改FIFOP中断为非边沿触发（目的禁止中断，注1）
+                   ->读CC2420_RXFIFO寄存器(CC2420_read_reg in SG2_CC2420.c，注2)
+                   ->清除RXFIFO两次（CC2420_SFLUSHRX，注3）
+                   ->包接收状态改为没有正在接收的包
+                   ->设置FIFOP为下降沿中断
+注：
+1, 修改FIFOP中断为非边沿触发，参考CC2420.c CC2420_irq_handler函数：
+                // if SFD already fell, then disable interrupt
+                if(!TEST_SFD_PIN()){
+                    set_irq_type(CC2420_SFD_IRQ, IRQT_NOEDGE);
+                    printk(KERN_DEBUG "SFD already fallen\n");
+                   }
+2, 读出的寄存器值是16位数据，通过下面的语句保存在16位无符号整数data中：
+    data =  SSDR_P((&SG2_ssp_dev)->port);
+    data = ((data<<8) & 0xFF00);
+    data |= SSDR_P((&SG2_ssp_dev)->port);
+对于读取RXFIFO的数据。实际上只保存了最开始的数据。也就是高8位是FIFO中的字节数，低8位是数据的第一字节，验证，待做。
+3, CC2420_SFLUSHRX同样位于"CC2420Const.h"
+#define CC2420_SFLUSHRX        0x08
+CC2420, p62. Flush the RX FIFO buffer and reset the demodulator. Always read at least one byte from the RXFIFO before issuing the SFLUSHRX command strobe.
+以CC2420_S开始的都是CC2420 Strobe指令。
+
+18:36 2007-05-09
+继续分析CC2420_flush_RXFIFO函数。
+搞清如果没有上层的读函数，接收到的数据最多可以传递到哪里
+
+20:21 2007-05-09
+当前CC2420_enable_ack仅仅由TOSMac.c的ioctl调用。
+
+20:29 2007-05-09
+使用tos_mac_bamvor.ko和test_tos_mac_block的multithread函数，结果见tos_mac_bamvor-test_tos_mac_block_multithread-send-200705092038。可以收到数据，但是发不出去。
+tos_mac_bamvor-test_tos_mac_block_multithread-send-200705092036两个节点都使用test_tos_mac_block的multithread函数的日志。
+
+20:36 2007-05-09
+今日收获
+1, 重新配置了两个节点
+2, flush函数
+3, 困惑，为什么二者都是发送时没有进入中断的下半部分"entering bottom half"，觉得明天还是用gdb调试比较好。详细分析底层驱动。
+
+10:32 2007-05-10
+1, 一个节点固定时间发送；一个节点用poll查询，非阻塞read。
+(11:01 2007-05-10)无遗漏的连续正确接收61侦。
+为了方便把tos_mac_bamvor.ko改为tos_mac.ko，原有tos_mac.ko改为tos_mac.ko.bak。
+tos_mac_bamvor.ko备份在主机的$Imote2/compileResult/0705101102/。修改了原有poll_test，把test_tos_mac.c，test_tos_mac_0510, tos_mac_bamvor.ko，运行结果保存到$Imote2/log/cc2420/poll_test目录。
+//"11:01 2007-05-10"结束
+2, 发送，多次poll的总和是1s，每次poll成功后read。
+
+
+11:28 2007-05-10
+待做. 学习CC2420的抓包软件
+
+12:12 2007-05-10
+计划：完成test2
+
+13:24 2007-05-10
+TRACE32下载blob(bootloader)的文档见"16:55 2007-04-11"
+
+14:57 2007-05-10
+usleep没有效果不知道为什么。耽误很多时间。测量poll的timeout。每次都有8-9ms的误差，应该是由于gettimeofday调用本身造成了。
+
+16:52 2007-05-10
+1_1651是先开节点；2_1651是后开节点。
+
+17:23 2007-05-10
+1723。本节点后开发送，另一个节点收发（write_poll_read）。没有FIFOP，只有SFD
+
+17:45 2007-05-10
+待做：修改"0System not idle"信息为USBnet终端可以显示信息的printk输出级别。
+
+17:49 2007-05-10
+1, 根据没有send_failed，而且有wait finished。我们认为发送成功。
+部分函数调用关系：
+CC2420_start_send->CC2420_write_TXFIFO
+CC2420_try_to_send->CC2420_send_packet
+
+CC2420_send_packet:
+if ((status >> CC2420_TX_ACTIVE) & 0x01) {
+如果射频idle返回0，如果射频活跃返回1
+CC2420,P29
+
+CC2420, P34***
+During transmit, the FIFO and FIFOP pins are still only related to the RXFIFO. The SFD pin is however active during transmission of a data frame, as shown in Figure 15.
+
+正确发送的过程参见日志1612
+
+19:01 2007-05-10
+项目进展, 待做, 重要阶段日志
+1, "send: current state:8"信息中的8指RX_STATE，也就是说很可能是接收信息造成的状态机有问题。
+看Imote2-1_2ndstart，Imote2-1_driver_log和Imote2-2_1ststart。注：节点2死了。
+2, 乒乓球实验。
+3, yahoo group 查"0System not idle"。
+4, 加入对FIFO，CCA的检测；
+5, 10号的实验结果还说明，如果使用write_multi-poll-read程序，后开会出现没有FIFOP的情况。这个问题很奇怪。
+10号最终代码保存在"$Imote2/log/cc2420/write_multi-poll-read/0510_backup/"
+6, (10:09 2007-05-11)查SG2_GPIO0_CC_FIFOP中断中阻塞和非阻塞是否都可以到tasklet调用"tasklet_schedule(&read_packet_tasklet);"
+疑问：SFD中断中为什么不处理接收的情况？
+(11:04 2007-5-11)
+yahoo group 查"0System not idle"没有结果。
+现在的发现的问题基本都与发送有关，其中问题5涉及硬件接收，需要有第三个节点辅助验证，留在周一做。问题六是接收刚开始时发现的问题，可能有意义，先查。问题1是接收出问题的现象稍后再查。
+
+10:38 2007-5-11
+MAC层CCA的作用。
+CCA的作用：发送时检测CCA信道空是否闲超过DIFS，如果超过进行随机退避。退避过程中如果CCA不空闲，停止退避等待CCA空闲后再退避剩余的退避时间。进行随机退避的目的是同时有其他节点也在检测CCA是否空闲等待发送，如果检测空闲后直接发送可能会有冲突。
+
+10:58 2007-05-11
+platx, led使用
+自: http://tech.groups.yahoo.com/group/intel-mote2-community/message/150
+modprobe gpiomon
+echo c103 > /proc/gpio/GPCTL # turn on red LED
+echo s103 > /proc/gpio/GPCTL # turn off red LED
+echo c104 > /proc/gpio/GPCTL # turn on green LED
+echo s104 > /proc/gpio/GPCTL # turn off green LED
+echo c105 > /proc/gpio/GPCTL # turn on blue LED
+echo s105 > /proc/gpio/GPCTL # turn off blue LED
+另外，同一个文档说，使用RfmToLed和CntToLedsAndRfm收发程序时LED没有变化是驱动的bug。
+
+11:23 2007-05-11
+查看系统printk信息的方法：
+1, cat /proc/kmsg
+2, dmesg
+
+13:09 2007-05-11
+Linux, 文件系统, NFS
+挂载NFS文件系统时不能在要挂载的目录进行操作，这样不会成功。如果出现这种问题，用umount卸载，退出要挂载的目录重新mount即可。
+
+13:11 2007-05-11
+项目进展, Linux驱动, poll
+更正。系统调用poll, select, epoll最终都会调用驱动程序中的poll函数。这样说来佳露使用select函数造成的死机可能也是驱动的问题。
+
+13:21 2007-05-11
+继续测多线程的程序。确定是否是0System not idle问题。
+参"14:20 2007-05-11"
+
+13:57 2007-05-11
+非阻塞模式下的multithread_test结果：
+<7>send: current state: 8
+<4>0System not idle
+<7>Write: done
+日志：$Imote2/log/cc2420/multithread_test/non_block的Imote2-1_1st_on  Imote2-2_1st_on目录分别是Imote2-1和Imote2-2先开启的结果。没有driver_log后缀的是程序输出到控制台的信息。driver_log是驱动程序输出的信息。另外"Imote2-1_2nd_driver_log_theBeginingOfThisMsgIsMissing"文件中开始信息缺失，这是因为系统printk的缓冲有限，新数据覆盖了旧数据。
+相关代码位于"$Imote2/log/cc2420/write_multi-poll-read/0510_backup/"目录。
+
+14:20 2007-05-11
+完成非阻塞模式的测试。继续完成阻塞模式的测试使用test_tos_mac_0511
+阻塞模式测试见$Imote2/log/cc2420/multithread_test/block/Imote2-1_1st_on
+似乎真的是节点死了，驱动没有输出信息。先开节点显示多发了一次数据。但是在节点关闭之后，两个节点都都收到了FIFOP中断，这很奇怪。
+(19:19 2007-05-17)修改驱动后使CC2420读取后恢复到IDLE_STATE，现有多线程使用write，poll-read两个线程，测试结果见5/17日志。
+
+15:38 2007-05-11
+待做, 测试节点：
+1, 需要加入的程序/root/gdbserver, /lib/libthread_db.so.1, /root/tosmac/CntToLedsAndRfm, test_tos_mac, RfmToLeds等程序。
+
+15:51 2007-05-11
+看multithread_test代码，突然觉得可能是上锁导致的问题，如果刚写完，但是还没有解锁，此时read上锁，可能有问题。还是决定先做单线程的测试，因为多线程的程序是否正确就无法排除。
+(19:21 2007-05-17)现在去掉了互斥锁，不过仍有死机情况。
+
+16:00 2007-05-11
+分析CC2420驱动(tos_mac), 续, RX_STATE
+还是回到对于驱动程序的分析：
+使用C, R程序进行和收发。
+R（接收）部分的printk信息：
+<7>IRQ type is FIFOP
+<7>8, 0
+8表示接收状态，继续查看了48侦，每次都是"8, 0"。说明接收状态是正常状态。
+分析代码，CC24240_read中，最开始：
+CC2420_state = RX_STATE;
+也就是说，如果上层有读的操作，CC2420的状态转入接收状态，这样才能接收数据。
+另外说明，两个节点对发数据（不接收）时，进入FIFOP后只有FIFO中断产生这个信息而没有其他信息是正常的。现在的关键是查找何处没有完成的read操作造成了"0System not idle"错误。
+
+17:12 2007-05-11
+怀疑是CC2420_read函数的问题.
+下面是原有注释
+    // FIXME: the use of RX_STATE is broken -- not sure why it's here at all
+    // basically the system should receive packets all the time, and then
+    // they just get lost of nobody is trying to read them
+最后一行的of，似乎应该是if。
+把CC2420_read中处理非阻塞模式的语句由
+        if (ok_to_read){
+          ok_to_read = 0;
+          return SUCCESS;
+        } else {
+          return FAIL;
+        }
+改为
+        if (ok_to_read){
+          ok_to_read = 0;
+          //bamvor.20070511. for abnormal "0System not idle"
+          printk(KERN_DEBUG "switching CC2420_state to IDLE_STATE\n");
+          CC2420_state = IDLE_STATE;
+          return SUCCESS;
+        } else {
+          //bamvor.20070511. for abnormal "0System not idle"
+          printk(KERN_DEBUG "switching CC2420_state to IDLE_STATE\n");
+          CC2420_state = IDLE_STATE;
+          return FAIL;
+        }
+原有模块保存为tos_mac.ko.bak0511。新模块保存在"$Imote2/compileResult/0705111714"。和$Imote2/compileResult/CC2420_module/tos_mac.ko.bak.0514IDLE_NONBLOCK。
+
+17:56 2007-05-11
+write_multi-poll-read
+A, 结果，没有了"0System not idle信息"。但是收到的信息除了个别的与B.3类似的超长信息都是序号为04的信息。日志见"$Imote2/log/cc2420/write_multi-poll-read/0511"，忘记了哪个节点先开启的。但是先关闭的Imote2-1。
+下面的信息是关闭Imote2-1后Imote2-2输出的信息。
+02      33      ffffffc2        ffffff9d        01      ffffffab
+ffffffef        fffffff1        31      4c      ffffffe3        ffffffa3
+ffffffd5        ffffffed        10      fffffffb        16      ffffffc9
+6f     4c       67      69      42      1f      73      5e      ffffffac
+28     time passed 19191 (0.1)s
+ffffffa4        ffffffd4        1b      ffffffc8        14      5a
+ffffff97        ffffffc7        ffffffd0        65      ffffffc9        16
+ffffffcf        fffffff6        41      56      ffffffd2        ffffff83
+ffffff89        ffffff9d        18      6b      72      18      67
+ffffffb9       6b       56      time passed 19199 (0.1)s
+
+B, 疑点,，查，待做：
+1, 查使用poll时是否状态被切回去。
+会。见"19:54 2007-05-11",下一步是检查那里的程序把CC2420的状态恢复为了IDLE，待做。
+2, 由于观察到现在5s接收一次，所以认为接收到了数据，但是读取不正确。 
+3, 多次发现下面的信息。佳亮认为有可能是屋内802.11设备的干扰。不确定。佳亮查看802.11的信道后，发现802.15.4的15信道可以使用，现有CC2420默认设置是11信道。
+ffffff84        20      51      04      32      73      5c      ffffffb7
+ffffff9c         ffffff83        ffffffc3        ffffff9b        ffffffbf
+ffffffd0         ffffff97        fffffffc        77      32      48
+ffffffc5        ffffffc7        70      ffffffd3        45      15      37
+ffffffa2        ffffffa6        time passed 5642 (0.1)s
+注：本数据同样来自Imote2-2节点。
+
+19:54 2007-05-11
+使用test_tos_mac_0511-4的poll_write函数。测试poll之后能否正常发出数据。
+日志保存在"$Imote2/log/cc2420/poll_test/0511"。
+实验结果是可以。同时驱动程序输出的信息也说明pollread之后，CC2420a恢复到了IDLE状态。
+//"17:00 2007-5-15"
+这是驱动程序输出的接收最后一侦和开始发送第一侦的log。
+IRQ type is FIFOP
+8, 1
+entering bottom half
+packet is being read
+rxfifo_done: length is 15
+Length convert from 15 to 3
+end of RXFIFO
+receive done. output  received packet: <7>rx_packet.data[0]=4
+send: current state: 2
+DestAddr is 65535
+DestAddr is 65535
+timer started
+interval is 30
+start_send
+Timer IRQ happened 
+OS Timer IRQ
+timer is INITIAL
+length is 15
+CCA is good
+timer started
+interval is 1000
+IRQ type is SFD!
+CC2420 state is in TX_WAIT
+SFD:FSMSTATE is 38
+cc2420_state: Tx_Wait
+timer started
+interval is 1000
+SFD: TX_WAIT
+wait finished
+Write: done
+
+21:05 2007-05-13
+待做。
+修改test_tos_mac.c：Ctrl+c退出当前运行的函数，而不是test_tos_mac本身。
+
+23:45 2007-05-13
+项目计划, 周一待做
+如果有新节点
+1, 组内分工测试节点。
+2, 实验现有write_poll_read，使用原有驱动。检查到底是没有发出，还是没有接收。
+如果没有新节点：
+继续按11日思路做。修改信道为15。
+
+10:48 2007-05-14
+多线程, 张宇同样认为多线程中不应该加入互斥锁。测试结果见5/17日志
+
+11:25 2007-05-14
+tos_mac_tools.sh, 备份
+tos_mac_tools.sh bak 0514
+是把/lib/modules/2.6.14_r1.0/kernel/drivers/tosmac目录的tos_mac.ko改为tos_mac.ko.bak.0514。
+
+11:46 2007-05-14
+分析CC2420(tos_mac)驱动, 续
+修改CC2420_read_packet函数：
+    if (_is_packet_receiving) {
+        printk(KERN_DEBUG "previous packet receiving, schedule");//bamvor.20070514
+        tasklet_schedule(&read_packet_tasklet);
+    } else {
+        printk(KERN_DEBUG "no packet receiving, to receive");//bamvor.20070514
+        is_packet_receiving = TRUE;
+    }
+Imote2-2节点是：
+no packet receiving, to receive。说明没有出现节点收侦错误，每次接收到的侦都是刚刚收到的。
+
+12:24 2007-05-14
+注释有数据情况下的IDLE_STATE修改切换。因为CC2420_packet_rcvd函数中有CC2420_state = IDLE_STATE;，
+        if (ok_to_read){
+          ok_to_read = 0;
+          //bamvor.comment.20070514
+          //bamvor.20070511. for abnormal "0System not idle"
+//          printk(KERN_DEBUG "switching CC2420_state to IDLE_STATE\n");
+//          CC2420_state = IDLE_STATE; 
+          //bamvor.add.20070514
+          printk(KERN_DEBUG "poll success: current state: %d\n", CC2420_state);
+另外，在tosmac_read和write中加入显示读写开始和结束的输出信息，验证poll成功后是否read了数据。
+仍然不正确：先开节点可以收到数据，但收到第一次数据后无法发送信息－－"0System not idle"信息。后开节点有时收到错误的数据，且有0System not idle。日志见write_poll_read/0514-2。
+
+13:22 2007-05-14
+把CC2420_read中修改CC2420_state的命令移到阻塞模式下。
+//    CC2420_state = RX_STATE;//bavmor.comment.2007050141320
+    if(!non_blocking_mode) {
+      CC2420_state = RX_STATE;//bavmor.add.2007050141320
+同时注释了原有阻塞模式下把CC2420_state改为IDLE的语句。
+仍然是每次都接收到04这侦。模块名称是"tos_mac.ko.bak.0514RX_STATE_BLOCK"
+
+14:46 2007-05-14
+分析CC2420(tos_mac)驱动, 续
+做实验：
+把成功的poll_write函数去掉等待另外节点切换状态的时间。并且无线次重复这个过程。看是否这个节点是否会出现"0System not idle"的问题。结果是会出现。日志见0514-3。实验过程：有poll_read_write_0514的节点(Imote2-2)先开启，Imote2-1开始发送，Imote2-2正常接收，Imote2-1改为接收，Imote2-2死。查看日志表明一直出现开始发送和"0System not idle"信息。
+
+现有write_poll_read函数的实验中，有相同的实验。但是我没有印象，日志里也没有这个实验，可能是和佳亮博士一起做的，没有记入日志，经佳亮博士提醒，做了这两个实验。
+下一步：联想neighbor.c中使用POLL预定义时。读到数据后，节点会睡眠一段时间。会不会是read成功后节点底层函数没有处理完，不能马上发送数据？
+实验，在write_poll_read中read成功后加入sleep时间，但仍保证write总时间不变。另外跟踪底层程序，看是否有这个情况。
+(17:02 2007-5-15)
+poll_write和neighbor都有问题。前者的测试不清楚，有时间重新分析，远期待做。后者的问题见"19:19 2007-05-14"。
+后来还是使用修改后的驱动：
+tos_mac.ko.bak.0514RX_STATE_BLOCK或tos_mac.ko.bak.0514IDLE_NONBLOCK。在现有程序中两个程序的作用相同。现在使用的是前者，因为非阻塞read其实并不会也不需要影响CC24420_state，所以把RX_STATE限制在阻塞模式下使用好一些。
+//"17:02 2007-5-15"
+
+15:48 2007-05-14
+查如何达到毫秒级睡眠。网上有人说可以用select，只要select使用的设备没有其它进程使用即可。
+
+16:25 2007-05-14
+test_tos_mac_0514-5
+把原有poll_read_write_0514改为线程th_poll_read_write_0514，由poll_read_write_0514调用。
+怀疑使用-lpthread参数编译后，sleep只能使线程睡眠。为了使用sleep只能把原有poll_read_write_0514程序改为一个线程。
+还是出现：
+<7>starting write.
+<7>send: current state: 8
+<4>0System not idle
+<7>Write: done
+<7>starting write.
+<7>send: current state: 8
+<4>0System not idle
+<7>Write: done
+<7>starting write.
+<7>send: current state: 8
+<4>0System not idle
+<7>Write: done
+<6>close tosmac
+<7>Close device
+
+16:49 2007-05-14
+按照前面的思路进行实验。发现不论把sleep放在何处都不行。
+于是怀疑前面neighbor.c的结果。重做实验neighbor_0514。发现先开节点接收到2两次信息，后开节点收到一次信息后。出现"0System not idle"。
+这条路不通。进展。还是转回去考虑修改IDLE_STATE"。比较好。
+
+19:19 2007-05-14
+饭后又做了一次neighbor.c的实验。
+结果见"$Imote2/log/cc2420/neighbor/0514-2"。
+发现一个新情况：
+Imote2-1_1st_driver_log中，出现"0System not idle"信息是在发送信息，驱动读数据之后。驱动读数据并不会改变CC2420_state，所以可能write相关函数设置也有问题。重要，待查。
+
+20:15 2007-05-14
+决定还是从write_poll_read入手。
+多次收到data[0]=4的原因是什么？
+是发错了，还是接收错了。
+向节点复制：
+1, tos_mac_original.ko
+2, 原有的write_poll_read程序
+
+20:36 2007-05-14
+延长poll_read_write中read后的停顿时间。测试是否工作正常。
+修改此函数，通过命令行控制是手动还是sleep。保存在test_tos_mac_0514-7。另外原有的write_poll_read程序也在其中。
+手工控制也有问题。原来没有发现问题是因为两边节点没有使用同样的程序。进展。
+
+21:22 2007-05-14
+测试原有write_poll_read程序。
+两个节点都使用write_poll_read。节点2先开始，除了节点2第一次收到的数据是01      00      ffffff85        time passed 23 (0.1)s，以外，两节点其余都是：
+04      00      ffffff85        time passed 274 (0.1)s
+第一类测试：这时如果停止节点1程序，节点1改用单接收程序。
+节点1收到：
+Length:03 Fcf: 0x0108 Seq#:77 DestPAN:ffff DestAddr:ffff TypeID:04 GroupID:7d   
+Data: 05 00 85 Strength:246 LQI:104 CRC:1 
+序号从05开始，都是正常变化。如果停止节点1程序，重新用单接收程序。最开始节点1遗漏了一侦的序号。后面仍然正常。如果节点1改用单发送程序，节点2从01开始接收，序号递增。节点1重启单发送程序，节点2接收内容同样。
+如果节点1改用write_poll_read，重复上面的信息。
+第二类测试：如果按下列顺序实验：节点1改用单接收程序，节点1改用单发送程序，节点1改用单接收程序...。每次改为节点1改用单接收程序后，接收序号都从04或05开始。
+
+(21:47 2007-5-14)
+使用单收程序时，注意到有一个数据是"Seq#:10"发现这个序号是按时间正常增加的。即不论是否收到了信息，序号都是按5s加1，变化的。在write_poll_read中显示这个序号。
+test_tos_mac.c的recv函数
+printf("Seq#:%02x ", recv_pkt.dsn);
+修改后编译的结果是test_tos_mac_0514-8。位于"$Imote2/log/cc2420/write_multi-poll-read/0514-4"
+从seg看，收到的数据是正确的。下面查recv_pkt.dsn从何处产生。查数据在哪里被改错了，(5-17)后来发现是发送的错误，当时应该用一个节点单接收，这样就知道接收信息并没有问题。
+
+00:15 2007-05-15
+今日总结:
+多次在不同的测试方法之间摆动，耽误了一些时间。现在觉得还是3的思路更好些。
+1, 重新测试neighbor.c。发现一个新情况：
+Imote2-1_1st_driver_log中，出现"0System not idle"信息是在发送信息，驱动读数据之后。驱动读数据并不会改变CC2420_state，所以可能write相关函数设置也有问题。但是这个错误没有3重要。
+2, 分析poll_read_write函数，用手动控制，也会出现"0System not idle"。手工控制也有问题。原来没有发现问题是因为两边节点没有使用同样的程序。
+3, 详细测试原有write_poll_read程序，用通用的接收方法可以看到"Seq#:10"序号，序号完全正确。收到的序号是recv_pkt.dsn，由发送函数前增一。说明现在收到的包是正确的。明天根据收发包过程数据在哪里出的错。为了对比，两个节点发不同的数据。
+
+10:02 2007-05-15
+项目进展, 待做
+1, 由于发现seg号是连续的，继续沿着5-14总结3，继续分析，预计需要两天时间。
+2, 张健开始编写项目概要设计文档。系统分析之路：TP311.52/154。
+
+11:23 2007-05-15
+计划1
+把write_poll_read显示收到数据包的格式改为与函数recv相同的格式。结果使用新程序的节点收到的数据没有变化。使用旧程序的节点收到数据如下：
+[root@Imote2-2 nfs]#./test_tos_mac_0514-8 5 0              
+CC2420(TOSMAC) driver test: 
+insert module tos_mac first (modprobe tos_mac)
+ 0: time_accuracy_test using gettimeofday
+ 1: imote2_time_sync
+ 2: bacic send test
+ 3: bacic recv test
+ 4: poll recv test
+ 5: write_poll_read_test, write period is 1s
+ 6: multithread test
+ 7: duplex tramsmition test
+ 8: channel test
+ 9: poll, write. test CC2420_state between poll and write
+10: poll_read_write_0514
+Select function to test
+5
+close and reopened in NON-blocking mode
+03       00      ffffff85        Seq#:03  time passed 16 (0.1)s
+04       00      ffffff85        Seq#:04  time passed 66 (0.1)s
+05       00      ffffff85        Seq#:05  time passed 117 (0.1)s
+06       00      ffffff85        Seq#:06  time passed 167 (0.1)s
+07       00      ffffff85        Seq#:07  time passed 217 (0.1)s
+似乎是正确的。
+如果都使用新程序，结果如下：
+Data: 03 00 85 time passed 1971 (0.1)s                                          
+Length:03 Fcf: 0x0108 Seq#:29 DestPAN:ffff DestAddr:ffff TypeID:04 GroupID:7d   
+Strength:227 LQI:103 CRC:1                                                      
+下一步：
+0, 使用没有修改的驱动程序测试，先开节点会收到数据，但是发送时会出现"0System
+not idle"信息。后开节点发送正常，没有数据收到。
+现在使用的模块是tos_mac.ko.bak.0514RX_STATE_BLOCK
+1, test_tos_mac_0514-8程序的错误原因：发送数据包自己的需要由变量i控制，当时的输出收到包的语句也在发送接收大循环中，也使用了变量i，每次发送的数据又都是4字节，所以除了发送的第一个包，后面的每次发包时i都是4。呵呵，当时为了省事没有梳理程序，结果出了这么弱智的错误。另外强制转换是需要的。
+2, 发包内容改为上一次收到包的时间，保证两个节点的数据完全不同。发送较长的数据，现有FISCO要求的数据长度是16, 20字节，include/linux/tosmac.h中定义TOSH_DATA_LENGTH是28字节，这应该足够用了。测试发送28字节和40字节。
+(15:46 2007-5-15)
+测试发送28字节完成，可以正确收发。
+使用了发送时间作为参数，这样两个节点的发送数据不同，便于比较。代码见"$Imote2/log/cc2420/write_multi-poll-read/0515-1"。test_tos_mac_0515-1_write_poll_read（test_tos_mac_0515_1-write_poll_read是同一文件）
+40字节测试暂缓，待做。
+//"15:46 2007-5-15"
+3, 如果正确，进行多线程实验。
+多线程的结构：
+方案1（原计划）：一个线程读，一个线程写；
+方案2，leader节点工作最多，关键是满足它的要求。leader的工作实际上是周期性的发送包，然后监听数据，根据收到的不同数据进行不同的操作。现在的想法***：进程负责数据的收发，使用队列管理收发的数据。根据收到的数据建立或把数据给已有的线程进行处理。
+(15:23 2007-05-15)
+与张宇讨论。张宇认为方案1好，收到包以后可以在本线程处理，也可以建立新线程处理。
+将来小组内可以再讨论。
+bamvor: 现在只需要测试方案1中一个线程读，一个线程写。
+
+15:25 2007-05-15
+张健待做（已转移）
+1, 需要测试方案1中一个线程读，一个线程写是否可以（完成）。整理现有write_poll_read代码。（完成）
+2, 总结驱动查错。发maillist
+3, 信道改为15（完成）。查其他待做。（完成）
+4, 驱动测试文档。（阶段完成，待完善）
+5, FISCO概要设计；
+5-15, 测试：
+6, write_poll_read的发送周期缩短至100-200ms，poll周期相应缩短（死，进一步测试，待做；
+7, 解决write_poll_read收到负数，收到乱码的问题。
+
+16:25 2007-05-15
+1, write_poll_test测试。
+出现乱码和负数。现有TOS_Msg结构中data是有符号8位数。
+output_pkt应该使用无符号数。
+2, 多线程测试。现有multithread_test没有通过，仍然是死机。
+
+16:34 2007-05-15
+test_tos_mac_0515-2_wpr_mtt
+1, multithread_test程序去掉了读写互斥锁。
+在使用阻塞读的情况下，仍然出现"0System not idle"，这是正常情况。
+因为阻塞读通过tosmac_read调用CC2420_read，该函数会先CC2420_state改为RX_STATE，读取完成后会再改回IDLE_STATE。所以在整个阻塞读过程中，都无法发送数据。
+2, write_poll_read：
+//        printf("%s", data);
+        for ( i = 0; i < pMsg->length; i++ ) {
+            printf("%c", (unsigned char) data[i]);
+        }
+仍然有负数，但是没有乱码了。
+21298*0.1s sending time pas
+time passed 21371 (0.1)s
+21348*0.1s sending time pas
+time passed 21421 (0.1)s
+21398*0.1s sending time pas
+time passed 21472 (0.1)s
+21449*0.1s sending time pas
+time passed -21427 (0.1)s
+-21450*0.1s sending time pa
+time passed -21377 (0.1)s
+-21400
+time passed -21327 (0.1)s
+-21349
+time passed -21276 (0.1)s
+-21299
+
+3,  multithread_test，预定义改为：
+#define M_NON_BLOCK
+//#define M_DELAY
+后面把read函数改为poll。
+4, (17:27 2007-5-15)write_poll_read：
+//    int time_passed = 0;              //passed time. count by sender.
+    unsigned int time_passed = 0;               //passed time. count by
+sender.
+未测试。待做。
+现有test_tos_mac.c中multithread_test函数修改未测试。
+
+10:44 2007-05-16
+test_tos_mac_0515_1-write_poll_read, 节点死
+write周期改为1s, poll周期仍是200ms。
+[root@Imote2-2 nfs]#./test_tos_mac_0515_1-write_poll_read 1 0
+节点1先于节点2开启。
+出现下面信息后，两个节点没有其他信息显示：
+节点1:
+ 4892*0.1s sending time pas
+time passed 5002 (0.1)s
+节点2：
+ 5002*0.1s sending time pas
+time passed 4903 (0.1)s
+重启节点2程序，两节点都正常收发。
+查看driverlog，节点1发送信息正常，节点2接收信息正常。怀疑刚才的死机是节点2出错造成的。重做刚才的实验。
+(11:13 2007-05-16)
+节点1正常，节点2：
+time passed 13917 (0.1)s
+ï¤
+   "÷á­ýÑº«⎽TL É"▒⎽ãÝR
+├␋└␊ ⎻▒⎽⎽␊␍ 13927 (0.1)⎽
+13877*0.1⎽ ⎽␊┼␍␋┼± ├␋└␊ ⎻▒⎽
+两个节点都没有死，从时间看数据收发正确。很可能是受到干扰后，国家页代码之类被意外修改，所以显示的不是英语字母。
+先改信道。再测试write_poll_read和多线程。
+
+11:36 2007-05-16
+节点1：
+-14262
+time passed -14302 (0.1)s
+-14252
+time passed -14292 (0.1)s
+-14242
+time passed -14282 (0.1)s
+-14231
+time passed -14271 (0.1)s
+节点2：
+-14302
+├␋└␊ ⎻▒⎽⎽␊␍ -14252 (0.1)⎽
+-14292
+├␋└␊ ⎻▒⎽⎽␊␍ -14242 (0.1)⎽
+-14282
+├␋└␊ ⎻▒⎽⎽␊␍ -14231 (0.1)⎽
+-14271
+├␋└␊ ⎻▒⎽⎽␊␍ -14221 (0.1)⎽
+driverlog正常。
+
+11:52 2007-05-16
+修改信道, 修改源代码
+临时加入ioctl所需cmd值。
+test_tos_mac_0516-1_ct
+set和get都是失败。
+using arg1 as channel
+setting 15. 
+ioctl return value is -1, 
+Now, the channel is -1. 
+根据错误号修改程序，得到正确结果。
+删除上面临时加入的cmd值，把幻数和cmd都加入到"../../include/linux/tosmac.h"，该文件原有幻数和cmd是旧的。
+代码"/media/NEW/log/Imote2/log/cc2420/ioctl_test/0516-1", 看readme。
+
+15:33 2007-05-16
+write_circle_time改为ms为单位。程序中有把秒转为us的常数，需要修改。
+
+15:53 2007-05-16
+问题, write_poll_read
+设置write周期和poll周期的单位是毫秒。
+使用200, 50。正常运行几秒后节点死，两次都是如此。频点是15。
+改使用5000, 200测试。修改频点后，还是有乱码：
+节点2：
+ 1272*0.1s sending time pas
+time passed 1288 (0.1)s
+��¿½�y]��-¿½˓�\� W�����
+time passed 1331 (0.1)s
+850秒内一共发现6次。
+出现乱码：
+time passed 10676 (0.1)s
+¡Jí«D±â
+├␋└␊ ⎻▒⎽⎽␊␍ 10697 (0.1)⎽
+10710*0.1⎽ ⎽␊┼␍␋┼± ├␋└␊ ⎻▒⎽
+802.15.4的15信道本来是位于802.11的1和11之间，干扰较小，但刚才查看信道发现4信道也有占用，所以想没有干扰很难，转变思路，考虑抗干扰。
+看crc/ack，参CC2420datasheet，如果不行就自己发送标志侦，见"18:50 2007-05-17"。
+
+16:40 2007-05-16
+测试write_poll_read
+1, 参数5000 200（写周期5000ms，读周期200ms）
+到-18000没有出错，实际时间是65535-18000=47535(0.1s)=79分钟？。但是两个终端显示出了数字都是乱码。
+2, 参数1000 200
+节点死（无显示），后开节点死。
+节点1：
+ 1966*0.1s sending time pas
+time passed 1978 (0.1)s
+ 1966*0.1s sending time pas
+time passed 1998 (0.1)s
+节点2
+time passed 1966 (0.1)s
+ 1978*0.1s sending time pas
+time passed 1986 (0.1)s
+V��W��*��&≠ñ.â!;      SÂ2
+├␋└␊ ⎻▒⎽⎽␊␍ 2109 (0.1)⎽
+停止节点1，看节点1driverlog，发送正常，没有接收到的信息。
+重启节点1，继续测试，节点1到120s左右死。现象同上。这两次都是后开节点死。
+3, 重启两节点驱动。用与2同样的参数测试。
+节点1先于节点2开启。
+节点1：
+time passe�(�\.�'.CJ�'@.
+time passed 507 (0.1)s
+后来信息又变成：
+time passed 347 (0.1)s
+  336*0.1s sending time pas
+time passed 357 (0.1)s
+  336*0.1s sending time pas
+time passe�(�\.�'.CJ�'@.
+time passe�(�\.�'.CJ�'@.
+time passed 968 (0.1)s
+节点2：
+time passed 315 (0.1)s
+  336*0.1s sending time pas
+time passed 325 (0.1)s
+  347*0.1s sending time pas
+time passed 336 (0.1)s
+  357*0.1s sending time pas
+time passed 346 (0.1)s
+现象同上，仍然是后开节点死。
+节点1不动，重启节点2程序，继续测试。
+直到下面的时间两节点都没有死。
+节点1：
+ 9463*0.1s sending time pas
+time passed 13491 (0.1)s
+ 9473*0.1s sending time pas
+time passed 13502 (0.1)s
+节点2：
+time passed 9453 (0.1)s
+time passed 9463 (0.1)s
+13491*0.1s sending time pas
+time passed 9473 (0.1)s
+
+17:07 2007-05-16
+现有实验结果("10:44 2007-05-16"和"16:40 2007-05-16")是后开节点发送出错。待做：修改程序进行跟踪，节点再次死后，使用先开节点与"死"节点进行单发单收实验。
+
+17:45 2007-05-16
+测试多线程程序，节点2发送一个信息后死，
+<7>starting write.
+<7>send: current state: 2
+<7>DestAddr is 65535
+<7>DestAddr is 65535
+<7>timer started
+<7>interval is 20
+<7>start_send
+<7>Timer IRQ happened 
+<7>OS Timer IRQ
+<7>timer is INITIAL
+<7>length is 15
+<7>CCA is good
+<7>timer started
+<7>interval is 1000
+<7>IRQ type is SFD!
+<7>CC2420 state is in TX_WAIT
+<7>SFD:FSMSTATE is 38
+<7>cc2420_state: Tx_Wait
+<7>timer started
+<7>interval is 1000
+<7>SFD: TX_WAIT
+<7>wait finished
+<7>Write: done
+<7>Timer IRQ happened 
+<7>OS Timer IRQ
+<7>timer is TRANS
+<6>close tosmac
+<7>Close device
+
+
+18:17 2007-05-16
+测试multithread_test
+[root@Imote2-2 nfs]#./test_tos_mac_0516-3_mtt 5000 200
+CC2420(TOSMAC) driver test: 
+insert module tos_mac first (modprobe tos_mac)
+ 0: time_accuracy_test using gettimeofday
+ 1: imote2_time_sync
+ 2: bacic send test
+ 3: bacic recv test
+ 4: poll recv test
+ 5: write_poll_read_test, write period is 1s
+ 6: multithread test
+ 7: duplex tramsmition test
+ 8: channel test
+ 9: poll, write. test CC2420_state between poll and write
+10: poll_read_write_0514
+Select function to test
+6
+w_timeout is 5000. 
+r_timeout is 200. 
+send 0th message, 4 bytes.
+用gdb没有查出错误，明天继续。
+完成写驱动测试文档
+
+09:56 2007-05-17
+待做
+1, 打印CC2420驱动，看802.15.4相关部分；
+2, 打印802.15.4，看已有的文档（书和文档）
+3, 两个博士定义MAC层功能需求（完成，看佳亮博士邮件和上午讨论结果）。
+
+10:03 2007-05-17
+test_tos_mac_0516-3_mtt, 出错原因, 继续分析
+日志和代码见"$test_tos_mac_0516-3_mtt"。
+节点2启动后只发送了一侦，这侦节点1使用单收程序接收正确。节点1停止后启动单发程序，节点2没有显示收到数据。但是看节点2的driver log可以看到中断已经收到了程序。但是上层没有读操作。
+没有收到信息是poll函数笔误，上次下班时改的匆忙留下了隐患。加入跟踪信息后，发现write的第一个周期都没有完成。用gdb查。write的问题是sleep时间单位用的s，实际用的毫秒，所以sleep时间超长。。。
+修改后，短时间测试通过，注释多余信息并且加入运行时间的显示，进行长时间测试，代码见"$Imote2/log/cc2420/multithread_test/0517"。
+前面write_poll_read函数5000 200的测试时间大于1小时。1000 200大于5分钟。现在测试multithread_test也要大于1小时，然后测试100 10，10 10，10 100，待做。
+乱码：大约15分钟内，遇到8次其他信息。
+(15:39 2007-5-17)
+测试1小时，没有出错。
+但是测试小于1s的不行，尤其是write小于1s，有问题，需要详细测试，待做。
+
+18:50 2007-05-17
+待做（已转移）
+1, CSMA－CA，ACK
+2, BMAC查lpl。参tinyOS。
+3, MAC queue，如果有多个数据需要同时发送，会不会丢侦。bamvor: 考虑在应用层实现一个发送队列，只由一个线程接收；发送同理。
+4, 完成邻居表算法。（完成）
+5, "15:42 2007-04-19"sleep/active mode，在拓扑图之后，待做:
+只需要看是否实现了下列功能：
+(1)CC2420的休眠，在CC2420 11节中提到了power up/power
+down模式，但是没有查到驱动>如何实现，也没有找到CC2420datasheet中的详细描述；
+新待做：CC2420_start，CC2420_stop。佳露查tinyOS
+(2)MAC层休眠，活跃和休眠之间切换的时间；
+(3)BMAC（叫一个人的时间长过他睡觉的时）查，待做。佳露问
+6, 学习CC2420的抓包软件
+7, 其它：参"15:25 2007-05-15"
+

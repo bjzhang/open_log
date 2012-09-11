@@ -1,0 +1,736 @@
+11:36 2007-06-19
+测试N2M：
+第8次的代码和日志见：$Imote2/log/fisco/06191133。第8次测试时，重启了leader和new节点的PTL和MTL程序。
+前7次，有两次在进入N2M后退出，成功为M的，都是两跳地址分配。另有两次是在进入ONEHOP_ADDR_REQ后退出。
+
+13:00 2007-06-19
+LDBR data_len is wrong, so PTLw refure to send it.
+fix it.
+
+13:55 2007-06-19
+节点退出的原因是broken pipe:
+[root@localhost fisco]# arm-linux-gdb fisco
+GNU gdb 6.6
+Copyright (C) 2006 Free Software Foundation, Inc.
+GDB is free software, covered by the GNU General Public License, and you are
+welcome to change it and/or distribute copies of it under certain conditions.
+Type "show copying" to see the conditions.
+There is absolutely no warranty for GDB.  Type "show warranty" for details.
+This GDB was configured as "--host=i686-pc-linux-gnu --target=arm-linux"...
+(gdb) target remote 192.168.99.118:2345
+Remote debugging using 192.168.99.118:2345
+0x40000a40 in _start () from /lib/ld-linux.so.2
+(gdb) b 1262
+Breakpoint 1 at 0xc428: file fisco.c, line 1262.
+(gdb) cont
+Continuing.
+
+Program received signal SIGPIPE, Broken pipe.
+0x4013c6d0 in ?? ()
+
+
+18:26 2007-06-19
+今天日志记的很不好. 下午进展是负的.
+晚上linux没有认出调试板, 开始以为是我笔记本左侧USB不好用. 后来发现是线的问题.
+
+18:32 2007-06-19
+如果程序异常退出, 可能是SIGPIPE, 删除fifo, 由PTL重新建立即可.
+见"17:37 2007-06-20"。
+
+加入了print_hex_pack, 以二进制方式显示包的内容.
+07 ,01 ,01 ,40 ,00 ,00 ,00 ,00 ,00 ,00 ,01 ,00 ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,67 ,01 ,01 ,00 ,
+07 ,01 ,01 ,40 ,00 ,00 ,00 ,00 ,00 ,00 ,01 ,00 ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,67 ,01 ,01 ,00 ,
+07 ,01 ,01 ,40 ,00 ,00 ,00 ,00 ,00 ,00 ,01 ,00 ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,67 ,01 ,01 ,00 ,
+
+节点
+07 ,01 ,01 ,40 ,00 ,00 ,00 ,00 ,00 ,00 ,01 ,00 ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,67 ,01 ,01 ,00 ,
+07 ,01 ,01 ,40 ,00 ,00 ,00 ,00 ,00 ,00 ,01 ,00 ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,67 ,01 ,01 ,00 ,
+07 ,01 ,01 ,40 ,00 ,00 ,00 ,00 ,00 ,00 ,01 ,00 ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,ff ,67 ,01 ,01 ,00 ,
+二者一致, 但是为什么显示不正确?
+
+如果注释了判断数据长度是否正确的语句, PTL接收一个LDBR后, 就没有了反应.(两次都是如此)
+
+20:17 2007-06-19
+fisco_PTL.c
+复制fisco包时, 
+        memcpy((void*)&fisco_head, (void*)(fifo_data+sizeof(send_pkt.addr)), sizeof(fisco_pack_t));
+写成了:
+        memcpy((void*)&fisco_head, (void*)fifo_data, sizeof(fisco_pack_t));
+总是出这些基础问题. 
+加入"USING_STRUCT"预编译指令.
+定义了"USING_STRUCT"后,send_fifo把从FIFO读出的fisco_pack_t类型数据, 写入到fisco_head结构体中. 这样只要FIFO读出的数据正确, 包的显示都是正确的. 
+但是不明白使用fisco_pack_t*为什么不可以, 代码是"USING_STRUCT"的else部分, 不会和大端, 小端有关吧. 只有实际跟踪指针才可以. 待做***.
+
+20:40 2007-06-19
+经过修改, 终于恢复到了昨天睡觉前的状态. 代码和日志见"$Imote2/fisco/06192036".
+发现接收缓冲区也有错误的时候, 同样需要改为使用结构体, 待做.
+SIGPIPE的问题, 计划自己捕捉这个信号, 然后删除重建FIFO, 重新发送. 
+
+
+21:10 2007-6-19
+FIFO问题的另外思路
+如果是FIFO的读端过早的关闭，说明读端读到的数据少于预期数据，这是应该继续读出数据。这样可能更容易解决FIFO问题。再测试两跳后。解决这个问题。
+
+00:27 2007-06-20
+r_pid_process修改为直接使用struct后, 包没有错误. 见"$mote2/fisco/backup/fisco_06200028.tar.gz"
+
+00:34 2007-06-20
+new节点配置为member节点, 第一次没有收到LDAA, 第二次收到后成功变为member. 而且过期地址得到复用.代码和日志见"$Imote2/log/fisco/06190031".
+开启了CSMA-CA(无重发), 节点18的IP地址是1, 节点16的IP地址是99. 由于PTL只是在启动时读一次MAC地址, 所以修改MAC地址后, 需要重起PTL.
+"new2member_PTL_log"中可以看到过滤一次LDAA的指令:
+[root@Imote2-18 nfs]#./fisco_PTL_0619-2  LDAA 65534 1
+该指令由is_drop_msg函数实现丢弃指定消息或地址一定次数.
+
+01:48 2007-06-20
+把运行结果写入文件. 从fisco退出时不能用break, 那样只会结束本case.
+
+02:27 2007-06-20
+如果设置捕捉Ctrl+c(SIGINT), 会使两个ssh连接都退出. 而且无法重新连接, 只有重起才可以再使用ssh连接. 难道是sshd被关闭了?查, 待做. 使用Ctrl+\同样不行.  
+如果不使用fisco_PTL_0619-2做实验, Ctrl+\是退出fisco_PTL, 对其它程序没有影响. 
+暂时改用定时器的方法. 
+
+03:23 2007-06-20
+耽误一个小时的时间, 但是向文件记录信息没有成功. 突然想起有两个调试板, 可能就不需要记录到文件了.
+
+04:01 2007-06-20
+现在测试没有问题的是
+2.1, 2.3, 2.4, 2.5
+2.5代码见"$Imote2/fisco/backup/fisco_06200401.tar.gz"
+
+04:04 2007-06-20
+到公司后, 可以用两个笔记本测试.
+2.2测试,可以设置开始几次LDBR不接收, 这样就可以做出一个pantition中, 多个leader.
+两跳地址复用的测试方法, 在drop_pack_t, 加入skip_times, 表示开始几次接收. skip-times=0后, 再接收到就根据times判断是否抛弃. 
+
+15:21 2007-6-20
+1, 项目完成前，给佳亮博士发fisco完整代码。
+2, 看家璐今天给我的最后的代码。以此为基础进行调试。要注意的是如果节点连发两个包，可能后者无法发送成功，家璐的方法是进行了睡眠。
+
+17:37 2007-06-20
+1, 用NFS有问题。直接在JFFS2上面运行极少出错。
+2, 解决一跳请求， 但是leader多数都是显示两跳分配的情况。
+
+17:54 2007-06-20
+项目计划
+1, 本周完成8个case；
+2, 下周，a, 信息收集节点；b, 15节点邻居表；
+3, 下下周, 测试中规模；
+4, 下下下周，测试大规模。
+
+18:09 2007-06-20
+A, 英语介绍Imote2总结：
+1, 佳亮博士：总体可以听懂。但是有时一句话没有说完，估计是词汇问题。
+bamvor: 最近英文资料看的比较少，不连贯的地方主要是射频相关部分，英语积累较少。
+2. 张宇博士：
+B, 什么时候能用enovation garden，可以先用张宇的门卡；问法国实习生何时到（21日，随项目测试）；
+
+18:28 2007-06-20
+待做
+1, 完成distance_test；(完成)
+2, 整理基于PTL的邻居表。
+
+23:26 2007-06-20
+        __s8 data[TOSH_DATA_LENGTH];
+改为
+        __s8 data[TOSH_DATA_LENGTH+6];
+(00:23 2007-06-21)
+开始把链路质量用成了信号强度. 再加上前面的修改. 
+发射功率是3时, 有效通信距离是2米, 信号强度从210-225. 这个距离应该是很便于做实验的. 代码和编译结果保存在"$Imote2/log/cc2420/distance-test"
+
+11:54 2007-06-21
+经过实验, 每个节点放在相同的材质上, 姿态相同. 这样效果较好. 现有实验是3个节点一线排开. 相临节点间距1.5米, 节点平放, 天线朝上 , leader节点发射功率是3, 可以可靠相临节点的收到信号.信号强度一般在217以上, 相隔3米的节点一般收不到对方信号, 即使收到一般信号强度小于215. 位于两个leader中间的gateway节点, 发射功率是31, 这样leader收到的信号强度一般在是240以上. 
+不过如果进行5个以上节点的实验, 这个方法可能不能满足需求. 如果情况复杂, 可能需要调整节点监测信号的敏感度, 待做. 
+(13:56 2007-06-21)
+信号强度不稳定. 似乎节点启动一段时间后, 才符合上述描述. 
+(15:22 2007-06-21)
+经实验, 需要选择开阔的区域, 临近但没有紧挨着"墙"(比节点高很多称为"墙")的节点反而信号强度高, 对于偶然收到的高信号强度的包, 仍然抛出.
+(15:57 2007-06-21)
+信号强度还与天线方向有关, 现有对策是天线都朝着一个方向--窗户, 节点沿窗户一线摆开.
+
+12:15 2007-06-21
+待做:
+1, 使用getopts函数, 方便设置节点初始状态, 向扔掉不需要的包这种复杂情况, 可以采用家璐fisco的方法. 设置最低信号强度可以直接用参数设置. 
+2, 使用家璐新代码, 修改出错的一跳分配时信息显示不正确的问题. 
+
+18:22 2007-06-21
+完成除了2.6和2.8的测试. 
+2.6还需要丢包机制的配合. 2.8需要较多节点. 另外, one-hop中出现two-hop的情况只在节点12发现过. 节点18做leader时, 显示正确.
+
+21:23 2007-6-21
+crossbow工程师回信
+4. We failed to install driver for usbNet under Windows XP, though we installed it according to the document. After we select network adaptor, it said it can not find device.
+*** How did you attach the USB device? The on-board connector is client only, for host mode you will need an adapter.
+
+22:53 2007-6-21
+待做
+1, 查"crossbow工程师回信"相关内容；
+2, 要家璐最后的代码；
+3, 监控节点用src MAC, fisco msg type, 节点的信息发送时间唯一确定网络中的任何一个包，保存每个包时在用监控节点自己的时间作为时间戳；正常工作的节点记录每个包。这样的好处是当网络中包很多的情况下，监控节点的负担不会很重。
+需要解决的问题：监控节点会不会很多？需要提高正常工作节点对于信号强度的要求，这样相当于扩大了监控节点的监控范围。
+记录包需要消耗系统资源，会降低系统效率。如果网络层的FIFO是自己编写的，就可以把FIFO写为环行链表，链表长度就是记录log包的长度。现在看来使用Linux FIFO不是很明智的选择，以后可能会更多的问题。
+
+11:47 2007-06-22
+待做, 与张宇商量, 可以我自己先写一个文档. 周一三个人讨论.
+需要监视和控制两个功能, 我和云川可以各负责监控节点和普通节点两部分.
+监控功能部分可以放在PTL层, 例如rfifo, sfifo和MTL的启动. 修改节点参数等. 
+找把尺子, 需要精确测量节点距离.
+
+13:10 2007-06-22
+修改write_poll_read用于信号强度测试. 同样把data[0]:magic bit, data[1], data[2]src mac addr. data[1] is MSB.
+
+13:36 2007-06-22
+似乎调试板的信号差一些.
+都用log文件记录后, 再测试. 
+
+13:51 2007-06-22
+三个节点各测试一次one-hop没有出现two-hop. 需要继续测试.\
+2.2测试需要gdb. 未完成.
+
+13:45 2007-06-24
+把fisco_signal, sig_timeout等函数打包. 以便其他MTL代码使用.
+
+10:28 2007-06-25
+项目计划：
+本周任务：
+周一，周二完成具备基本功能的sniffer，并且测试15个节点的邻居表；
+周三－周五，开始测试中规模fisco测试，首先是测试2.2和2.8；
+
+11:18 2007-06-25
+待做
+1，新笔记本有几个USB，如果只有两个需要买hub；
+2，回学校帮路云川找英文VC8.0 GUI的书。
+3，找VC8.0英文和MSDN。
+
+13:48 2007-06-25
+(10:44 2007-06-26)
+具体计划：
+1，sniffer。监听CC2420包，包括ack包。
+2，远程控制节点PTL层设置屏蔽信号强度的值，MTL层；
+3，加入节点初始化代码，设置MAC层最大包长度，发射功率，ack使能，mac地址；
+bamvor：突然想到，如果把CC2420驱动做成网络驱动程序会有很多方便之处，例如可以通过CC2420以无线方式登录节点，放入项目远期目标，修改概要设计文档（完成）。
+4，整理邻居表代码；
+
+14:59 2007-06-25
+云川找到串口操作的源代码后，打开串口成功，但是有错误的提示，不知道是什么原因（查，待做）；另外开始操作串口时，读回的是乱码，设置了如下参数后：波特率(115200)，数据位8bits)，停止位(1bit)，奇偶校验(no parity), DTS，CTS等禁止。工作正常。
+(15:36 2007-06-25)
+现有代码打开COM10时也会出错。并不是数组长度不够的问题，查，待做。
+
+15:44 2007-06-25
+待做
+查memcpy中void类型指针是如何使用的。直接定义为void数组会出错。难道直接使用指针么？
+
+15:59 2007-06-25
+把直接基于硬件运行的收包程序也改名为sniffer。
+
+16:45 2007-06-25
+修改
+1, node /etc/profile加入：
+#bamvor.add.20070621                                                       
+/root/tosmac/tos_mac_tools.sh reinst
+cd tosmac  
+但是这样没有，如果节点运行过程中，ssh登录，会把硬件初始化。这样很不好。还是改为由PTL加载驱动。 
+2, print_pack中mac地址的显示格式从十六进制改为十进制，这样与mac地址设置时的输入格式统一，与id号格式统一。
+
+17:12 2007-06-25
+最新代码, 包括fisco和CC2420_test_code. 但是MTL_sniffer, 有些问题. 接收N2FL的信息都正确, 但是N2M哪个节点的包一个也没有收到, 提示是invalid message, 即magic bit不正确.
+"$Imote2/fisco/backup/tosmac_0625.tar.gz"
+
+22:45 2007-06-25
+无法收到单播的原因是sniffer节点打开了CSMA-CA, 关闭后没有问题. 但是现在收不到单播目的节点回复的ack. 
+经检查, sniffer节点收到了连续两侦, 怀疑第二侦就是ack. 待确定. 
+(10:37 2007-06-26)
+经与张宇讨论, mac层ack的捕捉等确实需要再做.
+
+0:44 2007-6-26
+1, For.Dummies.Visual.Studio.2005.All.In.One.Desk.Reference.For.Dummies.Nov.2006中搜索：
+Saying Hello, Visual C++
+里面有GUI的简要介绍
+2, Microsoft Visual Studio 2005 Unleashed: Chapter 14. Building Windows Forms. GUI introduction
+3, Visual C++串口通信工程开发实例导航，VC6。有对串口介绍很详细，第一章从串口使用到建立GUI都有介绍。P37页开始是“GUI design and implement”
+
+11:02 2007-06-26
+把r_pid_process判断strength移动到保存mac, fisco pack之后, 这样把判断是否有需要处理的调试信息放在信号强度之前.
+r_pid_process:
+fifo read
+get mac, fisco packet and fisco preload data.
+handle the debug command if necessary according to the fisco packet type.
+write mac and fisco packet to MTL.
+
+if fisco_pack.type is equal to FDBUG
+    read fisco preload data according to fisco_pack.data_len 
+    if  PTL DEBUG 
+        handle it.
+    fi
+fi
+    
+    
+STRENGTH
+MTL
+struct {
+uint8_t op_mode;
+uint8_t op_data;
+}
+
+15:13 2007-06-26
+move fisco.c: fisco_init_pack  function to fisco_utils.c: init_fisco_pack.
+
+15:54 2007-06-26
+待做. 加入参数, 保证监控节点不会处理修改信号强度, 开关MTL等工作.
+
+00:10 2007-06-27
+待做,重要. 发现驱动的版本有问题, 需要修改tosmac.h, 
+/*default vlaue of data lengh in packet*/
+//#define TOSH_DATA_LENGTH  28  //bamvor.modified.2007-06-27
+#define TOSH_DATA_LENGTH  116
+
+typedef struct __TOS_Ms
+{
+        __u8 length;    // data length include header and footer
+        __u8 fcfhi;
+        __u8 fcflo;
+        __u8 dsn;
+        __u16 destpan;  // destPAN
+        __u16 addr;        // destAddr
+        __u8 type;
+        __u8 group;
+        __s8 data[TOSH_DATA_LENGTH+6];
+//        __u8 strength;
+//        __u8 lqi;
+//        __u8 crc;
+//        __u8 ack;
+//        __u16 time;
+} TOS_Msg;
+(00:32 2007-06-27)
+修改驱动后, 设置信号强度功能正常运行. 测试了有无信号强度输入参数, 情况下提高和降低信号强度. 
+但是启动MTL, 有问题. 关闭MTL会引起节点退出登录,(两次实验)
+
+09:30 2007-06-27
+经检查在PC机上PTL_DB可以启动和关闭MTL.
+节点测试也没有问题. 测试启动实际的MTL
+(09:44 2007-06-27)
+昨天没有成功的原因可能就是因为没有fisco这个文件.
+代码见"$Imote2/fisco/backup/fisco_06270948.tar.gz"
+现在有几个问题要解决: 
+1, 可以选择启动不同的MTL程序; (完成)
+2, 可以向指定MAC地址节点发送MTL_ON;
+3, 可以关闭PTL输出信息, 或写入到文件. 
+4, PTL_DB_handle处理包后, 即使包没有用也没有把包扔掉.(完成), 增加该函数的返回值, 以下摘自注释:
+ *      > 0, indicate the debug packet is handled successful, the value is the
+ *           debug_type
+ *      = 0, indicate the debug packet is not handled,
+ *      = -1, indicate the debug packet handling error.
+(23:16 2007-06-26)debug_type改为handle_res.
+5, 上报的包要有seq编号, 便于查找不同节点收到的包是否是同一个包.
+
+11:34 2007-06-27
+节点PTL初始化时, 读取配置文件进行配置. 设置radio power, max data lenght, ack, mac address.
+
+12:25 2007-06-27
+负载数据长度有问题. id数值不正确, 改为int id = -1后正常, 但是改为id = 0或没有初始数值. id恢复了正常.  两次都是如此. 奇怪, 待做. 
+现在版本保存于"$Imote2/fisco/backup/fisco_06271606.tar.gz"
+
+16:44 2007-06-27
+现在使用的test_tos_mac_0622_distance-test保存于"$Imote2/log/cc2420/stable_edition". 这是事后备份的版本, 从日期看代码与实际编译结果是一致.
+
+17:36 2007-06-27
+改原有程序运行出错没有退出的错误. 完善.
+例如
+        case 0:
+             r_pid_process(rfifo_name);
+             fprintf(FERROR, "this process should not return.\n");
+             break;
+改为
+        case 0:
+             r_pid_process(rfifo_name);
+             fprintf(FERROR, "this process should not return, exit.\n");
+             exit(1);
+             break;
+仅仅是编译通过. 待测试, 待做.
+
+13:41 2007-06-28
+使用UnixProgramming/test/time/time_accuracy_test.c测试, usleep的精度在10ms,
+左右, 难道和时间片有关?, 有时间查原因, 待做.
+另外, 现有platx Linux内核的精度在10ms左右, 用gettimeofday测量10ms以下的时间没有意义. usleep函数的单位是us(microsecond)不是ms, 不要搞错了.
+
+
+17:33 2007-06-28
+为了在节点启动时自动运行fisco_PTL, 把fisco_recv_fifo, fisco_send_fifo都设为绝对路径: /root/tosmac/...
+fisco,c并不使用那两个数组, 而是直接使用fisco.c内的宏定义. 修改fifo名称时要同时修改这两处.
+
+18:27 2007-06-28
+实验结论: scp传的普通文件属性不变. 但是链接文件会没有执行属性. 启动脚本中加入了修改为可执行文件的权限. 或传送前修改. 
+
+22:14 2007-06-28
+先是没有考虑fisco_PTL运行的路径问题导致无法正确操作fifo; 后来又是fisco_PTL没有运行权限. 再往后是PTL_config_file没有随着节点上文件的修改而同步更新. 考虑问题很不全面
+
+22:45 2007-06-28
+收到邻居表的消息后, 所有同时发送包, 信道繁忙会造成发送失败. 和节点死. 但是节点为什么会死?查, 重要待做***.
+其中次实验结果, 每次结果类似:
+1, 两节点各发5次数据后都不再发包, 节点10, 16死. 
+2, 两节点各发5次数据后都不再发包, 节点10, 16死. 
+3, 节点16发9, 收5; 节点10发5, 收5. 节点10, 16死.
+此问题可以在PTL层解决, 对于所有需要同时发送数据的任务:
+法1: 以节点id为睡眠时间避免冲突. 
+法2: 发送这个指令时, 错开一个最小时间间隔.
+需要分析问题原因, 如果是MAC(驱动)退避时间问题, 至少前几个包没有问题. 似乎是MTL程序本身的问题, 会不会是timer与fifo阻塞读写冲突的问题, 待做. .
+
+00:26 2007-06-29
+都有:
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+neighbor test end. exit.
+MTL_neighbor_0628是僵尸进程; fisco_PTL是stopped.
+详细查看日志(06290102)发现, "fifo read error"出现次数+正常收发包次数正好是9次.
+说明MTL_neighbor_0628运行正常且退出了. 出错原因是PTL不知道MTL已经退出, 在FIFO读写时被阻塞. 如果前面分析前先分析了现有日志就好了. 
+代码改为, 
+1, 加入is_process_exist函数, 根据pid和是否是zombie返回是否退出的信号状态. 同时删除了is_MTL_ON, "is_process_exist"函数输入参数是pid，如果pid<0或者结束了处于僵尸状态的进程设置pid=-1，都返回1，其余情况返回0。函数中没有使用全局变量。
+(11:07 2008-9-12)
+is_process_exist函数的思路是：先从proc文件系统中（/proc/pid/status）查看进程状态，如果是僵尸（Z），调用waitpid等待进程结束。
+"11:07 2008-9-12"
+2, MTL_neighbor.c
+如果是被中断, 重新读取, 否则继续. 由于邻居表测试有限次, 即使由于其他错误造成fifo读取错误, 错误也不会持续.
+        do {
+            rfifo_ret = FIFO_out(rfifo_name, r_fifo_data, BUFSIZ);
+        } while ( rfifo_ret >= 0 || (rfifo_ret < 0 && error != EINTR ));
+同时取消了开启定时期前的延时.
+
+02:51 2007-06-29
+第二次实验时, 经常出现只有MTL信息, 没有PTL信息的情况.
+本来正确的结果又找不到了, 白做了一晚上. 
+
+10:48 2007-06-29
+1，系统自动mount的权限可能有问题，如果文件有相应权限，但是使用时却报错，可能是加载文件系统的权限有问题。一般情况下，卸载后，手工加载就可以解决问题。
+2，Imote2：
+liama配置节点时发现把节点连接到PC时，没有认出usb0设备，主机端无法配置网络，经检查，原因是节点端没有设置usb0设置。这可以在节点下载成功后直接运行/root/configurek解决。重要，与前面我遇到的类似错误合并，待做。
+
+11:14 2007-06-29
+两个节点测试正确的代码，日志保存在"$Imote2/log/cc2420/neighbor/0629". 第二次运行还是会出现仅仅有：
+MTL: the id is 18.
+MTL: the current data length is 2.
+MTL: the current data length is 30.
+MTL: the data length is 32.
+的情况，仍然可以远程关闭，但是出现上述信息的节点没有发送数据，接收到的id没有记录。
+
+15:26 2007-06-29
+测试场景照片
+1，5个节点邻居表测试；
+98, 99两个图， 是5个节点测试邻居表，中间节点是监控节点；
+2，15个节点中规模功能测试
+100－102是，15个节点功能测试，图中绿灯节点是预期起leader作用的节点。有有调试板的绿灯节点是监控节点。其余蓝灯节点是member或gateway。
+保存在"$Imote2/picture"
+
+17:50 2007-06-29
+从现象上看(0629/1724)，fifo读和定时器冲突，现有办法是fifo读取失败后连续读取，这样很可能timer和fifo互相锁死，所以系统无法正常继续运行，如果用ctrl+z中断后，就可以正常运行了。可能是由于任务重新进行了调配。修改方法是如果被中断打断，就休眠20ms。待测试。
+最早的方法是无论成功与否程序都继续运行，这样fifo和timer冲突的几率小很多。昨天晚上成功的情况应该是使用的最早的代码。待测试***。
+(11:04 2007-06-30)
+先在MTL_neighbor.c中测试, 成功后在FIFO_in和FIFO_out中实现. 
+
+11:20 2007-06-30
+MTL_neighbor_0630仍然不正确. 从提示上看, 要从timer上想方法.
+
+11:06 2007-07-01
+待做, 非关键路径, 利用空闲时间
+1, 实现MTL_tools显示现有MTL应用程序列表, 由用户选择运行哪个程序. 更进一步还可以在MTL应用程序中加入-h等参数, 这样MTL_tools就可以显示具体程序功能. 
+2, (11:17 2007-07-01)MTL_tools实际运行的程序名称长度不能超过"MTL_neighbor_0701_old-code", 查原因并改进. 
+
+11:28 2007-07-01
+在定时器启动之前sleep id ms, 没有起作用. 
+
+11:47 2007-07-01
+出现time occur是每次到定时时间出现的. FIFO_in函数没有返回.
+进一步跟踪发现, PTLw没有把消息发出去.
+
+16:06 2007-07-01
+把定时器处理放在main中, 只有一个节点收到信息. 要确定是没有发出还是没有收到
+
+21:15 2007-07-01
+现在的办法仍然是错开每个节点开始发送id的时间----启动定时器前sleep (id+10)*10ms.
+"$Imote2/fisco/backup/fisco_200707012113.tar.gz"
+使用节点10作为控制节点, 控制节点16, 节点18运行邻居表:
+1, 手工启动fisco_PTL,  手工输入远程启动MTL指令, 连续5次运行成功(neighbor.txt结果正确. MTL可以正常关闭). 
+2, 节点启动时自动启动fisco_PTL, 其余相同, 连续7次成功.
+3, (21:54 2007-07-01)
+测试8, 9, 12, 16, 18五个节点, 使用节点10作为监控节点. 9, 12, 16, 18这四个节点可以相互收到正确的邻居表, 节点8没有任何信息, 可能是没电造成的. 现在发现的问题是, 由于fifo与signal冲突, 实际仅仅发出2次信息, 有三次是失败, 见"$Imote2/log/cc2420/neighbor/07012202":
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+timer occurs.
+ (前面测试两个节点是是发出了5次), 设定的发送次数是10次. 如果测试10个节点, 很可能只能发出一次, 这样找邻居的结果可能不准. 
+
+22:35 2007-07-01
+为了解决上面的问题. 开始是改为如果读FIFO没有成功, 就继续读取, 但这样16, 18节点, 会锁在读FIFO这里: 
+PTLr: reading message from tos_mac device.
+PTLr: packet length is : <44>
+RECEIVE PACK (count = 100)
+-----------------------------------------------------------------------
+mac : 10
+head_len : 7    type : DEBG     date_len : 13
+src_addr : ffffffff     dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 255       nap : 255       nld : 255       flag : 0 0 0 0 0 0 0 0
+-----------------------------------------------------------------------
+process exit. kill the process:: <1308>
+MTL return status: exit = 0, sig = 0, core = 9.
+/-------------------------------MTL_neighbor
+TEST------------------------------/the process state is S
+MTL create successsfull : <1309>
+PTLr: reading message from tos_mac device.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+Open fisco_recv_fifo: Interrupted system call
+fifo read error.
+PTLr: packet length is : <32>
+RECEIVE PACK (count = 101)
+-----------------------------------------------------------------------
+mac : 10
+head_len : 7    type : DEBG     date_len : 1
+src_addr : ffffffff     dst_addr : ffffffff
+gtw_addr : ffffffff     tmp_addr : ffffffff
+pid : 255       nap : 255       nld : 255       flag : 0 0 0 0 0 0 0 0
+-----------------------------------------------------------------------
+bamvor: not considered. FIXIT. exit. date 2007-06-28
+wait MTL end: Success
+PTLr: reading message from tos_mac device.
+锁住的原因可能是读FIFO中, 定时器无法处理, 造成类似互锁的问题, 待查, 待做. 
+现在的解决思路是recv_id失败不计入NEIGHBOR_TIMES. 如果recv_id失败, 返回-1, 同时id发送次数(NEIGHBOR_TIMES)减一, 
+这样不形, 原因待查, 见"$Imote2/log/cc2420/neighbor/07012319", 打算改为设置不同的参数(间隔时间, id发送次数), 如果明天实验遇到这个问题, 明晚实现. 
+
+23:31 2007-07-01
+五个节点的实验结果:
+1, 第一次实验.
+8, 12, 16, 18: 3次, 4节点.
+9: 3次3节点(无8), 1次4节点.
+2, 第二次实验, 
+8. 9: 6次, 3节点(8, 9, 16, 18其中之3)
+16, 18: 3次3节点(同上), 3次两节点(8, 16, 18其中之2)
+12: 2次4节点, 3次3节点(8, 16, 18)
+说明邻居表程序还是需要改进. 
+代码见"$Imote2/fisco/backup/fisco_07012346.tar.gz"
+
+08:31 2007-07-02
+在自己笔记本"/usr/src/Imote2_backup"备份:
+1, Imote2_log: 复制自"/media/NEW/log/Imote2", 编译结果和代码运行日志.
+Project_file: 复制自"/media/NEW/wsn/无线传感网络/Project": 项目文档和ft_release开发包.
+08:31 2007-07-02
+项目备份
+在自己笔记本"/usr/src/Imote2_backup"备份:
+1, Imote2_log: 复制自"/media/NEW/log/Imote2", 编译结果和代码运行日志.
+2, Project_file: 复制自"/media/NEW/wsn/无线传感网络/Project": 项目文档和ft_release开发包.
+
+09:12 2007-07-02
+MTL_tools.c加入了目的id的选择. 还需要远程reboot和节点记录日志..
+
+10:43 2007-07-02
+调试
+1, (1)现有OUTPUT_LOG_FILE中, "FILE *FINFO, *FERROR"定义于fisco_framework.h中, 这似乎不好, 但是如果定义在fisco_framework.c, 并且在fisco_framework.h中加入extern声明, 连接器会提示:
+/tmp/ccOKcUAD.o(.text+0x37):/usr/src/Imote2/imote2_ft_release/dev/app/fisco/log_file.c:7: undefined reference to `FINFO'
+(2)fisco_framework.c/h中加入了LOG_FILE_OPEN, LOG_FILE_CLOSE, 如果定义了"OUTPUT_LOG_FILE", 这两个宏会打开/关闭日志文件.
+2. 后来改为如果定了OUTPUT_LOG_FILE, 在fisco_framework.c中定义log_file_open/close, FINFO, FERROR, 在fisco_framework.h中声明FINFO, FERROR.
+3. 还是改回了前面的方法, 2中提到的方法保存为fisco_framework_0702.tar.gz,
+1中出错的原因待查. 从fisco_framework_0702.tar.gz恢复旧文件查这个错误, 待做***.
+4, 编译时"-DOUTPUT_LOG_FILE", 会写入log文件的同时, 把信息输出到stdout. 现在做法没有区分FINFO和FERROR, 改进, 待做.
+5, 修改fisco.c: 使其输出信息到文件: 
+(0), 注释fisco.c中定义的FINFO和FERROR. 否则只有最开始的输出会写入日志文件, 而且系统会很快退出. 
+(1), 原有DOUT宏目的输出改为FINFO, 这样就可以使用fisco_framework.h/c中的FINFO和FERROR定义了.
+(2)加入PRINT_PACK宏, 如果fisco定义了"__DEBUG__", PRINT_PACK就是print_pack函数, 否则是空函数. 
+(3)LDBR发送位于sig_sending函数, 这里没有使用fisco_send宏, 与fisco_send的fisco_send宏区别是会判断FIFO打开是否成功.所以直接在PRINT_PACK函数插入到发送信息之后.
+其实都应该判断, 修改, 待做.
+(4)现在fisco仅仅保存日志到文件, 没有同时输出出来.  
+日志和代码见"$Imote2/fisco/07021245"
+
+15:47 2007-07-02
+1, PTL仍然改为显示信号强度, 这样便于放置节点.
+2, 待做: 今天晚上, 解决下面情况:
+                    if  ( is_process_exist(&MTL_pid) ==  1 ){
+                        fprintf(FERROR, "bamvor: not considered. FIXIT. exit. date 2007-06-28\n");
+                        perror("wait MTL end");
+                        return -1;
+
+18:11 2007-07-02
+fisco调试工具
+监控很不方便. 使用LED指使状态:
+目前只会控制三色LED, 查D1如何控制. 
+节点启动后, 关闭所有LED灯.
+MTL开始运行时, PTL开启三个LED, 此后PTL不能在控制LED.
+对于fisco, 在整个新节点配置阶段, 保持三个LED灯同时亮.
+first leader	蓝色, 绿色
+leader		绿色
+member		红色, 
+gateway		红色, 绿色
+
+08:49 2007-07-02
+fisco调试工具
+可以有选择的显示log文件中的信息, 基本功能是可以选择是否显示包的内容.
+
+10:04 2007-07-03
+PMIC, gpio monitor
+查下面信息的"wX make wakeup source"和"rX create read node"
+[root@Imote2-18 tosmac]#cat /proc/gpio/GPCTL                                    
+wite-only, X=gpio#:                                                             
+ sX set                                                                         
+ cX clear                                                                       
+ iX make input                                                                  
+ rX create read node                                                            
+ wX make wakeup source                                                          
+ xX clear alt fun                                                               
+ AX alt fun1                                                                    
+ BX alt fun2                                                                    
+ CX alt fun3   
+
+10:07 2007-07-03
+今日计划:
+1, 完善Imote2调试: 简单信息尽量用LED指示, 复杂信息(例如fisco中的neighbor table)用quiry. 现在要加入的功能如下: fisco使用LED指示角色; fisco_log工具(可选是否显示包信息), MTL_tools, 加入命令行, 这样支持脚本调试; 邻居表改为单一节点发送, 其余节点LED复位, 接收包, 如果收到信息点亮LED. MTL_ON命令时加入参数，例如加入系统时间，节点根据系统时间建立日志文件，这样日志便于管理。
+2, 使用一个监控节点, 一个控制节点, 自动化测试. 重做2.2和2.8;
+
+11:09 2007-07-03
+GPCTL_test.c文件是控制GPIO的代码.
+
+12:19 2007-07-03
+1, P_RECV_PACK和P_SEND_PACK中输出包序列号时没有使用"fprintf(FINFO,"，而是使用的print，所以日志文件中没有这行，昨天写的程序测试不认真。。。。
+2, FINFO_FILE从"//root//tosmac//fisco_PTL_log"改为"//root//tosmac//fisco_log"
+
+12:38 2007-07-03
+代码和日志保存在"$Imote2/fisco/07031236"。LED指示正确。但是节点18成为first leader后，日志中没有在记录LDR。从节点18PTL输出信息和节点16fisco_log看，节点18正常发送的LDBR。难道是fflush的问题？
+
+12:46 2007-07-03
+继续完成"18:11 2007-07-02"LED的要求，PTL部分。
+
+15:25 2007-07-03
+graphic user interface to 路云川
+1, format of config file:
+node_id, MTL_ON, filename, RxPower, xxx, threshold, xxx.
+node_id, MTL_OFF, , RxPower, xxx, threshold, xxx.
+note: RxPower: 3-31; threshold: 0-255.
+
+16:11 2007-07-03
+建立blink_led.sh，MTL没有运行时，PTL运行blink_led.sh表示系统正常运行。
+
+08:17 2007-07-04
+改进邻居表
+1, neighbor_send: send node id. switch on green led;
+2, neighbor_recv: recv node id, switch off red led when start up, switch on red led when recv id.
+
+18:26 2007-07-04
+MTL_neighbor.c没有修改完，在由于id在mtl db handle中处理，但是LED文件在main中定义，mtl db handle中无法控制LED。较好的办法是修改mtl db handle，recv_id函数返回值，main根据返回值控制LED。
+修改完成,编译通过, 未测试.
+
+21:36 2007-07-04
+MTL_neighbor.c中, 还需要可以处理各种信号, 参考Unix/Linux编程实践教程. 响应信号时, 要考虑保存系统结果.
+
+21:44 2007-07-04
+待做: 周末编写Makefile
+
+23:13 2007-07-04
+又把已经正确的邻居表程序改错, 又是不知道为什么会改错... 这次一定要查出来.
+
+11:00 2007-07-05
+向云川解释MTL_tools原理，大约40分钟。感觉他想完成Linux串口编程有一定挑战，估计还需要3天。
+(11:54 2007-07-05)
+云川的想法是直接通过，GUI界面向节点串口2发送信息，这样节点上的程序基本不需要改变。虽然没有直接控制串口功能强，但是易于实现。
+我并没有想到这个方法，现在思路总是很死。
+
+17:02 2007-07-05
+家亮博士要的PPT(完成, 文件名"wsn/无线传感网络/Project/FISCO At a glance")：
+1. Imote2 hardware architecture, components and main data sheet
+2. Develop environment
+3. Configuration procedure
+4. Driver 2420 and our modification and problem shoot
+5. General architecture of FISCO/PTL
+6. Functional test results (be brief)
+7. Performance test avancement
+
+16:06 2007-07-07
+项目计划: 07-06开会内容:
+1, 我和云川分别描述进度; 云川完成了control和sniffer界面, 但sniffer没有把包写入到文件中. 
+2, 下一阶段安排:
+(1)张健: 9,10解决FIFO bug; 11-13中规模测试; 16-21大规模测试;
+鉴于quiry没有时间做, 现有对策是把节点状态写入文件. 具体内容和策略待定, 待做.
+
+10:30 2007-07-08
+两个节点同时启动fisco, 有一个节点死.
+
+10:59 2007-07-08
+BUGS:
+bamvor: not considered. FIXIT. exit. date 2007-06-28
+第一次关闭fisco时会出现这个问题, 第二次关闭才能正常关闭. 当时没有考虑这个问题, 待解决.
+
+16:23 2007-07-08
+$Imote2/fisco/backup/fisco_07081623.tar.gz
+完成对FFLUSH的修改.
+
+09:55 2007-07-09
+待做。MTL_sniffer没有找到源代码。
+
+08:40 2007-07-10
+fisco_utils.c加入USING_LED宏.
+另外, LED操作宏可以简化定义为LED_SWITCH(gpio_fd, RED_ON), 这样简洁很多. 待做.
+
+08:49 2007-07-10
+CLOSE_GPIO_FILE当打开文件错误时加入exit(1).但是这会造成调用它的程序退出,
+不符合程序退出前要释放已分配空间的设计. 没有想到更好的办法, 只有保证OPEN_LED_FILE前没有申请空间和CLOSE_LOG_FILE前已经释放空间. 后者待修改, 待做.
+
+08:58 2007-07-10
+现在fisco已经无法正常在pc下运行, 应该是FIFO操作失败造成的. 待解决. 应该改为MTL程序可以独立运行于PC机上.
+
+09:18 2007-07-10
+删除了PACK_R, PACK_S, FISCO_STATE, LOG_HEAD, LOG_TAIL等最后的'\0', 双引号内的字符串保存有'\0', 不需要手工加入.
+
+09:23 2007-07-10
+get_sec_type出错的问题原因是, 使用sizeof而不是strlen计算字符串长度.
+
+09:36 2007-07-10
+fisco_log_tools会无条件的输出SEC_END
+"$Imote2/fisco/backup/fisco_07101030.tar.gz"
+待做:
+1, 现有函数处理在SEC_NULL中即可能是PACKET, DETAIL, 也可能是NORMAL但是NORMAL没有HEAD, 这样逻辑上不清楚. 解决方法是在NORMAL信息前也加入HEAD. 这样get_sec_type后面可以改为switch语句. 详见杂记本. 
+2, 修改sec_struct_t类型, 加入sec_string类型表示这个section的head.
+sec_string应该可以容纳多个head多个head
+
+17:02 2007-07-10
+解决FIFO的问题：
+"$Imote2/log/fisco/07081658"
+发现虽然后面PTL层数据读取有问题，但是经过对比数据，只是多次读出了数据原来应该一次读出的数据。
+
+17:40 2007-07-10
+完成fisco_FIFO.c. 测试
+
+11:28 2007-07-11
+"$Imote2/log/fisco/07111128/read_FIFO_pack.c"
+read_FIFO_pack函数旧版，编译通过未测试。
+
+17:39 2007-07-16
+(10:38 2007-07-23)
+项目交接list
+1，开发包
+除了现有内容外，加入
+指明CC2420驱动位置
+fisco(MTL和PTL)代码；
+节点测试代码（简单发送接收，接收阈值，发送功率，CSMA-CA开关，无PTL层的邻居表）。
+2，文档，中文为主，除了原有文档是英文的。
+(1)blob(bootloader), Linux编译，配置。时间：0.5天；优先级：7
+(2)CC2420驱动分析：包括驱动程序结构，已修改的bug和尚未解决的问题，测试过程。整理后汇总到CC2420_test_report。时间：1天；优先级：6
+(3)项目概要设计文档：保持与最终代码的一致；详细设计文档（写明功能-文件-函数的对应关系）。时间：1.5天；优先级：3
+(4)测试代码文档：包括control, sniffer在PC机和节点上两部分。PC机部分由路云川完成。张健部分：时间：1天；优先级：2
+(5)节点测试过程，结果：包括小规模，中规模。时间：1天；优先级：1
+(6)PMIC使用说明。时间：?天；优先级：8
+(7)代码的修改：包括和原始设计不一致的代码，文档一致实现方式不同的代码；时间：7,8共0.5天；优先级：4
+(8)附件：项目过程中所有没有归类的遇到的问题，已解决的写明解决办法。quiry的设计思路。时间：7,8共0.5天；优先级：5
+
+18:10 2007-07-16
+待做, 需要云川改进的地方：
+1，完成功能，感觉不流畅
+MTL_OFF发送两次，且不需要发送power和阈值
+
+17:56 2007-07-17
+云川进展：
+读取fisco包文件。建议云川使用scanf和debugger。
+

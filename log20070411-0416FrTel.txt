@@ -1,0 +1,657 @@
+9:54 2007-4-11
+今日计划：
+1, 上午TRACE32烧写flash；
+2, 下午blob烧写flash；
+
+10:46 2007-4-11
+现有开发环境存在的问题；
+1, 使用TRACE32，自己没有，且东西贵不一定能买，JTAG很便宜，但现在没有成功，没有找到熟悉的工程师请教；
+2, 调试环境不好：
+(1)没有NFS文件系统，如果文件系统变化需要每次都烧写flash，不便于调试，参"Setting
+up USBnet"，看是否可以建立NFS文件系统。
+(2)没有液晶显示等接口，imote2节点状态不好观察。有文档可以参考，找这篇文档，待做。
+3(16:38 2007-04-11)下载速度问题，blob使用1kxmodem下载文件系统需要1小时，这对于调试是无法接受的，两个办法：
+(1)使用TRACE32的TARGET下载方式。需要装Linux下的vmware，使Linux下能完成全部的开发。
+(2)还有一个办法是移植支持USB的bootloader，印象中uboot是支持usb下载的。
+4, 同组同事如何在windows下完成开发：对于同组其它三个人，最需要的是改变文件系统的内容，应该可以在windows下的cygwin下完成。
+
+11:03 2007-4-11
+待做
+查pxa271flash的位宽，为什么TRACE32使用/word /long都可以。除非是16位宽的。
+
+11:13 2007-4-11
+TRACE32, flash烧写
+data.load命令完全清楚了，下面是下载内核和文件系统，需要先尝试flash.program命令使用Flash.create命令定义的分区，不同的分区单独编程
+
+11:28 2007-4-11
+现有板子上PXA271多芯片封装芯片上标注的芯片型号：
+PXA271FC5416
+A5247115
+K5240011A
+PHILIPRIMES
+公司买的板子会略有不同，会不会时flash或sdram小，早点问（07-04后来买的板子仅仅是PCB板布局有所不同）：
+自: imote_overview.pdf
+There will be multiple versions
+of Intel mote2 offered at different cost points. The high cost version will include 32 MB of SDRAM and
+32 MB of flash in a multi-chip module. A lower cost version containing a flash only option will be offered
+as well. Other cost reduced versions might be offered later.
+
+11:37 2007-4-11
+进展
+1, 由于文件系统很大(31M)，使用trace32直接烧写很慢，需要使用目标板烧写的办法，参见"使用 Trace32 对 FLASH 编程"。暂时仅仅尝试blob和Linux内核。
+2, "11:28 2007-4-11"PXA271FC5416的datasheet，暂时没有找到。
+
+14:44 2007-4-11
+计划：
+1, 由于上午没有完成原有用tarce32的计划，加上以后在Linux下调试时也需要用blob，所以暂时不做trace32下载内核和文件系统的实验。先做blob通过xmodem下载的实验。
+2, trace32下载的重点放在使用目标板擦写flash的内容，否则31M的文件系统烧写太慢了。
+
+15:09 2007-4-11
+flash烧写, blob, 超级终端
+根据"Blob: TFTP images"文档：
+The console log for the download command should look something like the following. After you enter the xdownload C's, will be printed until the download begins. The steps that initiate the download vary by terminal emulator. For SecureCRT go to the Transfer menu and select the Send XModem... item. Then browse to locate and select the zImage file.
+又根据从网上下载的blob-2.0.5-pre2源代码包的README:
+  blob> download kernel
+  Switching to 115200 baud
+  You have 60 seconds to switch your terminal emulator to the same speed and
+  start downloading. After that blob will switch back to 9600 baud.
+
+Switch your terminal emulator to the indicated speed and start
+downloading the kernel or ramdisk. With minicom, you can use the ASCII
+download method, or use another shell to download the file:
+
+  uuencode zImage zImage > /dev/ttyS1
+输入"xdownload kernel"后，选择超级终端Transfer菜单-Send File选项选择xmodem协议和要下载的文件，本次下载的是SG2开发包中Image目录下的ZImage，超级终端会弹出显示下载状态的对话框。稍等后，可以看到调试板上第二个uart接收LED闪(对应PC机COM4)，超级终端下载状态对话框的packet后的数字会增加，说明开始正常下载了。约需要6分钟下载完成。log如下，其中"Received 1146624 (0x00117f00) bytes"是下载完成后出现的：
+Start sending using the XMODEM protocol (repeated ^X to quit).
+
+C
+
+Received 1146624 (0x00117f00) bytes
+然后把下载到的内容写入到flash中：
+fwrite 0xa0008000 0x00040000 0x00200000
+log如下：
+blob> fwrite 0xa0008000 0x00040000 0x00200000
+Erasing 16 blocks at 0x00040000:................done
+Flashing 0x00200000 bytes at 0x00040000:................done
+重新启后的log见"\boot\blob_Linux_SG2PacketImage"，可以看出错误出现的挂载jffs2文件系统后，由于没有烧写文件系统，所以错误很正常。
+
+15:31 2007-4-11
+flash烧写, blob, 超级终端, 续
+超级终端Send File对话框中选择1kxmodem协议也可以，比xmodem协议快一些。大约3分钟。
+下面尝试自己编译的Linux内核：
+使用"zImage-ba-0704061032_Makefile.platx"没有成功，内核在解压缩过程中无反应（没有显示解压缩完成）。
+使用"zImage-ba-0704051717"停在了同样的位置。
+
+15:50 2007-4-11
+网址, blob
+http://sourceforge.net/projects/blob/
+blob在sourceforge的站点
+http://www.lartmaker.nl/lartware/blob/
+LARTware - Blob, the boot loader
+
+15:57 2007-4-11
+编译Linux内核
+试图解决"15:31 2007-4-11"中的问题
+对比"Compiling Linux"文档，发现下面语句
+export ARCH=arm
+export CROSS_COMPILE=arm-linux-
+make stargate2_defconfig
+make oldconfig
+make zImage
+的
+make stargate2_defconfig
+make oldconfig
+make zImage
+当时执行的是
+make intelmote2_defconfig
+make 
+尝试上面的命令。
+(17:40 2007-04-11)
+日志见log\makeLinux200704111743Success
+编译的内核见compileResult\zImage-ba-0704111735，仍然不行，对策：
+1)imote2 yahoo提问，内容如下：
+Hi Ralph,
+
+I am also a beginer in imote2. just now, I compile and download blob and
+kernel
+successfull. but the kernel startup is stop when  kernel is uncompressing. how
+to
+fix this error, using kgdb?
+In addition, when I download my blob and the kernel image from SG2Release 1.0,
+the
+ kernel boot successfull. 
+Here is the log using my own blob and kernel:
+Consider yourself BLOBed!
+
+blob version 2.0.5-pre3 for Intel Stargate 2 and Mote 2
+Copyright (C) 1999 2000 2001 2002 2003 Jan-Derk Bakker and Erik Mouw
+blob comes with ABSOLUTELY NO WARRANTY; read the GNU GPL for details.
+This is free software, and you are welcome to redistribute it
+under certain conditions; read the GNU GPL for details.
+Loading blob from flash . done
+Loading kernel from flash ........ done
+Autoboot (10 seconds) in progress, press any key to stop ..........
+Starting kernel ...
+
+Uncompressing
+Linux.............................................................
+
+Thanks for your kind help,
+Zhang jian
+2)使用kgdb调试，参intel_mode_2/其它/目录下的"Porting Linux 2.6.9 to the PXA270 based development platform"P14。
+
+16:55 2007-04-11
+由于刚才的误操作覆盖了0404-0410的日志文件，幸好有备份，仅仅是损失了0410下午两点之后的数据，现在凭记忆恢复。
+主要的内容是TRACE32的使用，参见"Imote2\pxa27x.cmm"。
+1, data.load.binary filename/Word中的binary，如果没有设置blob无法正常启动。后面的/word改为/long也可以。filename可以"*"代替，这样TRACE32会弹出对话框提示选择要下载的文件。
+2, 硬件连接顺序：
+TRACE32烧写flash：imote2调试板的usb需要先于imote2主板的usb插入PC机，否则TRACE32执行命令或运行脚本时会提示"target processor in reset"错误。
+blob启动：imote2调试板的usb插入PC机->打开超级终端(现在的输出都在COM4)->imote2主板的usb插入PC机。if you want to reboot blob, do these steps again.
+comment: if you are boot blob in Linux environment, e.g. using minicom, just replug the imote2 mainboard usb to PC when you wanna reboot blob. 
+
+17:12 2007-04-11
+日志助手对于输出文件应该也可以备份，从代码中看应该是可以的，但是没有达到目的，所以把备份改为如果输出文件已经存在则退出
+
+17:52 2007-04-11
+解决解压缩内核过程中出错的问题
+问题描述见"(17:40 2007-04-11)"1。
+arch/arm/boot/compressed/misc.c的decompress_kernel函数，内容如下：
+        putstr("Uncompressing Linux...");
+        gunzip();
+        putstr(" done, booting the kernel.\n");
+
+
+18:11 2007-04-11
+自: Kernel Parameters
+ Partitions Tables
+Another reason is to pass partition information up to the kernel. That provides a mechanism to easily customize kernel partitions without recompiling it. For example, suppose the kernel's partition table defaults are as follows:
+  0x00000000-0x00040000 : "bootloader"
+  0x00040000-0x00240000 : "kernel"
+  0x00240000-0x01240000 : "filesystem"
+
+
+18:20 2007-04-11
+网址, 
+lists.arm.linux.org.uk
+
+18:55 2007-04-11
+今日总结
+1, 分析了TRACE32中data.load命令的详细使用方法；
+2, 使用blob下载了linux内核，但是自己编译的内核没有成功启动，SG2Release\image的内核可以正常启动。问题描述见"(17:40 2007-04-11)"1。
+明日计划：
+1, 启动未压缩的内核vmlinux，确定是否是内核解压缩的问题；
+2, 使用kgdb跟踪Linux内核解压缩过程；
+3, 下载经过剪裁的文件系统，确定使用自己的blob，SG2开发包的内核，自己的文件系统能否正常启动。如果可以，一定程度上项目可以继续进行。
+
+10:16 2007-04-12
+尝试下载Image
+vmlinux无法下载，经查Image是压缩前的内核
+即buildTree/platx/linux-2.6.14/arch/arm/boot/Image，
+fwrite 0xa0008000 0x40000 0x200000
+[bamv26@localhost boot]$ ll
+总计 3452
+......
+-rwxr-xr-x 1 root root 2347280 04-11 17:34 Image
+......
+-rwxr-xr-x 1 root root 1133428 04-11 17:34 zImage
+
+
+
+10:32 2007-04-12
+现在的内核启动参数是：
+root=/dev/mtdblock2 rootfstype=jffs2 console=ttyS2,115200 mem=32M
+console=ttyS2似乎应该改为console=ttyUSB2
+(17:05 2007-04-12)
+console=ttyS2 is the setting for imote2 board, not for PC enviroment. So DO
+not change it.
+
+10:34 2007-04-12
+由于Image内核过大无法下载，对内核进行剪裁；
+去掉了下面的功能：
+Networking support
+Device Drivers
+    Memory Technology Device (MTD)
+        Memory Technology Device (MTD) support
+    SCSI device support
+        SCSI device support
+    Multimedia devices
+        Video For Linux
+    Graphics support
+        Support for frame buffer devices
+Second extended fs support
+Kernel hacking的Kernel debugging
+配置好的文件在"stargate2_defconfig_cut"中。
+编译的结果在"$Imote2/compileResult/0412/"中，编译日志见"$Imote2/log/makeLinux200704121107_stargate2_defconfig_cut"
+启动的结果是：
+Uncompressing Linux.......................................... done, booting
+the.
+minicom中这些内容是在一行的，上次启动时也是显示完第一行以后出了问题，这是什么问题？应该不是minicom的问题，因为SG开发包中的内核启动没有问题。似乎只能是Linux内核中的uart输出函数有问题，难以理解......
+下载同一次编译的Image到板子，Linux没有启动，blob显示starting kernel后，输出了有l两个回车，然后就没有了反应。
+
+11:53 2007-04-12
+Linux启动
+修改decompress_kernel函数，注释了其中gunzip函数前后的两个输出到串口的字符串，想看看是否能够看到内核启动的信息。
+只显示了解压缩内核的"."
+.......................................
+
+11:58 2007-04-12
+为了确定解压缩内核后是否有输出，把decompress_kernel改为：
+//      putstr("Uncompressing Linux...");
+        putstr("1");
+        gunzip();
+//      putstr(" done, booting the kernel.\n");
+        putstr("2");
+结果是：
+1.......................................2
+可知，内核是正常解压缩的。
+
+
+12:05 2007-04-12
+下午试验04121202内容。
+
+13:36 2007-04-12
+Linux内核编译调试，对策：
+1, 分析intelmote2.c和stargate2.c的区别，去maillist查intelmote2.c。
+2, 参考邮件：
+I am not an expert on BLOB but it looks
+like your problem occurs just after BLOB has completed uncompressing the Linux
+image and jumps to it. It could be a problem with the Linux image itself or
+that the jump vector is set incorrectly. I have never compiled the Linux
+kernel myself, hopefully some other readers have more advice.
+3. 如果方法1没有办法结合2，使用TRACE32进行调试。
+
+13:49 2007-04-12
+下午计划：
+（可能由于昨天下午的又一次误操作，0404-0410的全部日志都丢失了。
+打击。
+如果不是刚才要查原来的文档也不会发现，现在是怎么了，总是把文件覆盖。）
+1, 写备份Linux编译结果的脚本，自动把编译的Image, zImage, make all的日志, 配置文件写入到"/media/NEW/log/Imote2/compileResult/日期时间/"目录下
+用法：任意目录下输入
+bakRes 备份内容 日期时间
+例如：
+bakRes Linux 0704211356
+即备份现有Linux编译结果到"/media/NEW/log/Imote2/compileResult/0704211356/"，0704211356指"4月21日 13:56"。
+或
+bakRes 备份内容
+例如：
+bakRes Linux 
+即备份现有Linux编译结果到"/media/NEW/log/Imote2/compileResult/0704211356/"，0704211356指"4月21日 13:56"。时间有date命令生成。
+2, 根据"13:36 2007-04-12"文档解决Linux启动问题。
+
+14:49 2007-04-12
+Linux
+arch/arm/mach-pxa/stargate2.c
+there is no arch/arm/mach-pxa/intelmote2.c
+
+16:25 2007-04-12
+Linux boot successful
+changing the kernel config using "make menuconfig":
+select the stargate2 instead of intelmote2.
+the boot is successfull, see compile result, log and boot log in "$Imote2/compileResult/0704121621".
+
+17:02 2007-04-12
+待做
+read usb_serial_download.c file in blob src directory. 
+accerating the download speed?
+
+17:11 2007-04-12
+conclusion in compiling and flashing for intelmote2
+intelmote2(Imote2)编译和烧写flash总结
+(modified in 2007-4-19)
+1, compile
+reference "compiling blob", "compiling Linux" documents in
+http://embedded.seattle.intel-research.net/wiki/index.php?title=Main_Page
+2, flashing
+reference "Flashing Images" for flashing overview and "Blob: TFTP images" for
+xmodom download
+1)flashing bootload -- blob
+using TRACE32 with the pxa27x.cmm in $Imote2 directory.
+blob image should be in the same directory.
+2)flashing kernel and filesystem
+(1)setup console (linux: minicom, windows: hyper terminal )
+115200 8N1 no flow control
+the serial is the second virtual com port. in windows, it may be COM4 ( of COM3 and COM4). On the othe hand, in Linux, it may be /dev/ttyUSB1 ( of /dev/ttyUSB0 and /dev/ttyUSB1 )
+(2)connect
+plug imote2 debug board usb to PC
+start console
+plug imote2 main board usb to PC
+(3)flashing kernel, referece the "Blob: TFTP images" in the website above
+#check the kernel partition namee:
+blob> help xdownload                                                            
+Help for xdownload:                                                             
+                                                                                
+Usage: xdownload {blob|param|kernel|ramdisk}                                    
+Download <argument> image to RAM using xmodem                                   
+                                     
+#download kernel to ram
+blob> xdownload kernel
+#open send file menu (press Ctrl+A, S in Linux. Select Menu "Transfer" -> "Send File" in windows) 
+#select protocol "1k xmodem" or "xmodem", and select kernel file(zImage in demo)
+Start sending using the XMODEM protocol (repeated ^X to quit).
+CC
+Received 1144320 (0x00117600) bytes
+#write flash. the first parameter is kernel address in ram, the second
+parameter is kernel start address in flash fisk, the third one is writing size.
+blob> fwrite 0xa0008000 0x00040000 0x00200000
+Erasing 16 blocks at 0x00040000:................done
+Flashing 0x00200000 bytes at 0x00040000:................done
+(4)flashing filesystem:
+(13:47 2007-04-13)
+#download filesystem to ram
+blob> xdownload ramdisk
+#Open send file menu; select protocol 1k xmodem or xmodem, and select file syetem file(fs.jffs2 in demo)
+......                                           
+Received 4194304 (0x00400000) bytes
+#write flash
+blob> fwrite 0xa0500000 0x240000 0x1dc0000                                      
+Erasing 238 blocks at 0x00240000:..............................................e
+Flashing 0x01dc0000 bytes at 0x00240000:.......................................e
+
+17:41 2007-04-12
+flashing the filesystem which make by myself, linux also boot fail when load root file system. i wonder whether the configured kernel is correct.
+So, flashing the demo kernel.
+
+18:17 2007-4-13
+在使用自己的内核加载文件系统，仍是无法引导，怀疑是内核配置有问题。
+使用deomo的内核加载文件系统出错，联想刘淼P324，可能是文件系统区域的flash没有完全擦除，或者在blob中擦除，或者把文件系统填充为分配的大小。
+。
+明天先解决第二个问题。
+
+
+10:22 2007-04-13
+与张宇博士沟通；
+根据现有的项目需求使用ramdisk就可以满足需求，所以暂时不尝试jffs2。使用romfs+ramfs的方式，参原来我自己的LEON文档。 
+
+10:38 2007-04-13
+建立ramdisk：
+现有CMDLINE是：
+root=/dev/mtdblock2 rootfstype=jffs2 console=ttyS2,115200 mem=32M
+查找相关CMDLINE配置：
+./arch/arm/configs/hackkit_defconfig:CONFIG_CMDLINE="console=ttySA0,115200 root=/dev/ram0 initrd=0xc0400000,8M init=/rootshell"
+./arch/arm/configs/lart_defconfig:CONFIG_CMDLINE="console=ttySA0,9600 root=/dev/ram"
+./arch/arm/configs/epxa10db_defconfig:CONFIG_CMDLINE="mem=32M console=ttyUA0,115200 initrd=0x00200000,8M root=/dev/ram0 rw"
+./arch/arm/configs/pleb_defconfig:CONFIG_CMDLINE="console=ttySA0,9600 mem=16M@0xc0000000 mem=16M@0xc8000000 root=/dev/ram initrd=0xc0400000,4M"
+./modules/lib/modules/2.6.14/build/arch/sh/configs/se73180_defconfig:CONFIG_CMDLINE="console=ttySC0,38400 root=/dev/ram"
+把imote2的CMDLINE配置为：
+mem=32M console=ttyS2,115200 root=/dev/ram0 rw 
+启动日志见："$imote2/compileResult/0704131050"目录：
+错误提示是：
+Kernel panic - not syncing: VFS: Unable to mount root fs on
+unknown-block(1,0)
+参考上面其它的CMDLINE配置，可能是由于没有加入：
+"initrd=0x00240000,4M"
+内核启动参数的说明见，"linux-2.6.14/Documentation/ kernel-parameters.txt"。例如：initrd=         [BOOT] Specify the location of the initial ramdisk
+
+另外，可以参考"linux-2.6.14/Documentation/initrd.txt"的另一种方法。
+
+11:36 2007-04-13
+待做（完成）
+imote2邮件列表发邮件，说已经解决了之前问的问题。
+
+12:15 2007-04-13
+网址, bootloader, uboot
+http://u-boot.sourceforge.net/
+http://www.lupaworld.com/23340/viewspace_4342.html
+移植uboot手记
+http://www.denx.de/wiki/DULG/Manual
+The DENX U-Boot and Linux Guide (DULG) for TQM8xxL，关于uboot很好的手册。
+
+12:25 2007-04-13
+文件系统, ramdisk
+建立ramdisk，使用原来LEON的脚本，user/ramdisk/mkrd，参Linux On LEON文档。
+仅仅建立了bin, sbin, var...等几个目录，复制了init指令。
+没有成功，错误仍然是"Kernel panic - not syncing: VFS: Unable to mount root fs
+on unknown-block(1,0)"，说明是内核加载文件系统时有问题，下午先下载开发包中的内核和自己填充的正确大小的文件系统。然后配置自己的内核使其能否引导jffs2文件系统。
+
+13:30 2007-04-13
+Linux, 文件系统, ramdisk
+根据内核的错误提示，在ramdisk中建立dev/ram0块设备，主设备号，辅设备号分别是1，0。建立的文件系统保存在"$Imote2/compileResult/0704131134/ramfs4096_dev"
+
+14:16 2007-04-13
+今天状态不好，刚才在文件系统中建立ram0设备没有成功的原因是使用dd命令时，选择了错误的输入设备。
+修改后的ramdisk仍然保存在"$Imote2/compileResult/0704131134/ramfs4096_ram0"，原有的ramfs4096_dev删除。
+如果这次成功，下一步就是下载busybox建立所需的文件系统。
+(15_03)仍然是同样的错误：
+Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(1,0)  
+查重看Linux配置文件，imote2 maillist，linux maillist, 看linux启动代码
+
+14:24 2007-04-13
+待做
+1, 使用busybox配置文件系统。
+2, 查blob在何处定义了分区信息；
+
+15:05 2007-04-13
+根据网上帖子的说法，在文件系统中加入Reiserfs support的支持。
+
+
+15:25 2007-04-13
+List:       linux-kernel
+Subject:    Re: ENOENT creating /dev/root on MTD RAM partition
+From:       Olaf Hering <olaf () aepfle ! de>
+Date:       2007-04-02 12:52:12
+Just a guess:
+Check if '/dev' exists. I think it is now possible to not add the built-in
+cpio archive with the mandatory /dev, /dev/console and /root entries.
+
+16:22 2007-04-13
+jl: 
+1, 使用jffs2，便于记录日志；
+2, 查802.15.4的驱动。
+3, 能否改802.15.4 MAC，查CC2420。
+4, 当IP地址改变时，MAC给IP的包会不会丢。查IP地址改动的处理方式。
+发日志到jlu.ext@orange-ftgroup.com
+
+16:59 2007-04-13
+16:59, 1600k
+17:03, 2528k
+17:12 2007-04-13
+文件系统, jffs2
+前面发现的错误：
+jffs2_scan_eraseblock(): Magic bitmask 0x1985 not found at 0x00000024: 0x2b10 instead
+可以参考jffs2/JFFS2_FAQ.txt，感觉最大的嫌疑是flash没有完全擦除。
+
+17:30 2007-04-13
+现有计划：
+1, 烧写demo的文件系统和内核，确认其可以正常启动；
+2, 烧写自己编译的内核，查找错误的内容：首先建立mtd设备，然后查其他原因。
+3, 配置自己的文件系统。现在猜测是没有擦除flash。
+
+17:47 2007-04-13
+待做
+读jffs2.pdf, P2-结束
+
+18:25 2007-04-13
+文件系统, jffs2
+文档"Find your Root File System with MTD"对这类问题有详细的问题，细看，待做。
+查找"Kernel panic"
+./modules/lib/modules/2.6.14/source/kernel/panic.c:     printk(KERN_EMERG "Kerne
+l panic - not syncing: %s\n",buf);
+根据"fs/vfs/Linux_VFS=+.htm"，自"developerWorks 中国 > Linux"
+查找"sys_mount"
+./init/do_mounts.c:     sys_mount(".", "/", NULL, MS_MOVE, NULL);
+./init/do_mounts_initrd.c:      sys_mount(".", "/", NULL, MS_MOVE, NULL);
+./init/do_mounts_initrd.c:      sys_mount("/", ".", NULL, MS_MOVE, NULL);
+grep: warning: ./modules/lib/modules/2.6.14/source/modules: recursive directory loop
+
+./modules/lib/modules/2.6.14/build/init/do_mounts.c:    sys_mount(".", "/", NULL
+, MS_MOVE, NULL);
+./modules/lib/modules/2.6.14/build/init/do_mounts_initrd.c:     sys_mount(".", "
+/", NULL, MS_MOVE, NULL);
+./modules/lib/modules/2.6.14/build/init/do_mounts_initrd.c:     sys_mount("/", "
+.", NULL, MS_MOVE, NULL);
+./modules/lib/modules/2.6.14/source/init/do_mounts.c:   sys_mount(".", "/", NULL
+, MS_MOVE, NULL);
+./modules/lib/modules/2.6.14/source/init/do_mounts_initrd.c:    sys_mount(".", "
+/", NULL, MS_MOVE, NULL);
+./modules/lib/modules/2.6.14/source/init/do_mounts_initrd.c:    sys_mount("/", "
+.", NULL, MS_MOVE, NULL);
+可以看出，是panic输出了最后的一个错误提示，所以关键是找谁调用了panic，在init目录有"VFS: Unable to mount root fs on"的是：
+./init/do_mounts.c:             panic("VFS: Unable to mount root fs on %s", b);
+./init/do_mounts.c:     panic("VFS: Unable to mount root fs on %s", __bdevname(R
+OOT_DEV, b));
+进入do_mounts.c，可以看到上述语句位于mount_block_root函数，如果只考虑" panic("VFS: Unable to mount root fs on %s", __bdevname(ROOT_DEV, b));"语句引起的错误，在根据下面的语句：
+                int err = do_mount_root(name, p, flags, root_mount_data);
+                switch (err) {
+                        case 0:
+                                goto out;
+                        case -EACCES:
+                                flags |= MS_RDONLY;
+                                goto retry;
+                        case -EINVAL:
+                                continue;
+                }
+可以知道返回的错误值是-EINVAL，待做，待续。
+进一步查看，知道错误在于"sys_mount"函数，位于"fs/namespace.c"
+
+18:37 2007-04-13
+待做
+学习Linux启动加载文件系统的过程。
+
+19:06 2007-4-13
+烧写demo 文件系统的命令
+blob> fwrite 0xa0500000 0x240000 0x1dc0000                                      
+Erasing 238 blocks at 0x00240000:..............................................e
+Flashing 0x01dc0000 bytes at 0x00240000:.......................................e
+使用0704121621的文件系统，错误同0704121621/bootLog。
+
+10:00 2007-04-16
+Linux, 文件系统
+使用demo的内核和文件系统，启动成功，日志见"$Imote2/compileResult/demo/bootLog"，其中还保存了reboot命令的执行结果和根目录下第一级子目录的文件内容和属性。便于后面生成自己的文件系统。
+
+10:05 2007-04-16
+下一步计划:
+1, 使用demo的文件系统和自己编译的内核启动成功；
+估计这一步会用1－2天。怀疑是Linux启动配置有问题。
+(10:10)实验发现没有问题，看来完全是文件系统的问题。
+使用原来没有成功的配置文件尝试，暂时没有成功，继续，待做***。
+2, 建立自己的文件系统；
+并且做简单的实验。串口通信，LED灯等。
+3, 分析使用intelmote2_defconfig不能成功的原因；
+
+10:59 2007-04-16
+为了验证自己编译的Linux是否能正确启动，重新建立一个platx Linux进行实验。
+运行成功。当时使用demo的内核和自己的文件系统是不成功。这样看是文件系统的问题。
+
+11:33 2007-04-16
+查找为什么0704121621的Linux不正确，这是一个自己剪裁过的Linux。
+下列选项是0704121621与0704161106比较后，根据0704121621修改的内容。如果没有特殊说明下面的选项表示取消了对应的功能。
+CONFIG_PCCARD
+CONFIG_NET
+CONFIG_MTD没有取消
+CONFIG_IDE
+CONFIG_USB
+CONFIG_USB_GADGET
+CONFIG_MMC
+CONFIG_NETDEVICES没有取消
+CONFIG_PLATX_LED
+CONFIG_EXT2_FS
+CONFIG_TMPFS没有取消
+CONFIG_JFFS2_FS没有取消，估计是由于没有这个的问题。
+CONFIG_DEBUG_KERNEL
+CONFIG_CRYPTO没有取消
+CONFIG_ZLIB_INFLATE和CONFIG_ZLIB_DEFLATE不确定是否选中，0704161106都有。
+成功加载文件系统，见compileResult/0704161158。
+
+11:56 2007-04-16
+Linux, 杂项
+1, man bootparam可以查看启动参数。
+
+13:00 2007-04-16
+查如何解包jffs2文件系统。
+
+13:02 2007-04-16
+杂记
+吃完饭启动imote2板子无法正常启动，忘记了吃饭前使用的那个内核。
+
+13:06 2007-04-16
+文件系统
+现有imote2板子使用/dev/ttyS0, /dev/ttyS1作为系统串口。
+
+13:13 2007-04-16
+比较0704121639和0704161106的配置文件，结果见"0704161106/0704121639with0704161106"
+感觉是下面的选项出了问题：
+319c356
+< # CONFIG_MTD_PXA271 is not set
+---
+> CONFIG_MTD_PXA271=y
+这个选项位于：
+-> Device Driver
+  -> Memory Technology Devices (MTD)
+    -> Memory Technology Device (MTD)
+      -> Mapping drivers for chip access
+使用0704121639的配置文件，并且使CONFIG_MTD_PXA271有效。
+仍然有错，停在了"Freeing init memory: 84K"
+分析原因。
+
+13:34 2007-04-16
+去掉对于jffs2的支持后，错误如下：
+mice: PS/2 mouse device common for all mice
+VFS: Cannot open root device "mtdblock2" or unknown-block(31,2)
+Please append a correct "root=" boot option
+Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(31,2)
+日志见"0704161314/bootLog"
+再去掉mtd的支持，结果如下：
+VFS: Cannot open root device "mtdblock2" or unknown-block(0,0)                  
+Please append a correct "root=" boot option                                     
+Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)  
+这时错误的日志是相同的。现在问题的关键就是把"0704121639"的配置文件修改正确。
+
+13:54 2007-04-16
+日志有问题，今天11点以后的bootLog可能与zImage不对应。
+重新检查这些日志。
+
+15:21 2007-04-16
+继续"13:34 2007-04-16"，把无法启动成功的内核按"0704161001"进行配置。
+加入jffs2和mtd的支持，系统启动成功。日志见"0704161510/bootLog"，修改的配置中的mtd部分见"0704161510/changedConfigs"
+
+15:44 2007-04-16
+仔细检查错误的配置文件
+发现配置文件中选择了MTD emulation using block device，但是没有选择MTD using block device (rewrite)，二者正好选反了。
+
+16:00 2007-04-16
+文件系统, jffs2, 分区信息
+根据"http://www.ebdev.com/jupiter/HOW%20TO%20use%20MTD-JFFs.htm"分区信息位于"drivers/mtd/maps/pxa27x-flash.c"，如下：
+static struct mtd_partition pxa27x_partitions[] = {
+        {
+                .name =         "Bootloader",
+                .size =         0x00040000,
+                .offset =       0,
+                .mask_flags =   MTD_WRITEABLE  /* force read-only */
+        },{
+                .name =         "Kernel",
+                .size =         0x00200000,
+                .offset =       0x00040000,
+        },{
+                .name =         "Filesystem",
+                .size =         0x01DC0000,
+                .offset =       0x00240000
+        }
+};
+
+
+16:02 2007-04-16
+compileResult/0704161547是使用重新使用默认的配置文件进行的编译，编译和运行完全正确。
+
+16:19 2007-04-16
+仍然是停在了"Freeing init memory: 84K"之后，详细查原因。。
+"
+
+16:57 2007-04-16
+文件系统待看, 待做
+文件系统相关文档。
+1, Copying Files to Stargate
+2, Creating a Root File System
+
+
+17:09 2007-4-16
+demo文件系统与root.tgz比较：
+bin目录相同
+
+18:31 2007-04-16
+待做
+1, 完成"genDev"脚本；
+2, 继续完成除了bin和dev目录的比较。demo(见demo/bootLog)和root.tgz比较；
+3, 生成jffs2时不填充数据，以减小文件系统的大小。先使用blob擦除。
+4, 看现有linux对于cc2420和无线传感网络的支持。看intel资料。车上看文字资料。
+5, 远期：分析简单路由协议的实现方法。
+

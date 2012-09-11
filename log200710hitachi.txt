@@ -1,0 +1,695 @@
+﻿18:22 2007-10-11
+Redhat Linux 9(rh9) installation log
+1, Installation:
+When i install rh9, it indicate that grub might not bootstrap the rh9 kernel in current partition. Because of it, I do not choose to install the grub  of rh9. just use the grub of FC7(grub 0.97). 
+This is my current partition table:
+[root@localhost ~]# fdisk -l /dev/sda
+
+Disk /dev/sda: 160.0 GB, 160000000000 bytes
+255 heads, 63 sectors/track, 19452 cylinders
+Units = cylinders of 16065 * 512 = 8225280 bytes
+
+   Device Boot      Start         End      Blocks   Id  System
+/dev/sda1   *           1        2550    20482843+   c  W95 FAT32 (LBA)
+/dev/sda2            2551       19451   135757282+   f  W95 Ext'd (LBA)
+/dev/sda5            2551        5100    20482843+   b  W95 FAT32
+/dev/sda6            5101        7650    20482843+   b  W95 FAT32
+/dev/sda7            7651       10200    20482843+  83  Linux
+/dev/sda8           10201       18168    64002928+  83  Linux
+/dev/sda9           18169       19443    10241406   82  Linux swap / Solaris
+
+2, boot the Linux
+(1), copy the grub parameter for rh9 from other computer, like this :
+        root (hd0,7)
+        kernel /boot/vmlinuz-2.4.20-8 ro root=LABEL=/ hdc=ide-scsi
+        initrd /boot/initrd-2.4.20-8.img
+(2), i replace the filename of vmlinuz initrd with the above filename in grub parameter when the computer boot up, and modified the root, like this:
+        root (hd0,8)
+        kernel /boot/vmlinuz-2.4.20-8 ro root=LABEL=/ 
+        initrd /boot/initrd-2.4.20-8.img
+then boot the kernel. 
+(3), but  the following error occurs:
+no init found trying pass init= option to kernel
+After puzzle, i search "redhat 9 qidongjiaoben" in google, qidongjiaoben is chinese character. and get a tip:
+Changing "root=LEBAL=/" to "root=/dev/hdxx"
+So, I change grub parameter like this, and boot rh9 successful:
+        root (hd0,7)
+        kernel /boot/vmlinuz-2.4.20-8 ro root=/dev/hda8
+        initrd /boot/initrd-2.4.20-8.img
+notes: boot rh9 need sata disk in combination(capataility) mode, but boot FC7 need sata disk in normal mode. you can change it in BIOS.
+(4), it time to modify the configuration file, in FC7 ( because our grub is install by FC7):
+(4)-1, /etc/fstab
+TODO: error, need to modified.
+#OSS-zhangjian.modified.2007-10-10.because_of_Redhat9 delele "SWAP-sda9" LABEL
+#LABEL=SWAP-sda9         swap                    swap    defaults        0 0
+/dev/hda7                swap                    swap    defaults        0 0
+(4)-2, /etc/grub.conf
+add this item in menu ( normal after splashimage, hiddenmenu keywords)
+title Redhat (2.4.20-8 rh9)
+        root (hd0,7)
+        kernel /boot/vmlinuz-2.4.20-8 ro root=/dev/hda8
+        initrd /boot/initrd-2.4.20-8.img
+
+
+
+.LOG
+11:33 2007-10-15
+学习buildx86.exe脚本文件:
+1, 配置qt-X11
+echo yes | ./configure -static -no-xft -no-opengl -no-sm
+待做: 看"echo yes"的作用, 看起来没什么作用.
+配置选项作用
+    -static ............ Create and use a static Qt library (libqt.a)
+    -no-xft ............ Disable support for Anti-Aliased fonts through the
+			 Xft extension library (XFree86 4.0.2 and newer).
+    -no-<module> ....... Disables a module, where module can
+                         can be one of: opengl table network canvas
+    -no-sm ............. Do not support X Session Management.
+The defaults (*) are usually acceptable.  Here is a short explanation of
+each option:
+*   -shared ............ Create and use a shared Qt library (libqt.so)
+待做: 继续分析
+
+13:57 2007-10-15
+项目计划安排：
+1, 学习QT，如何使用qvfb。学习单选框，列表，使用图片的按钮等。确认在qvfb可以运行的程序，可以不修改的编译为arm linux可运行的程序。（1天）。#
+2, 学习splite。根据文档建立数据库；（1天）#
+3, 看fv底层通信软件，1天。#
+4, 完成用户管理全部工作（3天）。
+同时进行的工作：
+1, QT x86版本和arm版本的编译方法#。尝试QT4。
+2, 液晶屏，触摸屏驱动。
+
+18:02 2007-10-15
+sqlite
+http://www.sqlite.org/
+http://www.ibm.com/developerworks/library/os-sqlite/index.html
+0, Why go embeddable?（为什么需要可嵌入的数据库？）
+
+Embeddable databases get their name from their unique run mode. They are embedded within an application process, removing the overhead associated with a client-server configuration. Embeddable databases are lightweight in the sense that they require little memory during run time. They are written in compact code, making them fast and ideal for embedded devices. The embedded run mode allows an embeddable database to be used to easily manage application data using SQL, instead of relying on primitive flat files. Embeddable databases also offer zero-configuration run modes, which makes getting one up and running a snap.
+
+Be aware that SQLite relies solely on the file system for its database permissions and has no concept of user accounts. SQLite has database-level locks, no network server, and implements most -- but not all -- of the SQL92 standard. Some major features left out are foreign keys and check constraints. Learn which SQL92 features are not implemented.
+
+1, SQLite's support of the SQL92 standard includes indices, limitations, triggers, and views. SQLite does not support foreign key constraints, but supports Atomic, Consistent, Isolated, and Durable (ACID) transactions.
+Some major features left out are foreign keys and check constraints. Learn which SQL92 features are not implemented.
+待做：查foreign key constraints。是不是就是外键？
+
+Under The Hood的由来：
+http://blog.joycode.com/zhanbos/archive/2004/06/10/24208.aspx
+既然Matt Pietrek is working for Microsoft，我就直接去问好了。以下是来自Matt的回答：
+The "Under The Hood" name was thought up by somebody at MSJ magazine.  The meaning is closer to the car analogy.
+所以我的解释是正确的。这也解释了为什么整个网上的字典没有能提到其由来的原因。这并不是一个long-established jargon.MSJ先开了这个专栏名称，以后在IT界得到使用。
+待做：看这个博客。这个作为例会调剂，加入例会内容（完成）。
+
+2, Under the hood
+用内部的虚拟机执行SQL statement（语句？），数据库文件可以跨越不同位序(bitorder)的机器。
+Internally, SQLite consists of several components: an SQL compiler, a core, a back end, and accessories. SQLite's utilization of a virtual machine, the Virtual Database Engine (VDBE), makes it easy to debug, modify, and extend SQLite's core. All SQL statements are compiled into easy-to-read assembly executed in the SQLite virtual machine. SQLite supports databases of up to 2 TB, with each database stored entirely in a single disk file. These disk files are portable across different byte-ordered machines. The data is stored on disk in a B+tree data structure. 
+
+3. Data types
+待做：这里的"column affinity"不太明白。
+SQLite does not support static data typing and, instead, uses column affinity. This means that instead of a datatype being a property of a table column, it is a property of the data itself. When a value is inserted into the database, SQLite will examine its type. If the type doesn't match that of the associated column, an attempt will be made to convert the value to the column type. If this not possible, the value will be stored as its native type.
+SQLite supports the NULL, INTEGER, REAL, TEXT, and BLOB data types.
+
+4, Using SQLite with a database abstraction layer
+待做：看下面两个软件。
+Two modern open source database abstraction layers offer support for SQLite: PEAR::DB, included in PHP V5, and the considerably more lightweight ezSQL. By making use of PHP Extension and Application Repository (PEAR) or ezSQL up front, SQLite can be used for rapid prototyping of applications that, should they later need to, be ported seamlessly to a more industrial-strength database.
+
+5, 其它的嵌入式数据库
+Apache Derby和Cloudscape
+
+6, SQLite use considerations是SQLite的缺点。
+
+7, 文后有相关资源。看，待做。
+
+18:55 2007-10-15
+sql相关资料，待做，下载：
+0, http://www.ibm.com/developerworks/library/os-sqlite/index.html, An introduction to SQLite, an open source embeddable database=++
+1, http://www.chinaeda.cn/show.aspx?cid=81&id=1485，使用 SQLite；
+2, http://blog.donews.com/directX/archive/2005/09/12/551121.aspx，Sqlite介绍；
+3, http://blog.csdn.net/mimepp/archive/2007/03/15/1530672.aspx， uclinux下的sqlite嵌入式数据库移植全攻略 [原创] 
+4, http://www.yuanma.org/data/2006/0603/article_603.htm，sqlite嵌入式数据库在arm-linux下的编译全攻略
+友情提示：
+如果sqlite在处理数据库过程中出现“The database disk image is malformed”，如：你在delete from sometable时，可能遇到这个问题。
+那么就是你的arm板上的空间不够（如在/tmp下），请删除掉一些文件。我遇到的情况是空间还剩1-2M都会出现这个提示。删除后空余4M，就正常了(如delete from sometable)。我是开的8M的ramdisk做开发玩的:-)
+5, http://www.netyi.net/search.aspx?type=&query=sqlite，去netyi下载sqlite资料。
+
+11:43 2007-10-16
+项目计划：
+0, 阅读编码风格文档。
+1, 本月完成用户管理，从明天开始，数据库部分可以暂时不实现。
+2，从 路 得到数据库设计文档；
+3，编译arm-linux-gdb；
+4，建立CVS服务器。
+
+17:12 2007-10-16
+QT安装。
+经过两天时间。QT embedded终于使用正常了。
+使用qt embedded在PC开发的过程：
+待做：使用qt embedded arm开发的过程，待补充；编写脚本，使得程序可以选择运行于qvfb还是实际嵌入式开发板。
+1，解压缩fftqt.tar.gz，运行buildx86.exe脚本。会编译QT embedded, QT X11, Qtopia。
+待做：buildx86.exe脚本分析。buildarm.exe脚本分析。
+2, 每次开发前要运行buildx86.sh脚本，建立开发环境。
+3，一定要在QT目录下开发，不是在qt-x11目录。例如：使用tutorial/t1的代码：
+[root@localhost qt]# source ./buildx86.sh （如果shell已经是bash，直接./buildx86.sh即可，一定要在buildx86.sh所在目录运行，否则环境变量设置不正确）
+[root@localhost qt]# pwd
+/usr/src/FV_project/qt
+[root@localhost qt]# cd qt/tutorial/t1
+[root@localhost t1]# make clean 
+rm -f main.o
+rm -f *~ core
+rm -f allmoc.cpp
+[root@localhost t1]# make
+g++  -c -I/usr/src/FV_Project/qt/qt/include -pipe -DQWS -fno-exceptions -fno-rtti -O2 -fno-default-inline -Wall -W -DNO_DEBUG  -o main.o main.cpp
+g++ -L/usr/src/FV_Project/qt/qt/lib -Wl,-rpath,/usr/src/FV_Project/qt/qt/lib   -o ./t1 main.o   -lqte -lm
+[root@localhost t1]# qvfb
+后面的程序不支持32位色彩深入，修改：在打开的qvfb窗口中选择菜单File->configure 色彩深入从32改为16，否则后面程序会报错。
+[root@localhost t1]# ./t1 -qws
+Connected to VFB server: 240 x 320 x 16
+这时在打开的qvfb窗口中可以看到，可以helloworld窗口。
+
+注：
+1, 这里的qt目录是QT embedded版本，如果使用qt-x11，需要修改buildx86.sh中QTDIR中\qt为\qt-x11。qt-x11是基于x-windows的GUI，不需要qvfb。使用qt embedded和qt-x11的系统结构分别是：
+/----------------------------------\
+|          Application		   |
+-----------------------------------
+|          Qt API		   |
+-----------------------------------
+|               ｜  Qt/X11	   |
+|  Qt/Embedded  ｜  Qt/XLib	   |
+|               ｜ X windows server|
+-----------------------------------
+|          FrameBuffer		   |
+-----------------------------------
+|         Linux Kernel		   |
+\----------------------------------/
+自: "Qt嵌入式图形开发（基础篇）.pdf"，p3。
+2, qvfb是虚拟framebuffer，这样嵌入式qt就可以把结果写入qvfb这个虚拟framebuffer中。既然是虚拟framebuffer，像minigui这类使用framebuffer的嵌入式GUI，也可以使用，这样开发就方便多了。
+3, 比较qt embedded和qt-x11的Makefile:
+(1) -DQT_NO_QWS_*，应该是配置支持哪些qvfb，现在还不知道哪个文档描述这些内容。查，待做。
+< QT_CXXFLAGS_OPT = -DQT_NO_QWS_VOODOO3 -DQT_NO_QWS_MACH64 -DQT_NO_QWS_MATROX -DQT_NO_QWS_VNC -DQT_NO_QWS_VGA_16 -DQT_NO_QWS_DEPTH_4 -DQT_NO_QWS_DEPTH_8 -DQT_NO_QWS_DEPTH_24 -DQT_NO_QWS_DEPTH_32 -DQT_BUILTIN_GIF_READER=0 -DQT_NO_IMAGEIO_JPEG -DQT_NO_IMAGEIO_MNG -DQT_NO_SM_SUPPORT  -I$(QTDIR)/src/3rdparty/zlib -I$(QTDIR)/src/3rdparty/libpng -I3rdparty/freetype/src -I3rdparty/freetype/include -I3rdparty/freetype/builds/unix
+---
+> QT_CXXFLAGS_OPT = -DQT_BUILTIN_GIF_READER=0 -DQT_NO_IMAGEIO_JPEG -DQT_NO_IMAGEIO_MNG -DQT_NO_SM_SUPPORT -DQT_NO_XKB  -I$(QTDIR)/src/3rdparty/zlib -I$(QTDIR)/src/3rdparty/libpng
+(2)，DQWS应该是控制有无qws选项的。
+< SYSCONF_CXXFLAGS      = -pipe -DQWS -fno-exceptions -fno-rtti -O2 -fno-default-inline -Wall -W -DNO_DEBUG
+---
+> SYSCONF_CXXFLAGS      = -pipe -O2 -Wall -W
+(3)，这里嵌入式版本使用了共享库，x11版本反而使用静态库，费解，查，待做。(3) 
+< SYSCONF_LINK_TARGET   = $(SYSCONF_LINK_TARGET_SHARED)
+> SYSCONF_LINK_TARGET   = $(SYSCONF_LINK_TARGET_STATIC)
+其余区别，例如FT_OBJECTS的作用等，还不了解，过段时间继续分析，全部区别见"qt_embedded-x11"，该文件比较了qt embedded2.3.7和qt x11 2.3.2的tutorial/t1/Makefile的区别。
+
+18:14 2007-10-16
+明日待做：
+继续完成实战篇的例子。然后开始做项目内容，全天完成所有的界面。下周开始看FV通信部分。
+(11:39 2007-10-17)
+实例运行完成，hello.cpp中加入了两个头文件：
+#include <qpixmap.h>
+#include <qpainter.h>
+否则有编译错误：
+g++ -c -pipe -DQWS -fno-exceptions -fno-rtti -Wall -W -O2 -fno-default-inline -DNO_DEBUG -I/usr/src/FV_Project/qt/qt/include -o hello.o hello.cpp
+hello.cpp: In member function `virtual void Hello::paintEvent(QPaintEvent*)':
+hello.cpp:144: variable `QPixmap pm' has initializer but incomplete type
+hello.cpp:148: aggregate `QPainter p' has incomplete type and cannot be defined
+make: *** [hello.o] Error 1
+
+11:46 2007-10-17
+下午继续分析完实例，问叶涛项目计划。绘制完基本界面。
+
+13:30 2007-10-17
+分析实例
+1, 多数都可以直接通过文档"qt/doc/html/index.html"。（加入最终心得文档）
+例如类的定义在index.html中的API Reference->Alphabetical Class List)
+2, click信号是在main.cpp中与quit事件相连的。
+
+13:43 2007-10-17
+待做：查QT2.3.2是否有数据库接口
+
+14:08 2007-10-17
+开始做界面，步骤：
+1, 做用户管理初始界面.
+技术：进一步熟悉QT；
+文档：QT开发方法。
+2，做用户管理的四个子界面（不加入具体内容）。
+技术：如何进入下一个界面
+3，做注册新用户主界面
+技术：软键盘。
+进度：10-17下午完成1-3中的两个。
+4，注册新用户之手指注册界面。
+技术：通过QT的fv通信。
+进度：10-22完成
+5，完成全部用户管理界面；
+技术：文件管理。
+进度：10-23完成
+6，加入数据库sqlite。
+技术：QT数据库接口。
+7，最终完成用户管理部分。
+进度：10-24完成。
+
+
+17:57 2007-10-17
+对困难估计不足，没有完成进度。现在只能说是基本了解了QT开发。
+
+20:41 2007-10-19
+继续分析buildx86.exe。
+待做：并入前面的文档。
+echo yes | ./configure -static -no-xft -no-opengl -no-sm
+里面的"echo yes"的作用，输入configure过程中需要的yes（表示同意license）。
+
+20:59 2007-10-19
+用gcc4.1编译qt embedded 2.3.2, qt x11 2.3.7
+make -C src出错：
+/usr/src/src2/FV_project/qt/qt-x11/include/qvaluestack.h: In member function ‘T QValueStack<T>::pop() [with T = QMap<QString, QString>]’:
+xml/qxml.cpp:513:   instantiated from here
+/usr/src/src2/FV_project/qt/qt-x11/include/qvaluestack.h:57: 错误：不能从 ‘QValueListIterator<QMap<QString, QString> >’ 转换到 ‘const char*’，为实参 ‘1’(属于 ‘int remove(const char*)’)
+/usr/src/src2/FV_project/qt/qt-x11/include/qvaluestack.h: In member function ‘T QValueStack<T>::pop() [with T = QString]’:
+xml/qxml.cpp:2502:   instantiated from here
+/usr/src/src2/FV_project/qt/qt-x11/include/qvaluestack.h:57: 错误：不能从 ‘QValueListIterator<QString>’ 转换到 ‘const char*’，为实参 ‘1’(属于 ‘int remove(const char*)’)
+make: *** [xml/qxml.o] 错误 1
+make: Leaving directory `/usr/src/src2/FV_project/qt/qt-x11/src'
+前面有很多警告，比如，有虚函数却没有虚析构函数。
+回去用gcc3.4编译。
+
+13:50 2007-10-20
+继续研究如何在FC7下使用qt：
+用3.4.6 gcc编译qt，安装的是FC6上提供的campat-gcc-3.4, campat-gcc-c++-3.4
+rpm包。为了编译qt和开发qi过程中都能使用这个gcc, g++，在qt目录下建立qt-gcc目录，并建立gcc->/usr/bin/gcc34, g++->/usr/bin/g++34两个符号链接。在buildx86.exe和buildx86.sh中设置PATH的语句改为：
+export PATH=$QTDIR/bin:$QPEDIR/bin:$TMAKEDIR/bin:$PATH
+这样系统会先找到上述两个3.4版本的编译器。
+编译qt-x11 2.3.7正确。编译qt embedded 2.3.2出错：
+g++  -c -I/usr/src/src2/FV_project/qt/qt/include  -pipe -DQWS -fno-exceptions
+-fno-rtti -O2 -fno-default-inline -Wall -W -DNO_DEBUG -fPIC
+-DQT_NO_IMAGEIO_MNG -DQT_NO_QWS_VOODOO3 -DQT_NO_QWS_MACH64 -DQT_NO_QWS_MATROX
+-DQT_NO_QWS_VNC -DQT_NO_QWS_VGA_16 -DQT_NO_QWS_DEPTH_4 -DQT_NO_QWS_DEPTH_8
+-DQT_NO_QWS_DEPTH_24 -DQT_NO_QWS_DEPTH_32 -DQT_BUILTIN_GIF_READER=0
+-DQT_NO_IMAGEIO_JPEG -DQT_NO_IMAGEIO_MNG -DQT_NO_SM_SUPPORT
+-I/usr/src/src2/FV_project/qt/qt/src/3rdparty/zlib
+-I/usr/src/src2/FV_project/qt/qt/src/3rdparty/libpng -I3rdparty/freetype/src
+-I3rdparty/freetype/include -I3rdparty/freetype/builds/unix -I3rdparty/kernel
+-I3rdparty/tools -o allmoc.o allmoc.cpp
+In file included from kernel/qt.h:62,
+                 from allmoc.cpp:16:
+/usr/src/src2/FV_project/qt/qt/include/qsortedlist.h: In destructor
+`QSortedList<type>::~QSortedList()':
+/usr/src/src2/FV_project/qt/qt/include/qsortedlist.h:51: 错误：there are no
+arguments to `clear' that depend on a template parameter, so a declaration of
+`clear' must be available
+/usr/src/src2/FV_project/qt/qt/include/qsortedlist.h:51: 错误：(if you use
+`-fpermissive', G++ will accept your code, but allowing the use of an
+undeclared name is deprecated)
+make[2]: *** [allmoc.o] 错误 1
+make[2]: Leaving directory `/usr/src/src2/FV_project/qt/qt/src'
+make[1]: *** [sub-src] 错误 2
+make[1]: Leaving directory `/usr/src/src2/FV_project/qt/qt'
+make: *** [init] 错误 2
+
+23:57 2007-10-20
+尝试编译gcc：
+--enable-shared[=package[,...]]
+    Build shared versions of libraries, if shared libraries are supported on the target platform. Unlike GCC 2.95.x and earlier, shared libraries are enabled by default on all platforms that support shared libraries, except for libobjc which is built as a static library only by default.
+
+    If a list of packages is given as an argument, build shared libraries only for the listed packages. For other packages, only static libraries will be built. Package names currently recognized in the GCC tree are libgcc (also known as gcc), libstdc++ (not libstdc++-v3), libffi, zlib, boehm-gc and libjava. Note that libobjc does not recognize itself by any name, so, if you list package names in --enable-shared, you will only get static Objective-C libraries. libf2c and libiberty do not support shared libraries at all.
+
+    Use --disable-shared to build only static libraries. Note that --disable-shared does not accept a list of package names as argument, only --enable-shared does. 
+--disable-libgcj
+    Specify that the run-time libraries used by GCJ should not be built. This is useful in case you intend to use GCJ with some other run-time, or you're going to install it separately, or it just happens not to build on your particular machine. In general, if the Java front end is enabled, the GCJ libraries will be enabled too, unless they're known to not work on the target platform. If GCJ is enabled but libgcj isn't built, you may need to port it; in this case, before modifying the top-level configure.in so that libgcj is enabled by default on this platform, you may use --enable-libgcj to override the default. 
+未完，太晚了，明天接着做。
+
+09:18 2007-10-22
+待做：
+尝试QT国际化，tr()
+
+09:31 2007-10-22
+今日目标：
+1, 完成初始界面，会用RadioButton;
+2, 通过初始界面进入退出，四个子对话框。
+3, 调出软键盘。
+4, 如果19点前，完成尝试在FC7下编译gcc3.2.2和QT。
+
+1，QRadioButton action:
+clicked(index) -(connect)-> action(QRadioButtonName(index))
+action, save QRadioButton name:
+(1), save QRadioButton name to set private value;
+(2), display message debug message or help message at debug label.
+Next Button action:
+clicked() -(connect)-> action()
+action, enter different dialog according to "QRadioButton action" result.
+
+Cancel Button action:
+clicked() -(connect)-> action()
+action: Cancel current dialog. if we at the top dislog, prompt and exit.
+
+10:43 2007-10-22
+待做：
+考虑自己继承ButtonGroup类，包括。
+class
+{
+    modeIndex
+    modeName
+    modeAction
+    currentMode;
+    lastMode
+}
+前三个可能ButtonGroup类已经支持，关键是后两个。
+
+14:00 2007-10-22
+第一个界面工作正常了。
+总体计划一下这部分界面的设计：
+QWidget
+TOP -> 
+    mode:(QWidgetStatck)
+    Add -> ...(QWizard)
+    Edit -> ...
+    Quiry -> ...
+    Delete -> ...
+
+UserAdminMode: QWidgetStack. Add, Edit, Quiry and Delete.
+AddMode: QWizard. 
+
+QWidgetStatck参看xform
+增删改查中，都有结构共同的对话框，这个需要建立一个对话框类。
+
+i18n是国际化的参考。
+
+16:34 2007-10-22
+使用gcc4.1编译gcc3.2.2失败，用gcc3.4.6编译。
+从FC6光盘或网上下载的compat-gcc-34-3.4.6-4.i386.rpm和compat-gcc-34-c++-3.4.6-4.i386.rpm。需要修改gcc-3.2.2/Makefile的CC变量gcc为gcc34，CXX变量c++为g++34。
+(16:58 2007-10-22)
+编译gcc-3.2.2成功，日志见"fv/qt/compileQT"：
+1，配置：configure.log
+2，修改编译器：edit_Makefile.log
+3，编译：make.log
+4, 安装：make_install.log
+参考文档：
+1, 如何编译gcc编译器=++.pdf
+2, GNU官方编译gcc文档，位于"gcc-3.2.2/INSTALL"目录
+使用gcc3.2.2编译qt成功。运行qt embedded 2.3.7 tutorial/t1，正确。
+(19:19 2007-10-22)
+奇怪的问题，qt的designer中键盘无效。难道是用3.2.2编译器编译造成的？待做：尝试3.3.2。
+
+19:55 2007-10-22
+进展：
+useradmin_10221955.tar.gz
+加入了QWidgetStack。需要设置位置和最小的大小，否则显示会有问题。
+
+20:13 2007-10-22
+《24小时学通QT》的23学时，有关于qDebug等调试函数和如何用gdb调试Qt的说明。用gdb调试时，需要先用nm查出编译后函数的名称，再用gdb设置断点。
+待做完成：加入qDebug等函数。再次尝试用gdb调试Qt。
+(13:02 2007-10-24)
+用gdb调试qt：
+1, 编译时加入调试信息，"-g"或"-ggdb"。为了提供更多的调试信息，在CFLAGS和CXXFLAGS中加入"-ggdb"
+2, 查编译器中的函数名，例如查原有的pageNext函数：
+[root@localhost useradmi]# nm UserAddtest | grep pageNext
+0805d870 T _ZN7UserAdd8pageNextEv
+3, 用gdb调试，下面是设置"pageNext"函数的断点和调试的过程：
+[root@localhost useradmi]# gdb --args ./UserAddtest -qws
+GNU gdb Red Hat Linux (5.3post-0.20021129.18rh)
+Copyright 2003 Free Software Foundation, Inc.
+GDB is free software, covered by the GNU General Public License, and you are
+welcome to change it and/or distribute copies of it under certain conditions.
+Type "show copying" to see the conditions.
+There is absolutely no warranty for GDB.  Type "show warranty" for details.
+This GDB was configured as "i386-redhat-linux-gnu"...
+(gdb) l
+353     {
+354         qDebug("check current page %s", currentPage()->name());
+355         emit pageNext();
+356     }
+357     //bamvor.add.2007-10-24.end
+358
+359     #ifdef USER_ADD_DEBUG
+360     int main(int argc, char** argv)
+361     {
+362         qDebug("User Add Debug.");
+(gdb) l
+363         QApplication a(argc, argv);
+364         UserAdd ad_start;
+365         a.setMainWidget( &ad_start );
+366         ad_start.show();
+367         return  a.exec();
+368
+369     }
+370     #endif /*USER_ADD_DEBUG*/
+371
+372
+(gdb) l
+Line number 373 out of range; UserAdd.cpp has 372 lines.
+(gdb) b _ZN7UserAdd8pageNextEv
+Breakpoint 1 at 0x805d876: file moc_userAdd.cpp, line 93.
+(gdb) run
+Starting program: /usr/src/FV_Project/project/useradmi/UserAddtest -qws
+User Add Debug.
+Connected to VFB server: 320 x 240 x 16
+check current page getUserInfo
+ 
+Breakpoint 1, UserAdd::pageNext() (this=0xbffff5a0) at moc_userAdd.cpp:93
+93          activate_signal( "pageNext()" );
+(gdb) l
+88      }
+89
+90      // SIGNAL pageNext
+91      void UserAdd::pageNext()
+92      {
+93          activate_signal( "pageNext()" );
+94      }
+(gdb) 
+这里也可以看出moc_UserAdd.cpp是经过moc处理过的程序，完全符合c++的语法。同样在该文件中，可以看到：
+QString UserAdd::tr(const char* s)
+{
+    return qApp->translate( "UserAdd", s, 0 );
+}
+                                                                                
+QString UserAdd::tr(const char* s, const char * c)
+{
+    return qApp->translate( "UserAdd", s, c );
+}
+是国际化的代码，实现了把QObject::tr()函数。
+待做：深入学习QT消息机制；参考i18n实现QT国际化机制。
+
+22:12 2007-10-22
+在公司用3.2.2编译的QT有问题。现在尝试用3.3.2编译。编译器配置完全一样。
+键盘仍然无法输入，奇怪.....
+
+17:18 2007-10-23
+待做完成：用QComboBox代替前面的列表框。
+
+10:48 2007-10-24
+尝试通过重新定义next slot来控制是否进入下一个菜单：
+//bamvor.add.2007-10-24
+void UserAdd::next()
+{
+    qDebug("next slot, current QWidget name is %s.", currentPage()->name());
+    pos++;
+    if ( pos<pageCount() )
+    {
+        showPage(page(pos));
+        setNextEnabled(currentPage(), FALSE);
+        setBackEnabled(currentPage(), TRUE);
+        qDebug("entering next page, current QWidget name is %s.",
+                currentPage()->name());
+    } //if
+    else
+    {
+        qDebug("this is the end of Wizard.");
+    } //else
+                                                                                
+}
+问题：Back按钮没有有效。原因未知。
+但是已经感觉到这样似乎不是好办法，要负责页面的显示和按钮的使能等。
+尝试修改nextButton，使其不直接连接next slot
+
+14:22 2007-10-24
+如何检查用户输入的内容是否正确
+1, 使用QObject::queryList查询所有的children
+This somewhat contrived example disables all the buttons in this window:
+
+    QObjectList * l = topLevelWidget()->queryList( "QButton" );
+    QObjectListIt it( *l );             // iterate over the buttons
+    QObject * obj;
+    while ( (obj=it.current()) != 0 ) { // for each found object...
+        ++it;
+        ((QButton*)obj)->setEnabled( FALSE );
+    }
+    delete l;                           // delete the list, not the objects
+2, 
+class QCheckWidget: public QWidget
+{
+public:
+    virtual bool check();
+}
+
+class QCheckLabel: public QCheckWidget, public Label
+{
+public:
+    bool check();
+}
+(1)为了避免重复搜索QCheckWidget，规定QCheckWidget里面，不应该加入QCheckWidget。
+(2) QCheckWidget::check()，检查数据，合法返回TRUE，非法返回FALSE。
+QCheckWidget::check()使用"QObject::queryList"查询其所有的children。
+(3), QCheckLabel::check()，仅仅查询自己保存的数据是否合法。
+(4), QWizard中的所有page应该都是"QCheckWidget"类型。点击nextButton时，check()。
+
+16:30 2007-10-24
+刚才的思考算是面向对象的学习吧。后来实现过程中，越想越不对，qt怎么可能没有考虑到check的问题呢？
+在所有函数列表中搜索valid，最终找到了"QValidator"类，这个里面的validate函数是纯虚类，可以根据自己的需要定义规则。并且提供三种状态表示是否满足规则：
+# Invalid - the string is clearly invalid.
+# Intermediate - the string is a plausible intermediate value during editing.
+# Acceptable - acceptable as a final result.
+待做：借此学习纯虚类等，先期加入简单的规则，例如人名中不能有数字。
+(14:17 2007-10-28)
+发现上面这次考虑的也不全面，使用了QValidator后，其实是CheckLabel就不需要自己手工建立了，其它都是一样的，这个还是应该建立UML图，完成界面和与FV通信后，做，应该放在数据库之前。
+现有整体考虑：
+类图：
+QWizard		(1)<--组合--(1..n)	QCheckWidget(QWizard的Page)
+QCheckWidget	(1)<--组合--(1...n)	layout
+layout	---	(1)<--组合--(1)		edit(QLineEdit or QComboEdit...)
+       	`--	(1)<--组合--(1)		QLabel
+序列图：
+QWizard::collectPageInfo() -> QWizard::check() -> QCheckWidet::check() -> edit::validator
+待做：实现错误检查，使用UML图表示类的从属关系，画序列图。
+
+11:37 2007-10-28
+建立QT环境（加入最终心得文档）：
+1，修改qt/buildx86.sh中QWD为QTBASE
+2，在"/etc/profile"中加入：
+QTBASE="..."
+export QTBASE
+修改
+# No core files by default
+ulimit -S -c 0 > /dev/null 2>&1
+为
+# no limited core file
+ulimit -c unlimited
+3, 在适当位置加入下列脚本，进入qt开发目录。
+#bamvor.add.2007-10-28
+source /mnt/hgfs/FV_project/qt/buildx86.sh
+cd /mnt/hgfs/FV_project/project/useradmin
+qvfb -width 320 -height 240 -depth 16 &
+#bamvor.add.2007-10-28.end
+其中"/mnt/hgfs/FV_project/project/useradmin"是qt开发目录，"-width 320 -height 240 -depth 16"是所需的qvfb启动参数。
+我是放在了rh9的"/root/.bashrc"文件的最后。
+
+12:25 2007-10-28
+完成收集信息的函数框架。
+下午：
+1，实现checkCP成功情况下的，收集信息。最终保存于文件中；
+2，采集指静脉。
+晚上完成其它三个界面。
+
+14:44 2007-10-28
+c++学习
+UserAdd.o(.text+0x3f99): In function `UserAdd::collectCPInfo()':
+/mnt/hgfs/FV_project/project/useradmin/UserAdd.cpp:363: undefined reference to `UserAdd::checkCP()'
+collect2: ld returned 1 exit status
+make: *** [UserAddtest] Error 1
+原因是：
+UserAdd::checkCP()的定义写成了：
+QWidget* checkCP()
+{
+    //...
+}
+所以连接器没有找到"UserAdd::checkCP()"函数，报错。
+
+14:51 2007-10-28
+使用了没有定义的SLOT--"checkCurrent()"，但是编译时没有报错，运行时有下面的提示？
+说明信号槽机制可能是动态绑定。待做：看昨天下载的QT信号槽机制分析。
+QObject::connect: No such slot UserAdd::checkCurrent()
+QObject::connect:  (sender name:   'next')
+QObject::connect:  (receiver name: 'UserAdd')
+待做：查键合(bonding)和焊接有什么区别？一个物理过程，一个化学过程？
+
+16:53 2007-10-28
+需求：
+1，在 增删改查 中。保持用户所有信息内容，格式和显示位置的一致性。
+2，方便的设置和获得信息。
+3，易于Wizard通用处理。
+Info
+Info() :QWidget()
+view: none editable
+create: all editable
+edit: some items are editable
+getInfo()
+setInfo()
+
+待做：修改用户名会失去现有手指信息，是否继续？
+00:03 2007-10-29
+计划：
+1，上午1小时完成用户注册；
+2，剩余时间完成另外三个界面；
+3，下午开始FV通信。
+
+09:36 2007-10-29
+待做，查：
+1，INT，VARCHAR的取值范围。
+
+14:05 2007-10-29
+又没有考虑全面。
+class UserBasicInfo : public UserBasicInfo
+{
+    Q_OBJECT
+                                                                                
+public:
+    UserBasicInfo( QWidget* parent = 0, const char* name = 0, bool modal = FALSE, WFlags fl = 0 );
+    ~UserBasicInfo();
+    void* getInfo();
+    void setInfo(void *info);
+protected:
+    void* info;
+}
+如果这样定义，通过void *info导入导出数据是否可以？
+考虑用QDict类。
+
+重新整理一下思路，如果没有界面。肯定是用一个统一的数据结构描述。然后建立get，set函数即可。现在有了界面，道理一样，比较简单的办法对应界面，把统一的数据结构和对应的get，set分为界面对应的小数据结构和get，set。再对每个小数据结构实现具体数据和get，set函数。
+class InfoCollection
+{
+public:
+    virtual QDict<char> *getInfo() = 0;
+    virtual setInfo(QDict<char> *) = 0;
+proteched：
+    QDict<char> * info;    
+}
+
+class UserInfo: public InfoCollection
+{
+public:
+    QDict<char> *getInfo();
+    setInfo(QDict<char> *);
+protected:
+    QDict<char> * info;
+    InfoCollection *UserBasicInfo;
+    InfoCollection *UserFingerInfo;
+    InfoCollection *UserDateInfo;
+}
+
+class UserBasicInfo: public InfoCollection
+{
+public:
+    QDict<char> *getInfo();
+    setInfo(QDict<char> *);
+protected:
+    QDict<char> *info;
+}
+
+14:54 2007-10-29
+getInfo和setInfo起什么作用？应该是把数据写入到界面上，或者从界面上把数据读出。如果是这个作用，用迭代器就可以。
+好像缺乏的是从数据库读入和从数据库读出的函数。
+void readDB()
+writeDB(DB *db)
+
+22:57 2007-10-31
+现在的想法是直接使用QObjectList存储内容，用QObjectListIt做迭代器。
+QCollection -> QGDict -> QDict
+            -> QGList -> QList -> QObjectList
+另外，QObjectListIt继承了QListIterator。
+对于现在我的应用来说，应该都是够用的。
+待做：结合"qobjectlist.h"和"qobject.h"qobject.h理解QObectList和QObjectListIt。QList<QObject>是模板还是什么？查。
+
+15:53 2007-11-06
+fv, getbyte函数
+把32位整数，按大端方式保存：
+void FingerVein::getbyte(int n, char *ptrcmd)
+{
+	int i;
+	for (i = 0; i < 4; i++)
+		ptrcmd[i] = (n >> 8 * (3 - i)) & 0xff;
+}
+查，待做：FV的通信是大端格式？
