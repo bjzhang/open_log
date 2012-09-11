@@ -1,0 +1,3061 @@
+﻿
+10:19 2011-5-2
+时间管理
+0, 9:50
+
+1, 本日
+1), AE bus clkswitch代码完善. 
+
+10:26 2011-5-2
+VC0882, SV, AE, clkswitch, power, dvfs: cpufreq; 3 bus clkswitch, 改进切频效果; 基本测试通过, 近两日工作总结
+1, 4月30日代码主要是调试效果不好.
+之前在30-70之间调整, 对于70%这个门限不太好, 因为到了70%就已经影响效率. 参考cpufreq里面, 一般是80%就调整. 
+所以想修改为>60%就调整, 调整到50%. 调整后需要确认利用率.
+<40%就调整, 调整到50%. 
+只要在40-60%之间就不调. 不知道这样实际效果如何. 
+
+2, 对于"##"理解还不是很够: 
+只有和字母数字等函数变量里面可以出现的字符才需要用"##"隔开, 否则编译器会认为你需要多处理一次, 例如分析##marb.是什么东西. 
+arch/arm/plat-vc088x/vc088x_monitor.c:446:1: error: pasting "," and "marb" does not give a valid preprocessing token
+arch/arm/plat-vc088x/vc088x_monitor.c:446:1: error: pasting "marb" and "." does not give a valid preprocessing token
+
+3, 根据1项目, 经过调试, 能得到较好的结果. 一般调整两次就可以到40-60%之间. 目前delay和times都可以在用户空间设置. 
+
+4, 和dongliang代码merge后, performance montior, 计时有固定的误差. 仔细看了vc088x_monitor.c, 没发现问题. 
+对比merge之前的代码, 发现是因为bus_clksrc错误的设为了pll1, 所以bus计时不准.
+其实这个问题, 本来不难想到. 自己思维现在很受局限. 分析时就直接认为是marb计数个数不对, 没有想到是marb performance monitor单位就有问题.
+\todo 查一查思维方法的书. 
+
+5, 给dongliang发代码修改. 
+1), bus_clksrc挂在pll2.
+
+6, (20:16 2011-5-2)工作总结
+调试AE Linux bus switch, 基本测试通过, 准备和dongliang cpufreq一起加入到android中测试.
+1), 和dongliang做的cpufreq代码merge.
+2), 目前bus在cpu频率调整后调整bus频率, 策略如下:
+所以想修改为>60%就调整, 调整到50%. 
+<40%就调整, 调整到50%. 
+只要在40-60%之间就不调.
+每次cpu调频后, bus调频会执行三次, 以调整到更准确的频率. 
+3), 基于上述代码测试, 当cpu频率变化时, bus能正确调整频率. 一般三次中的第二次就可以得到较准确的结果.
+4), 为了便于调整参数: 
+上述的升频, 降频门限(up_threshold, down_threshold), 升频, 降频目标(up_object, down_object), bus调频次数(scale_times)以及bus利用率统计时间(clock_delay_trigger), 都加入到了performance monitor sysfs目录(/sys/devices/system/monitor/marb/global), 便于调整. 
+
+7, 给biainrongguang, zhaoyuan发进展
+cpu, bus切频初步测试通过. 
+1), 目前cpu频点如下:
+ 750MHz   PLL1
+  666MHz   PLL2
+  375MHz   PLL1 / 2
+  333MHz    PLL2 / 2
+  250MHz   PLL1 / 3
+  222MHz   PLL2 / 3
+  150Mhz   PLL1 / 5
+  125MHz   PLL1 / 6
+  75Mhz   PLL1 / 10
+  50Mhz   PLL1 / 15
+bus频点: 333, 222, 166.5, 133.2, 111, ..., 55.5. 十个频点. 
+
+2), 目前bus在cpu频率调整后调整bus频率, 策略如下:
+所以想修改为>60%就调整, 调整到50%. 
+<40%就调整, 调整到50%. 
+只要在40-60%之间就不调.
+每次cpu调频后, bus调频会执行三次, 以调整到更准确的频率. 
+3), 基于上述代码测试, 当cpu频率变化时, bus能正确调整频率. 一般三次中的第二次就可以得到较准确的结果.
+4), 为了便于调整参数: 
+上述的升频, 降频门限(up_threshold, down_threshold), 升频, 降频目标(up_object, down_object), bus调频次数(scale_times)以及bus利用率统计时间(clock_delay_trigger), 都加入到了performance monitor sysfs目录(/sys/devices/system/monitor/marb/global), 便于调整. 
+
+3), 下一步会在android下面测试切频效果. 
+
+10:04 2011-5-4
+VC0882, SV, performance monitor, arm busy/idle统计 for 微软项目
+zhangjian2gong'anmin邮件
+硬件方式计算cpu占用率资料如下:
+
+1, performace monitor: 
+1), 文档: D:\VC0882\document\arm\Cortex-a8, p203, C9寄存器.
+具体统计arm busy/idle, 我看可以用下面这个事件:
+0x5a Number of cycles that NEON and integer processors are both not idle.
+2), 计算clock counter的参考代码: do_arm_pmu_counter()(arm_test_cmd.c)
+2, 强制进idle: do_autopmutest()(autotest/auto_test_cmd.c)
+
+统计arm busy/idle这个功能我没有用过, 可能需要做一些时间. 然后再修改环境, 使系统在空闲时能进入arm idle状态. 
+
+10:15 2011-5-4
+时间管理
+0, 9:50
+
+1, 本日
+1), 10' 支持gong'anmin调试硬件统计arm占用率, 见"10:04 2011-5-4".
+2), 45' 支持QA pmu 模式转换问题, 见"11:22 2011-5-4". 
+3), 20' 添加"rvds安装破解问题"到rvdebugger问题集, 见"11:01 2010-6-8"9.
+4), 20' 和bianrongguang讨论工作安排, 先实验android clkswitch并上传代码.
+
+11:22 2011-5-4
+VC0882, SV, 445, 604, power, pmu, idle, halt, sleep
+1, hefan说的idle问题, 我复测没有问题. 
+2, hefan halt问题是我代码中加入gpu work around时, 对halt有影响. 
+3, zhangyunxia sleep问题, 我用最新代码也有问题, 保险起见merge我修改后的代码到最新代码.
+4, ddr training地址问题: 地址是64bit地址, 不是byte地址. 详见beihua今日邮件. 
+这个问题是这样的：
+
+我们在DT_ADDR（0x60011070）这个寄存器里填写的地址并非是一般的按byte寻址的地址而是按照DWORD（64bit）方式寻址的地址，也就是说这个寄存器里的地址总是用来指向DWORD的，所以这个地址转换为byte地址后需要再乘8。如果DRAM的容量比较小，而DT_ADDR里的值又比较大，就会发生address求模的操作，也就是你所描述的破坏0x0地址的数据的现象。
+
+另外需要注意的是Data training操作需要占用8个WORD的存储空间也就是32个byte；还有一个很重要的问题是DT_ADDR里的地址值需要保证是256bit对齐的，如果换算成DWORD寻址方式，我们必须保证DT_ADDR里的地址的最低2bit是0！
+
+13:45 2011-5-4
+VC0882, SV, power, pmu, mode trans, AE降低sleep功耗
+1, 之前bianrongguang sleep功耗比我高的原因是ddrphy没有进入lpmode, 看了ddrphy功耗至少有50-60ma.
+PS: pmu域里面有pmu, padc, timer, ddrphy四个模块. 
+
+18:12 2011-5-4
+VC0882, SV, git使用方法; 文档, 总结
+1, git pull不允许有冲突的文件, 自己写脚本解决这个问题
+1), 备份旧文件: 
+for name in `git status | grep modified | cut -d :  -f 2`; do mv $name $name.bak; done
+2), 更新:
+git pull
+3), git add arch/arm/mach-vc0882/board-vortex.c arch/arm/mach-vc0882/clock-vortex.c arch/arm/plat-vc088x/Kconfig.debug arch/arm/plat-vc088x/cpu.c arch/arm/plat-vc088x/include/mach/clock.h arch/arm/plat-vc088x/include/mach/log-private.h arch/arm/plat-vc088x/include/mach/module.h arch/arm/plat-vc088x/vc088x_monitor.c arch/arm/plat-vc088x/vc088x_monitor.h
+4), git commit -m "add cpufreq and bus clkswitch while CONFIG_CPU_FREQ defiend"
+git push origin HEAD:vmc_g
+5), PS: 为了避免使用内部emmc卡, 注释了board-vortex.c里面sd2的device
+
+9:46 2011-5-5
+时间管理
+0, 9:42
+
+1, 本日
+1), 10' 10:41 AE suspend/resume debug, 见"9:47 2011-5-5". 
+2), 40' IC clock training, \todo 看完ppt. 
+3), 60' VC0882 SV总结文档. 见"10:51 2011-5-5". 
+4), 30' VC0882 ICP sync up. 
+5), 20' VC0882 AE sync up. 见"9:47 2011-5-5"7.
+
+9:47 2011-5-5
+VC0882, SV, AE, power, suspend, resume, debug
+1, 目前bianrongguang调试中目前问题
+1), suspend, resume不稳定. 
+2), 串口不稳定. 
+3), gpu掉电时间. 
+4), 修改ddr training地址问题. 详见beihua邮件. 见"11:22 2011-5-4"4.
+
+2, ramdisk下调试
+1), suspend出错
+# echo mem > /sys/power/state
+request_suspend_state: sleep (3->3) at 247520425553 (2000-01-01 
+...
+<E>[va7882]: va7882_i2c_suspend
+<I>[va7882]: Set[0x55]=0x00
+<I>[va7882]: Get[0xf3]=0x20
+pm_op(): i2c_device_pm_suspend+0x0/0x50 returns -1
+PM: Device 0-0016 failed to suspend: error -1
+PM: Some devices failed to suspend
+<E>[va7882]: va7882_regulator_resume
+由于suspend出错, 后面就是resume. 现在在ramdisk下面是有问题: resume后会立刻suspend. laobian说echo on > /sys/power/state, 可以避免再次sleep. 
+这里suspend出错是预期之内的, 目的是如果suspend时发现用户按键唤醒, 就不再suspend. 
+
+2), 第二次实验, 没有发现这个问题. 现在是sleep后没有唤醒. 
+
+3, 看代码. 
+sleep入口v8sram_pm_sleep()(sram.c). 
+汇编在sram-helper.c
+总的入口: v8_pm_enter()(plat-vc088x/pm.c)
+
+4, 中午饭后继续实验, 发现用同样的电池, 电源, sd卡, bianrongguang的板子可以睡眠, 我的板子power key不管用.
+另外现在sleep时没有关闭watch dog, 所以需要在/system/etc/init.vimicro.sh里面注释打开watch dog的四句话(搜索watch可以找到). 
+
+5, 找huangchen修板子(power key不管用, usb口插到pc无效). 
+
+6, 串口历史未发现问题. 等其它同事复现后再查. 
+
+7, 功耗目标
+1), 本周sleep/wakeup
+(1), video播放.
+(2), gpu
+(3), lvds.
+(4), tpi.
+(5), g-sensor
+2), 下周: 动态功耗. 
+3), battery/charger bug.
+4), u-boot关机充电. 
+5), led指示灯. 
+6), dvfs. 
+
+8, 细看sleep代码, 
+1), 为什么不清srcpnd? 担心丢中断. 
+2), 目前pm_enter里面除了gpu关电以外的7882操作, 尽量移到各模块driver中. 
+3), sram-helper.S里面只有v8_sram_entry到v8_sram_entry+v8_sram_sz之间, 会被copy都sram中, 其余都是在ddr中, 所以不需要保存.
+4), 测试ddr进入自刷新后, wfi前按键有无问题. 
+5), 看resume中ddr堆栈恢复是否正确. <阅读代码未发现问题>
+6), 修改ddr training地址. <已修改, 未测试>
+
+9, 上述问题4), 现在还不是每次都可以. 
+实验四次有一次不行. 
+
+10:51 2011-5-5
+VC0882, SV, AE, SV总结文档
+上传到"D:\VC0882\document\sv\Notice\VC0882 SV总结.doc"
+1, 主要描述sv, fpga差异: clock, power, reset.
+1), clock: nfc时钟对齐问题. 由于sv/fpga频率差异引入的问题:
+中断测试中: sw trigger需要memory barrier.
+ddrc sleep/wakeup参数变化.
+超过综合频率: 可能造成模块工作不稳定. 
+2), power: 
+(1), 电压设置范围: 1.1-1.5v.
+(2), gpu上电流程.
+
+2, 从模块内部和模块之间关系两部分描述: 主要是模块间或系统级应用的影响.
+
+3, sv阶段bug: sar adc.
+
+4, bootloader引入的影响: rom boot和u-boot都修改了usb phy clock.
+文档不清, 由于测试方法局限未覆盖到: ddrc training address是8byte地址, 不是byte地址.
+
+5, board notice需要么? 
+
+15:15 2011-5-5
+VC0882, SV, trace, SV和FPGA相比trace少了下面几个信号, \todo 都是做什么用的? 
+VTREFB_R
+DBGRQ
+TRACE_DBGACK
+EXTTRIGX
+VTREFA_RVSUPPLYA_R
+
+9:49 2011-5-6
+时间管理
+0, 9:30
+
+1, 本日
+1), AE sleep, 见"9:49 2011-5-6". 
+(1), 上午: 和bianrongguang一起修正了gpu work around流程, 原有代码中gpu work around reset pso前没有使ddr进入自刷新. 
+(2), 下午: 4h 和bianrongguang一起修正了suspend过程中用户按键无法唤醒的问题. 见"9:49 2011-5-6"4, 5.
+2), 20' 和gong'anmin讨论硬件统计arm利用率.
+3), 50' 支持sleep测试. 见"19:47 2011-5-6". 
+4), 工作总结. 见"20:00 2011-5-6". 
+
+9:49 2011-5-6
+VC0882, SV, AE, power: suspend, resume, pmu mode trans: sleep, debug, 续, fix one bug(详见5,6)
+1, 根据昨天讨论, 我继续查sleep->wakeup不稳定问题. 昨天修改代码后, 
+1), 用ICE调试实验两次都可以过wfi, 然后正确退出. 
+2), 用sd boot: 实验四次有三次可以到达预定的"clock resume", 一次只能到wfi后面的打印. 
+2, 今天计划
+主要计划是保证suspend, resume稳定. 
+1), sleep, wakeup前后加入足够打印, 便于查看错误位置. 
+2), 查为什么到clock resume后有问题. 
+开始以为是ddr退出自刷新流程有问题:
+ddr 退出自刷新需要和bootloader方式一致, 估计需要加入ddrphy的控制和io的控制. 
+后来想起最后系统是reset, 后面应该由bootloader退出自刷新. wfi后面应该仅仅是走gpu开电流程. 
+3, merge git代码
+v8_sram_push里面为什么不flush icache. 
+1), vimdiff
+用":qall"退出. 
+参考: http://witmax.cn/linux-vimdiff-notes.html
+光标移动
+移动光标，切分窗口会同步移动，使用:set noscrollbind命令可取消同步
+]c 跳到下一个不同的地方
+[c 跳到上一个不同的地方
+文件合并
+dp 将当前窗口光标位置处的内容复制到另一窗口
+do 将另一窗口光标位置处的内容复制到当前窗口
+2), 上午做gpu workaround时, 读v8_sram_sz变量读的是0xc0000000开始的地址, 但是这时mmu没有开, 所以应该是用0x80000000开始的地址. 但是由于ddrc支持绕回, 所以0xc0000000地址也可以访问. 但是这样写不好用. 
+
+4, merge后, 在wfi前面按wakeup按键, 
+fail(@012): 1, 2, 6.
+log: 
+0123456789:;<=>?@ABCDEFGHIJKLMNO012
+即: gpu上电reset流程中. 死在"V8REG_CLKRST_STOR_PERI_MCLK_CTRL". 
+
+fail(@Missing key down event): 3, 4, 5, 7, 8.
+log: 
+PM: early resume of devices complete after 8.351 msecs
+<E>[va7882]: va7882_irq_handler
+<I>[va7882]: Get[0xf3]=0x02
+<I>[va7882]: Get[0xf7]=0x03
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: Missing key down event
+wakeup wake lock: event0-1048
+<I>[va7882]: Set[0xf3]=0x02
+
+5, 感觉这样问题较多, 不如直接在wfi后面重启. 
+实验fail(after "Missing key down event"): 1, 2, 3, 4.
+现象和4的现象一致. 这就让人很困惑了. 为什么每次都死在同一个位置呢? 
+和bianrongguang分析. bianrongguang想到是可能是因为系统wakeup时进入cpu idle线程, 所以arm发了wfi, 这样pmu模块就会按照之前sleep时设置的mode trans进入休眠状态. 
+现在改为gpu work around后就清掉mode trans. 修改后测试9次. 两次中途断电. 其余正常. 
+测试正常. 上传代码. 保存相关文件, uImage:
+\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110506_AE_suspend_resume_fix_bug
+log: 
+fix suspend->resume fail while wakeup source encountered before wfi
+ 
+author zhangjian <zhangjian@vimicro.com> 
+ Fri, 6 May 2011 09:09:43 +0000 (17:09 +0800) 
+committer zhangjian <zhangjian@vimicro.com> 
+ Fri, 6 May 2011 09:09:43 +0000 (17:09 +0800) 
+commit be4f0609d9dff737e495c54e284627faacebf5f9 
+tree 93a4beec541fe9dd1cf813e5617dadaa6fd65c38 tree | snapshot 
+parent 68fa0ab1529045189badb9c9f57ec5d2d0b73c73 commit | diff 
+
+fix suspend->resume fail while wakeup source encountered before wfi
+
+Change-Id: Id5f45e8e8c61833886ec2b928588d73e9ffe9373
+
+arch/arm/plat-vc088x/pmu.c  diff | blob | history 
+arch/arm/plat-vc088x/sram-helper.S  diff | blob | history 
+
+17:31 2011-5-6
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE wifi suspend/resume bug
+1, resume. 读卡id不正确. 
+这个问题是时钟问题, 因为wifi suspend时释放了时钟, 所以clkrst没有保存wifi时钟, 这样wifi resume时时钟不正确, 所以会出错.
+所以修改wifi驱动, suspend时记录clock, suspend后自己恢复clock(set_rate).
+修改后没有问题. 
+2, 修改后, 发现resume时, 随机死. 这个可能是bianrongguang和zhangjian今天修改的清除pmu mode trans问题. 更新代码后就可以. 
+
+19:47 2011-5-6
+VC0882, SV, power, pmu, mode trans: sleep, 支持zhangyunxia, hefan测试
+1, zhangjian2fuyali, zhangyunxia, hefan邮件
+不好意思, 这几天在楼下封闭, 可能响应不太及时. 
+
+9就是reset, 因为当初autotest要求wakeup后reset. 可能原来含义容易误解, 我已经修改了打印信息(代码测试通过, 已上传).
+0 for none: 也就是wakeup后仍然回到aasp pmu模块下. 
+1 for default: wakeup后, 退出pmu模块, 回到aasp根目录. 
+9 for reset after wakeup: wakeup后, 关闭c类电源, 系统sw reset.
+2 for gpu test: wakeup后, openpanel 50, 测试gpu case(目前是2d case 0,1,2,3), 然后系统自动复位(下面两个方式二选一: 
+1), 关闭c类电源, 系统sw reset.
+2), 关闭c类电源, 系统power off, 7882 alarm开机. 
+二选一的方式是: 1- 1- 2- 2- 1 …
+这样可以测试到两种方式和交替出现的四种情况. 
+)
+
+Hefan发的log对应流程”1”. Sleep, wakeup流程正确. 
+麻烦你们更新一下testplan中对于测试结果的描述. 
+
+Zhangyunxia: 
+run script after reboot(0 for none. 1 for default, 9 for autotest, 2 for gpu test)(Int)/[0] （选0、1、9、2都到AASP）
+ZJ: 都到aasp. 还是要看怎么到aasp的, 上述四个方式都回到aasp. 需要结合log分析, 通过看bootloader打印可以看出是wakeup还是非wakeup. 
+Panda_os启动时” system reset type is :”打印信息可以说明系统是那种启动方式. 
+AP power on reset: 系统power on或硬件复位上电. 
+AP reset from sleep mode to normal mode: 系统wakeup. 
+AP software reset active: 系统software reset后启动. 
+AP watchdog reset active: 系统看门狗复位后启动
+
+20:00 2011-5-6
+VC0882, SV, 工作总结
+本周封闭主要解决sleep->wakeup唤醒不稳定的问题, 不稳定的原因是因为AE系统是多线程的, corner case较多. 
+
+1), 实验android clkswitch并上传代码.
+(1), 和dongliang一起实验android clkswitch. 
+(2), 和AE代码merge, 并上传代码. 
+2), AE sleep, 
+(1), 阅读bianrongguang sleep代码, 确认已经问题. 
+(2), 5月6日上午: 和bianrongguang一起修正了gpu work around流程, 原有代码中gpu work around reset pso前没有使ddr进入自刷新. 
+(3), 5月6日下午: 4h 和bianrongguang一起修正了suspend过程中用户按键无法唤醒的问题. 见"9:49 2011-5-6"4, 5.
+3), 和gong'anmin讨论硬件统计arm利用率.
+4), 5/3, 5/6: 支持QA sleep测试. 
+
+2, 次日
+1), 继续解决Ae sleep bug. 现在sleep流程还可以不够严谨, 有些case可能无法处理.
+
+3, (20:20 2011-5-6)
+VC0882, SV, AE sleep下周工作计划
+1, wakeup后串口历史不能用. <5月6日 bianrongguang发现是因为串口中断配置(mask)有变化, 恢复正确的中断配置后, 问题解决, bianrongguang会check in>
+2, 模块suspend失败能正常退出: 7882 suspend前有按键. 
+
+20:08 2011-5-6
+VC0882, SV, power, gpu work around, pmu, mode trans, gpu work around提交测试
+1, zhangjian2fuyali
+Gpu work around测试方法
+
+如果屏不是50, 需要修改aasp/bootscript.c里面的BootScript数组"openpanel 50"改为自己的屏(共有两处)
+编译: gpu_sv_2dRepeat_exceptionInSram
+
+启动后输入命令: 
+pmic
+writereg 0xd0 1
+writereg 0xa2 2
+runrtc 1023
+pmu
+rebootsw 1 1
+
+此后系统会在power on后测试gpu 2d case, 然后系统sleep->wakeup, 测试gpu 2d case->reboot(下面两个方式二选一: 
+1), 关闭c类电源, 系统sw reset.
+2), 关闭c类电源, 系统power off, 7882 alarm开机. 
+二选一的方式是: 1- 1- 2- 2- 1 …
+这样可以测试到两种方式和交替出现的四种情况. )
+
+屏上应该有正确的gpu case显示. 如果出错会跑死. 
+
+2, (17:01 2011-5-17)zhangjian回复xuefei邮件:
+1), Hi, xuefei
+这个case是验证gpu power on bug的work around方案. 具体情况可以问一下wenlei, Testplan里面是否对问题本身也描述一下.
+还需要你看一下, 这样测试能否满足要求.
+这个case是新加的, 有不清楚地方可以直接打我手机: 13810498791.
+Thanks
+zhangjian
+2), xuefei原始邮件和我的回复: 
+1、   测试结果：只显示四五张case图片
+ZJ: 这个测试是反复测试0,1,2,3四个gpu 2d case. 应该不是静态图片. 
+2、   这两种方式 【 1) 关闭c类电源, 系统sw reset.  2) 关闭c类电源, 系统power off, 7882 alarm开机】在什么时候执行？
+ZJ: 你的log, 太少, 还没有到这部分. 详细流程之前给yali发过邮件:
+A, power on -> B 测试gpu 2d case0,1,2,3 -> C sleep->wakeup, D: 测试gpu 2d case0,1,2,3-> E: reboot
+你的log只是完成了步骤C, 的sleep部分, 从wakeup开始就没有了. 
+你这里问的reboot是在步骤E, 也就是wakeup后, 再次测试gpu 2d case, 然后才会执行. 
+每次A-E流程一次是一轮, 两个方式会在每轮测试中交替出现: ABCDE(方式一) ABCDE(方式一) ABCDE(方式二) ABCDE(方式二) ABCDE(方式一)
+3、   测试预期的结果是套显示全部的case吗？
+ZJ: 预期结果应该是按照上述流程, 反复执行A到E各步骤, 一直循环不停止就正确, 测试时间暂定为8个小时.
+4、   7882 setalarm不起作用。
+ZJ: gpu 测试中7882 alarm开机是软件自动做的, 不需要人工干预. 
+
+9:46 2011-5-9
+时间管理
+0, 9:40
+
+1, 本日
+1), 继续解决Ae sleep bug: 模块suspend失败能正常退出, 例如7882 suspend前有7882按键. 
+2), 下午882 sync up. 
+
+10:22 2011-5-9
+VC0882, SV, AE sync up
+boss发现的问题
+1, 没电后无法充电
+2, 小鸟玩四十分钟必死。退出后系统速度变慢。怀疑是memory碎片。
+
+过issue
+1, 多媒体问题较多。
+2, memory有碎片，怀疑是gpu引起的。
+
+本周任务
+1, power
+1), 8 inch suspend/resume
+2), 功耗优化: gate, 调频(arm, bus, gpu)
+
+16:10 2011-5-9
+软件技巧, vi
+1, undo/redo
+    |u|       N  u          undo last N changes
+    |CTRL-R|  N  CTRL-R     redo last N undone changes
+2, file
+显示当前文件名
+"~/mydroid_f/kernel/drivers/base/power/main.c" 1137 lines --77%-- 
+
+17:31 2011-5-6
+VC0882, SV, AE, power, pmu, mode trans: sleep, 解决suspend/resume不稳定问题: suspend过程中有唤醒时间发生, 应该保证suspend正常退出
+1, 如果在va7882_i2c_suspend()(va7882_core.c)里面加入delay, 会提示dpm_drv_timeout. 
+
+expire_timer的handler expire_wake_locks()如果超时就会调用suspend: 
+expire_wake_locks()->suspend_work suspend()->
+pm_suspend()->enter_state()->suspend_devices_and_enter()->dpm_suspend_start()
+kernel/power/suspend.c <<suspend_devices_and_enter>>
+             error = dpm_suspend_start(PMSG_SUSPEND);
+
+dpm_suspend_start()->dpm_suspend(): 启动dpm timer检测suspend有无超时. 
+dpm_suspend()->device_suspend()->__device_suspend(): 依次调用class, type, bus的suspend函数. 
+
+wake lock api:
+wake_lock, wake_lock_timeout. 其中后者调用wake_lock_internal添加到链表中. 
+
+2), 什么时候添加的devices? 
+device_add()->device_pm_add(): 添加dev->power.entry到dpm_list. 
+
+2, 实测gpu掉电时间, 大约6ms. 目前delay是5ms, delay后写i2c还有一个1ms的delay. 
+
+3, 需要做suspend/resume自动测试. 
+计划用7882 alarm做为唤醒事件. 
+
+4, 看rtc文档和代码:
+1), 
+bash-4.1# pwd
+/proc/driver
+bash-4.1# cat rtc
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 00 00 00 01 - 01 01 00 20
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 00 00 00 01 - 01 01 00 20
+<E>[va7882]: Get[0xa0]= 0xa0 Cache
+<I>[va7882]: Get[0xa1]=0x00
+<I>[va7882]: Rd 8 bytes from 0xb8
+<I>[va7882]: 00 00 00 01 - 01 01 00 20
+rtc_time        : 00:00:00
+rtc_date        : 2000-01-01
+alrm_time       : **:**:**
+alrm_date       : ****-02-**
+alarm_IRQ       : no
+alrm_pending    : no
+24hr            : yes
+
+2), Documentation/rtc.txt
+sys下面可以通过alarm文件设置alarm, 单位是s.
+这里增加多少秒, 采用如下流程, 感觉比我在panda_os里面用的方式好: 我的方式需要考虑很多进位问题. 
+rtc_tm_to_time	//转换时间为1970年1月1日开始的秒数. 
+now += second
+rtc_time_to_tm	//转换秒数为实际时间. 
+
+3), 使用
+需要先使用"hwclock -w", 将系统时间写入rtc, 并使rtc开始运行. 
+
+16:28 2011-5-9
+思考, 工作方法
+1, 今天支持jinyang u-boot power off. 但是u-boot里面编译器版本较低(armv5), 不能用v7的wfi指令
+1), v5, v6里面cp15 wfi在v7里面是nop. 
+我只是想到用armv7-a编译. 
+bianrongguang就想到直接写二进制数. 即使有这个提醒, 我也没有想到是可以用定义的方式, 直接跳转到wfi指令的位置. 
+后者还是bianrongguang提醒我才想到的.
+感觉自己现在做事情很死板, 思维局限...
+
+19:20 2011-5-9
+\\10.0.12.140\Project\VC0882\ic_doc\Cortex-A8\DDI0344J_cortex_a8_r3p2_trm.pdf
+
+20:16 2011-5-9
+rvt是标准库. 
+
+20:20 2011-5-9
+VC0882, SV, SV总结文档, 关注gpu问题
+1, shuyu. D:\VC0882\document\sv\Notice\de,cif,vdec,gpu需要注意的问题.doc 四: 
+GPU每做一个case (game)之前，先会对它要操作的两块memory (640x480x4byte大小)做clear 操作，一旦启动GPU, GPU会疯狂的AXI write 这两块memories. 我们目前的版本是不支持write control的，他们后续的版本听说是有write control option. 这个AXI write 时间较长（640x480x4byte x2）,把DE的line buffer 给耗尽了。造成了De的fifoempty发生。
+可以通过软件clear buffer绕过去，由于是game 一开始只做一次，应该不会影响performance.
+
+2, zhangjian2shuyu
+请教个问题. 
+Gpu这个问题记得你说试过用performance monitor gpu_wr_maxosnum压制gpu写, 效果好么? 
+在ae的应用中, 不知道是否容易判断出是clear操作. 
+
+9:37 2011-5-10
+时间管理
+0, 9:20
+
+1, 本日
+1), 30' 邮件. shuyu performance问题, 见"9:46 2011-5-10". 
+2), 尽快完成wakeup自动测试脚本. 
+
+9:46 2011-5-10
+VC0882, SV, video, gpu, de, performance: gpu某些操作对于系统带宽影响较大
+1, shuyu转发guye邮件"答复: performance目前相关问题"_20110506_1536
+这个问题可以这样来解释：
+GPU每做一个case (game)之前，先会对它要操作的两块memory (640x480x4byte大小)做clear 操作，一旦启动GPU, GPU会疯狂的AXI write 这两块memories. 我们目前的版本是不支持write control的，他们后续的版本听说是有write control option. 这个AXI write 时间较长（640x480x4byte x2）,把DE的line buffer 给耗尽了。
+下一步的plan:
+1)      会通过仿真结果进一步确认这个问题。
+2)      检查Android 软件平台上运行game时是否也会有这个问题，如果存在，可以通过软件clear buffer绕过去，由于是game 一开始只做一次，应该不会影响performance.
+
+2, shuyu邮件""_20110509
+有效果。把wr_maxosnum 配置成1，就没有fifoempty出现。不过这样会导致gpu的效率变低
+ZJ: 之前我理解是设为16或其它的比较普适的值, 就是各种情况下对gpu都合适. 
+Shuyu：见附件，其实按照guye的解释，还是有解释不通的地方。她的解释是3D的clear不经过AXI bus，所以不受maxosnum的控制，但我这里的实验，maxosnum是有效果的。
+目前是建议用软件来做一次clear。Guye的意思是应用中每个case仅做一个clear，所以影响应该不大。
+ZJ: 但是, 软件怎么知道是否需要clear. 通过自己解析cmdline判断么? 
+Shuyu：这个从软件驱动里面，只要做clear，都需要调用clearFrameBuffer和clearFrameBufferMSAA这两个函数。在底层修改的。至于什么时候需要clear，是应用层决定的。
+
+10:51 2011-5-10
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定; sleep自动测试
+1, 死在如下位置
+<I>[v8-pmu]: 84 31:                        UNUSED       [31, 0] 0
+此时无法连接ICE:
+Warning: Possible endianness configuration mismatch. The target is configured as little endian. RVD can not determine if that is correct.
+Error: 0x02410100: The run control operation could not be completed : .
+从现象上看, 是ddr进入自刷新之后出错的. 加入打印信息后, 定位问题: 
+
+2, sleep自动测试(续"10:37 2011-5-12"-1-7)
+#sync time from android to rtc in VA7882
+hwclock -w
+while true; do
+#using system timer as random generator
+timer=`vmtool rd 0x60052034 1`
+second=`echo $timer | sed 's/^.*\\[//g' |  sed 's/\\]//' | \
+        sed 's/[0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z]\\(.*\\)/\1/'`
+echo alarm after $second seconds > /sys/class/rtc/rtc0/wakealarm
+#wait rtc alarm event
+sleep 256
+done
+
+3, 做功耗优化.
+1), 看bianrongguang是否加入了所有的clock. 
+2), 写脚本变化查看clock开关.
+
+4, bianrongguang rtc alarm已经修改好并上传代码.
+1), 使用android的时钟应用程序可以唤醒. 
+但是直接写sys文件不行"/sys/class/rtc/rtc0/wakealarm"不行. 加入打印发现. 使用后者配置时, 没有打开irq. 
+现在是在7882 rtc setalarm中修改: 如果enable=0, 关闭alarm功能, 如果enable=1, 打开alarm功能. 
+2), 这样修改后, 仍然不行: echo +xx > wakealarm没法唤醒. 用android闹钟可以唤醒. 
+3), 详细看这两个操作的差异:
+(1), android闹钟是在suspend时, 才设置到rtc寄存器: 
+PM: Syncing filesystems ... done.
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 13 24 00 06 - 01 01 00 20 
+<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: Wr 8 bytes to 0xb8
+<I>[va7882]: 59 24 00 06 - 01 01 00 20 
+<I>[va7882]: Set[0xa0]=0x7f
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: Set[0xa1]=0x05
+<I>[va7882]: Set[0xa1]=0x15
+<I>[va7882]: Set[0xf0]=0x7e
+<I>[va7882]: Set[0xf6]=0x08
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 13 24 00 06 - 01 01 00 20 
+(2), 后来在bianrongguang支持下, 发现write wakealarm情况下, 在Freezing remaining freezable tasks之后, 也会像android闹钟一样再次设置闹钟时间. 在1小时开始的时间(2000-1-1 1:00:39, 见下面Wr 0xb8寄存器): `
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 14 36 00 06 - 01 01 00 20 
+<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: Wr 8 bytes to 0xb8
+<I>[va7882]: 39 00 01 06 - 01 01 00 20 
+<I>[va7882]: Set[0xa0]=0x7f
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: Set[0xa1]=0x05
+<I>[va7882]: Set[0xa1]=0x15
+<I>[va7882]: Set[0xf0]=0x7e
+<I>[va7882]: Set[0xf6]=0x08
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 14 36 00 06 - 01 01 00 20 
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 14 36 00 06 - 01 01 00 20 
+<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: Wr 8 bytes to 0xb8
+<I>[va7882]: 39 00 01 06 - 01 01 00 20 
+<I>[va7882]: Set[0xa0]=0x7f
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: Set[0xa1]=0x05
+<I>[va7882]: Set[0xa1]=0x15
+<I>[va7882]: Set[0xf0]=0x7e
+<I>[va7882]: Set[0xf6]=0x08
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 14 36 00 06 - 01 01 00 20 
+(3), 由于是在Freezing remaining freezable tasks之后, 所以bianrongguang判断是在kernel里面有程序设置了rtc alarm. 
+(4), 思考. 在不熟悉代码, 不熟悉硬件情况下, 要想解决问题, 需要思路很清楚, 注意硬件状态. 这次laobian一下就看到设置时间不正确. 
+4), 
+zhangjian@ubuntu:~/mydroid_f/frameworks/base$ vim libs/utils/SystemClock.cpp
+zhangjian@ubuntu:~/mydroid_f/kernel/drivers/rtc$ vim alarm-dev.c
+
+如果单独搜索"/dev/alarm"
+
+zhangjian@ubuntu:~/mydroid_f/frameworks$ grep "\/dev\/alarm" * -R
+grep: base/.git/rr-cache: No such file or directory
+grep: base/.git/svn: No such file or directory
+base/cmds/runtime/main_runtime.cpp:    fd = open("/dev/alarm", O_RDWR);
+Binary file base/libs/utils/.SystemClock.cpp.swp matches
+base/libs/utils/SystemClock.cpp:    fd = open("/dev/alarm", O_RDWR);
+base/libs/utils/SystemClock.cpp:        int fd = open("/dev/alarm", O_RDONLY);
+base/services/jni/com_android_server_AlarmManagerService.cpp:    return open("/dev/alarm", O_RDWR);
+
+14:57 2011-5-10
+VC0882, SV, power, 电源总结
+1, 理解功耗
+内部功耗会导致发热. 
+功耗要考虑是什么位置的功耗: 电压不同, 电流也会不同, 但是UI(功率)是不变的. 
+
+21:20 2011-5-10
+VC0882, SV, power, pmu, mode trans: sleep, wifi suspend/resume(suxin)
+1, 发现wifi驱动中suspend时, 把sdio卡设为1bit, 48MHz, 如果不用这个设置, wifi会不稳定.
+修正这个问题后, wifi还是不稳定, 但是只是会导致驱动卸载后重新加载. 不会造成驱动死机. 
+2, (13:24 2011-5-25)
+suxin根据Linux下驱动分析, 最后发现是在唤醒回来后, 把wifi pm寄存器清零, 就可以保证, 唤醒后wifi电源管理仍然是正常的.
+387芯片电源管理: 如果一段时间系统没有访问, wifi会降低功耗. 
+ZJ: 感觉bianrongguang, suxin的能力都挺强的, 在信息很少情况下, 也能分析出问题.
+我现在的情况是需要所有的信息, 才有可能解决问题. 这样看的话, 说明我解决问题的能力还是很有差距的.
+
+9:43 2011-5-11
+时间管理
+0, 9:05
+
+1, 本日
+1), 30' 业内动态. 
+2), 继续做AE android suspend/resume自动测试. 
+3), 看看下午有没有时间听FPGA讲座. 
+4), 功耗优化. 
+
+9:46 2011-5-11
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定; sleep自动测试, 续
+1, 写.c的测试程序
+参考frameworks/base/libs/utils/SystemClock.cpp和同目录的Android.mk
+用mmm编译指定模块. 
+source build/envsetup.sh
+mmm vimicro/suspend
+(15:07 2011-6-27)"source build/envsetup.sh"后可以得到如下命令
+zhangjian@ubuntu:/home/tftpboot/zhangjian$ head /home/zhangjian/mydroid_f/build/envsetup.sh  -n 20
+function help() {
+cat <<EOF
+Invoke ". build/envsetup.sh" from your shell to add the following functions to your environment:
+- croot:   Changes directory to the top of the tree.
+- m:       Makes from the top of the tree.
+- mm:      Builds all of the modules in the current directory.
+- mmm:     Builds all of the modules in the supplied directories.
+- cgrep:   Greps on all local C/C++ files.
+- jgrep:   Greps on all local Java files.
+- resgrep: Greps on all local res/*.xml files.
+- godir:   Go to the directory containing a file.
+
+"15:07 2011-6-27"end
+
+2, 编译出错, 但是编译utils里面就可以
+zhangjian@ubuntu:~/mydroid_f$ mmm vimicro/suspend
+Adding CUSTOM_LOCALES [hdpi] to PRODUCT_LOCALES []
+============================================
+PLATFORM_VERSION_CODENAME=REL
+PLATFORM_VERSION=2.3
+TARGET_PRODUCT=generic_vortex
+TARGET_BUILD_VARIANT=userdebug
+TARGET_SIMULATOR=
+TARGET_BUILD_TYPE=release
+TARGET_BUILD_APPS=
+TARGET_ARCH=arm
+HOST_ARCH=x86
+HOST_OS=linux
+HOST_BUILD_TYPE=release
+BUILD_ID=GRH55
+============================================
+make: Entering directory `/home/zhangjian/mydroid_f'
+build/core/main.mk:307: implicitly installing apns-conf_sdk.xml
+build/core/base_rules.mk:74: *** Module name: ioctl
+build/core/base_rules.mk:75: *** Makefile location: vimicro/suspend
+build/core/base_rules.mk:76: *
+build/core/base_rules.mk:77: * Each module must use a LOCAL_MODULE_TAGS in its
+build/core/base_rules.mk:78: * Android.mk. Possible tags declared by a module:
+build/core/base_rules.mk:79: *
+build/core/base_rules.mk:80: *     optional, debug, eng, tests, samples
+build/core/base_rules.mk:81: *
+build/core/base_rules.mk:82: * If the module is expected to be in all builds
+build/core/base_rules.mk:83: * of a product, then it should use the
+build/core/base_rules.mk:84: * "optional" tag:
+build/core/base_rules.mk:85: *
+build/core/base_rules.mk:86: *    Add "LOCAL_MODULE_TAGS := optional" in the
+build/core/base_rules.mk:87: *    Android.mk for the affected module, and add
+build/core/base_rules.mk:88: *    the LOCAL_MODULE value for that component
+build/core/base_rules.mk:89: *    into the PRODUCT_PACKAGES section of product
+build/core/base_rules.mk:90: *    makefile(s) where it's necessary, if
+build/core/base_rules.mk:91: *    appropriate.
+build/core/base_rules.mk:92: *
+build/core/base_rules.mk:93: * If the component should be in EVERY build of ALL
+build/core/base_rules.mk:94: * products, then add its LOCAL_MODULE value to the
+build/core/base_rules.mk:95: * PRODUCT_PACKAGES section of
+build/core/base_rules.mk:96: * build/target/product/core.mk
+build/core/base_rules.mk:97: *
+build/core/base_rules.mk:98: *** user tag detected on new module - user tags are only supported on legacy modules.  Stop.
+make: Leaving directory `/home/zhangjian/mydroid_f'
+
+3, 用suxin给的Android.mk
+LOCAL_PATH := $(call my-dir)
+include $(CLEAR_VARS)
+LOCAL_SRC_FILES := \
+    ttool.c
+LOCAL_MODULE := ttool
+LOCAL_MODULE_TAGS := eng
+LOCAL_FORCE_STATIC_EXECUTABLE := true
+LOCAL_STATIC_LIBRARIES += libc
+include $(BUILD_EXECUTABLE)
+
+也是出错
+make: Entering directory `/home/zhangjian/mydroid_f'
+build/core/main.mk:307: implicitly installing apns-conf_sdk.xml
+make: *** No rule to make target `out/target/product/vortex/obj/lib/crtbegin_static.o', needed by `out/target/product/vortex/obj/EXECUTABLES/ttool_intermediates/LINKED/ttool'.  Stop.
+make: Leaving directory `/home/zhangjian/mydroid_f'
+如果注释
+LOCAL_FORCE_STATIC_EXECUTABLE
+提示
+`out/target/product/vortex/obj/lib/crtbegin_dynamic.o', needed by `out/target/product/vortex/obj/EXECUTABLES/ttool_intermediates/LINKED/ttool'.  
+
+1), 看了是需要这个.o, 从昨天的daily里面copy过来.
+2), 复制后:
+target thumb C++: ioctl <= vimicro/suspend/ioctl.cpp
+target Executable: ioctl (out/target/product/vortex/obj/EXECUTABLES/ioctl_intermediates/LINKED/ioctl)
+prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/../lib/gcc/arm-eabi/4.4.3/../../../../arm-eabi/bin/ld: out/target/product/vortex/obj/lib/crtbegin_dynamic.o:(.text+0x14): error: undefined reference to 'main'
+collect2: ld returned 1 exit status
+3), 使用LOCAL_FORCE_STATIC_EXECUTABLE := true
+也是类似错误. 
+4), 保险起见, 先看看region.cpp和它的Android.mk
+frameworks/base/libs/ui/tests/region/region.cpp
+复制到vimicro/suspend, 是可以编译过的.
+参考这个, 最后也编译通过.
+代码和Android.mk如下:
+zhangjian@ubuntu:~/mydroid_f/vimicro/suspend$ cat ioctl.cpp
+/*
+ * Copyright (C) 2009 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define LOG_TAG "Region"
+
+#include <stdio.h>
+#include <utils/Debug.h>
+#include <ui/Rect.h>
+#include <ui/Region.h>
+#include <linux/android_alarm.h>
+#include <fcntl.h>
+
+using namespace android;
+
+int main()
+{
+    struct timeval tv;
+    struct timespec ts;
+    int fd;
+    int res;
+    int ret = 0;
+
+    fd = open("/dev/alarm", O_RDWR);
+    if(fd < 0) {
+        return -1;
+    }
+    ts.tv_sec = tv.tv_sec;
+    ts.tv_nsec = tv.tv_usec * 1000;
+    res = ioctl(fd, ANDROID_ALARM_SET_RTC, &ts);
+    if(res < 0) {
+        ret = -1;
+    }
+    close(fd);
+
+    return ret;
+
+    return 0;
+}
+
+zhangjian@ubuntu:~/mydroid_f/vimicro/suspend$ cat Android.mk
+LOCAL_PATH:= $(call my-dir)
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:= \
+        ioctl.cpp
+
+LOCAL_SHARED_LIBRARIES := \
+        libcutils \
+        libutils \
+    libui
+
+LOCAL_MODULE:= ioctl
+
+LOCAL_MODULE_TAGS := tests
+
+include $(BUILD_EXECUTABLE)
+
+4, 总线一下sleep不稳定的现象:
+1), resume后, 立刻suspend, 屏没有亮. 
+<I>[v8-clk]: clk_set_rate(sdio[1],400000)
+suspend: exit suspend, ret = 0 (2000-01-01 00:02:09.613734809 UTC)
+<I>[v8-clk]: clk_set_rate(sdio[1],400000)
+PM: Syncing filesystems ... done.
+Freezing user space processes ... (elapsed 0.02 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+
+5, 自动suspend. 
+由于alarm_suspend中会根据hrtimer设置alarm时间, 所以会冲掉已经设置的rtc alarm时间. 除非我们能把时间加入到hrtimer里面. 根据代码, sleep时就会调用hrtimer. 但是用sleep和usleep无效. 
+再细看alarm_suspend(), 发现里面会从alarms[ANDROID_ALARM_RTC_WAKEUP]取事件. 这个事件会不会是android闹钟?
+mount /dev/block/mmcblk0p1 /mnt/sdcard/
+后来看了看, 用ANDROID_ALARM_SET_RTC应该是没问题的. 
+只是我之前设置的时间太小. 
+
+6, (21:41 2011-5-11)现在自己工作效率真是低, 查了一天结果发现是set alarm时ioctl返回的是错误. 
+错误是device or resource busy.
+看代码发现, 如果是get不查busy. 如果是set, 查busy(alarm_open). 
+
+13:49 2011-5-11
+仿真, co-simulation, Synopsis hspa
+Hspa 60:
+hspa 64: up to 18M gate, four fpga.
+Hspa可以接到PC pci-e, 用于Co-simulation等。
+demo
+1, Co-simulation.
+testbench: vhdl, verilog, system verilog.
+软件自动生成。
+Chip it manager pro.
+vcs.
+仿真器中: 只能看dut端口信号，内部信号没有看到
+与Testbench有关assertion, 和不可综合部分都不能放到fpga中。
+时钟还是由仿真器vcs提供。fpga受vcs控制。
+2, umr bus steer & control:
+testbench: c/c++/systemC.
+手工在需要调试的硬件插入debug IP(代码量很小)。
+速度比1快。
+3, 事物级仿真
+testbench: c/c++/systemC.
+sce-mi 2.0: co-simulation标准。
+需要用户自己做有无时序的转换。
+
+15:40 2011-5-11
+VC0882, SV, AE, power, 充电
+jinyang邮件"关于关机充电功能的说明"_20110511
+今天已经将关机充电的代码上传GIT服务器，请大家及时更新自己的CODE。昨天进行了一天的测试，暂时没有发现问题，请大家在使用的过程中特别是QA在测试过程中重点留意一下，有问题及时通知我。目前功能的定义如下：
+1、插入CHARGER，系统就会开机进入UBOOT阻塞充电。
+按开机键，系统开机进入UBOOT，检查是否有CHARGER插入，如果有，阻塞充电，如果没有，LOAD系统
+2、在关机充电时，默认充电电流为1200mA,目前系统在UBOOT中的运行电流在500MA左右，这个后续在做功耗控制时会进行调整，因此现在可能在UBOOT中关着LCD充电，也会有觉得机器很热的情况。
+3、在关机充电时，不会电量LCD，只用LED灯指示充电状态，红色为CHARGER插入，充电中。绿色为电池已经充满。
+4、在插入CHARGER充电时，UBOOT会阻塞，如果需要开机进入系统，请按POWER ON KEY键。
+5、目前，进入系统后，电池驱动将自动调整充电电流为300mA。（后续可能还有调整）
+6、当插着CHARGER关机时，系统会自动进入关机充电模式，为电池充电。
+7、系统处在关机充电模式时，如果拔出CHARGER，系统会自动关机。
+8、目前定义八寸屏的项目支持关机充电功能，七寸屏项目由于大部分板子没有RT9513芯片，所以暂不支持。
+ 
+同时，大家可能在使用中发现在系统报低电的时候，插入CHARGER，系统就会显示充电满的状态。经查此问题是由于RT9513报充电满中断异常导致的，需要修改充电电路。具体请与黄晨联系。
+
+10:07 2011-5-12
+时间管理
+0, 9:40
+
+1, 本日
+1), suspend/resume自动测试. 
+
+10:37 2011-5-12
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定; sleep自动测试, 续
+1, 在va7882-core.c的suspend()(va7882_i2c_suspend())强行设置rtc alarm时间, 由于7882 core在rtc前面注册, 所以7882 core设置的时间是最后的. 
+1), 需要验证这个顺序. 实验结果和估计的一致:
+PM: Syncing filesystems ... done.
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+alarm_suspend(d41341c0, 2)
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 00 00 00 01 - 01 01 00 20 
+<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: Wr 8 bytes to 0xb8
+<I>[va7882]: 38 26 00 06 - 01 01 00 20 
+<I>[va7882]: Set[0xa0]=0x7f
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: Set[0xa1]=0x01
+<I>[va7882]: Set[0xa1]=0x11
+<I>[va7882]: Set[0xf0]=0x7e
+<I>[va7882]: Set[0xf6]=0x08
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 00 00 00 01 - 01 01 00 20 
+rtc alarm set at 946686398, now 946684800, rtc delta 241.085671883
+<I>[va7882]: va7882=d404a000 led=d404a3e8
+
+<I>[va7882]: va7882_led_disable<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 00 00 00 01 - 01 01 00 20 
+
+<I>[va7882]: Set[0x80]=0x00
+<I>[va7882]: va7882=d404a000 led=d404a384
+<I>[va7882]: va7882_led_disable
+<E>[va7882]: va7882_key_suspend
+<E>[va7882]: power_key may wakeup
+<E>[va7882]: va7882_rtc_suspend
+...
+<E>[va7882]: va7882_led_suspend
+...
+<E>[va7882]: va7882_i2c_suspend
+<I>[va7882]: system auto wakeup test. Android rtc alarm setting will be over-wrote.
+<I>[va7882]: Set[0x55]=0x00
+<I>[va7882]: Get[0xf3]=0x00
+PM: suspend of devices complete after 275.237 msecs
+PM: late suspend of devices complete after 1.192 msecs
+<E>[v8-clk]: v8clock_suspend
+
+2), 设置rtc alarm时间, 参考下面函数实现.
+test_suspend()(kernel/power/suspend_test.c)
+这里除了用到rtc export给kernel的函数, 还用到了class_find_device():
+class_find_device(rtc_class, NULL, &pony, has_wakealarm);
+在有class指针情况下, 可以按照has_wakealarm()的条件找到对应的设备, 该设备的名称保存到pony, has_wakealarm如下: 
+static int has_wakealarm(struct device *dev, void *name_ptr)
+{
+        struct rtc_device *candidate = to_rtc_device(dev);
+
+        if (!candidate->ops->set_alarm)
+                return 0;
+        if (!device_may_wakeup(candidate->dev.parent))
+                return 0;
+
+        *(const char **)name_ptr = dev_name(dev);
+        return 1;
+}
+
+3), echo 111 > /sys/devices/platform/v8-i2c.0/i2c-0/0-0016/auto_suspend
+4), 测试发现可以自动suspend/resume, 但是由于没有wakeup lock, 所以会很快suspend. 需要参考7882 key发假的key down, key up. 
+input_event_handler()(drivers/mfd/va7882-key.c).
+5), 编译后实验, 由于u-boot中size指定错了, 造成系统无法启动, 相关打印信息如下: 
+regulator_init_complete: disabling VDD_5V
+<I>[v8-clk]: clk_set_rate(sdio[1],400000)
+<I>[va7882]: Rd 8 bytes from 0xb0
+<I>[va7882]: 00 00 00 01 - 01 01 00 20 
+va7882-rtc va7882-rtc.0: setting system clock to 2000-01-01 00:00:00 UTC (946684800)
+<I>[v8-clk]: clk_set_rate(uart[0],115200)
+<I>[v8-clk]: clk_set_rate(sdio[1],400000)
+RAMDISK: gzip image found at block 0
+smsc95xx v1.0.4
+List of all partitions:
+b300         3872256 mmcblk0 driver: mmcblk
+  b301         2036493 mmcblk0p1
+  b302               1 mmcblk0p2
+  b303          131072 mmcblk0p3
+  b304          131072 mmcblk0p4
+  b305          262112 mmcblk0p5
+  b306         1048544 mmcblk0p6
+  b307          262112 mmcblk0p7
+No filesystem could mount root, tried:  ext2 vfat
+Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+6), 先用固定时间测试, 发现容易死在ohci里面, jiabo说是死在配寄存器中. 
+usb usb1: root hub lost power or was reset
+Unhandled fault: external abort on non-linefetch (0x1008) at 0xdb818204
+Internal error: : 1008 [#1] PREEMPT
+last sysfs file: /sys/devices/virtual/timed_output/vibrator/enable
+Modules linked in: galcore
+CPU: 0    Not tainted  (2.6.35.7+ #124)
+PC is at ohci_hcd_vc088x_drv_resume+0x34/0x124
+LR is at ohci_hcd_vc088x_drv_resume+0x30/0x124
+pc : [<c020e094>]    lr : [<c020e090>]    psr: 60000013
+sp : d405ddf0  ip : d405ddf0  fp : d405de0c
+r10: d405de88  r9 : 00000000  r8 : 00000010
+r7 : 00000000  r6 : d4320cd8  r5 : c043ab18  r4 : d4320c00
+r3 : db818200  r2 : 00000e48  r1 : c03579b8  r0 : 00000000
+Flags: nZCv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+Control: 10c5387d  Table: 91004019  DAC: 00000017
+
+PC: 0xc020e014:
+e014  0a000002 e5943000 f57ff04f e5832008 e5943000 e5933004 f57ff05f e3a05000
+e034  e1a00005 e24bd028 e89daff0 e3550000 0afffed0 e3e0500f eafffff8 c03f3f93
+e054  c03f3fb0 8000005a c043ca48 e1a0c00d e92dd8f0 e24cb004 ebfeb197 e59f3104
+e074  e5932004 e3822002 e5832004 e1a04000 e28060d8 e59f00f0 ebfd86b4 e59430d8
+e094  e5933004 f57ff05f e2132f4f e5863234 1a000005 e21330c0 0a000003 e3530080
+e0b4  11a03002 13a02c01 1a00001f f10c0080 e1a0300d e3c35d7f e3c5503f e5953004
+e0d4  e2833001 e5853004 e3a03084 e1a00006 e58430d4 ebfffe84 e3a03085 e1a00006
+e0f4  e58430d4 e3a01000 ebfffcb6 e3a03004 e58430d4 f1080080 e5953004 e2433001
+
+LR: 0xc020e010:
+e010  e5813004 0a000002 e5943000 f57ff04f e5832008 e5943000 e5933004 f57ff05f
+e030  e3a05000 e1a00005 e24bd028 e89daff0 e3550000 0afffed0 e3e0500f eafffff8
+e050  c03f3f93 c03f3fb0 8000005a c043ca48 e1a0c00d e92dd8f0 e24cb004 ebfeb197
+e070  e59f3104 e5932004 e3822002 e5832004 e1a04000 e28060d8 e59f00f0 ebfd86b4
+e090  e59430d8 e5933004 f57ff05f e2132f4f e5863234 1a000005 e21330c0 0a000003
+e0b0  e3530080 11a03002 13a02c01 1a00001f f10c0080 e1a0300d e3c35d7f e3c5503f
+e0d0  e5953004 e2833001 e5853004 e3a03084 e1a00006 e58430d4 ebfffe84 e3a03085
+e0f0  e1a00006 e58430d4 e3a01000 ebfffcb6 e3a03004 e58430d4 f1080080 e5953004
+
+SP: 0xd405dd70:
+dd70  c005427c c00539ac 00000002 00000026 d405ddb4 d405dd90 ffffffff d405dddc
+dd90  d4320cd8 00000000 d405de0c d405dda8 c002aa6c c002a2bc 00000000 c03579b8
+ddb0  00000e48 db818200 d4320c00 c043ab18 d4320cd8 00000000 00000010 00000000
+ddd0  d405de88 d405de0c d405ddf0 d405ddf0 c020e090 c020e094 60000013 ffffffff
+ddf0  c0355a4c c043ab18 00000000 00000000 d405de1c d405de10 c01bbcf0 c020e06c
+de10  d405de54 d405de20 c01be778 c01bbcb4 c03eb00b c03d333a 00000000 00000000
+de30  c03eaf1d c043ab18 00000010 c043ab4c c043d83c 00000003 d405de74 d405de58
+de50  c01bec8c c01be710 c043ab18 00000010 c05cc9c0 c043d83c d405debc d405de78
+
+IP: 0xd405dd70:
+dd70  c005427c c00539ac 00000002 00000026 d405ddb4 d405dd90 ffffffff d405dddc
+dd90  d4320cd8 00000000 d405de0c d405dda8 c002aa6c c002a2bc 00000000 c03579b8
+ddb0  00000e48 db818200 d4320c00 c043ab18 d4320cd8 00000000 00000010 00000000
+ddd0  d405de88 d405de0c d405ddf0 d405ddf0 c020e090 c020e094 60000013 ffffffff
+ddf0  c0355a4c c043ab18 00000000 00000000 d405de1c d405de10 c01bbcf0 c020e06c
+de10  d405de54 d405de20 c01be778 c01bbcb4 c03eb00b c03d333a 00000000 00000000
+de30  c03eaf1d c043ab18 00000010 c043ab4c c043d83c 00000003 d405de74 d405de58
+de50  c01bec8c c01be710 c043ab18 00000010 c05cc9c0 c043d83c d405debc d405de78
+
+FP: 0xd405dd8c:
+dd8c  d405dddc d4320cd8 00000000 d405de0c d405dda8 c002aa6c c002a2bc 00000000
+ddac  c03579b8 00000e48 db818200 d4320c00 c043ab18 d4320cd8 00000000 00000010
+ddcc  00000000 d405de88 d405de0c d405ddf0 d405ddf0 c020e090 c020e094 60000013
+ddec  ffffffff c0355a4c c043ab18 00000000 00000000 d405de1c d405de10 c01bbcf0
+de0c  c020e06c d405de54 d405de20 c01be778 c01bbcb4 c03eb00b c03d333a 00000000
+de2c  00000000 c03eaf1d c043ab18 00000010 c043ab4c c043d83c 00000003 d405de74
+de4c  d405de58 c01bec8c c01be710 c043ab18 00000010 c05cc9c0 c043d83c d405debc
+de6c  d405de78 c01bef14 c01bec14 0139dd3b 000001d4 0139dd3b 000001d4 c05cc7cc
+
+R1: 0xc0357938:
+7938  c020e184 c020ec10 c020d5b4 c020e8dc c020c190 00000000 00000000 00000000
+7958  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+7978  00000000 00000000 00000000 6963686f 6463685f 5f6f6e2e 646e6168 6b616873
+7998  00000065 6963686f 6463685f 7369642e 73757274 69665f74 61776d72 00006572
+79b8  00000000 00000000 c020c684 c020e060 00000000 00000000 00000000 00000000
+79d8  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+79f8  00000000 75657571 6d6f6365 646e616d 00000000 c03f52ff c03f531a c03f5335
+7a18  5f627375 726f7473 2e656761 72697571 0000736b 00000080 c060811c 5f627375
+
+R3: 0xdb818180:
+8180  00241ee4 00000002 00000034 00000000 00000000 00000000 00000000 00000000
+81a0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+81c0  00241ee4 00000002 00000034 00000000 00000000 00000000 00000000 00000000
+81e0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+8200 usb usb1: root hub lost power or was reset
+Unhandled fault: external abort on non-linefetch (0x1008) at 0xdb818204
+Internal error: : 1008 [#1] PREEMPT
+last sysfs file: /sys/devices/virtual/timed_output/vibrator/enable
+Modules linked in: galcore
+CPU: 0    Not tainted  (2.6.35.7+ #124)
+PC is at ohci_hcd_vc088x_drv_resume+0x34/0x124
+LR is at ohci_hcd_vc088x_drv_resume+0x30/0x124
+pc : [<c020e094>]    lr : [<c020e090>]    psr: 60000013
+sp : d405ddf0  ip : d405ddf0  fp : d405de0c
+r10: d405de88  r9 : 00000000  r8 : 00000010
+r7 : 00000000  r6 : d4320cd8  r5 : c043ab18  r4 : d4320c00
+r3 : db818200  r2 : 00000e48  r1 : c03579b8  r0 : 00000000
+Flags: nZCv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+Control: 10c5387d  Table: 91004019  DAC: 00000017
+
+PC: 0xc020e014:
+e014  0a000002 e5943000 f57ff04f e5832008 e5943000 e5933004 f57ff05f e3a05000
+e034  e1a00005 e24bd028 e89daff0 e3550000 0afffed0 e3e0500f eafffff8 c03f3f93
+e054  c03f3fb0 8000005a c043ca48 e1a0c00d e92dd8f0 e24cb004 ebfeb197 e59f3104
+e074  e5932004 e3822002 e5832004 e1a04000 e28060d8 e59f00f0 ebfd86b4 e59430d8
+e094  e5933004 f57ff05f e2132f4f e5863234 1a000005 e21330c0 0a000003 e3530080
+e0b4  11a03002 13a02c01 1a00001f f10c0080 e1a0300d e3c35d7f e3c5503f e5953004
+e0d4  e2833001 e5853004 e3a03084 e1a00006 e58430d4 ebfffe84 e3a03085 e1a00006
+e0f4  e58430d4 e3a01000 ebfffcb6 e3a03004 e58430d4 f1080080 e5953004 e2433001
+
+LR: 0xc020e010:
+e010  e5813004 0a000002 e5943000 f57ff04f e5832008 e5943000 e5933004 f57ff05f
+e030  e3a05000 e1a00005 e24bd028 e89daff0 e3550000 0afffed0 e3e0500f eafffff8
+e050  c03f3f93 c03f3fb0 8000005a c043ca48 e1a0c00d e92dd8f0 e24cb004 ebfeb197
+e070  e59f3104 e5932004 e3822002 e5832004 e1a04000 e28060d8 e59f00f0 ebfd86b4
+e090  e59430d8 e5933004 f57ff05f e2132f4f e5863234 1a000005 e21330c0 0a000003
+e0b0  e3530080 11a03002 13a02c01 1a00001f f10c0080 e1a0300d e3c35d7f e3c5503f
+e0d0  e5953004 e2833001 e5853004 e3a03084 e1a00006 e58430d4 ebfffe84 e3a03085
+e0f0  e1a00006 e58430d4 e3a01000 ebfffcb6 e3a03004 e58430d4 f1080080 e5953004
+
+SP: 0xd405dd70:
+dd70  c005427c c00539ac 00000002 00000026 d405ddb4 d405dd90 ffffffff d405dddc
+dd90  d4320cd8 00000000 d405de0c d405dda8 c002aa6c c002a2bc 00000000 c03579b8
+ddb0  00000e48 db818200 d4320c00 c043ab18 d4320cd8 00000000 00000010 00000000
+ddd0  d405de88 d405de0c d405ddf0 d405ddf0 c020e090 c020e094 60000013 ffffffff
+ddf0  c0355a4c c043ab18 00000000 00000000 d405de1c d405de10 c01bbcf0 c020e06c
+de10  d405de54 d405de20 c01be778 c01bbcb4 c03eb00b c03d333a 00000000 00000000
+de30  c03eaf1d c043ab18 00000010 c043ab4c c043d83c 00000003 d405de74 d405de58
+de50  c01bec8c c01be710 c043ab18 00000010 c05cc9c0 c043d83c d405debc d405de78
+
+IP: 0xd405dd70:
+dd70  c005427c c00539ac 00000002 00000026 d405ddb4 d405dd90 ffffffff d405dddc
+dd90  d4320cd8 00000000 d405de0c d405dda8 c002aa6c c002a2bc 00000000 c03579b8
+ddb0  00000e48 db818200 d4320c00 c043ab18 d4320cd8 00000000 00000010 00000000
+ddd0  d405de88 d405de0c d405ddf0 d405ddf0 c020e090 c020e094 60000013 ffffffff
+ddf0  c0355a4c c043ab18 00000000 00000000 d405de1c d405de10 c01bbcf0 c020e06c
+de10  d405de54 d405de20 c01be778 c01bbcb4 c03eb00b c03d333a 00000000 00000000
+de30  c03eaf1d c043ab18 00000010 c043ab4c c043d83c 00000003 d405de74 d405de58
+de50  c01bec8c c01be710 c043ab18 00000010 c05cc9c0 c043d83c d405debc d405de78
+
+FP: 0xd405dd8c:
+dd8c  d405dddc d4320cd8 00000000 d405de0c d405dda8 c002aa6c c002a2bc 00000000
+ddac  c03579b8 00000e48 db818200 d4320c00 c043ab18 d4320cd8 00000000 00000010
+ddcc  00000000 d405de88 d405de0c d405ddf0 d405ddf0 c020e090 c020e094 60000013
+ddec  ffffffff c0355a4c c043ab18 00000000 00000000 d405de1c d405de10 c01bbcf0
+de0c  c020e06c d405de54 d405de20 c01be778 c01bbcb4 c03eb00b c03d333a 00000000
+de2c  00000000 c03eaf1d c043ab18 00000010 c043ab4c c043d83c 00000003 d405de74
+de4c  d405de58 c01bec8c c01be710 c043ab18 00000010 c05cc9c0 c043d83c d405debc
+de6c  d405de78 c01bef14 c01bec14 0139dd3b 000001d4 0139dd3b 000001d4 c05cc7cc
+
+R1: 0xc0357938:
+7938  c020e184 c020ec10 c020d5b4 c020e8dc c020c190 00000000 00000000 00000000
+7958  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+7978  00000000 00000000 00000000 6963686f 6463685f 5f6f6e2e 646e6168 6b616873
+7998  00000065 6963686f 6463685f 7369642e 73757274 69665f74 61776d72 00006572
+79b8  00000000 00000000 c020c684 c020e060 00000000 00000000 00000000 00000000
+79d8  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+79f8  00000000 75657571 6d6f6365 646e616d 00000000 c03f52ff c03f531a c03f5335
+7a18  5f627375 726f7473 2e656761 72697571 0000736b 00000080 c060811c 5f627375
+
+R3: 0xdb818180:
+8180  00241ee4 00000002 00000034 00000000 00000000 00000000 00000000 00000000
+81a0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+81c0  00241ee4 00000002 00000034 00000000 00000000 00000000 00000000 00000000
+81e0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+8200 
+Unhandled fault: external abort on non-linefetch (0x1008) at 0xdb818200
+Internal error: : 1008 [#2] PREEMPT
+last sysfs file: /sys/devices/virtual/timed_output/vibrator/enable
+Modules linked in: galcore
+CPU: 0    Not tainted  (2.6.35.7+ #124)
+PC is at __copy_from_user+0xac/0x3ac
+...
+7), 注释ochi后, 用14秒睡眠, 测试了20分钟. 初步看没有问题. 
+改为init.vimicro.sh里面, 做自动脚本. 
+#!/bin/sh
+
+auto_suspend_file='/sys/devices/platform/v8-i2c.0/i2c-0/0-0016/autosuspend'
+
+#sync time from android to rtc in VA7882
+hwclock -w
+while true; do
+        #using system timer as random generator
+        timer=`vmtool rd 0x60052034 1`
+        second=`echo $timer | sed 's/^.*\\[//g' |  sed 's/\\]//' | \
+               sed 's/[0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z]\\(.*\\)/\1/'`
+        echo alarm after $second seconds
+        echo 0x$second >  $auto_suspend_file
+        while true; do
+                auto_suspend=`cat $auto_suspend_file`
+                if [ "$auto_suspend" = "0" ]; then
+                        echo "auto_suspend empty"
+                        sleep 1
+                        break
+                fi
+                sleep 1
+        done
+        echo "resume done"
+done
+把这个脚本放到/system/bin(可以先复制到sd fat分区, 系统启动后再复制到该目录). 系统启动后, 在命令行允许这个命令(记得后台运行, 便于自己做一些操作):
+auto_suspend_test.sh &
+为了清楚, 可以只显示kernel中比较重要的信息:
+echo 4 > /proc/sys/kernel/printk
+
+测试中又死在ohci中, 去掉ohci.
+
+8), (20:33 2011-5-19)根据bianrongguang提供的随机数函数, 改写脚本.
+#!/bin/sh
+
+auto_suspend_file='/sys/devices/platform/v8-i2c.0/i2c-0/0-0016/autosuspend'
+
+#sync time from android to rtc in VA7882
+hwclock -w
+while true; do
+	let "second = $RANDOM % 60 + 5"
+        echo alarm after $second seconds
+        echo $second >  $auto_suspend_file
+        while true; do
+                auto_suspend=`cat $auto_suspend_file`
+                if [ "$auto_suspend" = "0" ]; then
+                        echo "auto_suspend empty"
+                        sleep 1
+                        break
+                fi
+                sleep 1
+        done
+        echo "resume done"
+done
+
+19:31 2011-5-12
+希望优先解决功耗问题. 不烫手. 
+
+场景: mp3. 
+
+19:34 2011-5-12
+
+测试pclk对于性能的影响(750, aclk333, stor333):  
+133200000: 24.7, 24.7, 24.5, 
+ 33300000: 25.1, 24.6, 24.7, 
+
+测试stor aclk对于性能的影响(750, aclk333, stor33.3):  
+ 33300000: 24.7, 
+
+测试aclk对于性能的影响(750, stor33.3): 
+111000000: 18.2.
+222000000: 23.3.
+
+9:33 2011-5-13
+时间管理
+0, 9:20
+
+9:38 2011-5-13
+AE, wifi, top gun, 密码: A3C58C6059; vortex wifi, 密码: vortex882
+
+10:05 2011-5-13
+(19:22 2011-5-25)
+(14:43 2011-6-3)
+VC0882, SV, AE, 竞争对手, amlogic, rockchip
+1, amlogic, AML8726-M
+蓝魔、台电、智器
+1), 蓝魔W10
+http://mid.pconline.com.cn/review/1104/2391624.html
+http://mid.pconline.com.cn/review/1103/2360920.html
+(0), Android2.2
+(1), CPU
+AML8726-M的CPU主频800MHz，二级缓存128KB，带有NEON.
+(2), GPU
+ARM Mali-400 GPU 
+(3), memory, flash
+SCSemicon（华芯半导体）的HXB18T2G160AF DDR2 RAM, 512Mbyte
+Hynix公司，型号为H27UBG8T2ATR-BC，单片容量32G bit，两片合共64G bit，
+(4), wifi, bt, 
+Broadcom公司的BCM4329芯片，BCM4329是通过WAPI支持验证，65纳米制程，WiFi/蓝牙/FM组合芯片，其中WIFI支持双频802.11N，可提供到300Mbps甚至高达600Mbps的无线传输速率，大名鼎鼎的苹果Iphone4所用的无线芯片也是BCM4329。
+(6), audio:
+Wolfson WM8900L
+2), 智器Ten
+(0), android2.2
+(3), memory, flash
+ddr2同W10. Micron（镁光）29F32G08CBABA，单片容量4GB，两片共组成8GB
+(4), wifi, bt同W10.
+(5), LCD: 
+LP097X02, 9.7寸IPS硬屏，分辨率1024*768
+(6), audio: 同W10. 
+(7), 触摸: 10点(实测8点). 
+3), 艾诺NOVO8
+http://bbs.imp3.net/thread-10315006-1-1.html(含大量视频测试), 可以看到切水果时没有882流畅. 
+http://bbs.imp3.net/thread-10319136-1-1.html: 拆机. 
+(0), android2.2
+主机尺寸：213.6x128.9x14.1(mm)
+8GB/998元人民币
+(3), memory, flasg
+512MB RAM，8GB内部存储空间
+(5), 8英寸1280×768像素分辨率显示屏
+(7), 电容式触摸面板，支持5点触控
+轨迹球辅助操作
+(9), 前置30万像素摄像头
+(15:45 2011-6-28)
+1）通过网页浏览器直接看在线视频
+奇艺：画面略微有点儿卡；
+优酷：画面很卡；
+土豆：画面很卡；
+QQ视频：画面很卡；
+搜狐TV：画面很卡.
+2）用“天天浏览器”看在线视频
+奇艺： UA模式设置成iPad后会自动调用本地视频播放器，画面清晰效果流畅；
+新浪视频：自动调用本地视频播放器，画面清晰效果流畅；
+迅雷视频：自动调用本地视频播放器，播放过程中自动退出；
+乐视网：自动调用本地视频播放器，画面清晰效果流畅；
+QQ视频：自动调用本地视频播放器，画面清晰效果流畅；
+CNTV：自动调用本地视频播放器，画面清晰效果流畅；
+搜狐TV：自动调用本地视频播放器，画面超清晰效果很流畅；
+3）用视频客户端软件看在线视频：
+奇艺：调用了本地播放器，播放效果流畅，画面比较差（因为是给手机做的客户端）；
+土豆：调用了本地播放器，画面流畅，画质较差。
+优酷：调用了本地播放器，画面流畅，画质较差。
+因为NOVO8显示屏分辨率高，所以用这些手机客户端软件后会发现视频画质都比较差。所以推荐大家用“天天浏览器”看在线视频，画面流畅而且画质好，当然你的网速也要够快哦。
+
+艾诺能玩儿的游戏: 
+http://bbs.imp3.net/thread-10347074-1-1.html
+"15:45 2011-6-28"end
+
+2, rockchip, RK2918
+1), 酷比魔方U9GT 
+http://item.taobao.com/item.htm?id=10171166055&ad_id=&am_id=&cm_id=&pm_id=
+http://it.21cn.com/digital/mp4guild/2011/05/11/8286145.shtml
+ZJ: 从21cn视频上看不到上次视频里面3点触控造成屏幕卡壳的问题. 
+(0), android2.3
+(1), CPU:
+ARM Cortex A8内核，处理器主频高达1.2GHz，支持Neon协处理器和512KB二极缓存
+ZJ: 即使45nm, 1.2GHz可能也有水分. 根据上面链接, 淘宝卖家声称能跑到1GHz. 
+(3), memory, flash
+三星的K4B2G1646C-HCH9缓存颗粒，三星原装的DDR3 SDRAM, 单片容量为256MB，加起来就是512MB，频率为DDR3-1333
+ZJ: 据信rockchip不支持ddr3, 这里的ddr3可能有水分. 1333应该只是标称频率, 实际应该到不了1333/2. 
+镁光的29F64G08CBAAA
+(4), wifi, bt
+三星的SWB-B23模块，它支持Wi-Fi和蓝牙
+(5), LCD:
+7寸, 800x600.
+(6), audio
+欧胜的WM8900芯片
+(7), 触摸: 5点(有水分, 使用三点时响应速度变慢). 
+汇顶科技（GOODiX）的GT801多点电容屏芯片
+(8), 电池, 续航: 4000mAH, 号称续航7小时. 
+根据上面链接, 目前待机功耗已经优化到19ma, 和882一样. 
+(9), video codec:
+根据"http://bbs.imp3.net/thread-980345-1-1.html"说法, 应该是Ceva MM3000(支持VP8和AVS). 
+
+3, 其它
+1), AML8726-M和S5PV210对比
+http://blog.sina.com.cn/s/blog_71927ee80100qf0k.html
+
+11:26 2011-5-13
+VC0882, SV, AE, andorid, suspend/resume, wakelock
+手动设置wakelock, 和手动退出wakelock: 
+echo string > /sys/power/wake_lock
+echo string > /sys/power/wake_unlock
+
+14:10 2011-5-13
+VC0882, SV, AE, power, package, Thermal
+1, 今天大家在讨论882和7882热的问题. 
+Mr. Lin Chun Fen林春芬邮件"答复: ASEK RD e-Thermal Simulator Service Report [Input Date:2011-05-12;Input Time:16:35:14]"20110513_1302
+P83-106的有关热模拟的资料可供大家理解。
+资料已上传到目录: D:\VC0882\document\power
+
+2, 882功耗资料
+xueke关于882电流的测试报告和882各模块的功耗情况. 
+D:\VC0882\document\power\"power cal.xls", "VC0882_电流测试_20110402.xls"
+1), 问题
+parameter sheet: P0, K的含义. K是和频率相关的参数, P0是和频率无关的参数.
+leakage power: 单位. mW. 现在看起来不大, 系统总的leakage power也就是几十mW. 
+
+dcdc电流转换方法: 
+dcdc: 效率80%. 100ma * 1.2 / 0.8 / 4 = 37.5ma
+ldo电流转换方法: 电池端电流和ldo电流一样. 
+
+2), 为了了解表格, 看看3d和video play相关模块功耗: 
+(1), arm功耗: 55.5mw/MHz@1.2v, 750MHz下, 416.25mW. 
+(2), vdec: 59mw/MHz@1.2v, 200MHz下, 118mW. 
+(3), other: 788-340=448mW.
+
+3), 根据xueke表格, 估计3d测试中882的功耗
+"power cal.xls"表格是根据实测结果, 拟合出882各模块功耗计算公式: 
+表格中基本都可以设置频率, 电压, 负载. 这里的负载可能和我们android里面负载有差异, 例如arm没有跑neon. 
+例如在3d case中, 如果修改为我们现在用的频率:
+cpu750(382.073mW), bus333, ddr333, gpu600(209.191mW). 
+882总功耗为1273mW(318mA@4v).
+
+15:04 2011-5-13
+公司, ip地址, 10.0.12.xxx, 10.0.15.xxx, 网关: 10.0.12.1
+
+16:41 2011-5-13
+上传代码.
+modify code for suspend/resume: 
+1), add key down, key up event and delay(VA7882_MISSING_KEY_DELAY) for wakeup: send fake key event in order to turn on the screen.
+drivers/mfd/va7882-key.c
+drivers/mfd/va7882-rtc.c
+include/linux/mfd/va7882/rtc.h
+2), add auto suspend test in "/sys/devices/platform/v8-i2c.0/i2c-0/0-0016/autosuspend"
+we can use the following script to do the auto suspend test. The random number is read from timer2. 
+#!/bin/sh
+
+auto_suspend_file='/sys/devices/platform/v8-i2c.0/i2c-0/0-0016/autosuspend'
+
+#sync time from android to rtc in VA7882
+hwclock -w
+while true; do
+        #using system timer as random generator
+        timer=`vmtool rd 0x60052034 1`
+        second=`echo $timer | sed 's/^.*\\[//g' |  sed 's/\\]//' | \
+               sed 's/[0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z]\\(.*\\)/\1/'`
+        echo alarm after $second seconds
+        echo 0x$second >  $auto_suspend_file
+        while true; do
+                auto_suspend=`cat $auto_suspend_file`
+                if [ "$auto_suspend" = "0" ]; then
+                        echo "auto_suspend empty"
+                        sleep 1
+                        break
+                fi
+                sleep 1
+        done
+        echo "resume done"
+done
+
+ref drivers/mfd/va7882-core.c
+
+3), fix rtc alarm irq control bug. (va7882-rtc.c)
+
+4), add some print info in suspend sequence in order to debug the suspend bug. 
+only valid while CONFIG_V8LOG_PMU is defined. 
+
+10:05 2011-5-14
+时间管理
+0, 9:50
+
+1, 本日
+1), pll stable时间. bootloader里面已经配置过, 不需要修改. 
+2), 支持bianrongguang调整Linux kernel clk结构. 
+3), suspend/resume不稳定: 保证唤醒后屏幕必定会亮, 且时间确定. 见"10:14 2011-5-14". 
+4), 背光为什么比屏幕亮的早. 
+
+10:14 2011-5-14
+VC0882, SV, AE, power, pmu, modes trans: sleep, suspend/resume不稳定, 保证唤醒后屏幕必定会亮, 且时间确定
+1, 现在的问题是有时唤醒后, 屏幕没有亮就再次休眠了. 
+昨天的实验是发假的key down/up操作时加入一个延时. 但是修改后, 还是有, 只是概率低一些. 
+今天的考虑是唤醒后在kernel里面获取一个超时锁. 
+2, wake_lock用法
+void wake_lock_init(struct wake_lock *lock, int type, const char *name);
+void wake_lock_destroy(struct wake_lock *lock);
+void wake_lock(struct wake_lock *lock);
+void wake_lock_timeout(struct wake_lock *lock, long timeout);
+void wake_unlock(struct wake_lock *lock);
+原型在"include/linux/wakelock.h"和drivers/staging/dream/include/linux/wakelock.h"都有定义. 为什么有两个呢? 
+具体参数和用法
+struct wake_lock;
+wake_lock_init(&wake_lock, WAKE_LOCK_SUSPEND, lock_name);
+WAKE_LOCK_SUSPEND: Prevent suspend
+lock_name: e.g. "gpio_input"
+
+wake_lock_timeout(&wake_lock, 5 * HZ);
+timeout以HZ为单位. "5 * HZ"也就是5秒. 
+
+3, 和bianrongguang讨论. 没看到别家在driver里面加wake_lock. 
+希望看看唤醒的机制. 但是我找了找, 除了monkey, 只在"system/core/toolbox/powerd.c", 看到操作"/dev/input/event0"设备文件. 
+但是分析Android.mk看不出powerd.c编译为什么文件. 分析core下面的源代码也看不到谁使用了powerd. 看起来toolbox.c里面include的tools.h可以包含一些tools.
+
+4, 这次对比屏幕有没有亮, 发现没有打印"Missing key down event". 
+
+5, 背光和framebuffer suspend和resume, disable/enable
+arch/arm/plat-vc088x/pwm.c
+
+11:00 2011-5-15
+VC0882, SV, AE, 发掘8寸样机，试用体会
+1, 死机bug: 
+1), gpu GLbenchmark2.0.3测试, 全选所有case测试, 三次测试有两次测试死在第二个case, 死机后自动重启(没有打印u-boot界面, 只看到android字样). 
+2), 切水果遇到一次死机：背景音乐在正常播放，可正常开关屏幕，但无法强行关机。最后只能重起。
+
+2, 其它: 
+1), repligo pdf reader3.10:翻页时有绿色(在我的智器V5上无此问题)。正常浏览时有时左侧不是纯白(不易必现)。
+2), 大游戏提示sd空间不足(sdcard下空间是够的, idisk下空间也是够的)。原来在七寸上是可以的。
+实验了实况足球和gangstar.
+3), 主菜单状态下左上角有多个横条。
+4), android下非正常卸载sd卡后, 插入后, 不会正确mount sdcard.
+5), 触摸屏要用力按，感觉不舒服。尤其是主菜单和文件浏览器拖拽很耗力。 
+屏幕颜色发白，屏的质量问题？
+6), gpu测试只有15.9frame, 是因为屏幕大了么? 
+ZJ: 从800x480到8寸屏的1280, 数据量翻了一倍还多. 
+
+14:34 2011-5-16
+时间管理
+0, 9:45
+
+1, 本日
+1), VC0882 ICP sync up.
+2), AE 8寸suspend/resume. 见"14:35 2011-5-16". 
+
+14:35 2011-5-16
+VC0882, SV, AE, power, pmu, modes trans: sleep, suspend/resume不稳定
+1, bianrongguang发现, resume后屏比背光亮的晚可能是因为屏的resume里面有一个1.3s的延时. 
+2, 8寸屏死机问题
+1), 打印
+abcdefg
+说明是ddr进入自刷新之后死的. 
+先关闭arm中断实验. 
+2), 修改后死在:
+abcdefghi0123456789
+也就是wfi延时之前死的. 
+3), 用panda_os实验. gpu_sv_2dRepeat_exceptionInSram, 测试126次未发现问题. 
+(1), 把gpu_sv_2dRepeat_exceptionInSram改为反复sleep->wakeup.
+a, 8寸板: 51次死. 第二次也是死. 
+b, 怀疑是8寸板问题, 用dongliang7寸板实验, 48次死.
+4), panda_os下死的问题, 和android下面的现象不同, 先查android下面的问题.
+android下面睡不下去的问题, 把中断mask, 并清srcpnd试试. 
+5), 仍然不行, 实验几次就出错:
+abcdefg
+难道是cache没有清? 
+6), 把关闭arm中断改到清cache之前, 仍然不行, 实验了20-30次出错. 死的位置都是一样的: "abcdefg". 
+再次实验, 发现5次就死了. 看起来稳定性肯定不如我当时实验的7寸屏. 会不会是这两天代码有变化? 
+7), 前面文档可能确实是偶然的, 现在不论是否加no_console_suspend时, 2-3次就会死. 
+3, 保险起见在7寸屏上做类似实验.
+4, 想一想, 现在android和panda_os的差异, 除了mmu, 就是cache. 关闭cache实验. 
+关闭cache后会crash, 可能是因为清cache之前就关了cache. 放到清cache后面试试. 
+放到清cache后面关闭cache是可以的. 但是这样不是很好, 等于还是可能有数据在清cache过程中进入cache. 
+为了先关闭cache, 再clean cache, 还是直接在汇编中直接清cache(也就是参考laobian从OMAP3移植的代码. 
+1), 修改后实验, 实验三次, 都是5次内出错. 
+5, 没辙了, 只好修改arm页表, 看看到底是谁引起的问题, 参考panda_os异常向量表在sram的写法修改. 
+1), 加入的异常没有起作用, 明天继续调试. (需要关闭wdt)
+2), 会不会是clock引入的问题? 
+
+6, (23:26 2011-5-16)
+今日工作进展
+继续调试android suspend/resume稳定性问题. 发现今天的稳定性比周五差了很多. 
+今天修改了sram中的部分代码, 但是对于稳定性没有明显进展.
+下一步会继续对比android suspend流程和panda_os差异. 
+另外, 看看是否是最近android clock的调整引入的问题. 
+
+15:57 2011-5-16
+VC0882, SV, 882 中的8个模拟ip/module
+TV，ddr，usb，sar，mipi，pll，efuse，aud 
+
+21:10 2011-5-16
+VC0882, SV, AE, android, suspend/resume对系统的影响
+1, console suspend后, printk的打印不会输出, 只是保存在buffer中. 在console resume后才会打印, 所以这时看到的打印信息, 可能和实际顺序不一致. 
+实际顺序:
+normal print -- console suspend -- printk after console suspend -- (wakeup) -- rom boot print -- printk before console resume -- console resume -- normal print.
+看到的顺序可能是: 
+normal print -- console suspend  -- (wakeup) -- rom boot print -- console resume -- printk after console suspend -- printk before console resume -- normal print.
+
+如果在printk中加入时间戳, 就可以看到真实的顺序, 这样就不会受错误顺序误导. 
+
+9:44 2011-5-17
+时间管理
+0, 9:25
+
+1, 本日
+1), AE suspend/resume不稳定问题. 见"9:44 2011-5-17". 
+2), 30' 支持xuefei gpu bug work around. 
+3), 总结：见"9:44 2011-5-17"12. 
+今天总算有点进展，心情也好些，如果是tpi phy power问题，我当时review code时就能发现。
+
+9:44 2011-5-17
+VC0882, SV, AE, power, pmu, modes trans: sleep, suspend/resume不稳定, 续; 工作总结
+资料位置: \\10.0.13.101\share\zhangjian\projects\vc0882\code\20110517_AE_suspend_resume
+1, 继续调试, 看看到底是谁引起的死机:
+1), 异常处理. 
+2), 如果上午正向分析没有结果, 先用排除法, 恢复代码试试. 
+
+2, 看看sleep时, 关cache, 关中断, 异常处理代码本身有无问题. 
+用ICE调试, 需要的/system/etc/init.vimicro.sh里面关闭watchdog(共四句话). 
+未发现问题. 
+
+3, 实验100次(uImage_20110517_1019), 第61次死:
+1), 1-10: pass. 有一次屏没亮就再次sleep.
+2), 11-20: pass.
+3), 21-30: pass.
+4), 31-40: pass.
+5), 41-50: pass. 
+6), 51-60: pass, 其中(午饭1小时)
+7), 61-70: 1, dead. 
+
+4, 实验100次(uImage_20110517_113434, 比上面增加了打印信息, 但是没有编译进去). 
+3死. 
+
+5, 确认加入打印信息后, 再次实验(uImage_20110517_150622): 4次死. 
+
+6, 还是要分析android和panda_os区别. 
+1), mmu开关: panda_os下sleep后期mmu是关闭的, android下面sleep过程中mmu一直打开. 
+2), 有无usb网卡: panda_os下测试sleep时, uhost没有接设备. 原来我在android下面测试时, 没有编译usb网卡, 今天的代码是编译了的(昨天应该也编译了). 
+3), pmu 32k clk: android下pmu 32k clk是在wfi前面才切过去的. 
+4), 是否清srcpnd. 今天在v8_pm_enter里面加入了清srcpnd代码. 
+5), check PMU_EN_XCLK.	
+
+7, 感觉没什么问题啊. 
+什么东西会导致ddr force进入self-refresh后, 就不稳定? 
+肯定是访问了ddr, 可能有影响. 
+1), 中断发生. 
+2), arm cache操作. 
+3), 其它master访问应该不会影响. 
+
+8, 一步一步查.
+
+9, 7寸屏被借走了, 用8寸屏继续实验.
+uImage_20110517_173803.
+
+10, 对比中发现还有一个差异.
+panda_os没有控制gpio. android里面控制了gpio. uImage_20110517_182849
+文件修改: 
+arch/arm/plat-vc088x/pm.c
+638              //ZJ: temp comment for suspend/resume debug.
+639 //           tmp = readl(IO_ADDRESS(V8REG_TPI_PHY_CTRL));
+640 //           writel(0x297,IO_ADDRESS(V8REG_TPI_PHY_CTRL));
+641 //
+642              gpio1 = readl(IO_ADDRESS(V8REG_GPIO_I_PE));
+643              writel(0xffff6feb,IO_ADDRESS(V8REG_GPIO_I_PE));
+644
+645              gpio2 = readl(IO_ADDRESS(V8REG_GPIO_K_PE));
+646              writel(0xffffffc0,IO_ADDRESS(V8REG_GPIO_K_PE));
+647 //
+648 //           writel(0x03,IO_ADDRESS(V8REG_KPD_INT_MASK));
+649 //
+650              intsrcpndl = readl(IO_ADDRESS(V8REG_INTC_INTPND_L));
+651              intsrcpndh = readl(IO_ADDRESS(V8REG_INTC_INTPND_H));
+652              writel(intsrcpndl, IO_ADDRESS(V8REG_INTC_INTPND_L));
+653              writel(intsrcpndh, IO_ADDRESS(V8REG_INTC_INTPND_H));
+654              V8LOGI(V8TAG_PM, "current intsrcpnd 0x%x 0x%x, clear pnd", intsrcpndh, intsrcpndl);
+655              intsrcpndl = readl(IO_ADDRESS(V8REG_INTC_INTPND_L));
+656              intsrcpndh = readl(IO_ADDRESS(V8REG_INTC_INTPND_H));
+657              V8LOGI(V8TAG_PM, "current intsrcpnd 0x%x 0x%x, after clear all", intsrcpndh, intsrcpndl);
+658
+659              V8LOGI(V8TAG_PM, "prepare enter v8sram_pm_sleep, sleep 5s.");
+660              mdelay(5000);
+661              V8LOGI(V8TAG_PM, "enter v8sram_pm_sleep...");
+662              v8sram_pm_sleep();
+663              V8LOGI(V8TAG_PM, "exit v8sram_pm_sleep");
+我的板子(tftp boot, log: putty_20110517_175031)
+1), 1-10: pass.
+2), 11-20: pass.
+3), 21-30: pass.
+4), 31-40: pass.
+5), 41-50: pass.
+6), 51-60: pass.
+7), 61-70: pass.
+8), 71-80: pass.
+9), 81-90: 87次pass. 后来断点, 做测试11, 然后再做本实验. 
+
+同时在jinyang板子(sd boot)上实验这个kernel. 4次死, 电流是sleep后电流, 第三次wakeup后, 屏幕没有亮, 然后再次sleep, 电流是sleep的电流. 但是无法唤醒. 
+打开no_console_suspend, 再次实验: 
+1), 1-10: pass.
+2), 11-20: pass.
+3), 21-30: pass.
+4), 31-40: pass.
+5), 41-50: 7890
+6), 51-60: 1234567890
+7), 61-70: 1234567890
+8), 71-80: 1234567890
+9), 81-90: 1234567890
+10), 91-100: 1234567890
+
+感觉如果console_suspend后仍然写串口的话, 可能会影响系统稳定性. 
+
+11, 注释delay5s, 取消注释: tpi phy, key int.
+uImage_20110517_201937
+用我原来的板子(tftp), 第三次就死了. 再次实验也是三次就死(auto_suspend.sh自动测试, log: putty_20110517_214031). 
+
+12, 今日工作总结
+继续debug android sleep不稳定问题(5-10次死一次)
+0), 目前现在是sleep中, ddr进入自刷新后死机(ICE无法连接). 从流程上分析, ddr进入自刷新后, arm跑死, 除非是arm又访问了ddr: 要么是arm产生了异常, 要么是cache或write buffer的读写操作. 根据这个思路修改代码无进展. 
+1), 对比了panda_os和android下差异. 
+为了保证一致性, 关闭了arm cache. mask interrupt. clr interrupt srcpnd. 
+但是稳定性仍然没有改善. 
+2), 注释在882 core suspend时不需要管理的tpi phy和key int. 
+并且在进入sram sleep前增加5s延时. 
+修改后, 如果sleep时, 不关闭串口. 两个板子都能成功suspend/resume超过50次. 
+目前继续做自动测试, 看看能否活到明天早晨. 
+
+明日计划
+1), 如果晚上测试通过, 需要分析原因. 如果仍然有问题. 继续考虑mmu和cache相关问题(中断关闭就是关闭了, 不会再发生). 
+
+11:17 2011-5-17
+VC0882, SV, AE, 工作体会
+1, 感觉laobian工作效率挺高的. 
+882里面调了很多东西. 
+gpio, pmu, clkrst, va7882. 我感觉在这么短时间内, 要想在几个月时间内把这个都调好, 对我来说难度很大. 
+2, (20:41 2011-5-19)
+今天laobian, 又提醒我两个东西, 感觉自己最近工作不太在状态. 要抓紧时间了:)
+1), panda_os和android差异中mmu开关问题, 可能由于ddr进入自刷新后我的访问造成arm要访问页表, 这样就会访问ddr.
+我之前分析这个差异时, 就没有想到. 
+
+17:04 2011-5-17
+VC0882, SV, AE, Power, clock, bus clkswitch, yanglei给出的bus切频方案: 采用ddrc利用率调整bus频率
+1, yanglei邮件"答复: 功耗调试进展"_20110517
+动态调ｂｕｓ频率初步方案：
+ｄｄｒｃ使用率　＝　ｄｄｒｃ　ａｃｔｉｖｅ　ｃｙｃｌｅ／　ｔｏｔａｌ　ｃｙｃｌｅ　（ｄｄｒｃ　ａｃｔｉｖｅ　ｃｙｃｌｅ　＝ｒｅｇ　０ｘ６００１１２００　）
+ｂｕｓ的使用率约等于　ｄｄｒｃ的使用率，即使ｂｕｓ和ｄｄｒｃ是异步的，比如１００ＭＨｚ：３３３ＭＨｚ，这个数据也能有效反应ｂｕｓ的使用率。我们根据ｂｕｓ的使用率来调整ｂｕｓ频率。
+当ｂｕｓ　使用率> 80 % ,   则升频２０％
+当ｂｕｓ　使用率< 40 %,    则降频２０％
+这个８０％，４０％，２０％是一个初步值，比较保守，可以先用。更优化的数据需要大量实验在调整。
+
+调整时间：　我觉得大概是帧量级的时间调整一次，　３３ｍｓ，６６ｍｓ，１００ｍｓ，　这个需要实际测试看看效果。
+
+为什么没用ｂｕｓ的效率（ｄａｔａ／ｃｙｃｌｅ）来作为ｂｕｓ调整的依据。　因为ｂｕｓ的效率与ｍａｓｔｅｒ内的繁忙程度不是完全相关的。举个例子，假设系统里只有一个ＤＥ在工作，并且只刷１层Ａ　ｌａｙｅｒ，　假设ｒｌａｔｅｎｃｙ　约为５０ｃｙｃｌｅ，以为ＤＥ　ａ　ｌａｙｅｒ　ｆｉｆｏ的深度为３２，那么发４个ｂｌ＝８的请求就会等ｒｄａｔａ，那么此时ｂｕｓ效率峰值只有　32/(32+50) = 40%。　什么意思呢，也就是即使此时ＤＥ　都已经ｆｉｆｏ　ｅｍｐｔｙ了，但是在总线上看ｂｕｓ的效率也只有４０％。正因为这个，这个算法没有用ｂｕｓ　ｄａｔａ　／ｂｕｓ　ｃｙｃｌｅ去调整ｂｕｓ频率，而使用ｄｄｒｃ　ａｃｔｉｖｅ　ｃｙｃｌｅ间接计算ｂｕｓ的繁忙程度来调整ｂｕｓ频率。
+补充一下，　向下调整频率，最好有一个下限，比如 ５０ＭＨｚ.  实际的bus频率下限为ＤＥ　ｒｅｑｕｉｒｅ的ｂｕｓ　ｍｉｎｉｍａｌ　频率和５０ＭＨｚ里的大的那个。这个５０ＭＨｚ也是可以调整的，相对保守。
+
+ｍｉｎｉｎａｌ　ｆｒｅｑｕｅｎｃｙ　　＝　ｍａｘ（５０,   DE bandwidth *  ( 3.3 – enable layer num *0.3  ) / 8 )）；
+
+DE bandwidth ＝　sum of   each  enable layer  ( width * high * bytes per pixel  * fps ) 
+
+2, bamvor: 原来给yanglei, 并没有给出这个方案, 看了有些问题还是要反复想才会有更好的方案.
+
+10:14 2011-5-18
+VC0882, SV, AE, power, pmu, modes trans: sleep, suspend/resume不稳定, 续
+1, 昨天实验, 两个板子都跑了几十次, 但是今天在实验, 我的板子用uhost时, 几次就死了. 
+原有bianrongguang sleep代码, 把tpi phy控制为power down模式:
+writel(0x297,IO_ADDRESS(V8REG_TPI_PHY_CTRL));
+
+和jiajihua讨论, tpi phy(sar adc)在sleep时会由isolation控制. 软件不需要控制.
+PMU_CTRL: PD_SAR_FE_SW, PD_SAR_FE_SEL. 可以控制供电. 
+但是目前死在ddr进入自刷新之后. isolation还没有起作用, 所以应该和isolation置一的bug没关系.
+
+和zixi讨论一下. zixi建议: low power mode 不配, 看看什么现象. 如果是配置ddrphy进入lp mode出错, 不配置就应该没问题.
+
+2, (14:23 2011-5-18)上午实验结果. 
+我的板子(sd boot uImage_20110517_182849)正确跑了337次, 现在是屏没法正常亮了. 
+jinyang的板子(sd boot uImage_20110517_182849), 已经正确跑了604次, 继续测试. 
+
+3, 用我的板子实验不配置lp mode(tpi phy和key int不配置, 去掉延时. uImage_20110518_142531).
+1), tftp boot, 自动测试20次没有死. 
+但是发现, 没法支持wfi前有按键. 
+2), 是否是mask影响? 去掉int mask. 实验: uImage_20110518_151440.
+去掉int mask后, wfi前有唤醒源是可以的. 在这种情况下做手工测试, 看看50次是否出错. 
+(1), 1-10: 4(休眠过程按键唤醒). 5次都正确. 
+拔出usb网卡造成板子重启. 继续实验.
+测试两次后, 又遇到重启. 
+3), 改为直接给电池供电: 
+(1), 1-10: 休眠过程按键唤醒: 1, 7. 从9开始改为星系的动态桌面. 
+(2), 11-20: 休眠过程按键唤醒: 1, 测试到18次时: 
+stop_drawing_early_suspend: timeout waiting for userspace to stop drawing
+测试过程: gpu case运行中suspend, 但是音乐没有停, 开屏, 关屏, 音乐停了, 但是打印上述信息. 
+完整log(putty_20110518_153449):
+bash-4.1# request_suspend_state: wakeup (3->0) at 1207577706272 (2000-01-01 00:20:06.351354309 UTC)
+pwm_enable(PWM0)
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 200
+pwm_enable(PWM0)pwm_enable(PWM0)
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 100
+pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_disable(PWM0)
+request_suspend_state: sleep (0->3) at 1223266946194 (2000-01-01 00:20:22.040593770 UTC)
+request_suspend_state: wakeup (3->0) at 1223575255963 (2000-01-01 00:20:22.348903692 UTC)
+pwm_enable(PWM0)pwm_enable(PWM0)
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 200
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 100
+pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_disable(PWM0)
+request_suspend_state: sleep (0->3) at 1232210412272 (2000-01-01 00:20:30.984061386 UTC)
+request_suspend_state: wakeup (3->0) at 1232443762157 (2000-01-01 00:20:31.217409886 UTC)
+pwm_enable(PWM0)
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 200
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 100
+pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)
+stop_drawing_early_suspend: timeout waiting for userspace to stop drawing
+pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_disable(PWM0)
+request_suspend_state: sleep (0->3) at 1236350371503 (2000-01-01 00:20:35.124020194 UTC)
+request_suspend_state: wakeup (3->0) at 1236591146618 (2000-01-01 00:20:35.364795617 UTC)
+pwm_enable(PWM0)
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 200
+v8sensor_mma7660_ioctl:  IOCTL_SENSOR_SET_DELAY_ACCEL (0xea64) 100
+pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)
+stop_drawing_early_suspend: timeout waiting for userspace to stop drawing
+pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_enable(PWM0)pwm_disable(PWM0)
+request_suspend_state: sleep (0->3) at 1242395882002 (2000-01-01 00:20:41.169530500 UTC)
+stop_drawing_early_suspend: timeout waiting for userspace to stop drawing
+
+4), 继续实验.
+(1), 休眠过程按键唤醒:3.
+第10次, 死在"abcdefgh". 说明去掉ddrphy lpmode没有解决根本问题. 
+log: putty_20110518_162140
+
+5), 把h后面的配置pmu寄存器clock和mode trans移到ddr进入自刷新之前. 
+uImage_20110518_164119.
+(1), 休眠过程按键唤醒:3.
+(2), 休眠过程按键唤醒:2.
+关屏后gpu测试音乐没有关闭: 4.
+(3), 休眠过程按键唤醒:5.
+(4), 休眠过程按键唤醒:3.
+(5), pass.
+(6), 休眠过程按键唤醒:3.
+(7), pass.
+
+第46次时log: 
+Thread-10: page allocation failure. order:7, mode:0x20
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c034b94c>] (dump_stack+0x18/0x1c)
+ r7:c05fc620 r6:c05fc620 r5:00000007 r4:00000020
+[<c034b934>] (dump_stack+0x0/0x1c) from [<c0093de0>] (__alloc_pages_nodemask+0x520/0x574)
+[<c00938c0>] (__alloc_pages_nodemask+0x0/0x574) from [<c0093e4c>] (__get_free_pages+0x18/0x44)
+[<c0093e34>] (__get_free_pages+0x0/0x44) from [<bf003b58>] (gckOS_AllocatePagedMemoryEx+0x84/0x200 [galcore])
+[<bf003ad4>] (gckOS_AllocatePagedMemoryEx+0x0/0x200 [galcore]) from [<bf009d84>] (gckVIDMEM_ConstructVirtual+0xf0/0x154 [galcore])
+[<bf009c94>] (gckVIDMEM_ConstructVirtual+0x0/0x154 [galcore]) from [<bf0052d8>] (_AllocateMemory+0x98/0x158 [galcore])
+[<bf005240>] (_AllocateMemory+0x0/0x158 [galcore]) from [<bf00562c>] (gckKERNEL_Dispatch+0x294/0x540 [galcore])
+[<bf005398>] (gckKERNEL_Dispatch+0x0/0x540 [galcore]) from [<bf00100c>] (drv_ioctl+0x288/0x4d0 [galcore])
+ r7:00007530 r6:c44ba000 r5:c93e61c0 r4:ce642300
+[<bf000d84>] (drv_ioctl+0x0/0x4d0 [galcore]) from [<c00c8dd0>] (vfs_ioctl+0x84/0xb4)
+[<c00c8d4c>] (vfs_ioctl+0x0/0xb4) from [<c00c9444>] (do_vfs_ioctl+0x548/0x5a8)
+ r7:00000022 r6:00007530 r5:c9c291c0 r4:4446e3e0
+[<c00c8efc>] (do_vfs_ioctl+0x0/0x5a8) from [<c00c94e4>] (sys_ioctl+0x40/0x64)
+ r9:c44ba000 r8:c002b128 r7:00000022 r6:00007530 r5:4446e3e0
+r4:c9c291c0
+[<c00c94a4>] (sys_ioctl+0x0/0x64) from [<c002af80>] (ret_fast_syscall+0x0/0x30)
+ r7:00000036 r6:00298a80 r5:4446e434 r4:4446e434
+Mem-info:
+Normal per-cpu:
+CPU    0: hi:  186, btch:  31 usd:  29
+active_anon:24044 inactive_anon:6882 isolated_anon:0
+ active_file:4001 inactive_file:15222 isolated_file:0
+ unevictable:214 dirty:0 writeback:0 unstable:0
+ free:6957 slab_reclaimable:527 slab_unreclaimable:866
+ mapped:7600 shmem:140 pagetables:1820 bounce:0
+Normal free:27828kB min:2456kB low:3068kB high:3684kB active_anon:96176kB inactive_anon:27528kB active_file:16004kB inactive_file:60888kB unevictable:856kB isolated(anon):0kB isolated(file):0kB present:377952kB mlocked:0kB dirty:0kB writeback:0kB mapped:30400kB shmem:560kB slab_reclaimable:2108kB slab_unreclaimable:3464kB kernel_stack:2624kB pagetables:7280kB unstable:0kB bounce:0kB writeback_tmp:0kB pages_scanned:0 all_unreclaimable? no
+lowmem_reserve[]: 0 0
+Normal: 3177*4kB 1050*8kB 274*16kB 71*32kB 1*64kB 0*128kB 0*256kB 0*512kB 0*1024kB 0*2048kB 0*4096kB 0*8192kB 0*16384kB 0*32768kB 0*65536kB = 27828kB
+19577 total pagecache pages
+0 pages in swap cache
+Swap cache stats: add 0, delete 0, find 0/0
+Free swap  = 0kB
+Total swap = 0kB
+95232 pages of RAM
+36365 free pages
+2747 reserved pages
+1393 slab pages
+85785 pages shared
+0 pages swap cached
+
+6), 需要看一下sram是否进入了cache, 是non-cachable的. 见"17:49 2011-5-18". 
+
+4, 和dr.yang, aiguo讨论, 什么情况下会导致ddr进入自刷新后程序跑死? 
+1), arm访问ddr: 
+ZJ: 目前已经关闭了中断, cache. cache也做了clean. 
+2), 配置寄存器timeout. sram速度太慢会不会造成系统工作不正常. 
+ZJ: 
+3), SV上对比实验. 
+目前跑了几十次之后, ddr对比不过. 会不会是ddr数据出错, 导致sram代码出了问题. 
+
+5, 在我这个8寸板上实验. 46次后提示数据比对未通过. 
+后来发现这个问题是因为ddr training地址设置不正确造成的: 设置ddr training地址时没有考虑移位. 
+
+11:38 2011-5-18
+时间管理
+0, 9:50
+
+1, 本日
+1), AE suspend/resume稳定性. 
+2), 下午40' 调试trace, 见"13:42 2011-5-18". 
+3), 10' 修改VIM_UART_SendOneChar_NoStack的传入参数, 使用UART_AASP_CUR_NUM表示串口编号. 
+4), 总结. 见"22:36 2011-5-18". 
+
+13:42 2011-5-18
+VC0882, SV, arm trace
+1, trace工作不正常, 没有正确采到数据. 
+原来的脚本没有配置keypad为function mode, 并选择为trace data. 修改了gpio, 仍然不行. 
+2, \todo 下一步需要用示波器看trace数据波形. 
+17:49 2011-5-18
+Linux, cache, 分析Linux中cache属性. 
+
+Linux中核心的memory属性描述在mem_types, cache policy(cp)的属性会写到前者中: 
+mem_types[MT_MEMORY].prot_sect |= ecc_mask | cp->pmd; 
+
+20:16 2011-5-18
+VC0882, SV, 功耗数据, 
+ddr3 sdram颗粒@1.5v电源
+刷屏时540ma, 关屏时400ma. 
+自刷新: 11.5ma(两个ddr颗粒). 
+实验表明ddr的功耗和使用多少有很大关系: 
+如果刷屏时bus从333降到11.1MHz, ddr功耗从540ma降到420ma, 此时刷屏已经不正常了.
+如果刷屏时bus从333降到111MHz, ddr功耗不变. 
+
+22:36 2011-5-18
+VC0882, SV, 工作总结, AE suspend/resume稳定性; 调试trace
+1, 今日工作总结
+1), 继续解决AE suspend/resume稳定性问题, 调整步骤后目前能做到100次左右死一次. 
+和dr.yang, aiguo讨论, 什么情况下会导致ddr进入自刷新后程序跑死? 
+(1), arm访问ddr: 
+ZJ: 目前已经关闭了中断, cache. cache也做了clean. 
+(2), 配置寄存器timeout. sram速度太慢会不会造成系统工作不正常. 
+ZJ: 配置寄存器, 应该不会timeout. 目前apb timeout值较大. 
+(3), SV上对比实验. 
+目前跑了几十次之后, ddr对比不过. 会不会是ddr数据出错, 导致sram代码出了问题. 
+ZJ: 这个问题, 今天晚上发现可能是ddr training地址和pattern区域冲突造成的. 已修改, 正在测试. 
+3), 调试trace: trace工作不正常, 没有正确采到数据. 
+
+2, 次日工作计划
+1), 继续解决AE suspend/resume稳定性, 如果出错概率较低, 考虑先提交QA测试, 看看实际效果.
+2), 用示波器看trace波形. 
+
+9:34 2011-5-19
+时间管理
+0, 9:25
+
+1, 本日
+1), 上午2h. 18:12- AE suspend/resume. 见"9:39 2011-5-19". 
+2), 支持深圳同事设置ddr参数并和beihua讨论. 见"14:46 2011-5-19".
+3), 3h 调试trace. "16:23 2011-5-19"
+4), 给gong'anmin gpu sleep测试邮件. 
+
+9:39 2011-5-19
+VC0882, SV, AE, power, pmu, modes trans: sleep, suspend/resume不稳定, 续2
+1, 昨天实验结果
+1), jinyang板子(ICP panda_os gpu 2d case + sleep)
+933次之后死(两个半小时, 22:14--00:37), 最后的log, 看起来是唤醒后, ddr不可访问.
+这是第二次wakeup的情况, 第二次wakeup pso只是rst没有掉电, 所以sram数据应该还在, bootloader应该也没有改写sram最开始的数据(panda_os异常向量). 这样情况下, 也没法打印信息, 说明arm或sram有问题了?
+H0x00368368
+data abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0xprefetch abort lr = 0x
+\todo 发信给beizhan, yali, 在7寸板上测试. 
+
+2), 我的板子, 还活着, 跑了874次. 
+
+2, 和zhaoyuan讨论, merge最新代码, merge lvds和lvds_pm配置文件. 关闭no_console_suspend实验. 如果没问题, 给QA测试. 
+1), 代码已merge. 
+lvds和lvds_pm只有CONFIG_PM_VC088X一处差异. 
+2), 更新代码后, 编译两个image: 
+20110519_102037: enable pm and pmu log. log level=3, using no_console_suspend in bootargs
+20110519_101802: disable all vc0882 log. DO NOT use no_console_suspend. 
+3), 确认功耗设置正常
+(1), 上面映像是140ma.
+如果把v8_pm_enter里面原有关闭所有时钟的代码, 功耗降到80. 也就是说各模块driver中没有控制的功耗有60ma. 
+这里其实在board-vortex.c中已经修改, 把TEMP_ON宏定义为空既可. 
+(2), lvds屏在sleep状态下, 没有进入低功耗模式, 如果在mach-vc0882/gpio-vortex.c中的代码做如下修改, 功耗可以进一步降到20ma, 也就是lvds有70ma左右的功耗. 
+DEFINE_PIN_STATE( GPIO_ID_I29 , PIN_LCD_RST             , PINMUX_FUN1, PINDIR_IN, PINVAL_H, PINDRAIN_OFF, PINPULL_ON)
+改为
+DEFINE_PIN_STATE( GPIO_ID_I29 , PIN_LCD_RST             , PINMUX_GPIO, PINDIR_OUT, PINVAL_H, PINDRAIN_OFF, PINPULL_ON)
+4), 另外为了和之前测试稳定性的代码对应, 在sram-helper.S中, 仍然把设置mode trans和switch pmu和padc clk到32k, 放到ddr进入自刷新之前.
+5), 除了TEMP_ON的修改, 如上这两个个修改目前都不能给测试同事. 使用uImage_20110519_133547测试. 
+
+3, 发信, 需要测试同事帮忙测试.
+\\10.0.12.160\share\androidbuilds\vortex_20110519_133547_suspend_test.pak
+1), suspend和resume测试至少100次. 
+2), resume后, 随机做各种测试, 包括3D测试, 视频播放, 音频播放.
+3), 测试suspend过程中有唤醒源是否稳定: 
+需要看打印信息, 在如下打印信息出现后, 立刻唤醒. 
+PM: Syncing filesystems ... done.
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+
+4, (18:12 2011-5-19)
+测试同事测试, 33次后, 跑死: 第二次wakeup跑死. 
+
+14:46 2011-5-19
+VC0882, SV, AE, 产品板, ddr配置: 1Gbyte
+1, 两个8bit ddr串联, 然后再并联. 用了两个片选, 咨询了beihua. 软件上需要配置的东西和我想的是一样的. 
+1), 软件配置: rank=1
+2), 硬件要注意: 板级连线要对称, 正确连接cke1.
+2, 4个8bit串联为32bit. 这个参数估计是要变的. 
+
+16:23 2011-5-19
+VC0882, SV, arm, trace, etm, tpio, 调试trace: 初步得到数据, 需要进一步实验
+参考"10:33 2010-5-19". 
+1, 测试tpiu test pattern
+trace start后, 没有提示full, stopped, 提示not full, stopped.
+后来发现是VTRef没有接Vcc. 飞线后, tpiu test pattern的ff/00 pattern不正确, 都是f, 其余pattern正确.
+和"Logic 1没有上拉, 直接接到Vcc"不知有没有关系. 
+test pattern脚本, 和FPGA的区别使用的gpio有差异: "D:\VC0882\panda_os\init_script\RVD_SV\trace\tpiu_test_pattern.inc".
+
+pattern详见DDI0314H_coresight_components_trm.pdf(D:\VC0882\document\arm\debug\trace)p198-p199的Supported test pattern/modes和Current test pattern/mode寄存器.
+[3] PatF0 FF/00 Pattern
+[2] PatA5 AA/55 Pattern
+[1] PatW0 Walking 0s Pattern
+[0] PatW1 Walking 1s Pattern
+
+2, 抓实际数据
+脚本: "D:\VC0882\panda_os\init_script\RVD_SV\trace\LPDDR_1Gb_1x32_dll_off_133_etm.inc"
+1), 运行后, 提示trace analyser出错.
+> analyzer,set_size=0x3000
+> go
+Error: [TA0024] Read failed
+Error: [TA0024] Read failed
+Error: [TA0024] Read failed
+2), 可能是trace clock太高了, 降低到37.5MHz(IO上也就是37.5/2=16.75MHz)后, 可以抓到部分数据, 数据如下, 看起来流程正确, 但是由于频率限制, 丢掉大量数据: 
+0	Warning: Debug state
+0	0	Cancelled	VIM_HAL_ReadRegBitCheck\#230	S:0x0006CF80	0xE1A03130	LSR      r3,r0,r1
+0	1	Exec				INTERRUPTED
+1	1	Exec	INT_Vectors_old\#209	S:0x00000018	0xEA0000D8	B        INT_IRQ <0x380>
+2	2	Exec	INT_IRQ	S:0x00000380	0xE92D000F	PUSH     {r0-r3}
+3	3	Exec	INT_IRQ\#1144	S:0x00000384	0xE24E3004	SUB      r3,lr,#4
+4	4	Exec	INT_IRQ\#1145..#1146	S:0x00000388	0xE59F0160	LDR      r0,0x4f0 <Panda_Copy_Area+0x9C>
+5	5	Exec	INT_IRQ\#1147	S:0x0000038C	0xE12FFF30	BLX      r0
+6	6	Exec	TCT_Interrupt_Context_Save	S:0x00092F48	0xE10F1000	MRS      r1,APSR ; formerly CPSR
+7	7	Exec	TCT_Interrupt_Context_Save\#2450	S:0x00092F4C	0xE38110C0	ORR      r1,r1,#0xc0
+8	8	Exec	TCT_Interrupt_Context_Save\#2451	S:0x00092F50	0xE12FF001	MSR      CPSR_cxsf,r1
+9	9	Exec	TCT_Interrupt_Context_Save\#2452..#2456	S:0x00092F54	0xE51F0658	LDR      r0,Int_Count <0x92904>
+10	10	Exec	TCT_Interrupt_Context_Save\#2457	S:0x00092F58	0xE5901000	LDR      r1,[r0,#0]
+11	11	Exec	TCT_Interrupt_Context_Save\#2458..#2459	S:0x00092F5C	0xE3510000	CMP      r1,#0
+12	12	NoExec	TCT_Interrupt_Context_Save\#2460	S:0x00092F60	0xCA000000	BGT      TCT_Nested_Save <0x92f68>
+13	13	Exec	TCT_Interrupt_Context_Save\#2461	S:0x00092F64	0xEA000017	B        TCT_Not_Nested_Save <0x92fc8>
+14	14	Exec	TCT_Interrupt_Context_Save\#2498..#2508	S:0x00092FC8	0xE2811001	ADD      r1,r1,#1
+15	15	Exec	TCT_Interrupt_Context_Save\#2509	S:0x00092FCC	0xE5801000	STR      r1,[r0,#0]
+16	16	Exec	TCT_Interrupt_Context_Save\#2510..#2512	S:0x00092FD0	0xE51F16EC	LDR      r1,Current_Thread <0x928ec>
+17	17	Exec	TCT_Interrupt_Context_Save\#2513	S:0x00092FD4	0xE5911000	LDR      r1,[r1,#0]
+18	18	Exec	TCT_Interrupt_Context_Save\#2514	S:0x00092FD8	0xE3510000	CMP      r1,#0
+19	19	NoExec	TCT_Interrupt_Context_Save\#2515	S:0x00092FDC	0x0A00001C	BEQ      TCT_Idle_Context_Save <0x93054>
+20	20	Exec	TCT_Interrupt_Context_Save\#2516..#2521	S:0x00092FE0	0xE92D0070	PUSH     {r4-r6}
+21	21	Exec	TCT_Interrupt_Context_Save\#2522	S:0x00092FE4	0xE1A0500E	MOV      r5,lr
+22	22	Exec	TCT_Interrupt_Context_Save\#2523	S:0x00092FE8	0xE14F4000	MRS      r4,SPSR
+23	23	Exec	TCT_Interrupt_Context_Save\#2524	S:0x00092FEC	0xE1A0600D	MOV      r6,sp
+24	24	Exec	TCT_Interrupt_Context_Save\#2525	S:0x00092FF0	0xE28DD01C	ADD      sp,sp,#0x1c
+25	25	Exec	TCT_Interrupt_Context_Save\#2526	S:0x00092FF4	0xE10F0000	MRS      r0,APSR ; formerly CPSR
+26	26	Exec	TCT_Interrupt_Context_Save\#2527	S:0x00092FF8	0xE3C0001F	BIC      r0,r0,#0x1f
+27	27	Exec	TCT_Interrupt_Context_Save\#2528	S:0x00092FFC	0xE3800013	ORR      r0,r0,#0x13
+28	28	Exec	TCT_Interrupt_Context_Save\#2529..#2530	S:0x00093000	0xE12FF000	MSR      CPSR_cxsf,r0
+29	29	Exec	TCT_Interrupt_Context_Save\#2531	S:0x00093004	0xE1A0100D	MOV      r1,sp
+30	30	Exec	TCT_Interrupt_Context_Save\#2532	S:0x00093008	0xE320F000	NOP
+31	31	Exec	TCT_Interrupt_Context_Save\#2533	S:0x0009300C	0xE5213004	STR      r3,[r1,#-4]!
+32	32	Exec	TCT_Interrupt_Context_Save\#2534	S:0x00093010	0xE9217F80	STMDB    r1!,{r7-lr}
+33	33	Exec	TCT_Interrupt_Context_Save\#2535	S:0x00093014	0xE1A0D001	MOV      sp,r1
+34	34	Exec	TCT_Interrupt_Context_Save\#2536	S:0x00093018	0xE8B60380	LDM      r6!,{r7-r9}
+3), 另外, 这次实验经常抓到我不存在的代码, 类似"andeq r0, r0, r0"不知道是什么原因. 
+
+19:25 2011-5-19
+VC0882, SV, pmu, power, VA7882
+panda_os函数. 先en, 后改mux. 请wenlei修改. 
+check AE 7882流程. 先en, 后改mux. 
+
+19:32 2011-5-19
+VC0882, SV, pmu, mode trans, sleep, panda_os下sleep反复测试
+1, zhangjian2gong'anmin: 
+hi, anmin
+
+更新代码, 编译: gpu_sv_2dRepeat_exceptionInSram
+
+启动后输入命令: 
+pmic
+writereg 0xd0 1
+writereg 0xd2 1
+writereg 0xa2 2
+runrtc 1023		//按s退出
+pmu
+rebootsw 1 1
+
+测试过程是, gpu 2d四个case的测试(0,1,2,3)->sleep->wakeup->gpu 2d 测试->...
+需要帮我确认是否gpu测试后系统进入了sleep状态, log如下: 
+trans to sleep mode
+ddr into sel refresh...
+en self refresh 24, 25
+nop
+exec cmd
+exec cmd done
+force enter self refresh
+ddr into sel refresh...done
+en ddrphy lp mode
+set trans mode in pmu
+dsb_isb_wfi_sram
+从第二次sleep开始, 每次会sleep两秒(也就是打印dsb_isb_wfi_sram后暂定两秒), 然后wakeup. 
+
+2, (10:13 2011-5-20)
+在ae android平台下发现sleep->wakeup不稳定. 我在ICP panda_os下复现了这个问题. 
+目前都是死在wakeup过程中, 其中4/5板子都是死在一级处理完成跳转到二级boot之后. 具体情况如下: 
+1), C20-1: 8.5小时, 3510次跑死, 系统现场恢复过程中跑死. 
+2), C5: 8小时. 3200次. 
+C6, C7, C9三个板子: 
+3), 3小时. 1200次. 
+4), 12小时. 4800次. 
+5), 7小时. 2800次. 
+
+测试基于产品板(7寸屏). 
+原有高低温测试中是wakeup后reset, 现在的流程是反复sleep->wakeup, 没有reset, 问题容易积累. 而且目前wakeup后只做了gpu 2d case, 所以sleep->wakeup测试次数远远多于高低温测试. 
+
+注: 
+1), suxin板子: C20-1
+2), gong'anmin, 21:50开始跑, C5: 6:00死, C6, C7, C9分别死在(顺序可能不正确): 1:00, 9:40, 5:00
+3), 平均6.8次/分钟. 
+
+3, (14:39 2011-5-20)
+1), wakeup后执行的代码是:
+VIM_PMU_RestoreContext()(pmu/pmu.s)
+执行完成后, 会返回_VIM_PMU_Sleep()函数的"PMU_DBG("sleep return!");"位置, 然后继续运行. 
+2), 可以继续做的实验: 
+BootScript[](aasp/bootscript.c). 宏定义VIM_GPU_2D_REPEAT_TEST里面的代码: 
+    "write_fastwakeup_pmu_reg 0x2",
+注释, 改为:
+    "write_fastwakeup_pmu_reg 0x82",
+0x82是在三星ddr3使用的配置, dllon_after_selfref
+
+
+21:13 2011-5-19
+VC0882, SV, 注意事项, pmu, pmic, VA7882, audio
+1, VA7882如果hardware电源打开, 此时如果要切换到软件控制模式, 需要先打开en, 再切换mux.
+2, audio agc. \todo 见beizhan邮件. 
+
+22:03 2011-5-19
+VC0882, SV, wakeup source
+irq chip中set_wake表示设置唤醒源. 
+
+9:19 2011-5-20
+VC0882, SV, aiguo
+1, 最近组里人员流动很大，和我一年来的同事都走光了。
+团队的凝聚力。
+2, 培训：
+最近项目事情比较紧，没有时间听icp, ic部门的培训。
+3, 883动态。
+对cortex-A15双核很感兴趣。
+
+9:32 2011-5-20
+VC0882, SV, AE, 882 pad测试
+1, 使用sdcard, external_sd可能会出现软件不兼容的问题。
+es文件浏览器，external_sd打开pdf后，每次都会退回sdcard目录。
+
+10:00 2011-5-20
+ae sync up
+1, 上班时间改为9:15.
+2, 给发掘release重要版本：pm, without pm.
+
+11:34 2011-5-20
+VC0882, SV, AE, sleep
+1, 代码阅读
+1), set_wakeup.
+2), Linux memory分频: mem_types, create_mapping. 
+
+15:17 2011-5-20
+电源总结, \todo 整理
+电源没有打开. 造成sensor初始化失败. 
+但是bianrongguang板子上可以, 说明可能是漏电给camera供了电.
+
+16:00 2011-5-20
+VC0882, SV, AE, power, pmu, modes trans: sleep, suspend/resume不稳定, AE suspend/resume不稳定讨论; 在panda_os上做实验, 确认ddr有无问题
+zhaobeihua, liuzixi, dr.yang, fengbeizhan, zhangjian
+1, check panda_os下ddr enter self-refresh和bootloader里面是否一样.
+一样.
+2, phy的控制有多个来源. iso和pmu lp mode.
+3, ddr sdram要求, ddr3 sdram有最小自刷新: 4 x Trfc, 大约640ns. 
+4, 第二次sleep时, 我写了wfi. 
+无影响. 因为pmu收到software rst后, 只是等延时复位, 不看其它, 也需要管wfi信号.
+5, self-refresh配置.
+无修改. 
+6, pmu software rst配置.
+1), active = 10cycle@XCLK.  无问题. 
+2), delay. 0xffe. 发现配置为0xfff不对. 
+7, 看512info配置. 
+打开了odt, 这样导致, 芯片发热.
+0X60011110=0x10703
+改为
+0X60011110=0x10700
+
+0x60011110, 高4bit改为1. dq, dqs pad的recevier在不使用时关闭, 这样也会降低功耗. 
+[31:28]	io_byte_rcv_pwrdn	4'b0	" Byte lane SSTL IO RECEIVER Power Down.
+0: byte io receiver do not power down.
+1: byte io receiver controlled by hardware.
+"
+
+1, beihua建议:
+是否去掉第二次sleep. 看看是否和第二次有关. 
+2, ddr pattern增大200Mbyte, 确认ddr有无问题. 
+
+19:48 2011-5-20
+现在DE闪可能是priority_en打开了, 这样ddrc仍然会按照id做reorder. 原来yanglei发信说过这个问题. \todo 查yanglei邮件. 
+
+21:17 2011-5-20
+今日工作总结
+1, AE suspend/resume测试中出现的问题讨论，在android里面，各种场景切换的可能性都有，系统需要考虑很全面才可以。
+
+10:55 2011-5-21
+VC0882, SV, AE, power, pmu, modes trans: sleep, AE suspend/resume不稳定, 续
+1, 根据昨天的讨论，我把memory pattern check的区域改为200Mbytes，希望能借此检查出ddr有无问题。
+今天早晨发现两个板子都跑到系统调度中就死了
+TCT_Schedule_Loop
+	0x0009a9b8:    e5920000    ....    LDR      r0,[r2,#0]
+	0x0009a9bc:    e3500000    ..P.    CMP      r0,#0
+	0x0009a9c0:    1a000002    ....    BNE      TCT_Schedule_Thread ; 0x9a9d0
+	0x0009a9c4:    e5930000    ....    LDR      r0,[r3,#0]
+	0x0009a9c8:    e3500000    ..P.    CMP      r0,#0
+	0x0009a9cc:    0afffff9    ....    BEQ      TCT_Schedule_Loop ; 0x9a9b8
+1), 上传昨天代码
+为了进一步调试sleep/wakeup不稳定问题修改代码
+(1), target pmu_sv_fast_wakeup_repeat_exceptionInSram和pmu_sv_fast_wakeup_repeat的
+-define=VIM_PMU_VA7882_FASTSLEEP_TEST=1
+改为
+-define=VIM_GPU_2D_REPEAT_TEST=1 -define=GPU_POWER_ON_BUG_WORK_AROUND=1
+这样这两个测试和gpu测试里面的流程是一致的, 可以保证修改sleep/wakeup流程不会影响gpu上电bug work around流程。
+删除pmu_sv_fast_wakeup_repeat_exceptionInSram_WithGpuWorkAround. 
+(2), BootScript的VIM_GPU_2D_REPEAT_TEST和WakeupScript4gputest部分加入ifdef DE, ifdef GPU定义，保证(1)中target运行不会提示de或gpu命令未定义。
+(3), VIM_DRIVER.h: 如果定义了gpu, 自动定义GPU_POWER_ON_BUG_WORK_AROUND宏.
+(4), VIM_DRIVER_Typedef.h: 定义原来没有定义过的size
+
+2), 看看代码段是否有变化。
+无变化。
+3), 看来只能先分析程序跑到什么地方了.
+sram backup后面是malloc一个32k的memory。
+。。。
+发现自己分配后没有释放。内存泄露了。。。
+昨天的实验白做了...
+PMU_TEST_NormalToSleep里面加入：
+PMU_MSG("max available memory. 1st: 0x%x, 2nd: 0x%x\n ",VIM_MMU_CacheGetAvailable(0), VIM_MMU_CacheGetAvailable(1));
+但是VIM_MMU_CacheGetAvailable(number)只能得到第number大可用的memory，并不是系统剩余memory，所以不一定可以确认有无内存泄露。只能做个参考，如果内存泄漏很大才能看出来。
+4), 上传代码
+1, pmu_test_api.c sleep里面加入max memory查询，看看有没有大的内存泄露。
+2, 调整pmu pmu_sv_fast_wakeup_repeat_exceptionInSram_withGpuPowerOnWorkAround和pmu_sv_f ast_wakeup_repeat_exceptionInSram定义。加入de, tools。 后者去掉gpu power on work  around流程。
+
+16:09 2011-5-21
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定, AE suspend/resume不稳定, panda_os下实验
+1, 今天有一个板子容易唤醒后跑死. 我在restore函数里面加了打印, 发现是在restore函数完成后, 跳回到C语言里面出的错. 
+M0x00000011
+H0x800421f8ABCD
+这样的话, 感觉是memory问题. 
+第二次出错, 现象一样. 
+2, 原来的打印加的位置有问题, 可能会破坏现场. 把打印信息放到最后恢复arm rx寄存器之前. 同时在v8sram_pm_sleep里面增加打印信息(uImage_20110521_163350).
+3, 用自动测试看看能否复现这个问题. 
+自动测试也会出错: 15次. 
+4, 同时加入堆栈打印, 看看会不会是堆栈数据出错? suspend时死了. 
+
+18:40 2011-5-21
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 调试panda_os suspend/resume稳定性, 和昨天相比加入了200Mbyte memory check. 目前三个板子都还活着. 一个带gpu work around流程的板子已经跑了4小时没有错. 
+2), AE android下suspend/resume稳定性继续debug, 发现在mmu打开后出错. 
+
+9:27 2011-5-23
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定, AE suspend/resume不稳定, panda_os下实验: 5/21实验结果
+1, 周末结果
+10.0.26.57
+ic11_6
+123456
+
+com5板子又重启了, 可能是电源超载造成的? 
+加gpu work around流程的板子反而没有问题. 这个流程和android关系不大, 我理解要么是流程问题, 要么是板子问题. 建议zhaoyuan用更多板子实验, 可以用自动测试工具. 
+
+2, (9:58 2011-5-23)
+VC0882, SV, power, sleep, wakeup问题
+周末实验结果：两个用gpu work around的板子都没问题(无gpu case)，没有加gpu work around的板子三次都重起，感觉是电源带负载能力问题。
+和dr.yang讨论：建议加gpu测试，但关闭odt.
+zj: 这样和ae已有流程是一致的。
+
+10:32 2011-5-23
+VC0882, SV, icp sync up
+1, ae release文档
+画流程图。
+bootloader: 使用推荐。sd no crc, nfc with crc.
+
+11:45 2011-5-23
+VC0882, SV, 客户, 882项目情况
+D:\work\VC0882\Documentation\客户进度汇总.xls
+ddr3用micron和elpida.
+
+13:03 2011-5-23
+时间管理
+0, 9:20
+
+1, 本日
+1), VC0882 ICP sync up. 见"10:32 2011-5-23".
+2), VC0882 AE sync up. 
+3), 13:04-14:28 给sunfengqiang suspend/resume自动测试工具. 
+
+13:06 2011-5-23
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定, 续: 继续查问题; sleep自动测试, 续, 多台机器同时测试
+1, zhaoyuan安排QA帮我测试. 
+sunfangqiang会帮忙. 
+发信
+1), 测试流程:
+(1), 烧写(\\10.0.12.160\share\androidbuilds\vortex_20110523_suspend_test.pak), 复制"\\10.0.12.160\share\zhangjian\auto_suspend.sh"到882 pad sd内卡. 
+(2), android主界面出现后, 输入如下命令. 
+bash-4.1# hwclock -w
+
+bash-4.1# sh /mnt/sdcard/auto_suspend.sh &
+1466
+bash-4.1# alarm after 33 seconds
+(3), 882大约会1-2分钟休眠唤醒一次. 希望能测试1小时以上. 
+
+2, 今天为了测试加入打印堆栈数据的函数, 打印当前堆栈开始20个word的数据, 如果是打开mmu后出错, 我感觉最大可能是堆栈出错.
+10004:
+        ldr     r0, [r5]
+        bl      printhex8
+        ldr     r0, =string_cr_lr
+        bl      printascii
+        add     r5, r5, #4
+        subs    r4, r4, #1
+        bne     10004b
+        ldmfd   sp!, {r0-r12}
+        mov             r0, #1
+        ldmfd   sp!, {pc}
+1), 前两个测试的板子都没有死, 用bianrongguang有漏电的板子测试: 
+H0x80041b64ABCDc046f514
+c0033fb4
+c0041b64
+c061112c
+f0051000
+fff7bfff
+ffffffff
+d0016b48
+d005df84
+c047206c
+00000000
+d005de9c
+d005dea0
+c0040f38
+d005debc
+d005dea0
+c0040ea4
+c0040f1c
+00000000
+003fffff
+
+正确log:
+H0x80041b64ABCDc046f514
+c0033fb4
+c0041b64
+c061112c
+f0051000
+fff7bfff
+ffffffff
+d0016b48
+d005df84
+c047206c
+00000000
+d005de9c
+d005dea0
+c0040f38
+d005debc
+d005dea0
+c0040ea4
+c0040f1c
+00000000
+003fffff
+二者一致, 说明堆栈并没有出错.
+
+注: 操作步骤:
+使用vortex_20110523_suspend_test__FailDebug.pak, 
+并修改u-boot中环境变量
+ramfs_args=setenv bootargs console=${console} mem=${dram} init=/init
+为
+ramfs_args=setenv bootargs console=${console} mem=${dram} init=/init no_console_suspend
+
+3, 这样看起来是driver resume有问题. 为了排除问题, 在每个driver resume前都加入打印, 按照打印顺序检查. 
+结果发现在v8sram_pm_sleep()函数的"sleep return, retore mmu table done."后面, v8sram_pm_sleep()函数返回后的打印没有. 
+
+4, 仍然是同一个板子, 加入更多堆栈(20 -> 40 words)打印和v8sram_pm_sleep return后的level debug打印信息后(uImage_20110523_205651), 这次死在打印堆栈中:
+H0x80042114ABCDc046f514
+c0033fb4
+c0042114
+c061112c
+f0051000
+f0002000
+fff7bfff
+ffffffff
+d005df84
+c0
+
+5, 这个现象很想ddr不稳定. 用panda_os代码测试这个板子. 
+(9:27 2011-5-24)跑了19次就死了. 这个板子修改. 修改后还是有10ma漏电, zhanguo帮我去掉了ESD管子, 就没有漏电了. 去掉后, 关闭屏幕和休眠时功耗还是高于(390ma, 90ma)其它板子(260ma, 20ma, 精度10ma), 休眠测试31次出错. 后来发现是有个电阻没有焊, 修改后继续实验.
+注: 在ZhanGuo修改时, 测试了另一个修改过漏电的板子: 跑了65次没有跑死.
+但是, 使用上面测试的板子修改漏电后, 跑了18次跑死. 这个板子还是用加入更多打印信息的版本(vortex_20110523_suspend_test__FailDebug.pak, putty_20110524_190527), 看看死在什么地方. 
+
+6, (9:37 2011-5-24)对于android下有问题的板子, 换成ICP的panda_os环境确认是否是板子硬件问题. 但是发现焼写比较麻烦, 需要参考现在dfu. 
+
+跑死:
+[MMU   ERROR]caller  undef
+[INT   MSG]
+create the isr ,the name is NUM44 the priority is 1
+[INT   MSG]
+create the isr ,the name is NUM45 the priority is 1
+[INT   MSG]
+create the isr ,the name is NUM46 the priority is 1
+[INT   MSG]
+create the isr ,the name is NUM47 the priority is 1
+[INT   MSG]
+create the isr ,the name is NUM48 the priority is 1
+data abort lr = 0x342838, DDRC_CFG1 = 0
+arm DFAR = 0 DFSR = 80D
+
+改为pmu_sv_fast_wakeup_repeat_exceptionInSram_withGpuPowerOnWorkAround, 仍然出错: 
+data abort lr = 0x342838, DDRC_CFG1 = 0
+arm DFAR = 0 DFSR = 80D
+
+1), 烧写流程. 
+按照正常流程烧写映像: 
+\\10.0.12.160\share\androidbuilds\Only4SuspendDebug\vortex_20110523_ICPSleepGPuWorkAround.pak
+烧写过程中, vdfu消失后, 拔掉usb线, 关闭焼写工具.
+2), 插上串口线, 输入如下命令:
+pmu  :/>
+pmu  :/>pmic
+pmic  :/>writereg 0xd0 1
+[PMIC]->_DO_PMIC_WriteReg()
+[PMU   MSG]     TEST PMIC: write register: addr = 0xD0, val = 0x01
+pmic  :/>writereg 0xd2 1
+[PMIC]->_DO_PMIC_WriteReg()
+[PMU   MSG]     TEST PMIC: write register: addr = 0xD2, val = 0x01
+pmic  :/>writereg 0xa2 2
+[PMIC]->_DO_PMIC_WriteReg()
+[PMU   MSG]     TEST PMIC: write register: addr = 0xA2, val = 0x02
+pmic  :/>pmu
+pmu  :/>write_fastwakeup_pmu_reg 0x2
+[PMU]->do_pmu_WriteFastWakeupPmuReg()
+[PMU   MSG]     set pmu info done.
+pmu  :/>wakeup_source 2 8
+[PMU]->do_pmu_EnWakeupSource()
+[PMU   MSG]     do_pmu_en_wakeup_source...
+
+pmu  :/>
+
+7, (9:17 2011-5-25)
+昨天和前天测试的3-4小时死的是17号板, 这个板子后来没有实验.
+4号板测试了107次没有死. `
+3: 555次, 8: 221次. 
+目前测试情况见"10:55 2011-5-25".
+
+15:04 2011-5-23
+VC0882, SV, 竞争对手, RK2918, amlogic
+1, cube U9gt评测
+大家集中说到电池电量非常不准和wifi信号差的问题, 有人也说到发热问题. 
+http://www.duxinhappy.cn/index.php/archives/217
+http://www.51cube.com/bbs/viewthread.php?tid=29261
+
+2, amlogic游戏视频
+1), 实况足球2011
+http://v.youku.com/v_show/id_XMjQ4NDgyOTU2.html
+2), 刺客信条
+http://v.youku.com/v_show/id_XMjQ4Mzg2NDA0.html
+
+19:29 2011-5-23
+软件技巧, Linux, shell, bash, 统计计数行数, wc -l
+
+10:58 2011-5-24
+VC0882, SV, AE, 量产工具, AE打包工具
+PARTITION_SECTORS单位是section(512bytes). 
+sd打包工具, fat分区没法直接调整, 分区后剩余空间是fat的.
+Partition_Data现在是1Gbytes, 可以改为512MBytes. 
+[PARTITION_SECTORS]
+	Partition_System = 0x80000
+	Partition_Data = 0x200000
+	Partition_Cache = 0x80000
+	Partition_Recovery = 0x40000
+	Partition_Boot = 0x40000
+	LABEL = VORTEX
+
+12:38 2011-5-24
+VC0882, SV, AE, 触摸屏, 多点触控, 电容触摸屏校准
+在android recovery模式下, 会对触摸屏进行校准, 此时手不能放到触摸屏上, 否则校准后无法使用(我自己的理解: 因为触摸屏芯片校准时相当于设置了基准电容, 如果把手放上去, 以后手按上去还是会认为是没有手按下去). 
+校准后会删除脚本的脚本, 所以以后启动时系统不会校准. 可以用如下命令脚本, 输入命令行后, 要等1-2秒.
+echo > /sys/class/input/input3/calibration
+(18:06 2011-5-28)
+echo >  /sys/devices/platform/v8-i2c.1/i2c-1/1-0046/calibrate
+
+17:47 2011-5-24
+VC0882, SV, AE, 量产工具, dfu编译target, 应该使用sdio2
+build -m=otg,nfc,sd,pmu,i2c,clkrst,ddr,fat,dmac,mem -dram=128M -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 -define=__SD_DFU_TOOLS_DEF__=1  -define=CUTINOUTTEST_ENABLE=1 -define=__SD_DFU_SD_NO__=2 -sv
+
+19:35 2011-5-24
+VC0882, SV, AE, bootloader fail
+目前有两个板子在反复按复位后很容易出错. 
+其余板子不清楚. 
+
+M0x00000001	//SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH
+M0x000000d0	//SYS_CACHE_ICACHE_ON
+M0x00000070	//SYS_CLK_SWITCH_CPUPLL_SUCCESSFUL
+M0x00000072	//SYS_CLK_SWITCH_CPU_SUCCESSFUL
+M0x0000007e	//SYS_CLK_SWITCH_EMI_SUCCESSFUL
+M0x00000064	//SYS_CLK_SWITCH_BY_STRAPPIN_CORE_SUCCESSFUL
+M0x00000066	//SYS_CLK_SWITCH_BY_STRAPPIN_MODULE_SUCCESSFUL
+M0x00000002	//SYS_UART_INIT_DONE_AFTER_STRAPPIN_SWITCH
+M0x00000063	//SYS_CLK_SWITCH_BY_STRAPPIN_SUCCESSFUL
+M0x00000003	//SYS_TIMER_INIT_DONE
+H0x00000000
+M0x00000958	//PADC_NO_KEYDONW
+H0x00000001
+M0x00000008	//SYS_SD_HC_BOOT_START
+
+brg:
+M0x00000001
+M0x000000d0
+M0x00000070
+M0x00000072
+M0x0000007e
+M0x00000064
+M0x00000066
+M0x00000002
+M0x00000063
+M0x00000003
+H0x00000000
+M0x00000958
+H0x00000001
+M0x00000008
+M0x0000000d	//SYS_LOAD_IMAGE_FAIL
+R0x00000425
+M0x0000000b
+
+21:59 2011-5-24
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 继续调试AE suspend/resume不稳定bug. 
+(1), 根据最近两天在AE 7寸板上的实验, 目前认为: suspend/resume稳定性和odt打开有关, 和android的suspend/resume流程无关. 
+(2), suspend/resume和板子是否漏电有关: 
+目前2块suspend/resume稳定的板子都是不漏电的. 
+有一块漏电的板子修改后suspend/resume仍然不稳定.
+其余跑死的板子也是漏电的. 
+今天晚上继续跑三块板子, 看看什么现象.
+
+2), AE同事发现按8寸板reset后, 一级bootloader有时sd初始化失败. 
+
+2, 明日计划
+1), 最近几天做了一些实验. 明天计划review android下suspend/resume代码. 
+
+10:34 2011-5-25
+VC0882, SV, AE, power, pmu, Linux kernel suspend/resume
+1, Linux kernel suspend/resume参考代码
+drivers/video/skeletonfb.c
+#ifdef CONFIG_PM
+static int xxxfb_suspend(struct platform_device *dev, pm_message_t msg)
+{}
+static int xxxfb_resume(struct platform_dev *dev)
+{}
+#else
+#define xxxfb_suspend NULL
+#define xxxfb_resume NULL
+#endif /* CONFIG_PM */
+
+static struct platform_device_driver xxxfb_driver = {
+        .probe = xxxfb_probe,
+        .remove = xxxfb_remove,
+        .suspend = xxxfb_suspend, /* optional but recommended */
+        .resume = xxxfb_resume,   /* optional but recommended */
+        .driver = {
+                .name = "xxxfb",
+        },
+};
+
+2, 阅读"Documentation/power/devices.txt"
+/sys/devices/.../power/wakeup
+
+10:44 2011-5-25
+VC0882, SV, 关注2片选ddr调试
+1, 0x0开始的地址只能访问256Mbyesmemory, 要访问256Mbytes以上的memory需要用实际的ddr地址(0x80000000)为基址访问, 也就是0x90000000表示256Mbytes memory.
+
+10:53 2011-5-25
+时间管理
+0, 9:12
+
+10:55 2011-5-25
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定, 续, 总结已有实验情况, review代码
+1, 截止目前suspend/resume稳定性进展
+1), 实验情况: 
+实验了zj, jy, brg, 1, 3, 4, 8, 17 8块板子. 其中两块板子容易死(20次以内或半小时以内), 其余板子的测试次数有些少, 需要修改后, 把小于200次的做进一步测试. 
+这两个板子硬件情况: 板子关机无漏电, 功耗正常(待机界面, early suspend: 260ma, suspend: 20ma). 
+详细情况如下: 
+brg: 20次以内跑死.
+1: 20次以内跑死.
+17: 两次是3-4小时(150-200次)跑死.
+zj: 跑了20小时没死.
+jy: 两次是3-4小时(150-200次)没死.
+3: 555次没死.
+4: 107次没死.
+8: 221次没死.
+
+3号板是5月24日晚同事帮我测试的. 
+4号板是5月24日晚我自己测试的.
+8号板是5月24日晚上测试同事帮我测试的. 
+17是5月23日测试同事帮我测试的.
+其余板子都是我自己测试的. 
+
+2), 具体现象:
+目前所有跑死的板子都是在唤醒后(第二次启动), 一级boot完成, 系统恢复最小系统现场时跑死(没有运行任何的driver).
+这样的话, 其实还是可以先用memory比较的方式试试. 或者是启动时打印memory数据. 
+但是有一次是在打印堆栈过程中跑死. 按理说循环打印堆栈不应该有什么问题. 难道中毒发生? 但是bootloader里面应该是没有打开中断的. 
+
+2, 今天发现1号板还有其它问题: 低电关机后, 插入charger开机, 一级boot启动正常, 但是u-boot启动失败(连打印都没有), jinyang在17号板上实验, 看看有没有这个问题(我感觉应该没问题). 所以我感觉1号板是硬件问题. 所以现在把brg板子也排除一下硬件问题. 
+
+3, brg板:
+1), 看看1号板的低电启动问题: 低电关机后, 可以启动android, 然后系统自动低电关机(实验两次, 都没有跑死). 但是又发现有漏电, 屏背光也不亮了. 找xiaopan去修(同时引出ddr供电, 看看是否是ddr供电不稳导致的).
+修改后, 更加不稳定, 两次实验都出错, 都是resume时bootloader重新启动: 
+(1), resume时, 没有打印fast wakeup信息: 
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+M0x00000001
+M0x000000d0
+M0x00000070
+(2), resume时, 打印fast wakeup, 然后重启.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+M0x00000001
+M0x000000d0
+M0x00000013
+M0M0x00000001
+M0x000000d0
+(3), 把地线移近一些, 实验, 仍然很快死(resume后打印堆栈后跑死). 再想实验时ddr 1.5v电流有时到1A, 没敢继续实验. 
+2), dr.yang建议换882, VA7882实验. 但是xiaopan说没有料. 
+
+4, 测试三个板子: 
+putty_20110525_214747, putty_20110525_213958, putty_20110525_215324
+
+5, (9:23 2011-5-26)
+9: 1475没死.
+13: 78死: 堆栈后. 再次测试60次没有死. 
+14: 10次以内死, 707没死(putty_20110525_2147470. 再次测试10次没有死. 
+ZJ: 这个问题又有些反复, 自动测试工具也不能过于相信. 
+
+20:09 2011-5-25
+业内论坛, gpu
+1, 很好的gpu论坛
+http://www.opengpu.org
+
+20:26 2011-5-25
+VC0882, SV, arm, arm汇编, 背光省电算法, 有意义的算法
+1, 大小写问题, 今天shuyu用yanglei的代码. 发现里面凡是arm汇编, 都需要用小写的字母, 例如"R4"应该写为"r4".
+yanglei背光算法: D:\work\VC0882\marb_performance_monitor\背光省电算法_20110525.txt
+
+22:00 2011-5-25
+VC0882, SV, 工作总结
+1, 今日工作总结
+今天主要工作是继续分析suspend/resume稳定性.
+1), 总结到今天为止的现象(附后). 
+2), 分析bianrongguang板子的硬件问题: 用直流电源给ddr sdram供电, 看看是否影响了suspend/resume稳定性, 修改后稳定性反而变差. 
+dr.yang认为是引出电源后加入了一些寄生参数, 可能导致稳定性变差. dr.yang担心之前板子的漏电问题导致VC0882, VA7882不稳定, 建议更换芯片, 但是6层没有芯片. 
+3), android suspend/resume, 晚上继续实验3个板子, 看看效果. 
+4), 支持lidongliang调试bus切频.
+
+2, 明日工作计划
+1), 整理并讨论release给AE的文档. 
+
+3, 到目前位置的Android suspend/resume问题
+
+13:46 2011-5-26
+VC0882, SV, AE release流程
+根据checklist检查各模块有无问题. 
+如果有差异, 找xxx确认.
+
+16:43 2011-5-26
+时间管理
+0, 9:20-23:45
+
+1, 本日
+1), 1h 合并SV总结文档. 
+2), 1.5h ICP sync up. 
+3), 1h 支持beihua调试elpida ddr3, 发现可能不是clean build. 
+4), 工作总结. 见"23:33 2011-5-26". 
+
+16:54 2011-5-26
+VC0882, 成本
+1, full layer tapeout 50$. 
+882一个芯片利润在2$. 
+
+40nm tapeout一次100万$, 换analog需要100万$. 
+
+21:33 2011-5-26
+wifi稳定性基本完成
+驱动和android缺一个接口. 
+dhcp之前会设置full power, dhcp后会设置节能模式, 设置之前会读模式. 387驱动之有设置接口, 没有get接口, 所以wifi功耗偏高.
+
+22:12 2011-5-26
+AE suspend/resume
+1, fanzhijun今日邮件(含zhangjian回复):
+检查了一遍,没有发现wakeup能引起100mA*4.2的地方:
+1         * bash-4.1# vmtool 0x60011000 0x400  * =~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2011.05.26 18:23:23 =~=~=~=~=~=~=~=~=~=~=~=
+2         * [     0] [60011000] [1370020]       [     0] [60011000] [1370220] [init_bypass]    
+           * [     1] [60011004] [0]  *         [     1] [60011004] [3400] [data training]        ZJ: 由于70地址溢出造成的, 修正dt_addr既可
+8         * [     6] [60011018] [ff]  * [     6] [60011018] [2100004] [self refresh]  ZJ: sleep时force enter self-refresh会修改这个寄存器, 无问题. 
+9         * [     7] [6001101c] [ff]  * [     7] [6001101c] [2100004] [reserved]
+23       * [    21] [60011054] [800000]  * [    21] [60011054] [0] [zq_ctrl1, cal_en未开]   ZJ: bootloader pmu info里面无此寄存器, 所以没法恢复 
+24       * [    22] [60011058] [800000]  * [    22] [60011058] [0] [zq_ctrl2, zqcs_en未开]          ZJ: bootloader pmu info里面无此寄存器, 所以没法恢复
+25       * [    23] [6001105c] [800000]  * [    23] [6001105c] [0] [reserved]
+30       * [    28] [60011070] [200000]  * [    28] [60011070] [580c3d98][ DT_ADDR,]    ZJ: 地址错误, 我感觉会导致dt其实没有做. 请beihua确认. 
+70       * [    68] [60011110] [f0010700]  * [    68] [60011110] [10700] {这个已知,只有10ma影响} ZJ: bootloader pmu info里面无此寄存器, 所以没法恢复
+
+2, data training地址是先移位后转为物理地址的, 所以结果不对. 
+改为先转为物理地址再移位. 
+修改后, 看看sleep前后寄存器配置. 
+wakeup
+[     0] [60011000] [1370220]
+[     1] [60011004] [0]
+[     2] [60011008] [452]
+[     3] [6001100c] [12f00000]
+[     4] [60011010] [220]
+[     5] [60011014] [0]
+[     6] [60011018] [2100004]
+[     7] [6001101c] [2100004]
+[     8] [60011020] [115]
+[     9] [60011024] [3011000]
+[    10] [60011028] [55b600d]
+[    11] [6001102c] [55b600d]
+[    12] [60011030] [a201145]
+[    13] [60011034] [c2104050]
+[    14] [60011038] [e568d6]
+[    15] [6001103c] [e568d6]
+[    16] [60011040] [361004]
+[    17] [60011044] [29000]
+[    18] [60011048] [0]
+[    19] [6001104c] [0]
+[    20] [60011050] [3b00000]
+[    21] [60011054] [0]
+[    22] [60011058] [0]
+[    23] [6001105c] [0]
+[    24] [60011060] [319af]
+[    25] [60011064] [dd22ee11]
+[    26] [60011068] [7788bb44]
+[    27] [6001106c] [f00]
+[    28] [60011070] [100c222c]
+[    29] [60011074] [2222]
+[    30] [60011078] [0]
+[    31] [6001107c] [0]
+[    32] [60011080] [3707000]
+[    33] [60011084] [0]
+[    34] [60011088] [0]
+[    35] [6001108c] [0]
+[    36] [60011090] [0]
+[    37] [60011094] [307000]
+[    38] [60011098] [307000]
+[    39] [6001109c] [307000]
+[    40] [600110a0] [307000]
+[    41] [600110a4] [0]
+[    42] [600110a8] [0]
+[    43] [600110ac] [0]
+[    44] [600110b0] [0]
+[    45] [600110b4] [0]
+[    46] [600110b8] [ffffffff]
+[    47] [600110bc] [ffffffff]
+[    48] [600110c0] [ffffffff]
+[    49] [600110c4] [ffffffff]
+[    50] [600110c8] [3333]
+[    51] [600110cc] [3333]
+[    52] [600110d0] [3fff8f4f]
+[    53] [600110d4] [ff0000]
+[    54] [600110d8] [ff0000]
+[    55] [600110dc] [ff0000]
+[    56] [600110e0] [ff0000]
+[    57] [600110e4] [ff0000]
+[    58] [600110e8] [ff0000]
+[    59] [600110ec] [ff0000]
+[    60] [600110f0] [ff0000]
+[    61] [600110f4] [0]
+[    62] [600110f8] [0]
+[    63] [600110fc] [0]
+[    64] [60011100] [0]
+[    65] [60011104] [0]
+[    66] [60011108] [0]
+[    67] [6001110c] [0]
+[    68] [60011110] [10700]
+[    69] [60011114] [0]
+
+power on
+[     0] [60011000] [1370020]
+[     1] [60011004] [0]
+[     2] [60011008] [452]
+[     3] [6001100c] [12f00000]
+[     4] [60011010] [220]
+[     5] [60011014] [0]
+[     6] [60011018] [ff]
+[     7] [6001101c] [ff]
+[     8] [60011020] [115]
+[     9] [60011024] [3011000]
+[    10] [60011028] [55b600d]
+[    11] [6001102c] [55b600d]
+[    12] [60011030] [a201145]
+[    13] [60011034] [c2104050]
+[    14] [60011038] [e568d6]
+[    15] [6001103c] [e568d6]
+[    16] [60011040] [361004]
+[    17] [60011044] [29000]
+[    18] [60011048] [0]
+[    19] [6001104c] [0]
+[    20] [60011050] [3b00000]
+[    21] [60011054] [800000]
+[    22] [60011058] [800000]
+[    23] [6001105c] [800000]
+[    24] [60011060] [319af]
+[    25] [60011064] [dd22ee11]
+[    26] [60011068] [7788bb44]
+[    27] [6001106c] [f00]
+[    28] [60011070] [200000]
+[    29] [60011074] [2222]
+[    30] [60011078] [0]
+[    31] [6001107c] [0]
+[    32] [60011080] [3707000]
+[    33] [60011084] [0]
+[    34] [60011088] [0]
+[    35] [6001108c] [0]
+[    36] [60011090] [0]
+[    37] [60011094] [307000]
+[    38] [60011098] [307000]
+[    39] [6001109c] [307000]
+[    40] [600110a0] [307000]
+[    41] [600110a4] [0]
+[    42] [600110a8] [0]
+[    43] [600110ac] [0]
+[    44] [600110b0] [0]
+[    45] [600110b4] [0]
+[    46] [600110b8] [ffffffff]
+[    47] [600110bc] [ffffffff]
+[    48] [600110c0] [ffffffff]
+[    49] [600110c4] [ffffffff]
+[    50] [600110c8] [3333]
+[    51] [600110cc] [3333]
+[    52] [600110d0] [3fff8f4f]
+[    53] [600110d4] [ff0000]
+[    54] [600110d8] [ff0000]
+[    55] [600110dc] [ff0000]
+[    56] [600110e0] [ff0000]
+[    57] [600110e4] [ff0000]
+[    58] [600110e8] [ff0000]
+[    59] [600110ec] [ff0000]
+[    60] [600110f0] [ff0000]
+[    61] [600110f4] [0]
+[    62] [600110f8] [0]
+[    63] [600110fc] [0]
+[    64] [60011100] [0]
+[    65] [60011104] [0]
+[    66] [60011108] [0]
+[    67] [6001110c] [0]
+[    68] [60011110] [f0010700]
+[    69] [60011114] [0]
+
+修改后, 1号板, 还是很快就死了. 重启后继续实验: 也是很快死了. 
+brg板子也就跑了20次就死了. 
+综合今天dongliang发现的ddrc配置差异, 如果是由于一些没有开部分zq功能造成的, 得看看能否fast wakeup后补齐再设置. 否则就只能使用normal wakeup了. 
+
+(9:26 2011-5-27)
+13(shuyu), 230次跑死. 
+jinyang板子: 655次没有跑死. 
+
+23:33 2011-5-26
+VC0882, SV, 工作总结
+1, 今天工作总结
+1), 继续改进AE suspend/resume稳定性. 在dongliang和fanzhijun提醒下, 发现fast wakeup时地址配置出错, 这样可能造成data training没有成功. (修改后, 有两块不稳定的板子仍然10次或20次以内出错). 
+同时也发现fast wakeup和power on/normal wakeup的ddr配置有差异(详见fanzhijun邮件), 这可能造成fast wakeup后ddr稳定性变差(需要beihua确认). 
+2), 支持shuyu编译背光省电算法的neon部分. 
+3), VC0882 ICP sync up. 
+
+2, 次日工作计划
+1), 和beihua确认ddr配置. 
+2), 如果fast wakeup有风险, 尝试用normal wakeup(代码修改很少). 
+
+10:01 2011-5-27
+时间管理
+0, 9:23
+
+1, 本日
+1), 50' VC0882芯片应用. 见"10:07 2011-5-27".
+2), AE suspend/resume稳定性: 问beihua ddr配置问题. 
+3), AE suspend/resume稳定性: 实验normal wakeup.
+
+10:07 2011-5-27
+VC0882, SV, 芯片应用
+1, 882做电纸书AP: 
+882 halt模式可以用于电纸书, 屏幕不更新时, 整个882都可以进入低功耗模式, halt恢复状态很快, 所以也不会影响用户操作.
+halt也可以用于DBI屏的系统. 
+
+2, 882做大学计划
+现在学校里面也会逐步做更新一代的处理器, 从学校入手一方面可以扩大影响力, 将来8系列芯片市场会更好; 另一方面利用学校的资源, 也可以把系统做的更好. 
+大学计划和开源项目, 感觉都是一种比较长久方式. 要想真正把芯片做好, 都是需要的. 
+
+3, 利用882多个sdio口做系统快速启动
+android系统启动时间偏长. 
+如果能把android系统最小系统(能保证UI使用的部分, 肯定小于512M)直接保存在sd卡里面, 这样就减少了系统加载的时间, 可以提高系统启动速度. 但是这样加载镜像的速度肯定是瓶颈, 不论sd还是nand加载512M的映像估计都需要20秒一样. 如果我们加载映像时同时从两个sd卡读映像, 这样就有希望在10-15秒完成加载, 可能可以做到20秒的系统快速启动. 
+
+10:28 2011-5-27
+VC0882, SV, 竞争对手, rockchip
+一人一本下一款产品会使用RK2918
+步步高一直在做MID, 用了marvell, 高通方案. rockchip方案也有.　以前两个为主.
+
+14:10 2011-5-27
+VC0882, SV, AE suspend/resume
+1, 现在power on后运行稳定, wakeup后很快跑死. 应该是suspend/resume引入的问题.
+1), 板级影响:
+电源: wakeup后电源不稳.
+信号: wakeup时cke有抖动. 
+2), IC设计风险:
+gpu work around流程. 
+3), 软件
+power on和ddr配置差异. 
+
+15:13 2011-5-27
+VC0882, SV, ddr, 支持深圳AE同事
+1, fengbeizhan转发李建平邮件_20110527
+我在U-BOOT里测试内存空间结果如下：
+vc088x # mw 90000000 aaaa
+vc088x # mw a0000000 bbbb
+vc088x # mw b0000000 cccc
+vc088x # md 90000000 1
+90000000: 0000cccc    ....
+vc088x # md a0000000 1
+a0000000: 0000bbbb    ....
+vc088x # md b0000000 1
+b0000000: 0000cccc    ....
+vc088x # md 80000000
+80000000: 0000bbbb    ....
+vc088x #
+从以上数据可以知道，我们其实上只能用到512M内存。
+因为我们在U-boot中并未打开MMU，直接使用物理地理的，不存在地址转换的过程，所以我认为0xa0000000 与0x80000000地址是重合的, 0xb0000000 与0x90000000地址是重合的。
+我想知道我们内存控制器中每个BANK的内存开始地址和最大数。
+
+2, zhangjian回复
+因为系统中只配置了512MBytes, 所以大于512Mbytes的空间是绕回的. 也就是512MBytes-1GBytes和0-512MBytes是一样的. 
+0x60011004[10]表示访问是否溢出: if address to ddr is larger than used all external DDR-SDRAM max address density,then this bit will be set to 1'b1. 
+
+rank0起始地址: 0x80000000
+rank1起始地址: 0x80000000+rank0_memory_size. 
+每个rank的最大支持8Gbit. 
+
+18:12 2011-5-27
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 继续调试AE suspend/resume问题. 
+(1), 根据beihua建议修改0x60011034 0xC2104050改为0xC3804090.
+(2), 和zhaoyuan, bianrongguang, jinyang讨论进展, 并做了分工:
+zhangjian实验7寸android有无问题.
+jinyang检查最不稳定的1号板板级问题. 
+bianrongguang查suspend/resume不稳定和gpu work around流程有无关系(实际也是确认gpu work around流程有无问题).
+
+14:00 2011-5-28
+VC0882, SV, AE, power, pmu, mode trans: sleep, 查sleep不稳定, 续, wakeup后不再data training
+1, 昨天实验的7寸882没有问题。在15层实验另外三个板子.
+0), 昨天晚上跑的版本: putty_com5_20110527_180013.txt
+1), 机器远程信息：
+10.0.26.9
+ic11-11_0
+123456
+2), 跑到18:30, 三个都正常。
+
+2, bianrongguang发现休眠唤醒后，跑死时ddr training结果有时不对。
+但是ddr training值正确时有时也会跑死。
+为了避免data training的错误，在wakeup时使用power on的dt结果。
+发现原来跑死的1号板稳定性提高：原来20分钟内跑死，第一次实验1个多小时死，第二次实验1.5小时未死。
+另外两个不稳定性的板子，跑了一下午都正确。
+data training问题需要beihua下楼一起调试。
+
+data training版本已提交。
+
+9:39 2011-5-30
+AE suspend/resume
+1, 周六测试:
+7寸板四个跑了24小时都没有死. 
+6, 13：270次没死。
+2: 468次没死。
+liujie的板子可能死了。但是跑了1400次？\todo 问liujie为什么有两个log。
+
+2, (10:00 2011-5-30)讨论
+1), pmu降压.
+2), 换882, VA7882芯片.
+3), beizhan建议对比ddrc和clkrst寄存器. 
+
+3, (13:52 2011-5-30)
+根据beihua建议, 把pmu电压降低到1v1后实验.
+映像: \\10.0.13.101\share\zhangjian\projects\VC0882\code\20110530_AE_suspend_resume_cont6: uImage_20110530_125940, vortex_20110530_Suspend_Resume_Test_8Inch_Pmu1v2_Dt.pak
+1号板: 103次没有死, ddr training一般都很理想, 有时出现
+dt error: H0x00002212, H0x0000000c, 仅有一次出现
+dt error: H0x00002212, H0x0000000d, 这个风险就比较大了. 
+17号板: 124次没有死, ddr training无问题. 
+pmu重新改为1v2:
+1号板两次死都是如此: 
+M0x00000807
+H0x00000212
+M0x00000808
+H0x0000008c
+发现在PMU1v2情况下, 0x2212和0x0c是普遍现象.
+pmu使用1v1有没有什么风险? 
+从理论上分析, 上电后可能也有风险.
+
+pmu改为1.1v的影响:
+1), padc频率可能受限. 
+
+4, 为了方便, 汇总之前dt修改前的情况:
+brg: 20次以内跑死. (bianrongguang自己实验时, 也有600次不死的经历).
+1: 20次以内跑死.
+13: 78死: 堆栈后. 再次测试60次没有死. 
+14: 10次以内死, 707没死(putty_20110525_2147470. 再次测试10次没有死. 
+
+17: 两次是3-4小时(150-200次)跑死.
+
+jy: 两次是3-4小时(150-200次)没死.
+9: 1475没死.
+zj: 跑了20小时没死.
+3: 555次没死.
+4: 107次没死.
+8: 221次没死.
+
+12:55 2011-5-30
+软件技巧, editor, vi, diff
+1, vi基本操作：
+1), "Ctrl+w+w": 在两个窗口之间跳转。
+2, vim diff file1 file2
+1), "]c": 跳转到下一处不同。
+2), "do": merge到当前文件。
+3), "dp": merge到另一文件。
+
+15:15 2011-5-30
+VC0882, SV, AE suspend/resume, wakeup后电流高了100ma
+dongliang和fanzhijun通过对比寄存器发现: 
+suspend后功耗上去的原因是tv dac没有关闭. 
+D:\VC1600WCVS\doc\mas\pub_src\TV_Encoder\VC1600_Register_TVEncoder_v1.3.xls, 
+308H	VDAC_power_down.
+
+9:35 2011-5-31
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后跑死, 续
+3, 9, 13, 17, 18, ZJ.
+brg板子由于插了双口线, 有周期性的charger中断, 所以总是被唤醒. 昨天实验次数有限, 现在继续实验. 
+6#运行了6小时, 不动了. 
+1#没跑几次就重启了. 191次.
+
+3#: 712次. dt理想. 
+6#: 374次. dt差1/4 cycle 132次:
+dt error: H0x00002222, H0x00000004.
+最后一次suspend时, 系统重启, 感觉是pmu寄存器丢了造成的. 
+
+13#: 46次. dt理想. \todo 问是否是完整log. 
+14#: 714次. dt差1/4 cycle的35次:
+19次: dt error: H0x00002221, H0x00000003.
+13次: dt error: H0x00001222, H0x000000c0.
+两次: dt error: H0x00002222, H0x00000001.
+18#: 703次. dt理想.
+19#: 690次. dt理想. 
+
+ZJ#: 684次. 上电第一次dt结果不好(这时pmu电压就没有修改到1v1)
+dt error: H0x00000222, H0x00000080.
+
+9#: 667次. dt理想. 
+10#: 287次. dt理想. 
+16#: 487次死, 最后死在dt结果相差1.5周期: 
+dt error: H0x00000222, H0x00000080.
+4#: 9次. 休眠后没有唤醒. 
+
+\todo: auto_suspend.sh脚本中打印次数. 
+
+10:47 2011-5-31
+VC0882, 电源总结, 文档
+1, 电源上的问题对系统可能有总体的影响.
+例如说电压不稳, 限流都可能造成系统工作不稳定.
+例如我今天看到AE板每次都跑到u-boot里面然后就自动重启, 后来发现是因为电源上设置了300ma限流.
+
+12:18 2011-5-31
+VC0882, SV, AE android现有问题汇总; 文档
+1, sunfengqiang: 
+thumbnail速度慢原因：不同应用对thumbnail要求不同, 所以会重复扫描, 另外目前vdec解码是每次都走上下电和初始化流程, 还有加入pp后速度较慢, 共同造成此问题. 
+2, (15:03 2011-6-1)bianrongguang: g-sensor有时不好用.
+bianrongguang检查后发现是g-sensor处于关闭状态(软件关闭, 电源和寄存器正常), 打开即可. 
+
+14:15 2011-5-31
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后跑死, 续, 会议记录
+1, pmu寄存器错误: 有可能是7882寄存器或pmu寄存器写错了. 
+加入写入后读出看看是否一致. 
+
+2, 出错情况
+1), 第一次wakeup出错(一次). 
+2), 第二次wakeup出错.
+
+3, BRG: 只wakeup一次: 也会死. 
+
+4, beihua: 400M 1v2稳定, 333可能要降压到1v2, 
+400M需要升压, 333M 1v2稳定.
+
+5, 96M下实验. 看看稳定性如何.
+
+6, 直接使用0x2222, 0x00结果. 或training之后举手表决.
+
+7, bianrongguang发的meeting minutes:
+今天会议纪要如下：
+1. 检查7882在sleep时是否设置成功. (Done,7882默认为Sleep模式。)
+2. 测试DDR@96Mhz, 1.2V, training.(Beihua提供521Info. BRG 测试)
+3. use 0x2222, 0x00 without trainning. (Zhangjian测试)
+4. Beihua check DDRC trainning.
+6. Review sleep/wakeup流程 (时间待定).
+5. 备选选方案：
+     a)固定值.（0x2222,0x22)
+     b)举手表决.(计划明晚测试，Zhangjian/BRG).
+
+19:55 2011-5-31
+VC0882, SV, power, VA7882, 自动筛片, correlation
+1, Liuzixi邮件"va7882 correlation board is ready"20110531_1942
+经过wang wenlei, liu xiaotao, lile, zhengxuan， zou weiran , chen wenxin, duan xiaohua等同事超过3个星期的共同努力， 终于有一套稳定的7882 correlation board系统(标号为#1的 7882 sub board和#1的882 SV board)可供使用。 这套系统，既可以用于近期的手工筛选直接出货，也可以用于和7882 量产测试pattern的correlation。 
+目前此芯片一颗的测试时间为18.6s (不包含换芯片时间)， 测试项包含charger 充电，POR, DCDC/LDO (均有空载/带载，共200个左右电压)，开关机逻辑，I2C,PWM, RTC 等。
+目前针对30多颗芯片进行了实测，除了一颗芯片还需要进一步debug坏的原因外， 其他芯片不仅能够正确筛选其好坏，而且能够准确判断其坏的原因。
+附件是具体的文档，包括测试方法，系统使用方法指南，以及实测的具体情况。
+用于和7882量产测试patter做correlation的标准将会参考实际量产测试的标准。
+而从实际芯片能否在系统上工作以及兼顾良率的角度出发，我暂定了近期手工筛选直接出货的标准：
+DCDC1～4(空载/带载， 1.0v ~ 1.5v)： DCDC_UP_LIMIT1      107%              DCDC_DOWN_LIMIT1    98%
+DCDC5(空载/带载)：                                DCDC_UP_LIMIT2      105%              DCDC_DOWN_LIMIT2    95%
+Boost2(空载/带载)：                             On 大于10V                                         Off 小于4V
+LDO15(空载/带载)：                                LDO_UP_LIMIT1         108%              LDO_DOWN_LIMIT1      98%
+Other LDO(空载/带载)：                               LDO_UP_LIMIT2         108%             LDO_DOWN_LIMIT2     95%
+Charger：
+    恒流充电   3.2v ~ 4.0v 范围内，电流100mA ~ 250mA
+    充满电后： 4.16v ~ 4.5v
+
+2, Liuzixi邮件中的文档: D:\work\VC0882\pmu_power\va7882 Correlation Test Flow & Schematics_20110531.doc

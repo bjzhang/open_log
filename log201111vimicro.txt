@@ -1,0 +1,1778 @@
+﻿
+9:58 2011-11-7
+时间管理
+0, 9:30
+
+1, 本日
+1), 9:59-
+2), 10:20-13:12(含工作餐). 14:30-15:02 查viewsonic系统不稳定, 目前看是ddrc,bus超频造成的. 见"11:47 2011-11-7".
+3), 午休20'
+
+11:47 2011-11-7
+VC0882, SV, 量产
+1, suxin邮件_20111104_1356
+我刚刚分析了Lei Sijun发来的两份log，结果如下，请深圳同事参考：
+#1设备 LOG：
+开机后卡在LOGO界面的原因在于，u-boot中Charger部分代码进入死循环，不停输出
+v8_charger_event_detect:status 0x7
+v8_charger_event_detect:charger plugin
+……
+导致整个启动流程不会再往下进行。
+无编号1设备 LOG：
+启动慢的直接原因是，启动过程中com.android.systemui发生莫名原因的崩溃，系统检测到这个事件后就记录该事件的ANR，然后试图重新启动这个服务，结果再次崩溃；……，此过程周而复始，但是其根本原因从LOG上看不出来，据Qiao Wei推测是由于系统在某处发生锁死，需要发生问题时的/data/anr/traces.txt文件来帮助分析。
+
+2, 拿到板子和dongliang, beihua一起看. dongliang发现是ddrc和bus都是400MHz, 判断问题是频率过高导致的.
+
+3, (15:03 2011-11-7)
+实验修改时钟后情况: 
+fengbeizhan邮件:
+请zhangjian和xiaotao下午，在那个板子上，把参数改后，使用android ，看看还有没有问题。
+zhangjian邮件: 
+北京的guobaozu编译的imge无法启动. 
+我联系了深圳lijianping, 他会给我一份image.
+从深圳传文件就需要半小时, 算上测试时间, 可能下班前不一定有结果. 
+
+4, 测试image
+image: \\10.0.12.160\share\lijianping\nand_tool_czc_20111107.rar
+测试gpu apk(选择第二项做连续测试, 1-2小时出错, 最快10-20分钟出错): \\10.0.12.160\share\guobaozu\vmc-czc-burn-tool\newest\neocore-1.9.22.apk
+
+5, (16:23 2011-11-7)
+经xiaotao提醒看了一下ddrc和bus是否都是400MHz. 这个我也没有想到. 
+(17:12 2011-11-7)
+beizhan感觉用panda_os的dma测试可能更容易测出问题. 
+
+6, (18:48 2011-11-7)
+guobaozu用我给我的333MHz配置, 播放视频会死机(屏幕不动): 
+//10.0.2.208/share/'test(这个可不能删啊)/伴随测试/拷机测试/片源/. 测试10分钟之内会出错. 
+xiaotao这个板子在400MHz测试, 30分钟会出错, 提示: video error, unknown error.
+
+16:15 2011-11-7
+android, 启动流程, 续, init文件分析, 续2
+1, coding练习
+1), 看get_first_command, get_next_command和is_last_command三个函数. 
+2), 理解后用graphviz画图, 参考如下代码(http://www.flickr.com/photos/kentbye/1156412078/in/set-72157601523153827):
+GraphViz Example: structs.dot
+
+digraph structs {
+node [shape=record];
+struct1 [shape=record,label=" left| middle| right"];
+struct2 [shape=record,label=" one| two"];
+struct3 [shape=record,label="hello\nworld |{ b |{c| d|e}| f}| g | h"];
+struct1:f1 -> struct2:f0;
+struct1:f2 -> struct3:here;
+}
+3), 画的不太成功
+digraph actions {
+rankdir=LR;
+node [shape=record];
+struct_listnode0 [shape=record, label="next| prev"];
+struct_listnode1 [shape=record, label="next| prev"];
+struct_listnode2 [shape=record, label="next| prev"];
+struct_action [shape=record, label="alist| qlist| tlist| hash| name| commands| current"];
+struct_command0 [shape=record, label="clist| func| nargs| args"];
+struct_command1 [shape=record, label="clist| func| nargs| args"];
+struct_command2 [shape=record, label="clist| func| nargs| args"];
+
+struct_action:f5 -> struct_listnode0:here;
+struct_listnode0:f0 -> struct_listnode1:f1;
+struct_listnode1:f1 -> struct_listnode0:f0;
+struct_listnode1:f0 -> struct_listnode2:f1;
+struct_listnode2:f1 -> struct_listnode1:f0;
+
+struct_listnode0:here -> struct_command0:f0;
+struct_listnode1:here -> struct_command1:f0;
+struct_listnode2:here -> struct_command2:f0;
+}
+
+17:39 2011-11-7
+软件技巧, vim, ZhaoBeiHua
+1, 原来乱码问题可能是因为没有用gvim, 今天用gvim就可以了. 
+2, beihua推荐图书: 
+learning Vi Improved 6th
+
+11:17 2011-11-8
+VC0882, adb使用说明
+在命令行提示符下属如入下命令:
+进入adb工具所在目录
+cd \
+cd adb
+cd adb
+启动adb root权限
+adb root
+打开adb shell
+adb shell
+# logcat -v time &
+
+\todo vim中如何自动插入时间.
+
+11:43 2011-11-8
+VC0882, SV, MP, viewsonic, 苹果9.7inch屏幕方案
+1, zhangjian邮件
+上午实验发现系统不稳定和nand有点关系. 
+xiaotao和我实验中发现几个现象, 一个是ubi文件系统crc出错(附件log 3658行): 
+UBIFS error (pid 1): ubifs_check_node: bad CRC: calculated 0x1ff5b6be, read 0x38286bfc
+UBIFS error (pid 1): ubifs_check_node: bad node at LEB 11:863616
+UBIFS error (pid 1): ubifs_scanned_corruption: corruption at LEB 11:863616
+UBIFS error (pid 1): ubifs_recover_leb: LEB 11 scanning failed
+这个现象出现时, viewsonic(带音乐)重复几次, 启动后系统里面找不到vortex播放器.
+一个是log3708行: 
+pmem: can't remap task is gone!
+一个是有时vortex播放器播放效果很差. 
+
+2, (13:15 2011-11-08)
+lijianping邮件_20111108_1310
+NAND CRC的问题会有概率出现，暂时是通过重烧解决，如果常常发生，就说明NAND内部这个位置的介质处于临介状态，就是在烧录它是好的，在读写时，它又成坏块，这个问题是已知的，我觉得先暂时放一边，如果觉得它有影响，先换块NAND。另外在烧录时最好先擦除一次。
+
+3, fengbeizhan做高低温的机器测试中播放器退出.
+beizhan：
+早上重新做了高低温，从25° ---  0°，然后在0°持续运行，一个多小时候看的时候，屏幕黑了，发现进入sleep状态。
+附件是log信息，大概看了看，屏幕黑了后还有打印MediaPlayerService。
+请zhaoyuan尽快安排人员分析log，看看到底是否重启了？
+
+4, 器件spec
+Cao minfeng邮件_今日
+这份图纸是王占国在北京做的，占国在北京发一下吧。
+或者请朱萌取一下SVN库：http://10.0.2.88/svn/WMPL/VC0882/Projects_and_PM/创智成公司项目/Z97T项目/规格书和做样 
+huangChen邮件_今日
+ftp：10.0.12.31/移动1部系统组对外资料/移动1部系统组对外资料/882平台对外资料/客户项目/CZC/Z97T/器件资料/
+这个下有这个项目的spec。
+
+5, 分析
+1), \todo 需要认真看原来讨论的邮件. 
+2). 对比差异.
+(1), 882本身没有变.
+(2), ddr: 尔必达的ddr在882上没有量产过. 
+(3), 电源设计有没有变化? 
+7.4v电池是否稳定? 需要看创维方案的情况. 
+7882芯片有无变化? 
+(4), nand/文件系统.
+(5), 其他? 
+
+6, (15:30 2011-11-8)
+深圳leisijun测试的三台机器(拷机, 播视频), 测试了21个小时没有问题.
+
+7, (16:22 2011-11-8)
+在panda_os下实验. pingping openpanel后屏没有亮, 感觉是背光没开. 
+需要看Linux kernel driver里面是怎么写的. 
+en: gpioc1, pmw1
+pmw con: gpioc0
+
+8, 深圳工厂10台机器暂时没有问题. 会跑更多板子. 5点时会有报告出来. 
+1), beizhan感觉#7板子和深圳测试差异很大比较奇怪, 希望看看是否是板子问题, 请xiaotao去六楼换nand, 吹吹其他芯片. 
+zj: 但是有个问题, GuoBaoZu的#3板子其实也有问题. 所以如果说是#7板子太烂, 也不想. 虽然深圳AE同事也说#3是最烂的. 
+2), xiaotao反馈: viewsonic板子上有用于固定的胶, 如果换芯片可能容易造成其他芯片位移. huangchen不建议换芯片. 
+
+9, xiaotao希望实验ddr400MHz或其他频率, 说原来用盗版尔必达时遇到过333Mhz不行但是400MHz可以的情况. 
+给xiaotao发相关命令. 
+编译kernel
+目录最好修改为你自己的(lidongliang): 
+export CROSS_COMPILE=/home/zhangjian/mydroid_f/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-
+make distclean
+make vc088x_defconfig
+make -j8
+
+给kernel打包
+mkbootimg位于:
+android: out/host/linux-x86/bin/mkbootimg
+mkbootimg --kernel uImage --ramdisk ../ramdisk.img --output boot.img
+mkbootimg --kernel uImage --ramdisk ../ramdisk-recovery.img --output recovery.img
+
+13:37 2011-11-8
+VC0882, \todo 关注全胜方案. 
+全胜A10完全解析, 印象很深的时PMIC很小啊, 只看到8个引脚, 不太可能吧(如果支持多路dcdc独立很困难啊).
+http://ereadcn.com/bbs/viewthread.php?tid=32911
+
+11:30 2011-11-9
+VC0882, VC0718, Linux, kernel, memory深入分析, lingming
+1, x86进程地址空间，灵活布局. 注意到栈地址是随机的，应该是为了security.
+动态库放在进程code段以下?
+malloc分配较小memory在heap上分配，交大memory用匿名映射（mmap）分配。
+2, arm linux为了满足linux三级映射，pgd, pmd, pte, pgd直接用两个pmd拼起来。
+pmd是1Mbytes映射，pte是4kbytes映射。
+3, 很长时间不看kernel，都忘干净了。
+kernel memory管理分为node, zone, page三级.
+4, lingming思考的还是很深的。
+buddy管理的是物理地址。所以说不管low memory还是high memory，不管kmalloc, vmalloc所需的物理内存都是buddy分配的。
+所以buddy会把vector, page table, tags等对应的物理内存标为reserved。
+buddy function: __get_free_page(s), alloc_page(s). 前者由后者实现，且前者只能从low memory分配。
+6, (10:25 2011-11-10)续昨天，今天重点是high memory和process memory。
+7, 动态链接库显式调用会在dlopen时映射，dlclose时取消映射，释放memory。
+隐式调用时进程启动时映射，进程退出时释放。也就是说显式调用节省memory。
+8, 进程空间memory: 匿名/非匿名，buddy/reserve, 一次映射/需要时通过缺页函数。
+9, 进程和内核页表同步。
+所有进程包括内核自己维护自己的一级页表，但内核空间二级页表都是指向内核二级页表，即内核空间二级页表只有一份。
+内核页表变化后所有进程通过page fault更新页表。vmalloc释放时，内核页表会改为不可访问（进程再访问时会导致page fault）。
+
+
+14:03 2011-11-9
+VC0882, SV, MP, 882 cost down 应用功耗测试方案讨论, 199元低端android平板
+1, 需求, 199元(卖价), 分离器件, arm 1.25 800Mhz, 待机功耗40ma@4.3v
+2, 分析
+1), 开始我忘了882自己有pmu, 所以上下电和sleep其实都不复杂. 
+(1), 系统上电给pmu和ddr上电. 
+(2), pmu上电后发en_vdd_core给882 pso电源, 然后pmu给882 pso复位. 
+2), 这里面882 pso使用dcdc(1.25v), pmu, ddr分别使用1.2v ldo和1.5v ldo. 
+I/O, analog(例如SAR adc), 外设(sd, lcd, ts等)使用3.3v ldo. 背光自己使用单独的高压ldo供电. 
+3, 考虑其他问题:
+1), gpu上电流程: 882 gpu work around主要是开isolation后需要reset 882 pso. gpu与882 pso other是否单独供电没有影响. 
+2), sleep流程: 
+(1), 休眠前软件配置pmu进入sleep mode. 
+(2), ddr进入self-refresh, arm execute wfi.
+(3), pmu en_vdd_core = 0, 关闭882 pso dcdc.
+4, 注: 882 pso dcdc也可以换成ldo. 
+5, (17:54 2011-11-10)
+昨天的讨论有个问题: 缺了A类电源的控制. 
+开机时首先通过用户按键给A类电源上电, 882 rom boot启动后需要用GPIO_A12拉住, 保证A类电源有电, 这时用户再松手系统也不会断电了. 为了尽快由882控制A类电源, 可以在bootloader 512info里面配置gpio. 
+关机时, 就没法做原来的正常流程了, 可能是882直接给A类电源断电, 这样整个系统也就没电了. 
+
+15:04 2011-11-9
+时间管理
+1, 本日
+1), 10:05-11:40 lingming Linux memory讲解, 见"11:30 2011-11-9".
+2), 14:05-15:23 882 cost down 应用功耗测试方案讨论, 见"14:03 2011-11-9".
+3), 最近公司走的人很多啊, xuelian也走了...
+4), 15:23-15:30 跟进viewsonic量产问题. 见"15:23 2011-11-9". 
+5), 10' 整理之前遗留\todo
+6), 15:44- vi加入跳转section, GTD功能. 见"16:21 2009-1-21"2.
+
+15:23 2011-11-9
+VC0882, SV, MP, viewsonic, 苹果9.7inch屏幕方案, 续
+1, 从下面leisijun和caominfeng邮件看, 53台机器测试只有1台没有通过. 说明ddr跑333MHz比跑400MHz稳定. 
+1), leisijun邮件_20111109_0946
+深圳拷机测试最新的结果：
+3台机器到目前为止已经测试了50个小时左右，正常，未出现关机死机花屏等异常现象。
+CZC工厂的测试结果，到昨天晚上为止，未发现异常。今天最新的结果等待CZC反馈。
+2), CaoMinFeng邮件_20111109_1008
+创智成工厂50pcs，40台720P测试，有一个出现死机花屏问题，Reset后也花屏，这个机器我已经申请原封不动给我们拿过来；
+3D测试的都OK。
+所以，50台机有49台跑过了24小时，基本上已经下结论，使用333M参数能解决这个问题。
+
+2, 因为beizhan用发掘8inch板子过温度测试没有问题, 深圳也会安排viewsonic方案过温度测试: 
+CaoMinFeng邮件_20111109_1148
+OK，已经安排。
+20pcs机器，先做2小时0度低温测试，再做一小时0~40度升温测试，再做一小时40~0度降温测试。
+下午5点反馈结果。
+
+19:20 2011-11-9
+VC0882, SV, MP, 华天封装
+1, 下午和xiaotao一起看看能否把创维m3s方案加华天封装的nand boot android跑起来。
+烧写工具提示nand参数不正确，zhangyanhong帮忙确认了nand参数无问题(t2a, 24bit ecc, 1chip). 从串口log看nand id不正确，5个0xdf，请xiaoyu量nand电阻无问题，换nand芯片问题依旧。
+2, xiaotao感觉需要定位nand/nfc有无问题。我感觉最好别陷太深。
+回来和guye，beizhan讨论。其实目的不是实验nand，主要是验证华天封装有无问题（该板子ae android没跑起来，panda os gpu测试pass）所以考虑用nfs或sd boot。
+我自己做事情还是不太能抓住重点. 也差点就陷入细节. 
+3, (14:51 2011-11-10)
+今天xiaotao用在7寸屏华天封装882, 可以正常运行gpu和播放视频. 但是sd boot也不行. beizhan问是否是sd时钟配置有问题, 我怎么没有考虑到? xiaotao的确说过视频放在sd卡上就有问题.
+感觉xiaota动手能力还是挺不错的, 同样的事情我可能做的会慢一些.
+xiaotao修改内容如下:
+kernel配置文件, vortex_mmcroot. 
+display需要tft代替lvds.
+gpu驱动里面配置clock为200MHz. 
+
+12:55 2011-11-10
+时间管理
+1, 本日
+1), 10:05-11:40 lingming Linux memory 续1, 见"11:30 2011-11-9"2.
+2), 11:40-13:05 午饭. 
+3), 13:10-15:08 vi加入跳转section, GTD功能, 见"16:21 2009-1-21"3
+4), 20' 和xiaotao一起看华天封装问题. 见"19:20 2011-11-9"3.
+5), 15:08-15:50 午休.
+6), 15:50-16:09 diary. 
+7), 16:10-16:45 vi技巧, 强制以某种编码方式打开文件. 
+8), 5' 支持youhai. youhai希望优化copy, 希望把non-bufferable buffer改为buffer. 所以需要进程页表. 
+9), 16:55-17:10 17:15-17:30 17:53-18:09 coding练习, 双向链表. 
+10), 17:30-17:53 fengbeizhan分配任务, 明天需要测试882 low cost平台的sleep功耗. 见"17:48 2011-11-10". 
+11), 总结. 发现自己对于软件应用很感兴趣, 今天学到了一些vi技巧很兴奋. 
+
+13:23 2011-11-10
+软件技巧, vim, vi查找命令, 阅读笔记
+" 查找函数声明，nmap为normal模式下的键盘映射
+:nmap gx yiw/^\(sub\<bar>function\)\s\+<C-R>"<CR>
+" 查找多个文件
+:bufdo /searchstr/ : 在多个文件缓冲区里执行查找
+" 更好的多文件查找定位方法
+:bufdo %s/searchstr/&/gic : 在多个文件缓冲区里查找，按下n停止
+
+" create a new file for each line of file eg 1.txt,2.txt,3,txt etc
+:g/^/exe ".w ".line(".").".txt"
+
+gf : 打开当前光标下或后的文件
+:nnoremap gF :view <cfile><cr> : 打开当前光标下或后的文件, 如果不存在则创建
+
+16:32 2011-11-10
+软件技巧, vim, 强制以某种编码方式打开文件; logAssistant
+参考"vi编码", http://apps.hi.baidu.com/share/detail/34374443
+:e ++enc=utf-8 filename
+1), e表示edit命令. edit完整命令参数如下
+:e[dit] [++opt] [+cmd]
+2), ++enc=xxx, 实际是"++opt", opt可以是ff(fileformat), enc(encoding), bin(binary), nobin(nobinary), bad, edit. 
+3), 如果省略filename, 表示重新打开当前文件. 
+4), cmd包括
+	+		Start at the last line.
+	+{num}		Start at line {num}.
+	+/{pat}		Start at first line containing {pat}.
+	+{command}	Execute {command} after opening the new file.
+			{command} is any Ex command.
+看起来, 可以用edit跳转到执行行. 这样我之前一直准备的根据"secton"xxx跳转可能就可以用上了. 可以先搜索相关文件, 如果找到匹配的pattern, 就用edit打开. 不错, 不错. 
+
+17:48 2011-11-10
+VC0882, SV, MP, low cost, 882 cost down 应用功耗测试方案讨论, 199元低端android平板, sleep测试
+1, 工作
+1), 从sony项目copy工程. 
+2), 保险起见还要测试关机, 开机是否正常. 
+3), 新建一个工程, 测试882 low cost板子sleep功耗. 具体测试找zouweiran. 
+4), 疑问: 芯片外面没有实时时钟, 系统关机后, 时间岂不是就没有了? 应该不会这样设计. 看来rtc芯片也很便宜. 
+2, (10:15 2011-11-11)
+本来是考虑从sony项目再copy一份, 看起来有两个问题:
+1), sleep需要测试gpu上电流程. sony项目没有gpu. 
+2), 将来还有7882_64pin测试. 看起来还是把no_7882, full_7882, 64pin_7882共存比较好. 
+为了简单起见, 目前no_7882的配置直接在pmic_init里面判断有无7882 id. 如果没有id则关闭7882 read/write函数. 
+加入了一个g_pmic_id, 在7882 init时判断id, 如果id都不匹配, g_pmic_id=0. 如果匹配0x78820000保存该id.
+
+9:56 2011-11-11
+时间管理
+0, 9:32
+
+1, 本日
+1), 10:03-11:16 882 low cost平台, 代码修改完成, 方案没有完全确定, 暂时不调试. 见"17:48 2011-11-10". 
+2), 6' bank客服电话.
+3), 8' 安装xmanager, 设置了xterm03和10.0.13.244两个连接. 
+4), 11:31-11:45 14:20-14:40 15:10-15:20 18:30-18:54 camera driver. 准备nucleus环境. 见"15:20 2011-11-11"1,2,5
+5), 882 low cost平台讨论, 我没有参加, 记录邮件. 见"12:53 2011-11-11". 
+6), 20' 去实验室拿回我的ICE.
+7), 70' 调试7882/no_7882 sleep/wakeup代码. 并上传. 见"17:46 2011-11-11"3,4.
+8), 参与讨论7882 64pin方案. <取消>似乎不做这个封装了.
+
+12:53 2011-11-11
+VC0882, SV, MP, low cost, 882 cost down 应用功耗测试方案讨论, 199元低端android平板, 882 low cost平台讨论
+我没有参加, 记录邮件如下
+ChenYing邮件"答复: 5寸低成本方案待机功耗评估（会议纪要）"_20111111_1203
+参加讨论的：Liuzixi，Jiangbo，Huangchen，Fengbeizhan， 记录如下：
+低成本方案：
+一、 SLEEP 状态下系统功耗typical 大概30MA-50MA左右，与系统外设有关, 有些外设可能会导致sleep状态功耗更高
+二、需要加reset电路（RC）
+三、风险：电源管理方案不如7882稳定可靠（建议整机必须加拨码开关可关断电源正极）
+四、电源分以下几组：
+1、1.25V: ARM、GPU、Video、PLL、core、PMU, HDMI1.2V
+                 1个1A  DCDC(0.15+0.05电感) 
+2、 1.5V DCDC: DDR3  四片    LDO 500MA？ 40MA*4.2V=160MV
+3、3.3v: LDO1 500MA : IO, AUD,USB, TP,VDAC (需要用磁珠隔AUD和VDAC)
+                LDO2 300MA: NAND,TF、HDMI3.3V
+                LDO3 300MA: WIFI
+（为了面积考虑，3类中可使用3个LDO或一个DCDC）
+成本大概：$0.5-0.6；同时可节省贴片成本，预计可减少RMB 0.8（发掘确认的）
+五、可选项：
+1、   RTC，如果需要，大概$0.25, 如没有，关机后时间就没有了，开机可以通过网络同步
+2、   充电，客户可选择方案，二极管或使用充电芯片
+3、   背光电路，由客户选择
+
+15:20 2011-11-11
+VC0882, SV, camera driver. 准备nucleus环境
+1, 脚本
+D:\VC0882\panda_os\init_script\RVD_SV
+Cpu_pll1_500_Bus_pll2_133_LPDDR_pll6_1Gb_1x32_dll_off_133.inc
+or
+Cpu_pll1_500_Bus_pll2_133_LPDDR_pll6_2Gb_1x32_dll_off_133.inc
+\todo 应该只有一个是可以的. 
+
+2, 7882电源板不太好用, 要用力按才行. 
+代码里面使用了val[0] -- val[3]. 但是声明只有val[3], 所以编译器把代码里面的val[3]改为val[2]了. 
+实验7882电源板和分立器件电源板的sleep/wakeup. 
+
+3, (16:57 2011-11-11)
+1), 如hanzhimin, fuyali说, 最新代码在445封装唤醒有问题. \todo 确认.
+2), 在604上实验了pmu_sv_fast_wakeupxxx三个make target都不行. 等等, 可能是搞错了, 因为我跳的是spi boot, 唤醒后一级boot是空的所以没法继续运行. 修改启动方式为rom boot就没问题了. 
+3), 再实验分离电源.
+(1), 读0x60050004导致data abort. rvdebugger无法访问该区域? clock没开? 
+这个区域是pmu, 不应该不能访问啊. 
+详细跟踪, 死在"switch padc clk to 32k"打印后. 这句话的上一句是"__PMU_SetPmuClkSel(PMU_CTRL_PMU_X32K);", 可能是因为没有外部32k晶振, 看板子确实如此. 修改代码, 如果定义了VIM_PMU_NO_32K则在休眠时pmu和padc不使用32k晶振.
+
+4, 上传代码.
+modify code for 分立器件 power board sleep/wakeup. test target: pmu_sv_fast_wakeup_repeat_no_32k, pmu_sv_fast_wakeup_repeat.
+1), add g_pmic_id. if no 7882 g_pmic_id is 0 which lead to all 7882 operation fail.
+2), do not switch 32k osc while it is not present. 
+3), add media_L2_sv_pmu_pwm, pmu_sv_fast_wakeup_repeat_no_32k in .cproject
+4), add VIM_PMIC_ID_ERROR in VIM_DRIVER_Debug.h
+
+5, (18:45 2011-11-11)
+学习camera使用. 
+1), 跳线: 
+sensor(0v3640): JP18, JP17靠左. 
+panel(13, tg110): JMP3靠右, JP19靠左, JUMP-2靠左. JP16靠右. 
+2), 软件: 编译media_L2_sv_pmu_pwm
+3), 命令
+AASP SD0:/>media
+(1), opencif, 一路回车就可以. 其中sensor size index是sensor出图的size. 
+media  SD0:/>opencif
+[MEDIA_MODULE]->do_media_opencif()
+Please input sensor data format
+(0:yuv; 1: ccir656; 2:jpeg; 3:raw; 4:rgb;:):(Int)/[0]
+Please input sensor size Index:(Int)/[0]
+Please input sensor ctrlbus type
+(0:sifi2cbus; 1: sysi2cbuf; 2:gpioi2cbus;:):(Int)/[0]
+Please input sensor databus type
+(0:parallelbus; 1: smiabus; 2:mipibus;:):(Int)/[0]
+MED_CIF_Open
+CIF_Open
+[SIF   LOG]sensor ID is 0x364C, ov3640
+Sensor image width = 640, height = 480
+[MEDIA_MODULE]<-do_media_opencif() with 1
+(2), 打开lcd. 成功打开后, 背光会亮, 屏幕显示单色(默认是白色).
+media  SD0:/>opende 13
+[MEDIA_MODULE]->do_media_opende()
+MED_DE_Open
+DE_Open
+[MEDIA_MODULE]<-do_media_opende() with 1
+(3), 在lcd上preview
+media  SD0:/>previewtode
+[MEDIA_MODULE]->do_media_priviewTode()
+Please input window start x(Int)/[0]
+Please input window start y(Int)/[0]
+Please input window width(Int)/[640]
+Please input window height(Int)/[480]
+Please input target x:(Int)/[640]
+Please input target y:(Int)/[480]
+output format
+(0:vyuy422I; 1: uyvy422I; 2:yvyu422I; 3:yuyv422I; 4:420svu; 5:420suv;:):(Int)/[3]
+af window num(Int)/[0]
+Please input layer index:0:layer0;1:layer1;(Int)/[0]
+MED_DE_Configure
+DE_Config
+MED_CIF_Preview
+CIF_Preview
+[MEDIA_MODULE]<-do_media_priviewTode() with 1
+media  SD0:/>NU_recive  fist  command, flag = 0
+ 
+(4), capture, 这里的输出文件是"1841_fo.yuv".
+media  SD0:/>ipp
+ipp  SD0:/>capturepath
+[IPP_MODULE]->do_ipp_CapturePath()
+window start x(Int)/[0]
+window start y(Int)/[0]
+window width(Int)/[0]400
+window height(Int)/[0]400
+tgt width(Int)/[0]400
+tgt height(Int)/[0]400
+output mode: 0:frame,1:slice(Int)/[0]1 
+save file Name(String)/[cap_out_0]1841
+capture Frame Num(Int)/[1]
+lines per frame or slice:(Int)/[0]
+output format
+(0:vyuy422I; 1: uyvy422I; 2:yvyu422I; 3:yuyv422I; 4:420svu; 5:420suv;):(Int)/[3]
+FAT write>>size:0x0000000a>>.Done
+[IPP   LOG] VIM_IPP_CapturePathFrameStart
+[IPP   LOG] VIM_IPP_CapturePathFrameEnd
+display fps = 4;
+FAT write>>size:0x0004e200>>..Done
+ipp  SD0:/>ls
+LOST.DIR                      <DIR>
+1                      <DIR>
+.android_secure                      <DIR>
+com.swype.android.inputmethod-1.apk                      5851619
+                      822614
+h_eZ<_NH,.mp3                      677060
+1841_fo.yuv                      320010
+
+8:28 2011-11-11
+kernel driver: v4l2(camera, fm), cpufreq, irq, timer, uart, char sysfs.
+来中星微以来，我除了维护过sd driver，写过linux keypad driver，主要工作在arm和power（含clock）。
+和aiguo，beizhan讨论我的工作规划。
+
+10:08 2011-11-14
+时间管理
+0, 9:40
+
+1, 本日
+1), 10:20-11:40 13:10-14:07 vi实验file list. 见"10:12 2011-11-11".
+2), 午饭. 
+3), 12:54-13:10 看邮件. 
+4), 15:00-15:25 看youhai GPU总结. 见"15:06 2011-11-14". 
+5), 15:25-16:02 882问题汇总. 见"15:25 2011-11-14".
+6), 16:03-16:15 看lingming memory总结. 见"16:06 2011-11-14". 
+7), 16:20-18:24 Linux camera driver. 见"16:17 2011-11-14". 
+
+2, 次日
+1), camera driver. 开始看camera code. 
+\todo 自己参考vivi.c, 写v4l2最基本的架子. 
+
+), coding练习. 继续写链表代码. 
+), \todo 上下班路上看lingming文档. 
+
+工具学习: 
+(1), 整理vi技巧, 发博客. 以logAssistant为主线写vi技巧. 
+(2), 在vi中根据在各级标号之间跳转. 
+(3), vi插入日期时间. 续"16:21 2009-1-21"4. 
+(4), 根据"section"直接跳转. 
+(5), vi里面在visual mode下如何做替换. 下面两个都不行: 
+:map <M-0> :'<,'>s/^[\ \t]*\n//g<CR><CR>
+:map <M-0> /^[\ \t]*\n//g<CR><CR>
+), 如果logAssistant搞完了, 可以试试最新的eclipse编译和调试环境. 也算是为将来开发环境做个准备. 
+
+), 看android启动流程. 
+
+), 时间一多, 想干的事情也多, 882 flash播放已经可以用了. 我要想用, 还需要先把备份工具做好. 
+
+), yanglei希望我把performance monitor ddrc里面的page conflict和读写转换都加入. 
+
+), 抽空了解android: http://blog.csdn.net/maxleng
+), vi调用perl脚本.
+
+2, 次日
+计划一天做coding一天学工具看资料. 目前计划是一天看"系统程序员修炼之道", 工具是logAssistang升级到vi. 主要工作是camera driver里面要进一步熟悉kernel memory function. 
+关注viewsonic bt music reboot进展.
+2), 明天计划是要用xiaotao的笔记自己建立git. 继续写双向链表代码. 
+3), qemu下正常运行android需要继续实验, 看看能不能使用键盘鼠标. 应该是配置问题. 
+), 服务器上firefox需要重新编译. 这样上网就比较方便了. 
+
+3, 次次日
+1), linaro 继续看linaro 11.10和11.09文档. 并整理已有linaro资料(清\todo). 
+2), qemu: 计划是能使用qemu调试kernel和module, 使用gdb调试library, 使用ddms和adb调试应用程序. 
+
+2, 每天
+2), 编程练习: 链表. 继续完成链表基本操作. 
+
+2, \todo
+1), 今天把原来虚拟机的开发资料误删除了, 下次还有重新建立. 正好就在244服务器上做了. 
+2), root工具, "16:44 2011-8-23". 
+3), 关注shuyu: 写vp6的代码。Lib层的已经完成，明天开始omx层的。
+看看到底需要添加哪些代码.
+
+3, 次日
+), 继续解决按键问题? 
+7, \todo
+1), memory机制: 明天搭个环境. 验证一下. 为了简单使用同样的kernel在OMAP3530模拟器上测试. 
+2), PLKA上说vmalloc也会导致page fault? 这个可以查一下. 
+
+1), 继续阅读PLKA, 在模拟器上测试8月16日的分析. 
+
+\todo
+1), 继续kernel学习, 四种notifier(scu?)
+
+), 感觉需要一个三位的绘图和讲解软件, 这样说明power, clock和软件, 环境之间的关系就比较容易了.
+\todo 画882的编程模型. 
+
+), 关注cadence palladium. 
+
+), 整理昨天882 mp会议记录. 
+
+), 创维板子arm 750MHz@1.2v不稳定. 降频稳定, 考虑arm供电不好. 
+
+), 今天一定要上传部分代码. 
+), 实验dvfs 1v4问题. 
+
+), kernel优化:
+(1), Compile the kernel in Thumb-2 mode: 会不会提高系统性能? 
+(2), Use kernel mem{cpy,set}() for {copy_to,clear}_user(): 似乎也可以提高性能. 
+  x Implement faster copy_to_user and clear_user methods for CPU                                                             x
+  x cores where a 8-word STM instruction give significantly higher                                                           x
+  x memory write throughput than a sequence of individual 32bit stores.                                                      x
+  x                                                                                                                          x
+  x A possible side effect is a slight increase in scheduling latency                                                        x
+  x between threads sharing the same address space if they invoke                                                            x
+  x such copy operations with large buffers.  
+
+2, 次日
+5), \todo mlm和mp各什么意思？
+4), 给zhaoyuan, aiguo/beizhan发我写好的信. "23:11 2011-6-6". \todo 需要完善. 
+\todo 关注"20:20 2011-5-9" shuyu回信. 
+
+VC0882 AE文档: 想一想arm, clk, irq, pmu有哪些注意事项. 
+\todo cpufreq utils里面有自动测试工具么? 
+
+2, 次日
+), 看linux neon何时开。不赞同yinong观点。我倾向于arm方案
+), openocd调试mmu打开的OMAP3530.
+
+), 整理日志。
+), 查"19:16 2011-3-17"3的pmic开机按键有时没有这个问题。
+), "00:12 2011-4-7"
+), 根据"10:24 2011-4-4"5测试。
+), 加入链接脚本预处理。\todo 没找到文档啊, 支持么? 原来好像看到过. 
+
+2, 次日
+1), 次日
+(), 自动的做section内多个关键字的搜索还是很有用的.
+(), 确认performance monitor latency问题. 见"15:40 2011-3-4".
+(), fuyali说neon两个测试项不过, 虽然不影响测试 进展, 但是也需要看一下. 
+2), 次次日
+(), 实验一下openocd 调试882 aasp.
+3), 稍候
+(2), 需要分析nucleus, linux调度，更快定位到跑飞位置。
+(3), 关注"21:33 2011-2-22"的关注. 
+4), 关注
+(1), 关注: Face detect, 低频率出错, \todo 关注. 见"17:59 2011-2-12". 
+(2), 发现7882 rtc使用runrtc每次时间都会重新记时，使用getrtc就没问题，待查。见"14:49 2011-3-9"4.
+
+3), 其它
+), 考虑logAssistant改进, 参见"13:49 2011-1-30". 
+), 嵌入式软件一直没有找到合适的论坛. 
+7), 编程练习: logAssistant改进, 续"17:16 2010-11-15"4. 
+
+0), 每周必做事项:
+(1), 每周处理未完成邮件, 尽量周四处理. 
+(2), 每周至少看一次业内动态, 目前主要渠道是hotmail订阅的eetimes. 
+(3), 每周都要加油. 包括知识和编程两方面, 时间不少于2h. 
+
+(), 急需一个section搜索多个字符的功能. 测试case: support.*arm, neon. 
+
+(), 整理caijin发的vdec, venc等文档到performance.
+(), 参与"http://newsletters.eetimes.com/portal/wts/ccmciv2cjTA6ecsenqrw38ihFssuh".
+(), 下周可能还是没法开始系统程序员那本书。计划用两周时间完成日志工具初稿，首先解决查找和编辑. 买android书。
+(), 看看大家Linux代码有没有写注释. 发信强调. 
+(), 看来需要继续改进工具: android下可以方便的查找, 修改log; windows下可以同时搜索关键字和时间 管理里面的内容. 
+(), 关注进展, beizhan: yangxing的ddr还需要发ddr培训文档. yangxing文档见yangxing邮件"DDR总结"20101020_1818, "D:\work\VC0882\ddr\ddr总结.doc".
+(), android2.2上传服务器.
+(), 本周需要review xiaotao和shuyu Linux driver代码. 
+2), 其它
+(), 给仿真发之前讨论的两个case(irq和timer那个问题可能需要用qiaowei的usb台子). 见"16:51 2010-10-9".
+(), 整理和arm support-cores和huangwei讨论的arm问题. 不明白地方继续发信. 
+(), 开始关注android平板和android开发环境.  arm11那个板子问问有没有android2.2
+(), 实验clkrst延时时间不准的问题. 
+(5), 问题(qiaowei, mengfandong), 什么是dtm? 自hanzhimin邮件: dtm测试通过. 
+3), 
+(2), 发邮件, 说明看到的Linux现有的寄存器属性. 见"11:33 2010-9-28"2
+(1), 用工具格式化代码. 解决"14:34 2010-9-23"1 问题. 
+(2), 最近大家在移植driver到35时, 借机会把代码都看一下. 
+gpu的情况问wangwenlei. 最近移植时需要看代码. 
+(7), ftrace ASLR会不会是x86的feature? 续"10:40 2010-9-19".
+(8), omap模拟器sd卡应该可以用, 实验. 
+(9), 看cache的处理(framebuffer(问suxin, 不进cache是否效率低? ), v4l2应该也有类似问题, 是如何处理的?), mmap和异步通知. 自己做一些实验.
+4), 十一:
+(3), 需要看一下718 arm testplan有没有问题. 
+(4), arm总结. 
+5), 下周计划:
+(1), Application_Initialize()有疑问需要查: g_first_available_memory传递问题. 
+(3), 整理设备模型讨论的遗留问题("14:18 2010-08-30"2), 包括mengfandong 设备模型example bug. 
+(5), 有空在板子实验omap3530 framebuffer.
+7), 其它:
+注册 edn 电子设计技术。
+看 大教堂与市集，the art of Unix programming. c陷阱与缺陷。dr.dobb's journal. 
+
+3, 每日成长计划
+0), arm, Linux相关值得学习的内容: 
+arm smp讲座总结.
+Linux: dataabort后的, backtrace. 尝试添加到panda_os中. 参考"17:15 2010-11-1"分析.
+arm load/store相关知识，trm, arm_arm.
+1), 当天如果没有写code, 都要有coding练习, 最近两个内容:
+(1), qemu VC0882 simulator, 主要用于调试bootloader clkrst code. 将来也可以向仿真一样加入写RO段的warning. 
+(2), Linux platform bus继续实验: 自己建立class, 在machine中做device register. 
+2), 如果写了code, 需要further reading. 
+(1), "Professional Linux Kernel Architecture" Chapter 15 Time Management. p925.
+(2), PLKA, Chapter 3 Memory Management. p165.
+
+4, 四象限
+1), 重要但不紧急
+(1), arm模拟器.
+(2), L2 cache lockdown. <已转交给yangxing, 需要支持>
+(3), 发arm,bus问题.
+(4), 确认"14:09 2010-7-1"事情是否完成. 
+2), 不重要不紧急
+(1), 抽空看yangxing cache代码. 
+
+5, 其他
+4）p clk and aud clk挂在一个pll上引起reset问题debug；
+5), 问下usb fat问题beizhan改了哪些代码. 
+6), zhangpu gpu测试结果邮件没看懂. 
+7), trace继续实验:
+(1), 单独构造一个dataabort case, 实验能否trace到汇编. 
+(2), 希望把arm profiler试通. 这个主要依赖与arm交流. 
+8), 路上看文档
+(1), arm profiler p33. 
+(2), neon
+A, 用法: DUI0204I_rvct_assembler_guide.pdf p277.
+B, 指令, 参考ARM_ARM_7AR, p838开始. 
+(4), arm dataabort处理写的挺好的, 有空看看. "C:\Program Files\ARM\RVDS\Examples\4.0\77\windows\databort"
+
+6, 问题
+1), verilog: "<="是block assign还是non-block assign? 
+2), 什么是odt? YangZuoXing邮件"about resynthesis"21000803_1244
+jinwenjie: odt issue for chip side for ddr.
+
+10:12 2011-11-14
+软件技巧, vi, file list
+0, 希望在右边显示所有工作日志的列表. 
+1, 参考"taglist.vim"的Tlist_Window_Toggle, 可以得到如下命令. 
+":botright vertical 30 sp d:\personnal\log"
+做纵向分割, 窗口在右侧, 宽度为30列. 新打开文件"d:\personnal\log"(vi检测到是目录会自动做浏览).
+2), (11:37 2011-11-14)
+想做成toggle的, 还没学会...
+3), (13:59 2011-11-14)
+最后也没做成类似TlistToggle的toggle方式. 似乎是目录没法支持bufwinnr命令(文档说bufwinnr可以支持buffers列出的buffer, 但是目录需要用buffers!才能列出).
+最后是用全局变量保证不会重复open. 并把所有和logAssistant相关命令放在logAssistant.vim文件: 
+
+let LogAssistant_opened = 0
+
+function! s:LogAssistant_Open()
+    if g:LogAssistant_opened != 0 
+        return
+    endif
+    let g:LogAssistant_opened = 1
+    exe 'silent! ' . 'botright vertical' . ' ' . '30' . 'split d:\personnal\log'
+endfunction
+
+"map keys for GTD
+"Alt+2 jump to prev section
+map <M-2> ?[\(]\{0,1\}[0-9]\{1,2\}:[0-9]\{1,2\}\ 20[0-9]\{1,2\}\-[0-9]\{1,2\}\-[0-9]\{1,2\}[\)]\{0,1\}\n<CR><CR>
+"Alt+3 jump to next section
+map <M-3> /[\(]\{0,1\}[0-9]\{1,2\}:[0-9]\{1,2\}\ 20[0-9]\{1,2\}\-[0-9]\{1,2\}\-[0-9]\{1,2\}[\)]\{0,1\}\n<CR><CR>
+"Alt+4 jump to prev GTD
+map <M-4> ?(*[0-9]\{1,2\}:[0-9]\{1,2\}\ 20[0-9]\{1,2\}\-[0-9]\{1,2\}\-[0-9]\{1,2\})*\n时间管理\n<CR><CR>
+"Alt+5 jump to prev GTD
+map <M-5> /(*[0-9]\{1,2\}:[0-9]\{1,2\}\ 20[0-9]\{1,2\}\-[0-9]\{1,2\}\-[0-9]\{1,2\})*\n时间管理\n<CR><CR>
+"Alt+0 delete empty line
+"map <M-0> /^[\ \t]*\n//g<CR><CR>
+
+command! LogToggle call s:LogAssistant_Open()
+
+2, 上面的方法只能保证列出这些文件. 但是没法像tag那样跳转. vi里面浏览目录, 会在浏览目录的窗口打开文件. 看来正解还是像Tlist那样建立一个可以跳转的buffer. \todo
+实验时还有一点笔记奇怪. 上面map命令加入到logAsssitant.vim以后, 向前跳转的命令需要删除一个<CR>, 否则总是找到这一个. 但是这个现象不是必现.
+
+3. (15:41 2011-11-14)
+发现加入上面变量判断后, 即使手工关闭了这个窗口, 也没法再打开. 所以这个功能现在没法用. 
+
+15:06 2011-11-14
+VC0882, SV, AE, youhai GPU总结, gpu相关问题的研究结果总结; 重要文档
+fengbeizhan转发yinong邮件. youhai的gpu总结, "gpu相关问题的研究结果总结.doc", 给我印象最深的有两点: 
+1, 游戏性能查不等于gpu 3d差, 定位问题. 
+例如youhai提到的3 framebuffer, 是个不错的办法. 软件实现上代价也不大. 
+这个道理说起来容易, 但是自己分析问题时经常陷入一个点, 像前段时间AE封闭开发, 我在sleep稳定性问题上做的贡献其实不大.
+2, 合理利用各种工具. youhai用了oprofile, 882 performance monitor等工具. 
+
+其"概述"部分如下. 
+本文主要描述如下gpu相关的几个问题的研究结果。
+如何分析，解决具体单个游戏中的问题？
+Ui、游戏显示通路是否已经优化？
+现有系统是否已经优化到接近理论值水平？ 
+    如何从整体系统上对现在和将来游戏，UI架构进行优化？
+通过对上面这些问题的研究及实测验证，目前得到如下结论
+1.	很多游戏的帧率基本上和分辨率成反比
+疯狂的小鸟在800*600 级别的屏上可以跑出56-60帧， 都市赛车5为10-13帧，1280*768可以跑出30-33，都市赛5可达5-7帧，基本上和分辨率成反比，(1280*768)/(800*600)=2。
+2.	游戏的直观感觉和帧率有一定关系，但不是全部，帧间均匀性也很重要。疯狂的小鸟就是这样的一个例子。
+优化了ui显示路径，采用3framebuffer 方式使一些3d benchmark 专项测试分数普遍提高，甚至超过rockchip。可以作为一个卖点
+3.	很多游戏的问题，比如花屏，卡和系统问题有关。和gpu的性能无关。
+4.	目前2d  的软件部分skia部分有两处需要优化，且优化空间很大。Draw image，Draw rect 是软件2d 部分需要优化的部分，因为这些部分竞争对手的数据是我们的2倍。
+5.	在疯狂的小鸟等游戏中总线的频率333M已经接近到瓶颈或者说是瓶颈，如果更换略高一点的gpu，bus都一定会是瓶颈。
+6.	硬件2d，3d 当前硬件是串行的，很大程序的影响了效率，尤其是大屏系统。
+7.	硬件2d 中的alpha公式有一些不能实现。目前采用近似算法。
+8.	目前 3d 模块访问总线的数据量很大，不确定是否都有必要，需ic 进一步确认。
+
+15:25 2011-11-14
+VC0882, SV, 量产, VC0882L准备, 882问题总结
+1, fengbeizhan转发guye邮件"882的问题"
+我们要准备做882L，也就是882的cost down 版本，基本确定会有如下的改进：
+1)       add HDMI
+2)       add one UHOST
+3)       add Ethernet EMAC
+4)       fix VGA bug
+你们能否看看882还有哪些问题，请先提出，由于目前各方面资源有限，很多问题不一定能解决，但是如果改动不大，还是可以考虑的，附件是HuangChen 和深圳team提出的，供参考，我在备注里有部分解释。
+Thanks,
+
+2, fengbeizhan邮件"答复: 882的问题"_201111114_1012
+882 要做个cost down版本，主要改动见如下guye讲的。请所有软件人员和测试人员都把自己了解的882 的问题，写到如下的文档里，截止时间，今天18：00前完成。
+\\10.0.2.36\sqmshare\share\fengbeizhan\VC0882\问题\VC0882问题汇总——ICP.xls
+另外，“882问题点汇总_by_GuYe.xls” 是其它人总结的，可以参考。
+
+3, 想了想我负责的模块并没有什么bug啊. 看了看大家的. 有两个我应该想到: 
+1), arm l2 cache 太小. 
+2), gpu power on bug需要fix. 
+
+4, 我的建议
+1), 882 irq模块bug. 不能在arm中断打开情况下mask, unmask中断. 对OTG模块使用用影响.
+2), ddr training bug. traing中复位时间不够, 可能造成training结果不正确. 
+3), performance. bus和ddrc能否稳定跑400MHz, ddrc在400MHz以下的频率造成个别片子不稳定. 
+
+5, 其实trace一直没有大量使用. 很难说有没有问题. 但是没法在今天18:00之前给出结果. 
+
+16:06 2011-11-14
+VC0882, VC0718, Linux, kernel, memory深入分析, lingming, 续, 阅读lingming补充章节
+1, 内核在0xc000000下面有两个区域. 一个是2Mbytes的kmap持久映射区域. 一个是14Mbytes的module区域.
+2, 这个2Mbytes的kmap区域是kmap的持久映射区域. 使用kmap(), kunmap()分配和释放. 
+另外kmap还有临时映射区域, 每个cpu有13个窗口, 使用kmap_atomic(), kunmap_atomic()分配和释放. 
+3, module区域使用module_alloc分配, vfree释放. 前者和vmalloc类似. module_alloc映射的虚拟地址在物理上可能是不连续的. 
+
+16:17 2011-11-14
+Linux, driver, study, camera, v4l2, 看文档, vivi代码阅读
+1, 先看kernel driver还是先看nucleus driver? 要不先看kernel driver. 这样先熟悉kernel. 
+先看文档和vivi.c
+Documentation/video4linux/v4l2-framework.txt, videobuf
+
+2, v4l2-framework.txt
+1), v4l2_device_register(struct device *dev, struct v4l2_device *v4l2_dev);
+The first 'dev' argument is normally the struct device pointer of a pci_dev, usb_interface or platform_device.
+2), v4l2_subdev和底层实际设备之间互相指向.
+It is recommended to store that pointer in the private data of v4l2_subdev using v4l2_set_subdevdata(). That makes it easy to go from a v4l2_subdev to the actual low-level bus-specific device data.
+You also need a way to go from the low-level struct to v4l2_subdev. For the common i2c_client struct the i2c_set_clientdata() call is used to store a  v4l2_subdev pointer, for other busses you may have to use other methods.
+3), 注册v4l2 subdev方法(我应该用不到).
+int err = v4l2_device_register_subdev(v4l2_dev, sd);
+err = v4l2_subdev_call(sd, core, g_chip_ident, &chip);//实际是: err = sd->ops->core->g_chip_ident(sd, &chip);
+4), struct video_device
+video_device_allc()或嵌到上一级结构体里面都可以. 
+err = video_register_device(vdev, VFL_TYPE_GRABBER, -1);
+5), struct v4l2_fh and v4l2 event.
+(1), struct v4l2_fh provides a way to easily keep file handle specific data that is used by the V4L2 framework. Using v4l2_fh is optional for drivers.
+(2), The V4L2 events provide a generic way to pass events to user space. The driver must use v4l2_fh to be able to support V4L2 events.
+(3), example: http://gitorious.org/omap3camera
+
+3, videobuf稍候看. 先看看vivi.c
+1), v4l2_device_register(). 这个dev为什么是空的? 从文档看除非是ISA设备, 或者是一个多功能设备. 如果说是注册多个v4l2设备, 也不影响parent啊. 除非是一个v4l2 device对应多个parent?! 不可能吧. \todo.
+2), 看了注册, 看具体fops(v4l2_file_operations). 
+vivi自己实现了vivi_mmap, 其实只是把通用的"videobuf_mmap_mapper"包了一层. 
+3), v4l2_ioctl_ops都需要自己实现. 只需要实现自己需要的. 问题是我需要哪些呢? 
+
+4, 还需要看一下用户如何使用. 
+"v4lgrab.c": 用read得到buffer. 需要看如何用mmap, 暂时没有找到code. 
+
+5, 今天大概了解了流程, 下次用最简单的read方式把图片读出来, 看看是否正确. 
+是用882还是模拟器? 
+\todo 自己参考vivi.c, 写v4l2最基本的架子. 
+
+13:43 2011-11-15
+时间管理
+1, 本日
+1), -16:20 听lidongliang android audio: audio flinger and stagefright audio player.
+2), 16:50-18:39 camera driver. 准备qemu beagle环境. 见"16:57 2011-11-15". 
+3), 总结: 今天和aiguo说了我的想法，同意我改ae android camera driver为v4l2。另外今天为了debug qemu beagle board，用了前段时间看gdb的commands命令做断点命令，感觉还算有收获。
+
+16:49 2011-11-15
+VC0882, SV, 获得liuxiaotao建立的icp android代码
+1, liuxiaotao邮件"10.0.13.244 的 android源代码服务器（git server）已经建立完成"_20110908_1003
+我已经在10.0.13.244建立了我们自己android源代码服务器。大家以后可以从我们自己的服务器上面获取源代码。
+如何在linux下面获取android源代码
+一. 拷贝repo-local  （10.0.13.244已经做了这件事，可以省去）
+安装完成后，将 repo-local 拷贝到bin目录
+      repo-local这个文件时从Google的repo文件修改得到的
+               将Google的网址修改成这个 git://10.0.13.244/android-mirror/tools/repo.git
+repo-local 可以从 10.0.13.244的bin目录取得，我已经修改过一份了。
+二. 获取代码                       
+mkdir android_src
+cd android_src/
+repo-local init -u git://10.0.13.244/android-mirror/platform/manifest.git -b vmc_g
+sudo vi .repo/manifests/default.xml
+      修改成 git://10.0.13.244/android-mirror/
+repo-local sync          
+如何在windows上面获取android源代码
+一. 安装cygwin
+\\10.0.2.36\sqmshare\Document\Linux\application\cygwin.rar
+      1. 按照的时候选择“install from local directory”，再指定到release目录
+      2. select packages界面，选择all，也就是安装所有的工具（这个一定要注意好）
+二. 拷贝repo-local
+安装完成后，将 repo-local 拷贝到bin目录
+      repo-local这个文件时从Google的repo文件修改得到的
+               将Google的网址修改成这个 git://10.0.13.244/android-mirror/tools/repo.git
+repo-local 可以从 10.0.13.244的bin目录取得，我已经修改过一份了。
+三. 获取代码                       
+mkdir android_src
+cd android_src/
+repo-local init -u git://10.0.13.244/android-mirror/platform/manifest.git -b vmc_g
+sudo vi .repo/manifests/default.xml
+      修改成 git://10.0.13.244/android-mirror/
+repo-local sync
+
+2, 我操作时遇到问题
+zhangjian@icp882-desktop:/opt/share/zhangjian/android/icp_android$ repo-local init -u git://10.0.13.244/android-mirror/platform/manifest.git -b vmc_g
+gpg: keyring `/home/zhangjian/.repoconfig/gnupg/secring.gpg' created
+gpg: keyring `/home/zhangjian/.repoconfig/gnupg/pubring.gpg' created
+gpg: /home/zhangjian/.repoconfig/gnupg/trustdb.gpg: trustdb created
+gpg: key 920F5C65: public key "Repo Maintainer <repo@android.kernel.org>" imported
+gpg: Total number processed: 1
+gpg:               imported: 1
+
+Getting repo ...
+   from git://10.0.13.244/android-mirror/tools/repo.git
+fatal: The remote end hung up unexpectedly
+
+3, xiaotao文档后来有更新, 没有发给我
+liuxiaotao邮件"正式发布我们自己的 android 代码服务器（10.0.13.244）"_20111014_1509
+正式发布我们自己的 android 代码服务器（10.0.13.244）
+原始的android代码服务器：git://10.0.12.140/android/platform/manifest.git
+我们自己的android代码服务器ip：10.0.13.244
+我们自己的android代码服务器上的代码仓库目录：/opt/share/android-server-icp
+客户端可以通过以下命令获取到 android 源代码
+repo-icp init -u git@10.0.13.244:/opt/share/android-server-icp/platform/manifest.git -b vmc_g
+repo-icp sync
+repo start --all vmc_g
+cd kernel
+git checkout vmc_g_icp
+cd device/vimicro
+git checkout vmc_g_icp
+编译android之前，需要设置java环境变量
+export JAVA_HOME=/opt/share/liuxiaotao/jdk1.6.0_22
+export CLASSPATH=.:$JAVA_HOME/lib:$JAVA_HOME/jre/lib
+export PATH=$JAVA_HOME/bin:$JAVA_HOME/jre/bin:$PATH
+make
+说明 ：git所有的操作都是基于分支的。
+    10.0.12.140 将所有项目的主分支都命名为vmc_g
+    为了便于跟10.0.12.140上面的代码同步，我们将各个项目的分支命名为vmc_g_icp
+    以后统一由liuxiaotao定期进行10.0.12.140到10.0.13.244上面的更新
+因此：大家以后的操作，主要是基于各个项目的vmc_g_icp分支
+下面以kernel为例，客户端如何修改代码，并提交代码
+cd kernel
+git branch -r //查看remote所有的分支
+git branch       //查看本地所有的分支
+git checkout vmc_g_icp
+修改代码
+git commit -am “***”     //提交到本地的分支vmc_g_icp （本地分支）
+git push //提交的10.0.13.244服务器上面的分支vmc_g_icp（remote分支）
+                        //缺省情况下，将当前branch的改动push到缺省repo中它track的branch
+                        //cat .git/config 能查看本地分支版本所对应服务器的分支版本
+git diff vmc_g_icp vmc_g --stat //可以比较本地vmc_g_icp分支，跟remote上面 vmc_g 分支的差别
+git log //可以查看所有的commit信息
+注：push 操作要小心       
+详细内容请查看：
+\\10.0.2.36\sqmshare\Document\Linux\开发环境\git
+
+14:36 2011-11-15
+android, audio, audio flinger, stagefright audio player; lidongliang, yangmin
+1, audiohardwareinterface, createaudiohardware.
+2, 音视频同步。video根据audio去同步。audio去更新系统时间戳。
+3, audioflinger负责播放。
+audioPolicyService是router，负责通路切换。
+二者对应两个hal(libhardware方式).
+4, audioflinger里面每个输出设备对应一个thread。
+
+16:57 2011-11-15
+Linux, driver, study, camera, v4l2, 看文档, vivi代码实验; software, skill, gdb, breakpoint, do some commands while breakpoint occurs. 
+1, 在AE最新代码上run beagle代码. 需要搭环境. 
+1), kernel用AE的, 其余用原来beagle qemu的.
+2), kernel跑不起来. 开始因为是console配置问题. 但是用ttyS0, ttyS2都不行. 后来用gdb调试发现在do_one_initcall的musb_init里面没有返回. \todo 明天继续debug. 
+具体gdb设置断点并打印函数名称的命令如下(参考"软件调试的艺术"2.11, 断点命令列表): 
+(gdb) break 784
+(gdb) info breakpoints
+Num     Type           Disp Enb Address    What
+1       breakpoint     keep y   0xc0008364 in kernel_init at init/main.c:871
+        breakpoint already hit 1 time
+2       breakpoint     keep y   0xc00083f4 in kernel_init at init/main.c:784
+(gdb) commands 2
+Type commands for when breakpoint 2 is hit, one per line.
+End with a line saying just "end".
+>print *fn
+>cont
+>end
+(gdb)
+
+$73 = (initcall_t) 0xc001b5c4 <musb_init>
+
+14:22 2011-11-16
+embedded, linaro, Linux, android, 相关网址
+http://launchpad.net/qemu-linaro
+https://launchpad.net/linaro-landing-team-ti
+https://wiki.linaro.org/Platform/DevPlatform/Ubuntu/ImageInstallation
+
+14:23 2011-11-16
+时间管理
+0, -20:45
+
+1, 本日
+1), 下载lianro 11.10 release部分资料.
+2), 下午, 晚上 camera drvier. 继续实验beagle环境, 如果有问题, 用linaro11.10 release的image和代码实验. 见"14:24 2011-11-16"
+
+14:24 2011-11-16
+Linux, driver, study, camera, v4l2, 看文档, vivi代码实验, 续
+1, 继续实验beagle环境, 如果有问题, 用linaro11.10 release的image和代码实验(见"14:22 2011-11-16").
+2, 继续昨天的跟踪: 
+musb_probe()的musb_init_controller没有返回.
+这个代码是mentor usb otg的driver.
+(1), allocate_instance里面的BUG_ON(musb->config->num_eps > MUSB_C_NUM_EPS);没有返回. 
+之前用linaro beagle qemu可以启动起来, 看起来是我这个kernel代码太老了, 对omap3 otg支持不好? 
+3, 实验linaro 11.10image和代码. 
+1), 参考"https://wiki.linaro.org/Platform/DevPlatform/Ubuntu/ImageInstallation"说明. 
+sudo linaro-media-create --rootfs ext3 --mmc /dev/mmcblk0 --binary linaro-TARBALL.tar.gz --hwpack hwpack_linaro.tar.gz --dev $BOARD
+所以命令是:
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/nano/11.10/release$ sudo ../../../../tool/linaro-image-tools-2011.09/linaro-media-create --rootfs ext3 --image_file beagle_11.10_release.img --binary linaro-o-nano-tar-20111024-0.tar.gz --hwpack hwpack_linaro-omap3_20111024-0_armel_supported.tar.gz --dev beagle
+2), 打包出错:
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/nano/11.10/release$ sudo ../../../../tool/linaro-image-tools-2011.09/linaro-media-create --rootfs ext3 --image_file beagle_11.10_release.img --binary linaro-o-nano-tar-20111024-0.tar.gz --hwpack hwpack_linaro-omap3_20111024-0_armel_supported.tar.gz --dev beagle
+mv: cannot stat `/tmp/tmpqNKv61/binary/etc/resolv.conf': No such file or directory
+Traceback (most recent call last):
+  File "../../../../tool/linaro-image-tools-2011.09/linaro-media-create", line 156, in <module>
+    verified_files, *hwpacks)
+  File "/opt/share/zhangjian/linaro/tool/linaro-image-tools-2011.09/linaro_image_tools/media_create/chroot_utils.py", line 48, in install_hwpacks
+    prepare_chroot(chroot_dir, tmp_dir)
+  File "/opt/share/zhangjian/linaro/tool/linaro-image-tools-2011.09/linaro_image_tools/media_create/chroot_utils.py", line 38, in prepare_chroot
+    temporarily_overwrite_file_on_dir('/etc/resolv.conf', chroot_etc, tmp_dir)
+  File "/opt/share/zhangjian/linaro/tool/linaro-image-tools-2011.09/linaro_image_tools/media_create/chroot_utils.py", line 155, in temporarily_overwrite_file_on_dir
+    as_root=True).wait()
+  File "/opt/share/zhangjian/linaro/tool/linaro-image-tools-2011.09/linaro_image_tools/cmd_runner.py", line 100, in wait
+    raise SubcommandNonZeroReturnValue(self._my_args, returncode)
+linaro_image_tools.cmd_runner.SubcommandNonZeroReturnValue: Sub process "['mv', '-f', '/tmp/tmpqNKv61/binary/etc/resolv.conf', '/tmp/tmpqNKv61/resolv.conf']" returned a non-zero value: 1
+3), 但是"/etc/resolv.conf"在linaro-o-nano-tar-20111024-0.tar.gz里面是有的. 
+4), hwpack_linaro-omap3里面的pkg有"linux-image-3.1.0-2-linaro-omap_3.1.0-2.2~ppa~oneiric_armel.deb", 看起来像kernel, 直接解开
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/nano/11.10/release/hwpack_linaro-omap3/pkgs/temp/boot$ ar x linux-image-3.1.0-2-linaro-omap_3.1.0-2.2~ppa~oneiric_armel.deb 
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/nano/11.10/release/hwpack_linaro-omap3/pkgs/temp/boot$ tar jxf data.tar.bz2 
+发现boot目录下"vmlinuz-3.1.0-2-linaro-omap"有3.9M. 试试这个文件是否是kernel. 
+5), 但是这个文件不是uImage. 
+mkimage -A arm -O linux -T kernel -C none -a 0x80008000 -e 0x80008000 -d /opt/share/zhangjian/linaro/beagle/nano/11.10/release/hwpack_linaro-omap3/pkgs/linaro-image/boot/vmlinuz-3.1.0-2-linaro-omap uImage_linaro_11.10_release
+
+运行出错: 
+zhangjian@icp882-desktop:/opt/share/zhangjian/board/beagle/image$ ../../../install/linaro/qemu_0.15.50_2011.10/bin/qemu-system-arm -M beagle -mtdblock beagle-nand_111116_linaro_11.10_release_kernel.bin --nographic
+
+
+Texas Instruments X-Loader 1.41
+Starting OS Bootloader...
+
+
+U-Boot 1.3.3 (Nov 23 2008 - 18:48:04)
+
+OMAP3530-GP rev 2, CPU-OPP2 L3-165MHz
+OMAP3 Beagle Board + LPDDR/NAND
+DRAM:  128 MB
+NAND:  256 MiB
+In:    serial
+Out:   serial
+Err:   serial
+Hit any key to stop autoboot:  0
+
+NAND read: device 0 offset 0x280000, size 0x400000
+ 4194304 bytes read: OK
+
+NAND read: device 0 offset 0x680000, size 0x800000
+ 8388608 bytes read: OK
+## Booting kernel from Legacy Image at 80000000 ...
+   Image Name:
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    3988720 Bytes =  3.8 MB
+   Load Address: 80008000
+   Entry Point:  80008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+
+Starting kernel ...
+
+Uncompressing Linux... done, booting the kernel.
+omap2_inth_read: Bad register 0x00000020
+Segmentation fault
+从log看, 解压缩正常, 但是运行出错,  要么不是omap3的kernel, 要么这个只是不同压缩包, 不是kernel. 
+
+6), 直接用linux-linaro-3.1-2011.10-1.tar.bz2, kernel代码. 
+但是里面没有beagle的配置文件. 手工配置一个beagle的配置. 编译实验. 错误和上面一样. 
+现在用的qemu就是11.10 release的. 不应该是qemu的问题. 
+这有点郁闷了. 今天没什么进展啊. 
+
+7), 上网查一查.
+(1), https://bugs.launchpad.net/qemu-linaro/+bug/890072
+OMAP3 beagleboard.org # set bootargs console=ttyO2,115200n8 ramdisk_size=8192 root=/dev/ram0 rw rootfstype=ext2 initrd=0x81600000,8M nohz=0ff
+修改后不行. 
+(2), https://bugs.meego.com/show_bug.cgi?format=multiple&id=22776
+死在do_one_initcall(), omap_gpio_drv_reg
+修改qmeu hw/omap-gpio.c:
+There's is a typo in the omap2_gpio_module_readp function in omap_gpio.c ([src
+dir]/hw/omap_gpio.c).  The function body currently reads:
+  return omap2_gpio_module_readp(opaque, addr) >> ((addr & 3) << 3);
+when it SHOULD most likely read (and seems to work this way):
+  return omap2_gpio_module_read(opaque, addr) >> ((addr & 3) << 3);
+
+修改后, 死在"initialize_hashrnd"打印后.
+再根据(1)修改串口. 在serial_omap_init()kernel打印信息终于出来了.
+看来上面并没有死在"initialize_hashrnd". 前面修改ttyS2为ttyO2的可以用"saveenv"保存到nand里面.
+(3), 跟踪代码确认(2)的分析.
+a, drivers/tty/serial/omap-serial.c: serial_omap_probe()->uart_add_one_port(), 执行后kernel会有打印. 
+b, initialize_hashrnd()是最后一个initcall.
+
+8), 但是uboot里面的saveenv就没法用了. 无论上面qemu代码是否修改都是一样的. 看起来是qemu更新后对于omap nand支持有问题. 
+(1), 为了简单, 把原来自己编译的qemu拿来改nand参数. 
+OMAP3 beagleboard.org # printenv
+bootcmd=nand read 0x80000000 0x280000 0x400000;nand read 0x81600000 0x680000 0x800000;bootm 0x80000000
+bootargs=console=ttyO2,115200n8 ramdisk_size=8192 root=/dev/ram0 rw rootfstype=ext2 initrd=0x81600000,8M nohz=0ff
+(2), 但是这样需要找比较以前的那个qemu, 有些麻烦. 如果用sd卡. 我暂时还不会. 
+(3), 现在回过头来看当时linaro-media-tool做的image. 
+发现里面也有"omap2_inth_read: Bad register 0x00000020"这个错误. console用的也是ttyO2.我怎么没有想到看看原来正确的image呢? 
+(4), 看了看, 还是决定用最笨的办法:
+编译出kernel后, 更新boot image, 然后用linaro-image-tool更新sd. 
+(5), 刚才搞错了, 其实更新boot.tar.bz2, 就可以. 
+我现在还差一个ramdisk image
+   Image Name:   Android Ramdisk Image
+   Image Type:   ARM Linux RAMDisk Image (gzip compressed)
+   Data Size:    192525 Bytes = 188 KiB
+   Load Address: 00000000
+   Entry Point:  00000000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+
+看[u-boot src]/image/common.c, 里面可以看到每个选项具体参数列表. 
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/temp$ mkimage -A arm -O Linux -T ramdisk -a 0 -e 0 -d rd-ext2-8M.bin boot/uInitrd
+
+用ramdisk的话, 还有ramdisk大小这个问题. command里面定义的是64M. 我现在用的是8M, 足够了. 
+(6), 完整命令
+base目录: zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/temp$ 
+cp /opt/share/zhangjian/linaro/download/image/beagle_11.09/boot.tar.bz2  .
+"untar boot image, and update uImage and uInitrd
+tar jxf boot.tar.bz2 
+cp /opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/linux-linaro-3.1-2011.10-1/arch/arm/boot/uImage  boot/ -p
+mkdir -p Initrd
+sudo mount -o loop rd-ext2-8M.bin Initrd
+"copy your files to Initrd
+sync
+sudo umount Initrd
+mkimage -A arm -O Linux -T ramdisk -a 0 -e 0 -d rd-ext2-8M.bin boot/uInitrd
+tar jcf boot.tar.bz2 boot
+"create system and data bz2 packages
+mkdir system
+mkdir app bin etc etc  fonts  framework  lib  modules  usr  xbin
+tar jcf system.tar.bz2 system
+mkdir data/app -p
+tar jcf userdata.tar.bz2 data
+"package to sd image file with linaro-android-tools
+sudo /opt/share/zhangjian/linaro/tool/linaro-image-tools-2011.09/linaro-android-media-create --image_file beagle_1808.img --dev beagle --boot boot.tar.bz2 --system system.tar.bz2 --userdata userdata.tar.bz2
+"run qemu
+/opt/share/zhangjian/install/linaro/qemu_0.15.50_2011.10/bin/qemu-system-arm -M beaglexm -drive if=sd,cache=writeback,file=beagle_1808.img --nographic
+
+4, (16:51 2011-11-16)
+总结, linaro11.10 release. qemu + beagle运行成功. 涉及到的修改.
+1), 修改qmeu hw/omap-gpio.c, omap2_gpio_module_readp()
+  return omap2_gpio_module_readp(opaque, addr) >> ((addr & 3) << 3);
+改为:
+  return omap2_gpio_module_read(opaque, addr) >> ((addr & 3) << 3);
+2), omap3在kernel serial驱动有变化, 需要修改ttyS2为ttyS0.
+
+5, (19:58 2011-11-16)
+看看qemu的"-kernel"参数是如何工作的, 更方便的更新sd img上的uImage.
+1), 看看main函数在什么地方(gdb里面"break main"), 
+(gdb) break main
+Breakpoint 1 at 0x817cba4: file /opt/share/zhangjian/linaro/qemu/qemu-linaro-0.15.50-2011.10/vl.c, line 2109.
+(1), main->beagle_init[label = "machine->init"]->beagle_common_init
+里面没有用到kernel_filename. 
+(2), 看了看realview.c的代码. 使用arm_load_kernel加载kernel, 但是没太看明白. 
+(3), 再跟了跟代码, 发现要想看明白还真不太容易. 放弃...
+
+6, 还是先玩儿玩儿camera vivi.c吧. 
+vivi要编译为模块. 
+decnet编译出错. 
+driver/gpu编译出错; 但是这个没有选项, 只能是修改"driver/Makefile". 
+难道是我用的工具链需要更新了?
+编译kernel module太多了, 早知道剪裁一下. 这两天准备环境有些得不偿失了. 
+
+20:40 2011-11-16
+想吃ICS仍需耐心 Android4.0编译工作庞大
+http://www.chinadaily.com.cn/hqgj/jryw/2011-10-25/content_4159678.html
+2011-10-25 06:44:00  来源：中关村在线
+--------------------------------------------------------------------------------
+ 打印文章  发送给好友 分享按钮  
+[提要]  你也许对Android4.0很动心，希望尽快体验到这个产品，但是在官方发布升级之前由开发者进行移植并不是件容易的事情，因为Android4.0系统的编译源代码工作将会非常庞大，而且要求很高――工作站容量应不低于16GB，是Android2.3系统对应数字的两倍。
+　　你也许对Android4.0很动心，希望尽快体验到这个产品，但是在官方发布升级之前由开发者进行移植并不是件容易的事情，因为Android4.0系统的编译源代码工作将会非常庞大，而且要求很高――工作站容量应不低于16GB，是Android2.3系统对应数字的两倍。
+Android4.0系统的源代码编译工作将会非常庞大
+　　来看看AndroidIce Cream Sandwich编译的苛刻条件吧：每次构建需要25GB左右容量，如果你的机器配置是两个2.4GHz四核处理器，单次构建就需要半个白天的时间...Android系统源代码编译工作可不像我们想象得那么轻松。
+　　看起来等待Android4.0到来的用户将会等久一点了，这另一方面也说明了Android系统代码的庞大，对于这个问题，你怎么看呢？
+
+10:01 2011-11-17
+行政, 公司制度, 中星微调整
+青岛 yinong总经理，chenweimin全部，guoxiaochuan部分。
+做8系列。
+ic1除了xiaoyong都去?
+
+之前，无锡总经理是dave。
+
+遗留问题:
+退税问题，家属户口问题。
+
+项目变化: 370，718dvrplus可能会不做。370需求并入710。
+
+11:19 2011-11-17
+时间管理
+1, 本日
+1), 10:00-11:00 ICP会议, 公司变动. 见"10:01 2011-11-17". 
+2), android4.0 build. 见"11:21 2011-11-17".
+
+11:21 2011-11-17
+android4.0, ice cream sandwish
+1, xiaotao昨天用默认配置编译的, 启动到gpu时失败, 从log看, 模拟器版本需要和qemu通信. 
+$ logcat
+--------- beginning of /dev/log/main
+I/DEBUG   ( 1004): debuggerd: Nov 17 2011 03:23:00
+--------- beginning of /dev/log/system
+I/Vold    ( 1002): Vold 2.1 (the revenge) firing up
+I/Netd    ( 1003): Netd 1.0 starting
+E/Netd    ( 1003): Unable to create netlink socket: Protocol not supported
+E/Netd    ( 1003): Unable to open quota2 logging socket
+init: untracked pid 1007 exited
+D/Vold    ( 1002): Volume sdcard state changing -1 (Initializing) -> 0 (No-Media)
+I/        ( 1008): ServiceManager: 0x18910
+D/AndroidRuntime( 1007): 
+D/AndroidRuntime( 1007): >>>>>> AndroidRuntime START com.android.internal.os.ZygoteInit <<<<<<
+D/AndroidRuntime( 1007): CheckJNI is OFF
+I/SurfaceFlinger( 1006): SurfaceFlinger is starting
+I/SurfaceFlinger( 1006): SurfaceFlinger's main thread ready to run. Initializing graphics H/W...
+I/gralloc ( 1006): using (fd=10)
+I/gralloc ( 1006): id           = 
+I/gralloc ( 1006): xres         = 800 px
+I/gralloc ( 1006): yres         = 480 px
+I/gralloc ( 1006): xres_virtual = 800 px
+I/gralloc ( 1006): yres_virtual = 960 px
+I/gralloc ( 1006): bpp          = 16
+I/gralloc ( 1006): r            = 11:5
+I/gralloc ( 1006): g            =  5:6
+I/gralloc ( 1006): b            =  0:5
+I/gralloc ( 1006): width        = 154 mm (131.948059 dpi)
+I/gralloc ( 1006): height       = 86 mm (141.767441 dpi)
+I/gralloc ( 1006): refresh rate = 60.00 Hz
+D/libEGL  ( 1006): loaded /system/lib/egl/libGLES_android.so
+D/libEGL  ( 1006): loaded /system/lib/egl/libEGL_emulation.so
+E/        ( 1006): Failed to connect to host (QemuPipeStream)!!!
+E/EGL_emulation( 1006): Failed to establish connection with the host
+...
+W/libEGL  ( 1006): 0: eglInitialize(0x40d46758) failed (EGL_SUCCESS)
+E/EGL_emulation( 1006): tid 1046: eglChooseConfig(612): error 0x3001 (EGL_NOT_INITIALIZED)
+W/SurfaceFlinger( 1006): ro.sf.lcd_density not defined, using 160 dpi by default.
+F/libc    ( 1006): Fatal signal 11 (SIGSEGV) at 0x00000000 (code=1)
+I/        ( 1009): ServiceManager: 0xf958
+I/AudioFlinger( 1009): Loaded primary audio interface from Default audio HW HAL (audio)
+I/AudioFlinger( 1009): Using 'Default audio HW HAL' (audio.primary) as the primary audio interface
+I/CameraService( 1009): CameraService started (pid=1009)
+E/CameraService( 1009): Could not load camera HAL module
+I/AudioFlinger( 1009): AudioFlinger's thread 0x10460 ready to run
+W/AudioFlinger( 1009): Thread AudioOut_1 cannot connect to the power manager service
+I/AudioPolicyService( 1009): Loaded audio policy from LEGACY Audio Policy HAL (audio_policy)
+D/AndroidRuntime( 1049): 
+D/AndroidRuntime( 1049): >>>>>> AndroidRuntime START com.android.internal.os.ZygoteInit <<<<<<
+D/AndroidRuntime( 1049): CheckJNI is OFF
+....
+I/SamplingProfilerIntegration( 1060): Profiling disabled.
+I/Zygote  ( 1060): Preloading classes...
+D/dalvikvm( 1060): GC_EXPLICIT freed 36K, 81% free 407K/2048K, paused 1ms+1ms
+D/dalvikvm( 1060): GC_EXPLICIT freed 3K, 77% free 471K/2048K, paused 0ms+0ms
+D/dalvikvm( 1060): GC_EXPLICIT freed 18K, 76% free 505K/2048K, paused 0ms+1ms
+D/dalvikvm( 1060): GC_EXPLICIT freed 28K, 74% free 532K/2048K, paused 1ms+13ms
+D/dalvikvm( 1060): GC_EXPLICIT freed 15K, 72% free 573K/2048K, paused 1ms+13ms
+D/dalvikvm( 1060): GC_EXPLICIT freed 28K, 71% free 600K/2048K, paused 1ms+1ms
+D/TextLayoutCache( 1060): Using debug level: 0 - Debug Enabled: 0
+D/dalvikvm( 1060): GC_EXPLICIT freed 25K, 70% free 631K/2048K, paused 1ms+1ms
+W/Zygote  ( 1060): Class not found for preloading: android.media.AudioManager$2
+I/dalvikvm( 1060): threadid=1: recursive native library load attempt (/system/lib/libmedia_jni.so)
+D/MtpDeviceJNI( 1060): register_android_mtp_MtpDevice
+I/dalvikvm( 1060): threadid=1: recursive native library load attempt (/system/lib/libmedia_jni.so)
+I/dalvikvm( 1060): threadid=1: recursive native library load attempt (/system/lib/libmedia_jni.so)
+W/Zygote  ( 1060): Class not found for preloading: android.media.IRemoteControlClientDispatcher
+W/Zygote  ( 1060): Class not found for preloading: android.media.IRemoteControlClientDispatcher$Stub
+D/dalvikvm( 1060): GC_EXPLICIT freed 22K, 67% free 677K/2048K, paused 1ms+1ms
+D/dalvikvm( 1060): GC_FOR_ALLOC freed 221K, 53% free 967K/2048K, paused 83ms
+D/dalvikvm( 1060): GC_EXPLICIT freed 35K, 51% free 1015K/2048K, paused 1ms+2ms
+I/SurfaceFlinger( 1064): SurfaceFlinger is starting
+I/SurfaceFlinger( 1064): SurfaceFlinger's main thread ready to run. Initializing graphics H/W...
+I/gralloc ( 1064): using (fd=9)
+后面还是反复启动zygote和surface flinger. 看起来是gpu问题导致二者反复启动. 
+
+2, 同样的image在模拟器上运行, android4.0可以正常启动. 
+\todo diff goldfish kernel变化. 
+
+3, 所以更换ti panda配置文件实验:
+. build/envsetup.sh
+lunch 6
+这样gpu虽然也是不对, 但是希望android会使用3d软件加速. 
+
+4, (15:04 2011-11-17)
+用ti panda, 系统由于system server重启四次造成系统重启. 
+如果用ti panda的system/lib/egl替换goldfish的egl, log和上午有差异: 没有提示如下错误: 
+D/libEGL  ( 1006): loaded /system/lib/egl/libEGL_emulation.so
+E/        ( 1006): Failed to connect to host (QemuPipeStream)!!!
+但是zygote仍然不断重启. 
+
+5, xiaotao上网搜索. 有人在HTC G7上跑android4.0成功. 又看到人家是把devces/htc目录复制到android4.0 devices里面. 所以也如法炮制, 把devces/vimicro复制过来. 编译选择generic vortex. 
+bamvor: 我原来一直没理解lunch是怎么找到配置文件的, 现在看起来就是直接搜索devices里面的每个平台的配置. 
+
+12:04 2011-11-17
+Linux, driver, study, camera, v4l2, 看文档, vivi代码实验, 续
+1, 更新vivi.ko到文件系统
+[root@beagleboard /]# insmod vivi.ko
+[   19.090789] vivi: Unknown symbol vb2_streamoff (err 0)
+[   19.091094] vivi: Unknown symbol vb2_streamon (err 0)
+[   19.091339] vivi: Unknown symbol vb2_dqbuf (err 0)
+[   19.091552] vivi: Unknown symbol vb2_qbuf (err 0)
+[   19.091796] vivi: Unknown symbol vb2_querybuf (err 0)
+[   19.092010] vivi: Unknown symbol vb2_reqbufs (err 0)
+[   19.092285] vivi: Unknown symbol vb2_queue_release (err 0)
+[   19.092559] vivi: Unknown symbol vb2_mmap (err 0)
+[   19.092803] vivi: Unknown symbol vb2_poll (err 0)
+[   19.093048] vivi: Unknown symbol vb2_read (err 0)
+[   19.093261] vivi: Unknown symbol vb2_buffer_done (err 0)
+[   19.093566] vivi: Unknown symbol find_font (err 0)
+[   19.093994] vivi: Unknown symbol vb2_queue_init (err 0)
+[   19.094299] vivi: Unknown symbol vb2_vmalloc_memops (err 0)
+[   19.094573] vivi: Unknown symbol vb2_plane_vaddr (err 0)
+insmod: cannot insert 'vivi.ko': unknown symbol in module
+
+原来是其它ko没有copy:
+zhangjian@icp882-desktop:/opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/linux-linaro-3.1-2011.10-1/drivers/media/video$ ls *.ko
+videobuf2-core.ko  videobuf2-memops.ko  videobuf2-vmalloc.ko  vivi.ko
+
+我记得v4l2可以编译到kernel中啊. 
+
+4, (14:09 2011-11-17)
+经过修改. 取消了USB_WUSB, 把framebuffer console改为*(编译到kernel), vivi就可以编译到kernel了. 方法是看看vivi.c的配置要求, 发现修改前, 只有FRAMEBUFFER_CONSOLE是m, 如下是修改后的情况: 
+  x Symbol: VIDEO_VIVI [=y]                                                 x
+  x Type  : tristate                                                        x
+  x Prompt: Virtual Video Driver                                            x
+  x   Defined at drivers/media/video/Kconfig:567                            x
+  x   Depends on: MEDIA_SUPPORT [=y] && VIDEO_CAPTURE_DRIVERS [=y] && \     x
+  x VIDEO_DEV [=y] && VIDEO_V4L2 [=y] && !SPARC32 && !SPARC64 && (\         x
+  x FRAMEBUFFER_CONSOLE [=y] || STI_CONSOLE [=n])                           x
+  x   Location:                                                             x
+  x     -> Device Drivers                                                   x
+  x       -> Multimedia support (MEDIA_SUPPORT [=y])                        x
+  x         -> Video capture adapters (VIDEO_CAPTURE_DRIVERS [=y])          x
+  x   Selects: FONT_8x16 [=y] && VIDEOBUF2_VMALLOC [=y]                     x
+
+16:04 2011-11-18
+时间管理
+1, 本日
+1), 1h: 系统没法正常启动, ghost系统. 
+2), 20' power, PMIC: VA7882F十大优点, 见"16:23 2011-11-18".
+3), 16:00-16:32 给aiguo写邮件, 聊一聊. 见"16:07 2011-11-18".
+4), 30' android4.0分工, 30' 和xiaotao讨论(20' 发邮件). 见"17:23 2011-11-18".
+5), 20:09-21:04 coding练习, 编程基础问题. 见"20:09 2011-11-18". 
+6), 看大家写的882问题. 只有shuyu, 我和pingping(audio)写了.
+
+2, 次日
+1), 看android makefile. 
+
+), coding练习, 
+(1), 尝试用kmap_cache分配内存. 
+(2), 继续写链表代码: 从整数链表改为通用链表. 
+), 阅读: 
+kernel进程间同步方法。spinlock, semaphore, completion
+memory management: kmalloc和kmap_cache区别，malloc做的工作。
+中断：spin_lock, spin_lock_irq区别
+
+16:07 2011-11-18
+公司, aiguo, 沟通, 绩效面谈, \todo 待修改
+1, 按: 对于自己的发展有些疑问, 对于公司也有些疑问, 先给aiguo发信同时约个时间聊聊. 
+2, mail2aiguo(未发信).
+hi, aiguo
+
+早就想找你聊聊, 只是最近家里一直有事情, 你看什么时候方便? 
+
+公司. 对于公司成立青岛分公司, 感觉不是好事情. 一个公司如果靠四处注册公司的方法去找投资, 感觉不是什么好事. 感觉也不是一个能实际做东西的公司该干的事情. 
+我自己感觉中星微像882, 718这样的项目没有做好(至少目前看起来是这样). 可能是公司还缺乏做好大项目的能力, 不管是人力资源的管理(830, 882的人员流失严重), 还是技术的预研, 还是部分之间的分工和沟通(882有冗余功能). 并不是钱的问题. 
+
+个人. 
+882 tapeout之后. 我一直也没怎么写代码. 我感觉以我的经验来说, coding的锻炼还是很重要的. 从我自己角度说, 我还是希望做linux底层的开发和调试工作. 对于像android4.0这类通路尝试的尝试工作希望少做一些. 因为882项目开始的时候, 我也做过类似的工作. 而且对我我自己来说, 本来搭环境, 攒软件我做的也比较多. 
+
+3, (11:18 2011-12-5)上午去找aiguo, 不在, 先发个邮件. 
+hi, aiguo
+
+我上午没找到你. 你什么时候方便, 想找你聊聊. 
+
+主要是三个事情: 一个是我之前工作的评价, 一个是我未来工作安排, 还有android4.0移植要做到什么程度, 需要你具体指导.
+
+之前咱们也聊过, 我想技术做的更深入一些. 所以更希望能多做一些coding和debug的工作.
+
+android4.0之前跑起来AE移植后, xiaotao正在研究修改需要如何修改. 之前我们按照修改代码的思路去做, 现在看起来android已经考虑到和硬件无关的问题, 可以通过修改makefile选择是否使用实际硬件. 可能本周会有个大概的移植结论. 这样看起来, xingjie和caijin看中间件和android4.0移植没有太大关系. 从研究角度说, 我不知道他俩该看些什么东西. 
+
+zhangjian
+
+4, 和aiguo聊了聊. 
+目前有710, 882L, 蓝牙等项目. 
+883估计得882L完事后, 明年下半年才可能. 
+aiguo说现在对于通讯这类驱动不太了解, 我能不能看看wifi或3G. 后来商量我看看wifi驱动, 先从AE已有的387启动开始. 
+
+16:23 2011-11-18
+VC0882, SV, power, PMIC, VA7882F十大优点
+休眠功耗可降低40%(休眠时关闭26M晶振, 只保留32k. 相比7882C, 功耗从10ma降到5-7ma)
+支持单键RESET功能
+支持组合键RESET功能
+支持充电最大电流可达3A
+支持低电预警
+支持模拟调光功能 
+PWM支持两级调制 
+改进了7882F的BUCK5 
+支持RTC功能
+实现最佳DVFS 
+
+17:16 2011-11-18
+VC0816, SV, 量产, 汽车电子, 铁将军
+1, fengbeizhan转发...mark邮件
+816行车记录仪刚在大客户铁将军量产出货，消费者就反馈816+SENSOR的系统对GPS的干扰很严重，消费者用816的记录仪就造成GPS无法搜到卫星。深圳工程师目前是查到816的CLOCK问题可能是根源。
+深圳希望能直接和IC设计工程师电话沟通，很急！
+
+17:23 2011-11-18
+1, aiguo, lidongliang邮件
+1), lidongliang
+收件人: Zhang jian; Liu xiaotao; Shu Yu; Yang min; Wang wenlei; Yin xingjie; Lv Bo Xue
+抄送: Ai Guo; Feng Bei Zhan; Ling Ming
+2), aiguo
+因项目的调整，讨论一下Android的工作分配！
+
+2, 我的考虑(但是这次开会aiguo也没有问大家的想法, 基本是dongliang直接安排的). 
+这几天和xiaotao尝试在882上跑android4.0.
+目前android4.0有支持的有TI pandaboard(OMAP4, cortex-A9), 三星两个板子. 我的思路还是先在别人的板子上研究android4.0, 然后移植到882上. 
+http://www.chipsee.com/
+(19:58 2011-11-18)
+不过后来和xiaotao讨论, 其实qemu也是一个SOC. 把这个版本了解清楚和再去跑panda board其实是一样的. 
+
+3, 发信
+下午和xiaotao讨论了一下. 周一过来后做这么几件事情. 
+1), android4.0上传到服务器: 需要改repo.
+2), 根据wenlei的建议看看能否使用软件egl, 在882sv上实验. 
+3), 比较goldfish, panda两个版本的差异, 差异的地方可能是硬件相关的. 去除这些差异, 不用硬件加速, 看看能否搞出一个882可用的版本. 
+如何去掉和硬件相关的部分, 可能会涉及的东西比较广, 我和xiaotao两个人看不够, 需要大家帮忙. 
+注: goldfish是android模拟器. panda是TI omap4开发板. 
+
+9:53 2011-11-21
+dengzhonghan。
+青岛市政府很重视，希望和当地的海信和海尔有合作。
+wally做ic副总裁。
+新项目计划。
+希望在地方政府支持下上市。
+
+中星电子在pc camera继续做好，再做监控。
+
+美国经济起码需要两年才能调整过来。奥巴马转移国内注意力：更深介入apec，孤立中国，澳大利亚驻军。
+
+专注，积累和发展。
+
+9:44 2011-11-22
+时间管理
+0, 9:30
+
+1, 本日
+1), 9:45-10:07 人间词话. 
+2), 10:08-10:53 看android build/envsetup.sh, 见"10:20 2011-11-22".
+3), 10:53-11:50 12:50-13:50 休息. 见"12:56 2011-11-21".
+4), 11:50-12:50 午饭. 
+5), 15:15-17:18 android4.0编译, 根据xiaotao实验结果, 看看android assert-product-vars作用. 
+6), 17:20-18:30 coding练习. 见"17:24 2011-11-22".
+7), 总结: 今天能给个60分吧。android4.0移植参与了，自己的代码也写了，也没有浪费大段的时间。只是最后自己编程练习时把kmap写成了kmem，自己总是性急，没搞清状况就动手。
+
+10:20 2011-11-22
+android4.0, 看android build/envsetup.sh,  分析各个板子编译配置差异. 
+1, lunch里面set_stuff_for_environment看起来是设置环境. 
+1), settitle设置:
+        local product=$TARGET_PRODUCT
+        local variant=$TARGET_BUILD_VARIANT
+        local apps=$TARGET_BUILD_APPS
+        if [ -z "$apps" ]; then
+            export PROMPT_COMMAND="echo -ne \"\033]0;[${product}-${variant}] ${USER}@${HOSTNAME}: ${PWD}\007\""
+        else
+            export PROMPT_COMMAND="echo -ne \"\033]0;[$apps $variant] ${USER}@${HOSTNAME}: ${PWD}\007\""
+        fi
+2), set_java_home里面设置JAVA_HOME
+3), setpaths设置编译器和out目录. 
+4), set_sequence_number
+export BUILD_ENV_SEQUENCE_NUMBER=10
+这个不知道是干什么的, 看起来也不是api level啊. 
+5), export ANDROID_BUILD_TOP=$(gettop)
+看起来是设置编译的根目录. 从中也可以看出顶层Makefile是: 
+TOPFILE=build/core/envsetup.mk
+
+2, lunch里面add_lunch_combo看起来会加入编译菜单. 所以需要看每个板子都有啥配置. 
+1), env/build.sh会查找vender和device下面的vendorsetup.sh并执行. 最后加入adb completion
+
+# Execute the contents of any vendorsetup.sh files we can find.
+for f in `/bin/ls vendor/*/vendorsetup.sh vendor/*/*/vendorsetup.sh device/*/*/vendorsetup.sh 2> /dev/null`
+do
+    echo "including $f"
+    . $f
+done
+unset f
+
+addcompletions
+2), 在目前的android4.0里面
+[zhangjian@icp882-desktop device]$ ls */*/vendorsetup.sh
+samsung/maguro/vendorsetup.sh  ti/panda/vendorsetup.sh
+samsung/tuna/vendorsetup.sh    vimicro/vortex/vendorsetup.sh
+如果上面几个板子都是用add_lunch_combo加入配置. 
+
+15:40 2011-11-22
+预研, android4.0, 在VC0882上运行, assert-product-vars 
+1, 获取代码
+Android4 源代码可以从我们自己的服务器下载了。
+Repo文件 \\10.0.13.244\Share\share\repo-android4-icp
+下载代码
+mkdir android4
+cd android4
+chmod 777 repo-android4-icp
+./repo-android4-icp init -u git@10.0.13.244:/opt/share/android4-server/platform/manifest -b android-4.0.1_r1       
+./repo-android4-icp sync
+./repo-android4-icp start --all android-4.0.1_r1
+
+2, 根据xiaotao的研究. 原来android2.3时为了建立本地的mirror, 需要修改manifest. 现在android4.0已经修改了manifest, 会优先去外面用户传入的地址取代码. 这样就不需要修改manifest文件了. 
+
+3, 在服务器上建立映像:
+./repo-android4-icp init -u git@10.0.13.244:/opt/share/android4-server/platform/manifest -b android-4.0.1_r1 --mirror
+
+4, copy android2.3的devices/vimicro, 
+修改ALL_PREBUILT为PRODUCT_COPY_FILES. 编译提示: 
+build/core/main.mk:531: PRODUCT_COPY_FILES has been modified:
+看对应代码(见下), 看起来是不允许变量修改, 只能赋值一次. 
+#
+# Assert that the the variable stashed by stash-product-vars remains untouched.
+# $(1): The prefix as supplied to stash-product-vars
+#
+define assert-product-vars
+$(strip \
+  $(eval changed_variables:=)
+  $(foreach v,$(_product_stash_var_list), \
+    $(if $(call streq,$($(v)),$($(strip $(1))_$(call rot13,$(v)))),, \
+        $(eval $(warning $(v) has been modified: $($(v)))) \
+        $(eval $(warning previous value: $($(strip $(1))_$(call rot13,$(v))))) \
+        $(eval changed_variables := $(changed_variables) $(v))) \
+   ) \
+  $(if $(changed_variables),\
+    $(eval $(error The following variables have been changed: $(changed_variables))),)
+)
+endef
+
+另外ALL_PREBUILT和PRODUCT_COPY_FILES的写法不同, 新写法
+development/data/etc/apns-conf_sdk.xml:system/etc/apns-conf.xml
+旧写法
+out/target/product/vortex/system/bin/busybox:device/vimicro/vortex/../tools/busybox out/target/product/vortex/system/bin/busybox
+xiaotao会实验修改这两个问题. 
+如果修改后还是不行, 加入"--debug=i"make, 看看makefile调用顺序, 分析原因. 
+
+5, 分析一下"assert-product-vars".
+如果这个变量是这个意思, 需要试试, 如果HAL存在, android能否跑起来. 
+_product_stash_var_list里面的_product_var_list, 的确定义了"PRODUCT_COPY_FILES".
+1), $(strip string)
+Removes leading and trailing whitespace from string and replaces each internal sequence of one or more whitespace characters with a single space.
+2), foreach
+$(foreach var,list,text)
+The first two arguments, var and list, are expanded before anything else is done; note that the last argument, text, is not expanded at the same time. Then for each word of the expanded value of list, the variable named by the expanded value of var is set to that word, and text is expanded. Presumably text contains references to that variable, so its expansion will be different each time.
+英文的开始没看懂, 再来一个中文的: 
+$(foreach <var>,<list>,<text>)
+这个函数的意思是，把参数<list>中的单词逐一取出放到参数<var>所指定的变量中，然后再
+执行<text>所包含的表达式。每一次<text>会返回一个字符串，循环过程中，<text>的所返回
+的每个字符串会以空格分隔，最后当整个循环结束时，<text>所返回的每个字符串所组成的
+整个字符串（以空格分隔）将会是foreach 函数的返回值。
+
+例如下面Makefile及其执行结果
+[zhangjian@icp882-desktop foreach_test]$ cat Makefile
+
+names := a b c d
+
+define foreach_test
+$(foreach n,$(names),$(n).o)
+endef
+
+.PHONY: all
+
+all:
+        @echo $(call foreach_test)
+
+[zhangjian@icp882-desktop foreach_test]$ make
+a.o b.o c.o d.o
+[zhangjian@icp882-desktop foreach_test]$
+
+3), rot13是把字符串里面的字符向后推13个字符, 不清楚为什么这么做. 
+define rot13
+$(shell echo $(1) | tr 'a-zA-Z' 'n-za-mN-ZA-M')
+endef
+
+tr: 做字符替换
+[zhangjian@icp882-desktop makefile]$ echo abc | tr 'a-zA-Z' 'n-za-mN-ZA-M'
+nop
+
+10:38 2011-11-23
+时间管理
+0, 9:50
+
+1, 本日
+1), 10:38-10:45 14:24-18:20 coding练习. 见"17:24 2011-11-22"2.
+2), 杂: 看小说. 
+3), 午饭.
+4), 13:51-14:23 android使用心得. 见"13:52 2011-11-23". 
+5), 17:22-17:30, 17:50-17:58 杂: 日记, 电话. 
+6), 18:20-18:34 现在这个beagle代码, 没有framebuffer. 有空可以试试. 按理说linaro的kernel对于beagle framebuffer支持应该是没有问题的. 
+
+), 路上看slab分配器.doc
+
+16:43 2011-11-23
+预研, android4.0, 在VC0882上运行, 续
+1, xiaotao注释了mediaserver里面的audio, camera等四个server. 系统可以启动到andoird升级界面. 再重启后, 停在android滚动(gpu)位置. 
+提示netd启动失败, netlink无此服务. xiaotao怀疑是init.vimicro.rc或vimicro的init.rc里面有网络配置造成的. 
+另外kernel的变化可能会导致netlink(基于socket)工作不正常. 
+
+10:19 2011-11-24
+时间管理
+0, 10:10
+
+1, 本日
+1), android4.0编译. 见"10:19 2011-11-24". 
+2), 15:51-17:10 18:03-18:25 coding练习: 理解mmap函数. 见"15:52 2011-11-24".
+3), 17:10-17:35 向caijin介绍32位免费cpu. 
+4), 17:35-18:00 电话. 休息. 
+5), 5' 看迟到时间: 迟到时间210分钟. 后面几天要注意了. 
+6), 下班前aiguo过来问android4.0进度，建议把楼下android4.0拿上来，另外要注意xingjie和caijin的进度。dongliang要专注应用，也没精力在android移植上。
+
+10:19 2011-11-24
+预研, android4.0, 在VC0882上允许, 续
+1, 昨天用"sudo make"编译, 提示cts出错:
+target Java: CtsVerifier (out/target/common/obj/APPS/CtsVerifier_intermediates/classes)
+cts/apps/CtsVerifier/src/com/android/cts/verifier/PassFailButtons.java:191: onCreateDialog(int,android.os.Bundle) in android.app.Activity cannot implement onCreateDialog(int,android.os.Bundle) in com.android.cts.verifier.PassFailButtons.PassFailActivity; attempting to assign weaker access privileges; was public
+    private static <T extends android.app.Activity & PassFailActivity>
+                    ^
+1 error
+make: *** [out/target/common/obj/APPS/CtsVerifier_intermediates/classes-full-debug.jar] Error 41
+2, xiaotao说可能是没有sync完成, 但是再次repo sync done, 没有代码更新.
+后来xiaotao说应该是直接用root编译. 
+用root编译结果一样。
+
+14:54 2011-11-24
+2011 ARM 技术研讨会 (11 月 30 日 周三 北京站) 确认函
+确 认 函
+尊敬的 ZhangJian                                    唯一确认号：3BJ028
+您已确认参加2011 ARM技术研讨会，谨代表ARM中国感谢您对我们此次活动的支持。
+本次活动的会务组工作人员将为您预留坐席至2011年11月30日上午9:20分止。
+若届时您未能到达会场，我们将视当日现场情况，可能会取消您的坐席预定，不便之处敬请谅解。
+期待您的光临！（温馨提醒：请您携带唯一确认号和名片出席会议，减少您在签到处的等候时间。） 
+会议时间地点
+城市
+时间
+地点
+北京
+2011年11月30日   周三（08:30-17:00）
+北京金隅喜来登酒店  3楼宴会厅    
+北三环东路36号（环球金融中心旁边）；（010）5798 8888
+
+10:27 2011-11-25
+时间管理
+1, 本日
+1), 10:40-11:40 30' AE android4.0代码. 见"11:38 2011-11-25".
+2), 20' vim, 为加入logAssistant做准备. 见"12:51 2011-11-25". 
+
+11:38 2011-11-25
+预研, android4.0, AE android4.0代码
+1, AE进展是可以屏, 触摸屏, 按键可用. 计划12月中旬完成. 赶CES进度. 
+gpu youhai去上海和vivante一起在做. bianrongguang在座蓝牙(bt).
+2, 取代码
+repo init -u git://10.0.12.140/android/platform/manifest.git -b vmc_i
+repo sync
+和原来的android一样, kernel代码不会自动获取, 单独取kernel代码
+git clone git://10.0.12.140/android/common.git
+(10:15 2011-11-28)取完后,用"git checkout -b remotes/origin/vmc_i"还是不行. 不过下载已经修改了repo, 可以自动取下来了. 再repo sync就行. 详见"5". 
+"10:15 2011-11-28"end
+3, android官方编译文档. 
+http://source.android.com/source/building.html
+可以用-jn和ccache提高编译速度. 
+4, 看AE都修改了哪些code:
+1), projects / android/platform/frameworks/base.git
+fix systemui crash and high cpu usage 
+wangweizhong [Fri, 18 Nov 2011 09:53:35 +0000 (17:53 +0800)]
+packages/SystemUI/src/com/android/systemui/ImageWallpaper.java [changed mode: 0644->0755]  patch | blob | history 
+services/surfaceflinger/DisplayHardware/DisplayHardwareBase.cpp  patch | blob | history 
+5, (10:27 2011-11-28)
+注: git和repo详细说明见"\\10.0.2.36\sqmshare\Document\Linux\training\17-android应用\git及repo说明及使用文档.doc", 其中"1.5.3. repo新增项目的步骤"有详细新增项目的步骤. 
+今天更新可以看到default.xml里面加入了取kernel的描述, default.xml第249行表示把服务器上common.git取下来到kernel目录. 
+zhangjian@ubuntu:~/mydroid_4$ cat .repo/manifests/default.xml  | grep kernel -n | grep common
+249:  <project path="kernel" name="common" />
+1), 先clone, 然后再checkout到vmc_i分支.
+参考: 
+http://hi.baidu.com/04023081/blog/item/fa51a7fde061b00d09244dc9.html
+git clone git://10.0.12.140/android/common.git
+git checkout remotes/origin/vmc_i -b vmc_i
+2), 为了搞清楚repo到底是怎么用的git, 把repo manifest.xml的第8行sync-j="4"改为sync-j="1". 
+      4   <remote  name="aosp"
+      5            fetch="git://10.0.12.140/android/" />
+      6   <default revision="refs/heads/vmc_i"
+      7            remote="aosp"
+      8            sync-j="1" />
+
+同时加入一个git的wrapper
+zhangjian@android:~$ cat bin/git
+#!/bin/sh
+
+echo $0 $*
+/usr/local/bin/git $*
+但是加入git这个脚本后, repo没法正常工作. 
+
+6, (14:18 2011-11-28)
+比较一下AE Android4.0 init.rc, android4.0默认的init.rc, 和AE android2.3 init.rc有什么区别. 
+对比ti panda方案
+$(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
+$(call inherit-product, device/ti/panda/device.mk)
+$(call inherit-product-if-exists, vendor/ti/proprietary/omap4xxx/ti-omap4-vendor.mk)
+1), full_base.mk
+/home/zhangjian/mydroid_4/build/target/product/full_base.mk
+2), zhangjian@android:~/mydroid_i$ cat device/ti/panda/device.mk | grep inherit\-product
+$(call inherit-product-if-exists, vendor/ti/panda/device-vendor.mk)
+$(call inherit-product, frameworks/base/build/tablet-dalvik-heap.mk)
+$(call inherit-product, hardware/ti/omap4xxx/omap4.mk)
+$(call inherit-product-if-exists, vendor/ti/proprietary/omap4/ti-omap4-vendor.mk)
+3), 但是找不到ti panda的init.rc, 只好用find查找所有android文件. 
+系统默认的init.rc: system/core/rootdir/init.rc
+可以看到和fj的改动只有三处:
+zhangjian@ubuntu:~/mydroid_4$ diff ./system/core/rootdir/init.rc device/vimicro/vortex/fj/init.rc
+#第一处是存储介质更换导致文件系统变化
+94,97c94,99
+<     mount yaffs2 mtd@system /system
+<     mount yaffs2 mtd@system /system ro remount
+<     mount yaffs2 mtd@userdata /data nosuid nodev
+<     mount yaffs2 mtd@cache /cache nosuid nodev
+---
+>       exec /sbin/fsck.ext2 -fy /dev/block/mmcblk0p5
+>       mount ext2 /dev/block/mmcblk0p5 /system
+>       exec /sbin/fsck.ext2 -fy /dev/block/mmcblk0p6
+>       mount ext2 /dev/block/mmcblk0p6 /data nosuid nodev
+>       exec /sbin/fsck.ext2 -fy /dev/block/mmcblk0p7
+>       mount ext2 /dev/block/mmcblk0p7 /cache nosuid nodev
+#这个不清楚. 不知道发掘版本为什么不remount为只读
+101c103
+<     mount rootfs rootfs / ro remount
+---
+> #    mount rootfs rootfs / ro remount
+#不知道oom_adj和oom_score_adj有什么区别. \todo 运行android模拟器后看. 
+207,208c209,210
+<     # Set init and its forked children's oom_adj.
+<     write /proc/1/oom_adj -16
+---
+>     # Set init and its forked children's oom_score_adj.
+>     write /proc/1/oom_score_adj -16
+
+7, bianrongguan 1123:
+Add ts config file for fajue
+vortex/it7260-ts.idc
+这里面涉及到触摸屏的配置. 该文件会复制到/system/user/idc目录:
+device/vimicro/vortex/it7260-ts.idc:system/usr/idc/it7260-ts.idc, 搜索idc文件, 看起来没有输入设备都需要?
+zhangjian@android:~/mydroid_i/device/vimicro/vortex$ grep idc * -R
+fj/device_vortex.mk:    device/vimicro/vortex/fj/it7260-ts.idc:system/usr/idc/it7260-ts.idc     \
+fj/device_vortex.mk:    device/vimicro/vortex/fj/v8keypad.idc:system/usr/idc/v8keypad.idc       \
+vs/device_vortex.mk:    device/vimicro/vortex/vs/touchpanel-goodix.idc:system/usr/idc/GoodixCapacitiveTouchScreen.idc \
+
+不知道对于xiaotao在sv上移植有无影响. 
+
+16:00 2011-11-28
+预研, VC0882, android4.0
+1, xiaotao把android在882sv上跑起来了, 修改了如下文件. 目前屏没有问题, 触摸屏坐标似乎不对. 
+root@icp882-desktop:/opt/share/liuxiaotao/androidae4# repo status
+
+... A new repo command ( 1.13) is available.
+... You should upgrade soon:
+
+    cp /opt/share/liuxiaotao/androidae4/.repo/repo/repo /bin/repo
+
+project device/vimicro/                         (*** NO BRANCH ***)
+ -m     vortex/generic/BoardConfig.mk
+project kernel/                                 (*** NO BRANCH ***)
+ -m     drivers/input/touchscreen/vc088x_ts.c
+ --     drivers/input/touchscreen/vc088x_ts.c23
+ --     drivers/input/touchscreen/vc088x_ts.c_sv
+ -m     drivers/video/vc088x/Kconfig
+ -m     drivers/video/vc088x/Makefile
+ -m     drivers/video/vc088x/display/hdmi_1080p.c
+ -m     drivers/video/vc088x/vc088x_de.c
+ -m     drivers/video/vc088x/vc088x_de.h
+ -m     drivers/video/vc088x/vc088x_fb.c
+ -m     drivers/video/vc088x/vc088x_hdmi.c
+ -m     drivers/video/vc088x/vc088x_ovlay.c
+ -m     drivers/video/vc088x/vc088x_tvout.c
+project u-boot/                                 (*** NO BRANCH ***)
+ -d     Android.mk
+ --     Android.mk2
+
+10:44 2011-11-29
+VC0882, 882L, 改进讨论
+1, 12月1日讨论, 本来beizhan希望我参加, 但是我家里有事情, 没法参加. 
+2, fengbeizhan转发YiNong邮件"答复: 882 的问题"20111109_1152
+多谢大家提出的问题。    IC 这里会由Gu Ye组织个会议和AE讨论讨论，来看要做的改进的取舍。
+这次882L里的改动需要一次成功，作为882的cost down来替代目前的量产。  IC投入的人数不会多，希望把它作为一个后端为主的项目而不是前端为主的项目。 整个前端设计改动的窗口，包括仿真，大概只是一个月, 时间非常紧，后端三个月， fab两个月。 要求6个月看到芯片回来。原计划要进行的改动是：
+1)      加HDMI TX
+2)      加一个USB Host
+3)      加ethernet接口
+其他的变动，如果改动很小而收效很大，可以考虑。  比如Fix  原VGA上遇到的问题来拓宽一类市场，是个好的例子。但提高ADC的精度之类的要求就太resource demanding了，目前安排不出人手做。  
+总之，大家先把问题提出来，我们先整理一下，再按人力是否能支持。
+
+10:47 2011-11-29
+时间管理
+1, 本日
+1), 实验把android4.0跑起来. 看看能不能搞出3套环境. 
+
+15:13 2011-11-29
+预研, android4.0, 根据xiaotao文档运行android4.0
+1, 
+

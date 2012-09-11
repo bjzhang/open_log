@@ -1,0 +1,2459 @@
+﻿
+12:03 2011-2-1
+VC0882, SV, 环境调试, 同事工作进展
+1, liuzixi邮件"2011-01-31工作汇报 liuzixi"20110201_2308
+今日工作总结：
+1）   目前3块贴片的CPU board,  其中两块可以上CPU500M, 另一块(6号CPu board)在把DDR, ARM的电源pin的电容从10uF换到47uF之后也可以上CPU500M
+2）   3块CPU board在搭配2号/7号 DDR board的情况下基本可以工作在CPU500M/DDR166M, 在搭配其他DDR board的情况下稳定性要差些。 目前初步感觉和DDR 的稳定性有关联。
+3)       在降低DDR到120M DLL off mode下， CPU仍然无法上到600M.
+明日工作计划：
+1)       看看CPU500M + BUS166 + DDR DLL off 120M的稳定性。
+2, zixi证明了电压的影响。 
+在cpu端加一个47u电容保持cpu板稳定. 因为zixi发现程序运行时cpu电压有波动.
+
+12:08 2011-2-1
+时间管理
+0, 10:50
+
+1, 本日
+1), 给zixi提供在sram的测试程序. 见"12:09 2011-2-1". 
+2), 调试昨天计划调试的performance monitor. 应该是在get class by name里面死了. <进展: 的确是这个地方出错。enable和trigger功能有问题，需要继续debug>
+
+12:09 2011-2-1
+VC0882, SV, 环境, arm最高频率测试程序
+1, 今天zixi和dongliang都建议程序在sram运行, 这样排除ddr对于系统稳定性和cpu最高频率的影响. 这点我也清楚, 我为什么没想到呢? 
+2, 原本考虑用memcpy, 后来想到caijin做过neon, 另外我还有dhry. 看看能不能把这些都放在一起. 
+3, 本来想用caijin的neon程序, 发现程序太大了. 
+4, 完成。已上传到"D:\VC0882\mini_env\mini_c_env_nolib_armcc". 
+打开L1, L2 cache情况下用cpu做memcpy和memcmp。
+
+10:20 2011-2-5
+VC0882, SV, 环境, arm最高频率测试程序, 续
+1, Liuzixi邮件"2011-02-01 工作汇报 liuzixi"200110201_1844
+当日工作总结：
+1.       CPU500/CPUACLK125/BUS111/DDR120(DLL off) 在DMAC copy in DDR的场景里能够稳定工作. 这将是release 给AE基于SV board做初期开发的参数。
+2.      CPU在不升压的情况下，一般可以工作在600Mhz; 在升压的情况下，一般可以工作在800Mhz(有些芯片不能)
+下面是debug的过程：（实验针对系统组合：mother board 4 号 + CPU board 6号+ power board 4号+ DDR board 7号） 
+1）                    CPU500/CPUACLK250/BUS166/DDR166(DLL on)下可以工作，但是CPU600/CPUACLK125/BUS166/DDR166(DLL on)不可以(一运行指令就飞)；
+2）                    改成CPU600/CPUACLK125/BUS166/DDR120(DLL off)后，运行指令OK,DMAC copy DDR就飞；分析是BUS对DDR压力偏大，导致DDR出错
+3）                    降低BUS freq,也就是 CPU600/CPUACLK125/BUS111/DDR120(DLL off)后， 可以正常工作，查了VDD_CORE_ARM在CPU board的电容旁的电压, 变成了1.165 v(power board那头DCDC输出仍然是1.204v).  但是提升到CPU700，data abort错误出现。, 考虑到core board + package带来的压降，VDD_CORE_ARM此时成为CPU升频的瓶颈。
+4）                    将power board 4号换成power board 2号，VDD_CORE_ARM的DCDC输出是1.271v, 此时可以正常运行DMAC, 芯片信息是CPU700/CPUACLK175/BUS111/DDR120(DLL off)， 此时VDD_CORE_ARM在CPU board的电容旁的电压是1.219v.
+5）                     进一步将VDD_CORE_ARM的DCDC输出升到1.466v, CPU可以工作在800Mhz.
+3.    同时，从上面来看， DDR在有压力的情况下运行稳定度有待加强(尤其是DLL on的情况下)。
+2, 和zixi讨论, 我提供的sram的测试程序arm能跑到1GHz. 但是由于对cache尤其是L1 cache压力比较小. 最高频率不够真实. zixi希望更充分利用cache, 而且尽量排除ddr的影响. 我提出有两种方法: 
+1), 利用882 sram空间会绕回的特性. 访问256Mbyte的sram. 
+2), 816筛片的方法: 用cache lockdown. 把L2 lockdown, 这样测试L1 cache压力会很大. 
+3), 用FPGA测试cache的memcpy_test命令, 这样没法排除ddr影响, 但是比使用dmac测试的arm压力会更大. 已经告诉zixi如何使用这个命令.
+3, 修改memcpy_test命令. 
+1), 原有地址没有做对齐, 会造成multi load/store unalign data abort. armv7架构中只有ldr,str这种single load/store才能做非对齐访问, 
+2), 增加了memory访问区域的限制, 不允许输入超过2 x size > 0x38000000的测试size. 
+4, 上述不允许非对齐访问的原因: 
+根据"17:46 2010-2-25"提到的ARM_ARM_7AR p119, A3.2.1 Unaligned data access.
+LDRH, LDRHT, LDRSH, LDRSHT, STRH, STRHT, TBH; LDR, LDRT, STR, STRT; VLD1, VLD2, VLD3, VLD4, VST1, VST2, VST3, VST4, all with standard alignment.
+NEON指令我不了解, arm指令都是single load/store. 也就是说即使支持非对齐访问, multi load/store也不能支持非对齐访问. 之前没有注意到这点. 
+现在memcpy_test里面加入了地址对齐. 
+
+11:17 2011-2-5
+时间管理
+0, 9:50
+
+1, 本日
+1), 90' 支持zixi使用memcpy_test命令. 
+2), 16:57-18:23 实验pmu idle. 见"17:42 2011-2-5".
+3), 5' 总结. 见"18:25 2011-2-5". 
+
+11:56 2011-2-5
+VC0882, SV, 882平板电脑外设资料
+自lidongliang邮件: 
+\\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\AE\882平板电脑外设资料
+
+17:04 2011-2-5
+VC0882, 经验, 
+查模块有问题, 查模块电源供电和时钟. 
+vdec寄存器不能访问:
+1), dongliang, xiaotao, shuyu检查了video codec时钟, 没有问题. 
+2), 找haifang测量video codec供电, 正确. 
+3), 找zixi分析, 用umonitor看video codec clock正确, 但是寄存器还是不能访问. 
+后来zixi发现是video codec电源域和vdd_core的isolation没有打开, 这个问题在gpu也存在. 
+pmu ctrl(0x60050000): 
+[23]	EN_ISO_GPU	1'b0	"Enable control of isolation cell when power on or off VDD_CORE_GPU
+1'b0:  make the signals between VDD_CORE_GPU voltage domain and VDD_CORE_CORE voltage domain to stuck at 1'b0 or 1'b1
+1'b1:  make the signals to transfer normally between VDD_CORE_GPU  voltage domain and VDD_CORE_CORE voltage domain"
+[22]	EN_ISO_VIDEO	1'b0	"Enable control of isolation cell when power on or off VDD_CORE_VIDEO
+1'b0:  make the signals between VDD_CORE_VIDEO voltage domain and VDD_CORE_CORE voltage domain to stuck at 1'b0 or 1'b1
+1'b1:  make the signals to transfer normally between VDD_CORE_VIDEO  voltage domain and VDD_CORE_CORE voltage domain"
+
+17:42 2011-2-5
+VC0882, SV, power, pmu, 模式转换
+1, 测试normal<->idle. 
+使用tick作为interrrupt, 单次测试成功. \todo 测试时通过把tick拉长达到测试的idle->normal的目的, 下一步需要实验gpio中断唤醒.
+连续测试失败, 初步看是OS软timer没有正常工作. 
+
+18:25 2011-2-5
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 环境支持: 为zixi提供arm的memcpy测试环境: 
+a, 用软件memcpy的arm压力比用dmac copy压力大. 
+b, 由于multi load/store不支持非对齐访问, 所以memcpy src和dst地址做了4bytes对齐. 
+2), 开始调试pmu模式转换. 
+今天调通了pmu normal<->idle, 使用系统tick中断触发. normal<->idle连续测试失败, 连续测试失败, 初步看是OS软timer没有正常工作. 
+2, 明日工作计划
+继续调试pmu模式转换: idle, halt. 使用gpio中断推出idle, halt状态. 
+
+10:19 2011-2-6
+时间管理
+0, 9:45
+
+1, 本日
+1), 9:50-10:30 业内动态.
+被2)打断. 
+2), 20' 和zixi讨论环境. arm memcpy in DDR. 乱码: 我认为是ddr不稳定. 
+3), 15:20-18:26 pmu idle. 
+中间被打断等40'.
+4), 总结. 见"18:27 2011-2-6". 
+
+15:25 2011-2-6
+VC0882, SV, 原理图, 882 SV 电路图最新版
+882 CVS: D:\VC0882\document\sv\sv board
+
+15:49 2011-2-6
+VC0882, SV, power, pmu, 模式转换: idle, halt
+1, 调试gpio中断: 看了看代码和原理图, 发现SV里面GPIO_A14比较好. 属于sys这组gpio, pmu wakeup source1. pin的名称是GPIO_UMOUT14 GPIO_TRACE_CLK.
+1), 后来A14不行, 但GPIO_A12可以(wakeup source1_6). 
+命令:
+(1), enable interrupt
+padc_init
+sys 12 1 1 0 0 65535
+(2), 实验normal->idle->normal
+pmu
+idle
+正确退出. 
+(3), 实验normal->halt->normal
+接步骤(1)
+pmu
+wakeup_source 1 4
+halt
+可以退出halt, 但是打印乱码. 
+(4), 查代码, 发现是退出halt时配置了peri clk: 
+    VIM_HAL_WRITE_REG(CLKRST_PERI_MISC_CFG, 0x33333330);
+这是FPGA的配置, ASIC中注释(按理说FPGA里面也不应该配置).
+修改后正确. 没有检查ddr是否丢失数据. 
+(5), 比较现在yangxing提供的进入退出自刷新函数.
+A, 自: yangxing邮件_20100205
+进入selfrefresh,函数为VIM_DDR_EnterSelfrefresh；
+退出selfrefresh,函数为VIM_DDR_ExitSelfrefresh；
+B, 函数没有问题. 
+(6), 测试时关闭cache后简单对比了192bytes ddr数据, 没有变化. 初步看没有丢失数据. 
+
+18:27 2011-2-6
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 环境支持: zixi, yangxing;
+2), 继续调试pmu模式转换
+(1), 看882 sv原理图挑选gpio wakeup source. 
+(2), 调试通过了pmu gpio唤醒idle, halt. 
+测试halt时关闭cache后简单对比了192bytes ddr数据, 没有变化. 初步看没有丢失数据. 
+2, 明日工作计划
+1), 继续调试pmu模式转换: normal<->sleep
+
+10:39 2011-2-7
+时间管理
+0, 9:45(春节加班)
+
+1, 本日
+1), 10:40-11:52 13:30-14:40 关注linaro和qemu. 见"10:45 2011-2-7".
+2), 14:43-16:20 17:10- 继续调试pmu模式转换: normal<->sleep. 见"14:43 2011-2-7".
+3), performance monitor debug: 实际没有进行. 
+4), 10' 总结. 见"18:11 2011-2-7". 
+
+10:45 2011-2-7
+Linaro, simulator, qemu, omap3530, Cortex-A8, meego, 实验Linaro qemu运行OMAP3530 2.6.35.2 kernel成功(无错误)
+1, Linaro 2011
+http://www.linaro.org/assets/LinaroSummaryQ111.pdf
+1), Initial Evaluation builds (11.05)
+–Android 2.3 Gingerbread/Honeycomb
+–Ubuntu 11.04
+–Basic ARM Linux for creating custom distribution
+–Chrome (tbd)
+2), Roadmap
+Work with distributions to become the enablement channel for member SoCs
+Work with ARM to deliver open source support for Cortex A15
+Continue to work on ARM generic SoC optimization including toolchain support, NEON and SMP issues
+Support new market segments: IVI, STB, ServerRoadmap
+2, qemu
+1), git: http://git.linaro.org/gitweb?p=qemu/qemu-linaro.git;a=summary
+2), 下载git clone http://git.linaro.org/gitweb?p=qemu/qemu-linaro.git;a=summary
+但是公司网络没法下载. 只能通过IE下载snapshot.
+3), linaro qemu是从meego继承过来的, 可以参考"meego qemu"相关网页. 
+4), 编译:
+参考"15:51 2009-10-30".
+(1), 
+[zhangjian@icp-desktop qemu-linaro-2011.02-0-rc2]$ ./configure --target-list=arm-softmmu
+[zhangjian@icp-desktop qemu-linaro-2011.02-0-rc2]$ make
+(2), 运行:
+cd arm-softmmu
+./qemu-system-arm -M beagle --mtdblock /opt/share/zhangjian/development/qemu/qemu4omap3530/image/beagle-nand_110112.bin --nographic 
+u-boot命令行可以输入. kernel可以直接启动. 很高兴:)
+5), 试一下vnc(之前居然没有记录vnc的详细用法...)
+(1), 启动server
+./qemu-system-arm -M beagle --mtdblock /o/share/zhangjian/daily_save/20110207/beagle-nand.bin 
+VNC server running on `127.0.0.1:5900'
+(2), 启动viewer:
+[zhangjian@icp-desktop unix]$ pwd
+/opt/share/zhangjian/software/vnc-4_1_3-unixsrc/unix
+
+[zhangjian@icp-desktop unix]$ ./vncviewer/vncviewer 
+
+VNC Viewer Free Edition 4.1.3 for X - built Aug 13 2010 04:34:35
+Copyright (C) 2002-2008 RealVNC Ltd.
+See http://www.realvnc.com for information on VNC.
+
+(在弹出的对话框中输入server"地址:端口", 例如上面qemu开的端口是"127.0.0.1:5900". 
+
+Mon Feb  7 19:19:49 2011
+ CConn:       connected to host 127.0.0.1 port 5900
+ CConnection: Server supports RFB protocol version 3.8
+ CConnection: Using RFB protocol version 3.8
+ TXImage:     Using default colormap and visual, TrueColor, depth 24.
+ CConn:       Using pixel format depth 6 (8bpp) rgb222
+ CConn:       Using ZRLE encoding
+ CConn:       Throughput 20000 kbit/s - changing to raw encoding
+ CConn:       Throughput 20000 kbit/s - changing to full colour
+ CConn:       Using pixel format depth 24 (32bpp) little-endian rgb888
+ CConn:       Using raw encoding
+
+或直接指定ip:port
+[zhangjian@icp-desktop unix]$ ./vncviewer/vncviewer 127.0.0.1:5900
+(3), 启动后, 还是只能看到bootloader打出的beagle.org图片. 可能是配置问题, 应该不是大问题, 将来再实验. 
+因为meego里面直接n900, 就是用的OMAP3. 所以显示部分肯定没问题. 
+从启动信息看, omap framebuffer初始化没有成功, 可能是因为命令行没有给framebuffer参数. 
+参考"11:15 2009-11-29"6, 在uboot bootargs加入: 
+video=omapfb:vram:2M,vram:4M,mode:1280x720@60,vxres=1280,vyres=720'
+提示依旧, 看来还是要详细debug. 
+
+6), 保存完成qemu启动命令和log:
+[zhangjian@icp-desktop arm-softmmu]$ ./qemu-system-arm -M beagle --mtdblock /opt/share/zhangjian/daily_save/20110207/beagle-nand.bin --nographic  2>&1 | tee log
+
+
+Texas Instruments X-Loader 1.41
+Starting OS Bootloader...
+
+
+U-Boot 1.3.3 (Nov 23 2008 - 18:48:04)
+
+OMAP3530-GP rev 2, CPU-OPP2 L3-165MHz
+OMAP3 Beagle Board + LPDDR/NAND
+DRAM:  128 MB
+NAND:  256 MiB
+In:    serial
+Out:   serial
+Err:   serial
+Hit any key to stop autoboot:  3  2  1  0 
+
+NAND read: device 0 offset 0x280000, size 0x400000
+ 4194304 bytes read: OK
+
+NAND read: device 0 offset 0x680000, size 0x800000
+ 8388608 bytes read: OK
+## Booting kernel from Legacy Image at 80000000 ...
+   Image Name:   Linux-2.6.35.2-svn9
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    1989180 Bytes =  1.9 MB
+   Load Address: 80008000
+   Entry Point:  80008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+
+Starting kernel ...
+
+Uncompressing Linux... done, booting the kernel.
+Linux version 2.6.35.2-svn9 (zhangjian@icp-desktop) (gcc version 4.4.1 (Sourcery G++ Lite 2010q1-202) ) #16 Mon Feb 7 19:34:31 CST 2011
+CPU: ARMv7 Processor [412fc083] revision 3 (ARMv7), cr=10c53c7f
+CPU: VIPT nonaliasing data cache, VIPT nonaliasing instruction cache
+Machine: OMAP3 Beagle Board
+Memory policy: ECC disabled, Data cache writeback
+OMAP3430/3530 ES3.1 (iva sgx neon isp )
+SRAM: Mapped pa 0x40200000 to va 0xfe400000 size: 0x100000
+Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 32512
+Kernel command line: console=ttyS2,115200n8 ramdisk_size=8192 root=/dev/ram0 rw rootfstype=ext2 initrd=0x81600000,8M nohz=0ff
+PID hash table entries: 512 (order: -1, 2048 bytes)
+Dentry cache hash table entries: 16384 (order: 4, 65536 bytes)
+Inode-cache hash table entries: 8192 (order: 3, 32768 bytes)
+Memory: 128MB = 128MB total
+Memory: 117740k/117740k available, 13332k reserved, 0K highmem
+Virtual kernel memory layout:
+    vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+    fixmap  : 0xfff00000 - 0xfffe0000   ( 896 kB)
+    DMA     : 0xffc00000 - 0xffe00000   (   2 MB)
+    vmalloc : 0xc8800000 - 0xf8000000   ( 760 MB)
+    lowmem  : 0xc0000000 - 0xc8000000   ( 128 MB)
+    modules : 0xbf000000 - 0xc0000000   (  16 MB)
+      .init : 0xc0008000 - 0xc002a000   ( 136 kB)
+      .text : 0xc002a000 - 0xc0385000   (3436 kB)
+      .data : 0xc03a0000 - 0xc03d20a0   ( 201 kB)
+Hierarchical RCU implementation.
+	Verbose stalled-CPUs detection is disabled.
+NR_IRQS:402
+Clocking rate (Crystal/Core/MPU): 13.0/332/500 MHz
+omap_hwmod: l3_hwmod: cannot be enabled (3)
+omap_hwmod: l4_core_hwmod: cannot be enabled (3)
+omap_hwmod: l4_per_hwmod: cannot be enabled (3)
+omap_hwmod: l4_wkup_hwmod: cannot be enabled (3)
+Reprogramming SDRC clock to 332000000 Hz
+GPMC revision 5.0
+IRQ: Found an INTC at 0xfa200000 (revision 4.0) with 96 interrupts
+Total of 96 interrupts on 1 active controller
+OMAP GPIO hardware version 2.5
+OMAP clockevent source: GPTIMER12 at 32768 Hz
+Console: colour dummy device 80x30
+Calibrating delay loop... 335.08 BogoMIPS (lpj=1310720)
+pid_max: default: 32768 minimum: 301
+Mount-cache hash table entries: 512
+CPU: Testing write buffer coherency: ok
+regulator: core version 0.5
+NET: Registered protocol family 16
+Found NAND on CS0
+Registering NAND on CS0
+Unable to get DVI reset GPIO
+OMAP DMA hardware revision 4.0
+bio: create slab <bio-0> at 0
+SCSI subsystem initialized
+usbcore: registered new interface driver usbfs
+usbcore: registered new interface driver hub
+usbcore: registered new device driver usb
+i2c_omap i2c_omap.1: bus 1 rev3.12 at 2600 kHz
+twl4030: PIH (irq 7) chaining IRQs 368..375
+twl4030: power (irq 373) chaining IRQs 376..383
+twl4030: gpio (irq 368) chaining IRQs 384..401
+regulator: VUSB1V5: 1500 mV normal standby
+regulator: VUSB1V8: 1800 mV normal standby
+regulator: VUSB3V1: 3100 mV normal standby
+twl4030_usb twl4030_usb: Initialized TWL4030 USB module
+regulator: VMMC1: 1850 <--> 3150 mV at 1850 mV normal standby
+regulator: VDAC: 1800 mV normal standby
+regulator: VDVI: 1800 mV normal standby
+regulator: VSIM: 1800 <--> 3000 mV at 1800 mV normal standby
+i2c_omap i2c_omap.3: bus 3 rev3.12 at 100 kHz
+Switching to clocksource 32k_counter
+musb_hdrc: version 6.0, musb-dma, otg (peripheral+host), debug=0
+musb_hdrc musb_hdrc: USB OTG mode controller at fa0ab000 using DMA, IRQ 92
+NET: Registered protocol family 2
+IP route cache hash table entries: 1024 (order: 0, 4096 bytes)
+TCP established hash table entries: 4096 (order: 3, 32768 bytes)
+TCP bind hash table entries: 4096 (order: 2, 16384 bytes)
+TCP: Hash tables configured (established 4096 bind 4096)
+TCP reno registered
+UDP hash table entries: 256 (order: 0, 4096 bytes)
+UDP-Lite hash table entries: 256 (order: 0, 4096 bytes)
+NET: Registered protocol family 1
+RPC: Registered udp transport module.
+RPC: Registered tcp transport module.
+RPC: Registered tcp NFSv4.1 backchannel transport module.
+Trying to unpack rootfs image as initramfs...
+rootfs image is not initramfs (no cpio magic); looks like an initrd
+Freeing initrd memory: 8192K
+NetWinder Floating Point Emulator V0.97 (double precision)
+VFS: Disk quotas dquot_6.5.2
+Dquot-cache hash table entries: 1024 (order 0, 4096 bytes)
+JFFS2 version 2.2. (NAND) © 2001-2006 Red Hat, Inc.
+msgmni has been set to 245
+alg: No test for stdrng (krng)
+io scheduler noop registered
+io scheduler deadline registered
+io scheduler cfq registered (default)
+OMAP DSS rev 2.0
+OMAP DISPC rev 3.0
+OMAP VENC rev 2
+Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+serial8250.0: ttyS0 at MMIO 0x4806a000 (irq = 72) is a 16550A
+serial8250.1: ttyS1 at MMIO 0x4806c000 (irq = 73) is a 16550A
+serial8250.2: ttyS2 at MMIO 0x49020000 (irq = 74) is a 16550A
+console [ttyS2] enabled
+brd: module loaded
+loop: module loaded
+usbmon: debugfs is not available
+ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+ehci-omap ehci-omap.0: OMAP-EHCI Host Controller
+ehci-omap ehci-omap.0: new USB bus registered, assigned bus number 1
+ehci-omap ehci-omap.0: irq 77, io mem 0x48064800
+ehci-omap ehci-omap.0: USB 2.0 started, EHCI 0.00
+hub 1-0:1.0: USB hub found
+hub 1-0:1.0: 0 ports detected
+i2c /dev entries driver
+TCP cubic registered
+NET: Registered protocol family 17
+NET: Registered protocol family 15
+Power Management for TI OMAP3.
+VFP support v0.3: implementor 41 architecture 3 part 30 variant c rev 2
+omapfb omapfb: failed to allocate framebuffer
+omapfb omapfb: failed to allocate fbmem
+omapfb omapfb: failed to setup omapfb
+omapfb: probe of omapfb failed with error -12
+drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+RAMDISK: gzip image found at block 0
+VFS: Mounted root (ext2 filesystem) on device 1:0.
+Freeing init memory: 136K
+
+init started: BusyBox v1.9.0 (2008-02-26 15:40:22 IST)
+
+starting pid 351, tty '': '/etc/init.d/rcS'
+
+    beagleboard.org (v0.90) : System initialization...
+
+    Kernel release : Linux 2.6.35.2-svn9
+    Kernel version : #16 Mon Feb 7 19:34:31 CST 2011
+
+ Mounting /proc             : [SUCCESS]
+ Mounting /sys              : [SUCCESS]
+ Mounting /dev              : [SUCCESS]
+ Mounting /dev/pts          : [SUCCESS]
+ Enabling hot-plug          : [SUCCESS]
+ Populating /dev            : [SUCCESS]
+ Mounting other filesystems : [SUCCESS]
+ Starting syslogd           : [SUCCESS]
+ Starting telnetd           : Jan  1 00:00:02 beagleboard syslog.info syslogd started: BusyBox v1.9.0
+[SUCCESS]
+/etc/init.d/rcS: line 100: cannot create /sys/power/fb_timeout_value: nonexistent directory
+
+System initialization complete.
+
+Please press Enter to activate this console. 
+
+starting pid 372, tty '': '/bin/sh'
+
+    Setting shell environment ...
+    - Path
+    - Aliases
+    - Touchscreen
+
+    Done!
+
+[root@beagleboard /]# 
+[root@beagleboard /]# 
+[root@beagleboard /]# 
+
+2, (13:25 2011-2-7)参考meego arm文档, 看看能不能把qemu lcd跑通.
+http://wiki.meego.com/ARM
+1), meego qemu需要sdl
+http://www.libsdl.org/index.php
+Simple DirectMedia Layer is a cross-platform multimedia library designed to provide low level access to audio, keyboard, mouse, joystick, 3D hardware via OpenGL, and 2D video framebuffer. 
+参考"http://www.linuxidc.com/Linux/2010-07/26965.htm"安装. 文中提到要安装下面5个, 先只安装第一个dev包试试. 
+sudo apt-get install libsdl1.2-dev(比较大，10M左右)
+sudo apt-get install libsdl-image1.2-dev
+sudo apt-get install libsdl-mixer1.2-dev
+sudo apt-get install libsdl-ttf2.0-dev
+sudo apt-get install libsdl-gfx1.2-dev
+(1), sudo apt-get install libsdl1.2-dev, 提示要安装下面的库
+  libsdl1.2debian libsdl1.2debian-alsa libslang2-dev libaa1-dev libasound2-dev
+  libaudio2 libaudiofile-dev libavahi-common3 libavahi-client3
+  libavahi-common-dev libdbus-1-dev libavahi-client-dev libcaca-dev libdrm-dev
+  libesd0-dev libgl1-mesa-glx libglu1-mesa mesa-common-dev libgl1-mesa-dev
+  libglu1-mesa-dev libpulse-dev libaudio-dev libsdl1.2-dev
+不知为什么在198服务器上没法下载. ping不通, 可以ping通"10.0.13.101", 难道是DNS问题? 
+(2), 配置网络
+删除网关
+sudo route del default gw 10.0.13.3 netmask 255.255.254.0
+如果不写gw后面的东西, 没法删除. 只是显示帮助. 
+参考"10.0.13.101"服务器, 设置网关:
+sudo route add default gw 10.0.12.1 netmask 0.0.0.0
+这样可以访问其他网段地址了, 但是DNS还是没法解析. 参考"http://soft.chinabyte.com/111/7603111.shtml". 在"/etc/resolv.conf"加入"10.0.8.17"(即时生效): 
+[zhangjian@icp-desktop trunk]$ cat /etc/resolv.conf 
+# Generated by NetworkManager
+nameserver 10.0.8.16
+nameserver 10.0.8.17
+后来发现10.0.8.16本来就没法访问. 
+(3), 配置后可以apt-get可以正常下载了. 
+2), 下载和编译很简单: 
+git clone git://gitorious.org/qemu-maemo/qemu.git 
+cd qemu
+./configure --target-list=arm-softmmu --enable-sdl
+make
+3), 问题是下载映像需要nokia n900的IMEI, 所以没法下载. 
+试试下载sdk. 参考"http://www.linuxidc.com/Linux/2010-08/28222.htm"和"http://www.meegoq.com/thread-161-1-1.html", 两篇文章其实都是来自meego.com, 只是没写地址. 
+http://download3.meego.com/meego-handset-ia32-1.0.80.9.20100706.1-sdk-pre0729.tar.bz2
+解压后是个RAW文件, 看起来用起来还是要花时间的. \todo 稍候继续. 
+
+14:43 2011-2-7
+VC0882, SV, power, pmu, 模式转换: sleep
+1, 上午实验发现跑到wfi前一句就没法往下执行了. 
+下午实验感觉这个可能不是问题. 通过usb boot实验, 发现sleep后可以唤醒. 
+但是没有走wakeup流程, 难道是usb不支持wakeup流程? 
+的确如此. 如果是normal wakeup, 只有进入sd boot或nand boot才会判断是否是wakeup. 
+2, 所以需要用sd或nand boot实验. 之前sd boot是我调的, 但是今天用sd boot时发现没有正常启动. 但是在panda_os下sd可以使用. 单步调试bootloader: 
+代码位置: \\10.0.2.36\sqmshare\Projects\Mobile BU\VC0882\bootloader\code_release_to_ICV\882bootloader_Ver_16.6
+3, 调试发现是sd number没有选, 跳成b10选择sd0正确了. 
+对于TOSHIBA 1G这张卡, clk高低和正反沿都可以. 
+4, sleep后可以wakeup, 但是由于ddr参数不正确, bootloader启动出错. 
+bin, axf, 512info见"D:\VC0882\882bootloader\QA_CFG_SV\DDR3\sdboot\cpu48_bus48_ddrc48_dll_off_pmu". 
+5, 经过dongliang, beihua帮忙, 参数修改后正确: 
+//[9]表示做initial bypass. 
+ddrcCfgWakeup	= 0x17E0220						//	ddrc cfg register, 专用于wakeup 控制 // f 111(1) -Enable command queue reorder. 0 = disable 1 = enable
+//原有training address过小, 不太安全. 现在相对安全, 只能说说是权宜之计. 
+ddrcTrainingAddr = 0x10000000	// ddrc training address, 目前256Mbyte这个区域不使用. 
+//需要做ddrc进入self-refresh, ddrc和dram exit self-refresh两个操作. 
+ddrNormalSelfRefByapss =0x0   //当bypass == 1时，膎ormal sleep 里的refresh是不执行的；
+//是否发init cmd.
+ddrNormalSleepCfg1Bypass = 0x0 //当 bypass == 1时，说明cfg1 init ddr start 是不需要执行的，否则需要执行；
+//如何设置DDRC_DRAM_REFRESH(0x60011018)[29:26],[22:19]
+ddrcSelfRefSomeCfg = 0x0 		//退出自刷新开始，DDRC2/3,LPDDRC 添加下面的控制比特[29-26, 22,19]high -> low
+
+14:46 2011-2-7
+VC0882, SV, arm频率测试, liuzixi邮件_20110206
+下班考情报告：
+报告人：            刘子熹
+下班时间：        2011年2月6日 19:30
+当天工作总结：
+1)       把我们生产的DDR board换成商用samsung  1Gb的DDR board后，DDR稳定大幅改善。
+2)       基于稳定的samsung内存条， 初步冲刺了CPU的频率（使用的是ARM memcpy_test）
+对于系统组合：mother board 4 号 + CPU board 6号+ power board 2号+ samsung 1Gb  (没加电流表， CPU 50M一档)
+DCDC                 C9旁电压(v)  CPU最高频率(Mhz) 具体参数
+R21(Kohm) Voltage
+        (v, no load)
+139       1.466      1.432         950  CPU950/CPUACLK158/BUS111/DDR120(DLL off)
+150       1.538      1.498        1000 CPU1000/CPUACLK166/BUS111/DDR120(DLL off)
+160       1.586      1.550        1050 CPU1050/CPUACLK150/BUS111/DDR120(DLL off)
+1.1G CPU下，芯片烫手。
+目前在做CPU1050Mhz下的长时间稳定测试
+当天问题：
+1）把我们生产的DDR board换成商用samsung  1Gb的DDR board后，DDR稳定大幅改善
+明天计划：
+1)       加上电流表，看看ARM在不同频率下所耗电流
+2)       外加散热片，继续ARM升压超频
+3）  修改DCDC的分压电阻，完善上面表格中的500M~800M的info。
+
+17:02 2011-2-7
+VC0882, android, AE, power, performance, performance monior, 续, debug
+1, 续"11:08 2011-1-27". 完成调试sysfs: enable, trigger后可以得到正确的数据. 
+
+17:03 2011-2-7
+工作方法, 安排好顺序
+今天下午出去了40'. 出去前请dongliang帮我看个东西(已发邮件), 回来时没有问进展, 后来过了会儿才问进展. 其实完全可以回来时直接问dongliang, 这样一是说明我回来了, 二是看看状态. 
+
+18:11 2011-2-7
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 调试VC0882 pmu normal<->sleep. normal wakeup通路正确. 
+2), 环境支持. 
+2, 明日工作计划:
+2), 调试VC0882 pmu normal<->sleep. fast wakeup通路. 
+
+10:25 2011-2-8
+时间管理
+0, 10:00
+
+1, 本日
+1), 10' 和dongliang讨论给测试的环境. 
+2), 10:40-10:53 10:53-11:37 2h 和yangzuoxing, liuzixi讨论. 做一个在sram ddr training函数每100ms做一次. 见"10:54 2011-2-8". 
+3), 20' pmu模式转换. fast wakeup代码不完善, 改进.
+4), 总结: 见"18:22 2011-2-8". 
+
+10:54 2011-2-8
+VC0882, SV, cpu最高频率测试, 定期做ddr training
+1, 代码初步写完. 下午1小时内完成调试. 
+2, (14:15 2011-2-8)本来是放在tick中断处理里面, 后来感觉在中断处理里面不太好, 还是放在系统timer里面. 目前nucleus系统timer似乎有问题. 先使用原有的VIM_SYS_Driver.c的timer. 
+3, 加了block后就没法调试. 即使预先禁止中断也不行. 
+4, 调试后上传CVS:
+添加运行在sram函数VIM_DDR_Training(). 方法是通用的: 
+1), 建立以*_Sram.c命名的文件, 例如VIM_DDR_Driver_Sram.c, 链接脚本会把"*_Sram.c"放到统一的区域, 并在初始化时把"*_Sram.o"的RO, RW, ZI都搬移到0x20000000开始的sram区域. 
+2), "*_Sram.c"中的函数不能使用堆栈. 如果一定要使用变量请在"*_Sram.c"定义全局变量. 尤其要注意访问寄存器时也不能使用堆栈, 为此我定义了"HAL_WRITE_UINT32_MASK_NOSTACK"(HAL_WRITE_UINT32_MASK的无堆栈版本)便于使用. 
+3), 定义在sram中的函数使用和其它函数完全相同. 
+5, 后来zixi需要在memcpy中加入training选项. 
+
+11:17 2011-2-8
+VC0882, dragon, general里面有一个run script应该可以执行命令(类似于脚本).
+
+18:22 2011-2-8
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 环境支持: 支持zixi测试cpu频率, 提供周期性data training函数(在sram中运行)希望能补偿温度变化.
+2), pmu模式转换. fast wakeup代码不完善, 改进中. 
+2, 明日工作计划
+1), 调试pmu模式转换. fast wakeup; sleep, halt两种模式代码整理.
+
+10:00 2011-2-9
+时间管理
+0, 9:40
+
+1, 本日
+1), 9:50-12:00 环境支持: zixi测试cpu最高频率. 见"10:35 2011-2-9".
+2), 1h' 关注业内动态. 见"12:47 2011-2-9".
+3), 14:35-16:30 performance monitor debug. enable, trigger正确. 
+4), 16:30-18:30 环境支持: 写sram中大于cache size的memory copy. 
+5), 总结. 见"19:10 2011-2-9".
+
+10:35 2011-2-9
+VC0882, SV, cpu最高频率测试, 续, 实验是否加了training后才不稳定, 开始写sram中的cache测试程序
+1, 上午和dr.yang开会讨论。
+1), 昨天zixi实验发现加入ddr training后觉得稳定性下降. 但是这几天clkrst也有改动，不清楚是谁的影响。实验确认之。
+2), 为了测试cpu最高频率, 需要写只在sram运行的程序, 利用sram空间会绕回的特性"骗"arm以为memory空间很大。
+3), ddr training的结果本身也有可信度问题, 因为dll off时, dq和dqs之间相位是用延迟链做的, 担心受到温度影响; dll on时就没这个问题. 
+所以在dll on下测试ddr training, 就知道training有没有起作用. 
+2, 恢复代码后training仍然导致不稳定, 怀疑是training写坏了系统使用的memory空间, 根据beihua建议(training需要1Mbytes对齐的32byte空间)修改training地址. 
+修改后training和不training对于稳定性没有影响. 
+3, 开始写sram中的cache测试程序
+1), 
+(1), 32k sram划分:
+0 -- 8k-1: 代码; 
+8k -- 24k-1: 测试数据;
+24k -- 28k-1: 一级页表.
+28k -- 32k-1: 二级页表. 
+(2), 利用二级页表把测试数据映射为连续1Mbyte的区域. 也就是: 
+0x20002000 -- 0x20006000-1映射到0x08000000 -- 0x08004000-1;
+0x2000A000 -- 0x2000E000-1映射到0x08004000 -- 0x08008000-1;
+...
+(3), 每次memcpy都在每组16k范围内做copy. 
+2), 现在memcpy代码是现成的, 映射二级页表的地址没有.
+3), 目前代码虽然编译通过, 但是二级映射估计还有问题. 明天上午调试完成也比较紧张. 
+4, (12:28 2011-2-10)一级页表要求16kbytes对齐, 所以一级页表地址只能是0x20004000. 
+发现原来映射二级页表的函数也有问题. 
+5, 没有映射sram, 但是stack使用的是sram地址, 修改为0x0开始的地址. 
+6, 代码终于调过了, 写脚本数据是否正确. 
+7, 用脚本太慢了, 用arm检查, 映射正确. 
+8, 实验memcpy时出错, 发现由于栈被写坏导致lr被写坏, 修改栈顶到0x2000. 
+\todo 需要重构代码, 现在的代码太难维护了. 
+9, (17:50 2011-2-10)ddr调试通过. 调试sram版本. 
+突然发现sram不是绕回的. 原来FPGA里面是可以的. 不过不绕回也是可以的. arm允许多个多个虚拟地址映射到一个物理地址. 
+
+12:43 2011-2-9
+VC0882, SV, bootloader, 支持suxin sd boot
+1, suxin遇到的几个问题:
+1), 打包文件只认识"0x", 不认识"0X". 
+2), clkBypassCtrl: 0表示配置, 1表示不变. 
+
+19:11 2011-2-9
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 上午支持zixi调试cpu最高频率. 
+修正了原有ddr training地址不安全的问题. 
+2), 下午写cpu频率测试代码(sram ver2). 需要利用sram空间会绕回的特性访问在大于L2 cache size的区域做memcpy. 估计共需要1-2天完成. 
+2, 明日工作计划
+1), 继续完成cpu频率测试代码(sram ver2)
+
+10:19 2011-2-10
+时间管理
+0, 9:50
+
+1, 本日
+1), 40' 看arm mmu文档. 
+2), 10' 支持xiaotao调试sd boot. 后来发现是strappin设置arm是480MHz, 512info里面没有设置arm, bus clk. 可能是arm速度太快跑飞了或cpu访问ddr压力大造成ddr不稳定. 
+3), 40' 邮件. 部分见"10:48 2011-2-10". 将来可以参考"10:48 2011-2-10"英语沟通. 
+4), 30' 12:29-13:20 14:13- 环境支持: 写sram中大于cache size的memory copy. 续"10:35 2011-2-9"3.
+5), data training使用一个单独分配的地址空间. 
+6), 总结. 
+(1), 工作总结见"18:39 2011-2-10".
+(2), 昨天发的TI OMAP5的新闻, 看起来还是很及时的, arm的sales也是2月9日下午给vimicro发的邮件. 
+
+10:48 2011-2-10
+arm, Cortex-A15, interconnect, AMBA4; arm处理器代号: tiger, eagle, kingfisher等; arm roadmap; 英语沟通参考
+1, aiguo转发邮件_今日
+FYI
+--------------------------------------------------------------------------------
+发件人: Yi Nong 
+发送时间: 2011-02-10 2:12
+收件人: dyang; Yang Zuo Xing; Wen Xiao Yong; Yang Lei; Kong Yingqi; Huang wei; Ai Guo; Wang Xin; Jiang Bo
+抄送: Sun yingying
+主题: 转发: would you have interest to ARM-AMBA4 and related technologies which has the close connections with ARM Cortex A15 and Mali -T60X series GPU?
+Hi Sally, 
+Please book a room for this ARM presentation.   
+All, 
+Feel free to inform the senior members in your team to attend this meeting if applicable.  It is not necessary to bring up everyone though.
+Best regards,
+Yinong
+发件人: Yi Nong 
+发送时间: 2011年2月10日 2:08
+收件人: 'Felix Liu'
+抄送: Yang Zuo Xing; Wen Xiao Yong; Wang Xin; Raymond Xu; Jason Zhao; William Liu; Karl Qin
+主题: 答复: would you have interest to ARM-AMBA4 and related technologies which has the close connections with ARM Cortex A15 and Mali -T60X series GPU?
+Hi Runguo, 
+We are interested in this presentation.   2pm at Feb 14th is a good time for us. 
+Best regards,
+Yinong
+发件人: Felix Liu [mailto:Felix.Liu@Arm.com] 
+发送时间: 2011年2月9日 13:09
+收件人: Yi Nong
+抄送: Yang Zuo Xing; Wen Xiao Yong; Wang Xin; Raymond Xu; Jason Zhao; William Liu; Karl Qin
+主题: would you have interest to ARM-AMBA4 and related technologies which has the close connections with ARM Cortex A15 and Mali -T60X series GPU?
+重要性: 高
+Hi, Yinong, 
+As you know, we ever talked a bit Cortex A9 and A15 before China new year... and right now, ARM just has a team which is on ARM Fabric product portfolio from ARM Processor Division will visit China Beijing on 14th, Feb. the Fabric is referred to ARM system architecture, interconnect(AMBA-4), DMA controller, L2 Catch controller and DDR controller, etc.. 
+so if Vimicro would like to consider Cortex A15 and ARM advanced GPUs-Mali-T60X series, the AMBA-4 would be vitally important to any Silicon partners of ARM. the topics from the team would cover and focus on the CoreLin-400 series and related technologies, and in them, such as GIC/SMMU/CCI , just ARM can offer right now..
+1)      NIC-400/QoS-400 is ABMA-4 BUS interconnect
+2)      SMMU enables hypervisor virtualization
+3)      Virtual GIC is needed if you have more than 1 Eagle or company with Kingfisher
+4)      Bank Cache-coherent Interconnect (CCI-400) is a MUST for CA15 based SOC
+5)      Orwell DMC is dedicate design with cache coherent and AMBA-4.
+so I wonder if you had interest to have an interview and meeting with the team. And right now, only the afternoon in 14th, Feb from 13:00-15:00 is open and free to us, then the team will fly to Shanghai on late afternoon... 
+Looking forward to your quick response and it’s better no late than tomorrow.
+Thanks
+Felix Liu 
+-- IMPORTANT NOTICE: The contents of this email and any attachments are confidential and may also be privileged. If you are not the intended recipient, please notify the sender immediately and do not disclose the contents to any other person, use it for any purpose, or store or copy the information in any medium. Thank you.
+
+2, arm处理器代号:
+Tiger: Cortex-A8 
+Eagle: Cortex-A15, 正式发布前曾经短暂称作Cortex-A10.
+Kingfisher: ?
+1), 从描述看, kingfisher可能是一个和Cortex-A5类似的低成本处理器, 用了一些新feature(上面flex liu提到vitual GIC), 性能超过Cortex-A5. 
+ARM updates roadmap with Kingfisher, Cygnet
+http://www.eetimes.com/electronics-news/4212774/ARM-updates-roadmap-with-Kingfisher--Cygnet
+Kingfisher is aimed at lower end smartphones and feature phones and cost-sensitive digital TV applications. It's a small A-class processor
+
+3, arm roadmap
+http://www.cdrinfo.com/sections/news/Details.aspx?NewsId=29426
+1), Cortex-A的license目前已经有58个. 
+2), 2011Q1 arm会做20nm, 并合IBM合作从20nm到14nm. 
+
+18:39 2011-2-10
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+初步完成cpu频率测试代码(sram ver2), 代码还需要整理
+2, 问题: 
+Sram似乎不能绕回, 不过对于工具没有影响. 
+3, 明日工作计划
+1), 整理今日测试工具, 
+2), 支持zixi测试cpu最高频率. 
+
+11:41 2011-2-11
+时间管理
+0, 9:40
+
+1, 本日
+1), 20' 环境支持: zixi. 见"11:57 2011-2-11"1. 
+2), 60' 环境支持: zhaobeihua. 见"11:57 2011-2-11"2. 
+3), 40' 和bianyingfeng, liaozhicheng讨论718 irq测试. 见"15:42 2011-2-11". 
+4), 1h 18:31-19:40 pmu模式转换. fast wakeup代码不完善, 改进. 见"15:44 2011-2-11". 
+5), 讨论: 20' 和yangxing讨论汇编初始化流程. 10' 和mengfandong讨论data abort处理. 
+6), 总结. 感觉写代码还是很不熟悉, 最近如果遇到写代码的机会, 要练习. 
+今天希望做power. 最近看的不多. 最近的希望能让sleep回到正常aasp. 
+
+11:57 2011-2-11
+VC0882, SV, 环境支持, 
+1, 支持zixi使用sram cache memcpy. 
+2, 为beihua添加ddr_dqs_drift打印, 并且可以设置打印周期. 
+使用ddr: period_task选择是否打印ddr_training, ddr_dqs_drift. 
+在memcpy最后一个参数设置周期(ms单位).
+注: dqs_drift其实只是控制是否打印, 开关由beihua控制. 最开始没提这个需求. 
+开关在ddr_drift中设置. 修改设置时需要保证ddr无访问. 
+ddr_cfg: 
+[10]	drift_comp_en	1‘b0	"DQS Drift Compensation Enable: 
+1 = Enables data strobe drift compensation (“See “DDRC MAS Chapte 5.13” for details.)
+0 = Disables data strobe drift compensation 
+By default, drift compensation is enabled."
+反思: 其实beihua提出分别加打印信息时, 我没想清楚: 如果软件不能控制开关, 只是控制是否打印意义不大. 现在做事情还总是着急动手, 没有想清楚!!!
+
+13:30 2011-2-11
+VC0882, SV, 环境, cpu频率
+1, liuxiaotao, zouweiran今日邮件. 
+Liuxiaotao: 实验室有一套板子的电源板有问题，供电不足导致，cpu不能够工作到500M,。
+Zouweiran: 原因：core_arm的电源跳线有点松，导致输出电压不稳；调整后输出稳定，可以正常工作到500M
+
+13:32 2011-2-11
+VC0882, SV, 验证要求, AE 对 SV测试阶段的需求; 目前SV测试频率要求; 文档
+1, fengbeizhan邮件"转发: AE 对 SV测试阶段的需求"_今日
+Hi,all
+请大家根据如下的时钟要求进行测试；
+对于ASIC性能方面的要求：
+ARM@600M ICD  
+DDR@200M ICD 
+BUS@200M ICD 
+GPU@200M  
+Vdec@200M 
+Venc@200M 
+DE@75M 
+SD@48M 
+NFC@48M 
+CIF@200M 
+以上要求是sv板子调试；
+要求进行高低温测试，但是高低温的测试软件目前只能使用部分功能；chenying
+由于时间紧，请SVTeam在2.25号之前优先保证以下项目的测试，如果有问题，我们可以再讨论。
+其他同事可以补充。
+1. VA7882测试 (owner: liuzixi, bianrongguang, zhangjian, 环境：产品板子，AE软件)
+a)   上下电流程
+b)   RTC
+c)   PWM
+d)   充电逻辑
+e)   I2C控制逻辑
+2. CPU/BUS/DDR（owner：bianrongguang，zhangjian，liuzixi）
+a)   稳定运行频率:600M,200M,200M
+b)   稳定切频 600M ---- 100M（cpu：step 50M， 2次切频幅度要求不能超过50M左右；顺序切频）
+3. SD Card（owner: fuyali， 要求48M，48M兼容性不能过的card要进行记录）
+a)   SD Boot 长时间多次Boot( 手动reset boot 和 pmu software boot)
+b)   SD Card 兼容性测试
+c)   长时间读写
+4. USB
+a)   USB Host(UDISK长时间读写) （owner：fuyali）
+b)   USB OTG Device(MASS Storage 访问SD Card) （owner：fuyali）
+c)   U-Boot USB Host Ethernet Driver(2月25号之前完成)（owner: mengfandong）
+5. DE(owner: fuyali)
+a)   1A Layer+1B Layer
+b)   1A Layer +1B Layer +Mouse Layer
+c)   DPI LCD（800*480）
+6. VDec(owner: shuyu, fuyali, clk: 200M)
+a)   1080P+PP(1080p->800*480; 1080p->720P)
+b)   QVGA+pp(QVGA ->800*480)
+c)   H.264 MPG4 RV JPEG
+7. GPU(owner:shuyu, clk 200M)
+a)   3D
+b)   2D
+8. CIF+VEnc(owner:shuyu, clk 200M)
+a)   Preview
+b)   Down Sizer 
+c)   Capture JPEG
+9. NFC(clk:48M,只测试Ae提供的片子)
+a)   长时间多次Nand Boot
+b)   量产使用的16Bit Nand(2*8Bit)
+10.   TV（owner：liujianbo，shuyu）
+a)   YPbPr， 多媒体播放；
+11.   Audio（owner：lidongliang）
+a)   单一Speaker通路
+b)   单一MIC通路
+c)   单一耳机
+12.   TPI（owner：fuyali）
+13.   SAR ADC（owner：fuyali）
+14.   KEY pad（owner：fuyali，只测试单件）
+15.   HDMI(这个在25号之前开始调，能不能调出来看情况， 第一步要求，720P)
+a)     希望可以在AE的产品板上调试。
+b)     先在sv 板子上调试；需要先做个板子；（owner: chenying）
+
+2, (11:38 2011-2-12)VC0882, SV, SV测试环境要求
+Lidongliang邮件"答复: 882 SV 实验室"20110209
+提醒大家一下
+目前测试的环境是
+Cpu：500MHz，CPU_BUS：125MHz， BUS：120MHz， DDR：120Mhz
+
+15:42 2011-2-11
+VC0718, irq, cache属性: strongly-ordered, device
+软件trigger中断测试不符合预期: 后来发现寄存器cache属性改为strongly-ordered就正确, 说明原有代码对于device属性考虑不够. 
+和bianyingfeng分析, 认为应该在sw interrupt trigger后面加memory_barrier. 
+\todo 关注bianyingfeng实验结果, 是否发信. 
+
+15:44 2011-2-11
+VC0882, SV, power, pmu, 模式转换(同义词: mode transition), fast wakeup
+1, 目的
+1), fast wakeup没有保存clkrst寄存器的函数: 继续完成.
+2), 测试fast wakeup. 
+2, 1-1).
+1), 添加了"_VIM_CLKRST_GetDrcPllNum". \todo 发信给xiaotao.
+2), 之前增加的ddr_training地址malloc函数怎么找不到了? 看了看自己的记录, 可能当时就没有传. 
+3), 感觉思维混乱啊, 写了半天都搞不清自己再写什么. 重新整理一下思路. 
+(1), 现在需要一个写fast wakeup pmu reg命令. 
+pmu reg似乎可以分为clkrst, ddr和其它三部分. 每部分都尽量使用已经寄存器, 如果需要用户输入的作为输入参数. 
+(2), 原有的"do_pmu_FastWakeUp", "do_pmu_FastWakeUp2", "do_pmu_FastWakeUp3"只允许输入部分ddr参数, 所以不适合ASIC直接使用ddr参数的要求. 
+(3), do_pmu_ReadDdrReg是读ddr寄存器再写入pmu. 符合ddr部分要求, 但是函数封装不好. 
+driver层"VIM_PMU_SetFastWakeUp"函数是保存info到pmu寄存器. 这点没有问题. \todo 需要确认这些参数是否完整. 
+现在还需要一个读ddr寄存器写到info的函数VIM_PMU_GetDdrcInforFromDdrcReg.
+clkrst方面两个函数都有: 
+VIM_PMU_GetClkrstInforFromClkrstReg: 读clkrst寄存器写到info. 
+VIM_PMU_SetClkrstInfor2Pmu: clkrst info写到pmu寄存器. 
+3, 1-2). 
+简单实验通过. log如下(包含idle, halt, fast: sleep->wakeup三个测试).
+AASP SD0:/>padc_int
+padc_int  SD0:/>sys   init
+pa[SD   MSG] VIM_SD_CardRemoval, sd number: 0
+dc_int  SD0:/>sys 1   12 1 1  0 0 65535
+[PADC]->do_padc_IntSYS()
+padc_int  SD0:/>pmu
+pmu  SD0:/>idle
+[PMU   MSG]
+go idle step 1...
+SYS srcpnd = 8
+interrup happan!
+ [PMU   MSG]
+go idle step 2...
+pmu  SD0:/>wk akeups _source 1 4
+[PMU   MSG]do_pmu_en_wakeup_source...
+pmu  SD0:/>halt
+[PMU   MSG]
+go halt step 1...
+SYS srcpnd = 8
+interrup happan!
+ [PMU   LOG] @@ C printf:  after pmu halt !
+[PMU   MSG]
+go halt step 2...
+pmu  SD0:/>
+pmu  SD0:/>write_fastwakeup_pmu_reg
+[PMU]->do_pmu_WriteFastWakeupPmuReg()
+selfRefSomeCfg(Int)/[0]
+[PMU   MSG]set pmu info done.
+pmu  SD0:/>fastsleep
+[PMU   MSG]
+go Fast sleep step 1...
+[PMU   ERROR]VIM PMIC: write register via i2c error !
+[PMU   LOG]@pmu go sleep module: PMU_SW_REG0 = 0x1cbdc
+[PMU   LOG]software will jump to sram after initialization!
+M0x00000001     //SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH
+M0x000000d0     //SYS_CACHE_ICACHE_ON
+M0x00000013     //SYS_WAKEUPFAST_PRTKEY
+M0x00000015     //SYS_WAKEUPFAST_CLKSWITCH
+M0x00000070     //SYS_CLK_SWITCH_CPUPLL_SUCCESSFUL
+M0x00000072     //SYS_CLK_SWITCH_CPU_SUCCESSFUL
+M0x00000078     //SYS_CLK_SWITCH_DDRCPLL_SUCCESSFUL
+M0x00000088     //SYS_CLK_RESET_DDRPHY_DLL_SUCCESSFUL
+M0x0000007a     //SYS_CLK_SWITCH_DDRC_SUCCESSFUL
+M0x00000074     //SYS_CLK_SWITCH_BUSPLL_SUCCESSFUL
+M0x00000016     //SYS_WAKEUPFAST_DDR_EXIT_SELFREFRESH
+M0x0000080e     //DDRC_FAST_SLEEP_START
+M0x0000081b     //DDRC_INIT_DONE
+M0x00000825     //DDRC_DRAM_CMD_FINISHED
+M0x00000825     //DDRC_DRAM_CMD_FINISHED
+M0x00000823     //DDRC_ZQ_CTRL0_DONE
+M0x00000807     //DDRC_RD_SL_MSG
+H0x00000000
+M0x00000808     //DDRC_DQS_SL_MSG
+H0x000000aa
+M0x0000081c     //DDRC_TRAINING_DONE
+M0x0000080f     //DDRC_FAST_SLEEP_END
+H0x0001cbdc
+M0x00000011     //SYS_REMAP_JUMP_TO_PC
+H0x0001cbdc
+vimicro
+vimicro
+vimicro
+1), bin, 配置文件保存在"D:\VC0882\882bootloader\QA_CFG_SV\DDR3\sdboot\cpu48_bus48_ddrc48_dll_off_pmu_fastwakeup". 
+2), 上传panda_os下代码. 
+(1), 添加"_VIM_CLKRST_GetDdrPllNum"函数. (VIM_CLKRST_Driver_Switch.c)
+(2), 根据bootloader clkbypass ctrl更新VIM_CLKRST_Driver.h
+(3), 添加用于测试fast wakeup的函数. 
+pmu命令:
+do_pmu_WriteFastWakeupPmuReg
+ddr
+VIM_PMU_GetDdrcInforFromDdrcReg
+VIM_PMU_SetDdrcInfor2Pmu.
+clkrst:
+VIM_PMU_GetClkrstInforFromClkrstReg: 读clkrst寄存器写到info. 
+VIM_PMU_SetClkrstInfor2Pmu: clkrst info写到pmu寄存器. 
+(4), 移动pmu_test_api.h的ddr寄存器读写宏定义到VIM_DDR_Driver.h
+
+9:57 2011-2-12
+时间管理
+0, 9:40
+
+1, 本日
+1), 9:57-11:02 邮件, arm AMBA(见"10:25 2011-2-12").
+2), 关注usb寄存器不能访问的问题是如何解决的, 可能不是时钟没配对? 见"10:07 2011-2-12". 
+3), 11:10-11:39 fast wakeup中调用ddr和clkrst函数判断寄存器是否有变化. 见"11:39 2011-2-12". 
+4), 60' 考虑到fast wakeup流程需要一定时间改进perl脚本. 先提交VC0882 arm模块, 保证今日进度. 见"14:38 2011-2-12". 
+5), 关注yangxing gpu问题: 应该直接能想到可能是内存泄漏, 我是和yangxing讨论中才想到的. 目前yangxing基本认定是内存泄漏, 正在修改代码.
+6), 2h 支持AE调试sd boot. 见"15:48 2011-2-12". 
+7), 20' 向youhai介绍sv环境. 便于youhai支持产品team. 
+8), 20' 支持beihua使用AE产品版. 
+9), 下班路上看amba文档. 
+10), 总结. 截至17点的今日总结, 见"17:43 2011-2-12". 
+
+10:07 2011-2-12
+VC0882, SV, clkrst, storage, usb otg, 寄存器无法访问
+0, 后来还是发现是clkrst被otg模块修改. 
+1, Mengfandong邮件"答复: 882 SV 实验室"_20110211
+昨天otg device运行中，寄存器无法访问，通过示波器查看在运行过程中otg device时钟分频被修改，后来发现是otg代码在原来fpga版本中，
+
+有一个地方对时钟分频进行过修改，现在sv不进行修改，但是依然会发生data abort的情况，不过继续运行能枚举成功，并可以拷贝，至于为什么会在
+
+中途跑飞一次，还没找到原因
+2,  mengfandong邮件_今日
+otg device 跑飞的问题已经找到，clkrst 模块初始化usb时钟时，打开了otg的autogate功能，使得在某种情况下otg的时钟会被硬件自动关闭，导致无法读写寄存器，访问时发生data abort。   如果禁掉这个功能otg device运行就没有问题。
+
+10:25 2011-2-12
+arm, Cortex-A15, interconnect, AMBA4, 看arm资料
+1, AMBA 4 规范简述
+http://www.arm.com/products/system-ip/amba/amba-open-specifications.php
+AMBA 4 规范在 AMBA 3 规范的基础上另外新增了三个接口协议。
+
+AXI4
+AXI4 协议是对 AXI3 的更新，在用于多个主接口时，可提高互连的性能和利用率。它包括以下增强功能：
+
+对于突发长度，最多支持 256 位
+发送服务质量信号
+支持多区域接口
+AXI4-Lite
+AXI4-Lite 是 AXI4 协议的子协议，适用于与组件中更简单且更小的控件寄存器式的接口通信。AXI4-Lite 接口的主要功能如下：
+
+所有事务的突发长度均为 1
+所有数据存取的大小均与数据总线的宽度相同
+不支持独占访问
+AXI4-Stream
+AXI4-Stream 协议可用于从主接口到辅助接口的单向数据传输，可显著降低信号路由速率。该协议的主要功能如下：
+
+使用同一组共享线支持单数据流和多数据流
+在同一互连内支持多个数据宽度
+FPGA 中实现的理想选择
+
+2, 36服务器上已经下载了文档(\\10.0.2.36\sqmshare\Document\ARM\arm体系结构\amba_coresight).
+1), The AXI4 update to AXI3 includes the following:
+• support for burst lengths up to 256 beats
+• Quality of Service (QoS) signaling
+• support for multiple region interfaces
+• updated write response requirements
+• updated AWCACHE and ARCACHE signaling details
+• additional information on Ordering requirements
+• details of optional User signaling
+• removal of locked transactions
+• removal of write interleaving
+2), \todo 上下班路上看这个文档.
+
+3, google搜索到一个介绍AMBA3的, 感觉不错, 路上看. 
+AMBA 3 AXI Protocol: A Powerful
+Evolution
+The new AMBA 3 AXI (Advanced eXtensible Interface) protocol builds on the many benefits of the AMBA 2 standard by greatly extending the performance and flexibility of the systems based on AMBA technology. Based on the industry’s needs, and created in collaboration with more than 30 companies, the AMBA3 AXI protocol is available now and addresses the needs of the coming generation of designs.
+
+11:39 2011-2-12
+VC0882, SV, power, pmu, 模式转换(同义词: mode transition), fast wakeup, 续, 验证
+1, 为了保存寄存器列表. 
+修改"./extract_reg_from_reglist.pl", 支持转换为panda_os regdef格式. 
+需要加入通用的扩展方法. 
+
+12:58 2011-2-12
+嵌入式, arm, android, linaro, Board Support Status; OMAP4 pandaboard
+1, Current Status of Hardware Enablement
+https://wiki.linaro.org/Releases/BoardSupportStatus
+2, OMAP4也有类似OMAP3 beagleabord的开源社区: pandaboard
+http://pandaboard.org/
+
+14:16 2011-2-12
+工作方法; 文档; \todo整理
+1, 先查电路连接, 再查供电, 时钟, 含跨电源域, 时钟域问题. 
+2, 问我arm, irq能否提交测试, 应该先想一想环境是否一样. 
+
+14:40 2011-2-12
+VC0882, SV, arm, irq提交测试
+1, arm提交测试
+1), NEON:
+使用48Mhzddr脚本(不是2Gb 2x16的)
+openmax icjp demo starting...
+output = 0x00a00178..+614410  
+strmbits =   172000, usedbits =   171984
+arm performance monitor counter cycle = 54380607 (0x033dc83f).
+elapsed time: 12750.0 (ms)
+使用"CPU500_CPUACLK125_BUS120_DDR3_1Gb_2x16_dll_off_120.inc"脚本测试结果: 
+openmax icjp demo starting...
+output = 0x00a00178..+614410  
+strmbits =   172000, usedbits =   171984
+arm performance monitor counter cycle = 54482016 (0x033f5460).
+elapsed time: 1820.0 (ms)
+使用"CPU500_CPUACLK125_BUS120_DDR3_2Gb_2x16_dll_off_120.inc"脚本测试结果: 
+jpeg decoder demo starting...
+output = 0x00a00178..+614410  
+strmbits =   172000, usedbits =   171984
+arm performance monitor counter cycle = 54582741 (0x0340ddd5).
+elapsed time: 1780.0 (ms)
+axf目录: D:\VC0882\document\arm\neon\openmax\obj\Jpeg_CortexA8.axf
+2), PLE正确中断 pass.
+3), PLE两个错误中断 pass. 
+4), panda_os下测试performance monitor irq, pass. 
+
+15:48 2011-2-12
+VC0882, SV, bootloader, AE: 支持AE产品板sd boot, 跳线和供电问题导致sd boot fail
+1, 跳线错误: 
+对比跳线: 应该是sd boot, 跳线成了mmc boot.
+修改后发现打印三次M0x00000416后找到usb boot. 这说明没找到sd卡(之前已经实验过sd卡在SV板上可以boot). 
+2, sd未供电: 
+大家分析, 可能是sd io没有供电, 经过查看原理图和PCB, 发现sd IO供电从emmc过来, emmc那边没有连接. 供电后sd启动正确. 
+3, memory参数错误: 
+sd boot后u-boot只能打印部分信息且有乱码. 原因是memory参数不正确. 使用之前beihua配置的micron 2Gb参数可以正确运行panda_os, 且dmac directautotest运行几分钟正确. 初步认为memory可用. 
+4, 正确的脚本和axf位置: D:\work\VC0882\code_backup\code\20110212_AE_board_script
+10.0.13.101服务器zhangjian projects VC0882也有. 
+
+17:24 2011-2-12
+VC0882, SV, Face detect, 低频率出错, \todo 关注. 
+1, shuyu邮件_今日
+fd error。
+提高了fd的clk，目前是200M，跑的全部pass，原来是12M。理论上说不应该和clk相关，需进一步检查。
+
+17:43 2011-2-12
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), fast wakeup基本通路正确. 需要完整确认寄存器是否正确.
+2), 环境支持:
+(1), 支持AE 产品版SD boot. 见"17:54 2011-2-12". 
+(2), 支持zixi调试cpu频率. 
+3), 调试arm和irq两个模块, 正在测试. 
+2, 周一工作计划
+1), 提交arm和irq两个模块.
+2), 验证fast wakeup是否恢复了要配置的clkrst和ddrc寄存器. 
+
+12:40 2011-2-14
+时间管理
+0, 9:45
+
+1, 本日
+1), 恢复ghost系统;
+2), 上次提交的.cproject多了一个</target>造成eclipse无法识别, 已修改.
+3), 882 sync up, \todo 关注meeting minutes.
+4), 2h 和zhaobeihua, bianrongguang一起调试AE产品板, 见"12:43 2011-2-14". 
+5), 80' ARM AMBA4讲座。
+6), 20' 写今日总结. 
+7), 根据上午讨论, 需要优先调试pmu I2C. zixi需要用I2C开关电源. 
+8), 总结. 感觉今天有点乱. 跑来跑去. 
+今日工作总结. 见"16:52 2011-2-14". 
+
+12:43 2011-2-14
+VC0882, SV, 1: 和zhaobeihua, bianrongguang一起调试AE产品板; 2: 新买的ddr芯片266比更低频率稳定
+1, 和zhaobeihua, bianrongguang一起调试AE产品板
+时钟方案不同造成panda_os无法启动。
+1), 把脚本的cpu, bus时钟改为xclk后仍然不行。
+后来发现注释下面代码后120MHz正确：
+void VIM_CLKRST_PLL5Init(void)
+#warning "######################################################"
+#warning "###############comment shuyu tmp code#################"
+#warning "######################################################"
+#if 0
+    //and by shuyu for tmp use 2011-2-5
+	VIM_HAL_WRITE_UINT32_BITVAL(0x60050004, 22, 22, 1);
+	VIM_HAL_WRITE_UINT32_BITVAL(0x60050004, 23, 23, 1);
+#endif // #if 0
+2), 继续试验80MHz. 也正确。
+3), 但是80MHz和120MHz启动kernel都出错。后来试验ddr 200MHz, 启动kernel正确。
+再试验cpp500_aclk250_bus200_ddrc200, kernel启动正确。
+
+16:52 2011-2-14
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 支持AE team调试. 最终可以在cpp500_aclk250_bus200_ddrc200kernel和ramdisk才能正常启动.
+如下原因造成之前AE产品板无法运行
+(1), ddr不稳定, 最终实验发现只有ddr=200MHz比较稳定, kernel和ramdisk才能正常启动.
+80, 120两个频率下kernel都无法正常启动. 
+(2), AE的时钟方案和ICP panda_os时钟方案有冲突. 
+(3), 在没有打开video codec和gpu电源情况下, 打开了与core之间的isolation. 打开后软件立刻死, 且ICE无法连接arm. 
+2, 问题
+1), fast wakeup的寄存器还没有完整比对. 
+3, 明日工作计划
+1), 调试882 pmu I2C. 
+
+10:02 2011-2-15
+时间管理
+0, 9:45
+
+1, 本日
+1), 20' 和zhicheng, yangxing讨论NFC问题, 怀疑是配置NFC clock流程不对(配置divider时没有关NFC_CKD). (14:34 2011-2-15)的确如此. 
+2), 1h 40' 和zixi调试pmu. 见"10:52 2011-2-15". 
+被3)打断. 
+3), 20' 自己把editplus配置删除了, 耽误了时间.
+4), 40' 和zixi, xiaotao讨论sram cpu dvfs测试. 见"10:52 2011-2-15"3.
+5), pmu I2C测试. 1.5Mhz下测试了RTC相关逻辑. 
+6), 今天5点后, 把irq提交了. 见"19:39 2011-2-15". 
+7), 总结. 见"17:23 2011-2-15". 
+
+10:52 2011-2-15
+VC0882, SV, AE产品板, power, pmu, VA7882; 需要做sram cpu dvfs
+1, I2C没有初始化. PMIC init初始化后, 读寄存器默认值正确. 读写寄存器正确. 
+RTC user register读写注意流程: 
+1), write reg
+2), 0xA2 = 2 ;把刚才写入的寄存器值写入到RTC域. 
+2, 修改I2C时钟配置, 从clkrst模块得到I2C频率. 
+由于I2C模块时钟是23.4MHz, 按照mas给出的"fi2c_24m_clk/ (8 * fSCL) -1"计算, 频率会有误差. 例如现在100k实际是100.86KHz, 400K是417KHz, 1.5MHz是2925. 
+给xiaotao和zhengwei发信.
+3, liuzixi需要一个sram内测试ARM DVFS的工具. 
+1), 切频由xiaotao做, 调压由zhangjian做. 预计周四下午提供给zixi. 
+2), 流程: 测试case是之前做的sram cpu copy. 
+升压流程: memcpy运行->升压->memcpy运行->切频->memcpy运行->降压->memcpy运行...
+降压流程: ...->切频->memcpy运行->降压->memcpy运行...
+3), 参数, 使用rvdebugger脚步配置参数. cpu_clk_div, cpu_aclk_div, pll_num, pll_r, pll_od, pll_f, memcpy次数4switch. 电压1, memcpy次数1, 电压2, memcpy次数2
+电压2和memcpy次数2都是0表示是降压流程. 
+4, PMU I2C测试
+1), 找出可以修改的寄存器. 
+buck2, buck3, Bst1, Bst2, LDO2-LDO14, LDO21, RTC, PWM.
+2), 后来看了看, 感觉使用PMIC_TEST_AutoCheckRtcDate, PMIC_TEST_AutoCheckRtcTime这两个函数就达到I2C测试的作用了. 
+
+14:05 2011-2-15
+同事信息, AE; MIS
+1, AE: 硬件, huangchen, wangzhanguo. 
+2, MIS: xun zhifeng, 负责CVS密码. 
+
+15:12 2011-2-15
+VC0882, SV, AE产品板, pcb, 项目资料; 移动1部系统组对外资料, 882平台对外资料
+zhaoyuan邮件_今日
+希望大家找882产品板电路图，芯片Datesheet时，到ftp://10.0.12.31上去找，如果没有，请跟Huangchen联系。
+
+17:23 2011-2-15
+VC0882, SV, 今日工作总结, 明日工作计划; 项目进展(fengbeizhan, fuyali): NFC时钟配置流程错误导致NFC无法正常工作, 供电问题造成系统不稳定
+1, 今日工作总结
+1), 和zixi一起调试AE产品板VC0882 pmu和VA7882.
+使用100KHz, 400KHz, 1.5MHz访问寄存器正确. 
+2), 和zixi, xiaotao讨论"ARM的动态切频调压(DVFS)". 预计软件两天完成. 
+3), 提交arm测试. 
+2, 明日工作计划
+1), 编写"ARM的动态切频调压(DVFS)"工程代码, 调试. 
+
+3, fengbeizhan邮件_今日
+今日进展
+1.         7882 iic 调试通过，可以正常读写register，简单试了试rtc等可以。 
+-        使用100KHz, 400KHz, 1.5MHz访问寄存器正确；
+-        下一步由zixi负责模拟的测试； 由zhangjian负责数字的功能调试；
+2.         tv encode 所有模式调试通过；
+3.         nfc 正沿调试通过；
+-        Mclk48M,16bit,r/w26M. 原因：clk 配置顺序问题；
+4.         解决了audio中， phone通路的输出波形超载问题；
+5.         Otg device 和host 提交测试
+cpu_clk	 bus_clk ddr_clk
+500M	 266M	 266M
+Otg         46.8mPhy           12m
+测试otg host时注意，由于目前的电源板在设计otg 的电源时有问题，需要通过跳线借用usb host的电源，将主板上的JH13的18和19脚短接，就是将电源板上下来的给uhost的电源给otg。测试人员有疑问找我。
+6.         解决部分模块板子供电不足的问题。
+
+4, fuyali邮件_今日
+1.       用5v的直流电源会出现很多莫名的问题（之前测试工程师发测试报告报的大多数问题都是这个原因导致），现在会统一修改电源板确保能解决问题。因为这个问题耽误了很多时间。
+2.       目前模块时钟基本都达到AE的要求了，但是cpu仍然在500M
+3.       软件那边基本上大部分模块已经调试通过并提交测试了。测试目前是4套板子，已经结束跟正在测试的模块有：de、cif、venc、vdec、tpi、dmac、audio
+4.       能否达到AE那边2.25号的测试要求，需要视新板子提供的速度及测试环境的稳定来看。
+
+18:11 2011-2-15
+VC0882, SV, rom bootloader调试方法, 代码位置
+zhangjian2yangxing邮件
+如果需要调试bootloader, 先更新882bootloaer目录, 
+然后解压\\10.0.2.36\sqmshare\projects\Mobile BU\VC0882\bootloader\code_release_to_ICV\882bootloader_Ver_16.6\ bootloader_Ver16.6_ICV.rar到" D:\VC0882\882bootloader"目录覆盖原有的bootloader目录. 
+板子调为spi boot, 使用" D:\VC0882\882bootloader\bootloader\init_script\ init_sv_debug.inc"脚步加载符号表并调试. 
+由于只能使用硬件断点, 且硬件断点数量有限, 请尽量少设置断点, 如果硬件断点用尽, 可能造成没法单步或其它错误. 
+
+19:39 2011-2-15
+(10:41 2011-2-25)
+VC0882, SV, irq提交测试
+1, 自动优先级测试中同时发生不需要加memory_barrier, 但是不同时发生需要加入memory_barrier, 否则中断会比预期多. 
+bianyingfeng邮件"882 sv_irq测试"20110211_1555: "718 IRQ测试的时候碰到一个问题，882可能也存在，测试的时候寄存器属性如果设置的是device, 在自动测试case里需要在 软trigger之后加上memory_barrier ,或者在测试的时候改用strongly order属性。"
+
+时钟: 
+CPU: PLL1, clk=500M, aclk=250M.
+BUS: PLL2, aclk=266M, pclk=133M, stor_peri=266M.
+
+DDR: PLL6, mclk=120M.
+
+9:41 2011-2-16
+时间管理
+0, 9:20
+
+1, 本日
+1), 40' 邮件, 业内动态. 
+2), sram cpu dvfs. 时间关系需要一天完成. 后天上午准备打包脚本. 
+3), 下午1h用于支持环境. 本来计划调试performance monitor, 后来2)进展慢再加上环境支持, 只能明天下午试一下. 
+4), 总结. 见"16:52 2011-2-16". 
+
+11:36 2011-2-16
+VC0882, SV, AE产品板, power, pmu, VA7882; sram cpu dvfs, coding
+1, 没有加入timer代码. 
+代码大小超过8k, 需要剪裁. 
+2, VIM_MMU_MAP_Sram_Fragment()需要调整结构, 当时就觉得架子不好, 现在sram要用到16k, 留给memcpy的只有8k.
+原来用的"-O0"代码有10.3K, "-O2"是7.54K. 加上堆栈和数据区各1k, 控制在16K内应该没什么问题. 
+3, 下午调试这个最多只能用2小时. 剩余时间要调试performance monitor. 
+4, 用了1个小时调试环境. 
+sram程序写I2C寄存器无反应, 用panda_os实验没有问题. 后来发现I2C没有正确初始化. 
+5, 计划使用0x20005C00-0x6000地址作为数据区（23k-24k). 
+6, 今天先把代码调通. 明天添加脚本. 
+1), 添加结构体后没法调通. 最后发现时编译选项不支持
+原有编译选项: 
+armcc -c -o build/boot/bootloader.o -I./include -I"C:\Program Files\ARM\RVCT\Data\4.0\400\include\windows" -O0 --cpu=cortex-a8 --brief_diagnostics --debug  -DCLKRST -DPADC -DUART -DMEM -DLIB_USING_USER_DEFINED_MEMCPY -DMEM_COPY_FOR_CACHE_TEST -DCACHE -DMMU -DPMU -DI2C --diag_style=ide -D__SV__  boot/bootloader.c
+panda_os中:
+armcc -I. -I./include --preinclude ./build/macro.h --cpu=Cortex-A8.no_neon --loose_implicit_cast --brief_diagnostics --diag_suppress=2083 --debug -W -O0 --diag_style=ide -INucleus/OS/inc -DNANDFLASH -DPANDA_PLATFORM -DFD_HW_ACC -DAASP_HOT_KEY -I./nucleus/os/inc  -c clkrst/VIM_CLKRST_Driver.c -o build/clkrst/VIM_CLKRST_Driver.o 
+其实都一样, 查armcc user guide, 发现需要用"--c99"才可以. 
+修改makefile: 
+//support C99 for Designated initializers
+CFLAGS += --c99 
+2), buck index写错了, 所以电压没有变化. 
+3), 现在软件完成, 使用内部结构体, 明天上午做打包工具. 下午调试performance monitor. 
+
+16:52 2011-2-16
+VC0882, SV, 今日工作总结, 明日工作计划
+1, 今日工作总结
+1), 调试sram cpu dvfs工程, sram环境下PMU I2C读写正确. 
+2), PMU RTC寄存器多次读写正确.  
+3), 环境支持: zhaobeihua, liuzixi. 
+2, 明日工作计划
+1), 调试sram cpu dvfs工程. 
+
+9:59 2011-2-17
+时间管理
+0, 9:20
+
+1, 本日
+1), 10' 邮件, 动态. 
+2), 30' 支持fandong调试u-boot, 由于uart没有时钟造成uart配置出错. rvdebugger看寄存器心得, 见"10:35 2011-2-17". 
+3), 10:40-11:47 1h sram cpu dvfs做打包脚本. 见"10:15 2011-2-17".
+4), 调试sram cpu dvfs工具. 
+
+10:15 2011-2-17
+VC0882, SV, AE产品板, power, pmu, VA7882; sram cpu dvfs, coding, 写脚本
+1, 实验rvdebugger脚本能否使用struct. 
+看了看文档, 发现rvdebugger不能建立struct, 但是可以用符号表里面的结构体定义. 
+后来想一想, 其实也没必要add, 直接用程序中分配的dvfs数组就行了. 反正也不能超过这个容量. 
+2, 现在zixi需要15个频点. 
+26MHz + 
+50M -> 100M -> 200M -> 300M -> 400M -> 500M -> 600M -> 700M -> 800M -> 900M -> 1G -> 1.1G -> 1.2G -> 1.3G
+暂时只留16个空间. 
+3, 最后要把数据文件单独出来, include这个文件. 
+define /R void SetCpuSwitchCfg(idx, pll_num, r, od, f, div_cpuclk, div_cpuaclk, memcpy4freq, vol1, memcpy4vol1, vol2, memcpy4vol2)
+int idx;
+int pll_num;
+int r;
+int od;
+int f;
+int div_cpuclk;
+int div_cpuaclk;
+int memcpy4freq;
+int vol1;
+int memcpy4vol1;
+int vol2;
+int memcpy4vol2;
+{
+	$ce /R dvfs[idx].pll_num	= pll_num$;
+	$ce /R dvfs[idx].r		= r$;
+	$ce /R dvfs[idx].od		= od$;
+	$ce /R dvfs[idx].f		= f$;
+	$ce /R dvfs[idx].div_cpuclk	= div_cpuclk$;
+	$ce /R dvfs[idx].div_cpuaclk	= div_cpuaclk$;
+	$ce /R dvfs[idx].memcpy4freq	= memcpy4freq$;
+	$ce /R dvfs[idx].vol1		= vol1$;
+	$ce /R dvfs[idx].memcpy4vol1	= memcpy4vol1$;
+	$ce /R dvfs[idx].vol2		= vol2$;
+	$ce /R dvfs[idx].memcpy4vol2	= memcpy4vol2$;
+}
+.
+
+SetCpuSwitchCfg(0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb)
+
+使用
+include "D:\\VC0882\\mini_env\\arm_coresight_test\\arm_core_neon_cache_test\\init_script\\RVD_SV\\dvfs.inc"
+其实也可以用环境变量, 当初rvdebugger如果用环境变量, 大家的工程可能就没有冲突了. 
+
+4, (14:21 2011-2-17)xiaotao已经把频点加入了, 下一步需要我加入电压. 
+发现7882 buck1, buck2的电压值并不是和寄存器值线性对应的. 
+还是自己写一个函数做转换. 本来想在rvdebugger里面写, 后来感觉还是在c程序里面写好一些, 将来迁移到panda_os更方便(已经确认过原来panda_os没有这个函数, 这次还是没有想清楚, 差点就没确认panda_os里面有没有这个函数).
+1), 既然电压和寄存器值没有统一的规律, 不如直接建立一个数组, 这个数组如果手工建立也太慢了. 
+使用perl教本转换(用时10'): 
+原始数据格式, 共32项:
+5'b00000: 0.60v
+5'b00001: 0.65v
+...
+5'b11101: 2.80v
+5'b11110: 3.00v
+5'b11111: 3.30v
+脚步如下: 
+#!/usr/bin/perl
+
+while(<>) {
+        #match 5'b00000: 0.60v
+        if ( /5\'b([01])([01])([01])([01])([01])\:\ ([0-9]\.[0-9][0-9])v/) {
+                my $idx = $1 * 16 + $2 * 8 + $3 * 4 + $4 * 2 + $5 * 1;
+                my $vol = $6 * 1000;
+#               printf "%d%d%d%d%d -> 0x%x; %d -> %d\n", $1, $2, $3, $4, $5, $idx, $6, $vol;
+                printf "0x%x, %d\n", $idx, $vol;
+        } else {
+                print "##### warning not match ######\n";
+        }
+}
+2), 写函数. 希望也能10'完成coding. 
+函数写了20', 自己对于工作量的掌控还是不够. 
+3), (16:00 2011-2-17)完成, 准备调试. 
+(1), 加入PMIC调压函数: 用户输入毫伏电压, 软件查表得出寄存器配置, 并通过I2C配置VA7882. VIM_PMIC_SetBuckVolmv(), VIM_PMIC_BuckVol2val(). 
+(2), 加入document memory_assign: 说明memory分配情况. 
+(3), 修改dvfs.inc, 加入电压值. 
+
+5, (16:38 2011-2-17)调试. 
+1), uart没法输出, 但是uart init后是可以的. debug发现加载dvfs.inc时覆盖了其余数据, 看代码发现dvfs数组应该改为16大小. 
+2), 切频出错, 发现时pll r写错了, 应该是(26-1).
+3), 由于zixi需要低->高->低完整流程, 需要至少29个频点, 把dvfs数组改为32个.
+
+\todo 加入正则表达式应用. 
+替换
+SetCpuSwitchCfg(13, 1, 1-1, 1-1,  1300-1, 1-1, 2-1, 10, 1650, 1, 1550, 1)
+为
+SetCpuSwitchCfg(13, 1, 26-1, 1-1,  1300-1, 1-1, 2-1, 10, 1650, 1, 1550, 1)
+查找: "(SetCpuSwitchCfg\([0-9]*,\ *1,\ )1-1"
+替换: "$126-1"
+
+10:35 2011-2-17
+VC0882, arm, rvdebugger, rvdebugger看结构体心得
+1, rvdebugger里面如果遇到被优化没法查看变量/结构体的值, 可以看对应汇编根据load/store指令找到结构体基址.
+注意这个地址已经是结构体的起始地址, 需要转为结构体类型, 而不是结构体指针类型. 
+例如有u-boot里面有结构体gd_t, 看代码发现地址是r8. 
+可以用(gd_t)@r8查看. 
+
+11:52 2011-2-17
+VC0882, SV, AE产品板, 使用文档, 注意事项; sd打包工具; 产品板注意事项; 10: u-boot tftp; 11: IP地址使用守则; 16: 创维nand编译烧写注意事项
+1, 综述 by chuangchen
+882 AE 产品板使用注意事项
+1. 电池接口位置焊有电源连接线，红色线为正极，黑色或黄色线为负极。电压范围为3.6-4.2V。建议供电为4V。
+2。轻拿轻放PCB板，避免磕碰，避免意外跌落。
+3。尽量不要手触芯片，和元器件。
+4。避免PCB放在金属物体上。
+5。避免产品板放在潮湿的环境里，避免接触水源。
+6。长时间不适用产品板，应断电处理。
+
+2, 产品板触摸屏使用
+zhaoyuan邮件"关于产品板触摸屏"_20110217
+产品板触摸屏线序有问题，请在使用之前确认：
+1. 找硬件同事调整TPI线序
+2. 选择正确的LCD，产品板:EK070TN93, SV板:LMS480KC04
+
+3, Zhaoyuan邮件"关于15网段IP"20110217
+15网段的IP，经测试可以作为PC IP访问 10.0.12.140/10.0.12.160
+也可以作为开发板IP挂在Rootfs，但请注意：
+1. U-boot启动参数：
+a)   Set ipaddr 10.0.15.xxx
+b)   Set serverip 10.0.12.160(或者10.0.12.140)
+c)   Set gatewayip 10.0.12.1
+d)   Set netmask 255.255.252.0
+e)   Set rootpath /home/zhaoyuan/rootfs(一定是用户根目录下的rootfs目录)
+f)   Set bootfs nfs
+g)   Save
+2. rootfs必须是/home/user/rootfs
+
+4, sd打包下载工具(bamvor: 这个只是打包工具, 具体镜像还是要从下面的daily build里面复制)
+zhaoyuan邮件"SD打包工具&下载工具"20110217_1124
+\\10.0.12.140\Project\VC0882\sw_design\sd_mptools\release
+1. COPY ./2011.01.24 到本地
+2. 将编译后 vortex\out\target\product\vortex\目录下的 *.img 和 u-boot.bin 拷贝到 2011.01.24\Product_TOOL\packet_tool 目录下
+3. 运行\2011.01.24\Product_TOOL\packet_tool\Vortexpacket.exe ,点击 “Convert to Vortex packet” 
+4. 将生成的vortex.pak 拷贝到 2011.01.24\Product_TOOL\flash_tool 中，插入TF卡，并运行 Vortexflash.exe
+5. 选择相应的下载配置脚本：
+产品板: pb_ddr3_2Gb_2x16_cpu800M_bus200M_ddr200M_storperi-pll3-288.ini
+SV板: sv_samsung_1Gb_cpu500M_bus111M_ddr120M_storperi-pll3-288.ini
+6. 点击”Submit”按钮开始下载。
+(17:46 2011-10-25)
+烧写工具的另一个位置: \\10.0.2.208\share\`test(这个可不能删啊)\13--882-打包烧写工具\fajue
+"17:47 2011-10-25"
+5, AE android daily build
+zhaoyuan邮件"关于Android每日Build"20110302_1006
+从昨天年开始，每天晚上，会自动Build一个最近的版本，存放在10.0.12.160/home/share/androidbuilds
+请大家尽量不要再工作时间，对Android 进行Clean Build，如果需要，就直接从androidbuilds 目录COPY过来。
+
+6, (14:40 2011-3-8)zhaoyuan邮件"关于量产版"20110308_1438
+1.Kernel
+必须使用 vc0882_vortex_mmcroot_defconfig，
+不在维护vc0882_vortex_nfs_defconfig
+2．量产工具使用 \\10.0.12.140\Project\VC0882\sw_design\sd_mptools\release\2011.01.24
+3. 下载脚本使用 \\10.0.12.140\Project\VC0882\sw_design\sd_mptools\release\flash ini\pb\pb_sd24M_ddr3_2Gb_2x16_cpu800M_bus400M_ddr400M_storperi-pll3-288.ini
+
+7, zhaoyuan邮件"关于产品板的维护"20110308_1448
+有产品板的同事，请填写\\10.0.12.140\Project\VC0882\hardware\产品板状态汇总.xls
+并且注意:
+1.       版号以LCD Connecter上红色的标记为准，如果没有，请填写N/A
+2.       开发板在使用时有什么异常，请一定要填写在表中，非常非常重要。
+
+8, (16:36 2011-5-10)daily build
+/home/share/androidbuilds/20110509/android/out/target/product/vortex/
+
+9, 生成boot.img和recovery.img的方法: 
+mkbootimg位于:
+android: out/host/linux-x86/bin/mkbootimg
+
+cp /home/tftpboot/zhangjian/uImage . -a
+../mkbootimg --kernel uImage --ramdisk ../ramdisk.img --output boot.img
+../mkbootimg --kernel uImage --ramdisk ../ramdisk-recovery.img --output recovery.img
+
+10, (19:27 2011-5-5)tftp使用更新: 
+1), burney bian [mailto:burney.bian@gmail.com]邮件"Re: About suspend/wakeup"_20110505
+另外，大家可以参考下面的命令使用tftp启动android. 避免内核调试过程中重复烧卡。
+set bootargs console=${console} mem=${dram} init=/init initrd=0x81000000,0x81477
+set bootcmd "usb reset;icache on;dcache on;tftp brg/uImage;tftp 0x81000000 brg/ramdisk.img;bootm 0x82000000"
+2011/4/29 burney bian <burney.bian@gmail.com>
+Hi All,
+我提交了一个可以在Android下休眠唤醒的版本和相应的配置文件。具体的使用方法如下。
+Kernel:
+1. 支持Android休眠唤醒的初始版本。
+2. 增加了用于大家调试的配置文件vc0882_vortex_mmcroot_pm_defconfig
+3. 使用时需要修改board-vortex.c去掉MMC_CAP_NEEDS_POLL标记。并且取消注册i2c1上的所有设备，即注释掉i2c_register_board_info(1, i2c_devs1, ARRAY_SIZE(i2c_devs1));
+4. 使用时修改rootfs,关闭GPU. 去掉init.rc中关于init.vimicro.sh的所有调用。并且将/system/lib/egl/egl.cfg改为egl.cfg.bak或其他名字。
+注意：可能需要C版才能工作。B版成功率很低。
+请所有驱动负责人完成相应的电源控制工作。
+
+2), 对我来说需要修改为
+set bootargs console=${console} mem=${dram} init=/init initrd=0x81000000,0x81479 no_console_suspend
+set bootcmd "usb reset;icache on;dcache on;tftp zhangjian/uImage;tftp 0x81000000 zhangjian/ramdisk.img;bootm 0x82000000"
+set ipaddr 10.0.12.145
+saveenv
+
+3), (20:04 2011-5-16)
+如果只是希望在suspend时, console仍然有打印, 只需要修改ramfs_args: 
+setenv ramfs_args setenv bootargs console=${console} mem=${dram} init=/init no_console_suspend
+u-boot是启动ramfs脚本, 并且使用ramfs_args作为参数. 
+"20:04 2011-5-16"end
+
+11, (13:12 2011-5-12)项目相关文档:
+\\10.0.12.140\Project\VC0882\sw_design\dev: 包括vortex软件环境使用指南, kernel coding规范, ip地址分配. 
+前两个文档已经上传到ICP VC0882 CVS: "document\sv\ae"
+zhaoyuan邮件"关于IP地址使用守则"20101130
+1.       不能使用他人IP
+2.       不能乱使用公司其他IP
+3.       如果急需IP可以从备用IP中找，然后把选中的IP写到自己名字后边，同时从备用IP里删除
+\\10.0.12.140\Project\VC0882\sw_design\dev\IP地址资源.xls
+bamvor: 目前使用文件: IP地址资源_Final.xls
+
+12, (14:58 2011-5-14)emmc打包工具. 
+要注意跳线, 如果跳线正确, 启动时打印M0x00000006(mmc hc)才正确.
+zhangyanhong邮件"板载方式烧录的重要步骤，无需拔卡"20110505_2117
+目前板载烧录必须在完全重新上电的情况下才能工作稳定，断电不彻底容易出现烧录不稳定。
+经过咨询硬件，发掘已经装机的机器带电池断电的烧录步骤为：
+ 
+第一步：拔掉外接充电器及USB线。
+第二步：reset，如果reset后重起了，说明断电没成功，请按长一点。（短按会重启，稍久一点断电）
+第三步：按住menu键，连接充电器，reset一下，然后松开menu键。
+第四步：连接USB线，就会连入PC了。
+第五步：PC烧录工具上选择“板载方式烧写”，点击“烧写”按钮。此时工具会变灰色，稍等一会，会有蓝色进度条提示。
+           烧录完成会有“烧录成功”提示框。
+
+13, (13:23 2011-7-4)VC0882, SV, AE, 量产, build发掘版本
+bianrongguang([burney.bian@gmail.com])邮件"How to build android for Fajue."_20110704
+现在服务器每天会自动build一版给fajue量产板子用的image.放在android_out_fajue目录中。烧写工具请用 \\10.0.12.160\share\brg\fajue中的版本。
+如果需要手动build kernel和u-boot。请使用如下配置文件覆盖系统默认配置文件。
+kernel/arch/arm/configs/vc0882_vortex_fajue_defconfig
+u-boot/include/configs/vc088x_vortex_fajue.h
+即
+cp kernel/arch/arm/configs/vc0882_vortex_fajue_defconfig kernel/arch/arm/configs/vc0882_vortex_lvds_defconfig -f
+make -C kernel clean
+cp u-boot/include/configs/vc088x_vortex_fajue.h u-boot/include/configs/vc088x_vortex_lvds.h -f
+make -C u-boot distclean
+make
+
+14, (14:57 2011-7-5)打包工具更新. 
+\\10.0.12.140\Project\VC0882\sw_design\sd_mptools\2011.07.01\Product_TOOL
+SuHuaWu邮件"烧录工具更新"_20110701
+NAND烧录工具有较多改动，请使用\\10.0.12.140\Project\VC0882\sw_design\sd_mptools\2011.07.01目录下的工具和配置文件。
+改动如下：
+NAND烧录工具添加单独资源烧录功能。由于单独烧一个或多个img时不能知道整块NAND的BBT了，如果中途坏块发生变化，就需要重新完整烧录一次才正常，此功能仅用于开发调试。
+此外将设置项单独放到一个对话框中。可以设置当前目录下的配置文件路径，选择所用的NAND类型，ECC长度，分区大小。
+打包工具将对话框缩小，功能不变，以适应小分辨率PC。
+
+15, (15:00 2011-7-5)
+for Gong'AnMin复现AE IO烧问题. 
+用"\\10.0.12.140\Project\VC0882\sw_design\sd_mptools\2011.07.01\Product_TOOL\flash_tool"烧写如下映像:
+\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110527_AE_suspend_resume_cont5\7_inch\vortex.pak
+具体操作见文档: 
+D:\VC0882\document\sv\ae\中星微_VC0882_软件培训_升级和烧录.ppt
+
+16, (10:33 2011-9-9)创维nand编译烧写注意事项(copy from "16:44 2011-8-25").
+1), 配置环境:
+zhangjian@ubuntu:~/mydroid_f$ . build/envsetup.sh
+including device/htc/passion/vendorsetup.sh
+including device/samsung/crespo/vendorsetup.sh
+including device/vimicro/vortex/vendorsetup.sh
+zhangjian@ubuntu:~/mydroid_f$ lunch
+
+You're building on Linux
+
+Lunch menu... pick a combo:
+     1. generic-eng
+     2. simulator
+     3. full_passion-userdebug
+     4. full_crespo-userdebug
+     5. generic_vortex-userdebug
+     6. full_vortex-userdebug
+     7. fj_vortex-userdebug
+     8. m3s_vortex-userdebug
+
+Which would you like? [generic-eng] 8
+
+============================================
+PLATFORM_VERSION_CODENAME=REL
+PLATFORM_VERSION=2.3
+TARGET_PRODUCT=m3s_vortex
+TARGET_BUILD_VARIANT=userdebug
+TARGET_SIMULATOR=false
+TARGET_BUILD_TYPE=release
+TARGET_BUILD_APPS=
+TARGET_ARCH=arm
+HOST_ARCH=x86
+HOST_OS=linux
+HOST_BUILD_TYPE=release
+BUILD_ID=GRH55
+============================================
+
+2), 打包(创维nand):
+system.img选ubi.system.img
+userdata.img选ubi.data.img
+udiskdata.img选ubi.userdata.img
+
+3), 烧写
+使用0701工具出错. 需要使用jinyang今天给我的工具. 
+先扫描, 再下载. 烧写过程较慢, 大约5分钟. 
+
+11:57 2011-2-17
+VC0882, SV, 量产计划, manager sync up meeting
+本邮件皆为转发邮件
+1, Chenying邮件"答复: AP sync up meeting notice"_20110209
+1、1月15日到19日之间开一个动员会，定一个详细计划：如何封闭开发；分三个milestone：PP,MP,MP到年底多少量？？？提前和delay咋处理  Houpeixin
+2、提一个对IC要求任务的时间表要求：   Zhaoyuan 尽快
+   把调试任务的优先级排一个出来
+   CPU:BUS:DDR  ？MHZ:？MHZ:？MHZ （需要通过高低温测试）
+   如GPU 250MHZ
+3、2月底：要确保把7882B和882的配合情况基本说清楚，以便出参考设计            Yangzuoxin，Liuzixi
+4、定一个详细计划                             Zhaoyuan
+5、每天下午5点左右，半小时内的sync up       Chenying
+6、产品板要能boot起来      Aiguo，zhaoyuan，huangchen，Caominfeng
+目标：2月底一定要有参考设计
+
+2, chenying邮件"答复: AP sync up meeting minutes"_20110216
+1、  modem： WCDMA  戴博  新modem预计这两天回来
+   TD     chenweimin
+   安排人花一周时间评估是否可行和时间表    zhaoyuan
+   WCDMA上网是最高优先级
+2、  硬件任务：7882C 核心板
+ 基于发掘新模具的外围板
+ 参考设计
+ Huangchen需要做一个计划出来，将风险列出来
+ 提供一个产品板使用注意事项，尽量避免板子的损坏。 Huangchen
+3、 HDMI：  3月第一周开始进行调试，希望4月可看到东西  （720P可能可以接受），希望ICP可以先打通通路
+ IC这边最晚3月初需要将HDMI调通                                     Yangzuoxin,Fengbeizhan
+ ICP现在人手紧张
+4、  电容屏（深圳负责）
+5、  深圳team需要支持换不同的modem、电容屏，现在要提前考虑人选          Houpeixin，Caominfeng
+6、  LVDS调试在产品板上调        Fengbeizhan (Huangchen预计板子3月中下旬才能好，希望能尽快)
+7、  招人一定要抓紧
+8、  探讨加散热的可能性   Huangchen，daijin
+9、  每个人每月初做个预算，报批。下周一报批。
+
+13:12 2011-2-17
+VC0882, SV, arm, Cortex-A8, NEON功耗问题
+1, huangwei邮件"An issue on CORTEX-A8 NEON power"20110217_1237
+The following table compares CORTEX-A8 current between NEON clock off and NEON clock on( just force NEON clock on, no SIMD/VFP instruction is excuted). From the table, current has a significant increase after NEON clock is forced on by setting  bit 14 of auxiliary control register high. It is reasonable or not and why? Thanks.
+ 
+CORTEX-A8 frequency DC-DC output NEON clock off  NEON clock on  
+VDD_A8(v)  current（mA) VDD_A8(v)  current（mA) 
+600Mhz 1.14 1.094 165 1.081 210 
+1.2 1.151 170 1.137 220 
+1.267 1.215 190 1.2 240 
+900Mhz 1.304 1.226 260 1.202 335 
+
+2, bamvor: 之前dr.yang说的开NEON时钟, 我以为是只是打开NEON, 如果不用NEON, 可能会自动gate. 现在既然force NEON clk on, 也就是不允许自动gate NEON时钟, 那功耗上有体现应该也是正常的. 
+
+13:34 2011-2-17
+软件技巧, IE, 代理
+安全: 218.207.217.226:80
+FTP: 10.0.0.3:80
+跳过如下地址: 
+10.*.*.*;*.vimicro.*;*.sina.*
+
+14:09 2011-2-17
+VC0882, SV, arm频率测试, 续, 不同电压对应的arm频率
+1, lizixi邮件"vc0882 SV :  ARM测试情况"20110212
+这两天在室温下比较系统的测试了SV上ARM的状况。
+使用的ICP提供的SRAM copy的software :
+   DDR not use  (排除了DDR的影响) 
+ARM :  L1 – I/D cache on, L2 cache on, Neon off (粗略估计Neon On的情况下动态功耗高50%左右)
+1Mbyte data copy
+ARM总的情况如下：
+1）    ARM在升压的情况下最高频率可以到1.3G（此时ARM的电压1.493v）.
+1.2v normal case下ARM可以跑900M.
+2）    1.3G下ARM电流大概 480mA ,  开Neon估计到720mA(有些烫手)
+50M 下 ARM电流大概20mA（音频应用场景） 
+3)       在0.999v下ARM leakge power 为1.9mA ,  我们可以在Halt mode下至少可以将ARM电压降到1.0v。
+注意：
+这些数字都是在特定芯片温度下的数据，温度升高的情况下ARM的表现会不一样。
+具体信息如下 ----------------------------
+通过改ARM的DCDC的反馈电阻(调节滑动变阻器)，可以得到下面 ARM电压和其最高频率的映射表：
+（没有使用散热片和风扇，下表内RC代表一特定电压下芯片内的温度。同一电压下，RC值越小，温度越高； 同一温度下，RC值越大，电压越高）：
+DCDC 	No clock	Mem copy RC	CPU	具体信息
+output	C9旁	ARM	C9旁	 (代表	最高
+(v)	电压(v)	Leakage	电压(v)	 温度)	频率
+		(mA)			(Mhz)
+1.001	0.999	1.9	0.999	0x1DA000 50	CPU50/CPUACLK50/BUS333/SRAM333
+1.015	1.012	1.9	1.011	0x1EC000 100	CPU100/CPUACLK100/BUS333/SRAM333
+1.034	1.031	1.9	1.028	0x203000 200	CPU200/CPUACLK200/BUS333/SRAM333
+			1.068~			CPU400~CPU600
+			1.073
+1.090	1.086	2.4	1.073	0x237000 700	CPU700/CPUACLK233/BUS333/SRAM333
+1.148	1.144	2.8	1.131	0x286000 800	CPU800/CPUACLK267/BUS333/SRAM333
+1.222	1.219	3.3	1.189	0x2DD000 900	CPU900/CPUACLK300/BUS333/SRAM333
+1.308	1.304	5.1	1.250	0x338000 1000  CPU1000/CPUACLK333/BUS333/SRAM333
+1.378	1.372	5.6	1.332	0x3A3000 1100  CPU1100/CPUACLK275/BUS333/SRAM333
+1.431	1.425	6.2	1.405	0x3FD000 1200  CPU1200/CPUACLK300/BUS333/SRAM333
+1.513	1.508	8.3	1.493	0x469000 1300  CPU1300/CPUACLK325/BUS333/SRAM333
+					 Fail  CPU1400/CPUACLK325/BUS333/SRAM333		-- Fail(芯片很烫手)
+
+11:02 2011-2-18
+时间管理
+0, 10:10
+
+1, 本日
+1), 20' 给zixi sram cpu dvfs工具. 
+2), 30' 和bianyingfeng讨论ARM data abort. 关注PCI-E引起data abort如何处理. 
+态度不太好. 以后注意. 
+3), 20' 通过VA7882开所有时钟. 
+4), 20' 讨论NEON功耗测试, 见"13:14 2011-2-18". 关注. 
+
+13:14 2011-2-18
+VC0882, SV, arm, power, NEON功耗讨论
+1, huangwei邮件"An issue on CORTEX-A8 NEON power"20110217_1237
+The following table compares CORTEX-A8 current between NEON clock off and NEON clock on( just force NEON clock on, no SIMD/VFP instruction is excuted).
+From the table, current has a significant increase after NEON clock is forced on by setting  bit 14 of auxiliary control register high. It is reasonable or not and why?
+Thanks.
+CORTEX-A8 frequency DC-DC output NEON clock off		NEON clock on
+				 VDD_A8(v) current（mA)	VDD_A8(v) current（mA)
+600Mhz		    1.14	 1.094	   165		1.081	  210
+		    1.2		 1.151	   170		1.137	  220
+		    1.267	 1.215	   190		1.2	  240
+900Mhz		    1.304	 1.226	   260		1.202	  335
+
+2, <Support-cores@arm.com>邮件"RE: An issue on CORTEX-A8 NEON power (482523)"20110217_1800
+[From Bobby Huang - ARM Technical Support]
+
+Please quote reference number 482523 when referring to this issue.
+
+Hello Huang Wei,
+
+There are major functional clock gating implemented in Cortex-A8, which can automatically gate the clock to NEON and ETM logic when they are idle. 
+So that the dynamic power can dramatically decrease. When you set "Force
+NEON clock" in Auxiliary Control Register, such the clock gate is disabled and the dynamic power are not saved any more. So you can see the increase of the current in the test.
+
+3, huangwei邮件_20110217_1809
+Dear Bobby,
+The reason we raise the issue is that we expected the power should be  neglectable if NEON is idle even when we force NEON clock on because DC inserts clock gating cell during logic synthesis. Could you expain more on this?
+Thanks
+
+4, <Support-cores@arm.com>邮件_20110218_1134
+[From Bobby Huang - ARM Technical Support]
+
+Hello Huang Wei,
+
+In Cortex-A8, when Neon is idle, its clock are almost gated and the dynamic power consumed by Neon are almost removed. I can't see any benefit that the bit "Force NEON clock" is set. Can you please explain your usage when setting this bit? What do you intend to say by " DC inserts clock gating cell during logic synthesis "?
+
+5, zhangjian回复houpeixin
+这个寄存器原来arm training时提到过, 当时的解释是用于调试. 例如说觉得NEON工作不正常, 可以把这个bit打开, 排除clock被gate引入的问题. 
+我理解Auxiliary Control Register所有bit基本都是调试用的, 一般不需要修改. 
+
+FPGA阶段测试NEON时也没有Force NEON clock on. 
+
+bamvor: 本来想说感觉Force NEON clock on这样测试NEON功耗怪怪的, zixi测试arm功耗是memcpy, NEON如果是为了对应也可以做NEON的multi load/store.
+后来一想这个和主题偏离了, 所以没有说. 
+
+14:27 2011-2-18
+VC0882, SV, power, pmu, VA7882
+1, 给产品板所有电源供电. 
+1), HDMI有三个电源 5v, 1.2v, 1.8v, io2v8
+(1), 1.8v需要VSYS, HDMI_POWER_ON, VDD_IO1v8三个条件. 
+(2), HDMI_5v由VDD_5V提供由V_SYS提供, 似乎是从电源直接给的. 
+两个作用: 一个是给I2C做上拉, 一个是给HDMI接口用.
+(3), HDMI1v2是LDO13, 默认是1v5, 需要改为1v2. 
+(4), HDMI_POWER_ON是pin A21, NF_CEN2(GPIO_J22). 
+(5), HDMI1v8由LDO1提供. 
+2), LCD3v3由LDO7提供, 默认2v8, 需要改为3v3. 
+2, 修改后上传代码. 
+1), remove VC7882 dcdc enable and isolaton enable for vdec, venc, gpu in VIM_CLKRST_Driver_Module.c
+2), add VA7882 power control in VIM_PMU_Init(VIM_PMU_Driver.c)
+3), remove dcdc disable and enable sequence from VIM_PMIC_SetBuckVol. in sv version. 
+3, 调试出错, 不能设置已经打开的DCDC/LDO: 
+DCDC1, 5, 6; 
+LDO0-3, 5, 15, 16, 20, 21.
+注: LDO1EN_SEL是一个pin, 目前产品板是1. 
+1), 参考Linux中的结构体:
+struct regulator_init_data {
+	const char *supply_regulator;        /* or NULL for system supply */
+	struct device *supply_regulator_dev; /* or NULL for system supply */
+
+	struct regulation_constraints constraints;
+
+	int num_consumer_supplies;
+	struct regulator_consumer_supply *consumer_supplies;
+
+	/* optional regulator machine specific init */
+	int (*regulator_init)(void *driver_data);
+	void *driver_data;  /* core does not touch this */
+};
+
+struct regulation_constraints {
+	char *name;
+
+	/* voltage output range (inclusive) - for voltage control */
+	int min_uV;
+	int max_uV;
+
+	/* current output range (inclusive) - for current control */
+	int min_uA;
+	int max_uA;
+
+	/* valid regulator operating modes for this machine */
+	unsigned int valid_modes_mask;
+
+	/* valid operations for regulator on this machine */
+	unsigned int valid_ops_mask;
+
+	/* regulator input voltage - only if supply is another regulator */
+	int input_uV;
+
+	/* regulator suspend states for global PMIC STANDBY/HIBERNATE */
+	struct regulator_state state_disk;
+	struct regulator_state state_mem;
+	struct regulator_state state_standby;
+
+	suspend_state_t initial_state; /* suspend state to set at init */
+
+	/* mode to set on startup */
+	unsigned int initial_mode;
+
+	/* constraint flags */
+	unsigned always_on:1;   /* regulator never off when system is on */
+	unsigned boot_on:1; /* bootloader/firmware enabled regulator */
+	unsigned apply_uV:1;    /* apply uV constraint if min == max */
+};
+
+2), 定义一个类似regulation_constraints的结构体.
+typedef struct tag_VIM_PMU_Regulation_Constraints
+{
+	UINT32 idx;
+	/* constraint flags */
+	UINT32 always_on:1;   /* regulator never off when system is on */
+	UINT32 boot_on:1; /* bootloader/firmware enabled regulator */
+} VIM_PMU_Regulation_Constraints;
+
+3), 原来有问题是I2C没有初始化且timer没有初始化, 所以没法timeout. 
+现在always_on = 1表示上电已经打开. 
+
+4, 没有开背光:
+//configuation PWM for backlight
+VIM_PMIC_PwmEn(7,1);
+VIM_PMIC_PwmFreq(7,8);
+VIM_PMIC_PwmRatio(7,64);
+ratio越大越亮, 电流也会大很多. 
+
+10:47 2011-2-19
+时间管理
+0, 10:10(加班)
+
+1, 本日
+1), 20' 邮件. 
+2), 10:40-11:51 AE Linux performance monitor, 见"10:49 2011-2-19". 
+14:00-19:04
+
+10:49 2011-2-19
+VC0882, android, AE, power, performance, performance monior, 续, debug
+1, 续"11:08 2011-1-27". 完成调试sysfs: enable, trigger后可以得到正确的数据. 
+2, 昨天在产品版上跑步起来的原因是memory不稳定，今天换了SV板，kernel可以跑起来。
+3, marb寄存器没有映射成功，发现都是在plat-vc088x/io.c用iotable_init映射的。
+\todo 修改寄存器定义，删除vc088x_monitor_reg.h
+4, (14:10 2011-2-19)命令
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t debugfs debugfs /debugfs
+echo 8 > /proc/sys/kernel/printk
+cd /sys/devices/system/monitor/marb/global
+echo -n 50 > period
+cat period
+echo -n 1 > enable
+cat enable
+cd ..
+echo -n 500000000 > cpu/clock
+echo -n 111000000 > de/clock
+
+5, 在store_global_enable里面出错，没有进入enable或disable。
+单步发现是在”v8monitor_get_and_acc_data_ch“出错，是个很低级的NULL指针错误。
+6, 修正了几个小毛病后，可以打印出每次抓到的数据。
+下一步是读文件系统的节点和计算是否正确。
+7, 加入ddrc performance monitor后，发现读写ddrc寄存器时所用的基址不正确。
+发现直接用IO_ADDRESS得到不正确。
+#define ddrc_write(val,offset)        writel(val, IO_ADDRESS(V8REG_BASE_DDRC) + offset)
+#define ddrc_read(offset)     readl(IO_ADDRESS(V8REG_BASE_DDRC) + offset);
+但是，在初始化中得到就没问题：
+ g_v8monitor_ddrc_base = IO_ADDRESS(V8REG_BASE_DDRC);
+
+#define ddrc_write(val,offset)  writel(val, g_v8monitor_ddrc_base + offset)
+#define ddrc_read(offset)       readl(g_v8monitor_ddrc_base + offset);
+可能是vc088x_monitor.c编译中没有引用IO_ADDRESS宏，或者编译顺序有问题？
+\todo 查。
+8, 调试kernel就是反复load映像时间很长, 目前还没有找到很好的办法.
+9, 提示除0错误:
+ddrcp->efficiency = do_div(data, ddrcp->active_cyc);
+似乎do_div不能用64位整数做除数? 查原型:
+uint32_t do_div(uint64_t *n, uint32_t base)
+修改后仍然不行，继续查。
+后来看汇编，看到行为和预期不一致，再回去看do_div原型，发现被除数是指针，而且返回值是余数，我用错了！
+10, 除了bus utilization等少数参数，基本功能已经实现。
+用de简单实验了数据有无。
+0x60022318[1]=0,1分别表示是否显示。不显示时de data，addr都是0。
+11, 下一步需要加入缺少的参数，并结合场景判断是否正确。需要加入顶层脚本。
+12, (19:16 2011-2-19)总结
+代码写的时间有点长，影响调试进度。更重要的是很长时间不调东西，思路不清楚。代码不够清晰，明天看一下是否需要重构。
+下一步首先补上重要参数bus utilization, 写顶层脚本，添加模块时钟，在26_26_120和500_120_120之间比较确认数据准确。
+
+11:34 2011-2-20
+时间管理
+0, 11:00
+
+1, 本日
+1), AE Linux Performance monitor. 见"11:35 2011-2-20". 
+
+11:35 2011-2-20
+VC0882, android, AE, power, performance, performance monior, 续, 完善功能
+1, c语言里面如果有参数没有传递，会是什么结果？
+2, 编译kernel时一直提示:
+ LD      vmlinux.o
+  MODPOST vmlinux.o
+WARNING: modpost: Found 3 section mismatch(es).
+To see full details build your kernel with:
+'make CONFIG_DEBUG_SECTION_MISMATCH=y'
+\todo 查
+3, 加入模块clock, 暂时不在kernel中从bianrongguang clock里面读取, 直接由脚本配置. 
+4, class没有数据。
+需要在v8monitor_set_class_internal和中断里面加入。这个不急， 暂时不加入。
+下午先写顶层脚本加入bus utilization，然后判断数据是否合理。 
+cpu+de的读写和ddrc的读写数据相等或略大，感觉比较合理。 
+5, 下一步是加入所有模块，然后上传代码。周一找zhaoyuan。
+
+10:13 2011-2-21
+VC0882, SV, test, interrupt寄存器测试讨论
+正确与否需要看文档（testplan，mas等），我的意见仅供参考。
+________________________________________
+发件人: Zhang xin 
+发送时间: 2011年2月21日 9:52
+收件人: Zhang jian; VC0882_ICP
+抄送: Li Dong Liang; Feng Bei Zhan; Li Xue Lian; Fu Ya Li
+主题: 答复: irq测试问题
+
+两个问题，
+1，	确认一下，
+没有进入interrupt模块测试结果如下，
+Default value cherk时，
+Reg(0x60002008): 0x00000001(R) != 0xffffffff(D)
+Reg(0x6000200c): 0xfff80000(R) != 0xffffffff(D)
+重贴下面的注释：“张健: 系统初始化后寄存器值会被修改, 如果希望用看默认值, 需要用ICE在连接arm后查看.“
+全0、Default val如下不通
+Reg(0x60002010) is WO
+Reg(0x60002014) is WO
+Reg(0x60002018) is WO
+Reg(0x6000201c) is WO
+这样子均为正确情况？
+Zj: 从mas上看这四个寄存器的默认值都是0,对于WO寄存器，由于会写清，只要写入任意值读出都是0就是正确。
+
+2，	irq测试是不是没有对应的模块频率需要记录？
+Zj: 从mas“4.1.1	First-level Interrupt controller interface”和“5.3	Software Gating Main Clock”可以看到interrupt使用pclk，可以记录pclk的频率。
+
+10:25 2011-2-21
+时间管理
+0, 9:55
+
+1, 本日
+1), performance monitor加顶层脚本和雕饰. 
+
+13:49 2011-2-21
+VC0882, android, AE, power, performance, performance monior, 续, 完善功能, 编写顶层脚本; bash, 函数, 全部参数
+1, 本来想用debug level统一处理，没试通。只能分别写err, msg, dbg三个函数，里面用"$*"表示所有参数($0, $1, 分别表示所有输入参数，0是调用者)，这样原有echo的用法不需要修改。
+print_dbg()
+{
+        echo $*
+}
+2), shell替换：
+http://anotherlifeusa.spaces.live.com/Blog/cns!C3EE276A08FDE7E8!458.entry
+${string/substring/replacement}
+使用$replacement来替换第一个匹配的$substring.
+
+${string//substring/replacement}
+使用$replacement来替换所有匹配的$substring.
+后来发现居然不用去掉"\n"，显示也没有问题。
+2, marb/global/statics_interval不准确，需要修改。
+其实显示的是当前的interval，并不是上次统计的，已修改。
+3, 现有还有class和id两个功能没有支持。还有内部函数没有写。干脆明天上午先做完再下去。
+class的问题是没有给初始值。另外没有分别处理read/write class。 
+另外删除寄存器文件。
+
+10:01 2011-02-22
+1, 发邮件请假: aiguo, cc: fengbeizhan, lidongliang. 
+
+2, 所需文件
+名字基本正确, 找不到再联系吧, 谢谢. 
+1), \\10.0.13.101\share\zhanjian\log\里面2月21日修改的文件, 应该有log201102vimicro.txt和log2011.txt.
+2), \\10.0.12.160\
+(1), 先只输入这个网址, 输入用户名和密码.
+用户名: zhangjian
+密码: zhangjian
+(2), 所需文件
+\\10.0.12.160\zhangjian\mydroid\kernel\的
+arch\arm\plat-vc088x\vc088x_monitor.c,vc088x_monitor.h, vc088x_monitor_reg.h, arch\arm\plat-vc088x\include\mach\hardware.h
+\\10.0.12.160\zhangjian\monitor.sh, go_zj.sh
+
+21:33 2011-2-22
+时间管理
+0, (请假)
+
+1, 本日
+1), irq测试有一项有问题, 明天找时间试一下.
+2), 关注HDMI调试过程, 为什么之前有问题? I2C为什么不通? 
+3), 关注GPU最高频率测试, 见"21:42 2011-2-22".
+\todo guye文档写的不错, 收藏.
+
+21:42 2011-2-22
+VC0882, SV, video, gpu, GPU的最大频率和功耗
+1, GuYe邮件"答复: vc0882 SV :GPU 测试情况"20110222_1443
+guye文档写的不错, 收藏.
+这两天测试了SV板上GPU的最大频率和功耗，详细内容请见附件。
+Summary 
+就目前SV板的测试结果看，GPU 最大频率没有达到要求，signoff frequency是在WC下500Mhz。SV板测试结果是1.2v 下能跑到300Mhz.
+GPU工作时，电源上会产生大约400mW的噪声，通过在core board的GPU 电源处加一个大的电容(about 47uF)将噪声减小到100mV.
+如果用DCDC供电，电压调到1.692v时才能够达到600Mhz，加上电容后可以再提高25Mhz – 30Mhz。
+改用直流电源供电，同时用大的电容滤波，电压调到1.644v, GPU 可以跑到625Mhz。
+GPU 3D功耗方面，基本上跟PT-PX分析结果比较接近。
+
+频率上不去可能的原因：
+    Package 封装的直流电阻偏大 （130mohm）
+    GPU IR drop 不是很理想。
+    板级需要对电源噪声做滤波
+
+2, 后面会在产品板上测试, 关注进展.
+(17:50 2011-3-2)guye邮件"答复: vc0882 AE board :GPU 最大频率测试情况"20110302_1747
+在882 AE 板子上测试了GPU 的电压和最大频率的对应，见如下表格。
+1. 测试条件跟SV板相同，GPU core 电压通过调7882 registers 改变DCDC output.
+2. 表中最大频率是GPU 接口频率，内部大部分逻辑会在该频率除2下工作。
+3. AE各板子一致性略有差别，表中是表现较好的一块板子测量的结果。
+4. GPU的最高频率基本上满足当初的设计要求。1.2v 下可以运行到675Mhz。
+5. 目前测试只是连续运行一遍3D diagnostic program. 高频下的稳定性测试还需要运行真正的3D benchmark.
+DCDC	 核心板GPU CORE  GPU Max 	 Other info
+register 电容旁电压 (v)	Frequency
+1000	 1.042		500Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1001	 1.092		575Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1010	 1.145		650Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1011	 1.199		675Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1100	 1.252		725Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1101	 1.305		800Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1110	 1.364		925Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+1111	 1.414		975Mhz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+10000	 1.462		1Ghz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+10001	 1.515		1.1Ghz		CPU 500Mhz/BUS300Mhz/DDR200Mhz
+10010	 1.567		>1.2Ghz		Fail
+
+3, fengbeizhan邮件""_20110302
+提醒注意：
+AE各板子一致性略有差别，表中是表现较好的一块板子测量的结果。
+该item，我具体问了一下guye，差的和好的相差100M多，值得注意，一致性对产品板来说，非常重要。
+
+9:33 2011-2-23
+VC0882, SV, power, pmu
+pmu normal<->idle, normal<->halt模式转换提交测试。
+wakeup source我只测试了，1 4.
+
+15:10 2011-2-23
+时间管理
+0, 9:45
+
+1, 本日
+1), 4h AE performance分
+析; performance monitor给bian rongguang试用。见"15:42 2011-2-23". 
+2), 10' 计算迟到时间. 
+3), pmu fast wakeup寄存器比对, 需要用perl自动提取寄存器. 见"16:05 2011-2-23". 
+
+15:42 2011-2-23
+VC0882, SV, AE, benchmark, power, performance monitor
+1, 上午和zhaoyuan team, yanglei讨论
+测试环境和测试结果见昨日和今日"882系统Benchmark"相关邮件. 
+0), 测试环境
+使用Linux下的Benchmark 工具 LmBench对882@800M 和 OMAP3530@600M做了评估，其中882进行了两遍测试。
+请大家留意:
+1.       Context switching
+2.       *Local* Communication bandwidths
+3.       Memory latencies in nanoseconds
+测试环境：
+882产品板:CPU@800, BUS@200, DDR@200
+OMAP3530官方开发板+官方Kernel: CPU@600, 使用LPDDR，SDRC@332M
+文件系统：通过NFS挂载完全相同的Rootfs
+接下来：
+1.       修改882或者3530的初始化配置，使两者在DDR和CPU频率上更加接近。
+2.       尝试优化882 L2 Cache 频率。
+3.       尝试优化Libc
+请IC和SV Team同事给一些建议。
+
+Wang Weizhong的测试环境：
+OMAP3530: CPU@600M, BUS@166M, LPDDR@166M
+Vimrcro882: CPU@600M, BUS@200M, DDR3@200M
+Vimrcro882: CPU@800M, BUS@200M, DDR3@200M
+1), 测试结果
+详细测试结果:
+
+                 L M B E N C H  3 . 0   S U M M A R Y
+                 ------------------------------------
+                 (Alpha software, do not distribute)
+
+Basic system parameters
+------------------------------------------------------------------------------
+Host                 OS Description              Mhz  tlb  cache  mem   scal
+                                                     pages line   par   load
+                                                           bytes  
+--------- ------------- ----------------------- ---- ----- ----- ------ ----
+882       Linux 2.6.35.                     882  800    32    64 1.0100    1
+882       Linux 2.6.35.                     882  600    32    64 1.2100    1
+omap      Linux 2.6.32-                    omap  600    31    64 1.0000    1
+
+Processor, Processes - times in microseconds - smaller is better
+------------------------------------------------------------------------------
+Host                 OS  Mhz null null      open slct sig  sig  fork exec sh  
+                             call  I/O stat clos TCP  inst hndl proc proc proc
+--------- ------------- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+882       Linux 2.6.35.  800 0.38 0.73 5.70 641. 21.9 1.00 4.31 616. 1666 7358
+882       Linux 2.6.35.  600 0.51 0.96 7.49 695. 28.9 1.46 5.78 735. 1933 8541
+omap      Linux 2.6.32-  600 0.45 0.90 10.3 334. 27.8 1.42 4.75 488. 1247 6438
+
+Basic integer operations - times in nanoseconds - smaller is better
+-------------------------------------------------------------------
+Host                 OS  intgr intgr  intgr  intgr  intgr  
+                          bit   add    mul    div    mod   
+--------- ------------- ------ ------ ------ ------ ------ 
+882       Linux 2.6.35. 1.2600 1.2600 0.7500   73.2   29.2
+882       Linux 2.6.35. 1.6800 1.6700 1.0000   97.5   38.6
+omap      Linux 2.6.32- 1.6800 1.6700 1.0000   97.0   38.5
+
+Basic uint64 operations - times in nanoseconds - smaller is better
+------------------------------------------------------------------
+Host                 OS int64  int64  int64  int64  int64  
+                         bit    add    mul    div    mod   
+--------- ------------- ------ ------ ------ ------ ------ 
+882       Linux 2.6.35.  1.280        1.6300  343.4  249.6
+882       Linux 2.6.35.  1.700        2.1800  467.7  333.3
+omap      Linux 2.6.32-  1.700        2.1700  459.0  332.9
+
+Basic float operations - times in nanoseconds - smaller is better
+-----------------------------------------------------------------
+Host                 OS  float  float  float  float
+                         add    mul    div    bogo
+--------- ------------- ------ ------ ------ ------ 
+882       Linux 2.6.35.   25.8   20.2  104.1  218.9
+882       Linux 2.6.35.   34.5   26.9  140.8  294.2
+omap      Linux 2.6.32-   34.2   26.9  139.0  291.9
+
+Basic double operations - times in nanoseconds - smaller is better
+------------------------------------------------------------------
+Host                 OS  double double double double
+                         add    mul    div    bogo
+--------- ------------- ------  ------ ------ ------ 
+882       Linux 2.6.35.   36.5   31.8  575.9  784.0
+882       Linux 2.6.35.   48.9   42.3  779.5 1042.3
+omap      Linux 2.6.32-   48.4   41.9  780.8 1040.3
+
+Context switching - times in microseconds - smaller is better
+-------------------------------------------------------------------------
+Host                 OS  2p/0K 2p/16K 2p/64K 8p/16K 8p/64K 16p/16K 16p/64K
+                         ctxsw  ctxsw  ctxsw ctxsw  ctxsw   ctxsw   ctxsw
+--------- ------------- ------ ------ ------ ------ ------ ------- -------
+882       Linux 2.6.35. 4.4700 9.8100  100.7   53.3  261.3    87.0   271.4
+882       Linux 2.6.35. 5.7200   11.3  137.0   56.9  262.9    92.2   267.6
+omap      Linux 2.6.32-   10.7   13.7   17.8   23.6  181.5    47.3   210.1
+
+*Local* Communication latencies in microseconds - smaller is better
+---------------------------------------------------------------------
+Host                 OS 2p/0K  Pipe AF     UDP  RPC/   TCP  RPC/ TCP
+                        ctxsw       UNIX         UDP         TCP conn
+--------- ------------- ----- ----- ---- ----- ----- ----- ----- ----
+882       Linux 2.6.35. 4.470  21.9 31.5  50.5        91.7       377.
+882       Linux 2.6.35. 5.720  28.7 42.3  63.7       107.1       476.
+omap      Linux 2.6.32-  10.7  32.7 51.3  65.5        98.0       281.
+
+*Remote* Communication latencies in microseconds - smaller is better
+---------------------------------------------------------------------
+Host                 OS   UDP  RPC/  TCP   RPC/ TCP
+                               UDP         TCP  conn
+--------- ------------- ----- ----- ----- ----- ----
+882       Linux 2.6.35.                             
+882       Linux 2.6.35.                             
+omap      Linux 2.6.32-                             
+
+File & VM system latencies in microseconds - smaller is better
+-------------------------------------------------------------------------------
+Host                 OS   0K File      10K File     Mmap    Prot   Page   100fd
+                        Create Delete Create Delete Latency Fault  Fault  selct
+--------- ------------- ------ ------ ------ ------ ------- ----- ------- -----
+882       Linux 2.6.35.  12.2K  12.2K  90.9K  23.8K  1262.0 1.083 5.04320 9.699
+882       Linux 2.6.35.  12.2K  12.0K  71.4K  23.8K  1667.0 1.487 5.46590  12.8
+omap      Linux 2.6.32-  12.2K  12.2K  71.4K  17.9K  5249.0 1.224 8.09980  13.5
+
+*Local* Communication bandwidths in MB/s - bigger is better
+-----------------------------------------------------------------------------
+Host                OS  Pipe AF    TCP  File   Mmap  Bcopy  Bcopy  Mem   Mem
+                             UNIX      reread reread (libc) (hand) read write
+--------- ------------- ---- ---- ---- ------ ------ ------ ------ ---- -----
+882       Linux 2.6.35. 125. 137. 14.5  113.2  197.7  138.9  140.2 197. 689.3
+882       Linux 2.6.35. 132. 124. 34.4  104.1  192.3  155.4  154.7 192. 655.0
+omap      Linux 2.6.32- 139. 141. 90.8  176.6  264.9  241.4  240.1 264. 529.8
+
+Memory latencies in nanoseconds - smaller is better
+    (WARNING - may not be correct, check graphs)
+------------------------------------------------------------------------------
+Host                 OS   Mhz   L1 $   L2 $    Main mem    Rand mem    Guesses
+--------- -------------   ---   ----   ----    --------    --------    -------
+882       Linux 2.6.35.   800 3.8200   88.8       272.1       525.5
+882       Linux 2.6.35.   600 5.0980   88.2       285.0       522.1
+omap      Linux 2.6.32-   600 5.0630   51.5       239.3       329.8
+
+2), wangweizhong:
+这个网址有关于各项测试的说明
+http://www.bitmover.com/lmbench/man_lmbench.html
+
+3), 从测试结果看出的问题:
+进程切频: 两个进程做64k memory操作很慢. 这个可能和L2 cache timing和size有关系. 
+文件系统测试: 读的速度很慢. 
+
+4), 修改: 
+改l2 timing. 0xcc->0x82(data ram和tag ram都是3cycles).
+看软件具体工作。
+
+2, performance monitor试用
+1), bian rongguang修改建议
+1. Help
+2. units
+3. rlatnecy == wlatency ?
+4.rutilization/wutilization
+TODO: CPU/BUS clock自动获取, class, id
+2), yanglei修改建议: 
+latency=latency/addr_tx, 这样更有意义. 
+例如cpu的latency大约是四十几个cycles.
+
+16:05 2011-2-23
+VC0882, SV, power, pmu, 模式转换(同义词: mode transition), fast wakeup, 续, 验证
+1, 续"11:39 2011-2-12"保存寄存器列表.
+2, (10:07 2011-2-24)查了半天, 没发现到底昨天代码有什么问题, 感觉还是foreach里面的问题. 
+修改完成, 上传CVS.
+3, 上传CVS后, 实验ddrc, 发现没有输出, 检查发现ddrc和clkrst差异是前者没有整体寄存器描述和默认值. 而且第一行的bitfield在第二个逗号后面. 
+ddrc寄存器
+0000H,DDRC_CFG,RW,[31:25],Reserved,8'b0,Return zeros on reads.
+clkrst寄存器
+0000H,PLL_CTRL,RW,,,32'h00666666,"PLL control register. This register controls PLL1~6's bypass, power down. Upon reset, all PLLs are powered down; all PLLs' is in bypass mode."
+,,,[31:23],Reserved,,
+在原来status上加入一个status 3: 专门用于处理匹配到的每一个bitfield, 进入status 3后会再进入status 2匹配新的bitfield.
+4, ddrc寄存器里面0x80到0xa4没有匹配, 发现是里面有回车, 可以用"."加"/s"的方法匹配回车, 但是这样就可能会匹配很多行, 所以需要非贪婪匹配".+?", 实验后不行. 看看这里一下也解决不了. \todo 匹配带回车的CVS文件, e.g.
+0080H,"MSDLL_CFG
+(Master-Slave DLL control bit 31~0)",RW,[31:30],Reserved,,Return zeros on reads.
+,,,[29],lock_det_en,1'b0,Master lock detector enable.
+,,,[28:27],fdtrm_sl,2'b00,slave Bypass fixed delay trim
+,,,[26:24],sl_bias_trm[6:4],3'b011,Slave biase generator  frequency trim.
+,,,[23],bps200,1'b0,Bypass Frequence select. Bypass mode has two setting s for the clk_90 delay to optimize it for two different frequency ranges:                                                                                                                   0 = 0~100 MHz                                                                                                                                         1 = 0~200 MHz
+,,,[22:20],sl_bias_trm[2:0],3'b111,Slave biase generator  frequency trim.
+,,,[19],fdtrm[1],1'b0,Master Bypass fixed delay trim
+,,,[18:16],bias_trm[6:4],3'b011,Master biase generator control voltage trim
+,,,[15],fdtrm[0],1'b0,Master Bypass fixed delay trim
+,,,[14:12],bias_trm[3:0],3'b111,Master bias generator frequency trim.
+,,,[11],test_ctrl_switch,1'b0,"Test Switch: Selects the test signals of either the master DLL ('0') 
+or the slave DLL ('1')"
+,,,[10:9],test_ctrl_a,2'b00,"Analog Test Control: Selects the analog signal to be output on the 
+DLL analog test output (test_out_a) when test_ctrl_en is high (Output 
+is Vss when test_ctrl_en is low). The test output either comes from 
+the master DLL or the slave DLL, depending on the setting of the 
+test switch (test_ctrl_switch). Both master DLL and slave DLL output 
+similar analog test signals. Valid settings for analog test control are: 
+00 = Filter output (Vc)  
+01 = Replica bias output for NMOS (Vbn)  
+10 = Replica bias output for PMOS (Vbp)  
+11 = Vdd
+"
+,,,[8:6],test_ctrl_d,3'b000,"Digital Test Control: Selects the digital signal to be output on the 
+DLL digital test output (test_out_d[1]) when test_ctrl_en is high 
+(Output is '0' when test_ctrl_en is low). Valid settings for master DLL 
+(such as, when test_ctrl_switch = '0'): 
+000 = 0 output clock (clk_0)  
+001 = 90 output clock (clk_90)  
+010 = 180 output clock (clk_180)  
+011 = 270 output clock (clk_270)  
+100 = 360 internal clock (clk_360_int)  
+101 = Speed-up pulse (spdup)  
+110 = Slow-down pulse (slwdn)  
+111 = 0 DDRC logic clock (cclk_0) 
+Valid settings for slave DLL (such as when test_ctrl_switch = '1'): 
+000 = Input DQS strobe (dqs)  
+001 = Input clock reference (clk_90_in)  
+010 = Internal feedback clock (clk_0_out)  
+011 = 90 output DQS_b strobe (dqsb_90)  
+100 = 90 output DQS strobe (dqs_90)  
+101 = Speed-up pulse (spdup)  
+110 = Slow-down pulse (slwdn)  
+111 = Auto-lock enable signa"
+,,,[5],test_ctrl_en,1'b0,"Test Enable: Enables digital and analog test outputs selected by 
+DTC and ATC respectively"
+,,,[4:2],ipump_trm,3'b000,"Charge Pump Current Trim: Used to trim charge pump current: 
+000 = maximum current  
+111 = minimum current"
+,,,[1:0],Reserved,,Return zeros on reads.
+5, 现在想一想fast wakeup的寄存器其实没必要比对, 因为就是那些寄存器, 不会不一样的. 
+
+17:34 2011-2-23
+VC0882, SV准备, 培训：用ICE和配寄存器, 下载ICP CVS方法: panda_os等工程
+1, JiaJiHua邮件"答复: 培训：用ICE和配寄存器"20110120_1657
+Dr Yang, and All
+
+ICP的这个CVS我们ICD这边可以访问。
+
+操作步骤如下：
+（1）	新建一个文件夹，如VC0882WCVS_ICP
+（2）	启动软件PAGEANT.EXE，添加自己的key
+（3）	在VC0882WCVS_ICP目录下，单击右键，选中“CVS取出”
+（4）	在弹出的窗口中，将仓库文件夹填写为/project/fpga_verif/VERIFY，将模块填写为VC0882
+
+10:07 2011-2-24
+时间管理
+0, 9:50
+
+1, 本日
+1), 1.5h 14:32-15:50 pmu fast wakeup寄存器比对, 需要用perl自动提取寄存器. 见"16:05 2011-2-23"2. 
+2), 1.5h 讨论882 banchmark. ICP的工作后来是beizhan分配给了yangxing, 既然如此, power事情一定要做好. 
+3), 20' 和chenying, zouweiran讨论VA7882: zixi会给7882配置用于筛片程序. 
+4), 20' 回复youhai邮件. 见"13:12 2011-2-24". 
+5), 16:08-18:10 提交pmu idle, halt, sleep。见"17:54 2011-2-24". 
+6), 10' irq复现, 未发现问题. 
+7), 总结. 现在希望自己尽量集中精力, 所以arm benchmark的程序我就推掉了. 今天的banchmark一定要有结果. 
+
+13:12 2011-2-24
+VC0882, SV, 调试, debugger, arm, Cortex-A8, linaro, openocd; openocd支持Cortex-A9
+邮件里面没看到调试器型号, 直接和youhai沟通. youhai关注的两个调试器是
+XDS200和code hammer, 据我之前的了解, 这两个调试器都没法支持882. 
+前者一般使用TI CCS环境开发, 里面我没有找到可以配置TI以外SOC的地方. 
+后者只能用于OMAP3530下载, 不支持其它Cortex-A8 SOC. 
+youhai可以再关注一下, 看看信息有没有更新. 
+
+另外youhai可以看一下openocd, 这是个开源的协议栈, 目前不支持mmu. 目前最新进展是支持了Cortex-A9, 对于Cortex-A8的支持也更完善了, 但是没有提到支持mmu. 
+参考: http://lists.linaro.org/pipermail/linaro-dev/2010-September/000917.html
+
+15:55 2011-2-24
+VC0882, SV, AE, benchmark, 续
+1, 今日讨论和进展
+1), yangxuoxing今日邮件
+Hi, all,
+在BENCH MARK上，我们在如下几个方面差距比较大（比较表中的第一行是L2 CACHE LATENCY 为3， 第二行是10左右）：
+1.  Processor, Processes - times in microseconds - smaller is better
+------------------------------------------------------------------------------
+Host                 OS  Mhz null null      open slct sig  sig  fork exec sh  
+                             call  I/O stat clos TCP  inst hndl proc proc proc
+--------- ------------- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ----
+882       Linux 2.6.35.  600 0.52 0.95 8.31 81.K 28.8 1.46 5.56 656. 2893 9178
+882       Linux 2.6.35.  600 0.51 0.96 7.49 695. 28.9 1.46 5.78 735. 1933 8541
+omap      Linux 2.6.32-  600 0.45 0.90 10.3 334. 27.8 1.42 4.75 488. 1247 6438
+2. Context switching - times in microseconds - smaller is better
+-------------------------------------------------------------------------
+Host                 OS  2p/0K 2p/16K 2p/64K 8p/16K 8p/64K 16p/16K 16p/64K
+                         ctxsw  ctxsw  ctxsw ctxsw  ctxsw   ctxsw   ctxsw
+--------- ------------- ------ ------ ------ ------ ------ ------- -------
+882       Linux 2.6.35. 5.5400 8.0500   98.7   59.1  281.3    89.4   282.9
+882       Linux 2.6.35. 5.7200   11.3  137.0   56.9  262.9    92.2   267.6
+omap      Linux 2.6.32-   10.7   13.7   17.8   23.6  181.5    47.3   210.1
+3. *Local* Communication latencies in microseconds - smaller is better
+---------------------------------------------------------------------
+Host                 OS 2p/0K  Pipe AF     UDP  RPC/   TCP  RPC/ TCP
+                        ctxsw       UNIX         UDP         TCP conn
+--------- ------------- ----- ----- ---- ----- ----- ----- ----- ----
+882       Linux 2.6.35. 5.540  27.5 39.2  47.8        89.1       410.
+882       Linux 2.6.35. 5.720  28.7 42.3  63.7       107.1       476.
+omap      Linux 2.6.32-  10.7  32.7 51.3  65.5        98.0       281.
+4. *Local* Communication bandwidths in MB/s - bigger is better
+-----------------------------------------------------------------------------
+Host                OS  Pipe AF    TCP  File   Mmap  Bcopy  Bcopy  Mem   Mem
+                             UNIX      reread reread (libc) (hand) read write
+--------- ------------- ---- ---- ---- ------ ------ ------ ------ ---- -----
+882       Linux 2.6.35. 132. 139. 13.2  121.4  196.1  153.4  151.3 196. 620.1
+882       Linux 2.6.35. 132. 124. 34.4  104.1  192.3  155.4  154.7 192. 655.0
+omap      Linux 2.6.32- 139. 141. 90.8  176.6  264.9  241.4  240.1 264. 529.8
+5. Memory latencies in nanoseconds - smaller is better
+    (WARNING - may not be correct, check graphs)
+------------------------------------------------------------------------------
+Host                 OS   Mhz   L1 $   L2 $    Main mem    Rand mem    Guesses
+--------- -------------   ---   ----   ----    --------    --------    -------
+882       Linux 2.6.35.   600 5.0840   62.0       284.0       499.0
+882       Linux 2.6.35.   600 5.0980   88.2       285.0       522.1
+omap      Linux 2.6.32-   600 5.0630   51.5       239.3       329.8
+从这几点来看，MEMORY的效率是一个公共的问题，WANG WEIZHONG做了一个MEMORY COPY的实验，4MBYTE（单BYTE 读写，CACH OFF） 数据读写4次耗时273S. 这个数据等效1500个CYLE读写一次，与仿真结果有1个数量级的差异。我们打算以MEMORY COPY这个小程序为突破口。
+action items are listed as following:
+1) disable the de clock                                owner: wang weizhong
+2) try 32byte/16byte/8byte/4byte align read (check stm instruction or not, cach off)                      owner: wang weizhong
+3) provide the mmu, page table setting                 owner: zhaoyuan
+4) run simulation for random byte access               owner: kong yingqi
+5) run random byte access program on sv                owner: feng beizhan
+6) analysis the random access program result on sv and vrf                                                          owner: yang lei
+7) check the ddr 200Mhz configuration                  owner: zhao beihua, bian rongguang
+8) check the omap and 882 l2 setting                   owner: zhang yanhong
+9) check the cpu_aclk frequency                        owner: bian rongguang
+Pls reply this email if you have finish you action items.
+
+2), 目前cache on时差异下, cache off差异大, IC designer感觉不应该有这么大的差距. 
+
+2, 给AE bianrongguang发Cortex-A8文档
+Cortex-A8主要查两个文档
+1), Cortex-A8 TRM, 这里面是Cortex-A8专有特性, 例如cache, tlb的配置, 例如CP15还有Cortex-A8 dbg寄存器. 
+VC1600WCVS\doc\module\Cortex-A8\doc\ARMv7_architecture
+CP15寄存器在TRM第三章, "3.2.1 Register allocation"里面列出了A8支持的所有CP15寄存器.
+2), DDI0406B_arm_architecture_reference_manual(for armv7A,R)
+文档位置: VC1600WCVS\doc\module\Cortex-A8\doc\trm\pdf_trm
+这里面可以查armv7的资料, 例如mmu页表属性位于: "Chapter B3 Virtual Memory System Architecture (VMSA)", "B3.3 Translation tables"
+armv7指令集所有指令: "Chapter A8 Instruction Details"
+
+VC1600 CVS可以从"\\10.0.13.101\share\cvsdir\VC1600WCVS"访问.
+
+17:55 2011-2-24
+VC0882, SV, power, pmu
+1, fast wakeup恢复的寄存器有问题. \todo待查. 
+2, 提交测试: 
+VC0882 pmu 模式转换的idle, halt, sleep(不含fast wakeup)提交测试. 
+使用的padc和wakeup source如下: 
+sys 12 1 1 0 0 65535
+wakeup_source 1 4
+wakeup source和SV, ASIC无关, 测试同事都可以测试. 
+
+10:39 2011-2-25
+时间管理
+0, 10:05
+
+1, 本日
+1), 20' 支持zhangxin interrrupt测试. 718问题在882上面也有, 之前我理解错了. 见"19:39 2011-2-15"
+2), 2h memcpy工具for beihua
+3), 20' 高性能板精简strappin. 见"15:14 2011-2-25"
+4), 支持zixi测试power, 见"18:01 2011-2-25".
+5), 总结, 中断这个问题之前bianyingfeng说的时候我没完全理解, 自己在882 SV测试时还以为没问题. 耽误了测试的时间, 这个自己太疏忽了, 以后要注意. 
+
+15:14 2011-2-25
+VC0882, SV, bootloader, 高性能板精简strappin
+1, chenying今日邮件. 
+Dongliang今天有事，你帮助确认一下：
+3）lcd部分的strap pin能否再精简一些？目前留的是lcd_d2, 3, 4, 7, 11, 12, 13, 14, 15。
+2, 和haifang讨论, strappin过多板子不好做. 所以只保留如下strappin, 其余都是默认值(0): 
+1, [0]: 电阻. 用于选择spi boot和rom boot. 
+2, [4:2]: 开关选择
+3, [12]: 开关. 用于选择sd0 boot和nfc 3+2 cycle. 
+4, [15]: 电阻. 用于是否打印. 
+另外, 8, 13, 14也可以去掉, 基本没有影响: 
+[8]: 可以去掉. 可能会导致个别sd卡不支持. 
+[14:13]:  如果芯片没问题, 可以去掉.
+
+18:01 2011-2-25
+VC0882, SV, power
+1, 支持zixi测量功耗. 
+audio, gpu不支持输入命令.
+和beizhan讨论, audio回请guzhaohui加, gpu没有人做.
+
+19:50 2011-2-25
+VC0882, SV, AE产品板, HDMI调试遇到的问题
+1, 1v8没有开. 
+2, HDMI芯片没有退出reset. \todo 硬件连通性, 工作状态(reset), 电源, 时钟. 
+3, HDMI时序不合理(高低电平配置错误).
+
+20:00 2011-2-25
+VC0882, SV, ddr, 稳定性调试
+1, cpu=50MHz, bus=40Mhz, ddr=48Mhz, 如果阻抗调到32欧姆, 在这个频率有改善. 
+2, 三星的memory就没事. 而且封装和micron基本一样, 应该可以替换. 
+
+10:24 2011-2-28
+软件技巧, RVI, rvds4.0, rvdebugger里面扫描扫描链正确, 但是保存退出到rvdebugger提示general error, 后来升级rvi3.3到3.4问题解决. 
+
+11:15 2011-2-28
+时间管理
+0, 10:05
+
+1, 本日
+1), 20' 和fuyali调试arm neon测试, 发现是ddr问题. dongliang请gong'anmin查这个问题. 
+2), 30' 提交sw reboot. 见"14:19 2011-2-28". 
+3), 30' 支持guzhaohui修改clkswitch ddr, 加入ddr training. 
+4), 10' 和bianyingfeng讨论VC0718环境问题. 
+5), 查pmu fast wakeup为什么寄存器值有变化. 见"18:03 2011-2-28". 
+
+14:19 2011-2-28
+VC0882, SV, pmu, software, reboot, sw reboot 反复测试
+1, 在SV4#+电源28#测试20分钟没有出错. 
+2, 修改: 
+1), 为了便于访问aasp的二级命令, 修改aasp代码使其支持在启动脚本中使用二级命令. 
+2), 添加pmu rebootRepeat命令, 该命令检测PMU_SW_REG31是否为0, 如果不为0, 使用该寄存器的[31:4]为PMU_RESET_CFG[31:4], 也就是reset的timing. 
+3), bootscript.c里面加入"pmu", "rebootRePeat"命令, 如果PMU_SW_REG31==0, 不会进行reboot. 否则调用"PMU_TEST_SoftwareReboot"进行reboot. 
+user guide: 
+编译pmu_sv_sw_reboot
+(1), 使用sd/nand boot. 
+(2), 第一次启动后, 会进入aasp, 此时输入timing到PMU_SW_REG3, 例如下面命令设置timing为reset delay = 1, reset time = 1: 
+pmu  SD0:/>memwrite m 0x6005027c 0x  0x00010010
+[HAL]MESSAGE:0x6005027c=0x00010010(0x00010010)
+然后输入reboot命令重启板子, 后面每次板子sd/nfc boot都会自动复位. 
+pmu  SD0:/>reboot
+
+16:36 2011-2-28
+VC0882, SV, 环境, 稳定性, ddr, 低频不稳定是twtr问题; 文档
+1, 前段时间调试ddr, micron低频一直不稳定. 
+后来今天讨论中beihua发现是twtr不能小于4cycle, 之前beihua一直以为是以时间为单位(7.5ns), 今天才发现是以cycle为单位, 7.5ns是在1066(时钟533MHz)的时间. 
+这个时间实质是ddr sdram里面的buffer, 从write到read的时间, 必须是4个cycle. 
+原来dll on情况下, 这个参数正好也正确.
+
+18:03 2011-2-28
+VC0882, SV, power, pmu
+1, pmu sleep->wakeup, fastwakeup, 今天都没有调通. 
+ddr不能使用. 上次记得用过都是没有问题的. 
+2, 详细调了调, 感觉是memory参数的问题, 看看能不能找到原来micron 48MHz的实验一下. 

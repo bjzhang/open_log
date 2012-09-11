@@ -1,0 +1,875 @@
+﻿
+9:54 2011-9-1
+时间管理
+0, 9:42
+
+1, 本日
+上午需要给发掘和创维build出新版本. 然后测试: 基本休眠唤醒的稳定性, 休眠时插usb设备死不死, 另外需要查休眠前把usb otg线会不会死. 
+
+13:55 2011-9-1
+昨天创维P1休眠电流大的问题. 
+更换VC0882芯片后休眠电流正常. 对这个板子做自动休眠唤醒测试. 
+
+14:30 2011-9-1
+java
+这都啥意思?
+1, rmi
+2, reflection
+
+反射感觉很神奇啊。
+
+23:16 2011-9-1
+(14:33 2011-9-2)
+(19:59 2011-9-5)
+休眠唤醒两个内容
+
+这里介绍的休眠唤醒流程。可能主要是个偏硬件的问题，不像binder本身在软件上就比较复杂。所以这里重点是硬件的软件concern。
+
+流程，调试经验。
+
+休眠唤醒总体介绍，休眠唤醒硬件流程，休眠唤醒android流程。
+休眠唤醒是个系统工程，所有和硬件有关的东西: driver, pcb, 筛片...
+
+
+模块级调试，wifi调了一个月，结果还影响了蓝牙，解决中。
+
+休眠唤醒的增量开发: 
+panda_os, mini bootloader, mini wakeup
+panda_os, bootloader, mini wakeup 
+panda_os, bootloader, wakeup, gpu work around: release reference code
+linux ramdisk no driver
+linux ramdisk with mini driver(timer, irq, uart), power optimization start
+linux ramdisk with mini driver(timer, irq, uart), gpu work around
+mini android driver(timer, irq, uart, fb, ts, gpu)
+full android.
+
+系统能做休眠唤醒后，进入debug阶段: 稳定性。基本每个driver都涉及到了。
+
+android休眠唤醒对驱动的影响。
+
+9:14 2011-9-2
+时间管理
+0, 
+
+1, 本日
+1), 昨天休眠电流过大的882需要做分析。见"10:03 2011-9-2"
+2), 16:19-18:15 休眠唤醒: 休眠前只打开唤醒源的中断. 见"16:20 2011-9-2". 
+
+2), uhost这个可能是原来的问题，确认。关电源应该就可以了。参"17:16 2011-6-7".
+
+10:03 2011-9-2
+VC0882, SV, AE, 休眠唤醒电流过大
+to: chenying
+cc: zhaoyuan; ai guo; fengbeizhan
+VC0882芯片休眠电流过大__但功能正常
+创维P1板子上本来休眠电流是正常的(20-30mA@8V), 后来发现休眠电流过大(160-170mA@8V), 更换VC0882芯片后电流恢复正常.
+换下来这颗芯片可以正常启动android, 休眠唤醒软件跑的是对的. 
+
+(16:19 2011-9-2)
+补充: 
+换下来这个芯片: 原来做dvfs和休眠唤醒一段时间后会跑死(没有死在休眠唤醒里面). 
+换芯片后, 跑dvfs+休眠唤醒20个小时没有跑死. 
+
+10:16 2011-9-2
+VC0882, SV, AE, suspend/resume
+1, 昨天测试情况. 
+1), fajue mp #01, 测试一晚上应该没有死. 
+(1), 次数看起来正常:
+dt times is 0, console suspend times is 0, request_suspend_state times is 1079, task_freeze_times is 567, rom boot times is 1072.
+dvfs: target times is 48672, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+(2), 有bug: 
+srcpndh=0, srcpndh=0x8. 似乎还是有中断没清掉. 看代码, 是high 0x8, 也就是uart中断. 
+看来上次开中断这个事情不够好, 还是要改为只打开enable wake的中断. 
+先临时直接在pm.c里面修改(vortex_20110902_fajue_pm_fix_srcpnd_not_zero_before_wfi.pak)给xiaohe测试. 
+
+2), 创维板子都死了, 看. 
+看不到什么出错log. 结合zhangwei说有电池的板子早晨充电没充上. 估计这两个板子都是电源接触不好导致的问题. 
+请xiaoyu把电源直接焊死. 
+另外昨天zhangwei测试拔otg线(另一端连pc)没发现死. 看来这个问题是修了. 
+
+2, (17:00 2011-9-2)
+到目前为止, m3s_P1, 从昨天晚上开始跑, 休眠唤醒359次. dvfs 64383次. 看来换了芯片后原来跑跑会死的问题也解决了. 
+
+15:54 2011-9-2
+VC00882, SV, keypad, input, VA7882 power key, liuxiaotao: 产品板上的几个按键对应哪些管脚
+zhangjian回复
+具体不记得了, 可以看一下code. 
+除了power键联到VA7882的power key, 其余都接到了882的keypad. 
+VA7882的power key中断通过VA7882的中断(GPIO_A28)报给系统. 
+keypad驱动见"drivers/input/keyboard/vc088x_keypad.c". 
+
+16:20 2011-9-2
+VC0882, SV, AE, suspend/resume, wakeup source, 休眠前只打开唤醒源的中断
+1, 实际是"10:16 2011-9-2"1-2)问题: 
+看看能否在enable_irq_wake里面保存当前唤醒源的中断号. 便于休眠时设置. 
+2, h: 0x11000, l: 0.
+32+12=44, 32+16=48. 
+修改后发现还是要unmask wake irq后, 清已有的srcpnd. 否则系统最后的srcpnd没人清理, 系统就没法休眠. 
+44(gpio nsd)这个唤醒源是在hdmi里面设置的: 
+drivers/video/vc088x/vc088x_hdmi.c:     enable_irq_wake(gHDMIdev.hdmi_det_irq);
+
+17:44 2011-9-2
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 休眠唤醒:
+(1), 8月31日休眠电流过大的882芯片给chenying. 
+(2), 调整休眠唤醒流程: 休眠前只打开唤醒源对应的中断(和唤醒源). 避免其他模块未处理的中断影响系统休眠唤醒流程. 
+(3), 晚上同时做创维P1, P0, 发掘量产板子的测试. 
+2), 整理部分休眠唤醒资料. 
+2, 次日工作计划
+1), 如果周末测试没有问题, 上传代码. 
+
+9:59 2011-9-5
+VC0882, SV, AE, suspend/resume
+1, m3s:
+1), m3s_P1, 没有死. 
+休眠唤醒测试是760次. 
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 0, request_suspend_state times is 1460, task_freeze_times is 760, rom boot times is 1458.
+dvfs: target times is 135465, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+2), m3s_P0_no_battery, 似乎是电源接触不好导致了关机(运行了2.5小时), 这个log后面还有2个log, 应该是周一reset后开机的结果
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110902/m3s_P0_no_battery_0902__0905$ ../../20110826_m3s/check_suspend_dvfs_ret log_kernel_0101_000007
+../../20110826_m3s/check_suspend_dvfs_ret log_kernel_0101_000007
+version: 20110826_1300
+dt times is 0, console suspend times is 74, request_suspend_state times is 150, task_freeze_times is 74, rom boot times is 0.
+dvfs: target times is 7743, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+2, 发掘
+1), 发掘(改reset), 测试1395次重启. 
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110902/fajue/xiaotang$ ../../../20110826_m3s/check_suspend_dvfs_ret 007#_自动测试.log
+../../../20110826_m3s/check_suspend_dvfs_ret 007#_自动测试.log
+version: 20110826_1300
+dt times is 0, console suspend times is 1394, request_suspend_state times is 2788, task_freeze_times is 1395, rom boot times is 2788.
+dvfs: target times is 130001, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 26362, count times is 26362
+
+dt times is 0, console suspend times is 201, request_suspend_state times is 402, task_freeze_times is 201, rom boot times is 402.
+dvfs: target times is 35900, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+dt times is 0, console suspend times is 311, request_suspend_state times is 624, task_freeze_times is 311, rom boot times is 622.
+dvfs: target times is 55697, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+2), fajue MP #58, 测试309次没有死(10小时). 单独保存的kernel log, 所以没有logcat次数. 
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110902/fajue/xiaotang$ ../../../20110826_m3s/check_suspend_dvfs_ret log_kernel_58#
+../../../20110826_m3s/check_suspend_dvfs_ret log_kernel_58#
+version: 20110826_1300
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 309, request_suspend_state times is 618, task_freeze_times is 309, rom boot times is 0.
+dvfs: target times is 28987, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+12:31 2011-9-5
+时间管理
+0, 9:55
+
+1, 本日
+1), 周五测试的休眠唤醒, fajue有问题: 休眠后重启. 飞串口. 
+
+14:19 2011-9-5
+android, binder
+android应用程序安装时分配uid。
+android设计模式: client-service, standard alone.
+binder的建立过程本身也用binder的建立，没有使用其它的进程间通信机制：先是server通过binder注册server(add service), 然后是client通过binder得到该service(get service).
+
+18:24 2011-9-5
+公司, 管理, 考勤, sunyingying转发邮件_20110808
+关于测试及逐步试运行新版本考勤系统的通知（IC2）
+各位员工：
+新版本的电子考勤系统，将于2011年8月8日起分部门开始试运行。
+1、试运行中的考勤系统，目前能够实现的功能包括，分级对员工考勤信息进行查询、对员工分项目进行管理、以及电子请假，其他一些功能也在逐步完善中。
+2、新系统中，每位员工会对应唯一的一张考勤门卡，记录员工的考勤信息。为避免考勤信息不准确，引起不必要的麻烦，请大家在试运行期间，及时登录系统，在线查询自己的考勤信息，以确认信息准确。
+3、系统试运行后，将试行启用电子请假流程。测试及试运行期间，在线请假与人工请假同步进行，正式启用后会逐步停止人工请假流程。
+4、试运行中的考勤系统，登录网址为http://10.0.8.66/，账号和密码为登录Windows帐号和密码，如：登录内网时，zhangshan@vimicro.com，密码为123456；那么登录考勤系统时，帐号：zhangshan；密码：123456。
+5、为保证电子请假系统的正常使用，初次登陆考勤系统，请您务必填写您的上级汇报对象：具体步骤为“登陆系统--个人操作-- Report To:--在 Report To右侧的英文名框中从上到下依次填入您的主要汇报上级（涉及到你的请假审批）、其它汇报上级（如果有）、、、最后点击“确定”完成“Report To”操作。
+具体操作方法详见附件《考勤系统使用手册》。
+系统试运行期间，有任何问题，可随时和陆垚（分机号：7255）,刘大桥（分机号：7475）联系。
+人力资源部
+
+10:04 2011-9-6
+VC0882, SV, AE, suspend/resume, 昨天测试结果
+1, m3s_P1: 继续正常运行(已经正常运行了3.5天? printk时间: 142003. 也就是连续运行了40个小时).
+2, fajue
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110906_fajue$ ../20110826_m3s/check_suspend_dvfs_ret 0905-1-03#
+../20110826_m3s/check_suspend_dvfs_ret 0905-1-03#
+version: 20110826_1300
+dt times is 0, console suspend times is 0, request_suspend_state times is 910, task_freeze_times is 464, rom boot times is 901.
+dvfs: target times is 42493, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 8560, count times is 8560
+dt times is 0, console suspend times is 0, request_suspend_state times is 23, task_freeze_times is 11, rom boot times is 22.
+dvfs: target times is 2018, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110906_fajue$ ../20110826_m3s/check_suspend_dvfs_ret 0905_01#
+../20110826_m3s/check_suspend_dvfs_ret 0905_01#
+version: 20110826_1300
+dt times is 0, console suspend times is 0, request_suspend_state times is 19, task_freeze_times is 4, rom boot times is 10.
+dvfs: target times is 84, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 125, count times is 125
+dt times is 0, console suspend times is 0, request_suspend_state times is 908, task_freeze_times is 460, rom boot times is 902.
+dvfs: target times is 42174, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 8535, count times is 8535
+
+3, fajue_MP_#3测试到464次后重启, 从log看是gpu休眠超时. 
+527233 [43779.750000] galcore galcore: preparing suspend
+527234 [43779.760000] galcore galcore: suspend
+527235 [43782.760000] **** DPM device timeout: galcore (galcore)
+527236 [43782.760000] Unable to handle kernel NULL pointer dereference at virtual address 00000000
+527237 [43782.770000] pgd = c0004000
+527238 [43782.770000] [00000000] *pgd=00000000
+527239 [43782.770000] Internal error: Oops: 817 [#1] PREEMPT
+527240 [43782.770000] last sysfs file: /sys/devices/platform/v8-i2c.0/i2c-0/0-0016/autosuspend
+527241 [43782.770000] Modules linked in: galcore
+527242 [43782.770000] CPU: 0    Not tainted  (2.6.35.7+ #558)
+527243 [43782.770000] PC is at dpm_drv_timeout+0x34/0x44
+527244 [43782.770000] LR is at release_console_sem+0x1f4/0x204
+527245 [43782.770000] pc : [<c01cb564>]    lr : [<c0050510>]    psr: 60000113
+527246 [43782.770000] sp : c045be90  ip : c045bdc8  fp : c045be9c
+527247 [43782.770000] r10: c0643b4c  r9 : c064394c  r8 : c0643d4c
+527248 [43782.770000] r7 : c01cb530  r6 : c045a000  r5 : 00000103  r4 : c0642f40
+527249 [43782.770000] r3 : 00000000  r2 : 00000103  r1 : 01cd7e85  r0 : 00000040
+527250 [43782.770000] Flags: nZCv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+527251 [43782.770000] Control: 10c5387d  Table: 91720019  DAC: 00000017
+527252 [43782.770000]
+527253 [43782.770000] PC: 0xc01cb4e4:
+527254 [43782.770000] b4e4  e89da800 e1a0c00d e92dd800 e24cb004 e5d11000 ebffffe0 e3a00000 e89da800
+527255 [43782.770000] b504  e1a0c00d e92dd800 e24cb004 e2523000 e1a02001 089da800 e1a01000 e59f0004
+527256 [43782.770000] b524  eb062350 e89da800 c0417ac3 e1a0c00d e92dd800 e24cb004 e590102c e3510000
+527257 [43782.770000] b544  05901008 e5900050 e3500000 15902000 059f2010 e59f0010 eb062342 e3a03000
+527258 [43782.770000] b564  e5833000 eafffffc c0417adc c0417ae6 e1a0c00d e92dd870 e24cb004 e24dd00c
+527259 [43782.770000] b584  e1a04000 e1a00001 e1a05002 e1a06003 ebffff7d e5941008 e1a03005 e58d6000
+527260 [43782.770000] b5a4  e1a02000 e59f0008 eb06232e e24bd018 e89da870 c0417b0b e1a0c00d e92dd830
+527261 [43782.770000] b5c4  e24cb004 e590104c e1a04000 e5942008 e3510000 e59f0038 059f1038 15911000
+527262 [43782.770000]
+527263 [43782.770000] LR: 0xc0050490:
+527264 [43782.770000] 0490  ea000006 e1a00005 e59f307c e1a05002 e8930006 e2422001 e1550006 1affffe4
+527265 [43782.770000] 04b0  e59f3064 e1a01006 e5932050 ebfffdbf e121f008 eaffffa3 e3a03000 e59f0044
+527266 [43782.770000] 04d0  e5823018 eb006c2e e121f008 e1a0200d e3c23d7f e3c3303f e5932004 e2422001
+527267 [43782.770000] 04f0  e5832004 e5933000 e3130002 0a000000 eb0c10e0 e35a0000 089dadf0 ebfffdfd
+527268 [43782.770000] 0510  e89dadf0 c0622820 c046ca78 c046ca34 e1a0c00d e92dd800 e24cb004 e59f003c
+527269 [43782.770000] 0530  eb006c36 e3500000 1a000005 e59f2030 e59230a8 e3530000 0a000003 e59f001c
+527270 [43782.770000] 0550  eb006c0f e3e00000 e89da800 e1a00003 e58230a4 e3a03001 e5823018 e89da800
+527271 [43782.770000] 0570  c046ca78 c0622820 e1a0c00d e92dd830 e24cb004 e59f4028 e5943000 e3530000
+527272 [43782.770000]
+527273 [43782.770000] SP: 0xc045be10:
+527274 [43782.770000] be10  5d303030 c0460020 2d4d06f2 0000ab06 c045be6c ffffffff c045be7c c045a000
+527275 [43782.770000] be30  c01cb530 c0643d4c c045be9c c045be48 c002aa6c c002a2a8 00000040 01cd7e85
+527276 [43782.770000] be50  00000103 00000000 c0642f40 00000103 c045a000 c01cb530 c0643d4c c064394c
+527277 [43782.770000] be70  c0643b4c c045be9c c045bdc8 c045be90 c0050510 c01cb564 60000113 ffffffff
+527278 [43782.770000] be90  c045bee4 c045bea0 c005a514 c01cb53c 2d4cf55e 0000ab06 2d4cf55e c064374c
+527279 [43782.770000] beb0  d304dcd0 d304dcd0 00000000 c045a000 00000103 00000004 00000001 00000001
+527280 [43782.770000] bed0  0000000a c0642d00 c045bf1c c045bee8 c005554c c005a3ac c046ec28 c046a860
+527281 [43782.770000] bef0  00000007 00000007 00000000 c0024014 00000002 00000001 c045a000 0000001f
+527282 [43782.770000]
+527283 [43782.770000] IP: 0xc045bd48:
+527284 [43782.770000] bd48  00000000 c045be48 c045bd94 c045bd60 c003189c c003164c c01c32cc c01c30a0
+527285 [43782.770000] bd68  c045bdf0 c045decc c045df3c 00000817 c045be48 00000000 20000113 c0643b4c
+527286 [43782.770000] bd88  c045be44 c045bd98 c002a2d8 c00316d8 01cd7e85 c045a000 c045bdc4 c045bdb0
+527287 [43782.770000] bda8  c004fc44 c004fb58 c046ca34 01cd7e85 c045bdec c045bdc8 c0050510 c004fd14
+527288 [43782.770000] bdc8  00000000 000027d1 0000ab06 c045be06 c06228db c045be15 c045be64 c045bdf0
+527289 [43782.770000] bde8  c0050bbc c0050328 c045be38 00000000 60000113 00000040 c007251c 345b6d8c
+527290 [43782.770000] be08  32383733 3036372e 5d303030 c0460020 2d4d06f2 0000ab06 c045be6c ffffffff
+527291 [43782.770000] be28  c045be7c c045a000 c01cb530 c0643d4c c045be9c c045be48 c002aa6c c002a2a8
+527292 [43782.770000]
+527293 [43782.770000] FP: 0xc045be1c:
+527294 [43782.770000] be1c  0000ab06 c045be6c ffffffff c045be7c c045a000 c01cb530 c0643d4c c045be9c
+527295 [43782.770000] be3c  c045be48 c002aa6c c002a2a8 00000040 01cd7e85 00000103 00000000 c0642f40
+527296 [43782.770000] be5c  00000103 c045a000 c01cb530 c0643d4c c064394c c0643b4c c045be9c c045bdc8
+527297 [43782.770000] be7c  c045be90 c0050510 c01cb564 60000113 ffffffff c045bee4 c045bea0 c005a514
+527298 [43782.770000] be9c  c01cb53c 2d4cf55e 0000ab06 2d4cf55e c064374c d304dcd0 d304dcd0 00000000
+527299 [43782.770000] bebc  c045a000 00000103 00000004 00000001 00000001 0000000a c0642d00 c045bf1c
+527300 [43782.770000] bedc  c045bee8 c005554c c005a3ac c046ec28 c046a860 00000007 00000007 00000000
+527301 [43782.770000] befc  c0024014 00000002 00000001 c045a000 0000001f c045bf2c c045bf20 c005561c
+527302 [43782.770000]
+527303 [43782.770000] R4: 0xc0642ec0:
+527304 [43782.770000] 2ec0  00000000 00000000 00000000 00000000 00000001 00000000 00000000 00000000
+527305 [43782.770000] 2ee0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527306 [43782.770000] 2f00  00000001 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527307 [43782.770000] 2f20  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527308 [43782.770000] 2f40  00000000 00425975 00425974 c0642f4c c0642f4c c0642f54 c0642f54 c0642f5c
+527309 [43782.770000] 2f60  c0642f5c c0642f64 c0642f64 c0642f6c c0642f6c c0642f74 c0642f74 c0642f7c
+527310 [43782.770000] 2f80  c0642f7c c0642f84 c0642f84 c0642f8c c0642f8c c0642f94 c0642f94 c0642f9c
+527311 [43782.770000] 2fa0  c0642f9c c0642fa4 c0642fa4 c0642fac c0642fac c0642fb4 c0642fb4 c0642fbc
+527312 [43782.770000]
+527313 [43782.770000] R6: 0xc0459f80:
+527314 [43782.770000] 9f80  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527315 [43782.770000] 9fa0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527316 [43782.770000] 9fc0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527317 [43782.770000] 9fe0  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527318 [43782.770000] a000  00000000 00000105 00000000 c045d008 c046c988 00000000 00000017 00000000
+527319 [43782.770000] a020  c045d008 c045a000 d1475200 d30399c0 413fc082 0000001f c045bf9c c045bf78
+527320 [43782.770000] a040  c0354644 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527321 [43782.770000] a060  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+527322 [43782.770000]
+527323 [43782.770000] R7: 0xc01cb4b0:
+527324 [43782.770000] b4b0  e3130004 089da800 e280006c eb0625f7 e89da800 c046e694 e1a0c00d e92dd800
+527325 [43782.770000] b4d0  e24cb004 e5d0305c e1a00001 e7e01153 ebffffe6 e89da800 e1a0c00d e92dd800
+527326 [43782.770000] b4f0  e24cb004 e5d11000 ebffffe0 e3a00000 e89da800 e1a0c00d e92dd800 e24cb004
+527327 [43782.770000] b510  e2523000 e1a02001 089da800 e1a01000 e59f0004 eb062350 e89da800 c0417ac3
+527328 [43782.770000] b530  e1a0c00d e92dd800 e24cb004 e590102c e3510000 05901008 e5900050 e3500000
+527329 [43782.770000] b550  15902000 059f2010 e59f0010 eb062342 e3a03000 e5833000 eafffffc c0417adc
+527330 [43782.770000] b570  c0417ae6 e1a0c00d e92dd870 e24cb004 e24dd00c e1a04000 e1a00001 e1a05002
+527331 [43782.770000] b590  e1a06003 ebffff7d e5941008 e1a03005 e58d6000 e1a02000 e59f0008 eb06232e
+527332 [43782.770000]
+527333 [43782.770000] R8: 0xc0643ccc:
+527334 [43782.770000] 3ccc  c0643ccc c0643ccc c0643cd4 c0643cd4 c0643cdc c0643cdc c0643ce4 c0643ce4
+527335 [43782.770000] 3cec  c0643cec c0643cec c0643cf4 c0643cf4 c0643cfc c0643cfc c0643d04 c0643d04
+527336 [43782.770000] 3d0c  c0643d0c c0643d0c c0643d14 c0643d14 c0643d1c c0643d1c c0643d24 c0643d24
+527337 [43782.770000] 3d2c  c0643d2c c0643d2c c0643d34 c0643d34 c0643d3c c0643d3c c0643d44 c0643d44
+527338 [43782.770000] 3d4c  c0643d4c c0643d4c c0643d54 c0643d54 c0643d5c c0643d5c c0643d64 c0643d64
+527339 [43782.770000] 3d6c  c0643d6c c0643d6c c0643d74 c0643d74 c0643d7c c0643d7c c0643d84 c0643d84
+527340 [43782.770000] 3d8c  c0643d8c c0643d8c c0643d94 c0643d94 c0643d9c c0643d9c c0643da4 c0643da4
+527341 [43782.770000] 3dac  c0643dac c0643dac c0643db4 c0643db4 c0643dbc c0643dbc c0643dc4 c0643dc4
+527342 [43782.770000]
+527343 [43782.770000] R9: 0xc06438cc:
+527344 [43782.770000] 38cc  c06438cc c06438cc c061dbe8 c061dbe8 c06438dc c06438dc c06438e4 c06438e4
+527345 [43782.770000] 38ec  c06438ec c06438ec c06438f4 c06438f4 c06438fc c06438fc c0643904 c0643904
+527346 [43782.770000] 390c  c064390c c064390c c0643914 c0643914 c064391c c064391c c0643924 c0643924
+527347 [43782.770000] 392c  c064392c c064392c c0643934 c0643934 c064393c c064393c c0643944 c0643944
+527348 [43782.770000] 394c  c064394c c064394c c0643954 c0643954 c064395c c064395c c0643964 c0643964
+527349 [43782.770000] 396c  c064396c c064396c c0643974 c0643974 c064397c c064397c c0643984 c0643984
+527350 [43782.770000] 398c  c064398c c064398c c0643994 c0643994 c07c1d4c c07c1714 c06439a4 c06439a4
+527351 [43782.770000] 39ac  c05fa910 c05fa910 c06439b4 c06439b4 c06439bc c06439bc c06439c4 c06439c4
+527352 [43782.770000]
+527353 [43782.770000] R10: 0xc0643acc:
+527354 [43782.770000] 3acc  c0643acc c0643acc c0643ad4 c0643ad4 c0643adc c0643adc c0643ae4 c0643ae4
+527355 [43782.770000] 3aec  c0643aec c0643aec c0643af4 c0643af4 c0643afc c0643afc c0643b04 c0643b04
+527356 [43782.770000] 3b0c  c0643b0c c0643b0c c0643b14 c0643b14 c0643b1c c0643b1c c0643b24 c0643b24
+527357 [43782.770000] 3b2c  c0643b2c c0643b2c c0643b34 c0643b34 c0643b3c c0643b3c c0643b44 c0643b44
+527358 [43782.770000] 3b4c  c0643b4c c0643b4c c0643b54 c0643b54 c0643b5c c0643b5c c0643b64 c0643b64
+527359 [43782.770000] 3b6c  c0643b6c c0643b6c c0643b74 c0643b74 c0643b7c c0643b7c c0643b84 c0643b84
+527360 [43782.770000] 3b8c  c0643b8c c0643b8c c0643b94 c0643b94 c0643b9c c0643b9c c0643ba4 c0643ba4
+527361 [43782.770000] 3bac  c0643bac c0643bac c0643bb4 c0643bb4 c0643bbc c0643bbc c0643bc4 c0643bc4
+527362 [43782.770000] Process swapper (pid: 0, stack limit = 0xc045a2e8)
+527363 [43782.770000] Stack: (0xc045be90 to 0xc045c000)
+527364 [43782.770000] be80:                                     c045bee4 c045bea0 c005a514 c01cb53c
+527365 [43782.770000] bea0: 2d4cf55e 0000ab06 2d4cf55e c064374c d304dcd0 d304dcd0 00000000 c045a000
+527366 [43782.770000] bec0: 00000103 00000004 00000001 00000001 0000000a c0642d00 c045bf1c c045bee8
+527367 [43782.770000] bee0: c005554c c005a3ac c046ec28 c046a860 00000007 00000007 00000000 c0024014
+527368 [43782.770000] bf00: 00000002 00000001 c045a000 0000001f c045bf2c c045bf20 c005561c c00554dc
+527369 [43782.770000] bf20: c045bf44 c045bf30 c002a078 c00555dc ffffffff ff002000 c045bf9c c045bf48
+527370 [43782.770000] bf40: c002aac4 c002a00c 2d4cae00 60000113 c045bf90 00000000 c045a000 c0621e48
+527371 [43782.770000] bf60: c0024014 c045dc98 80021fd0 413fc082 0000001f c045bf9c c045bfa0 c045bf90
+527372 [43782.770000] bf80: c002c0fc c002c100 60000113 ffffffff c045bfb4 c045bfa0 c002c968 c002c0e0
+527373 [43782.770000] bfa0: c045a000 c0621e48 c045bfcc c045bfb8 c0351df4 c002c924 c0645b90 c0621e48
+527374 [43782.770000] bfc0: c045bff4 c045bfd0 c0008a10 c0351d40 c000854c 00000000 00000000 c0024018
+527375 [43782.770000] bfe0: 10c53c7d c0621f58 00000000 c045bff8 80008034 c00087a4 00000000 00000000
+527376 [43782.770000] Backtrace:
+527377 [43782.770000] [<c01cb530>] (dpm_drv_timeout+0x0/0x44) from [<c005a514>] (run_timer_softirq+0x174/0x244)
+527378 [43782.770000] [<c005a3a0>] (run_timer_softirq+0x0/0x244) from [<c005554c>] (__do_softirq+0x7c/0x100)
+527379 [43782.770000] [<c00554d0>] (__do_softirq+0x0/0x100) from [<c005561c>] (irq_exit+0x4c/0xb0)
+527380 [43782.770000] [<c00555d0>] (irq_exit+0x0/0xb0) from [<c002a078>] (asm_do_IRQ+0x78/0x94)
+527381 [43782.770000] [<c002a000>] (asm_do_IRQ+0x0/0x94) from [<c002aac4>] (__irq_svc+0x44/0x9c)
+527382 [43782.770000] Exception stack(0xc045bf48 to 0xc045bf90)
+527383 [43782.770000] bf40:                   2d4cae00 60000113 c045bf90 00000000 c045a000 c0621e48
+527384 [43782.770000] bf60: c0024014 c045dc98 80021fd0 413fc082 0000001f c045bf9c c045bfa0 c045bf90
+527385 [43782.770000] bf80: c002c0fc c002c100 60000113 ffffffff
+527386 [43782.770000]  r5:ff002000 r4:ffffffff
+527387 [43782.770000] [<c002c0d4>] (default_idle+0x0/0x30) from [<c002c968>] (cpu_idle+0x50/0xa8)
+527388 [43782.770000] [<c002c918>] (cpu_idle+0x0/0xa8) from [<c0351df4>] (rest_init+0xc0/0xe0)
+527389 [43782.770000]  r5:c0621e48 r4:c045a000
+527390 [43782.770000] [<c0351d34>] (rest_init+0x0/0xe0) from [<c0008a10>] (start_kernel+0x278/0x2d8)
+527391 [43782.770000]  r5:c0621e48 r4:c0645b90
+527392 [43782.770000] [<c0008798>] (start_kernel+0x0/0x2d8) from [<80008034>] (0x80008034)
+527393 [43782.770000] Code: 059f2010 e59f0010 eb062342 e3a03000 (e5833000)
+527394 [43783.850000] ---[ end trace aa52b82b5b51307d ]---
+527395 [43783.850000] Kernel panic - not syncing: Fatal exception in interrupt
+527396 [43783.860000] Rebooting in 5 seconds..M0x00000001
+
+4, gpu休眠代码:
+vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_driver.c
+    801 static int __devinit gpu_suspend(struct platform_device *dev, pm_message_t state)
+    802 {
+    803         gceSTATUS status;
+    804         gckGALDEVICE device;
+    805
+    806         device = platform_get_drvdata(dev);
+    807
+    808         status = gckHARDWARE_SetPowerManagementState(device->kernel->hardware, gcvPOWER_OFF);
+    809
+    810     clk_disable(g_vim_gpu_mclk);
+    811     clk_disable(g_vim_gpu_aclk);
+    812         if (gcmIS_ERROR(status))
+    813         {
+    814                 return -1;
+    815         }
+    816
+    817         return 0;
+    818 }
+
+2), 
+    3105             gcmkONERROR(gckHARDWARE_QueryIdle(Hardware, &idle));
+3), 加了打印信息:
+cp /home/zhangjian/mydroid_f/out/target/product/vortex/system/lib/modules/galcore.ko /home/share/zhangjian -p
+
+4), 正常只需要80ms:
+[  165.750000] galcore galcore: suspend
+[  165.760000] platform_get_drvdata
+[  165.760000] gckHARDWARE_SetPowerManagementState
+[  165.760000] gckHARDWARE_SetPowerManagementState(2937): 0
+[  165.770000] gckHARDWARE_SetPowerManagementState(2945): 1
+[  165.770000] gckHARDWARE_SetPowerManagementState(2999): 2
+[  165.780000] gckHARDWARE_SetPowerManagementState(3002): 3
+[  165.790000] gckHARDWARE_SetPowerManagementState(3165): 4
+[  165.800000] gckHARDWARE_SetPowerManagementState(3173): 5
+[  165.800000] gckHARDWARE_SetPowerManagementState(3179): 6
+[  165.810000] gckHARDWARE_SetPowerManagementState(3211): 7
+[  165.810000] gckHARDWARE_SetPowerManagementState(3243): 8
+[  165.820000] gckHARDWARE_SetPowerManagementState(3252): 9
+[  165.820000] clk_disable(g_vim_gpu_mclk)
+[  165.830000] clk_disable(g_vim_gpu_aclk)
+[  165.830000] gpu_suspend end
+
+5), 修改后的galcore.ko给zhangwei做自动测试. 
+(1), 下午测试结果, 除了一次170ms, 其余都是70-80ms. 
+314832 [ 3714.550000] gckHARDWARE_SetPowerManagementState(2937): 0
+314833 [ 3714.560000] gckHARDWARE_SetPowerManagementState(2945): 1
+314834 [ 3714.560000] gckHARDWARE_SetPowerManagementState(2999): 2
+314835 [ 3714.570000] gckHARDWARE_SetPowerManagementState(3002): 3
+314836 [ 3714.570000] gckHARDWARE_SetPowerManagementState(3096): 4
+314837 [ 3714.580000] gckHARDWARE_SetPowerManagementState(3124): 5
+314838 [ 3714.580000] gckHARDWARE_SetPowerManagementState(2937): 0
+314839 [ 3714.590000] gckHARDWARE_SetPowerManagementState(2945): 1
+314840 [ 3714.590000] gckHARDWARE_SetPowerManagementState(2999): 2
+314841 [ 3714.600000] gckHARDWARE_SetPowerManagementState(3002): 3
+314842 [ 3714.600000] gckHARDWARE_SetPowerManagementState(3137): 6
+314843 [ 3714.610000] gckHARDWARE_SetPowerManagementState(3148): 7
+314844 [ 3714.610000] gckHARDWARE_SetPowerManagementState(2937): 0
+314845 [ 3714.620000] gckHARDWARE_SetPowerManagementState(2945): 1
+314846 [ 3714.620000] gckHARDWARE_SetPowerManagementState(2999): 2
+314847 [ 3714.630000] gckHARDWARE_SetPowerManagementState(3002): 3
+314848 [ 3714.640000] gckHARDWARE_SetPowerManagementState(2937): 0
+314849 [ 3714.640000] gckHARDWARE_SetPowerManagementState(2945): 1
+314850 [ 3714.650000] gckHARDWARE_SetPowerManagementState(3156): 8
+314851 [ 3714.650000] gckHARDWARE_SetPowerManagementState(3165): 9
+314852 [ 3714.660000] gckHARDWARE_SetPowerManagementState(2999): 2
+314853 [ 3714.660000] gckHARDWARE_SetPowerManagementState(3002): 3
+314854 [ 3714.670000] gckHARDWARE_SetPowerManagementState(3173): 10
+314855 [ 3714.670000] gckHARDWARE_SetPowerManagementState(3179): 11
+314856 [ 3714.680000] gckHARDWARE_SetPowerManagementState(3211): 12
+314857 [ 3714.680000] gckHARDWARE_SetPowerManagementState(3243): 13
+314858 [ 3714.690000] gckHARDWARE_SetPowerManagementState(3062): 4
+314859 [ 3714.690000] gckHARDWARE_SetPowerManagementState(3252): 14
+
+70-80ms:
+373451 [ 4434.750000] gckHARDWARE_SetPowerManagementState(2937): 0
+373452 [ 4434.760000] gckHARDWARE_SetPowerManagementState(2945): 1
+373453 [ 4434.760000] gckHARDWARE_SetPowerManagementState(2999): 2
+373454 [ 4434.770000] gckHARDWARE_SetPowerManagementState(3002): 3
+373455 [ 4434.770000] gckHARDWARE_SetPowerManagementState(3165): 4
+373456 [ 4434.780000] gckHARDWARE_SetPowerManagementState(3173): 5
+373457 [ 4434.780000] gckHARDWARE_SetPowerManagementState(3179): 6
+373458 [ 4434.790000] gckHARDWARE_SetPowerManagementState(3211): 7
+373459 [ 4434.790000] gckHARDWARE_SetPowerManagementState(3243): 8
+373460 [ 4434.800000] gckHARDWARE_SetPowerManagementState(3252): 9
+
+(2), 170ms这个实际多了一个: 
+    3157         /* Acquire the power management semaphore. */
+    3158         gcmkONERROR(gckOS_AcquireSemaphore(os, command->powerSemaphore));
+这个可能会导致超时?
+
+(3), 还多了:
+3128             /* Get the size of the flush command. */
+3129             gcmkONERROR(gckHARDWARE_Flush(Hardware,
+3130                                           gcvFLUSH_ALL,
+3131                                           gcvNULL,
+3132                                           &requested));
+3133
+3134             /* Reserve space in the command queue. */
+3135             gcmkONERROR(
+3136                 gckCOMMAND_Reserve(command, requested, &buffer, &bytes));
+3137
+3138             reserved = gcvTRUE;
+这些引起了再一次进入gckHARDWARE_SetPowerManagementState\
+
+6), 为了测试出错情况, 把dpm wdt改为30秒(原来的10倍). 这样gpu出错就不会重启, 就能知道到底gpu能否不timeout. 
+
+5, (15:57 2011-9-6)需要看一下gpu上下电流程是在什么地方做的. 
+1), 上电在u-boot和唤醒后(sram-helper.S). 
+2), 下电在pm_enter()(pm.c).
+
+6, zhaoyuan建议我确认电压. 也许升压之后就好了. 
+这个板子gpu使用时其实没发现问题, 所以升压的实验考虑明天做. 
+
+13:06 2011-9-6
+VC0882, SV, AE, suspend/resume, 总结; 文档
+1, i2c device之前的电的依赖关系如何解决?
+每个i2c device都拿自己需要的电和对自己使用有影响的电 .
+
+16:11 2011-9-6
+时间管理
+0, 
+
+1, 本日
+1),
+2), 16:05- gpu休眠时间分析. 
+
+17:21 2011-9-6
+call graph
+1, 学写dot文件
+http://micahelliott.com/2009/03/getting-started-with-graphviz/
+graphviz入门文档: http://thehelpfulhacker.net/2009/10/14/an-introduction-to-graphviz-with-a-crazy-story-about-turnips/
+http://www.flickr.com/photos/kentbye/sets/72157601523153827/
+2, 
+
+18:30 2011-9-6
+休眠唤醒总结
+drivers/base/power/main.c
+
+dpm_suspend
+
+kernel/power/suspend.c
+
+自"17:31 2011-5-6". 
+1), dpm_suspend(): 
+(1), 遍历dpm_list, 循环调用device_suspend(): 分为同步suspend和异步suspend. 
+(2), 遍历后, 调用"async_synchronize_full()", 确保所有异步suspend都完成. 
+
+2), device_suspend(): 原来以为这里就是按注册(?)顺序suspend设备. 今天发现可能是允许异步suspend的: 
+pm_async_enabled && dev->power.async_suspend
+前者是系统全部属性, 后者是每个设备自己的属性, 由device_enable_async_suspend设置. device_enable_async_suspend()在scsi, pci, usb里面可能会设置. 也就是说这三类设备可能会异步休眠. 
+异步唤醒我理解只是起了thread做suspend的工作, 最终还是调用driver自己的suspend函数: 
+async_schedule()->__async_schedule(): 把device_suspend传入的async_func_ptr()(async_suspend(): 调用__device_suspend())赋给新建立的async_entry.func()
+
+async_thread()(kernel/async.c)->run_one_entry()
+async_thread()由运行async_manager_thread(), 后者在系统启动时建立. 
+
+__device_suspend()里面会按照class, type, bus的顺序调用suspend(), 也就是说每个class或bus的suspend函数会调用它们device个数的次数? 原来以为只是调用一次. \todo 确认. 
+
+会不会异步唤醒? 下文分解. 
+
+3), 每个设备都suspend后, 才是sysdev_suspend():
+按照kset里面按照class顺序suspend, 对于每个class, 都先做class driver suspend, 再做class suspend. 
+sysdev_suspend后, 会调用SOC自己的pm enter函数使整个系统进入suspend状态. 
+
+4), resume: 
+suspend_devices_and_enter()->dpm_resume_end()->dpm_resume()
+
+5), dpm_resume()和dpm_suspend()功能对应. 
+(1), 先发起异步resume()
+(2), 然后按照链表顺序做非异步aync的设备的: device_resume()
+(3), 最后同样用async_synchronize_full()等待异步resume完成. 
+
+device_resume和__device_suspend相反, 按照bus, type, class顺序调用resume. 
+
+11:46 2011-9-7
+VC0882, SV, AE, suspend/resume
+1, 昨天测试未出问题. 难道是因为加入了gpu打印?!
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110907_fajue$ ./check_suspend_dvfs_ret 0906_01#
+./check_suspend_dvfs_ret 0906_01#
+version: 20110826_1300
+dt times is 0, console suspend times is 4, request_suspend_state times is 11, task_freeze_times is 4, rom boot times is 10.
+dvfs: target times is 320, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 79, count times is 79
+dt times is 0, console suspend times is 0, request_suspend_state times is 899, task_freeze_times is 458, rom boot times is 898.
+dvfs: target times is 33230, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110907_fajue$ ./check_suspend_dvfs_ret 0906-自动-3#
+./check_suspend_dvfs_ret 0906-自动-3#
+version: 20110826_1300
+dt times is 0, console suspend times is 0, request_suspend_state times is 548, task_freeze_times is 290, rom boot times is 544.
+dvfs: target times is 20257, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 5066, count times is 5066
+dt times is 0, console suspend times is 0, request_suspend_state times is 1, task_freeze_times is 0, rom boot times is 0.
+dvfs: target times is 50, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+2, 还是要看一下昨天出错的log里面能不能看到到底是跑到gpu什么位置. 
+有可能是加了loglevel=8之后不容易出现?! 下午去掉试试.
+
+3, 去掉后也测试了100次也没有. 
+fajue1#和3#都各有一次最长的一次是80ms.
+1), 3#
+    2457731 [16558.910000] platform_get_drvdata
+    2457732 [16558.910000] gckHARDWARE_SetPowerManagementState
+    2457733 [16558.920000] Hardware=0xd3828f48 State=12940: 0
+    2457734 [16558.920000] 2948: 1
+    2457735 [16558.920000] 3002: 2
+    2457736 [16558.930000] 3005: 3
+    2457737 [16558.930000] 3099: 4
+    2457738 [16558.930000] 3127: 5
+    2457739 [16558.930000] Hardware=0xd3828f48 State=42940: 0
+    2457740 [16558.940000] 2948: 1
+    2457741 [16558.940000] 3002: 2
+    2457742 [16558.940000] 3005: 3
+    2457743 [16558.940000] 3140: 6
+    2457744 [16558.950000] 3151: 7
+    2457745 [16558.950000] Hardware=0xd3828f48 State=42940: 0
+    2457746 [16558.950000] 2948: 1
+    2457747 [16558.950000] 3002: 2
+    2457748 [16558.960000] 3005: 3
+    2457749 [16558.960000] Hardware=0xd3828f48 State=72940: 0
+    2457750 [16558.960000] 2948: 1
+    2457751 [16558.960000] 3002: 2
+    2457752 [16558.970000] 3159: 8
+    2457753 [16558.970000] 3168: 9
+    2457754 [16558.970000] 3176: 10
+    2457755 [16558.970000] 3182: 11
+    2457756 [16558.980000] 3005: 3
+    2457757 [16558.980000] 3214: 12
+    2457758 [16558.980000] 3246: 13
+    2457759 [16558.980000] 3065: 4
+    2457760 [16558.980000] 3255: 14
+    2457761 [16558.990000] clk_disable(g_vim_gpu_mclk)
+    2457762 [16558.990000] clk_disable(g_vim_gpu_aclk)
+    2457763 [16558.990000] gpu_suspend end
+
+也就是调用了gcvPOWER_OFF, gcvPOWER_ON_BROADCAST x 2, gcvPOWER_IDLE_BROADCAST. 共四次. 
+
+2), 1#, 也是调用了上次四个power state. 
+    114614 [ 3819.100000] platform_get_drvdata
+    114615 [ 3819.100000] gckHARDWARE_SetPowerManagementState
+    114616 [ 3819.110000] Hardware=0xd3828f48 State=12940: 0
+    114617 [ 3819.110000] 2948: 1
+    114618 [ 3819.110000] 3002: 2
+    114619 [ 3819.120000] 3005: 3
+    114620 [ 3819.120000] 3099: 4
+    114621 [ 3819.120000] 3127: 5
+    114622 [ 3819.120000] Hardware=0xd3828f48 State=42940: 0
+    114623 [ 3819.130000] 2948: 1
+    114624 [ 3819.130000] 3002: 2
+    114625 [ 3819.130000] 3005: 3
+    114626 [ 3819.130000] 3140: 6
+    114627 [ 3819.140000] 3151: 7
+    114628 [ 3819.140000] Hardware=0xd3828f48 State=42940: 0
+    114629 [ 3819.140000] 2948: 1
+    114630 [ 3819.140000] 3002: 2
+    114631 [ 3819.150000] 3005: 3
+    114632 [ 3819.150000] Hardware=0xd3828f48 State=72940: 0
+    114633 [ 3819.150000] 2948: 1
+    114634 [ 3819.150000] 3002: 2
+    114635 [ 3819.160000] 3159: 8
+    114636 [ 3819.160000] 3168: 9
+    114637 [ 3819.160000] 3176: 10
+    114638 [ 3819.160000] 3182: 11
+    114639 [ 3819.170000] 3005: 3
+    114640 [ 3819.170000] 3214: 12
+    114641 [ 3819.170000] 3246: 13
+    114642 [ 3819.170000] 3065: 4
+    114643 [ 3819.170000] 3255: 14
+    114644 [ 3819.180000] clk_disable(g_vim_gpu_mclk)
+    114645 [ 3819.180000] clk_disable(g_vim_gpu_aclk)
+    114646 [ 3819.180000] gpu_suspend end
+
+11:54 2011-9-7
+VC0882, SV, AE, 关注shuyu进展
+shuyu邮件_20110906
+2，Android环境下和yangmin一起调试vp6，原驱动里面没有加入picId的相关内容，导致上层一直不能做音视频同步，目前已经ok了。
+2，支持youhai，和他讨论了De的机制和AE的实现。目前楼下在android平板电脑上，打游戏愤怒的小鸟的时候，出现小鸟飞行路径不平滑，有时候会感觉还有卡的现象。和youhai一起分析，把我们这边的DE的显示机制和他说明了一下，觉得是他们仅用了两个pingpang buffer，导致GPU在绘图的时候，需要等待DE刷完一帧切换到另外的一个buffer，释放idle mem，造成5ms—15ms不等的时间浪费。AE那边这里需要修改一下机制才行。
+
+16:55 2011-9-7
+VC0882, SV, suspend/resume总结
+1, 用2.5小时画出的anroid suspend/resume总图, 又用时间加入了唤醒过程. 
+digraph G {
+//define the node
+Application[shape=plaintext];
+Framework[shape=plaintext];
+HAL[shape=plaintext];
+KernelInf[label = "Kernel"; shape = plaintext];
+Kernel[label = ""; shape = plaintext];
+DeviceDriver[label = ""; shape = plaintext];
+Hardware[shape = plaintext];
+
+PowerManager[label = "PowerManager\nAndroid.os.PowerManager"];
+PowerManagerService[label = "PowerManagerService\nAndroid.os.PowerManagerService"];
+EventHub[label = "EventHub"];
+Power[label = "Power\nlibhardware_lagecy/power"];
+KPowerMain[label = "Kernel Power Main\nkernel/power/main.c"];
+KPowerWL[label = "Kernel Power Wakelock\nkernel/power/xxxwakelock.c"];
+KPowerErSus[label = "Kernel Power Core\nkernel/power/xxx.c"];
+KSuspendOps[label = "SOC suspend ops\narch/arm/plat-xxx/pm.c"];
+KDeviceModel[label = "Kernel Device Model\ndriver/xxx"];
+KInputDevice[label = "Kernel Input Device\ndriver/input/xxx"];
+HWpowerkey[label = "Power Key"];
+
+//define the rank
+{ rank = same; "Application"; "ApplicationA"; "ApplicationB"; "ApplicationC"; KInputDeviceFmt_A}
+{ rank = same; "Framework"; "PowerManager"; "PowerManagerService"; EventHub; KInputDeviceFmt_F}
+{ rank = same; "HAL"; "Power"; KInputDeviceFmt_H}
+{ rank = same; "KernelInf"; KPowerMain; KPowerWL; KInputDeviceFmt_K}
+{ rank = same; "Kernel"; KPowerErSus; }
+{ rank = same; "DeviceDriver"; KDeviceModel; KInputDevice; KSuspendOps; }
+{ rank = same; "Hardware"; HWpowerkey; KInputDeviceFmt_HW}
+
+//formant. no meaning. 
+KInputDeviceFmt_A[label = "", style = invis];
+KInputDeviceFmt_F[label = "", style = invis];
+KInputDeviceFmt_H[label = "", style = invis];
+KInputDeviceFmt_K[label = "", style = invis];
+KInputDeviceFmt_HW[label = "", style = invis];
+
+Application -> KInputDeviceFmt_A[style = invis];
+Framework -> KInputDeviceFmt_F[style = invis];
+HAL -> KInputDeviceFmt_H[style = invis];
+KernelInf -> KInputDeviceFmt_K[style = invis];
+Hardware -> KInputDeviceFmt_HW[style = invis];
+KInputDeviceFmt_A -> KInputDeviceFmt_F -> KInputDeviceFmt_H -> KInputDeviceFmt_K -> KInputDevice -> KInputDeviceFmt_HW[style = invis];
+//formant. no meaning. end
+
+//draw the hierarchy
+Application -> Framework;
+Framework -> HAL;
+HAL -> KernelInf;
+KernelInf -> Hardware;
+KernelInf -> Kernel[style = invis, dir = none];
+Kernel -> DeviceDriver[style = invis, dir = none];
+DeviceDriver -> Hardware[style = invis, dir = none];
+
+//draw the class, function relationship
+node [shape=egg];
+ApplicationA -> PowerManager[label = "Wl = newWakeLock(...);\nWl.acquire();\n//works\nWl.release();"];
+ApplicationB -> PowerManager;
+ApplicationC -> PowerManager;
+PowerManager -> PowerManagerService[label = binder];
+PowerManagerService -> Power[label = jni];
+Power -> KPowerMain[label = sysfs];
+Power -> KPowerWL[label = sysfs];
+KPowerMain -> KPowerErSus;
+KPowerErSus -> KSuspendOps;
+KPowerErSus -> KDeviceModel;
+HWpowerkey -> KInputDevice[label = "Screen Off"];
+HWpowerkey -> KSuspendOps[label = "Wake up", color = green, style = bold];
+KSuspendOps -> KPowerErSus[color = green, style = bold];
+KPowerErSus -> KDeviceModel[color = green, style = bold];
+KDeviceModel -> KInputDevice[color = green, style = bold];
+KInputDevice -> EventHub[style = dashed, color = green, style = bold];
+EventHub -> PowerManager[style = dashed, color = green, style = bold];
+}
+
+2, 从PowerManager到Kernel sysfs
+digraph G {
+set_screen_state[label = "set_screen_state\necho on/mem > /sys/power/state";
+userActivity -> setPowerState
+goToSleep -> goToSleepWithReason -> goToSleepLocked -> setPowerState -> setScreenStateLocked -> setScreenState -> set_screen_state
+}
+
+09:03 2011-9-8
+放到suspend/resume详图之前。
+early_suspend -> freeze_task -> suspend -> wakeup_event -> resume -> thaw_task -> late_resume
+
+arm休眠的考虑: 跳转到sram，ddr进入自刷新后arm不能再访问ddr，所以不能有cache到ddr的操作，不能有到ddr的translation table walk。不能有中断或中断handler不能在ddr中。
+
+10:00 2011-9-8
+时间管理
+0, 9:45
+
+1, 本日
+1), AE suspend/resume看昨天fajue三个板子的测试结果. 见"10:01 2011-9-8". 
+
+10:01 2011-9-8
+VC0882, SV, AE, suspend/resume
+1, fajue
+1), #3
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110908_fajue$ ../20110907_fajue/check_suspend_dvfs_ret 0907_5_3#_自动
+../20110907_fajue/check_suspend_dvfs_ret 0907_5_3#_自动
+version: 20110826_1300
+dt times is 0, console suspend times is 0, request_suspend_state times is 775, task_freeze_times is 393, rom boot times is 776.
+dvfs: target times is 30587, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 7076, count times is 7076
+max suspend time is 0.0300 @ 2150806
+
+2), #1, 无问题.
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110908_fajue$ ../20110907_fajue/check_suspend_dvfs_ret 0907_01自动#1
+../20110907_fajue/check_suspend_dvfs_ret 0907_01自动#1
+version: 20110826_1300
+dt times is 0, console suspend times is 0, request_suspend_state times is 947, task_freeze_times is 476, rom boot times is 944.
+dvfs: target times is 34262, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 8594, count times is 8594
+
+max suspend time is 0.0900 @ 1218999
+
+3), xiaotang(007):
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110908_fajue$ ../20110907_fajue/check_suspend_dvfs_ret 0907_自动测试_QA007.log
+../20110907_fajue/check_suspend_dvfs_ret 0907_自动测试_QA007.log
+version: 20110826_1300
+dt times is 0, console suspend times is 0, request_suspend_state times is 914, task_freeze_times is 480, rom boot times is 912.
+dvfs: target times is 33794, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 8531, count times is 8531
+max suspend time is 0.0800 @ 3242663
+
+2, 为什么会有这么大的变化? 周五晚上测试#3板子, 分别测试了5, 55, 77次重启. 
+1), 会不会和sd卡写入有关? 
+测试了30次未发现问题. 
+
+3, mail zhaoyuan:
+hi, zhaoyuan
+
+gpu问题和youhai沟通了, youhai说原来就有这个问题, vivante后来说修正了. youhai说优化完游戏会查一下. 
+今天上午加入sd卡保存log后, 测试了80次仍然没有出现. 小张在用三号板做自动测试. 
+
+我修改或知道的power问题, 见"14:20 2011-6-1".
+
+12:47 2011-9-8
+VC0882, SV, 找了个公司优化浏览器(含webkit)
+
+13:20 2011-9-8
+VC0882, SV, AE, suspend/resume, 上传代码
+zhangjian@ubuntu:~/mydroid_f/kernel$ git push origin HEAD:vmc_g
+zhangjian@10.0.12.140's password:
+Counting objects: 27, done.
+Delta compression using up to 8 threads.
+Compressing objects: 100% (14/14), done.
+Writing objects: 100% (14/14), 3.54 KiB, done.
+Total 14 (delta 12), reused 0 (delta 0)
+To git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git
+   c04a081..614f0ad  HEAD -> vmc_g
+
+log: 
+modify code for suspend/resume. 
+1, add v8irq_set_wake_irq, v8irq_clr_wake_irq add v8irq_get_wake_irq for unmask wakeup irq in pm_enter. 
+file: arch/arm/plat-vc088x/include/mach/irqs.h, arch/arm/plat-vc088x/irq.c
+2, add v8irq_set_wake_irq and v8irq_clr_wake_irq in gpio_wake_enable()(arch/arm/plat-vc088x/gpio.c)
+for save wakeup irq. 
+3, modify arch/arm/plat-vc088x/pm.c
+1), pm_enter: only unmask irq for wakeup src
+otherwise may be wakeup by other irq. e.g. timer1
+2), pm_prepare: disable arm irq while mask irq
+4, apply pmu.c patch for all the vc0882 product. not only in m3s p1
+file: arch/arm/plat-vc088x/pmu.c
+5, add debug info: print irq src pnd before wfi. 
+file: arch/arm/plat-vc088x/sram-helper.S
+6, modify arch/arm/plat-vc088x/timer.c for suspend
+1), add v8timer_clr_pnd while clock event shutdown.
+2), disable suspend/resume function in sys_timer while CONFIG_GENERIC_CLOCKEVENTS is defined. 
+7, change key.last_event init value from 0(EVENT_KEY_DOWN) to EVENT_KEY_UP in order to fix power on key wrong status after power on.
+
+14:18 2011-9-8
+VC0882, SV, suspend/resume
+1, 除了partial wake lock, 持有其他wake lock会不会休眠.
+2, freeze process是怎么做的? 
+
+10:09 2011-9-9
+时间管理
+0, 9:50
+
+1, 本日
+1), AE suspend/resume 昨天测试结果. 见"10:11 2011-9-9". 
+
+10:11 2011-9-9
+VC0882, SV, AE suspend/resume 昨天测试结果
+1, fajue #3, 测试368次没有出错. 
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 0, request_suspend_state times is 717, task_freeze_times is 368, rom boot times is 716.
+dvfs: target times is 33289, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 6818, count times is 6818
+
+11:55 2011-9-9
+setprop net.dns1
+
+23:59 2011-9-19
+总结, 文档, 882 arm这部分可以分为三部分或三个角度：开发环境的建立，arm ip的验证和调试手段。这三部分并不是互斥的。
+
+15:07 2011-9-27
+嵌入式, debugger, ide, rvds升级版, arm ds-5 workshop
+1, ds-5是个集成环境，比自己配置eclipse方便很多。现在的环境已经很好用了，调试环境不逊于rvds。
+2, 在不使用jtag情况下，可以很方便的调试linux application。
+3, profiling功能很好用。
+4, 
+
+5, 开mmu之前可以用add-symbol-file vmlinux -0x40000000加载符号表，0xc0000000和0x80000000的差是前者。
+__turn_mmu_on用的是__mmap switch的地址。
+

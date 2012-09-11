@@ -1,0 +1,3027 @@
+﻿
+10:44 2011-4-1
+时间管理
+0, 10:05
+
+1, 本日
+1), 2h: jun讲项目管理。
+2), 上传昨日代码。见"10:20 2011-3-31"4.
+3), 2h 复现wdt reset, 需要确认有无问题。实验wdt reset后用sw reboot能否正常。见"14:32 2011-4-1".
+4), 20' 支持xiaotao使用OMAP3530板子。
+5), 高低温sleep。45度和50度都不死。似乎和温度有关。\todo 等待进一步信息。
+6), 工作总结。见"19:41 2011-4-1". 
+
+14:32 2011-4-1
+VC0882, SV, power, video, gpu使用时死, 续, work around: gpu死后做wdt reset
+1, 加入wdt reset，参考
+2, 想利用timer已有api，发现有点难度。timer代码需要整理
+do_feeddog_test命令加入non block mode用于在系统中实际使用wdt。
+1), timer时钟现在是xclk（26Mhz）修改Appstart.c的VIM_TIMER_Init为26000。
+2), g_systimer_clk无论FPGA还是SV都统一改为KHz为单位。
+3), 删除g_iTimerClk以driver api VIM_TIMER_GetMclk和VIM_TIMER_SetMclk代替。
+4), 修正TIMER_TEST_set_timer_clk单位：MHz改为Hz。
+3, 上传代码
+1), 添加gpu_sv_2dRepeat_exceptionInSram用于测试gpu 2d，同时把异常处理代码放到sram中。另外打开了wdt reset功能。
+2), timer修改（见上面日志）。
+3), L2 cache timing改为0x82：即data ram和tag ram的latency都是3cycles。
+
+4, gpu: dongliang帮忙看了一下。关了cache稳定性提高：跑了100次没有死。但是代码中已经把cmd buffer设为了strongly ordered，需要看代码有无风险，例如没有invalidate tlb。
+
+5, \todo 需要加入reset type和启动type。
+\todo review cache操作函数，反思为什么自己没有想到开cache的问题？
+
+15:42 2011-4-1
+VC0882, SV, power, pmu, VA7882, interrupt, VA7882 charger, plug in, plug out中断问题
+0, plug in中断检测不到是因为VA7882B电池到charger的漏电较大，7882C有很大改善，以后应该没问题。
+plug out中断是因为电容稳压的作用使放电过慢，造成多个中断，去掉电容既可。
+1, wangwenlei邮件""_20110331
+Hi all：
+今天测试发现7882的一个新问题，当插入usb或者充电器后，7882不报任何中断。当拔出usb或者充电器后，7882报出多次plug-in中断，大约有20多次。
+用示波器测量发现：
+在没有usb或者充电器插入的状态下，VCHG电压应该为0V，但现在仍然有3.5V，好像有电压从VBAT串过来了。麻烦weiran帮忙查一下吧。
+在插入usb或者充电器时，VCHG电压明显高过VBAT，但7882没有plug-in中断报出。麻烦zixi帮忙查一下吧。
+Jianjun：
+你那边测试时发现过charger报中断异常的问题吗？
+2, wangwenlei邮件""_20110331
+我用的是sv板和7882B板。
+刚才用7882C板测了一下。电源子板插在主板上，VCHG电压还是3V左右。单独测电源板时，VCHG电压在0.7V左右。
+而用7882B板。电源子板插在主板上，VCHG电压是3V左右。单独测电源板时，VCHG电压在2V以上。
+3, wangwenlei邮件""_20110401
+在weiran和zixi的帮助下，7882 charger plug in报中断异常的问题，在c板上已经解决了。非常感谢weiran和zixi！
+主要原因：
+7882 plug-in中断是靠VCHG和VBAT相比较来判断的，当VCHG高于VBAT报一个plug-in上升沿中断，当VCHG低于VBAT报一个plug-in下降沿中断，。
+VCHG上有一个大电容蓄电，当charger拔出后，放电非常缓慢。而VBAT电压有较大纹波，这就导致在VCHG电压和VBAT相近时，VBAT电压在VCHG电压附近上下震荡，所以报出很多中断。
+现在把大电容去掉，VCHG电压放电就很快了。
+
+17:44 2011-4-1
+VC0882, SV, clkrst, clkswitch, 改为只做bus切频不做ddr切频
+1, ddr device频率访问量关系大，如果ddr访问量一样，频率不同差异较小。
+2, bus是1mw/1Mhz
+
+19:41 2011-4-1
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 查gpu上电问题
+(1), 把四种异常(undef, svc, pabort, dabort)处理移到sram中，发现gpu死的时候60%情况可以打出arm异常，说明此时arm访问sram通路正常。但是也有时无法打出任何异常，可能bus完全死了。
+2), 测试wdt reset：
+(1), 本次测试是在gpu出错使用wdt reset复位系统，看系统能否正确重启。目前实验发现至少10次都正确重启并正常运行。
+但有一次是系统启动到rom boot sd init时再次复位。这个问题比较奇怪，因为rom里面已经关闭了wdt，计划以后打印reset类型，如果再次复现此问题，会追查。
+(2), 为了调用wdt命令方便，整理了部分timer代码。
+3), 修改L2 cache timing改为0x82：即data ram和tag ram的latency都是3cycles。
+这个timing是在android下验证过的，大家如果感觉系统稳定性变差，请恢复panda_init.S实验。
+4), 支持xiaotao使用OMAP3530.
+
+2, 明日工作计划
+1), 分析wdt reset测试数据。
+2), 确认gpu buffer的cache属性有无问题。
+今天guye提到系统关闭cache后gpu稳定性提高，但是代码中已经把cmd buffer单独设为strongly-ordered，需要确认页表修改是否生效。如果没有invalidate tlb，可能有风险。
+
+10:20 2011-4-2
+时间管理
+0, 10:00
+
+1, 本日
+
+10:21 2011-4-2
+VC0882, SV, 问题总结
+1, 高低温需要过idle，AE要用。
+2, halt还是需要反复测试。
+3, sleep恢复到现场对于高低温更有意义。
+
+14:23 2011-4-2
+VC0882, SV, power, video, gpu使用时死, 续, 确认cache, tlb对于gpu有无影响
+1, 今天突然意识到gpu死的是否都只打印了0x7，以为是gpu打印有问题。后来发现可能是0x7ffffffe没打印完就data abort了。所以需要先修改打印信息。
+2, 现在对开cache的gpu: auto_powerOnOff对比出错
+arm死：5。
+gpu idle: 1。
+3, 发现gpu有几个ns的300mv的高频震荡。按理说这么高频的震荡可以被滤掉。如果是地的问题，可能就滤不掉。
+
+14:24 2011-4-2
+VC0882, SV, 思考
+1, 自己的脑子还不是很清楚，VA7882的中断处理srcpnd时没有和mask与一下。这个问题应该上来就提醒修改的。
+
+9:51 2011-4-3
+VC0882, android, AE, power, performance, performance monior, 续, 文档位置
+Performance monitor IC设计文档
+D:\VC1600WCVS\doc\mas\VC0882\DW_AXI\ VC0882_MAS_INTERCONNECT_V0.31.doc的2.4 Performance Monitor
+我写的Linux kernel使用文档，
+\\10.0.12.140\Project\VC0882\sw_design\performance_monitor\VC0882 Android SW Design(performance_monitor).doc
+
+10:12 2011-4-3
+VC0882, SV, power, pmu, mode trans, sleep->fast wakeup, 量产, 高低温: 高低温wdt reset跑死的问题
+1, 在C4的板子上两次都是sleep跑到
+"123456"死了。
+打印6表示跑到查询ddr sdram进入self-refresh成功。
+2, 把异常向量放到sram中，同时需要打印出出错地址，看看是否是发生中断导致的这个问题。
+1), 编译选项: 
+build -m=clkrst,ddr,i2c,padc,pmu,nfc,sd,fat -dram=128M -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 -define=SD0_ONLY=1 -define=VIM_PMU_VA7882_FASTSLEEP_TEST=1 -define=VIM_SYS_HANDLER_IN_SRAM=1 -define=VIM_MMU_CODE_PROTECT=1 -lds=ads_code_protect.lds -sv
+2), 打印异常出错地址。
+
+11:19 2011-4-3
+VC0882, SV, power, video, gpu使用时死, 续
+1, 给arm, core, pmu升压，无变化。
+2, 修改
+1), prefetech abort中查询ddr有无error。
+经过DDRC_CFG1的[13]如果是1, 会给总线会error。其余情况的read和所有的写都不会回复error。
+[14]	rdata_more	1'b0	Read Data Error: If set, indicate somel data is additional l from PHY  
+[13]	rdata_lost	1'b0	Read Data Error: If set, indicate some data are lost from PHY 
+[12]	rdata_error	1'b0	Read Data Error: If set, indicate some data are lost or/and additional  from PHY 
+注：这里的error表示fifo中数据多或少。
+2), 异常向量中打印出地址。
+3), 实际修改
+(1), 异常发生时需要判断是否在sram中运行，如果在sram中运行修改堆栈地址。
+(2), 加入exception handler:
+a, data abort和prefetch abort打印出出错原因。
+而且每次都要判断ddrc有无上述错误。
+b, 运行具体模块自己处理错误。
+(3), 异常处理不能跳过已有的指令，dataabort中处理不正确。
+
+3, gpu新现象
+1), C17, 测试gpu时第一个case造成arm reset（因为用ICE连接，ICE catch了reset异常）。三次都是这样。这和之前的prefetch abort现象不同。
+
+4, 遇到prefech abort，ddrc rdata_lost = 1，但是现场没法恢复，软件已经先跑飞了。
+但是ddr training时也有可能把[14:12]置一，需要ddr training把这个值清0。
+
+5, build -m=mem,clkrst,i2c,de,fat,sd,tools,ddr,gpu,dmac,pmu -dram=128M -define=MMU_FLAT_MAP=1 -define=CACHE_OFF=1 -define=VIM_SYS_HANDLER_IN_SRAM=1 -define=VIM_MMU_CODE_PROTECT=1 -lds=ads_code_protect.lds -sv
+
+6, 出错打印信息：
+GPU: starting executing command buffer!
+prefetch abort lr = 0xDEADBEF2, gpu status = 7FFFFFFF, DDRC_CFG1 = 0
+
+7, 上传代码
+1), add gpu_sv_exceptionInSram_nonCachable make target
+2), add VIM_HAL_PrintNum and VIM_HAL_PrintDigit in Sram.
+3), 修改abort异常，使用sram stack。
+在prefetch abort中打印lr, gpu status, ddrc_cfg1.
+4), VIM_DDR_Init中清rdata more, less, err.
+
+10:24 2011-4-4
+VC0882, SV, power, video, gpu使用时死, 续, 流程review
+1, 现象
+1）prefetch abort: ARM 还活着，可以读register, GPU status 正常，DDR没有FIFO 异常。
+prefetch abort lr = 0xDEADBEF2, gpu status = 7FFFFFFF, DDRC_CFG1 = 0
+但是lr跳转到0xDEADBEF2很奇怪。
+2）ARM reset: 当启动GPU开始工作时，发现ARM 自动reset.
+3) ARM 直接跑飞了，无法通过ICE去monitor.
+
+2, 针对上述现象的修改；
+1), 关闭reorder。DDRC_CFG[16]=0.
+2), reset时，读reset type.
+pmu 0014H	RESET_EVENT
+2'b00:AP power on reset
+2'b01:AP reset from sleep mode to normal mode
+2'b10:AP software reset active
+2'b11:AP watchdog reset active
+3), mmu页表属性改为：non-cachable, non-bufferable.
+4), 降频：arm 100, bus 100, ddr 96, gpu 100. gong'anmin提供ddr。
+
+3, 总体流程
+1), 上电c class
+(1), 上电前：先设置gpio input, 打开上下拉。
+2), while
+gpu 上电。
+delay 3秒
+gpu reset。
+run
+gpu 下电。
+delay 2秒。
+
+4, gpu测试时
+1), VIM_PMU_Power时不打开所有的c类电源。gpu电源在gpu使用时打开。
+gpio默认值对于模块不使用是安全的。
+2), 所有外设的初始化都不做。
+3), gpu编译选型改为：
+build -m=mem,clkrst,i2c,fat,tools,ddr,gpu,pmu -dram=128M -define=MMU_FLAT_MAP=1 -define=CACHE_OFF=1 -sv
+4), 修改页表为non-cachable, non-bufferable.
+5), 脚本中不执行VIM_PMU_Power。
+6), clkrst内部使用gpu clock把gpu reset送过去。
+
+5, 讨论
+1), gpu clock和reset默认打开，有无问题？
+clkrst设计上：gpu reset放开后，bus才放开。bus正确后arm才能运行（取指）。
+2), isolation cell置0,置1的设置没有仿真，有无问题？
+3), 如果担心gpu状态异常，可以把gpu的max outstanding=0，避免对系统的影响。
+4), isolation cell本身有无问题？（优先级低）。
+5), 讨论（yang）
+(0), (18:21 2011-4-6)担心isolation开关有毛刺，所以想把iso和clk顺序颠倒。
+以下以"----"表示修改。
+为什么怀疑isolation？dr.yang一直怀疑，似乎没什么证据。
+main axi -- gpu_aclk -- isolation -- mclk, power domain关系？
+"18:21 2011-4-6"end.
+(1), power on状态。
+iso diable, gpu clock enable(aclk, mclk), gpu reset disassert.
+gpu clock switch.
+voltage scale: arm, core, gpu. 
+----------------------mclk disable-------------------------
+----------------------aclk disable-------------------------
+(2), gpu sw reset assert.
+(3), gpu power on. delay 5s(等待电源稳定) + 32最低的gpu clock(aclk, mclk, pclk) cycles.
+----------------------mclk enable-------------------------
+----------------------aclk enable-------------------------
+-------------delay 1s. (32cycles最慢clock)----------------
+----------------------aclk disable------------------------
+----------------------mclk disable------------------------
+(4), iso enable.
+----------------------mclk enable-------------------------
+----------------------aclk enable-------------------------
+-------------delay 1s. (32cycles最慢clock)----------------
+(5), gpu sw reset disassert.
+(6), wait 1s(gpu128cycle)
+(7), wait gpu idle.
+(8), gpu init.
+(9), gpu run and wait gpu done.
+(10), gpu sw reset assert. delay 1s(wait reset valid).
+----------------------aclk disable------------------------
+----------------------mclk disable------------------------
+(11), iso disable.
+----------------------mclk enable-------------------------
+(12), wait 1s(pmu isolation valid 1-2 cycles)
+isolation cell和reset前后顺序存疑。
+(13), gpu power down.
+(14), delay 5s(等待掉电). 
+----------------------mclk disable------------------------
+goto (2).
+
+6, (16:16 2011-4-4)实验后发现r1是0xDEADBEEF. 
+原来lr是0xDEADBEF2。
+
+7, 下午开会讨论
+1), guye: gpu所需数据都直接写入memory。
+2), huangwei: 
+(1), arm write gpu buffer后memory_barrier.
+(2), check page table.
+3), wangwenlei:
+(1), check phys address
+(2), memset cmd buffer & other buffers
+
+8, 上传代码
+1), add gpu_sv_noDeSd_exceptionInSram_ncnb for gpu power on test.
+(1), 系统启动时不打开所有的class C。
+(2), 修改gpu上电流程。
+2), add volitale in ReadReg, WriteReg, Poke and ReadMem.	
+3), 修改mmu页表。
+
+9, 需要我确认的
+1), 关闭ddrc reorder。
+关闭reorder后发现arm直接死了。但是ddrc脚本里面没有关闭reorder，关闭后实验见10-3).
+
+2), 为什么AQCmdBufferAddrRegAddrs不需要改为ddr的0x8xxxxxxx开始的地址？
+因为gpu硬件指定了使用高地址，所以不需要软件处理：
+0x0654	AQCmdBufferAddr	DC	[31]	TYPE	1'b0	Programmers should always write 0 to this bit
+gpu使用高地址要配置的寄存器：
+// for 高位地址访问问题
+VIM_HAL_WRITE_REG32(GPU_BASE+0x418, 0x80000000);
+VIM_HAL_WRITE_REG32(GPU_BASE+0x41c, 0x80000000);
+VIM_HAL_WRITE_REG32(GPU_BASE+0x420, 0x80000000);
+VIM_HAL_WRITE_REG32(GPU_BASE+0x424, 0x80000000);
+VIM_HAL_WRITE_REG32(GPU_BASE+0x428, 0x80000000);
+
+10, 继续实验, 看看谁写了deadbeef到r1
+1), 发现仍然是死在同样位置：
+R0	0x00F28058
+R1	0xDEADBEEF
+R2	0x0033F6D1
+R3	0x00F280A8
+R4	0x00313D70
+R5	0x00F28058
+R6	0xDEADBEEF
+R7	0x01200000
+R8	0x7FFFFFFF
+R9	0x00000000
+R10	0x43F00000
+R11	0x00F2857C
+R12	0x00000001
+SP	0x20000800
+LR	0xDEADBEF2
+PC	0x2000000C
+CPSR	nzCvq_DISABLED_ge3ge2ge1ge0_eAIfjtAbort
+
+lr_svc = 0x0033E3A9
+
+2), 另一次：
+R0	0x00F28058
+R1	0xDEADBEEF
+R2	0x0033F6D1
+R3	0x00F280A8
+R4	0x00313D70
+R5	0x00F28058
+R6	0xDEADBEEF
+R7	0x01200000
+R8	0x7FFFFFFF
+R9	0x00000000
+R10	0x43F00000
+R11	0x00F2857C
+R12	0x00000001
+SP	0x20000800
+LR	0xDEADBEF2
+PC	0x20000378
+CPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAIfjtAbort
+USR
+IRQ
+FIQ
+SVC
+SP	0x00F28034
+LR	0x0033E3A9
+SPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+ABT
+UND
+MON
+
+3), 关闭reorder
+R0	0x00F28058
+R1	0xDEADBEEF
+R2	0x0033F6D1
+R3	0x00F280A8
+R4	0x00313D70
+R5	0x00F28058
+R6	0xDEADBEEF
+R7	0x01200000
+R8	0x7FFFFFFF
+R9	0x00000000
+R10	0x43F00000
+R11	0x00F2857C
+R12	0x00000001
+SP	0x20000800
+LR	0xDEADBEF2
+PC	0x20000378
+CPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAIfjtAbort
+USR
+IRQ
+FIQ
+SVC
+ABT
+SP	0x20000800
+LR	0xDEADBEF2
+SPSR	nzCvq_DISABLED_ge3ge2ge1ge0_eAifjTSVC
+UND
+MON
+
+13:45 2011-4-4
+VC0882, 服务器
+1, 服务器映射硬盘中毒，原来的思路是杀毒，效果不好。今天我突然想到把samba根目录设为只读，这样病毒就没法写入了。
+
+2, zhangjian2icp邮件"关注101服务器中毒"
+hi, all
+
+101服务器share目录下一直有病毒写入垃圾文件，占用了几个G的空间。
+我现在把share目录改为只读属性。不影响大家在个人目录下读写。
+如果有问题请联系我。谢谢。
+
+zhangjian
+
+18:52 2011-4-4
+时间管理
+0, 10:10
+
+1, 本日
+1), gpu调试
+2), 总结。
+
+19:00 2011-4-4
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), review gpu流程，review后gpu流程如下：
+(1), power on状态。
+iso diable, gpu clock enable(aclk, mclk), gpu reset disassert.
+gpu clock switch.
+voltage scale: arm, core, gpu. 
+(2), gpu sw reset assert.
+(3), gpu power on. delay 5s(等待电源稳定) + 32最低的gpu clock(aclk, mclk, pclk) cycles.
+(4), iso enable.
+(5), gpu sw reset disassert.
+(6), wait 1s(gpu128cycle)
+(7), wait gpu idle.
+(8), gpu init.
+(9), gpu run and wait gpu done.
+(10), gpu sw reset assert. delay 1s(wait reset valid).
+(11), iso disable.
+(12), wait 1s(pmu isolation valid 1-2 cycles)
+isolation cell和reset前后顺序存疑。
+(13), gpu power down.
+(14), delay 5s(等待掉电). 
+goto (2).
+
+2), 通过review大家建议，做如下实验，但是现象没有明显改变
+(1), 所有memory都设为ncnb：其中对于ddr memory, sram为了避免非对齐访问，都设为normal ncnb, 寄存器区域设为strongly-ordered.
+(2), 关闭ddrc reorder功能。
+
+3), 今天发现每次出错时，只要打印prefetch abort，不仅lr固定，其余寄存器也固定。同时注意到r1正是0xDEADBEEF这个值。分析这个数据，认为是某个master（gpu or arm）把堆栈写坏后造成软件出错。
+R0	0x00F28058
+R1	0xDEADBEEF
+R2	0x0033F6D1
+R3	0x00F280A8
+R4	0x00313D70
+R5	0x00F28058
+R6	0xDEADBEEF
+R7	0x01200000
+R8	0x7FFFFFFF
+R9	0x00000000
+R10	0x43F00000
+R11	0x00F2857C
+R12	0x00000001
+SP	0x20000800
+LR	0xDEADBEF2
+PC	0x20000378
+CPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAIfjtAbort
+USR
+IRQ
+FIQ
+SVC
+ABT
+SP	0x20000800
+LR	0xDEADBEF2
+SPSR	nzCvq_DISABLED_ge3ge2ge1ge0_eAifjTSVC
+UND
+MON
+
+2, 明日工作计划
+1), 继续分析prefetch原因，看看能否确认是arm还是gpu写坏的堆栈。
+2), 降频实验, arm, bus, ddrc, gpu都在96MHz/100Mhz.
+
+10:36 2011-4-6
+时间管理
+0, 10:05
+
+1, 本日
+1), 20' 讨论gpu.
+2), gpu上电实验.
+3), 总结。见"22:09 2011-4-6". 
+
+10:39 2011-4-6
+VC0882, SV, power, video, gpu使用时死, 续, work around: gpu死后做wdt reset, 多个板子确认实验
+1, 今天开会讨论gpu问题，现在需要首先确认gpu上电后连续使用有无问题。
+0), 实验使用VA7882C, 串不串电阻都可以。
+1), wenlei实验gpu上电后连续使用有无问题。
+2), zhangjian实验gpu死后能否wdt reset正常
+(0), 找beihua借板子。
+(1), 需要知道fail概率，最差系统可用时间（系统第一次上电到gpu ready的时间），最多会fail几次。
+(2), zhangjian提供gpu使用文档。wenlei review该文档。
+(3), 如果测试通过，close issue: http://10.0.2.208/mantis/view.php?id=10736
+3), guye看代码，看看前天实验的case为什么不对。
+
+2, 我的工作计划用脚本写
+1), sw reboot和power on reset有差异。最好是sw reset和7882的alarm开机都使用。
+\todo 7882中有没有加入开机类型的检测？
+(12:39 2011-4-6)7882 alarm开机和sw_reboot需要交替使用。a a s s a ...，这样可以测试到连续的7882开机和连续的sw reboot，7882和sw交替（2种），共四种情况。
+现在的sleep->wakeup是否需要？感觉没必要。最好是直接的sw_reboot和7882 alarm开机。
+
+3, 先测试原有的gpu_sv_2dRepeat_exceptionInSram：上电->gpu 2d->下电->sleep->wakeup->sw_reboot.
+arm_bus_ddr_gpu: 750_333_333_600. 
+1), c4板子遇到一次fast wakeup fail：停在打印信息"jump到ddr地址"之后。
+2), 似乎开了cache不容易死。
+下午需要：
+(0), 实验开关cache对于gpu case的影响。
+(1), 加入7882 alarm开机。
+(2), 获得比较准确的"最差系统可用时间"：
+a, 整理打印信息，
+b, 减小bin的大小。
+
+4, (16:22 2011-4-6)上传代码
+1), VIM_GPU_2D_REPEAT_TEST中改为class c power down + sw_reset. 不使用原有的sleep->wakeup->reboot流程。
+2), 修改gpu默认频率为600Mhz(VIM_CLKRST_GpuClock()).
+3), VIM_PMU_GpuStatusCheck不在VIM_GPU_POWER_ON_TEST宏定义里面。
+
+5, 加入7882 alarm开机。
+1), 工作
+(1), 加入7882 alarm命令("setalarm_addon", PMIC_TEST_SetRtcAlarmAddon)：设置1s后alarm关机，并调用关机命令。
+(2), 加入系统开关机总命令(rebootsys)，目前支持alarm和sw_reset两种方式。
+(3), 实现alarm alarm sw_reset sw_reset alarm这种关机顺序。
+这个功能要怎么实现？
+当然可以直接加一个命令，在rtc寄存器里面配置变量保存测试次数，如果次数%4 == 0 or 1做alarm power on, 次数%4 == 2 or 3做sw reset.
+但是感觉这样用很傻，完全没有灵活性可言。但是要想更灵活也没有思路。
+2), 除了1)-(3)外，加入后测试通过，上传代码，commit log见1)-(1),(2).
+3), (20:50 2011-4-6)加入1)-(3). 希望10分钟完成。
+(1), 忘了check condition命令没有支持读写pmic寄存器。10分钟没法完成。
+(2), 用了1个小时才完成原来以为10分钟能完成的工作，反思。
+
+6, 今天其他gpu实验
+1), wenlei实验3个板子，一个板子在gpu=600MHz跑死（gpu busy）。后来把两板子都在500MHz跑，跑了一个下午没有死。
+guye当时测试570MHz@1.1v, 675MHz@1.2v，今天跑死的板子可能是电压问题。
+
+11:18 2011-4-6
+VC0882, SV, training, 电路培训
+希望能结合是实例讲解。
+1, 电源芯片介绍。
+2, 常见器件电容（滤波电容，去耦电容），电感，nmos/pmos的作用。
+3, 电源相关问题：例如SSO问题。
+4, 电源质量好坏的评价：例如纹波的对系统的影响。
+5, 信号质量分析，如何判断对系统有无影响？
+1), setup time, hold time.
+2), 上升沿下降沿斜率对于系统的影响。
+6, 温度的影响
+1), 高温和setup time。
+2), 低温和hold time。
+
+22:09 2011-4-6
+VC0882, SV, 工作总结
+1, 今日工作总结
+今天继续调试gpu上电问题：分别讨论了work around和isolation风险两个问题。
+1), 上午和dr.yang, beizhan, guye, zixi开会讨论了gpu如何workaround。
+我这边需要证明gpu上电跑死后用watchdog reset后系统可以正确重新启动。同时给出gpu跑死的概率，最坏情况下系统启动时间。最后给出AE gpu使用文档。
+(1), gpu fail概率：约为1/15。
+(2), 最坏情况下系统启动时间：由于目前测试了4个gpu 2d case，打包文件较大，时间偏长，下一步会对系统进行剪裁，得到更准确的时间。
+(3), 调试过程想到目前利用software reboot测试gpu问题不够全面，需要加入power on测试。目前正在修改代码，90%代码调试通过。
+
+2), 考虑到gpu isolation风险，下午和dr.yang，guye, zixi讨论的流程如下：
+担心isolation开关有毛刺，所以想把iso和clk顺序颠倒。以下以"----"表示修改。
+(1), power on状态。
+iso diable, gpu clock enable(aclk, mclk), gpu reset disassert.
+gpu clock switch.
+voltage scale: arm, core, gpu. 
+----------------------mclk disable-------------------------
+----------------------aclk disable-------------------------
+
+(2), gpu sw reset assert.
+(3), gpu power on. delay 5s(等待电源稳定) + 32最低的gpu clock(aclk, mclk, pclk) cycles.
+----------------------mclk enable-------------------------
+----------------------aclk enable-------------------------
+-------------delay 1s. (32cycles最慢clock)----------------
+----------------------aclk disable------------------------
+----------------------mclk disable------------------------
+(4), iso enable.
+----------------------mclk enable-------------------------
+----------------------aclk enable-------------------------
+-------------delay 1s. (32cycles最慢clock)----------------
+(5), gpu sw reset disassert.
+(6), wait 1s(gpu128cycle)
+(7), wait gpu idle.
+(8), gpu init.
+(9), gpu run and wait gpu done.
+(10), gpu sw reset assert. delay 1s(wait reset valid).
+----------------------aclk disable------------------------
+----------------------mclk disable------------------------
+(11), iso disable.
+----------------------mclk enable-------------------------
+(12), wait 1s(pmu isolation valid 1-2 cycles)
+isolation cell和reset前后顺序存疑。
+(13), gpu power down.
+(14), delay 5s(等待掉电). 
+----------------------mclk disable------------------------
+goto (2).
+
+2, 明日工作计划
+1), 交替测试alarm power on和sw reboot，验证gpu上电能否work around。具体测试顺序为：
+alarm power on -> alarm power on -> sw reboot -> sw reboot -> alarm power on 
+2), 测试今天更新的gpu流程。
+
+3, 存在问题
+1), 高低温sleep还没有时间debug。
+2), 高低温中没有加入pmu idle的测试，需要和fandong讨论（周五开会）。
+
+00:12 2011-4-7
+VC0882, 工作计划
+1, aiguo: 
+1), 882 各模块icp owner重新讲一遍，做项目后理解更深刻 。
+2) , 讨论我技术发展规划。
+2, openocd计划本周和下周调通。如果u-boot gpu是我做，正好可以用上。
+3, 加强和zhaoyuan team的交流。aiguo对我有这个期望。
+
+10:01 2011-4-7
+VC0882, SV, IC training, fpga验证环境
+asic和fpga差异：padc, clk.
+dcm可以保证输入和输出有特定相位关系，pll不保证。
+对于v5: 一个slice: 4lut, 4ff.
+查一下882 fpga里面什么时候调过io驱动能力。
+fpga深度约束：如果做floor plan, 利用率可以更高。统计得到的利用率偏高：一个slice里面用了一个lut就算是用了。
+simplify综合效果比ise好，综合后通过edif网表给后者。
+总线信号较多，使用tdm(时分复用)压缩。需要两倍时钟。
+
+12:09 2011-4-7
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide), 续, 为了实验openocd对VC0882支持情况实验openocd最新版本
+1, 如果提示找不到libtool，安装既可"sudo apt-get install libtool". 
+安装后运行bootstrap，运行出错，但是configure已经生成，应该不影响编译：
+[zhangjian@icp-desktop openocd-becfbea]$ git submodule init
+fatal: Not a git repository (or any of the parent directories): .git
+2, configure: error: jimtcl not found, run git submodule init and git submodule update.
+3, windows下可以访问，198 Linux服务器不行，感觉是网关的问题，没搞定，做了如下实验。
+1), [zhangjian@icp-desktop openocd]$ route 
+Kernel IP routing table
+Destination     Gateway         Genmask         Flags Metric Ref    Use Iface
+10.0.12.0       *               255.255.254.0   U     1      0        0 eth0
+link-local      *               255.255.0.0     U     1000   0        0 eth0
+default         10.0.12.1       0.0.0.0         UG    0      0        0 eth0
+2), [zhangjian@icp-desktop openocd]$ sudo route add default gw 10.0.0.3
+[sudo] password for zhangjian: 
+SIOCADDRT: No such process
+3), sudo route del default
+4, 后来在pc下用"http://repo.or.cz/r/openocd.git/"得到了一个".git"目录，复制到198服务器，bootstrap可以通过。
+但是 ./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD_snapshot_20110407 --enable-maintainer-mode
+还是提示同样信息，关闭jimtcl实验：
+./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD_snapshot_20110407 --enable-maintainer-mode --disable-internal-jimtcl
+1), 如"19:14 2010-1-25"文档所述，需要安装libusb和libftdi
+(1), libusb: 
+./configure --prefix=/home/zhangjian/bin/libusb_0_1_12; make; make install
+ PATH=$PATH:/home/zhangjian/bin/libusb_0_1_12/bin/
+(2), libftdi:
+./configure --prefix=/home/zhangjian/bin/libftdi_0_18; make; make install
+ PATH=$PATH:/home/zhangjian/bin/libftdi_0_18/bin/
+2), 
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libftdi_0_18/lib/libftdi.so
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libftdi_0_18/lib/libftdi.so.1
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libftdi_0_18/lib/libftdi.so.1.18.0
+[zhangjian@icp-desktop lib]$ sudo ln -s /home/zhangjian/bin/libusb_0_1_12/lib/li
+busb.so  
+5, 即使disable internal jimtcl也不行。
+从http://repo.or.cz/w/jimtcl.git下载最新代码放到openocd的jimtcl目录，不需要disable internal jim，然后就可以编译过了：
+./configure --enable-ft2232_libftdi --prefix=/home/bin/OpenOCD_snapshot_20110407 --enable-maintainer-mode
+=== configuring in jimtcl (/opt/share/zhangjian/development/openocd/openocd-becfbea/jimtcl)
+configure: running /bin/sh ./configure.gnu --disable-option-checking '--prefix=/home/bin/OpenOCD_snapshot_20110407'  '--enable-ft2232_libftdi' '--enable-maintainer-mode' --cache-file=/dev/null --srcdir=.
+6, (19:21 2011-4-7)明天实验openocd调试VC0882. 
+7, (16:22 2011-4-8)为了实验方便，在fc10虚拟机里面重新编译了openocd。
+
+14:13 2011-4-7
+VC0882, SV, sync up
+1, 创维电视: hdmi input to sensor; display to hdmi or panel.
+wenlei.
+2, 微软项目: 做双sensor(598+882). 担心dongliang没有时间。shuyu, fandong做。
+3, 机台的软件尽量做灵活，尽量不去现场支持。
+4, 东芝片子有个pin需要接地，其它厂商这个pin是nc.
+5, dvfs: gong an min, zhangjian.  zhangjian发信要温度，电压，freq.c
+
+17:41 2011-4-7
+VC0882, SV, 882 pad短暂试用
+1, 发热量大，可以用于暖手。
+2, 屏幕闪：astro中安装软件和复制时屏幕上方闪。
+3, 实验实况足球，在我的arm11 MID（TCC8901）上没法运行。882 pad上可以运行。
+基本流畅，有时屏幕会闪。由于没有多点触控，游戏体验不好。
+4, 再次开机后没有声音了，不知道怎么设置。
+
+18:47 2011-4-7
+VC0882, SV, power, video, gpu使用时死, 续, work around: gpu死后做wdt reset; 实验昨天讨论的新方法：交换clock和isolation顺序
+1, 测试昨天写的sw reboot和alarm power on交替程序
+1), 运行中遇到一次prefetch abort，出错地址不是0xdeadbef2:
+prefetch abort lr = 0xF010F8, gpu status = 7FFFFFFF, DDRC_CFG1 = 0
+2), 上传代码
+修改check_script_condition函数，支持访问arm memory或PMIC I2C通道上的设备。同时加入-ne条件，表示不相等为正确。
+Usage: 
+//检查0x6005027c是否为1, ==1表示正确。
+check_script_condition 0x6005027c 1 
+//检查PMIC I2C通道的地址为0x16的设备的0xd0地址是否不为1, !=1表示正确。
+check_script_condition 0xd0 1 -mode 1 -slave 0x16 -ne
+
+2, 根据昨日讨论修改gpu上下电流程.
+
+19:21 2011-4-7
+时间管理
+0, 9:47
+
+1, 本日
+1), 上午: IC training, fpga原型验证.
+2), 下午1h: VC0882例会.
+3), 1h 试用882 pad. 
+4), 改进check_script_condition：支持读取pmic寄存器，支持不等和相等两个条件.
+5), 测试sw reboot和alarm power on混合重启.
+6), 总结. 见"19:24 2011-4-7". 
+
+19:24 2011-4-7
+VC0882, SV, 工作总结
+1, 今日工作总结
+今天发现gpu死的死后并不一定是deadbeef, 详见3). 
+1), IC training, fpga原型验证.
+2), 试用882 pad. 
+3), 修改代码交替测试alarm power on和sw reboot，
+(1), 具体测试顺序为：
+alarm power on -> alarm power on -> sw reboot -> sw reboot -> alarm power on 
+(2), 今天测试中又一次遇到prefetch abort, 这次lr并不是之前常见的0xdeadbef2, 而是:
+prefetch abort lr = 0xF010F8, gpu status = 7FFFFFFF, DDRC_CFG1 = 0
+(3), 目前测试中, 9次是power on后gpu 跑死, 4次是software reset后gpu跑死. gpu跑死 wdt reset后可以正确运行gpu. 
+
+2, 次日工作计划
+1), 测试昨天更新的gpu流程。
+2), 高低温测试程序把异常向量放在sram中, 看看是否对于分析sleep问题有帮助.
+
+3, 存在的问题
+1), dr.yang说AE不接受现有的gpu work around流程. 我负责的gpu work around文档是否暂时不写? 
+
+10:16 2011-4-8
+时间管理
+0, 9:55
+
+1, 本日
+-1), 之前已经完成但是没有记录的事情:
+(1), 给beizhan发OMAP3530板子资料。<DONE: 板子已购买>
+(2), 发板级培训需求。见"11:18 2011-4-6". 
+(3), 合并halt和sleep代码. 直接把halt和sleep代码放到sram，参照ddr_sram.c
+1), 实验新gpu流程, 流程见"10:24 2011-4-4"5. 
+2), 高低温讨论, power部分新增测试内容。见"15:36 2011-4-8". 
+3), 高低温测试程序把异常向量放在sram中, 看看是否对于分析sleep问题有帮助.
+4), gpu新的work around。见"12:30 2011-4-8"2.
+
+12:30 2011-4-8
+VC0882, SV, power, video, gpu使用时死, 续, 实验昨天讨论的新方法：交换clock和isolation顺序
+1, 用新流程后
+一共四块板子，产品板C4, C9, C11, SV7.
+1), c4, c9没有好转, 还是会timeout, 但是没有死. 
+连接ICE测试的SV7, 运行了96次出现timeout，也没有死。
+目前发现只要出错后, 后面测试也没法通过。
+2), 会继续实验会不会死. 目前四个板子都没有死. 
+后来实验两小时，发现四个板子有一个板子会死。
+
+2, (20:51 2011-4-8)
+在gpu和vcodec开电后, 通过software reset复位整个PSO域. 这样gpu和vcodec不论之前的上电或复位有什么问题，通过全局的PSO复位，也不会有问题。
+对于sleep->wakeup, 也可以在wakeup后，做software reset，因为此时pmu boot_flag_sw仍然有效，rom boot仍然会做wakeup流程，所以没有问题。
+
+3, 针对上电流程做试验。（如果搜索到watchdog说明gpu跑死，且通过wdt reset重新运行）。
+1), C20: 不用sw reset整个PSO时15分钟内死两次。
+PC test6, log D:\user\wangwenlei\putty-com4-20110408.log
+测试1小时。
+2), C9: 不用sw reset整个PSO时20分钟内死三次。
+测试36分钟。
+PC test11, log E:\software\putty\putty_20110408_230620.log
+3), C18, C17
+PC test7. putty-20110408_224119.log, putty-20110408_224205.log.
+测试40分钟。
+4), C11。已测试2小时41分。
+
+4, 上传代码。
+1), add autotest_product_exceptionInSram看看高低温中sleep问题能否打印出更多信息。 
+2), bootscript.c的VIM_GPU_2D_REPEAT_TEST宏里面加入repeat test使用方法。
+3), VIM_PMU_PowerOnGpu和VIM_PMU_PowerOnVcodec中如果isolation已经打开说明gpu和vcodec已经随PSO一起复位，不需要再做上电流程。
+4), 修改do_pmu_CheckScriptCondition，如果符合condition且定义了VIM_GPU_2D_REPEAT_TEST且0xd3==1, 会进行gpu上电问题work around：gpu，vcodec上电后做software reset，复位整个PSO域，这样gpu和vcodec会随着PSO复位正确复位。
+
+5, 发信
+1), 晚上继续讨论gpu问题。发现开关isolation可能会导致毛刺，毛刺可能产生错误的总线行为。另外由于gpu aclk也在gpu电源域，所以gate gpu aclk，没法避免isolation毛刺（vcodec是可以的）。
+经过讨论，有一个新的work around方法，目前测试未发现问题（测试情况附后）。
+work around方法：系统启动或wakeup后，给gpu和vcodec做上电流程，然后调用software reboot复位整个PSO域，不管gpu上电引入了什么问题，pso reset后都应该没问题了。详见下图（D:\work\VC0882\pmu_power\gpu_power_on_work_around.vsd）。
+和之前通过watch reset work around的差异是，wdt rst会复位pmu中boot_flag_sw（该寄存器指示一级rom boot走power on流程还是wakeup流程），sw rst不会复位boot_flag_sw。
+
+目前使用五个AE板测试，测试前用C20和C9测试前复现了gpu上电死机问题，最长的板子已经测试将近4个小时无问题。已正确测试时间和log文件如下；
+1), C20: PC test6, log D:\user\wangwenlei\putty-com4-20110408.log
+已测试2小时15分。
+2), C9: PC test11, log E:\software\putty\putty_20110408_230620.log
+测试1小时42分钟。
+3), C18, C17 PC test7. putty-20110408_224119.log, putty-20110408_224205.log.
+已测试1小时52分。
+4), C11。已测试3小时47分。
+
+2), 中午实验中，四个板子中还是有一个板子会出现arm死的现象，其余三个板子只是busy，程序没有跑死。
+
+6, (11:54 2011-4-11)
+从周五晚到周一，两天时间的实验未发现问题：
+5个板子(有一个板子中间暂停过测试)都没有出现arm跑死watch reset或gpu跑死(gpu持续busy)的问题。
+(12:25 2011-4-11)\todo 反思。又犯了表达不清楚的毛病。发信时没有说明sleep还没有测试。结果chenweimin还以为sleep也可以了。
+
+15:36 2011-4-8
+VC0882, SV, 高低温, 筛片, pmu, VA7882
+1, 下午开会review高低温. power部分变动
+1), 加入idle, halt测试. idle是现成的, 调用时注意保存现场就可以. 
+halt流程还需要完善.
+2), 使用硬件I2C调整模块电压. 封装易用的调压函数. 
+3), 7882已有测试是rtc, pwm. 其它测试暂时不加入882高低温. 筛片因为是筛882, 所以也不考虑7882的测试. 
+
+23:44 2011-4-8
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 继续debug gpu上电问题，详见附件。
+(1), 之前dr.yang，zixi，guye给出的用gpu aclk避免isolation风险的方法没有效果。
+(2), gpu新的work around流程，目前看将近四个小时没有死。
+2), 高低温讨论, power部分新增测试内容。见"15:36 2011-4-8". 
+3), 高低温测试程序把异常向量放在sram中, 看看是否对于分析sleep问题有帮助.
+
+2, 次日工作计划
+1), 改进halt流程：halt中需要做cpu, bus切频，ddrphy可能需要进入low power mode（待讨论）。
+2), 提供今天讨论的其余高低温所需api。
+
+3, 存在的问题
+1), 目前panda_os wakeup后没法进行gpu测试。需要修改环境才可以，预计会增加两天的工作量。
+不测试wakeup后gpu有无问题，没法保证今天讨论的work around方法完全可用。
+
+9:48 2011-4-11
+VC0882, SV, 例会(sync up)
+1, driver spec. pmu driver spec是我写。pmic给wenlei写。
+2, gpu power on未发现问题。需要实验sleep.
+由于gpu问题可能就可以解决，高低温pmu halt暂时不做。
+3, zhaoyuan要求支持sleep. 希望明天下去。
+
+11:44 2011-4-11
+时间管理
+0, 9:36
+
+1, 本日
+1), ICP sync up, 见"9:48 2011-4-11".
+2), gpu sync up. 见"11:46 2011-4-11".
+3), 发gpu实验进展。见"12:30 2011-4-8"6.
+4), 2h 听agilent逻分讲座。见"12:01 2011-4-11".
+5), 给fandong 高低温pmu api。
+6), 总结. 见"18:58 2011-4-11".
+
+11:46 2011-4-11
+VC0882, SV, gpu sync up
+0, dr.yang, fengbeizhan, guye, wenlei, zhangjian
+现在gpu问题有进展，一方面需要确认是否是isolation cell的问题；另一方面需要实验sleep有无问题。
+1, zhangjian做gpu sleep流程。
+2, wenlei实验单独开关isolation cell看有无问题。
+3, guye：
+1), gpu问题总结。
+2), 找ICV仿真三个valid(arvalid, awvalid, wvalid)信号有毛刺的情况。
+3), pt报timing。确认有毛刺。
+
+12:01 2011-4-11
+VC0882, SV, memory, ddr3, 设备: 逻辑分析仪
+1, fengbeizhan转发邮件: wei-guo_cheng@agilent.com2wanshuiming@vimicro.com邮件"安捷伦最新DDR3测试方案介绍 - 逻辑分析仪"_20110407_1535
+万经理，您好：
+安捷伦刚刚推出了世界上速度最快的逻辑分析仪，主要针对DDR3这类典型应用。资料请
+参见附件。
+下周一下午（2:30-4:30）我请工厂的专家专程来中星微给大家做一次介绍，除了最新
+的产品，还会介绍DDR逻辑分析方面的技术进展，并做离线演示。
+感谢您帮忙安排。欢迎感兴趣的工程师来一起讨论。
+
+12:30 2011-4-11
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide), 续, 为了实验openocd对VC0882支持情况实验openocd最新版本, 续
+1, 阅读openocd脚本和代码。
+发现omap4的脚本指定了dbgbase(似乎是cortex-a coresight dbg register)，注释说因为读到的base不对，所以需要从外面指定。
+\todo 看openocd如何从romtable中读到base。
+搜了一下代码，src/target/target.c里面有"-dbgbase"，这个参数。看来这里是入口。
+jim tcl里面的target configure, target create都在该文件定义。
+
+16:20 2011-4-11
+VC0882, SV, beizhan希望我讲一次VC0882系统, \todo整理其它文档; 板级调试总结
+1, 从模块角度需要了解系统哪些东西？
+也就是需要了解系统的编程模型。
+1), 物理连接关系。bus: 内部：axi, apb；外部：I2C, sd bus等等。
+一个模块通常会连接AXI（访问系统memory，可能通过X2X异步桥连接到系统总线）和APB bus（配置寄存器）。
+和882外部设备的连接。
+2), clock关系。模块有几个时钟域？aclk，mclk，pclk。
+3), 电源。模块在系统哪个电源域？是PMIC的哪类电源（A, B, C）？
+电源涉及到isolation和level shifter。
+
+17:04 2011-4-11
+VC0882, SV, 未发信
+提醒大家先更新后提交
+CVS对于XML文件（.cproject, .cdtproject和.project）merge支持的不好，可能得不到正确merge结果。
+大家如果添加或修改make target建议先更新后修改。
+如果已经修改，最好手工merge。
+
+18:58 2011-4-11
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), gpu sync. 分配了后续工作。
+2), 听agilent逻分讲座。
+3), 给fandong 高低温pmu api。
+
+2, 次日工作计划
+1), 支持AE bianrongguang调试sleep流程。
+2), 继续gpu测试：完善882 sleep->wakeup流程，目的是wakeup可以进行gpu测试。（预计需要两天）。
+
+12:59 2011-4-12
+时间管理
+0, 10:03
+
+1, 本日
+1), 20' 15:53- 支持fandong autotest pmu idle。见"16:01 2011-4-12". 
+2), 1.5h 支持AE bianrongguang调试sleep流程。见"13:00 2011-4-12". 
+3), 继续gpu测试：完善882 sleep->wakeup流程，目的是wakeup可以进行gpu测试。（预计需要两天）。
+
+13:00 2011-4-12
+VC0882, SV, power, pmu, sleep->wakeup, AE bianrongguang调试sleep流程
+1, 今天遇到的问题都是pmu info配置问题。
+1), 现象：唤醒后，rom bootloader打印到0x80e(fast wakeup start)。
+原因：clock_switch = 1。
+clock_switch = 0, 表示切频。AE设为了1，所以ddrc的时钟没有配置正确。
+2), ddrc_cfg[9] = 1表示ddrc做bypass init。
+
+2, 另外bianrongguang需要我提供sleep->wakeup中，保存和恢复arm寄存器的函数。
+参"arch/arm/mach-omap2/sleep34xx.S".
+
+16:01 2011-4-12
+VC0882, SV, 高低温/筛片, autotest, power, pmu, mode trans, idle, 支持fandong调试idle
+1, fandong的autotest pmu idle后没法做autovdec，fat ls也不行。
+autodec打印信息：
+AASP SD0:/>autovdec
+[AUTO_TEST_MODULE]->do_autovdectest()
+Please input timer Period times(Int)/[10]1
+[41m[37m[MMU   LOG][0m	VIM_MMU_POOL_LARGE  MAX available =244993288
+[41m[37m[MMU   LOG][0m	VIM_MMU_POOL_SMALL  MAX available =884632
+available memory is e9a4d08
+MED_DE_Open
+DE_Open
+
+2, 连上ICE看，发现运行autovdec后，在系统调度TCT_Schedule_Loop里面循环，看起来是没有找到需要运行的hisr或task。
+
+3, 运行autopmu之前，de open后TCT_Schedule_Loop时的现场
+R0	
+R1	0x01062724
+R2	0x010626F0
+R3	0x010626E4
+R4	0x20000113
+R5	0x00000390
+R6	0x0132D988
+R7	0x00000001
+R8	0x00000000
+R9	0x00000000
+R10	0x0132A89C
+R11	0x01338AFC
+R12	0x00000000
+SP	0x0132C898
+LR	0x004B027C
+PC	0x004C6F7C
+CPSR	nzCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+USR
+IRQ
+FIQ
+SVC
+ABT
+UND
+MON
+
+运行autopmu之后，de open后TCT_Schedule_Loop时的现场
+R0	0x20000113
+R1	0x01062724
+R2	0x010626F0
+R3	0x010626E4
+R4	0x20000113
+R5	0x00000390
+R6	0x0132D988
+R7	0x00000001
+R8	0x00000000
+R9	0x00000000
+R10	0x0132A89C
+R11	0x01338AFC
+R12	0x9D89D89D
+SP	0x0132C898
+LR	0x00000420
+PC	0x004C6F74
+CPSR	nzCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+USR
+IRQ
+FIQ
+SVC
+ABT
+UND
+MON
+
+
+
+
+16:18 2011-4-12
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around
+1, 希望参考OMAP3530代码。
+代码比较复杂，不是一两下可以搞定的，要想完全看懂看来还是需要跑起来实验。
+考虑到目前需要支持bianrongguang调试，而且需要实验gpu sleep问题，先一步一步做。
+1), 目前可以先参考OMAP3530的arm cp15寄存器保存。
+2), 然后看如何恢复mmu页表。
+3), 还要看如何恢复arm其它状态的寄存器。
+
+22:10 2011-4-12
+VC0882, SV, rvdebugger, rom table
+info: AHB-AP at AP index 0 has no ROM table.
+info: Reading ROM table for APB-AP at AP index 1 :-
+info: ROM table base address = 0xE0004000
+info: Reading device registers at address 0xE0005000
+info: Identified component CSCTI (id= 0x00000906) at address 0xE0005000
+info: Reading device registers at address 0xE0006000
+info: Identified component CSTPIU (id= 0x00000912) at address 0xE0006000
+info: Reading device registers at address 0xE0007000
+info: Identified component CSTFunnel (id= 0x00000908) at address 0xE0007000
+info: Reading device registers at address 0xE0008000
+info: Identified component CSITM (id= 0x00000913) at address 0xE0008000
+info: Reading device registers at address 0xE0009000
+info: Identified component CSSWO (id= 0x00000914) at address 0xE0009000
+info: Reading device registers at address 0xE000A000
+info: Identified component CSETM (id= 0x00000921) at address 0xE000A000
+info: Reading device registers at address 0xE000B000
+info: Identified component CSCTI (id= 0x00000922) at address 0xE000B000
+info: Reading device registers at address 0xE000C000
+info: Identified component Cortex-A8 (id= 0x00000C08) at address 0xE000C000
+
+22:11 2011-4-12
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续
+1, Linux OMAP3530里面也是打开mmu前后修改了页表。
+2, 从OMAP3530移植sleep代码，分析。
+1), 保存现场
+svc context [0x0013D33c]=0x0033E140..[0x0013D36c]=0x00023F98
+arm cp15: r8=0x0033E140
+S:0x0033E140	0x00000001	0x00000002	0x00000001	0x00000082
+S:0x0033E150	0x0013D10C	0x60000113	0x00023F98	0x00000000
+S:0x0033E160	0x07FF8000	0x00000000	0x00000000	0x00000001
+S:0x0033E170	0x00098AA4	0x44E048E0	0x00000000	0x00000000
+S:0x0033E180	0x00000000	0x600001D3	0x00C5187D	0xFFFE7EED
+2), 
+wakeup后，之后system control没有恢复，其余看起来正确：
+S:0x0033E140	0x00000001	0x00000002	0x00000001	0x00000082
+S:0x0033E150	0x0013D33C	0x60000113	0x00023F98	0x00000000
+S:0x0033E160	0x07FF8000	0x00000000	0x00000000	0x00000001
+S:0x0033E170	0x00098AA4	0x44E048E0	0x00000000	0x00000000
+S:0x0033E180	0x00000000	0x600001D3	0x0000187D	0xFFFFFFFF
+这里丢数的问题会不会和单步bootloader代码有关系？正好影响了ddr sdram做self-refresh？但是不调试也不行，奇怪...
+另外panda_os里面save context和restore context相对位置不同，所以lr似乎不需要保存，否则就跳回save context之后的函数了。
+3), 有仔细看了omap代码，发现mmu打开时cache和btb没有打开。
+cache_pred_disable_mask:
+	.word   0xFFFFE7FB
+
+	ldr     r2, cache_pred_disable_mask
+	and     r4, r2
+	mcr     p15, 0, r4, c1, c0, 0
+	dsb
+	isb
+4), 最后是用直接写寄存器的方式开的mmu。
+感觉还是ddr会丢数据，明天上午确认后河dongliang，beihua讨论。
+
+10:08 2011-4-13
+VC0882, SV, 工作总结, 2011年4月12日工作总结
+0, 遇到的问题:
+1), wakeup后ddr数据会丢失. 可能需要dongliang支持. 
+zhaoyuan team说客户要求本周要求可以sleep.
+
+1, 今日工作总结:
+1), 支持AE bianrongguang调试sleep->fast wakeup, 目前已经可以wakeup到ddr并打印信息.
+错误原因: ae代码中pmu info有错: ddrc时钟未开, 且未做bypass init.
+2), 调试fandong autotest pmu idle问题, 初步看是影响了系统调度, 改用timer1实验.
+3), 改进wakeup流程, 目的是用于测试系统唤醒后gpu work around方案. 目前恢复了arm svc模式现场和cp15寄存器. 
+
+2, 次日工作计划
+1), 调试ddr退出自刷新丢数问题. 感觉或者是参数本身问题或保存恢复ddr参数有问题.
+2), 继续改进wakeup流程,
+
+11:16 2011-4-13
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续, wakeup后gpu可以工作(正确性待确认)
+1, 继续分析
+确认进入退出自刷新前后ddrc寄存器是否变化。 同时对比memory是否变化
+1), 进入自刷新前
+S:0x60011000	0x017F0020	0x00000000	0x00000452	0x12F00000
+S:0x60011010	0x00000220	0x00000000	0x000000FF	0x000000FF
+S:0x60011020	0x00000115	0x03011000	0x055B600D	0x055B600D
+S:0x60011030	0x0A201145	0xC2104050	0x00E568D6	0x00E568D6
+S:0x60011040	0x00361004	0x00029000	0x00000000	0x00000000
+S:0x60011050	0x03B00000	0x00800000	0x00800000	0x00800000
+S:0x60011060	0x0003198E	0xDD22EE11	0x7788BB44	0x00000F00
+S:0x60011070	0x00040000	0x00002221	0x00000003	0x00000003
+S:0x60011080	0x03707000	0x00000000	0x00000000	0x00000000
+S:0x60011090	0x00000000	0x00307000	0x00307000	0x00307000
+S:0x600110A0	0x00307000	0x00000000	0x00000000	0x00000000
+S:0x600110B0	0x00000000	0x00000000	0xFFFFFFFF	0xFFFFFFFF
+S:0x600110C0	0xFFFFFFFF	0xFFFFFFFF	0x00003333	0x00003333
+S:0x600110D0	0x3FFF8F4F	0x00FF0000	0x00FF0000	0x00FF0000
+S:0x600110E0	0x00FF0000	0x00FF0000	0x00FF0000	0x00FF0000
+S:0x600110F0	0x00FF0000	0x00000000	0x00000000	0x00000000
+S:0x60011100	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011110	0x00010703	0x00000000	0x00000000	0x00000000
+S:0x60011120	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011130	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011140	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011150	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011160	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011170	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011180	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011190	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111A0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111B0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111C0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111D0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111E0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111F0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011200	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011210	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011220	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011230	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011240	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011250	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011260	0x00000000	0x00000000	0x00000000	0x00000000
+
+S:0x08000000	0x51211842	0x2EA00002	0x08040132	0x45121264
+S:0x08000010	0xD0000089	0x08812008	0x90080006	0x503D0220
+S:0x08000020	0x69046424	0x05B80000	0x104FB632	0x6BA5603C
+S:0x08000030	0xC183D28C	0x4815B502	0x0005C141	0x9D681204
+S:0x08000040	0x40A660AA	0xC6310214	0x94800509	0x810892D1
+S:0x08000050	0x50000336	0x18D10A0C	0x1C1C17A0	0xD0C78220
+S:0x08000060	0x189494AB	0x01881255	0x20615847	0x40A43B4A
+S:0x08000070	0x5551F8B0	0x49A81414	0x00900304	0x40A8EA1E
+S:0x08000080	0xA1303910	0x4240602E	0x50C020A7	0x80004804
+S:0x08000090	0xD6008168	0x5196D0B0	0x12900201	0x4105F900
+S:0x080000A0	0x50876806	0xA8C00525	0x7480402C	0x056A0A00
+S:0x080000B0	0x3442000D	0x8440F151	0xC2875FD0	0x14A90025
+S:0x080000C0	0x04854009	0x01860120	0x4009B003	0x50B45894
+S:0x080000D0	0xAD255840	0x20C2CF16	0x10082240	0x68E50C35
+S:0x080000E0	0x24483A10	0xF165039C	0x4CA04200	0xA5150962
+S:0x080000F0	0x11A78F0C	0x228040E5	0x14C5A012	0x13A10FD1
+S:0x08000100	0x80530221	0x15830096	0x4105206C	0x05295094
+S:0x08000110	0x60803D81	0x46408227	0x90620964	0x60833CA8
+S:0x08000120	0x4A0385B0	0xB9E12813	0x02A14540	0xD1122001
+S:0x08000130	0xD111CF5D	0x4C062028	0x1586D382	0xE5CD2C84
+S:0x08000140	0x40958086	0xB2E4542A	0x2AC0C9D2	0x058670AB
+S:0x08000150	0x45E84D12	0xD40561A8	0x34806531	0x510B1A4C
+S:0x08000160	0x14408D04	0x440522D5	0x05A400CC	0x2CE02A08
+S:0x08000170	0x04CE68E5	0xC101A80B	0x56A56408	0x81B5E0A2
+S:0x08000180	0x14B1900C	0x04530EE3	0xC9210298	0x01885B85
+S:0x08000190	0x7611471A	0x0006200F	0x510100A4	0x07604E46
+S:0x080001A0	0x880FF048	0x41006384	0x06A04484	0x82048026
+S:0x080001B0	0x0499C836	0x0884224C	0xA0B3D206	0x00A47820
+S:0x080001C0	0xC0643194	0x0108CC13	0x91A0C050	0x0FF00220
+S:0x080001D0	0x8884DC18	0x900C1081	0x50B160B0	0x41E61061
+S:0x080001E0	0xB288124A	0x43D005CD	0x430D8884	0x40870238
+S:0x080001F0	0x4247EA08	0x85E556E8	0x54223227	0xC06D49B4
+S:0x08000200	0x81000D04	0xD60EE6AB	0x40148A95	0x490271B1
+2), 退出自刷新后：
+S:0x60011000	0x017F0220	0x00000000	0x00000452	0x12F00000
+S:0x60011010	0x00000220	0x00000000	0x02100004	0x02100004
+S:0x60011020	0x00000115	0x03011000	0x055B600D	0x055B600D
+S:0x60011030	0x0A201145	0xC2104050	0x00E568D6	0x00E568D6
+S:0x60011040	0x00361004	0x00029000	0x00000000	0x00000000
+S:0x60011050	0x03B00000	0x00000000	0x00000000	0x00000000
+S:0x60011060	0x000319AF	0xDD22EE11	0x7788BB44	0x00000F00
+S:0x60011070	0x00200000	0x00002221	0x00000003	0x00000003
+S:0x60011080	0x03707000	0x00000000	0x00000000	0x00000000
+S:0x60011090	0x00000000	0x00307000	0x00307000	0x00307000
+S:0x600110A0	0x00307000	0x00000000	0x00000000	0x00000000
+S:0x600110B0	0x00000000	0x00000000	0xFFFFFFFF	0xFFFFFFFF
+S:0x600110C0	0xFFFFFFFF	0xFFFFFFFF	0x00003333	0x00003333
+S:0x600110D0	0x3FFF8F4F	0x00FF0000	0x00FF0000	0x00FF0000
+S:0x600110E0	0x00FF0000	0x00FF0000	0x00FF0000	0x00FF0000
+S:0x600110F0	0x00FF0000	0x00000000	0x00000000	0x00000000
+S:0x60011100	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011110	0x00010703	0x00000000	0x00000000	0x00000000
+S:0x60011120	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011130	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011140	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011150	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011160	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011170	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011180	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011190	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111A0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111B0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111C0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111D0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111E0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x600111F0	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011200	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011210	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011220	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011230	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011240	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011250	0x00000000	0x00000000	0x00000000	0x00000000
+S:0x60011260	0x00000000	0x00000000	0x00000000	0x00000000
+
+S:0x08000000	0x51211842	0x2EA00002	0x08040132	0x45121264
+S:0x08000010	0xD0000089	0x08812008	0x90080006	0x503D0220
+S:0x08000020	0x69046424	0x05B80000	0x104FB632	0x6BA5603C
+S:0x08000030	0xC183D28C	0x4815B502	0x0005C141	0x9D681204
+S:0x08000040	0x40A660AA	0xC6310214	0x94800509	0x810892D1
+S:0x08000050	0x50000336	0x18D10A0C	0x1C1C17A0	0xD0C78220
+S:0x08000060	0x189494AB	0x01881255	0x20615847	0x40A43B4A
+S:0x08000070	0x5551F8B0	0x49A81414	0x00900304	0x40A8EA1E
+S:0x08000080	0xA1303910	0x4240602E	0x50C020A7	0x80004804
+S:0x08000090	0xD6008168	0x5196D0B0	0x12900201	0x4105F900
+S:0x080000A0	0x50876806	0xA8C00525	0x7480402C	0x056A0A00
+S:0x080000B0	0x3442000D	0x8440F151	0xC2875FD0	0x14A90025
+S:0x080000C0	0x04854009	0x01860120	0x4009B003	0x50B45894
+S:0x080000D0	0xAD255840	0x20C2CF16	0x10082240	0x68E50C35
+S:0x080000E0	0x24483A10	0xF165039C	0x4CA04200	0xA5150962
+S:0x080000F0	0x11A78F0C	0x228040E5	0x14C5A012	0x13A10FD1
+S:0x08000100	0x80530221	0x15830096	0x4105206C	0x05295094
+S:0x08000110	0x60803D81	0x46408227	0x90620964	0x60833CA8
+S:0x08000120	0x4A0385B0	0xB9E12813	0x02A14540	0xD1122001
+S:0x08000130	0xD111CF5D	0x4C062028	0x1586D382	0xE5CD2C84
+S:0x08000140	0x40958086	0xB2E4542A	0x2AC0C9D2	0x058670AB
+S:0x08000150	0x45E84D12	0xD40561A8	0x34806531	0x510B1A4C
+S:0x08000160	0x14408D04	0x440522D5	0x05A400CC	0x2CE02A08
+S:0x08000170	0x04CE68E5	0xC101A80B	0x56A56408	0x81B5E0A2
+S:0x08000180	0x14B1900C	0x04530EE3	0xC9210298	0x01885B85
+S:0x08000190	0x7611471A	0x0006200F	0x510100A4	0x07604E46
+S:0x080001A0	0x880FF048	0x41006384	0x06A04484	0x82048026
+S:0x080001B0	0x0499C836	0x0884224C	0xA0B3D206	0x00A47820
+S:0x080001C0	0xC0643194	0x0108CC13	0x91A0C050	0x0FF00220
+S:0x080001D0	0x8884DC18	0x900C1081	0x50B160B0	0x41E61061
+S:0x080001E0	0xB288124A	0x43D005CD	0x430D8884	0x40870238
+S:0x080001F0	0x4247EA08	0x85E556E8	0x54223227	0xC06D49B4
+S:0x08000200	0x81000D04	0xD60EE6AB	0x40148A95	0x490271B1
+3), ddrc寄存器有差异，但是数据比对正确。
+4), 难道是因为今天换了板子所以没有问题？
+修改lr后已经可以回到aasp。下一步是完整测试memory数据是否正确。然后恢复arm其它处理器模式的现场，irq模块，然后就能恢复gpu了（似乎直接init再go就可以）。
+
+2, (15:42 2011-4-13)下午试验是随机读写了10k数据，都正确。
+再比较0-1m, 4-5m, 7-8m三个区域的数据。0-1m有不同，但是差异都在代码段后，可以不关心。
+
+3, 继续恢复最小环境现场：
+1), 内容:
+(1), 恢复arm其它处理器模式的现场
+这里要注意的是，user模式的现场不能再user模式下备份和恢复，需要在sys模式下做（因为两个模式的寄存器完全一样）。
+R0	0x003083C0
+R1	0x00000000
+R2	0x032CB8E4
+R3	0x00000000
+R4	0x00000000
+R5	0x00000000
+R6	0xF77FC03F
+R7	0xFFFE0FF6
+R8	0x000C7051
+R9	0x00000000
+R10	0x0002868C
+R11	0x00107CBC
+R12	0x00000000
+SP	0x0010780C
+LR	0x000235E8
+PC	0x000A19EC
+CPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAIFjtSVC
+USR
+R8	0x000C7051
+R9	0x00000000
+R10	0x0002868C
+R11	0x00107CBC
+R12	0x00000000
+SP	0xEE5DAF59
+LR	0xB8D0A820
+IRQ
+SP	0x000DE7E4
+LR	0x00000390
+SPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+FIQ
+R8	0x7C5590CF
+R9	0x49F7ED6E
+R10	0x23F72F5B
+R11	0x63799EDE
+R12	0xBD93A477
+SP	0x000DF7E4
+LR	0xBF917DFD
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+SVC
+SP	0x0010780C
+LR	0x000235E8
+SPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+ABT
+SP	0x000DD7E4
+LR	0x9A9DF436
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+UND
+SP	0x618DBBEF
+LR	0xB894DC35
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+MON
+SP	0x7EF7E40B
+LR	0x1458D61D
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+
+wakeup后：
+R0	0x003083C0
+R1	0x00000000
+R2	0x032CB8E4
+R3	0x00000000
+R4	0x00000000
+R5	0x00000000
+R6	0xF77FC03F
+R7	0xFFFE0FF6
+R8	0x000C7051
+R9	0x00000000
+R10	0x0002868C
+R11	0x00107CBC
+R12	0x00000000
+SP	0x0010780C
+LR	0x000235E8
+PC	0x000A1C58
+CPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAIFjtSVC
+USR
+R8	0x000C7051
+R9	0x00000000
+R10	0x0002868C
+R11	0x00107CBC
+R12	0x00000000
+SP	0xEE5DAF59
+LR	0xB8D0A820
+IRQ
+SP	0x000DE7E4
+LR	0x00000390
+SPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+FIQ
+R8	0x7C5590CF
+R9	0x49F7ED6E
+R10	0x23F72F5B
+R11	0x63799EDE
+R12	0xBD93A477
+SP	0x000DF7E4
+LR	0xBF917DFD
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+SVC
+SP	0x0010780C
+LR	0x000235E8
+SPSR	nZCvq_DISABLED_ge3ge2ge1ge0_eAifjtSVC
+ABT
+SP	0x000DD7E4
+LR	0x9A9DF436
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+UND
+SP	0x618DBBEF
+LR	0xB894DC35
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+MON
+SP	0x7EF7E40B
+LR	0x1458D61D
+SPSR	nzcvq_DISABLED_ge3ge2ge1ge0_eaifjtReserved
+用winmerge比较，完全一致。
+目前已经可以返回到pmu  SD0:/>，"help"命令可以执行。
+但是不能ls：和fandong问题一样，是在TCT_Schedule_Loop死循环。
+
+(2), 上传代码.
+a, remove AppsEntry\init_src\asm\ARM.inc, using Nucleus\Port\ARM.inc instead.
+b, move VIM_PMU_SaveContext and VIM_PMU_RestoreContext to PMU.s
+因为要include ARM.inc, 在embedded assembler中不知道如何include.
+c, _VIM_PMU_Sleep中加入打印rtc时间和reboot函数, 用于autotest.
+
+(3), (19:46 2011-4-13)恢复irq模块, timer模块(主要是timer0时间).
+修改后, gpu测试一直是busy, 后来发现是gpu没有开电, wakeup后手工开电就可以. 
+gpu
+2dinit
+2dgo -idx 0
+2dgo -idx 1
+2dgo -idx 3
+
+(4), 上传代码:
+add interrupt和timer0的suspend和resume函数. 
+VIM_INT_Suspend, VIM_INT_Resume, VIM_TIMER_Suspend, VIM_TIMER_Resume. 
+
+明天需要确认gpu是否可以使用. 
+
+14:25 2011-4-13
+VC0882, SV, sync up
+1, 高低温：gpu频率测试。
+2, 读arm的协处理器，icv, icp, ae三组对比。
+3, 量产中uhost dongliang和xiaotao实验。
+4, nand: intel改板后读id错误。怀疑是板级问题。
+
+21:34 2011-4-13
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 今天用另一块板子没有发现sleep->wakeup后ddr丢数问题. 
+没问题的板子对齐了sleep前后3Mbytes不连续的数据, 都正确. 
+2), 继续改进wakeup流程, 新增加入了arm所有处理器模式的现场恢复, interrupt, timer0两个模块的恢复. 
+目前wakeup后, 可以运行gpu 2d case.
+
+2, 次日工作计划
+1), 请wenlei确认wakeup后gpu运行是否正常. 
+2), 按照gpu work around要求修改wakeup流程. 
+3), 确认sleep->wakeup后ddr是否工作正常. 
+
+3, 存在的问题
+1), 调整sleep代码中影响了autotest的sleep测试. sleep代码调整后会解决这个问题. 
+
+23:42 2011-4-13
+VC0882, SV, 思考
+1, huangwei clk training: 能否讲需求和总体设计思路，例如为什么storage peripheral在总线上是独立的，在clk上有从属关系。
+2, 对于axi 多通道还需要深入理解。
+
+10:09 2011-4-14
+时间管理
+0, 9:50
+
+1, 本日
+1), 20' 看xiaotao Android power资料.
+2), 20' 邮件. 
+3), 10:20-11:23 12:14-12:59 4h gpu work around for wakeup. 见"10:21 2011-4-14".
+4), 支持dr.yang做android低电压测试. 
+5), 1h VC0882 ICP sync up. 
+6), 1h 支持bianyingfeng调试VC0718 bootloader. 
+7), 10' 支持xiaotao获得882页表. 
+8), 总结. 见"17:31 2011-4-14". 
+
+10:12 2011-4-14
+VC0882, SV, AE, power, 电池, 电池容量和内阻的测量
+1, fengbeizhan转发邮件, yangzuoxing邮件"电池容量和内阻的测量"20110413
+我今天测试了一下我们使用电池的容量和内阻，有如下结果：
+1)       电池容量：3000~3300mAHr (充满，然后放电到3.45V)。 与标称的3500mAHr 有一点小差距。
+2)       电池内阻为70~80mOHM. 没有SPEC, 不知道标准内阻是多少
+3)       此电池的3.3V是它能量的拐点，低于3.3V, 能量急剧下降，不具有使用价值。
+
+2, bamvor: 具体数据见, D:\work\VC0882\pmu_power\电池测试数据.xls
+感觉这个很有用. 
+
+10:21 2011-4-14
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续, gpu sleep->wakeup work around正确
+1, 首先需要验证gpu运行是否正确.
+然后对比实验gpu有无wakeup work around时是否出错.
+最后需要加入正式版本的work around: 只是开gpu电之后就reset. 
+
+2, 需要验证gpu运行是否正确.
+看了InitVC0882中VIM_DE_Sys_Init, 是注册中断. 中断部分已经恢复了, 所以后面直接openpanel 50应该就可以. 
+实验后可以. 但是发现gpu2d case先做20(alpha blending)再做15(渐变)会有横条, 和shuyu原来遇到的cache问题类似, wenlei说原来也有, 需要请wenlei确认是软件问题.
+
+3, gpu work around for sleep->wakeup.
+1), sleep流程中加入gpu上下电处理(等idle才下电). 
+2), 在VIM_PMU_Power就不调用gpu上下电了. 
+3), gpu上下电流程的修改: 如果是wakeup后的gpu上电.
+(0), check gpu isolation open or not. if open, VIM_PMU_PowerOnGpu return.
+(1), copy下列代码到sram.(\todo 代码copy来, copy去的看起来麻烦, 但是锁cache的代码其实也需要保证所有代码都锁到cache了, 工作量并没有减少).
+(2), ddr进入self-refresh.
+(3), pmu sw reset, 加一个delay, 保证下面(4), (5)代码可以执行完. 
+(4), 开gpu isolation
+(5), isb, dsb.
+(6), while(1), 等待sw reset生效. 
+
+4, (12:21 2011-4-14)根据3的要求. 准备实现, 发现如果之前已经sleep过一次, pmu进入sleep的代码也就丢了, 所以每次sleep之后需要恢复所有代码. 
+所以sleep->wakeup里面多了一个备份sram代码的工作. 
+
+5, (12:58 2011-4-14)代码加入完成, 未编译. 需要调整sleep和ddr enter self-refresh打印信息. 合并pmu和sys sram的uart代码.
+
+6, (18:37 2011-4-14)试验中，ddr进入selfrefresh后就停住了。
+1), 开始发现时调用了ddr里面的basefunc函数。
+但是修改后仍然不行。
+2), (21:27 2011-4-14)晚上调试想起来是因为没有remap，只要sw reboot不会情调remap寄存器。
+后来分析，也许可以利用software reset不清remap的特性节约系统复位时间。
+
+7, gpu work around wakeup流程完成. 上传代码.
+1), gpu work around wakeup流程完成, 详见VIM_PMU_NormalToSleep
+2), 为了调用方面, 把ddr进入selfrefresh函数独立, 供sleep和gpu work around wakeup流程调用. 
+3), sleep和fastsleep加入参数选择是否在wakeup后reboot系统(用于autotest测试, 不建议其他人使用).
+4), add: 
+#define SRAM_MEM_ADDR	(0x20000000)
+#define SRAM_MEM_SIZE	(SIZE_32K)
+
+11:06 2011-4-14
+VC0882, SV, AE, power, pmu, mode trans, OMAP3530 Linux kernel中wakeup后打开mmu的方法
+1, arch/arm/mach-omap2/sleep34xx.S(392-439)
+这段代码功能:
+1), 读出页表基址(ttb)
+2), pc所在的1Mbyte memory区域映射为可以读写的ncnb section. 
+原有entry保存在scratchpad_base+0xc4的位置.
+3), 清arm integer流水线, 分支预测和tlb
+4), 打开mmu. 
+5), 这里没有包括恢复页表的代码, 打开mmu后恢复既可. 
+
+    /* Enabling MMU here */
+    mrc     p15, 0, r7, c2, c0, 2 /* Read TTBRControl */
+    /* Extract N (0:2) bits and decide whether to use TTBR0 or TTBR1*/
+    and     r7, #0x7
+    cmp     r7, #0x0
+    beq     usettbr0
+ttbr_error:
+    /* More work needs to be done to support N[0:2] value other than 0
+    * So looping here so that the error can be detected
+    */
+    b       ttbr_error
+usettbr0:
+    mrc     p15, 0, r2, c2, c0, 0
+    ldr     r5, ttbrbit_mask
+    and     r2, r5
+    mov     r4, pc
+    ldr     r5, table_index_mask
+    and     r4, r5 /* r4 = 31 to 20 bits of pc */
+    /* Extract the value to be written to table entry */
+    ldr     r1, table_entry
+    add     r1, r1, r4 /* r1 has value to be written to table entry*/
+    /* Getting the address of table entry to modify */
+    lsr     r4, #18
+    add     r2, r4 /* r2 has the location which needs to be modified */
+    /* Storing previous entry of location being modified */
+    ldr     r5, scratchpad_base
+    ldr     r4, [r2]
+    str     r4, [r5, #0xC0]
+    /* Modify the table entry */
+    str     r1, [r2]
+    /* Storing address of entry being modified
+     * - will be restored after enabling MMU */
+    ldr     r5, scratchpad_base
+    str     r2, [r5, #0xC4]
+
+    mov     r0, #0
+    mcr     p15, 0, r0, c7, c5, 4   @ Flush prefetch buffer
+    mcr     p15, 0, r0, c7, c5, 6   @ Invalidate branch predictor array
+    mcr     p15, 0, r0, c8, c5, 0   @ Invalidate instruction TLB
+    mcr     p15, 0, r0, c8, c6, 0   @ Invalidate data TLB
+    /* Restore control register  but dont enable caches here*/
+    /* Caches will be enabled after restoring MMU table entry */
+    ldmia   r3!, {r4}
+    /* Store previous value of control register in scratchpad */
+    str     r4, [r5, #0xC8]
+    ldr     r2, cache_pred_disable_mask
+    and     r4, r2
+    mcr     p15, 0, r4, c1, c0, 0
+
+17:31 2011-4-14
+VC0882, SV, 工作总结
+1, 工作反思
+1), 今天支持bianyingfeng. 这个事情虽然不急, 但是我自己是很喜欢交流, 希望他能少走弯路.
+2), 支持xiaotao得到mmu页表. 自己忘了当初写过文档的. 
+
+2, 今日工作总结
+1), gpu work around for wakeup. 
+(1), 目前gpu wakeup work around流程已经完成。
+(2), 最近三天修改代码中影响的autotest测试问题也已解决：sleep时输入1表示wakeup后做reboot。
+2), 支持AE bianrongguang调试Linux kernel唤醒：目前已经可以恢复到mmu打开的状态。
+3), 支持dr.yang做android低电压测试. 
+4), VC0882 ICP sync up. 
+5), 支持xiaotao获得882页表. 
+
+3, 次日工作计划
+1), 上午: huangwei VC0882 clkrst training.
+2), 完善gpu power on work around流程：原有测试代码功能没有问题，但是结构不好，没法做为默认配置给大家使用。
+3), 做gpu power on和wakeup测试。确认work around流程正确。
+
+17:52 2011-4-14
+资产
+1, 今天借gonganmin一个串口线.
+2, 借dr.yang一个micro sd卡. 两套AE板(shuyu给dr.yang).
+
+19:39 2011-4-14
+VC0882, SV, AE, power, pmu, mode trans, OMAP3530 Linux kernel中wakeup后打开mmu的方法, 续
+bianrongguang sleep数据丢失是没清cache.
+
+23:10 2011-4-14
+VC0882, SV, 项目
+1, 对例会的建议, \todo 发信
+1), 希望结合clk, power讲一次。zj, dongliang, xiaotao, anmin. maybe including ddr.
+从系统角度看：除了function, 就是performance and stability. 后面两个东西，其实和power, clk, ddr都有很大关系。
+2), 工作方法的讨论。我的工作日志。
+3), code review: gpu work around code review, sv重点模块的review. 希望项目上有连续性。
+
+10:20 2011-4-15
+VC0882, SV, training, IC tech_report, Huangwei VC0882 clkrst讲座
+文档资料: D:\VC1600WCVS\doc\tech_report
+总线：每个master到slave之前是独立的。到slave端fabric做译码后分给不同的slave. 译码总线数量是master x slave. 882是8x4=32个。
+
+divider disable时output=0: 因为多数逻辑都用上升沿. if en = 0, clk = 1, latch output x,  对功能无影响，对仿真不好。
+
+虽然保证了占空比，但是上升沿上升速率和下降沿下降速率不同，所以占空比会有小差异，对于ddr对clk比较敏感(因为双沿采样？)。
+
+divider enable -> disable: 等divider计算到零再disable, 所以软件上要注意disable后不要立刻enable.
+sta对负沿没保证。(bamvor: 需要单独加规则?)
+arm9, arm11, cortex-a9都用负沿，a8没用。
+
+clkswitch波形上clk0切到clk1中间有个低电平, 这个没关系, 因为综合工具会插入gate cell, 低电平时后面的逻辑不会工作.
+
+14:28 2011-4-15
+时间管理
+0, 10:05-23:50
+
+1, 本日
+1), 2.5h IC Huangwei VC0882 clkrst讲座, 见"14:29 2011-4-15". 
+2), 14:46- gpu work around wakeup. 见"14:46 2011-4-15". 
+3), 总结. 含发信"23:10 2011-4-14". 参考"00:12 2011-4-7". 
+
+14:46 2011-4-15
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续, 测试加入work around流程后gpu有无错误
+1, 工作, 续"10:21 2011-4-14": 
+首先需要验证gpu运行是否正确.
+然后对比实验gpu有无wakeup work around时是否出错.
+最后需要加入正式版本的work around: 只是开gpu电之后就reset. 
+
+2, wakeup后是如何做gpu测试? 
+可以放在代码中, 但是感觉结构不好. 希望是把suspend和resume放在pmu代码里面. resume之后要做的一些测试放到, 脚本中. 
+
+3, 问题
+__PMU_SetSoftResetDelay设为0xfff就不行, 0xffe可以. AE bianrongguang同样发现了这个问题. 
+
+4, (20:42 2011-4-15)继续完善代码, 今天改代码思路不清晰, 多用了时间. 
+1), coding问题: 行后反斜杠导致下一行被注释. 这个问题其实用预处理也可以解决. 
+//C library memory model maintains eight-byte alignment of the heap.\
+#define VIM_SYS_SRAM_STACK_SIZE (1024)
+2), 如果定义了static，即使同一个文件里面的embedded assembler也不行。例如g_sram_temp_stack定义为
+static UINT8 g_sram_temp_stack[VIM_SYS_SRAM_STACK_SIZE];
+不行，必须是： 
+UINT8 g_sram_temp_stack[VIM_SYS_SRAM_STACK_SIZE];
+__asm INT32 VIM_SYS_SramWrapper(UINT32 func_in_sram, UINT32 func_sram_arg1, UINT32 func_sram_arg2)
+{
+	IMPORT g_sram_temp_stack
+	;...
+}
+
+5, 如果目前代码调试通过, 还需要加入memory check.
+其实下午改了半天代码是为了打印信息更清楚，而不是数字，结果从下午改到9点，这个却忘改了。
+
+6, (23:14 2011-4-15)发现奇怪的问题，手动测试sleep->wakeup没有问题，用脚本自动做就在wakeup返回提示符后data abort。
+直接原因是bsIndex导致currentScript溢出。
+根据原因是整个过程都是出于脚本执行，没有机会把bsIndex=0. 现在改为在VIM_AASP_SetWakeupScript清bsIndex。
+
+15:53 2011-4-15
+数字签名, Message Digest Algorithm, md5
+http://baike.baidu.com/view/7636.htm#sub7636
+如在UNIX系统中用户的密码是以MD5（或其它类似的算法）经Hash运算后存储在文件系统中。当用户登录的时候，系统把用户输入的密码进行MD5 Hash运算，然后再去和保存在文件系统中的MD5值进行比较，进而确定输入的密码是否正确。通过这样的步骤，系统在并不知道用户密码的明码的情况下就可以确定用户登录系统的合法性。这可以避免用户的密码被具有系统管理员权限的用户知道。
+
+17:52 2011-4-15
+VC0882, SV, 竞争对手
+fengbeizhan转发邮件
+发件人: mark 
+发送时间: 2011年4月15日 13:33
+收件人: dyang; Yi Nong; buhead; Chen Wei Min; Dai jin
+抄送: Yang Hui
+主题: 答复: 瑞星微的4.12香港展产品,
+我昨天去了香港电子展。
+RK29 展出了
+1，  SMARTPHONE一个型号，两台，BB是展讯的，DH是上海的，（以前听说过，记不清了），ANDROID2.3。操作还不错，但因网络问题没法打电话。明显的还是测试样机。
+2，  ANDROID TV BOX 一台，OS 2.3 ，用遥控器玩划水果，操作还比较流畅。
+3，  MID有三个型号共六台，ARCHOS的10“左右16：9，OS2.3 ，DDR3，操作流畅，背面板还有QA的测试标记，估计本月由易方PP。FOXCONN的7”类似彩屏电子书，没电无法操作。还有一个QQ HD。
+其余智能MP4，3DMP4 ，MOBILE DTV等占有的展位达3/4，因此显得气势比较大，但29的产品明显都还是PP前的样机阶段，但比我们目前的样机少很多BUG ，进度上RK是春节后就开始在做目前我们的调试阶段，因此领先我们两个月时间。
+Mark Guo 
+郭小川
+Vimicro 
+中星微电子
+Mobile:18603075311
+Tel:86-755-26719546
+FAX:86-755-26719539
+
+18:09 2011-4-15
+软件技巧, source insight, 正则表达式
+VIM_HAL_PrintXxx("svc exception r = 0x\n"); 
+替换为
+VIM_HAL_PrintXxx_Sram("svc exception r = 0x\n"); 
+
+VIM_HAL_Print\([^(]*\)
+VIM_HAL_Print\1_Sram
+
+18:39 2011-4-15
+VC0882, SV, rvct, 堆栈使用的注意事项
+堆栈必须8字节对齐
+位置: C:\Program Files\ARM\Documentation\Specifications\4.0\1\PDF\IHI0042A_aapcs.pdf
+
+5.2.1.1 Universal stack constraints
+At all times the following basic constraints must hold:
+? Stack-limit < SP <= stack-base. The stack pointer must lie within the extent of the stack.
+? SP mod 4 = 0. The stack must at all times be aligned to a word boundary.
+? A process may only access (for reading or writing) the closed interval of the entire stack delimited by [SP, stack-base – 1] (where SP is the value of register r13).
+Note This implies that instructions of the following form can fail to satisfy the stack discipline constraints, even when reg points within the extent of the stack.
+ldmxx reg, {..., sp, ...} // reg != sp
+If execution of the instruction is interrupted after sp has been loaded, the stack extent will not be restored, so restarting the instruction might violate the third constraint.
+
+5.2.1.2 Stack constraints at a public interface
+The stack must also conform to the following constraint at a public interface:
+? SP mod 8 = 0. The stack must be double-word aligned.
+
+23:37 2011-4-15
+VC0882, SV, 工作总结
+gpu power on和wakeup流程正在进行连续测试，时间关系只跑了一个板子。代码未上传。
+memory比较尚未加入。 
+
+9:36 2011-4-18
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续, 上传周五代码; sleep前后memory比较
+1, 周五的测试(C4, 反动高低温sleep fail):
+1), 跑了四个小时就死在sd boot(M0x000000044).
+测试中没有发现watch reset. 
+2), 同样板子跑第二次, 1小时后死在sd boot(M0x000000044).
+
+2, 目前测试C20, 看看gpu问题长时间跑有没有问题. 
+
+3, 上传周五代码.
+1), gpu上电work around: gpu上电后reset pso(重跑一级boot和panda_os).
+(1), 把pmu init放到pmic init后面(AppsEntry\init_src\Appstart.c), 在VIM_PMU_Init中的VIM_PMU_PowerOnGpu做gpu上电和reset. 
+(2), 修改VIM_PMU_PowerOnGpu()(pmu\VIM_PMU_Driver.c).
+
+2), gpu sleep->wakeup代码:
+调用_PMU_GpuIsoOn_Sram()(pmu\VIM_PMU_Driver_Sram.c)实现wakeup gpu上电后: 跳转进入sram执行, ddr进入self-refresh, reset pso. 
+
+3), 修改aasp, 支持wakeup后执行指定脚本.
+(1), 为了便于维护, 合并sleep和fastsleep命令为sleep, 通过参数选择normal wakeup or fast wakeup; 通过参数选择VIM_AASP_SetWakeupScript()(aasp\aasp.h)wakeup后面的脚本. 
+根据这个修改修改了相关API和受此影响的文件(autotest\auto_test_cmd.c, pmu\VIM_PMU_Driver.h, pmu\test\pmu_test_api.c, pmu\test\pmu_test_api.h, pmu\test\pmu_test_cmd.c)
+为此
+(2), 修改了aasp_checkRunBootScript()(aasp\AASP_Shell.c), 
+(3), 添加currentScript指针和WakeupScript, WakeupScript4gputest, WakeupScript4autotest三个脚本.
+把BootScript VIM_GPU_2D_REPEAT_TEST中的reboot/sleep选择改为sleep. reboot在WakeupScript4gputest实现. 
+(aasp\bootscript.c)
+\todo const用的有无问题? 
+
+4), 调整了在sram代码的架构. 
+(1), 新增hal\VIM_HAL_Driver_Sram.c实现sram架构的基本代码(move from AppsEntry\init_src\Appstart_Sram.c and pmu\VIM_PMU_Driver_Sram.c), hal\VIM_HAL_Driver_Sram.h供VIM_XXX_Driver_Sram.c include. 
+同时新增hal\VIM_HAL_Driver_Sram.o所需编译规则(hal\subdir.mk).
+(2), 移动原有hal\VIM_HAL_Driver.h XXX_NO_STACK到hal\VIM_HAL_Driver_Sram.h
+
+5), 修改data abort处理问题(AppsEntry\init_src\asm\Panda_Init.s):
+SUBS    LR, LR, #4
+改为
+SUBS    LR, LR, #8
+原有的lr - 4跳过了出错语句, 这样虽然能直接避免了出错语句, 但是不符合arm要求. 
+
+6), 其它
+(1), VIM_PMU_Power, powerModule中用on表示上电需要打开的c类电源, off表示下电需要关闭的c类电源. (pmu\VIM_PMU_Driver.c, VIM_PMIC_Driver.h)
+因为gpu上电有风险, 需要work around. 下电不需要, 和其它c类电源一起配置就行. 
+(2), (ddr\VIM_DDR_Driver.h):
+VIM_DDRC_SetTrainingAddr和VIM_DDRC_SetTrainingAddr_NoStack分别用于ddr\VIM_DDR_Driver.c和ddr\VIM_DDR_Driver_Sram.c
+(3), VIM_SYS_SramWrapper不再传入stack, stack改为8bytes aligned 1kbytes. 相关代码中注意堆栈一直是8bytes aligned.
+(pmu\VIM_PMU_Driver.c).  
+
+7), TODO
+\todo 加入memory比较. 参考beihua原来给的pattern. <DONE>
+\todo 代码还需要整理: 为了周四review 做准备. 全面review gpu work around代码. <DONE>
+\todo const用的有无问题? 
+\todo sleep部分增加打印. <DONE>
+\todo 后面测试中把wdt disable, 这样看着更方便. <DONE>
+\todo 启动时检测7882. 如果是B要打印提示信息. 
+
+4, 加入memory比较. 参考beihua原来给xiaotao的pattern. 
+TEST_ADDR_BA()(D:\VC0882\882bootloader\pattern\ddrphytest\boot\bootloader.c)
+0x3456789A
+0x3456789A
+0x13579BDF
+0xFDB97531
+0x2468ACE0
+0x0ECA8642
+0x579B8642
+0xB9752468
+0x3C3C6B6B
+0x5858A2A2
+0x6D6D9393
+0xC7C74D4D
+0x66CCBB77
+0x99334488
+0x33DD22EE
+0xCC22DD11
+0x55AA5A5A
+0xAA55A5A5
+0x8C8CADAD
+0x73735252
+0x55AA5A5A
+0xAA55A5A5
+0x66BB5678
+0x9944A987
+0x5C5C6A6A
+0xA3A39595
+0x1E1E1E1E
+0xE1E1E1E1
+0x2D2D2D2D
+0xD2D2D2D2
+0x3C3C3C3C
+0xC3C3C3C3
+0x4B4B4B4B
+0xB4B4B4B4
+0x5A5A5A5A
+0xA5A5A5A5
+0x69696969
+0x96969696
+0x78787878
+0x87878787
+0x24681357
+0xDB97ECA8
+0x7654ABCD
+0x89AB5432
+0x586972AD
+0xA7968D52
+0xC7C6A8A9
+0x38395756
+0x9C8B7E6D
+0x63748192
+0x33557799
+0xCCAA8866
+
+1), 其实这里有个问题: 因为sleep前后ddr数据可能丢失, 感觉没法保证memory比较正确则memory一定没问题. \todo. 
+2), 访问pattern0溢出。rvdebugger如何做array溢出检测? 
+3), 修改VIM_DISABLE_INTERRUPTS(temp);引入了问题。明天继续调试。
+
+5, (10:13 2011-4-19)是代码本身问题：进入_PMU_GpuIsoOn_Sram后没有返回，所以堆栈“错位”。
+但是把VIM_HAL_ChkPattern所属代码都移到gpu power on后面就没问题。
+1), (11:58 2011-4-19)进一步分析和调试发现是cache问题. 原来没问题是因为cache没有clean, 现在因为数据量大, cache替换时就更新了ddr数据. 
+
+12:01 2011-4-18
+ICP, Linux, 服务器, 10.0.13.101
+10.0.13.101 su centos
+
+12:46 2011-4-18
+VC0882, SV, ICP Linux 服务器, 10.0.13.101, 修改samba属性: 向/mnt/data复制数据
+1, /mnt/data本来是caijin用来放码流, 我备份liaozhicheng机器的资料放在/mnt/data/26_35_server_bak.
+修改samba权限: 
+1), 打开samba /mnt/data的写权限(writeable=no改为yes):
+[root@centos 26_35_server_bak]# cat /etc/samba/smb.conf | grep \/mnt\/data -B 1 -A 4
+[data]
+        path = /mnt/data/
+        writeable = yes
+;       browseable = yes
+        valid users = caijin, sqm
+2), 重启smb服务使之生效. 
+
+
+[root@centos data]# /etc/init.d/smb restart
+关闭 SMB 服务：                                            [确定]
+关闭 NMB 服务：                                            [确定]
+启动 SMB 服务：                                            [确定]
+启动 NMB 服务：                                            [确定]
+
+13:08 2011-4-18
+tar jxf home.tar.bz2
+tar jxf mnt_sqm.tar.bz2
+tar jxf share.tar.bz2
+tar jxf kernel.tar.bz2
+tar jxf opt.tar.bz2
+tar jxf svn.tar.bz2
+
+15:28 2011-4-18
+时间管理
+0, 9:25
+
+1, 本日
+1), 9:40-11:50 VC0882 ICP例会; xiaotao介绍android power management. \todo整理.
+2), 20' dr.yang. 见笔记. \todo整理. 
+3), 1h 上传周五gpu work around代码, 见"9:36 2011-4-18"3. 
+4), gpu work around. "9:36 2011-4-18"4.
+5), 总结。
+
+17:38 2011-4-18
+VC0882, SV, power讲座, reset: power on reset, watchdog reset和software reset区别
+刚才咨询了zixi: 
+1, watchdog和power on reset区别: 
+前者不会reset pmu的部分寄存器和部分逻辑(详见pmu寄存器), 不会reset padc, ddrphy, timer.
+2, software reset比watch reset, 少reset部分pmu逻辑(详见pmu寄存器).
+
+19:39 2011-4-18
+VC0882, SV, arm, rvds, rvdebuger, 
+条件断点: "="表示相等。不是"==". 
+
+11:58 2011-4-19
+时间管理
+0, 9:37
+
+1, 本日
+1), sleep->wakeup memroy chk. 
+2), 整理我现有任务. 见"12:35 2011-4-19".
+
+12:35 2011-4-19
+VC0882, SV, 我的现有任务
+1, ICP分配任务
+位置: D:\VC0882\document\sv\task\Sv_Task_20110418.txt
+2-2）sleep回来后 cpu memory比对；
+ZJ: 这个发现cache处理有问题, 至少需要半天修正. 
+3）sleep 高温有问题，发现2个板子都有问题；
+   一块没有复现；
+   另一块data Abort；
+ZJ: 这个还没有分析. 时间未知
+4）dvfs 和 切频的联调；
+ZJ: 主要是anmin做, 关键是思路想清楚, 希望能先看看OMAP是怎么做的: 看OMAP文档和Kernel代码. 
+5）和icv一起，讨论arm line覆盖的频率；
+ZJ: 暂时没事. 
+6）604 trace调试；
+ZJ: 单独一件事情, 如果上面事情进展慢, 考虑开始. 
+8）整理电源、系统相应的ppt及注意事项；
+ZJ: 这个需要花时间思考, 计划下下周讲. 
+
+2, AE任务
+zhaoyuan希望我支持sleep和cpu, bus切频. 
+
+15:26 2011-4-19
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续, 之前代码有bug, 需要做较大修改
+1, 续"9:36 2011-4-18"5. 
+原来gpu wakeup work around流程之所以没问题是因为数据都在cache里面, 没有写出去. 所以gpu power on->reset pso后, 堆栈数据仍然是正确的. 
+这样有风险(没有lockdown情况下没法保证cache不会write ddr), 而且不便于扩展. 
+究其原因, 正常的sleep->wakeup流程没有返回到完全sleep的位置, 所以gpu 上电后也不好再次处理.
+
+考虑修改:
+PMU_TEST_NormalToSleep
+	1, 正常sleep: VIM_PMU_NormalToSleep
+		保护现场->ddr自刷新->sleep->wakeup->gpu power on(iso不打开) 
+	2, gpu work around: VIM_PMU_NormalToSleep
+		保护现场->ddr自刷新->sw reset->wakeup->skip gpu power on.
+	3, 函数返回. 
+这样修改的前提: sleep->wakeup后回到原有位置. 
+
+2, 后来修改时，没有sleep->wakeup后回到原有位置。现在发现的问题是VIM_PMU_SaveContext()没有恢复现场，所以此后调用的函数不能使用前面的寄存器。这样肯定不行。目前想到的办法是把VIM_PMU_SaveContext()移到VIM_SYS_SramWrapper实现：
+VIM_SYS_SramWrapper会保持所有的arm当前处理器模式(对于panda_os是svc)现场。
+VIM_SYS_SramWrapper:
+	VIM_PMU_SaveContext
+	if ( 0 != g_pmu_wakeupFlag ) {
+		return;
+	}
+	_PMU_DdrRetention_Sram
+这样调用_VIM_PMU_Restore后，应该在
+
+16:28 2011-4-19
+VC0882, SV, code review, gpu work around
+1, 
+1), 好的代码自己会说话.
+2), 写调试友好的代码. 
+
+10:36 2011-4-20
+VC0882, SV, power, pmu, mode trans, sleep->wakeup; gpu work around, 续, 之前代码有bug, 需要做较大修改, 续
+1, 跳到sram的函数有访问ddr的，修改。
+2, 修改后, 第一次wakeup正确，但是第二次wakeup错误：
+start sw rst and enable gpu iso...
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000016
+M0x0000080e
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+会不会是pmu寄存器有变化
+3, (14:48 2011-4-20)
+再跑一次，可以跑到跳到ddr。
+第一次：
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000016
+M0x0000080e
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x00000807
+H0x00002222
+M0x00000808
+H0x00000000
+M0x0000081c
+M0x0000080f
+H0x00099008
+M0x00000011
+H0x00099008
+第二次：
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000016
+M0x0000080e
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x00000821
+M0x0000081c
+M0x00000810
+R0x00000805
+H0x00099008
+M0x00000011
+H0x00099008
+
+4, 可能是比原来多了set mode trans。
+去掉也不行，发现可能是因为VIM_PMU_PowerOnGpu在没有定义gpu时无效，所以没有开gpu电，这样开gpu isolation是会出问题的。
+晕。果然是这个问题。害的自己调了半天。
+加入gpu work around流程后也可以。
+
+5, 现在发现由于两次保存现场，真正的现场会被冲掉。
+
+6, (18:25 2011-4-20)上传代码
+1), 本次修改主要目的是修改sleep->wakeup代码，避免风险。
+原有代码的问题是，避免原有sleep代码的风险：原有代码在第一次wakeup和第二次sleep之前不能对ddr数据有影响，因为cache没有用满，所以不会有换出，因此不会写坏ddr。但是这样软件很难包装，所以必须修改。
+当然如果gpu work around wakeup(也就是上述第一次wakeup和第二次sleep之前的代码)流程都在sram里面做也可以。笔者为了更好的代码复用，放弃了这种方案（实际AE采取的正是这种方法）。
+目前的流程（核心流程集中在VIM_PMU_NormalToSleep）
+sleep流程就想剥卷心菜，剥了一层还有一层。
+(0), 非核型模块进入suspend状态（目前未实现）
+(1), 进入VIM_PMU_NormalToSleep前设置唤醒源。
+(2), 第一次sleep->wakeup
+a, 设置wakeup标志
+b, 关闭arm中断, 以下操作均为原子操作. 
+c, interrupt suspend
+d, timer suspend
+e, 生成memory pattern用于wakeup后比较（共4Mbytes数据）
+f, 备份sram数据(sleep只保证ddr数据不丢失, sleep时sram会掉电，数据会丢失)。
+g, 关闭mmu和cache（讨论：这里其实关闭cache既可，否则对于Linux来说不好处理。对于panda_os来说memory是平映射的，所以关闭mmu也没有影响）。
+-----------以下进入_VIM_PMU_Sleep()---------------------
+h, 设置pmic ap off state为sleep.
+i, 保存wakeup pc,
+j, 切换pmu和padc到32k时钟，并设置正确的padc到pmu的同步时间。
+l, 借助VIM_SYS_SramWrapper跳转进入sram执行.
+	VIM_PMU_SaveContext_Sram	保存arm所有处理器模式寄存器
+					保存arm所需cp15寄存器
+					调用_PMU_DdrRetention_Sram.
+m, _PMU_DdrRetention_Sram
+ddr进入self-refresh
+ddrphy进入low power mode
+设置pmu模式转换目标为sleep。
+执行arm wfi，通知pmu模块软件工作完成，开始硬件sleep流程。
+n, 硬件sleep流程（略）
+o, 唤醒源发生，pmu收到唤醒源。
+p, 硬件wakeup流程（略）+ rom boot: bootloader重新运行使ddr退出自刷新
+q,	VIM_PMU_RestoreContext		保存arm所有处理器模式寄存器
+					保存arm所需cp15寄存器
+r, 对应e: check memory.
+s, 重新初始化clk和uart，这里为了简单没有保存二者的现场。
+t, sram restore
+u, init pmic i2c
+v, VIM_TIMER_Resume(VIM_PMU_MODE_SLEEP);
+w, gpu上电，gpu isolation在第二次"sleep"末尾。
+(3), 第二次"sleep"，本次并不是完全的sleep：只是把ddr进入自刷新，然后rst pso。对于pmu和pmic来说是走rst流程。
+同上f->m，只是m中不设置mode trans，改为rst pso（利用882 rst delay的特性）。
+x, pso复位, bootloader重新运行使ddr退出自刷新
+y, 同r->v, 恢复interrupt模块，打开arm中断。	
+
+pmu\PMU.S
+pmu\VIM_PMU_Driver.c
+pmu\VIM_PMU_Driver.h
+pmu\VIM_PMU_Driver_Sram.c
+
+1), add pmu_sv_fast_wakeup_repeat_exceptionInSram_WithGpuWorkAround make target, 用测试gpu work around power on和wakeup流程本身是否正确（否则默认情况下只有定义了gpu模块才会有work around流程）。(.cproject)
+2), gpu默认频率改为600Mhz.(clkrst\VIM_CLKRST_Driver_Module.c)
+3), VIM_SYS_SramWrapper移到ddr中，且在跳入func_in_sram之前，只是用ddr数据。
+hal\VIM_HAL_Driver.c
+hal\VIM_HAL_Driver_Sram.c
+hal\VIM_HAL_Driver_Sram.h
+4), 修正interrupt和timer suspend打印错误。
+interrupt\VIM_INT_Driver.c
+timer\VIM_TIMER_Driver.c
+5), VIM_PMU_SaveContext从pmu\PMU.S移到pmu\VIM_PMU_Driver_Sram.c
+6), 删除_VIM_PMU_Restore。删除g_pmu_wakeupFlag.
+7), g_arm_context改为在save和restore中直接获得。
+pmu\PMU.S
+pmu\VIM_PMU_Driver_Sram.c
+8), 注释SV中不再使用的三个函数PMU_TEST_SetFastWakeUp, PMU_TEST_SetFastWakeUp2, PMU_TEST_SetFastWakeUp3。
+pmu\test\pmu_test_api.c
+pmu\test\pmu_test_api.h
+pmu\test\pmu_test_cmd.c
+
+15:55 2011-4-20
+shuyu
+1, gpu改为默认600.
+2, 我的gpu case加3d.
+
+17:06 2011-4-20
+VC0882, SV, arm, Cortex-A8, coprocessor, CP10, CP11, support ICV zhaoyan
+这两个协处理器我也没有研究过。刚才帮你看了看。
+从文档看应该在D:\VC1600WCVS\doc\module\Cortex-A8\doc\ARMv7_architecture里面描述。但是这里面也没找到单独写cp10和cp11寄存器的。
+从下文看，可能cp10里面有一些控制和配置寄存器。Cp11里面可能没有咱们直接可见的寄存器。
+• Coprocessor 11 (CP11) supports double-precision floating-point operations.
+• Coprocessor 10 (CP10) supports single-precision floating-point operations and the control and
+configuration of both the VFP and the Advanced SIMD architecture extensions.
+
+18:28 2011-4-20
+时间管理
+0, 9:42
+
+1, 本日
+1), 完成整理gpu work around power on和wakeup代码。代码已上传。见"10:36 2011-4-20".
+2), 20' 复测gpu横纹问题。
+3), 总结, 见"19:29 2011-4-20". 
+
+19:12 2011-4-20
+VC0882, SV, 汇编和c语言混合编程心得
+1, 堆栈需要8字节对齐。
+2, 堆栈的指令需要和c环境相同。
+pop是LDMIA, increase after, 也就是full Descending
+LDM / LDMIA / LDMFD
+push是STMDB, decrease before, Full Descending
+用FD, EA记忆指令好记，因为成对指令都是一样的后缀LDMFD, STMFD.
+但是用IA, DB容易理解。
+3, 如果不用堆栈，例如save context和restore context里面都用IA，这样相当于用数组，代码好写。
+
+19:29 2011-4-20
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 完成整理gpu work around power on和wakeup代码
+2), 整理上述流程文档, 已更新到pmu driver spec.
+3), 复测gpu横纹问题: wenlei修改后未发现问题.
+4), 下楼和AE zhaoyuan, bianrongguang开会，为了进入完成power方面工作，需要我再未来两周有一半时间在android里面完成arm, bus, gpu的调频。
+5), gpu测试两个板子
+C20测试1小时50分钟正确。
+C4（fandong高低温sleep中出现data abort的板子）第一次测试半小时正确，第二次测试18分钟出现data abort，log如下
+[PMU   MSG]sram backup
+data abort lr = 0x3402BC
+data abort lr = 0x3402BC
+data abort lr = 0x3402BC
+[PMU   LOG]@pmu go sleep module: PMU_SW_REG0 = 0x365f80
+[PMU   LOG]software will jump to sram!
+trans to sleep mode
+ddr into sel refresh...
+en self refresh 24, 25
+nop
+exec cmd
+exec cmd done
+force enter self refresh
+ddr into sel refresh...done
+data abort lr = 0x
+
+明天会继续追查这个问题。
+
+2, 明日计划
+1), 上午听zixi讲低功耗。
+2), 下午review gpu work around power on and wakeup sequence. 
+3), 看bianrongguang现有切频代码状态。
+
+14:09 2011-4-21
+VC0882, SV, sync up
+1, 125度才算老化实验. 70度没什么问题.
+882, gpu
+c4板测试时间不长就data abort, 出错位置的代码一直没有修改。
+过高低温的板子，稳定性感觉变差，需要追查。
+2, gong'anmin: gpu背景测试, 切频后DMA搬运有时出错. 考虑bus降频或使用arm搬运.
+
+14:47 2011-4-21
+VC0882, SV, power, pmu, mode trans: sleep, gpu work around; code review
+1, 内容要点
+1), sleep流程
+D:\VC0882\document\DriverSpec\pmu\VC0882_PMU_Driver_Spec.doc 第7章.
+2), VC0882 power关系框图: 
+D:\VC0882\document\DriverSpec\pmu\power.vsd
+3), 其它: 
+1), 关注模块之外需要关注: 物理连接, power, clock, rst, 信号质量.
+2), 功耗: 
+bus: 1ma/1MHz
+gpu: 静态功耗: 1ma, worse case: 4ma. 
+3), software reset: reset pso.
+4), Linux device model维护一个树状结构, 便于管理suspend和resume顺序.
+5), 为什么用汇编: 如下信息c语言没法保存: cpsr, spsr, 栈顶, 模式切换, cp15. 
+6), 如何把堆栈从ddr改到sram. 参见"VIM_HAL_SramWrapper"
+
+2, 发现的问题:
+1), VIM_PMU_PowerOffGpu: power off和clk off之间没有延时. 
+action: 加入延时后实测确认放电效果.
+2), 恢复现场后, mmu有没有打开? 
+action: sleep时不关就行了, 只关cache. 
+
+19:12 2011-4-21
+VC0882, SV, 工作总结
+1, 本日工作总结
+1), 上午听zixi讲低功耗。
+2), 下午review gpu work around power on and wakeup sequence. 
+详情附后. 
+
+2, 次日工作计划
+1), 看AE bianrongguang cpufreq进展. 
+2), 参见AE power sync up.
+3), 和dongliang, anmin讨论AE clkswitch分工. 
+4), 如果fandong测试板子有问题, 查sleep问题.
+5), 根据今日code review修改sleep代码.
+6), 看zhangyunxia sleep测试问题. 
+
+3, 遇到的问题, 修改sleep流程后, 目前只有一个板子19小时无错误. 还需要更多板子证明流程无问题. 
+
+10:21 2011-4-22
+VC0882, SV, AE, cpufreq
+1, 看看bianrongguang的代码做到了什么程度。
+1), cpufreq已经测试过. 
+2), pll规划
+(1), audio codec, stor, peri在一个pll. 
+(2), vcodec, gpu, cif在一个pll.
+(3), de在一个pll. 
+(4), cpu, bus, ddr可以用pll1, 2, 6. 不会有其它模块用. 
+默认系统频率: arm_bus_ddr: 750_333_333.
+
+2, arm, bus切频计划
+1), pll1=750, pll2=666. 
+arm: 750, 666, 375, 333, 222, 187.5
+bus: 333, 222, 111, 55
+ddr: 333@pll2.
+
+2), arm, bus一起调. bus根据performance monitor.
+3), 调压的目的: 避免升频时电源抖动, 降低静态功耗.
+
+13:19 2011-4-22
+VC0882, SV, AE进展
+之前UI速度慢是gpu pmem non-cachable问题. 和v5, v7编译没关系. 
+
+15:55 2011-4-22
+时间管理
+0, 9:40
+
+1, 本日
+1), 2h 看bianrongguang cpufreq进展, 并和bianrongguang讨论. 见"10:21 2011-4-21"1.
+2), 70' 和dongliang, xiaotao, anmin讨论android下arm, bus切频. 见"10:21 2011-4-21"2. 
+3), 40' 面试.
+4), 解决zhangyunxia power sleep->wakeup测试问题. 见"17:16 2011-4-22". 
+5), 支持bianrongguang降低sleep功耗, 提供了ICP的pak文件. 
+6), 总结. 见"18:42 2011-4-22". 
+
+17:16 2011-4-22
+VC0882, SV, power, mode trans, sleep, wakeup, fast wakeup, 解决zhangyunxia power sleep->wakeup测试问题
+1, 删除sleep cycle.
+2, 恢复fastsleep命令, 命令本身和sleep相同, 只是把isFast写死为1. 保证走fast流程. 
+
+17:17 2011-4-22
+VC0882, SV, usb转串口, 产品板USB-COM 驱动
+1, zhaoyuan邮件_20110217
+\\10.0.12.140\Project\VC0882\software\android-usbserial-driver
+
+2, 为了避免中毒, 删除了install.exe
+\\10.0.13.101\share\zhangjian\software\android-usbserial-driver.rar
+
+18:42 2011-4-22
+VC0882, SV, 工作总结
+1, 本日
+1), 和AE交流bianrongguang cpufreq进展.
+2), 和dongliang, xiaotao, anmin讨论android下arm, bus切频. 详见lidongliang邮件. 
+3), 解决zhangyunxia power sleep->wakeup测试问题. 
+4), 支持bianrongguang降低sleep功耗, 提供了ICP的pak文件. 
+
+2, 次日(周一)
+1), AE工作: 根据今日讨论加入kernel bus clkswitch代码并测试. 
+2), 找其它板子实验GPU work around有无问题. 
+3), 实验吹过的C4板sleep->wakeup问题. 计划加入打印stack功能便于出错后debug. 
+
+3, 下周工作计划
+1), 一半时间用于AE clkswtich工作.
+2), 构思给AE的快速参考文档.
+3), sleep问题收尾. 如果sleep事情close, 开始调试trace, 可能需要焊trace接口. 
+
+11:03 2011-4-24
+时间管理
+0, 10:00(周末加班)
+
+1, 本日
+0), 之前已完成但未记录的工作
+(1), fandong发现arm和core在程序中改过电压. 发现是VIM_PMU_PowerOnVcodec中调整arm和bus电压没有用VIM_PMIC_SetBuckVolStep改回到原始电压. 和gpu一样用此函数, 同时加入VIM_PMU_VA7882B宏, 避免对VA7882C和C后面的芯片有影响. 
+(2), 备份liaozhicheng Linux服务器资料。见"11:09 2011-4-24". 
+(3), gpu加入performance monitor. <取消: 本来是希望分析gpu出错和正常工作时数据有无差异, 目前gpu问题已经找到原因, 而且work around也初步可用, 因此这个工作暂时取消>
+1), 20' 整理部分日志. 现在日志还是需要整理, 尤其是todolist. 
+2), 10' 把原来zhaoyuan watch rst出错问题指回给报告人fengbeizhan. 
+
+11:09 2011-4-24
+ICP, 服务器, liaozhicheng: 10.0.26.35
+send: ai guo
+cc: fengbeizhan; caijin; lidongliang; fanxiaofan; lingming; zhangjian; yangmin
+hi, aiguo
+liaozhicheng服务器(10.0.26.35)已经备份到"\\10.0.13.101\data\26_35_server_bak", 备份了svn, opt, kernel, mnt/sqm, share目录的完整内容. 这些目录里面有很多原来的开发资料, 时间关系我还没有整理. 
+由于权限问题home目录只备份了部分内容. 
+
+11:34 2011-4-24
+VC0882, SV, pmu notice
+1, sleep时需要关闭gpu和vcodec电源, 否则core会工作不正常. 
+2, sleep: switch pmu clk to 32k because the DELAY of pmu wakeup sequence is counted by 32k clk
+这个问题在分立器件电源板上没有出现, 因为这种情况下电源板没有掉电, 不需要为power on做delay.
+
+11:39 2011-4-24
+VC0882, SV, 电源和pmu整理, 整理电源、系统相应的ppt及注意事项
+1, 电源有上电时间. 
+如果没有满足上电时间, 工作可能就不正常, 甚至没法工作. 
+sleep: switch pmu clk to 32k because the DELAY of pmu wakeup sequence is counted by 32k clk
+这个问题在分立器件电源板上没有出现, 因为这种情况下电源板没有掉电, 不需要为power on做delay.
+
+分析问题的思路: 
+了解更多的原理和细节有助于我们分析问题, 但是可能我们也没有精力去提前准备做好功课. 所以遇到问题, 必要时需要回到设计本身去分析. 
+例如882 SV阶段我遇到的分立器件上sleep->wakeup正常, 使用VA7882电源板就没法完成sleep->wakeup. 
+(我这里没有说"没法唤醒", 因为其实当时还没法确定是sleep出错, 还是wakeu出错. 我调试sleep时遇到的问题就和忽略了这个细节有关. 那个问题是因为没有关闭中断, 见后)
+
+16:11 2011-4-24
+VC0882, SV, 打印完整堆栈便于调试
+需要知道是哪个task，才能打印出完整的堆栈。 
+TCT_Control_To_Thread会切换堆栈。
+(TC_TCB *) TCD_Current_Thread表示当前thread，
+(TC_TCB *) TCD_Current_Thread->tc_stack_start是堆栈底，tc_stack_end是堆栈顶。
+但是nucleus不允许直接访问，看来一两下没法完成...
+
+10:22 2011-4-25
+VC0882, ICP, sync up
+筛片dma出错是socket接触问题。
+五一量产：一百台，发掘给我们五十个。
+
+15:23 2011-4-25
+时间管理
+0, 9:27
+
+1, 本日
+1), ICP sync up.
+2), AE android bus clk switch. 
+3), 总结. 见"19:15 2011-4-25". 
+
+16:13 2011-4-25
+VC0882, SV, AE, bus clkswitch
+1, 添加脚本: ZJ_RAMDISK_CPU750_CPUACLK375_BUS333_DDR3_2Gb_2x16_dll_PhyOn_DdrOn_333.inc
+
+2, bus_clksrc的频率和设置值不同，发现时bus_clksrc的parent是pll1, 暂时不考虑bus切换pll的问题, 把bus_clksrc parent改为pll2.
+修改后频率树显示正确:
+ckd_aclk(333000kHz,18)<=bus_clksrc(666000kHz,2)<=pll2_clk(666000kHz,2)<=xclk(26000kHz,7)
+
+3, 试验了通过debugfs切bus频率（不变pll）情况下
+333, 222, 166.5, 133.2, 111, 66.6切频都正确（check寄存器bus_clk_cfg: 0x60000048H）
+
+4, 测试降低bus频率后，bus utilization如何变化：
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization      6.5    clock 333000000 efficiency    85.96      page_confict        0
+bus     utilization     5.20    clock 333000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17268          61           5.18            0.1          38          11    17268328       61459     2158541       28544
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 135          62            0.4            0.1          53          18      135471       62269       23443       29354
+de                17140           0           5.14            0.0          44           0    17140296           0     2142536           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization      6.6    clock 333000000 efficiency    85.90      page_confict        0
+bus     utilization     5.20    clock 333000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17279          65           5.18            0.1          38          11    17279695       65048     2159962       30377
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 139          65            0.4            0.1          53          18      139166       65876       23932       31205
+de                17147           0           5.14            0.0          44           0    17147999           0     2143501           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+#
+
+# echo -n 0 > global/enable
+# echo -n 222000000 > global/clock
+# echo -n 50 > global/period
+# echo -n 1 > global/enable
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization      6.7    clock 333000000 efficiency    85.72      page_confict        0
+bus     utilization     7.81    clock 222000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17279          65           7.78            0.2          29          13    17279878       65120     2159985       30520
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 139          65            0.6            0.2          40          20      139029       65916       23634       31316
+de                17147           0           7.72            0.0          35           0    17147998           0     2143500           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization      6.8    clock 333000000 efficiency    85.67      page_confict        0
+bus     utilization     7.81    clock 222000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17281          66           7.78            0.2          29          13    17281386       66670     2160173       31102
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 140          67            0.6            0.3          41          20      140474       67482       23763       31914
+de                17148           0           7.72            0.0          35           0    17148003           0     2143500           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+#
+# echo -n 0 > global/enable
+# echo -n 111000000 > global/clock
+# echo -n 50 > global/period
+# echo -n 1 > global/enable
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization     6.12    clock 333000000 efficiency    84.95      page_confict        0
+bus     utilization    15.61    clock 111000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17264          65          15.55            0.5          21          15    17264006       65238     2158002       30389
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 140          66           0.12            0.5          31          22      140192       66051       22935       31202
+de                17129           0          15.43            0.0          27           0    17129998           0     2141251           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization     6.12    clock 333000000 efficiency    84.94      page_confict        0
+bus     utilization    15.60    clock 111000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17262          65          15.55            0.5          21          15    17262315       65753     2157790       30677
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 138          66           0.12            0.5          31          22      138492       66553       22712       31477
+de                17129           0          15.43            0.0          27           0    17129997           0     2141250           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+
+# echo -n 0 > global/enable
+# echo -n 66600000 > global/clock
+# echo -n 50 > global/period
+# echo -n 1 > global/enable
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization     6.21    clock 333000000 efficiency    83.86      page_confict        0
+bus     utilization     26.4    clock 66600000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17281          65          25.94            0.9          18          16    17281978       65993     2160248       30862
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 141          66           0.21            0.9          27          24      141366       66812       22415       31681
+de                17146           0          25.74            0.0          24           0    17146036           0     2143254           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+# /monitor.sh
+1 times test
+        statics interval     1050ms
+ddrc    utilization     6.19    clock 333000000 efficiency     84.3      page_confict        0
+bus     utilization     26.4    clock 66600000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17282          62          25.94            0.9          18          16    18146931       65645     2268365       30645
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 134          63           0.20            0.9          27          23      140755       66481       22441       31481
+de                17154           0          25.75            0.0          24           0    18011715           0     2251464           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+#
+# echo -n 0 > global/enable
+# echo -n 11100000 > global/clock
+# echo -n 50 > global/period
+# echo -n 1 > global/enable
+# /monitor.sh
+1 times test
+        statics interval     1050ms
+ddrc    utilization      4.8    clock 333000000 efficiency    58.15      page_confict        0
+bus     utilization    71.20    clock 11100000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc               7840          64          70.63           0.57          23          16     8232204       68124     1029025       32075
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 147          65           1.32           0.58          32          25      155299       68985       22544       32936
+de                 7695           0          69.32            0.0          29           0     8080487           0     1010057           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+# /monitor.sh
+1 times test
+        statics interval     1050ms
+ddrc    utilization      4.8    clock 333000000 efficiency    58.16      page_confict        0
+bus     utilization    71.22    clock 11100000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc               7841          65          70.63           0.58          23          16     8233302       68571     1029162       31919
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 148          66           1.33           0.59          33          24      155743       69444       22610       32793
+de                 7696           0          69.33            0.0          29           0     8081148           0     1010145           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+
+# echo -n 0 > global/enable
+# echo -n 16650000 > global/clock
+# echo -n 50 > global/period
+# echo -n 1 > global/enable
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization     5.16    clock 333000000 efficiency    75.21      page_confict        0
+bus     utilization    77.65    clock 16650000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              12880          50          77.35           0.30          23          16    12880883       50173     1610111       23416
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 114          50           0.68           0.30          32          24      114639       50983       17422       24228
+de                12769           0          76.69            0.0          29           0    12769778           0     1596225           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+#
+
+echo -n 22200000 > /debugfs/clock/xclk/pll2_clk/bus_clksrc/ckd_aclk/rate
+echo -n 0 > global/enable
+echo -n 22200000 > global/clock
+echo -n 50 > global/period
+echo -n 1 > global/enable
+/monitor.sh
+
+# /monitor.sh
+1 times test
+        statics interval     1000ms
+ddrc    utilization     6.35    clock 333000000 efficiency    81.19      page_confict        0
+bus     utilization    77.45    clock 22200000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+             rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc              17149          45          77.24           0.20          22          16    17149738       45044     2143718       20949
+cif                   0           0            0.0            0.0           0           0           0           0           0           0
+cpu                 101          45           0.45           0.20          32          24      101165       45861       16136       21766
+de                17052           0          76.81            0.0          28           0    17052564           0     2131571           0
+emi_burst             0           0            0.0            0.0           0           0           0           0           0           0
+gpu                   0           0            0.0            0.0           0           0           0           0           0           0
+video_codec           0           0            0.0            0.0           0           0           0           0           0           0
+#
+1), 开始对于这个结果不太理解, 因为bus效率应该接近100%. 
+后来和yanglei讨论, 认识到, bus效率和master,slave都有关系. 我之前只考虑了slave, 没有考虑master, 在我这个测试里面, 由于主要master是de, 而de使用bus clock, 所以降低bus频率也就降低了de频率, 所以de效率也会降低.
+目前测得的bus效率最高在71-78%之间，实际可以以下限70%为准进行切频。
+至于latency, latency减小也是可以理解的, 因为bus频率降低, 以bus频率计数的latency单位就变大了, 所以latency个数减小(但latency绝对值是上升了). 
+2), 后来测试了bus功耗, 如果是上面负载的话, 大约0.1ma/MHz, 和0.4mw/Mhz. 和dr.yang讨论, 可能是因为bus负载较轻, 所以比之前IC测试的1mw/MHz低一些.
+
+19:15 2011-4-25
+VC0882, SV, 工作总结
+1, 本日工作
+1), ICP sync up; wangwenlei training: lvds屏, 触摸屏. 
+2), AE bus clkswitch. 
+(1), 阅读AE已有的bus代码并和AE讨论. 
+(2), 实验了已有代码对于bus的切频, 手动方式切频到如下频点工作正常(bus@pll2=666MHz): 333, 222, 166.5, 133.2, 111, 66.6Mhz. 
+和dongliang一起实验了cpu切频, AE已经实现了在同一个pll情况下, 通过修改pll调整arm频率. 测试了750, 375, 200三个频点. 这样在cpu freq里面可以得到比较均匀了. 
+(3), 测试了不同bus频率下, bus utilization和功耗, 为下一步调压积累数据.
+utilization: 受到master频率和效率的影响, bus的最大利用率在71-78%之间(和yanglei讨论过, 认为是合理的), 将来切频会以bus 70%利用率为切频依据. 
+功耗: 在电源端0.1ma/MHz(0.4mw/Mhz). 和dr.yang讨论, 可能是因为bus负载较轻, 所以比之前IC测试的1mw/MHz低一些.
+
+2, 次日工作
+1), AE power sync up.
+2), bus切频需要kernel中调用performance monitor的接口. 
+3), 准备trace硬件和和gong'anmin讨论dvfs. 
+
+10:15 2011-4-26
+时间管理
+0, 9:50
+
+1, 本日
+1), 20' 看迟到时间.
+2), 20' AE power sync up. 
+3), 30' 和bianrongguang讨论clkswitch. 见"14:55 2011-4-26". 
+4), 10' 和bianrongguang讨论AE android sleep功耗问题.
+5), 30' 准备kongyingqi arm speed测试环境. "D:\VC0882\882bootloader\pattern\arm_speed"
+6), 60' 向kongyingqi介绍环境. 
+7), 20' 了解performance monitor对于分析NEON的作用. 见"15:52 2011-4-26". 
+8), AE bus clkswitch. 见"14:55 2011-4-26"3. 
+9), 总结. 见"19:10 2011-4-26". 
+
+14:55 2011-4-26
+VC0882, SV, AE, clkswitch, power, dvfs: cpufreq; 3 bus clkswitch
+1, 经过和bianrongguang讨论, 目前变cpu(bus等)pll频率的流程不完善, 没有加入中间过渡频点. 所以这个功能暂时不使用. 
+所以, 目前cpu切频不改变pll.
+另外切频时如果设置了1k的容差, 得到divider后, 会看二者绝对值是否超过1k, 如果不超过1k认为是正确的.
+2, bianrongguang看过moto的手机, 实际只是用了最高和中间两个频点. 
+
+3, bus切频需要两个东西
+1), 一是需要知道当前系统繁忙情况. 
+bus切频需要kernel中调用performance monitor的接口. 
+2), 二是需要在bus频率改变时通知performance monitor, 改变频率. 
+clk_notifier_register
+(1), 消息包括CLK_PRE_RATE_CHANGE, CLK_POST_RATE_CHANGE. 
+3), global/clock改为只读. 
+
+4, 现在这种performance monitor由用户trigger的方式, 对于cpu freq里面获得bus频率不太方便. 除非是在cpu freq里面起一个timer, 获得数据并切频. 
+
+15:52 2011-4-26
+VC0882, SV, performance monitor, NEON
+1, 关于统计NEON指令数量
+hi, peixin
+
+我看了一下performance monitor, 下面两个寄存器可以得到arm指令执行数量和非idle时间. 
+0x08 Instruction architecturally executed. This counter counts for all instructions, including
+conditional instructions that fail their condition code check.
+0x5a Number of cycles that NEON and integer processors are both not idle.
+
+但是没有能否单独统计NEON指令执行数量的, 只有统计NEON对cache和integer的影响, 可能可以间接看到NEON运行是否频繁(4e+4f相当于是NEON所有memory访问, 因为NEON默认不走L1 cache):
+0x4e Any L2 cache accesses as a result of a NEON memory access.
+0x4f Any NEON hit in the L2 cache.
+0x58 Number of cycles the processor stalls waiting on MRC data from NEON.
+0x59 Number of cycles that the processor stalls as a result of a full NEON instruction queue or NEON load queue.
+
+另外在marb上的performance monitor也没法区分integer和NEON. 
+
+17:31 2011-4-26
+logAssistant, 正则表达式, \todo 总结
+1, 从vi里面粘贴代码: 
+    5202 struct notifier_block dummy_clk_notifier = {
+    5203         .notifier_call = dummy_clk_monitor,
+    5204         NULL,
+    5205 };
+    5206 #endif
+
+结果是:
+    135     5202 struct notifier_block dummy_clk_notifier = {
+    136                 5203         .notifier_call = dummy_clk_monitor,
+    137                     5204         NULL,
+    138                         5205 };
+    139     5206 #endif
+
+预期是:
+    135  struct notifier_block dummy_clk_notifier = {
+    136          .notifier_call = dummy_clk_monitor,
+    137          NULL,
+    138  };
+    139  #endif
+
+可以用v选择区域. ":'<,'>s/^[\ \t]*[0-9][0-9]*//gc"替换. 
+
+2, (15:54 2011-5-2)正则表达式, 还可以用于函数批量修改. 
+
+19:10 2011-4-26
+VC0882, SV, 工作总结
+1, 本日工作
+1), AE power sync up. 
+2), 和bianrongguang讨论clkswitch. 
+3), 为kongyingqi建立单独的arm speed sorting工程(目录: D:\VC0882\882bootloader\pattern\arm_speed). 向kongyingqi, zhaoyan详细介绍speed sorting环境使用方法. 
+4), AE bus clkswitch: 今天主要工作是修改和添加用于bus切频的API. 基本添加完成, 明天测试. 
+
+2, 次日工作
+1), 看zhangxin irq测试问题. 
+2), 继续AE bus clkswitch
+3), VC0882 SV总结文档. 
+
+9:58 2011-4-27
+时间管理
+0, 9:32
+
+1, 本日
+1), 1h 看zhangxin irq测试问题. 
+2), 继续AE bus clkswitch
+3), VC0882 SV总结文档. 
+4), 总结. 见"17:58 2011-4-27". 
+
+10:17 2011-4-27
+VC0882, SV, BGA604, interrupt, irq测试fail
+1, zhangxin邮件_20110426
+是 882的604封装   使用的是 5V电源板   随便编译的模块 昨天测试pwm时用的，也包含其他模块。
+就是我下面邮件说的测试 ，敲了命令后 不断打印data abort at 0x3f324 with value 0xe514200
+FIQ与IRQ同时到来测试 与两个autotest测试 都是不断打印如下，
+data abort at 0x3f324 with value 0xe5142004
+
+2, 测试priority.
+发生prefetch abort。
+445和604都有这个问题。
+1), 排除gpu问题: 使用gpu流程与否都有问题. 
+2), 查看堆栈地址发现, svc的lr在VIM_SYS_SramWrapper中sram函数返回处, 说明r5是函数地址, \todo 查.
+但是VIM_SYS_SramWrapper这个函数, 如果没有定义VIM_SYS_HANDLER_IN_SRAM, 在这里应该不会用到.
+
+3, 追查发现是VIM_HAL_Write_DWord没有加返回指令造成的. 这个问题应该一直就有问题啊, 原来没有问题很神奇. 
+
+4, 上传代码: 
+1), VIM_HAL_Write_DWord没有加返回指令.
+之前FPGA和445测试, 没有问题可能是利用了后面函数的返回指令.
+2), VIM_SYS_SramWrapper返回值改为sram函数返回值. 
+原来是堆栈溢出的指示. 
+
+14:30 2011-4-27
+VC0882, 同事信息, AE
+1, sun feng qiang. 做过820, 没做过830. 882中参与多媒体部分. android2.3 stage fry的框架是他做的. 
+2, dazhi. 882 多媒体具体vdec的driver.
+
+14:41 2011-4-27
+VC0882, SV, 关注linaro kernel动态
+1, [CPUFREQ] Add documentation for sampling_down_factor
+25 Jan 2011
+http://git.linaro.org/gitweb?p=kernel/linux-linaro-2.6.38.git;a=blobdiff;f=Documentation/cpu-freq/governors.txt;h=e74d0a2eb1cf4d9921b0720039c6696e42fc3062;hp=737988fca64d37712a7b5c7dfc2d316a57be9082;hb=b6c784d817ac77750b4729f2e78dac591b55ddd4;hpb=da92d4c8dcaf14175ee14521df8cdefc59fa95a5
+sampling_down_factor: this parameter controls the rate at which thekernel makes a decision on when to decrease the frequency while runningat top speed. When set to 1 (the default) decisions to reevaluate loadare made at the same interval regardless of current clock speed. Butwhen set to greater than 1 (e.g. 100) it acts as a multiplier for thescheduling interval for reevaluating load when the CPU is at its topspeed due to high load. This improves performance by reducing the overheadof load evaluation and helping the CPU stay at its top speed when trulybusy, rather than shifting back and forth in speed. This tunable has noeffect on behavior at lower speeds/lower CPU loads.
+
+14:56 2011-4-27
+VC0882, SV, AE, clkswitch, power, dvfs: cpufreq; 3 bus clkswitch, 续
+1, mach-pxa/viper.c中通过cpufreq notifier调整电压. 
+参考via"10:25 2008-11-8"建立工作队列, 在上述notifier之后获得bus频率并调频. 
+2, (16:38 2011-4-28)为了便于调试, 添加"global/clock_delay_trigger", 测试切频正确. 
+现在需要加入较好的算法: 根据utilization得到正确频率. 
+3, 和dongliang讨论, 问bianrongguang问题
+1), CLK_FLAG_BUSY和CLK_FLAG_LOCK分别表示变频是等待busy还是lock, 功能和CLK_FLAG_WAIT_IDLE, CLK_FLAG_WAIT_LOCK重复, 删除后者. 
+因为修改divider也需要查busy, 所以对于auds, 也需要CLK_FLAG_BUSY flag. 
+2), max_times: 若干个children 最大公倍数/最小公倍数. 例如两个child, 一个需要2MHz, 一个需要3MHz, 最小公倍数是6MHz, 最大公倍数是12MHz(因为child自己有divider, 所以不一定只能是6M, 12M也能分到2M和3M), 这样max_times=2. 
+3), min_times(): 得到尽量小的分频值, 包装从children到parent的频率尽量小. 这样利于降低系统频率. 
+
+17:58 2011-4-27
+VC0882, SV, 工作总结
+1, 今日
+1), 看zhangxin irq测试问题: 是环境代码问题, 已修正. 
+2), 继续AE bus clkswitch, 继续coding代码, 已完成. 
+
+2, 次日
+1), 调试昨日今日代码.
+2), ICP例会, training. 
+
+3, 遇到的问题
+1), irq问题实际是我在FPGA上写的代码有问题. 说明自己对于自己的代码review不够. 如果能统一定期review代码可能会更好.
+
+14:31 2011-4-28
+时间管理
+0, 9:40
+
+1, 本日
+1), VC0882 ICP sync up. 见"14:31 2011-4-28".
+2), VC0882 ICP training: yangxing emi. 见"14:46 2011-4-28". 
+3), 调试AE bus clkswitch代码, 目前可以根据bus utilization调整bus频率. 见"14:56 2011-4-27"2
+4), 10' 支持zhangyunxia sleep测试. 
+5), 30' 支持kongyingqi调试speed sorting. 见"18:42 2011-4-28". 
+6), 总结. 
+
+2, 次日
+1), AE bus clkswitch代码完善: 希望借用cpufreq table函数维护bus freq table. 
+2), VC0882 AE文档: 想一想arm, clk, irq, pmu有哪些注意事项. 
+
+14:31 2011-4-28
+VC0882, SV, ICP sync up
+1, 微软项目
+除了要双sensor要做到30frames, 还需要看做到后, cpu占用率多少. 估计是要看看剩余工作能否完成. 
+得到cpu占用率可以有两种方法, 一个是统计idle线程(dongliang原来在ucos里面做过, 原理和Linux的一样). 一个是利用performance monitor看interget和neon是否busy, 不过这样可能需要cpu空闲时就进入wfi.
+参考"15:52 2011-4-26", 另外下面这个不知道是否有用: 
+0x56 Increment for every cycle that no instructions are available for issue.
+
+4月26日peixin本来也没有需要我查performance monitor, 但是, 我自己看了一下, 这样就比较了解都有什么寄存器, 这次才能提出这个硬件方案. 这样arm才能按我希望的做的更深入. 
+
+这个事情, 本来beizhan说给dongliang和我分别做软件和硬件部分. dongliang说需要做AE切频, 所以安排给gong'anmin做. 
+
+2, AE文档这个事情, beizhan希望我先写个初稿, 大家讨论一下, 然后再找相关模块写.
+
+14:46 2011-4-28
+VC0882, SV, memory, emi, training: yangxing emi
+开始没有说emi基本知识，为什么要引入emi? 以后要注意。
+外接设备要注意寻址方式。
+emi设备支持不变数据线，把地址移位。这样不用改板子，就可以接不同位宽设备。(16bit norflash的地址单位是16bit, 不是8bit).
+信号量用中断通知。
+adp数据地址分开，adm数据地址复用。
+slave模式(即882内部sram), 支持两种信号量模式，0x0模式和普通dpram一样，通过专门sem信号线指示信号量操作。0x2模式指定固定地址为信号量，这样适合44box这类没有sem信号线的芯片。
+
+14:51 2011-4-28
+VC0882, SV, AE clkswitch进展
+1, 最近三天进展. 
+实验环境均为ramdisk. 
+1), 初步实验了cpu freq里面各个goveror, 都可以切频. 
+测试中发现cpu切频需要换parent的情况有问题. 例如从750切到222, 预期是切到pll2(666)/3. 但是实际是pll1/3=250MHz. 需要确认一下寄存器, 看看是打印info信息不对还是确实流程有问题. 
+2), bus切频: 计划放到cpu切频post事件notifier中, 代码已经完成, 准备测试. 
+
+18:42 2011-4-28
+VC0882, SV, 量产, 机台测试, speed sorting, arm, SV注意事项
+1, 环境参考文档
+CVS: CVSROOT=:ext:yourname@cvs.vimicro.com:/project/fpga_verif/VERIFY
+module: VC0882
+异常调试方法见: VC0882\document\VC0882 environment freshman guide.doc第七章.
+rvdebugger和realview ICE使用方法见: VC0882\document\arm\debug
+
+2, 每次重新加载映像前都要复位板子, 否则程序运行可能出错.
+今天遇到的第一个问题可能是mmu, cache打开情况下下载代码不正确, 或没有相应访问权限. 
+第二个问题是因为寄存器空间没有映射. 
+
+19:35 2011-4-28
+软件技巧, 正则表达式, 重命名*.c, *,h, *.S和无扩展名的文件为*.txt文件
+想在mid上用iReader看代码, 但是前者只支持.txt文件, 需要重命名
+#!/usr/bin/perl
+
+use File::Find;
+
+my $dir = ".";
+find (\&wanted, $dir);
+
+#进入wanted函数里面时, 我们已经进入到$File::Find::name所对应目录, 因此直接操作
+#文件名($_)既可. 不需要脚本开始的写相对目录.
+sub wanted
+{
+#	print "$File::Find::name\n";
+	if ( -f $_ ) {
+		if ( /\.[chS]$/ or /^[^.]$/ ) {
+			my $newName = $_.".txt";
+			print "rename $File::Find::name to $newName\n";
+			rename $_, $newName;
+		}
+	}
+}
+
+
+15:25 2011-4-29
+时间管理
+0, 9:50
+
+1, 本日
+1), 2h: yangxing cache debug tools. 
+2), 解决pmu测试问题。见"15:26 2011-4-29".
+
+2, 次日
+1), 调试AE Linux bus switch. 
+
+15:26 2011-4-29
+VC0882, SV, power, pmu, mode trans, idle, sleep
+1, hefan idle问题
+1), 代码中使用mask作为输入参数，用户使用不方便。改为unmask。
+2), 原来idle代码有问题是因为没有清srcpnd. 
+原来没问题是因为没有在进入idle时关闭arm中断（disable arm interrupt to avoid bug in irq mask），所以de的中断会在wfi前由de中断自己清掉（mask一级中断，但已经产生的srcpnd还是会给arm处理）。
+
+2, zhangyunxia normal wakeup
+1), 我在445上做normal wakeup也会data abort:
+data abort at 0x496320 with value 0xe5142004
+进一步测试发现：只要是第二次wakeup就有问题。第一次normal是死在memory出错。两次fast或先fast后normal都有问题。
+后来发现是第二次wakeup后没有恢复sram. 现在改为第一次和第二次都会备份和恢复sram. 
+
+2), 测试normal wakeup中, 发现0x2000000 dt会把数据写到0地址。
+使用ICE脚本测试, 发现data training设为0x80200000没有问题, 0x82000000就会被0x80000000地址写坏. 
+注: data training中最高地址(bit31)无效, 这里写出0x8开始的地址为了描述方便.
+
+3, hi, beizhan, fuyali
+
+gpu power on有bug, 这个在445上是我自己测试的.
+是否加入testplan, 在604上也测试一下? 
+
+18:30 2011-4-29
+VC0882, SV, performance, video, 关注shuyu支持的AE video相关问题, marb里面压制gpu的选项看来很有用
+1, shuyu邮件"882 工作总结（2011-4-29）"_20110429
+Hi，all
+         今日工作：
+1，   ARM培训
+2，   看598 hujuteam的资料
+3，   Debug AE 如下的11039 issue，AE那么不过PP是ok的，过了PP就错了，怀疑PP的配置，不过我这里用和AE提供的PP 配置也是ok的，继续debug。
+问题已查明，是由于AE用的B板，vdec clk = 288M不稳定所致。降低频率或者升压都可以解决此问题。
+4，   Performance，hdmi输出，在1080P上面，跑gpu 3Dcase，有如下的两个问题：
+a)         会导致hdmi信号不稳定，产生黑屏现象，我现在用的板子没有接电阻，明天找个接电阻的看看。
+用串电阻的C板跑了，不会有信号不稳定的现象发生
+b)         在1080P上跑3D case，会造成AE出现大量的fifo empty，带宽理论上说是够的，读写总带宽的分布情况如下图：ddr和bus均为333M，cpu跑750M，de仅显示1层，大小为640x480。所需带宽为46M。如下图的峰值带宽到250M
+用marb那边把gpu的写操作压制后，fifo empty得到改善，等待仿真结果
+
+18:58 2011-4-29
+VC0882, SV, 工作总结
+1, 本日
+1), yangxing cache debug tools. 
+2), 解决pmu测试问题。详情附后
+2, 次日
+1), 调试AE Linux bus switch.
+3, 问题
+1), issue: 11106
+Data training地址如果是0x2000000, 会把ddr 0x0地址数据写坏. 
+
+Pmu详情: 
+1, hefan idle问题, 代码有两个问题
+1), 参数默认值修改.
+2), 进入idle前没有清中断. 可能造成wfi误退出
+3), 没有避免irq模块mask bug. 
+
+9:33 2011-4-30
+预研, arm, Cortex-A9, ARM_Cortex-A9_Detail.pdf
+1, A9 core:
+A9是8级流水线, out-of-order, 3+1 dispatch stage. 
+相比A8是13级整数流水线, in-order, dual issue. 
+另外A9在取指逻辑增加了fast-loop mode(\todo 查), 支持同时支持两个指令的译码. A9还支持register renaming: 也就是说为了提高效率A9内部使用的arm寄存器可能和code里面指定的不一样(bamvor: 有意思:)).
+
+2, A9 cache一致性通过:
+ARM’s Optimized MESI Snooping
+保证.
+
+3, A9 ACP
+似乎是能提前把cpu可能需要的数据取回来? 
+
+4, 什么是Rvt? 
+p34:
+和MIPS74k比较时提到rvt相比lvt Less Leakage. 这和hvt差不多啊.
+用rvt对于后端有影响么? 
+rvt和multi vt有关系么? 
+
+5, p22开始没有细看. 
+
+6, 回复kongyingqi邮件
+另外如果希望研究双核A9, 除了arm模拟器, 还有两个途径:
+1), 考虑直接用A9的芯片TI OMAP4, 这个板子有开源社区支持, 资料丰富, 国外卖174$, 
+http://www.pandaboard.org/
+2), 使用qemu(指令集模拟), 简单看过代码, qemu是支持多核A9的(qemu我只试验过A8, 没用过A9). 肯定没有前面两个精确, 但是对于研究双核OS来说应该也够用了.
+
+10:12 2011-4-30
+预研, arm, Cortex-A9, 分析qemu对于Cortex-A9 MP的支持.
+1, 从代码realview.c看, 是支持多核A9的, 需要确认. 
+realview_init()(hw/realview.c)
+
+2, cpu_init对于arm是cpu_arm_init()(target-arm/helper.c). 
+cpu_arm_find_by_name: 得到id, 保存到env中.
+cpu_exec_init
+qemu_init_vcpu()(cpus.c)
+
+qemu_init_vcpu()
+由于arm不像x86定义了kvm_enabled, 所以不会调用下面的函数: 
+kvm-all.c:int kvm_init_vcpu(CPUState *env)->kvm_arch_init_vcpu()
+
+... cpu init里面比较复杂, 看起来一时搞不定. 
+
+3, 回到realview_init, 里面smp_cpus到底是几个就很重要了. 
+smp_parse()(vl.c)在main()(vl.c)里面调用. 看qemu-system-arm, 发现的确有"-smp"这个参数. 看来系统有几个cpu, 可能是通过参数传进去的.
+
+10:39 2011-4-30
+时间管理
+0, 9:25
+
+1, 本日
+1), 60' Cortex-A9预研, 见"9:33 2011-4-30", "10:12 2011-4-30". 
+2), 10' gpu上电流程准备提交测试, 需要讨论是否需要修改. 见"10:52 2011-4-30". 
+3), 50'(-11:50) 13:30-15:16 设置vi阅读代码环境见"11:11 2011-4-30". 
+4), AE bus clkswitch代码完善: 希望借用cpufreq table函数维护bus freq table. 
+cpufreq utils里面有自动测试工具么? 
+
+10:52 2011-4-30
+VC0882, SV, video: gpu work around; power, pmu, mode trans, sleep->wakeup, gpu上电流程准备提交测试, 需要讨论是否需要修改. 
+1, zhangjian邮件2wangwenlei, guye:
+
+Gpu上电流程要提交测试, 我目前测试流程如下, 你们看需要调整么? 
+
+系统上电 -> gpu上电work around-> power on c类电源 -> gpu 2d case 0, 1, 2, 3 -> sleep -> fast wakeup(含gpu上电work around) -> gpu 2d case 0, 1, 2, 3 -> power off c类电源 -> reboot或power off+7882 alarm开机. 
+
+由于之前测试发现只要gpu上电第一个case就会出错, 所以我用了比较简单的2d case, 你看需要用3d case么? 
+
+10:54 2011-4-30
+VC0882, SV, AE, clkswitch, power, dvfs: cpufreq; 3 bus clkswitch, 希望借用cpufreq table函数维护bus freq table
+1, 设置vi阅读代码环境见"11:11 2011-4-30". 
+2, 
+1), 参考vc88x_clk_init_cpufreq_table建立freq table. 
+2), 原来把work queue放在vc088x_monitor.c. 是希望把相关函数都放在这个文件里. 现在如果参考cpu freq table的方式. 看了就需要把queue work放到cpu.c里面, 这样有没有问题呢? 
+(1), 原来在sys下面直接测试bus queue_work, 就需要引用cpu.c里面的文件. 
+
+3, 测试
+int v8_bus_target_wrapper(unsigned int target_freq, unsigned int up)
+{
+        unsigned int relation;
+
+        if ( up ) {
+                relation = CPUFREQ_RELATION_L;
+        } else {
+                relation = CPUFREQ_RELATION_H;
+        }
+        return v8_bus_target(bus_policy, target_freq, relation);
+}
+原来是up时CPUFREQ_RELATION_H, 否则CPUFREQ_RELATION_L. 实验发现这样可能在降频时把频率降得过低, 导致总线利用率大于70%. 所以把这个关系交换, 看看效果. 
+(18:38 2011-4-30)现在bus频率可以调整, 但是调整的效果不好, 很容易超调. 
+明天先备份代码和映像, 然后继续. 
+
+11:11 2011-4-30
+软件技巧, Linux下类source insight, vi, taglist, ctags, cscope, 跳转到函数定义, 跳转到调用者; 总结, 文档
+1, 参考资料: 
+0), 参考"9:52 2009-2-20". 
+1), 其它
+http://os.51cto.com/art/200801/64586.htm
+http://xsh8637.blog.163.com/blog/static/24099666201137115748243/
+ctags使用简介: 
+http://bbs.linuxpk.com/thread-3481-1-1.html
+taglist官网: 
+http://www.vim.org/scripts/script.php?script_id=273
+ctag官网:
+http://ctags.sourceforge.net/
+ctag中文手册:
+http://blog.csdn.net/easwy/archive/2007/04/27/1587363.aspx
+在vim里面找到调用者: 
+http://vim.1045645.n5.nabble.com/Can-Ctags-find-the-all-the-caller-of-a-function-td1140225.html
+
+2, 设置插件
+zhangjian@ubuntu:~/taglist_45/plugin$ mkdir ../../.vim/plugin -p
+zhangjian@ubuntu:~/taglist_45/plugin$ mkdir ../../.vim/doc -p
+zhangjian@ubuntu:~/taglist_45/plugin$ cp taglist.vim ../../.vim/plugin
+zhangjian@ubuntu:~/taglist_45/plugin$ cp ../doc/taglist.txt ../../.vim/doc
+
+注: 开始没有复制taglist.txt到vim doc目录, 所以":helptags /home/zhangjian/.vim/doc"会提示"no match". 
+复制后, 进入vi输入":helptags /home/zhangjian/.vim/doc", 以后就可以通过":help tag"查看帮助了. 
+
+3, 生成tags
+//在当前目录生成名为tags的tag文件: 
+ctags -R
+目录如下:
+/home/zhangjian/mydroid_f/kernel/arch/arm/mach-vc0882
+/home/zhangjian/mydroid_f/kernel/arch/arm/plat-vc088x
+/home/zhangjian/mydroid_f/kernel/drivers/cpufreq
+/home/zhangjian/mydroid_f/kernel/include/linux/cpufreq.h
+
+加入到/home/zhangjian/.vimrc: 
+set tags+=/home/zhangjian/mydroid_f/kernel/arch/arm/mach-vc0882/tags
+set tags+=/home/zhangjian/mydroid_f/kernel/arch/arm/plat-vc088x/tags
+set tags+=/home/zhangjian/mydroid_f/kernel/drivers/cpufreq/tags
+set tags+=/home/zhangjian/mydroid_f/kernel/include/linux/tags
+
+注意这里要用"+=", 开始用的"=", 相当于后面的tags覆盖了前面的, 所以在前面两个tags的函数就找不到了.
+
+4, 使用
+1), 直接打开指定函数所在文件:
+vi -t func_name
+例如打开"clk_set_rate()(定义在plat-vc088x/clock.c), 输入命令: 
+zhangjian@ubuntu:~/mydroid_f/kernel/arch/arm/mach-vc0882$ vi -t clk_set_rate
+vi启动后, 的提示信息栏里面显示的文件正是我预期的文件: 
+"~/mydroid_f/kernel/arch/arm/plat-vc088x/clock.c"
+2), 跳转:
+Ctrl+]跳到指定函数, Ctrl+o跳回.
+3), 打开/关闭本文件符号表:
+":TlistToggle".
+
+5, 查找谁调用了当前函数:
+1), vim中调用grep搜索文件:
+In Linux my instinct would be to use
+:!grep  functionname filename{s) 
+
+2), 或者使用cscope
+(1), 在当前目录生成cscope.out: 
+zhangjian@ubuntu:~/mydroid_f/kernel/arch/arm$ cscope -b -R -P  /home/zhangjian/mydroid_f/kernel/arch/arm
+(2), 数据库加入到vim中:
+cscope add /home/zhangjian/mydroid_f/kernel/arch/arm/cscope.out /home/zhangjian/mydroid_f/kernel/arch/arm
+后面这个目录和cscope里面"-P"目录是一样的. 
+(3), 查找调用者: 
+:cscope find c clk_set_rate
+注: 如果不使用"-P"参数, 如果vi启动目录不是cscope.out所在目录, 可以查找, 但是没法跳转. 
+find参数详见":help cscope", 
+find  : Query cscope.  All cscope query options are available
+	except option #5 ("Change this grep pattern").
+
+    USAGE   :cs find {querytype} {name}
+
+	{querytype} corresponds to the actual cscope line
+	interface numbers as well as default nvi commands:
+
+	    0 or s: Find this C symbol
+	    1 or g: Find this definition
+	    2 or d: Find functions called by this function
+	    3 or c: Find functions calling this function
+	    4 or t: Find this text string
+	    6 or e: Find this egrep pattern
+	    7 or f: Find this file
+	    8 or i: Find files #including this file
+
+6, 最终把上面cross ref写成脚本:
+zhangjian@ubuntu:~/project/ae_kernel$ cat update_cross_ref
+#!/bin/sh
+
+ctags -f arch_arm_mach_vc0882_tags -R /home/zhangjian/mydroid_f/kernel/arch/arm/mach-vc0882/
+ctags -f arch_arm_plat_vc088x_tags -R /home/zhangjian/mydroid_f/kernel/arch/arm/plat-vc088x/
+ctags -f include_linux_cpufreq_h_tags -R /home/zhangjian/mydroid_f/kernel/include/linux/cpufreq.h
+ctags -f drivers_cpufreq_tags -R /home/zhangjian/mydroid_f/kernel/drivers/cpufreq/
+
+cscope -b -R -f /home/zhangjian/project/ae_kernel/cscope_arch_arm_plat_vc088x.out -P /home/zhangjian/mydroid_f/kernel/arch/arm/plat-vc088x/ -s /home/zhangjian/mydroid_f/kernel/arch/arm/plat-vc088x/
+cscope -b -R -f /home/zhangjian/project/ae_kernel/cscope_arch_arm_mach_vc0882.out -P /home/zhangjian/mydroid_f/kernel/arch/arm/mach-vc0882/ -s /home/zhangjian/mydroid_f/kernel/arch/arm/mach-vc0882/
+
+\todo 将来加的目录多了, 就需要改进脚本了. 
+
+17:28 2011-4-30
+VC0882, SV, 
+1, fengbeizhan转发yinong邮件
+0), 这里提到的问题是vivante driver dead loop引起了屏幕显示问题
+1), yinong邮件"答复: 冻屏bug"20110429_1649
+如果通过604的tracing mechanism 看CPU都在跑什么东西,    是可以很容易识别在哪里死循环,   基本是可以一步到位identify the root cause of the issue. 
+我还是要求我们要尽快把604pin的平台调起来.   类似的问题我们将来可能还会陆陆续续经历许多起.    按照我们目前的进度和对将来的路有多长的预计,  这应该是个磨刀不误砍柴工的做法.
+2), fengbeizhan邮件""
+下面的事情 604上zhaoyuan team 考虑是5、1后上去调试，我们下周需要开始trace，否则zhaoyuan 都在604上调试了，但是我们的trace还没有好，那就是我们的问题了。
+另外，你考虑一下，看trace 是不是其他人也能调试， 这样对你可能会方便一些。
+
+2, beizhan
+
+之前我理解的调trace比这次说的简单很多, 如果要想到达yinong希望的作用, 可能需要2-3周. 所以如果能其他同事调trace比较合适. 调trace前期需要板级调试经验, 后期需要善于使用软件. 
+下面邮件提到的gpu问题, 用trace能否分析到我还不清楚. 估计软件是支持的, 但是需要时间学习: 
+1), 在FPGA阶段, 由于时间关系, trace只是调到可以在rvdebugger中trace到一部分arm汇编(由于软件buffer限制), 
+2), 如果希望长时间的trace, 就需要软件能保存所需数据.如果数据量太大, 可能需要加filter筛选. 
+3), 即使数据足够, 通过分析arm汇编(甚至是c语言), 可能也很难分辨出系统那部分效率低. 针对这种情况, arm有专门的profiling软件(咱们有, caijin在模拟器上用过).
+这个软件可以分析实际板子的数据, 但是我没有试通. 
+
+best regargs
+zhangjian

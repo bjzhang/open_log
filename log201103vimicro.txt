@@ -1,0 +1,2708 @@
+﻿
+15:03 2011-3-1
+时间管理
+0, 12:30(11:30)
+
+1, 本日
+1), 1h 面试郭寸锁. 感觉还可以, 符合基本要求. 详见简历注释. 见"15:12 2011-3-1". 
+2), 15:15- pmu wakeup 见"15:15 2011-3-1". 
+
+15:12 2011-3-1
+面试, 郭寸锁
+1, 系统框图没画出来. 
+2, 对底层硬件不熟悉: 不清楚uart协议, spi信号线和协议, lcd的几根数据线也解释不清. 
+3, 但是, 也许我问的东西他不了解. 感觉有些问题还是回答的可以的. 
+
+15:15 2011-3-1
+VC0882, SV, power, pmu, 模式转换(同义词: mode transition), wakeup; 总结, 文档: ddr dll on情况下wakeup时没有reset dll的现象, bootloader和panda_os联合调试
+1, 昨天发现wakeup后ddr不稳定, 需要先解决这个问题. 
+2, 今天找beihua借micron 2Gb ddr3, 确认了是memory参数问题. 
+3, 更换参数. 
+1), 看到beihua 1Gb memory里面配置了dqs drift, 这个功能只能在training之后开. 
+//printf "Enable DDR PHY dqs dynamic drift compensation!"
+//setmem /W 0x60011000=0x17F0420
+ddrcRegAddr[32] = 0x60011000
+ddrcRegVal[32]  = 0x17F0420
+2), 这样这个功能就没法在bootloader里面配置, 只能在bootloader之后打开.
+当初讨论bootloader为什么没有考虑到这个问题呢?
+3), 这个需要给dongliang, gong'anmin发信, 讨论. 
+4), 另外, 还有PHY_IO_CFG0, 不同. 
+//printf  "PHY_IO_CFG0 "
+//setmem /W 0X60011110=0x10700
+ddrcRegAddr[30] = 0X60011110
+ddrcRegVal[30]  = 0x10700
+原有脚本是0x10703, 而mas里面已经不允许配置为3了(有bug). 
+5), 修改后仍然不行, ddr问题暂时留给dongliang查, 先看pmu fast wakeup不正确的问题.
+4, 代码问题:
+修正fast wakeup寄存器保存函数的错误, "&&"替换为"&". 
+现象: 修改前, fastwakeup恢复后, clk配置基本都是1. 
+
+修改代码后, 初步看, fastwakeup的cpu, bus clk配置正确, ddrc_mclk配置错误. 
+5, (10:18 2011-3-2)继续查fast wakeup问题
+1), 发现ddr配置也是panda_os下代码问题. 
+上传CVS: 修正VIM_PMU_SetClkrstInfor2Pmu ddrcClkCfg参数设置错误. 
+2), pll配置和bypass配置也不正确。
+3), VIM_PMU_GetClkrstInforFromClkrstReg函数问题较多。
+添加VIM_CLKRST_GetPllCfg用于得到pll配置。
+4), 修改后还是有问题。参数恢复的还是不对。
+5), 最后发现ddrc mclk保存的有问题, 修改后正确. 
+现在micron在48Mhz(dll off), 266Mhz(dll on)测试通过. 但是三星的内存条不正确, 原因未知. 
+6, (13:20 2011-3-3)dongliang今天调试结果是三星的内存条没有做dll rst. 我之前想到是"ddrcSelfRefSomeCfg"里面要设置dll rst, 但是数值设错了, 应该是0x2, 我写的是0x1. 
+经验: wakeup时, ddr在高频从selffresh退出后如果没有做dll rst, 可能会造成ddr数据不稳定, 如果单步跟踪bootloader, 可以看到调到ddr执行后, 有些命令正确, 个别命令错误. 如果是直接执行, 程序会在ddr中跑死, 此时没法再访问ddr. 
+经验: panda_os和bootloader联合调试. 板子从spi启动, 用ICE连接arm后设置pmu remap, 并加载bootloader符号表. 如果直接加载panda_os, 也可以用axf(即bin+符号表). 这样sleep->wakeup后, 系统还是会走spi boot, 此时断开再连接板子, 设置pmu remap, 并加载bootloader符号表, 再继续调试. 由于spi boot没有接器件, spi启动时arm读到的数据都是0(0表示"andeq r0, r0, r0", 条件不满足, 不会执行这条语句), 即使spi区域(256Mbyte)执行完毕, 执行到0x20000000地址也会很快出错(例如 undefine instruction), 这样对于系统状态不会有影响. 
+
+16:14 2011-3-1
+VC0882, SV, usb, 网络
+1, fandong调试usb host网卡, 发现是否好用和网络环境有关. 最后是把usb网卡接收方式多次改为一次, 在6层的网络环境也可以. 
+
+16:53 2011-3-1
+VC0882, SV, video, HDMI, SSO
+1, SSO问题
+所有信号同时翻转时耗电增大造成电源抖动, 此时的电源抖动会叠加到每个信号.
+2, 调试产品板HDMI时, 发现有SSO问题. 幸好HDMI芯片可以自己提供DE这个信号, 这样就避免了SSO问题, 目前看HDMI视频效果不错. 有些静态图片效果不好，会闪，可能是sso导致vsync信号错误造成的。
+
+9:21 2011-3-2
+时间管理
+0, 9:40
+
+1, 本日
+1), pmu fast wakeup. 见"15:15 2011-3-1"5.
+2), bootloader给dongliang发信。
+3), 支持同事. 
+4), 总结. 今天最终把fast wakeup搞完, 后面ddr问题交给dongliang查就行了. 
+后面的事情大头是Linux和power. 目前一方面需要尽快close pmu和7882的事情, 一方面需要开始Linux. 计划明天把pmu能提交的尽量提交. 然后看看merge halt和sleep代码, 还有wakeup到aasp的研究: 这个对于后面做Linux里面的wakeup很有帮助. 
+
+13:34 2011-3-2
+VC0882, SV
+1, liuzixi邮件"about 7882B LDO18"20110301_1050
+bamvor: 附件里面可以看到具体干扰的波形, 可以学习一下. 见"D:\work\VC0882\pmu_power\VA7882测试\liuzixi\20110301测试情况.doc"
+Hi wangzhao !
+今天我们在SV board发现LDO18的输出上出现周期为16us (64KHz)的小毛刺以及周期为512us的大毛刺(输出接0.1uF电容)， 通过修改
+电容为4.7uf/1nf之后， 仅剩下周期为16us的小毛刺。 这个小毛刺在其他DCDC没有负载的情况下仍然存在，在其他DCDC带负载工作的情况下会
+窜到DCDC的输出上（BUCK5会达到160mv）。具体信息可以参考附件文档。
+请帮忙分析一下。
+如果明天想实地看看SV 上的波形，可以联系xueke (ext : 7316， mobile: 13581568176)
+
+2, wangzhao邮件"RE: about 7882B LDO18"20110302_0859
+你先试一下同时加上4.7uF, 0.1uF, 10nF,1nF电容。不同容值电容滤波不同频率的噪声。
+如果还不行，请检查地上的噪声，如也有类似噪声，则可能SSO的问题。
+需改善PCB地布线。
+
+3, yangzuoxing邮件"答复: about 7882B LDO18"20110302_1152
+HI, WANGZHAO,
+昨天试过如下几种组合：
+4.7u: 去掉了500us的毛刺
+4.7u+ 10nf: 16us 的毛刺减小
+4.7u+1nf:  基本同上
+将电源板单独取下来，使用示波器看过电源输入地与输出地之间的波形，也有这个16us的毛刺。
+现在的初步结论是，GND被弄脏了，噪声源是7882.
+我们看了一下7882 RTC的电源，上面也有16us的毛刺，感觉是不是内部的一些数字逻辑使用了32K 时钟，这个数字噪声影响了7882的输出。
+在不带载的情况下，7882 DCDC/LDO上虽然有这个毛刺，但毛刺的幅度跟DCDC的纹波差不多，我们认为关系不大。但在负载变大后，这个16us的NOISE的幅度变大很多，这个问题我们就需要关注了。
+这个问题是ZIXI和XUEKE比较细致才发现的，要是换别人，可能就漏过去了。
+另外产品板上的7882的输出也有这个噪声。
+我觉得你需要找工程师过来看看，像上次的问题一样，也许不是7882本身的问题，也许需要在PCB GUIDELINE上再强调一些什么东西。但对产品来说，他们都是同样重要的，不管是7882的问题，还是板级设计的问题。
+
+17:58 2011-3-2
+VC0882, SV, AE, benchmark, 续, 平均的request数量才是影响这个实验结果的主要因素
+1, 最近一段时间一直在查benchmark, 今天看到yanglei邮件说和具体所需cycle有关. 
+见yanglei邮件"答复: 答复: 882系统Benchmark"20110302_1621
+仿真  DDR3  和LPDDR的 结果比对。都是882芯片连接DDR3或者 LPDDR
+CPU 500M， BUS 200M， DDR3/LPDDR 200M。 仿真速度较慢， 所以循环只有64 * 1024次，AE测试是4*4*1024*1024次。
+		Write	Read 
+Ioff Doff  MMU on
+882 LPDDR	6.2	15.1 
+882 DDR3	12.3	10.5
+882 AE		10.9	 14.2
+OMAP		8.4	 7.5
+Ion Doff  MMU on
+ 882 LPDDR	 1.04	 4.8
+882 DDR3	 1.8	 5.1
+882 AE		1.66	 4.87
+OMAP		1.33	 3.69
+Ion Don  MMU on
+ 882 LPDDR	 1.04	 5.0
+882 DDR3	 1.8	 5.5
+882 AE	 1.56	 5.31
+OMAP	 1.26	 4.46
+
+仿真里DDR3 和LPDDR在测试里的性能差异： 采用(1- LPDDR/DDR3) * 100% 计算， 正数表示LPDDR快，负数表示LPDDR慢
+CPU500_bus200_ddr200	 Write	 read	 Total (read+write)
+Ioff Doff   MMUon	 50%	 -44%	 7%
+Ion Doff   MMUon	 42%	 6%	 16%
+Ion Don MMUon	 42%	 9%	 18%
+
+发现结果在Ioff  Doff  MMUon时，很奇特跟预期的结果很不一样，LPDDR无论再读还是写都会比DDR3 延时小一些，估计也就10%
+但是实验结果却是LPDDR写比DDR3快1倍， 读确是DDR3比LPDDR快1倍。
+进一步分析发现，在没有Cache的情况在，影响最大的因素不是我们之前考虑的各个因素，而是指令存放的地址。
+LPDDR  write的最内部循环 存放地址是0x12C到0x13C ，  读取这个指令ARM会发送1条 读请求。Addr= 0x128  , len=3 ,.
+也就是每写1个数据，需要1个read request,   3 个rdata 
+而对应的DDR3的代码这个循环指令在 0x1B4 – 0x1C4， arm需要发2个请求。0x1B0 ,len=2 ，和 0x1C0 ,len = 8
+也就是每写1个数据，需要2个read request, 10个rdata.
+LPDDR  read的最内部循环 存放地址是0x17C到0x18C ，  读取这个指令ARM会发送2条 读请求。Addr= 0x178  , len=1. 和 addr= 0x180 len=8
+也就是每读1个数据，需要2个read request,   9 个rdata 
+而对应的DDR3的代码这个循环指令在 0x204 – 0x214， arm需要发1个请求。0x200 ,len=8
+也就是每读1个数据，需要1个read request,   8个rdata.
+平均的request数量才是影响这个实验结果的主要因素。
+所以能否请AE再作一次882与OMAP的试验比较， 把试验代码的起始位置都放到一个相同的地方再作比较。
+我这边也试验一下1）把地址对齐的仿真结果。2）把cpu的频率调成600M，现在是500M的。
+
+18:46 2011-3-2
+vimicro, training, IC部门training计划
+1, sunyingying今日邮件
+序号	 培训内容		主讲人	 日期（调整前）	 日期(调整后)
+1	 Verilog Coding Style	李国新	 2011.2.24	 已完成
+2	 ARM926协处理器的设计与实现 王旭 2011.3.10	 2011.3.3
+3	 SOC对IC设计的影响	杨作兴	 2011.3.24	 2011.3.10
+4	 异步接口设计		李国新	 2011.3.17	 2011.3.17
+5	 项目计划与项目管理	朱军	 2011.3.3	 2011.3.24
+
+10:04 2011-3-3
+vimicro, training, cpu, coprocesser, ARM926协处理器的设计与实现, 王旭
+多媒体运算主要是多通道同时运算。加密解密，墒编码有较多的位操作。
+arm coprocessor数据可以用mrc, mcr; ldc, stc. 后面没有用过，其实保存cp15所有寄存器可能用stc更方便。
+原来不明白为什么是ldr, str, 感觉最后的r挺多余的，能不是register么，今天看到ldc, stc才明白最后一个表示arm Register or Coprocessor register.
+协处理器可以与arm pipeline 同步或落后一拍，对于arm内部协处理器cp15, cp14等是同步，对于外部一般是落后一拍，否则arm取指timing不好做。
+设计流程：算法设计->profile->指令设计。
+profile作者使用的是rvds profile, 这个东西一直想用起来，感觉功能很强大。他还提到soc designer效果更好，准确性更高。
+协处理器效率远高于软件，但低于独立的纯硬件，面积小于后面。
+
+13:49 2011-3-3
+时间管理
+0, 9:45
+
+1, 本日
+1), IC training ARM926协处理器设计, 见"10:04 2011-3-3".
+2), 1.5h 和zixi讨论VA7882 testplan和pmu里面7882相关部分test plan. 
+3), 提交pmu其余测试项. 除了7882以外的测试项. 见"13:52 2011-3-3". 
+
+13:52 2011-3-3
+VC0882, SV, power, PMU
+1, 需要我测试后提交的测试项
+1), wdt reset. 
+2), clock需要看umonitor如何使用. 
+3), idle, halt, sleep pass.
+fastsleep前需要输入"write_fastwakeup_pmu_reg"命令. 
+4), tpi, uhost, uotg三个模块相关的唤醒需要问一下对应模块的人, 各实验一个. 
+5), VA7882 I2C: \todo 需要和zixi讨论. 
+
+2, wdt reset:
+1), 开始以为wdt有问题，后来发现是底板问题。而且wdt reset有问题时，pmu software reset也会不行。
+
+3, wakeup/interrupt source
+1), uhost(读卡器): idle, halt pass。
+2), otg:
+(1), host: 没有供电，需要hostvbus右侧跳线跳到otgvbus左侧。
+注：host正常工作需要5v电压，如果供电不足，无法正常工作。7882输出电源本来是5
+v，但是加了二极管后就不够了，将来7882会把电压调高一点，保证供电。
+(2), device: 需要改电源板，且otgvbus跳线是跳线。修改电源板后仍然不行，后来发现是
+3), tpi:
+tpi, init, sample可以采到数。但是没法唤醒，后来不知怎么idle, halt就可以了。
+sleep还是不行。
+
+4, pmu提交测试
+除了7882和SARADC keyscan down sleep->wakeup以外的部分全部都提交测试
+bin: \\10.0.13.101\share\zhangjian\projects\VC0882\code\20110303_pmu_test
+
+10:21 2011-3-4
+时间管理
+0, 9:47
+
+1, 本日
+1), 30' zhaoyuan希望beizhan在OMAP板子上跑, 支持yangxing做. 
+2), 10:25-11:45 14:18-15:20 修改VA7882寄存器测试。见"10:46 2011-3-4". 
+3), 1h 实验gdb调试qemu下的OMAP3530 aasp(compile by armcc), 见"12:51 2011-3-4", 下一步可以实验用openocd调试aasp. 有时间可以看一下新的openocd有什么改进. 
+4), 3h performance monitor改进. 见"15:40 2011-3-4"
+5), fandong要的测试项原计划今天要提供，后来和fandong沟通周一下午提供. 见"10:42 2011-3-4". 
+6), 总结：今天下午准备环境用了很长时间，想试一下楼下的打包工具，没试通。
+
+10:42 2011-3-4
+VC0882, SV, 筛片程序, power, pmu和VA7882所需API
+1, mengfandong邮件"筛片中程序尚需要加入的部分"20110304_0954
+Hi，all
+下面是筛片程序还需要完成的工作
+1 Sleep模式timer唤醒的实现
+2 reboot的测试
+3 7882模块的测试。I2C，PWM和RTL(pwm控制led灯)
+4 7882定时开关机的测试
+上面4个请zhangjian准备一下接口
+5 针对周三讨论的频点，请dongliang提供一个针对该组频点的切频接口
+6 加入对hdmi的测试(mengfandong)
+7 加入对nfc 16bit的单独测试(mengfandong)
+8 增加vdec中pp测试(mengfandong)
+筛片程序中的sleep测试，该怎么测影响这个自动测试及切频测试的设计结构，
+我订了周一的六会议室，上午10点，我们讨论一下。能准备的接口大家先准备一下，上午讨论完后，
+周一下午加到测试程序里边。
+Mengfandong
+
+2, 我需要做的:
+1), sleep下timer唤醒. 
+2), 7882定时开关机.
+
+3, (17:43 2011-3-7)menfandong邮件"筛片中clk和7882、sleep需要提供的接口"20110307_1320
+zhangjian提供以下接口：
+1 读取7882 RTC时间的接口
+2 标志是否为第一次启动的状态位，使用pmu_sw_reg31来记录
+3 nomal_sleep 和fast_sleep的接口
+4 测试7882 i2c 功能的接口，读和写
+5 7882 pwm测试的接口，产品板控制背光的变化
+6 读写7882 rtc寄存器的接口
+7 定时开机的接口
+dongliang提供以下接口
+根据下面的几组频点，提供切到某一组的接口，index的顺序：理论上最容易通过测试的---à可能出问题的
+如：Clkrst_auto_switch(5)；直接切到第5组对应的各频点。
+cpu	bus	ddr	vdec	venc
+600	266	266	200	300
+800	333	333	288	300
+800	400	400	288	300
+800	266	266	288	300
+1000	333	333	288	300
+1000	400	400	288	300
+500	200	200	288	300
+100	96	96	288	300
+200	133	133	288	300
+166	166	166	288	300
+
+4, zhangjian回信. 
+1 读取7882 RTC时间的接口
+VIM_PMIC_GetRtcInfo();	//用法参考"PMIC_TEST_GetRtcInfo". 
+2 标志是否为第一次启动的状态位，使用pmu_sw_reg31来记录
+读: __PMU_GetSwReg31
+写: __PMU_SetSwReg31
+3 nomal_sleep 和fast_sleep的接口
+1), normal wakeup
+__PMU_SetWakeUpFast(0);//表示normal sleep
+PMU_TEST_NormalToSleep();
+2), fast wakeup
+VIM_PMU_WriteFastWakeupPmuReg(0x2);
+__PMU_SetWakeUpFast(1);
+PMU_TEST_NormalToSleep();
+4 测试7882 i2c 功能的接口，读和写
+读: VIM_PMIC_ReadReg
+写: VIM_PMIC_WriteReg
+5 7882 pwm测试的接口，产品板控制背光的变化
+VIM_PMIC_PwmEn(7,1);
+VIM_PMIC_PwmFreq(7,8);
+VIM_PMIC_PwmRatio(7,64);	//64表示亮度, 数字越大亮度越高(耗电也越高), 可以从1开始设置.
+6 读写7882 rtc寄存器的接口
+zhangjian: 以下函数用于设置rtc域不掉电的寄存器addr=0xd0--0xd3, value(0-255)
+PMIC_TEST_WriteReg(addr, value);
+VIM_PMIC_LatchSwReg();
+7 定时开机的接口
+PMIC_TEST_IntInit();
+PMIC_TEST_SetRtcAlarm(&rtc_info, en);
+PMIC_TEST_SetRtcInfo(&rtc_info);
+VIM_PMIC_RtcInit(rtc_speed);
+VIM_PMIC_RtcEn(1);
+PMU_TEST_NormalToPoweroff();	//power off.
+
+10:46 2011-3-4
+VC0882, SV, power, pmu, 提交VA7882全部测试
+1, 所需工作
+1), 寄存器读写测试加入是否避免写坏寄存器. 
+2), pwn, rtc, dcdc, ldo控制已经测试通过. 
+3), 开关机:
+(1), 开机: 待测. \todo 需要VA7882电源板. 
+(2), 关机: zixi测过了. 
+
+2, 寄存器测试
+1), 加入coTestBatchUnMask: 
+SV VC0882和VA7882联合测试情况下, 做批量读写测试不能写入的寄存器. 
+完成加入, 测试通过. 
+
+12:51 2011-3-4
+VC0882, SV, AE, android, beagleboard, TI OMAP3530 android download; zhangjian compile
+1, TI OMAP3530 android download
+http://software-dl.ti.com/dsps/dsps_public_sw/sdo_tii/TI_Android_DevKit/02_02_00/index_FDS.html
+2, zhangjian compile, 应该是可以运行的: 
+1), android
+\\10.0.2.36\sqmshare\Document\SOC\TI OMAP\TI OMAP3530\BeagleBoard\android\rawboat\git\compileByZhangjian
+2), 单独的kernel
+\\10.0.2.36\sqmshare\Document\SOC\TI OMAP\TI OMAP3530\zhangjian_compile
+
+13:30 2011-3-4
+VC0882, SV, simulator, qemu, qemu模拟器环境下: 实验用gnu工具链调试armcc编译的OMAP3530的aasp
+1, qemu
+1), 从axf转为elf
+fromelf --elf OMAP3530.axf --output=OMAP3530.elf
+2), elf -> bin
+arm-none-linux-gnueabi-objcopy -O binary OMAP3530.elf OMAP3530.bin
+3), 需要转为uimage么? 不需要. 
+4), 打包到nand:
+/opt/share/zhangjian/daily_save/20100802/bb_nandflash.sh OMAP3530.bin beagle-nand.bin kernel
+/opt/share/zhangjian/daily_save/20100802/bb_nandflash_ecc beagle-nand.bin 0x0 0xe80000
+5), 运行gdb
+arm-none-linux-gnueabi-gdb OMAP3530.elf
+注: ".gdbinit"脚本: 
+target remote :1234
+break Reset_Handler
+break __main
+break main
+break aasp_shell
+
+6), 加载image
+OMAP3 beagleboard.org # nand read 0x80000000 0x280000 0x400000
+
+NAND read: device 0 offset 0x280000, size 0x400000
+ 4194304 bytes read: OK
+OMAP3 beagleboard.org # go 0x80000000
+## Starting application at 0x80000000 ...
+
+7), 经过实验, 只要有source code的地方都可以调试.
+例如"_main"->"main"中间没有code, 即使用step, 也不会进去, 这应该是正常的. 
+以后可以研究一下, 没有code的地方应该也可以跟踪. 
+
+nand image, bin, elf位置: /opt/share/zhangjian/daily_save/20110304_aasp_debug
+
+15:40 2011-3-4
+VC0882, android, AE, power, performance, performance monior, 续, 完善功能: 修改latency计算方法, 调整脚本
+1, 上次yanglei提到latency用latency/addr_tx, 这样比较好, 可以得到每笔传输的latency, 对于cpu来说, 40左右的latency是正常的. 
+今天实验结果也差不多, 只是ddrc的write latency有2000多, 感觉不太正常.  记得写是发完就可以返回，读要等返回的。
+2, (11:37 2011-3-7)latency找yanglei确认。
+yanglei: read, arm 30-40, de大于arm, ddrc = arm -7.
+write 都是个位数。
+
+9:56 2011-3-7
+VC0882, SV,  例会
+1, 工作进展每天发。
+2, 筛片。同时运行有问题。
+3, ddr稳定性。
+4, 7882
+5, clkrst.
+6, performance.
+7, shuyu 1080p yuv422效果可以接受，因为了data pin from rgb888 24pin to yuv422 16pin. black to weight rgb比yuv信号剧烈的多。前者所有pin都会翻转，后者部分。
+
+14:33 2011-3-7
+时间管理
+0, 9:51
+
+1, 本日
+1), 1.5h 上午例会. 每天要发进展. 
+2), 1h: 帮助beihua在高低温实验室建立实验环境. 
+3), 30' 和liuzixi确认7882 power on key不稳定问题. 见"17:11 2011-3-7". 
+4), 30' 支持zouweiran测试VA7882. 见"18:20 2011-3-7". 
+5), 40' 为mengfandong提供筛片程序中所需的api, 见"10:42 2011-3-4"3. 
+6), 20' VA7882提交测试. 见"19:08 2011-3-7". 
+
+14:33 2011-3-7
+VC0882, SV, 环境, bug, 潜伏在882环境中的bug
+1, shuyu邮件""20110304
+进入到如下的接口后InitDbgMemHeapInfo，ox00000000地址被写入0x07F00010，请check
+2, 当天看了一下的确是软件bug: 
+1), 修正g_pMemDumping为空时, 保存malloc信息(MMU_DUMP_MEMERY)会写坏0地址开始的四个word.
+2), zhangjian回信""20110307
+谢谢shuyu. 
+问题已修正. 请大家更新文件VIM_MMU_Driver.c
+这个bug是panda_os启动时把0x0-0xc四个word数据写坏. 
+
+hi, bianyingfeng, lingming
+这个问题从882环境建立就存在. 718环境里面也有这个问题. 请修改. 详见VIM_MMU_Driver.c
+
+17:11 2011-3-7
+VC0882, SV, power, pmu, VA7882, power on key不稳定
+1, AE发现VA7882 power on key, 在系统刚刚启动时按键可能没反应. 后面就正常了. 
+
+18:20 2011-3-7
+VC0882, SV, power, pmu, VA7882
+1, 和zouweiran调试VA7882问题. zouweiran在分离器件电源板上可以使用的sd卡没法启动. zouweiran说SV板不能上电时打开7882所有电源. 于是把原有VIM_PMU_Init里面的打开VA7882所有时钟的函数单独封装为"VIM_PMIC_OpenAllPower" test api和_DO_PMIC_OpenAllPower test cmd. 
+2, 但是后来实验又发现该问题不是必现的, 不修改其实也可以.
+幸好我在aasp bootscripts里面用的反定义:
+#ifndef VIM_VA7882_NO_INIT
+	"pmic"
+	"openallpower"
+	"exit"
+#endif // #ifndef VIM_VA7882_NO_INIT
+
+18:42 2011-3-7
+VC0882, SV, power, pmu, VA7882, 测试用电源板
+zouweiran改VA7882电源板, 用于测试boost2, 已经设置输出电压为13v. 
+
+19:09 2011-3-7
+VC0882, SV, power, pmu, VA7882, VA7882提交测试
+1, VA7882提交测试
+除了charger开机, 混合开机和相关中断未测试. 其余都测试通过. 
+boost2需要修改后的电源板, 请测试同事找我领取. boost2输出电压已经固定为13v. 
+2, (11:09 2011-3-10)测试上面未通过问题. 
+
+19:18 2011-3-7
+项目, 资产, jlink, VC0882 VA7882电源板, 
+1, zhicheng借了jlink
+2, xueke领了一个电源板. 
+
+10:53 2011-3-8
+时间管理
+0, 10:05-21:00
+
+1, 本日
+1), 1h fandong要的测试项. timer wakeup. 见"14:47 2011-3-8"和"10:57 2011-3-8".
+2), 3h pmu和7882联合使用无法唤醒。见"10:31 2011-3-9"4
+3), 2h 支持ae power off. 见"10:30 2011-3-9". 
+
+10:57 2011-3-8
+VC0882, SV, 筛片程序, power, pmu和VA7882所需API, timer wakeup
+1, 实验用timer唤醒。
+1), timer0是wakeup source 2 10
+本来以为需要注释掉"VIM_PMU_NormalToSleep"的_VIM_PMU_SetIntrLow。否则timer中断没法产生，后来想起wakeup唤醒不依赖中断，只要设置wakeup source就可以。 实验结果也是如此。
+2), 实验VA7882电源板。
+昨天zhengwei发现使用VA7882电源板，sleep后没法唤醒。我今天自己的实验也确认了这点。 
+用timer实验也是如此，arm的电压变化正常，但是没有唤醒。
+此外wakeup后core, pll, sys都有电。下午查流程。 
+
+2, 先提供给fandong api:
+UINT64 timerDelay;
+VIM_PMU_EnWakeupSource(2,8);
+timerDelay = VIM_TIMER_GetCurrent(VIM_TIMER_0);
+timerDelay += delay(us) * timer_频率;
+VIM_TIMER_SetTarget(VIM_TIMER_0, timerDelay);
+后接昨日sleep接口(normal or fast都可以). 
+
+3, 确认是否产品板有此问题: 也有此问题。
+
+4, 唤醒后，打印7882时间并reboot。
+1), sleep时不关闭dcdc，可以。
+代码见"VIM_PMIC_OpenAllPower". 改为：
+    for ( i = 1; i < 7; i++ ) {
+#if 0
+    	if ( 1 == dcdc[i].always_on ) continue;
+
+	    VIM_PMIC_DcdcMux(i, 1);
+	    VIM_PMIC_DcdcEn(i, 1);
+#else
+	    VIM_PMIC_DcdcEn(i, 1);
+	    VIM_PMIC_DcdcMux(i, 1);
+#endif // #if 0
+    }
+    PMU_MSG("open all ldo");
+    for ( i = 0; i < 22; i++ ) {
+#if 0
+    	if ( 1 == ldo[i].always_on ) continue;
+    	
+    	VIM_PMIC_LdoMux(i, 1);
+    	VIM_PMIC_LdoEn(i , 1);
+#else
+    	//VIM_PMIC_LdoEn(i , 1);
+    	//VIM_PMIC_LdoMux(i, 1);
+#endif // #if 0
+    }
+2), pmic write apoffstate=0, 后加入10ms延时。不可以。
+代码修改见"VIM_PMIC_SetApOffState".
+3), zixi用示波器看时序。
+
+14:52 2011-3-8
+VC0882, 项目信息, 流片, 封装, 测试
+1, 在TSMC流片, ASE封装&测试. 
+自: D:\VC0882\document\sv\市场\VIMC_Mobile Profile-882_1.2.pdf
+
+19:21 2011-3-8
+VC0882, power, pmu, VA7882, 模式转换, 支持ae, power off不稳定: 有时无法关机
+1, add va7882 delay after 7882 I2C read/write.
+根据ICP经验, I2C两次读写之间需要延时, ICP使用的是2ms-5ms的延时, 实际也许不需要这么长. 
+2, add memory barrier between pmu mode trans and wfi. 修改后两次实验通过，三，四两次都死在I2c, 修改为400k后稳定。
+3, wfi后没有关机，经检查是de interrupt, 改为先mask所有再清所有srcpnd. 有一次wfi未起作用，程序是while循环又绕回到i2c, 当时误以为是I2c问题。
+
+10:27 2011-3-9
+时间管理
+0, 9:50
+
+1, 本日
+1), send rvdebugger 经验技巧 to ae。写了邮件，又觉得不需要发，保存了草稿，见"11:05 2011-3-9". 
+2), 1h mengfandong uhost, nfc power。见"11:13 2011-3-9". 
+3), 20' 关注切频. 见"14:45 2011-3-9". 
+4), 14:50-18:00 根据zixi邮件调试VA7882 wakeup。见"14:49 2011-3-9". 
+5), 2h fandong timer wakeup.
+
+11:05 2011-3-9
+VC0882, SV, send rvdebugger 经验技巧 to ae
+目前用的Rvdebugger有个bug: 如果向memory窗口写入的值和原值相等，实际不会写入。
+可以用命令行方式写入：ce *((unsigned long *)addr)=val
+例如要写清interrupt soruce pend 0x60002040，原有值是0x40000, 可以用ce *((unsigned long *)0x60002040)=0x40000命令写清。
+
+附件是ICP积累的一些rvds使用经验。供大家参考。
+
+11:13 2011-3-9
+VC0882, SV, power, pmu, 确认产品板VA7882电源是否打开
+1, 经过和bianrongguang沟通。
+uotg使用的boost1就是dcdc6，这个我已经打开。
+uhost使用的是另外一个电源芯片，需要软件控制开关。
+1), uhost
+资料：
+D:\work\VC0882\Documentation\882平台对外资料\882平板电脑外设资料\硬件SPEC
+"USB HUB"和"USB供电"分别是hub和电源芯片RT9207的datasheet.
+(1), 相关io
+usbhost_en: b13(keypad13)即GPIO_D13.
+VDD_HUB3V3: vout21，即LDO21，默认值就是3.3v。
+HUB_REST：G22,GPIO_J29. The system can reset the chip by driving this input low. The minimum active low pulse is 1 μs.
+OUT1_PRT_PWR：USB Port Power Enable 
+OUT1_OCS_N：Over-Current Sense
+(2), 在padc driver里面加入"VIM_PADC_Uhost_Ae".
+(3), 后来发现gpio_k19(v5_en).
+
+14:45 2011-3-9
+VC0882, SV, clkrst, clkswitch, ddr切频不稳定, 关注进展
+1, huangwei邮件"882 CLKRST DDR 切频 调试状态（3月8日）"20110308
+clkrst ddr 切频状态如下：
+1. 用soldered core board，主要是在166Mhz -> 133Mhz切频后dma copy阶段出错。
+2. 用socket core board，切频后dma copy阶段很容易出错，试了10个芯片，10个都出错，而且不只是在166Mhz -> 133Mhz切频后出错。即使将ARM的电压升高，现象也没有改善。
+目前这个问题还没有比较好的努力方向，想多找几块AE板试试，但空闲的AE资源太有限了。
+2, gong'anmin邮件_20110309
+      昨天在AE板上成功进行DDR切频测试，今天也对AE进行了一定量的DDR切频测试，现象与SV板相似，都会在133MHz-166MHz切换时跑飞。
+      目前在AE板测试的ddr稳定频点为：166MHz、266MHz、333MHz。
+3, yangzuoxing邮件_20110309
+有试过100MHZ么？
+4, lidongliang邮件_20110309
+刚才zhangjian 提到133MHZ 应该是个dll on，dll off
+比较临界的状态
+是否用dll off 的配置能好一些
+5, bamvor: 和dr.yang都想到了实验100MHz. 这个ddrphy支持较好的频点. 另外给dongliang提建议实验dll off频点. 目前测试通过的都是dll off的频点.
+
+14:49 2011-3-9
+VC0882, SV, power, pmu, VA7882, 使用VA7882情况下测试模式转换
+1, zixi邮件_20110308, 建议:
+在我们从NORMAL进入SLEEP/HALT/POWER_OFF之前，我们必须要让PMU clock从XCLK切换到32K上面，因为内部power sequence的计时是以32K clock为单位的。
+我将会在PMU databook的guideline里把这点要求加上。
+当前SV上sleep的wakeup不成功应该就是这个问题。
+1), 根据这个邮件修改sleep代码. 同时加入关闭c类电源的代码. 
+不关闭c类电源可以. 关闭了c类电源就不行. 
+2, 看昨天的修改哪些需要上传.
+DONE.
+3, 上传代码:
+1), sleep时关闭所有c类电源.
+2), sleep时切换pmu到32k clk. 
+4, 加入sleep后打印rtc时间和reboot功能, 现在流程是对的. 可以使用。
+发现7882 rtc使用runrtc每次时间都会重新记时，使用getrtc就没问题，待查。
+5, (10:59 2011-3-10)上传昨日代码.
+启动log见"D:\work\VC0882\code_backup\code\20110309_pmu_wakeup_with_getrtc_reboot\putty_20110309_202107.txt"
+6, wakeup时配置的selfRefSomeCfg对应三星1gb 2x16应该配置为0x82。 
+另外调试时发现如果不清cache，"g_systimer_clk”是0，这样timer没法使用。从882 bootloader复制VIM_MMU_MmuCacheOnOff，关闭mmu, icache, dcache, 只保留L2 cache(d$关闭后L2 cache不起作用)。
+7, (12:48 2011-3-10)context restore有问题：待查。
+为了测试反复的情况, 加入自动启动脚本使用check_script_condition命令判断是否继续运行脚本.
+本脚本使用SV 三星1Gb 2x16 ddr3测试通过。
+1), 脚本如下
+#ifdef VIM_PMU_VA7882_FASTSLEEP_TEST
+    "pmu",
+    "check_script_condition 0x6005027c 1",
+    "exit",
+    "memread 0x60052010",
+    "memwrite 0x60052010 0x0f000000",
+    //"pmic",
+    //"init 0x16 400",
+    //"runrtc 1023",
+    //"exit",
+    "pmu",
+    "write_fastwakeup_pmu_reg 0x2",
+    "wakeup_source 2 8",
+    "fastsleep",
+#endif //#ifdef VIM_PMU_VA7882_FASTSLEEP_TEST 
+2), 第一次启动脚本检测到0x6005027c不是1(设置executeBootScript = 0)，所以会退出脚本执行。需要输入如下命令设置该寄存器。同时运行rtc。
+pmu  SD0:/>check_script_condition 0x6005027c 1
+[PMU]->do_pmu_CheckScriptCondition()
+[PMU   ERROR]   condition fail, stop script execution
+pmu  SD0:/>memwrite 0x6005027c 1
+[HAL]MESSAGE:0x6005027c=0x00000001(0x00000001)
+pmu  SD0:/>pmic
+pmic  SD0:/>runrtc 1023
+[PMIC]->_DO_PMIC_RunRtc()
+[PMU   MSG]     TEST PMIC: current rtc info 2000-01-01[1] 00:00:00 000046       
+[PMU   MSG]     TEST PMIC: current rtc info 2000-01-01[1] 00:00:00 000522       
+[PMU   MSG]     TEST PMIC: current rtc info 2000-01-01[1] 00:00:00 000997       
+s[PMU   MSG]    TEST PMIC: current rtc info 2000-01-01[1] 00:00:01 000449       
+pmic  SD0:/>pmu
+pmu  SD0:/>reboot 1 1
+3), 本脚本运行了16次，最后一次死在打开ldo，可能是SV VA7882用法或VA7882B的问题。
+AASP SD0:/>pmic
+pmic  SD0:/>openallpower
+[PMU   MSG]     open all DcDc
+[PMU   MSG]     open all ldo
+
+8, \todo context restore问题下周做wakeup到aasp时再查。 
+
+9, (16:13 2011-3-10)查为什么开ldo21有问题. 把"VIM_PMIC_OpenAllPower();VIM_PMIC_ClassCDisable()"合并为"VIM_PMIC_Power()". 
+VA7882电源板有问题, 等有板子再实验. 
+
+17:20 2011-3-9
+VC0882, SV, storage, sd, AE产品板
+原来产品板sd不能使用的问题, 其中一个问题是storage_aclk过高(700MHz), 修改后正确. 
+
+10:41 2011-3-10
+时间管理
+0, 9:40
+
+1, 本日
+1), 30' 面试.
+2), 20' 支持zhengwei, 在sram中设置VA7882电压. 
+3), 40' 支持fandong筛片程序.
+4), 3h 完善timer wakeup. 见"14:49 2011-3-9". 
+5), 16:27-19:27 上传AE performance monitor. 见"18:58 2011-3-10". 
+6), 总结. 最近三天工作进展, 见"19:27 2011-3-10". 
+
+18:13 2011-3-10
+VC0882, mas, x2p, AXI_X2P, apb timer配置
+\\10.0.13.101\share\cvsdir\VC1600WCVS\doc\mas\VC0882\axi_x2p
+里面默认就是timeout，而且回perr（对于arm就是data abort）。
+
+18:58 2011-3-10
+VC0882, android, AE, power, performance, performance monior, 续, 上传已有代码; 软件技巧, AE, android, kernel, 网页浏览git代码"6-5)"
+1, 修改寄存器定义后，代码有些问题。修改后正确。latency和yanglei预期有差异。
+2, 
+# /monitor.sh
+        statics interval      550ms
+ddrc    utilization    16.80    efficiency    92.61      page_confict        0
+bus     utilization    15.56    clock 200000000
+------------------------------------------------------------------------------------------------------------------------------------------------------
+                  clock  rbandwidth     wbandwidth   rutilization wutilization    rlatency    wlatency       rdata       wdata       raddr       waddr
+ddrc          200000000       31054          75          15.52            0.3          33          14    17079861       41335     2134981       19396
+cif           100000000           0           0            0.0            0.0           0           0           0           0           0           0
+cpu           500000000         155          76            0.3            0.1          42          20       85577       42033       12371       20094
+de            200000000       30902           0          15.45            0.0          40           0    16996198           0     2124525           0
+emi_burst     200000000           0           0            0.0            0.0           0           0           0           0           0           0
+gpu           500000000           0           0            0.0            0.0           0           0           0           0           0           0
+video_codec   200000000           0           0            0.0            0.0           0           0           0           0           0           0
+
+3, 不能用origin的原因是
+2.4 创建本地vmc_g分支
+创建一个本地分支，这样可以方便使用git工具，比如可以使用git pull单独同步某个工程
+#v-repo bl vmc_g 
+2.5 添加服务器信息到本地git库
+把140服务器信息加入本地git库，这样就可以用git push origin HEAD:vmc_g来push
+#v-repo addremote
+
+4, \todo 明天上传. 
+备份代码. 
+
+5, (9:10 2011-3-11)
+zhangjian邮件"linux下write latency偏大"
+hi, yanglei
+
+我现在在linux抓到的latency数据如下，在总线不忙情况下，write latency大于你给出的参考值。
+ddrc    utilization    16.80    efficiency    92.61
+ddrc read latency 34, write latency 13.
+arm read latency 42, write latency 20. 
+de read latency 40.
+
+这样正常么？
+
+thanks.
+zhangjian.
+
+6, (9:54 2011-3-11)
+1), zhangjian@ubuntu:~/mydroid_f/kernel$ git push origin HEAD:vmc_g
+zhangjian@10.0.12.140's password:
+To git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git
+ ! [rejected]        HEAD -> vmc_g (non-fast forward)
+error: failed to push some refs to 'git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git'
+To prevent you from losing history, non-fast-forward updates were rejected
+Merge the remote changes before pushing again.  See the 'non-fast forward'
+section of 'git push --help' for details.
+zhangjian@ubuntu:~/mydroid_f/kernel$
+2), google说要先pull一下(git pull):
+zhangjian@ubuntu:~/mydroid_f/kernel$ git pull
+remote: Counting objects: 35, done.
+remote: Compressing objects: 100% (20/20), done.
+remote: Total 20 (delta 17), reused 0 (delta 0)
+Unpacking objects: 100% (20/20), done.
+From git://10.0.12.140/android/common
+   63b7afc..c365c2b  vmc_g      -> korg/vmc_g
+ * [new branch]      vmg_c      -> korg/vmg_c
+Updating 63b7afc..c365c2b
+Fast forward
+ arch/arm/Kconfig                    |    1 +
+ arch/arm/mach-vc0882/board-vortex.c |   50 +++++
+ arch/arm/plat-vc088x/Kconfig        |    6 +
+ arch/arm/plat-vc088x/Makefile       |    2 +-
+ arch/arm/plat-vc088x/gpio.c         |   98 +++++++--
+ arch/arm/plat-vc088x/pm.c           |  172 ++++++++++-----
+ arch/arm/plat-vc088x/pwm.c          |  412 +++++++++++++++++++++++++----------
+ drivers/mfd/va7882-regulator.c      |    4 +-
+ 8 files changed, 553 insertions(+), 192 deletions(-)
+3), 在git status, 似乎要重新commit
+zhangjian@ubuntu:~/mydroid_f/kernel$ git status
+# On branch vmc_g
+# Untracked files:
+#   (use "git add <file>..." to include in what will be committed)
+#
+#       arch/arm/boot/compressed/lib1funcs.S
+#       arch/arm/boot/compressed/piggy.gzip
+#       arch/arm/boot/compressed/vmlinux
+#       vmlinux.apr
+nothing added to commit but untracked files present (use "git add" to track)
+4), 文件似乎是被删除了. 需要重新改, 昨天还忘了做备份. 
+完成命令如下：
+git commit files -m "" 
+git push origin HEAD:vmc_g
+
+5), 修改, 调试正确后上传. 根据文档提示, 和config文件, 可以在如下网页浏览:
+http://10.0.12.140/cgi-bin/gitweb.cgi?p=android/common.git;a=shortlog;h=refs/heads/vmc_g
+
+bianrongguang提醒我, 可以在git projects根目录看到原始网址: 
+url = git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git
+
+zhangjian@ubuntu:~/mydroid_f/kernel$ cat .git/config
+[core]
+        repositoryformatversion = 0
+        filemode = true
+[user]
+        email = zhangjian@vimicro.com
+        name = zhangjian
+[remote "korg"]
+        url = git://10.0.12.140/android/common.git
+        review = review.source.android.com
+        projectname = common
+        fetch = +refs/heads/*:refs/remotes/korg/*
+[branch "vmc_g"]
+        remote = korg
+        merge = refs/heads/vmc_g
+[remote "origin"]
+        url = git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git
+        fetch = +refs/heads/*:refs/remotes/origin/*
+
+19:27 2011-3-10
+VC0882, SV, 工作进展, 总结, 3月8日-3月10日
+1, 3月8日-3月10日进展
+1), 提供fandong 筛片程序所需所有测试项. 支持唤醒后读取rtc时间, reboot 882. 
+2), 继续调试pmu和VA7882. 在zixi, zouweiran支持下解决使用VA7882时无法唤醒的问题.
+3), 支持ae调试关机.
+4), 支持
+(1), 为fandong配置产品板uhost电源. 
+(2), 支持zhengwei, 利用给zixi提供的dvfs测试程序, 在sram中升高ddr(dcdc5)电压. 
+5), 调试AE performance monitor. 
+
+2, 明日计划
+1), 提交pmu和VA7882剩余测试项. 
+2), 上传AE performance monitor. 
+
+3, 存在问题
+1), Linux下用performance monitor抓到的写latency大于yanglei给出的参考值一倍. 
+
+8:59 2011-3-11
+VC0882, SV,  AE,  android performance 优化思路
+1, 对比beagleboard移植和标准android间的差异：rowboat, 0xdroid.
+2, 实验l2$的影响：lockdown half of level two cache。
+3, performance monitor改为单独保存每次数据，看看有没有突发访问。
+
+9:57 2011-3-11
+时间管理
+0, 9:42
+
+1, 本日
+1), 20' 和fandong讨论筛片程序. 
+2), 30' 上传AE performance monitor. 见"18:58 2011-3-10"6. 
+3), 30' 完善AE performance monitor 文档。
+4), 1.5h 讨论AE android performance。
+5), 10' 给jiabo发performance monitor driver。见"17:21 2011-3-11". 
+6), 40' pmu 测试项。avs, rc分析。有问题，需要调试。\todo 代码修改: 0x60050004[21]=1. 
+7), sd插入中断检测。见"17:51 2011-3-11". 
+7), open ldo21跑死这个问题，ldo21是class B, 修改后在其它板子上open dcdc中跑死。
+
+13:07 2011-3-11
+VC0882, SV, AE, performance优化, TI OMAP3530, beagleboard, android
+1, zhaoyuan邮件"TI OMAP3530 资源"201103110_1341
+现在系统效率的低下逐渐凸现出来了，而且以现在系统的复杂程度来讲，一两个同事是无法快速得出结论的。
+经过沟通，这个Email上的同事，下周主要Focus在这个领域。不查到真相，绝不收兵。
+Wang Weizhong:主要从上层UI绘制，Profile工具上入手。
+Jia Bo&Zhang Jian:主要负责Kernel底层的工作，包括任务调度，Memory访问，Cache策略，Libc库的优化等。
+Wang Xiaocheng:主要从neon是否被使用及如何使用入手，
+Yang Xing：主要负责把复杂问题抽象成”裸奔”的代码，在ti和882上做对比试验
+随着Debug的进展，人员和工作可能会有所调整。
+以下是:前一阶段做3530vs882时用到的一些资源
+放到 /home/share/zy/performance
+rootfs_ti.tar.gz:TI 在TI原生Rootfs的基础上添加了lmbench和Wang Weizhong编写的测试工具
+linux-03.00.00.03.tar.gz: TI原生标准Linux
+linux-03.00.00.03_test.tar.gz: 在TI原生Linux 的基础上，添加了内核驱动测试内核态的读写, 源文件:vc088x_bench.c, 882内部也有相同的Driver,并且源代码相同。
+TI_Android_FroYo_DevKit-V2.2.tar.gz: TI Release Android2.2的开发包，包括Kernel 和 Root，暂时还没有搭建测试过。
+UserGuide-03.00.00.03.pdf: TI 原生Linux，使用手册
+omap3530_spec.pdf: Omap3530 datesheet.
+
+2, 我找到的一些资料
+1), TI资料:
+TI的DVSDK已经升级到4.0, 放到了
+\\10.0.12.160: \home\zhangjian\DVSDK4.00
+2), OMAP3530优化
+感觉beagleboard有两个android项目比较活跃，一个是mentor的http://arowboat.org/，一个是0xdroid，后者的roadmap里面提到一些neon的优化信息，不知有没有用：
+http://code.google.com/p/0xdroid/wiki/Roadmap
+Merge skia ARMv6/ARMv7 optimization from QuIC ( Issue #83 ) 
+ARM NEON/SIMD optimizations for PixelFlinger up to 5x speedup ( Issue #57 ) 
+ARM NEON and Thumb2 optimized bionic/libcutils 
+ARM NEON optimizations for skia 
+
+3), 未发邮件，其实还可以参考linaro的资料。
+0xlab介绍：
+http://planet.0xlab.org/technology.html
+linaro使用说明（支持模拟器）：
+https://wiki.linaro.org/Releases/MilestoneBuilds
+
+3, (12:42 2011-3-15)houpeixin邮件"答复: TI OMAP3530 资源"20110315_1150
+关于UI慢的事情，我又看了一下profiling的结果，结合Skia库目前的优化情况，突然想到可能和我们系统配置为ARGB8888有关。本身8888就比565更耗费运算资源，再加上针对565的优化也比8888更多（\skia\src\opts），因此出现性能差异并不奇怪。
+ZhaoYuan， 我建议看一下TI3530板上的颜色配置，并尽快安排人把我们的板子调回565（GPU这边可能也要动一下）试一下。MinFeng，你查一下三星板上的配置。
+我看了一下MileStone手机，至少GPU配的是565颜色，从常理推想系统应该也是565。
+4, yinong邮件""_20110315
+That’s nice to learn,  but that’s also a surprise that the AE setup is so different from IC.      We shall have a formal register value configuration meeting between AE and IC to eliminate other potential discrepancies.     AE should provide a list of configuration values you are using currently,  and IC needs to qualify each one from the regular usage and performance perspective.
+
+17:21 2011-3-11
+VC0882, SV, AE, arm, performance monitor counter driver
+1, Hi, jiabo
+
+原来我们实现过一个performance monitor arm clock counter driver，见附件，供你参考，其中： 
+"VIM_StartPerfomanceMonitor"：start performance monitor.
+VIM_ARM_PmuCCNTGet: 得到当前counter。
+
+17:51 2011-3-11
+VC0882, SV, AE, pmu, sd插入唤醒
+1, hi, fuyali
+
+sd插入唤醒，其实就是某个gpio唤醒源，具体sd0如下：
+SD0_DETECTN是GPIO_K6. 需要设置GPIO_K6为唤醒源.
+设置GPIO_INT_NSD_SRC[31:24](GPIO_INT_SRC_NSD3)=0x6(选择gpio k6)
+并设置wakeup_source是1 26([25]: the same source as GPIO_NSD_INT[3], specified by PADC register GPIO_INT_NSD_SRC[31:24])
+
+18:34 2011-3-11
+VC0882, SV, 工作总结
+1, 本日工作总结
+1), 上传AE performance monitor代码.
+2), 和AE开会讨论android performance, 需要支持jiabo使用arm performance monitor, 控制L2 cache lockdown bit.
+3), 实验pmu中VA7882测试项, 测试未通过, 需要继续debug. 
+
+2, 次日计划
+1), 提交pmu中VA7882测试项. 
+
+3, AE 本周工作总结
+1), 修改performance monitor latency计算方法. 
+
+23:14 2011-3-12
+logassistant
+今天看csi newyork season7 1, 通过模糊搜索快速找到了案发地，感叹科技的作用。我希望能充分发挥出技术的作用。
+\todo add video.
+
+9:55 2011-3-15
+时间管理
+0, 9:29
+
+1, 本日
+1), 10' 给zixi发882 sd boot焼写方法
+2), 40' 2h 20:00-23:20 pmu 测试项。avs, rc分析。"13:12 2011-3-15". 
+3), AE performance: beizhan说zhengwei, yangxing事情我要关注. 
+4), AE performance: houpeixin想到可能是RGB888和RGB565之间的差异, 见"13:07 2011-3-11"3. 
+5), 40' zhangjianjun测试发现pmic checkall有问题. 已修改并上传代码。
+6), 30' jiangbo的sd boot，进入pmu idle后立刻退出，实验最新版本无此问题。
+7), 20' 实验PMU tpi sleep->wakeup, 仍然不行. 
+8), 总结. 见"21:06 2011-3-15". 
+反思：今天调试pmu硬件I2C，其实认真看文档就能解决，看来自己解决问题能力还是很有限。后面剩余问题也要认真看文档。做嵌入式四年，感觉自己分析问题解决问题能力还需要进一步提高。
+
+9:57 2011-3-15
+VC0882, SV, 工具, bootloader, sd boot, sd卡焼写方法
+1, 打包
+D:\VC0882\882bootloader\tools\DfuPack\DfuPack.exe
+cfg file: D:\VC0882\882bootloader\QA_CFG_SV\DDR3\sdboot\Cpu_pll1_500_Bus_pll2_266_DDR3_pll2_1Gb_2x16_dll_on_266_wakeup\Cpu_pll1_500_Bus_pll2_266_DDR3_pll2_1Gb_2x16_dll_on_266.txt
+core bin file: D:\VC0882\panda_os\build\VC0882.axf(此文件根据自己需要使用arm workbench编译)
+pack file: 所需输出文件.
+2, 焼写sd卡(注意: 卡不要写保护):
+第一个位置选择上面焼写的pack 文件
+选择正确的物理磁盘(0是硬盘, 从1开始是可移动设备).
+其余参数不需要修改. 
+format, submit. 
+3, 拔出sd卡, 重新插入后, format fat分区. 
+如果不拔出sd卡, 直接format fat分区, 会覆盖上面焼写工具对分区表的修改. 
+
+13:12 2011-3-15
+VC0882, SV, pmu, avs, rc分析; pmic读写寄存器函数(checkall)bug修正
+1, avs直接使用xxx_avs命令既可, 不需要调用avs_xxx命令. 
+上午实验时PMU的AVS_ARM_CURR_VOLT可以读到设置的arm电压，但是用示波器抓不到波形，7882寄存器也没有相应改变。
+下午和zixi一起调试：zixi认为是I2C配置问题，建议找dabin看结果。
+PS: 我上午用的7882电源板有问题，I2C write 7882 OK, read fail. 用zixi的电源板没有问题.
+2, 先看看rc情况如何。
+1), 到现在还经常因为语法错误导致编译失败，看来还是要多练习编程，少做些实验。模拟器的事情要不先暂停，先把performance monitor完善了。
+2), 看温度，结果温度太高，把芯片吹掉了。
+从下面结果看, rc0-7随温度升高减小, 其余是随温度升高而升高, 这是否正常? 
+
+位置: \\10.0.13.101\share\zhangjian\projects\VC0882\code\20110315_pmu_rc
+=~=~=~=~=~=~=~=~=~=~=~= PuTTY log 2011.03.15 16:27:38 =~=~=~=~=~=~=~=~=~=~=~=
+[PMU   MSG]pmu rc test start...
+[PMU   LOG]h:m:s = 0:5:12, id = 0, val = 48316
+[PMU   LOG]h:m:s = 0:5:13, id = 1, val = 49701
+[PMU   LOG]h:m:s = 0:5:13, id = 2, val = 48956
+[PMU   LOG]h:m:s = 0:5:13, id = 3, val = 47155
+[PMU   LOG]h:m:s = 0:5:13, id = 4, val = 51915
+[PMU   LOG]h:m:s = 0:5:13, id = 5, val = 50770
+[PMU   LOG]h:m:s = 0:5:13, id = 6, val = 49272
+[PMU   LOG]h:m:s = 0:5:13, id = 7, val = 48115
+[PMU   LOG]h:m:s = 0:5:13, id = 8, val = 3913
+[PMU   LOG]h:m:s = 0:5:13, id = 9, val = 2959
+[PMU   LOG]h:m:s = 0:5:14, id = 10, val = 2519
+[PMU   LOG]h:m:s = 0:5:14, id = 11, val = 2265
+[PMU   LOG]h:m:s = 0:5:14, id = 12, val = 30560
+[PMU   LOG]h:m:s = 0:5:14, id = 13, val = 37475
+[PMU   LOG]h:m:s = 0:5:14, id = 14, val = 38024
+[PMU   LOG]h:m:s = 0:5:14, id = 15, val = 35834
+[PMU   LOG]h:m:s = 0:5:14, id = 0, val = 48304
+[PMU   LOG]h:m:s = 0:5:14, id = 1, val = 49668
+[PMU   LOG]h:m:s = 0:5:14, id = 2, val = 48834
+[PMU   LOG]h:m:s = 0:5:14, id = 3, val = 47125
+[PMU   LOG]h:m:s = 0:5:15, id = 4, val = 51832
+[PMU   LOG]h:m:s = 0:5:15, id = 5, val = 50684
+[PMU   LOG]h:m:s = 0:5:15, id = 6, val = 49181
+[PMU   LOG]h:m:s = 0:5:15, id = 7, val = 48044
+[PMU   LOG]h:m:s = 0:5:15, id = 8, val = 3884
+[PMU   LOG]h:m:s = 0:5:15, id = 9, val = 3012
+[PMU   LOG]h:m:s = 0:5:15, id = 10, val = 2563
+[PMU   LOG]h:m:s = 0:5:15, id = 11, val = 2163
+[PMU   LOG]h:m:s = 0:5:15, id = 12, val = 30552
+[PMU   LOG]h:m:s = 0:5:16, id = 13, val = 37486
+[PMU   LOG]h:m:s = 0:5:16, id = 14, val = 38079
+[PMU   LOG]h:m:s = 0:5:16, id = 15, val = 35929
+[PMU   LOG]h:m:s = 0:5:16, id = 0, val = 48049
+[PMU   LOG]h:m:s = 0:5:16, id = 1, val = 49317
+[PMU   LOG]h:m:s = 0:5:16, id = 2, val = 48462
+[PMU   LOG]h:m:s = 0:5:16, id = 3, val = 46686
+[PMU   LOG]h:m:s = 0:5:16, id = 4, val = 51405
+[PMU   LOG]h:m:s = 0:5:16, id = 5, val = 50271
+[PMU   LOG]h:m:s = 0:5:17, id = 6, val = 48772
+[PMU   LOG]h:m:s = 0:5:17, id = 7, val = 47607
+[PMU   LOG]h:m:s = 0:5:17, id = 8, val = 3032
+[PMU   LOG]h:m:s = 0:5:17, id = 9, val = 3857
+[PMU   LOG]h:m:s = 0:5:17, id = 10, val = 3759
+[PMU   LOG]h:m:s = 0:5:17, id = 11, val = 3520
+[PMU   LOG]h:m:s = 0:5:17, id = 12, val = 31945
+[PMU   LOG]h:m:s = 0:5:17, id = 13, val = 39089
+[PMU   LOG]h:m:s = 0:5:17, id = 14, val = 39748
+[PMU   LOG]h:m:s = 0:5:17, id = 15, val = 37684
+[PMU   LOG]h:m:s = 0:5:18, id = 0, val = 45736
+[PMU   LOG]h:m:s = 0:5:18, id = 1, val = 46853
+[PMU   LOG]h:m:s = 0:5:18, id = 2, val = 45991
+[PMU   LOG]h:m:s = 0:5:18, id = 3, val = 44101
+[PMU   LOG]h:m:s = 0:5:18, id = 4, val = 48831
+[PMU   LOG]h:m:s = 0:5:18, id = 5, val = 47678
+[PMU   LOG]h:m:s = 0:5:18, id = 6, val = 46201
+[PMU   LOG]h:m:s = 0:5:18, id = 7, val = 45048
+[PMU   LOG]h:m:s = 0:5:18, id = 8, val = 1319
+[PMU   LOG]h:m:s = 0:5:19, id = 9, val = 6089
+[PMU   LOG]h:m:s = 0:5:19, id = 10, val = 6118
+[PMU   LOG]h:m:s = 0:5:19, id = 11, val = 5836
+[PMU   LOG]h:m:s = 0:5:19, id = 12, val = 34018
+[PMU   LOG]h:m:s = 0:5:19, id = 13, val = 41317
+[PMU   LOG]h:m:s = 0:5:19, id = 14, val = 41952
+[PMU   LOG]h:m:s = 0:5:19, id = 15, val = 39877
+//......
+[PMU   LOG]h:m:s = 0:5:54, id = 0, val = 19355
+[PMU   LOG]h:m:s = 0:5:54, id = 1, val = 19442
+[PMU   LOG]h:m:s = 0:5:54, id = 2, val = 21032
+[PMU   LOG]h:m:s = 0:5:54, id = 3, val = 22477
+[PMU   LOG]h:m:s = 0:5:54, id = 4, val = 13933
+[PMU   LOG]h:m:s = 0:5:54, id = 5, val = 14653
+[PMU   LOG]h:m:s = 0:5:54, id = 6, val = 17627
+[PMU   LOG]h:m:s = 0:5:54, id = 7, val = 19742
+[PMU   LOG]h:m:s = 0:5:54, id = 8, val = 54824
+[PMU   LOG]h:m:s = 0:5:54, id = 9, val = 64520
+[PMU   LOG]h:m:s = 0:5:55, id = 10, val = 68779
+[PMU   LOG]h:m:s = 0:5:55, id = 11, val = 68806
+[PMU   LOG]h:m:s = 0:5:55, id = 12, val = 82098
+[PMU   LOG]h:m:s = 0:5:55, id = 13, val = 97804
+[PMU   LOG]h:m:s = 0:5:55, id = 14, val = 93630
+[PMU   LOG]h:m:s = 0:5:55, id = 15, val = 93866
+[PMU   LOG]h:m:s = 0:5:55, id = 0, val = 23080
+[PMU   LOG]h:m:s = 0:5:55, id = 1, val = 23326
+[PMU   LOG]h:m:s = 0:5:55, id = 2, val = 25096
+[PMU   LOG]h:m:s = 0:5:56, id = 3, val = 26611
+[PMU   LOG]h:m:s = 0:5:56, id = 4, val = 17753
+[PMU   LOG]h:m:s = 0:5:56, id = 5, val = 18521
+[PMU   LOG]h:m:s = 0:5:56, id = 6, val = 21599
+[PMU   LOG]h:m:s = 0:5:56, id = 7, val = 23786
+[PMU   LOG]h:m:s = 0:5:56, id = 8, val = 58618
+[PMU   LOG]h:m:s = 0:5:56, id = 9, val = 68487
+[PMU   LOG]h:m:s = 0:5:56, id = 10, val = 73690
+[PMU   LOG]h:m:s = 0:5:56, id = 11, val = 73322
+[PMU   LOG]h:m:s = 0:5:57, id = 12, val = 85415
+[PMU   LOG]h:m:s = 0:5:57, id = 13, val = 101631
+[PMU   LOG]h:m:s = 0:5:57, id = 14, val = 97075
+[PMU   LOG]h:m:s = 0:5:57, id = 15, val = 97646
+
+3, 上传CVS
+1), pmic checkall函数有bug, 已修改. 
+2), move avs clk enable to VIM_PMU_Init
+3), define PMU_MODULE_CLK_RC and PMU_MODULE_CLK_REPLICA for FPGA and SV.
+4), add rc interval in PMU_TEST_RcInit.
+
+4, i2c问题本来打算发邮件了，后来看dabin的文档发现文档中写明应该使用I2C0_CONFIGURE(0x060047000)=0x71d.
+PMC_SOFT_EN = 0	//0: PMC software control mode disable, hardware arbitration
+TO_EN = 1	//TO_EN: time out check enable
+PMU_EN = 1	//PMU_EN:  Enable PMU request channel to access external PMC 
+TRANS_EN = 1	//Transaction mode enable
+EN = 1		//EN, I2C module enable bit.
+低8位是时钟，应该不是大问题。
+第一次实验可以，当时交替用软件I2C方式写，PMU方式读，3次都可以。
+结果后面这样又不行了，还是pmu arm read里面提示error。
+
+5, 最后发现还有地址的问题：
+//#define PMU_I2C_SLAVE_ADDR  0x56// for eeprom test in FPGA 0x50 = AT24C02_I2C_ADDR
+#define PMU_I2C_SLAVE_ADDR  0x16
+#define __PMU_SetPmuI2cAddr()   VIM_HAL_WRITE_REG(I2C0_SLAVEADDR, PMU_I2C_SLAVE_ADDR)
+4,5都修改后arm avs正确。
+
+6, 上传代码:
+1), 修正pmu硬件I2C无法使用的问题:
+(1), 没有设置I2C0_configure的PMU_EN=1; (VIM_PMU_I2cInit())
+(2), 地址设置错误. 应该是0x16, FPGA中使用eeprom代替VA7882, 地址不同. (VIM_PMU_Driver.h: PMU_I2C_SLAVE_ADDR)
+2), 完善pmu模式转换流程:
+(1), _VIM_PMU_Sleep和_VIM_PMU_Halt的pmu 32k clock切换加入"#ifndef __FPGA__"区分
+(2), VIM_PMU_NormalToHalt, 修改后的代码仍有问题, 暂不使用. 
+3), 修正VIM_CLKRST_CfgSels对于SEL_AVS处理的bug. 
+4), VIM_CLKRST_MoudleInit中加入pmu rc和rcplica的配置. 
+5), 调整DMAC头文件的注释. 
+
+17:44 2011-3-15
+同事信息, 882 ICP, zhangjianjun 7314
+
+19:56 2011-3-15
+VC0882, SV, video, HDMI, power, VA7882; 模块供电过高引起疑似SSO问题
+之前认为的HDMI显示的SSO问题，今天发现主要问题是HDMI芯片供电过高，需要1.2v，实际给的是1.5v，这个电压我没有check。反思。
+这样看HDMI可能就可以不焊电阻. 
+
+21:07 2011-3-15
+VC0882, SV, 工作总结
+1, 今日工作
+1), 调试PMU AVS: PMU硬件I2C无法使用, 用示波器看7882 SDA和SCK两个信号, 只看到开始位, 开始位后始终为高. 
+2), 调试PMU RC: 其中rc0-7随温度变化符合预期, rc8-15不符合预期. 
+zixi认为所有rc都应该是随温度上升而上升. 
+3), 其余支持工作. 
+
+2, 次日计划
+1), 继续调试已有问题. 
+
+3, 之前存在的问题
+1), PMU tpi sleep->wakeup不通. 
+
+4, I2C问题后来有进展见"13:12 2011-3-15"4,5,6.
+
+5, 给相关人发PMU问题(邮件未写完. 后来I2C问题有进展, 未发送)
+title: VC0882 PMU问题
+发送: liuzixi; wudabin; 
+抄送: yangzuoxing; ai guo; fengbeizhan; lidongliang; zhangjian; fuyali
+hi, zixi, dabin
+
+VC0882 pmu现在有三个问题, 麻烦帮忙看看
+1, PMU硬件I2C通路不通, 今天zixi已经帮忙看了PMU部分的配置, 未发现问题, 无论是用硬件I2C read接口(AVS_xxx_I2C_READ), 还是使用avs电压调整接口(xxx_STEP_TWO_EN, xxx_STEP_ONE_EN), 都不能正确读写VA7882寄存器. 
+用示波器看7882 SDA和SCK两个信号, 只看到开始位, 开始位后始终为高. 怀疑是I2C方面的问题.
+
+00:11 2011-3-16
+VC0882, VC0718, 环境改进
+1, no lib aasp: 便于大家在sram中也能使用dragon.
+2, exception handler including data abort handler. back  trace.
+3, support kgdb-like debugger.
+
+15:08 2011-3-16
+时间管理
+0, 15:00(上午病假)
+
+1, 本日
+1), 30' 882攻关动员. 
+2), 3h 实验pmu VA7882测试项. 见"18:08 2011-3-16". 
+(1), VA7882电源控制有问题. 查. 反思为什么自己核对过两次都还有错. 
+(2), halt里面关闭c类电源. 
+3), 总结. 见"19:56 2011-3-16". 
+
+15:16 2011-3-16
+VC0882, SV, bottleneck
+1, yangzuoxing邮件"882 bottleneck issue sync for sv test"20110312_1709(未发给我)
+我们下周要完成SV测试，然而现在积累了一些BOTTLENECK ISSUE，为了让我们的SV测试尽快有一个结果，我们从下周一开始过BOTTLENECK ISSUE.
+我目前看到的BOTTLENECK ISSUE有（如果还有之外的，请跟我讲一下）：
+1.       7882问题 （主要相关人员： LIU ZIXI, WANGZHAO, LI LE）
+2.       DDR 切频  （主要相关人员： HUANGWEI, ZHAO BEIHUA,JIANGBO, LI DONGLIANG, GONG ANMIN）
+3.       POWER 测试（主要相关人员： XUEKE, JIANGBO, ZOU WEIRAN）
+4.       高低温测试（主要相关人员： FAN ZHIJUN, ZOU WEIRAN）
+5.       VDAC问题（主要相关人员： LIU JIANBO, GUYE, ZOU WEIRAN）
+6.       HDMI 1080P显示（主要相关人员： GUYE, SHUYU）
+7.       SAR_ADC的精度问题（主要相关人员： WU JIE）
+Bottleneck issue的sync 从每天下午16:00开始，SYNC的顺序按上面的序号，每个ISSUE大概20分钟。主要相关人员务必参加。7882 ISSUE的相关人员请在16:00准时参加，其他ISSUE的相关人员等我的电话。会议地点定在15层9会议室。
+
+2, yangzuoxing邮件""_20110316_0003, 提到的issue列表: 
+D:\work\VC0882\Documentation\sv_bottleneck_issue_record_2011_0315.xls
+表中列出了5类问题: 包括HDMI&Vdec, 7882, power, 高低温和其它.
+
+15:30 2011-3-16
+VC0882, SV, power, pmu, 3月3日review
+1, fuyali邮件"答复: 7882的测试"20110303_1640
+Pmu_7882 review：
+1.       nor boot（EMI）要在604封装上测
+2.       AVS的硬件软件自动调压，包括升压跟降压测试，ARM/BUS跑在26M，micron ddr跑在48M下测试。测试4种情况：arm、video、gpu、core
+升压：从1.0v升到1.8v，时间100us（此值可配），用示波器看下时间和电压上升的曲线过程
+降压：从1.8v降到1.0v，其他同上
+3.       增加AVS_RC的测试。
+a.       报警功能；温度越高，RC值越小。
+b.       测升压跟升温情况下，RC值的变化趋势。设定一个合理的值，升压或升温，RC值到达设定值后，报警，打出一个中断。
+电压从1.0v上升到1.6v，RC值变化趋势；
+用吹风机，温度上升情况下，RC值变化趋势。
+4.       DVFS与clkswith联合测试，待定
+
+15:53 2011-3-16
+882在谈sony ps, microsoft xbox不知具体什么应用。
+十二月九日开始算，一年两个月。下面两个milestone:
+五月一日 1k; 年底累计500k. 
+深圳客户关注的产品armlogic a9, rockchip 2918和VC0882. 大家各有问题。
+
+17:52 2011-3-16
+VC0882, SV, AE, android, performance, jiabo: arm performance monitor
+1, jiabo今日邮件
+Change-Id: Ief35b74f6d42ab7bff71cdbdda73b9efa4993320
+arch/arm/mach-vc0882/board-vortex.c [changed mode: 0755->0644]  diff | blob | history
+看了看, 修改主要在加入了如下platform device: 
+static struct platform_device platdev_pmu =
+{
+        .name                   = "arm-pmu",
+        .id                     = ARM_PMU_DEVICE_CPU,
+        .num_resources          = 1,
+        .resource               = &pmu_resource,
+};
+看了kernel里面是实现了名为arm-pmu的设备. 
+
+18:08 2011-3-16
+VC0882, SV, pmu, avs, 续; pmu模式转换, halt
+1, 继续实验, arm, core, gpu, video codec四个avs都正常. 现在欠缺: 
+1), 修改avs地址, gpu和video codec地址反了.
+2), scale time可配. 
+
+2, 实验电压升高后rc如何变化，和预期一致：rc随电压上升而上升。
+//调整arm, core, gpu, video到1.2v。
+pmu  SD0:/>rc_init
+[PMU]->do_pmu_RcInit()
+rc statics interval:(Int)/[10]
+[PMU   MSG]pmu rc init start...
+[PMU   MSG]pmu rc init finish.
+pmu  SD0:/>rc_test 0 15
+[PMU]->do_pmu_RcTest()
+[PMU   MSG]pmu rc test start...
+[PMU   LOG]h:m:s = 0:5:42, id = 0, val = 61342
+[PMU   LOG]h:m:s = 0:5:42, id = 1, val = 63036
+[PMU   LOG]h:m:s = 0:5:42, id = 2, val = 63152
+[PMU   LOG]h:m:s = 0:5:42, id = 3, val = 60613
+[PMU   LOG]h:m:s = 0:5:42, id = 4, val = 62183
+[PMU   LOG]h:m:s = 0:5:43, id = 5, val = 61899
+[PMU   LOG]h:m:s = 0:5:43, id = 6, val = 60461
+[PMU   LOG]h:m:s = 0:5:43, id = 7, val = 61603
+[PMU   LOG]h:m:s = 0:5:43, id = 8, val = 4058
+[PMU   LOG]h:m:s = 0:5:43, id = 9, val = 9482
+[PMU   LOG]h:m:s = 0:5:43, id = 10, val = 11705
+[PMU   LOG]h:m:s = 0:5:43, id = 11, val = 12771
+[PMU   LOG]h:m:s = 0:5:43, id = 12, val = 24416
+[PMU   LOG]h:m:s = 0:5:43, id = 13, val = 26990
+[PMU   LOG]h:m:s = 0:5:44, id = 14, val = 25864
+[PMU   LOG]h:m:s = 0:5:44, id = 15, val = 23887
+[PMU   MSG]pmu rc test finish.
+pmu  SD0:/>arm_avs 15 2 20 0
+[PMU]->do_pmu_AvsArm()
+[PMU   LOG]curr voltage is   : 12
+[PMU   LOG]target voltage is : 15
+[PMU   LOG]margin voltage is : 2
+[PMU   LOG]uplim voltage is  : 20
+[PMU   LOG]lowlim voltage is : 0
+[PMU   LOG]>>>>after step one val = 17
+[PMU   LOG]>>>>after step two val = 15
+//core, gpu, video命令相同。
+pmu  SD0:/>rc_test 0 15
+[PMU]->do_pmu_RcTest()
+[PMU   MSG]pmu rc test start...
+[PMU   LOG]h:m:s = 0:6:19, id = 0, val = 108149
+[PMU   LOG]h:m:s = 0:6:19, id = 1, val = 106727
+[PMU   LOG]h:m:s = 0:6:19, id = 2, val = 106539
+[PMU   LOG]h:m:s = 0:6:19, id = 3, val = 108343
+[PMU   LOG]h:m:s = 0:6:19, id = 4, val = 108455
+[PMU   LOG]h:m:s = 0:6:19, id = 5, val = 108635
+[PMU   LOG]h:m:s = 0:6:19, id = 6, val = 109270
+[PMU   LOG]h:m:s = 0:6:19, id = 7, val = 108295
+[PMU   LOG]h:m:s = 0:6:19, id = 8, val = 64607
+[PMU   LOG]h:m:s = 0:6:20, id = 9, val = 57592
+[PMU   LOG]h:m:s = 0:6:20, id = 10, val = 81471
+[PMU   LOG]h:m:s = 0:6:20, id = 11, val = 82761
+[PMU   LOG]h:m:s = 0:6:20, id = 12, val = 41100
+[PMU   LOG]h:m:s = 0:6:20, id = 13, val = 38689
+[PMU   LOG]h:m:s = 0:6:20, id = 14, val = 39619
+[PMU   LOG]h:m:s = 0:6:20, id = 15, val = 42260
+[PMU   MSG]pmu rc test finish.
+pmu  SD0:/>
+
+3, 实验fuyali说的pmu寄存器没法读的问题.
+原因是没有设置pmu_ctrl[21]=1. 设置后即可。 
+
+4, 发信, zhangjian2fuyali邮件:
+1), pmu寄存器没法读的问题.
+原因是没有设置pmu_ctrl[21]=1. 设置后即可。
+2), PMU VA7882测试项, 除了温度相关的rc8-rc15测试项, 其余提交测试: 
+也就是: avs测试, rc0-rc7的温度, 电压测试, rc-rc15的电压测试.
+
+5, halt时关闭c类电源, 唤醒后打开c类电源. 
+
+6, check了VA7882电源控制, 没发现问题. 
+
+7, 上传今日代码. 
+现在pmu和pmic都是我做, 原来没有统一的东西要逐步统一. 
+1), 定义PMIC_I2C_ADDR和PMIC_EEPROM_I2C_ADDR两个宏. 代码里面不再直接使用0x16和0x56两个地址. 
+2), halt时关闭c类电源, 唤醒后打开c类电源. 
+3), move VIM_PMU_I2cInit to VIM_PMU_AvsInit; remove VIM_PMU_AvsInit.
+4), avs_init命令加入scale time. 
+
+19:56 2011-3-16
+VC0882, SV, 工作总结
+1, 今日进展:
+1), 完善pmu和VA7882代码. 
+2), 调试pmu core, gpu, video codec avs pass.
+3), 提交pmu部分测试项, 现在pmu只有rc8-rc15与温度关系和tpi sleep->wakeup没有提交. 
+
+2, 明日计划
+1), 继续解决pmu和VA7882存在问题. 
+
+9:58 2011-3-17
+最近工作比较忙，事情多的同时也要思考自己成长了多少。
+最近做的这些事情还是对于pmu, va7882的基本内容的学习，这是基础。linux下clock,  power管理也属于这块。
+今年年度任务是power，现在对于power这块深入时会做哪些内容，还不太了解。
+从linux, android中power管理入手，看看实际系统中存在哪些问题，可能是个切入点。
+如果这样看我现在需要看linux,  android power,  同时完善882 performance monitor. 
+如果希望理解linux power, nucleus sleep -> wakeup流程也有对比和借鉴意义。
+后面计划：performance monitor完善做为编程练习，linux power做为知识点学习。
+
+10:23 2011-3-17
+ic training, performance
+1, 系统瓶颈一般在ddr.
+2, 不同bank之间，读写不能同时进行，但可以同时做开门关门。
+每个row都有一扇门。active相当于开门，precharge相当于关门。
+命中就是要开的门已经开了，冲突就是别的门开了。
+一个bank只能有一个row开门。
+page open policy, page close policy.
+3, 读冲突12cycle, 写冲突23cycle.
+读写转换，在page hit时write to read 10cycle. read to write 2cycle. 882里面ddrc使用了reorder减少了读写转换的次数。
+reorder考虑顺序: page hit,  read write group, bank group. 882在入口做, 718在出口做。882 queue深度是8. queue的深度要考虑master的总请求数量。reorder也可以分级做，synopsys新ip如此。
+4, ddr bl8 等于 882 axi bl4, 所以总线上burst length应该用4的整倍数。
+5, latency toleration: latency增大对于performance的影响。
+6, traffic control: master(主动控制)：尽量均匀的收发数据。interconnect(被动控制): abiter控制优先级。
+7, 对带宽的考虑。
+decoder带宽与frame类型有关：b > p > i.
+reorder后带宽增加了20%, 到达1.2G.
+8, 其实performance是个很综合的东西。要对各个模块有了解。和power类似。
+
+11:20 2011-3-17
+时间管理
+0, 9:47
+
+1, 本日
+1), 2h ic training: yanglei performance.
+2), pmic i2c init address提示加入snprintf。见"14:13 2011-3-17". <取消>
+3), 改进pmu和pmic代码。
+4), 总结。见"19:16 2011-3-17". 
+
+14:13 2011-3-17
+VC0882, SV, power, pmic代码改进
+1, 本来想用snprintf生成arguments里面info字符串, 这样可以使用PMIC_I2C_ADDR和PMIC_EEPROM_I2C_ADDR, 比较标准一些. 
+但是Param要求info是const类型, 没法再赋值. 
+
+15:29 2011-3-17
+VC0882, SV, power, pmu, VA7882, 支持mengfandong筛片程序
+1, fandong发现经常死在打开video codec, gpu isolation的地方. 
+死在gpu的可能性较大. 
+zixi分析里面有两种可能性, 打开gpu, video codec电源引起arm电源被拽下来(200-300mv, 毫秒级时间). 这需要打开电源时, arm升压, 延时后再降压.
+还有一种可能性是开isolation出错. 
+PS: 楼下实验出的gpu上电方法: 供电->供时钟->开isolation->reset gpu. 
+
+这里修改方式是，开dcdc时arm升压开dcdc后降压。
+
+\todo 找lixuelian拿micro sd卡.
+
+16:24 2011-3-17
+VC0882, SV, power, pmu, VA7882
+1, zixi发现rc代码有问题。
+PMU_AVS_RC_START和PMU_AVS_SRCPND1是分组的，原有分组不正确。
+修改后，rc_test命令本身没有bug，但是rc值没有变化。
+2, xueke测试halt模式发现ddrphy没有进入lpmode。这个需要加入。
+3, sleep目前100mA，三星ddr selfrefresh时，一个颗粒10mA。
+
+19:16 2011-3-17
+VC0882, SV, 工作总结; power, pmu, VA7882; mengfandong筛片程序
+1, 本日
+1), 改进pmu和7882代码。修正了rc_test的软件bug。
+2), 支持xueke测试pmu halt模式功耗：进入halt时关闭7882 c类电源，打开ddrphy lpmode。
+3), 和zhangjianjun一起检查7882测试中的问题。
+(1), 7882读写寄存器测试没有问题，原有错误是因为dcdc有电压上限保护。
+(2), 修正了dcdc和ldo电压测试流程。
+(3), 7882开机事件中断不太稳定，时好时坏。需要进一步debug。
+4), 支持mengfandong筛片程序：针对打开isolation的问题，在打开dcdc时先提高arm电压到1.5v，打开后在调回原有电压。同时延长开dcdc后延时到10毫秒。
+
+2, 明日计划
+继续解决pmu和VA7882已有问题。
+
+3, 目前pmu和7882存在问题汇总
+1), pmu
+(1), tpi sleep后无法wakeup。
+(2), otg唤醒部分case有问题。
+(3), rc8--rc15随温度变化规律不符合预期。
+2), VA7882
+(1), 7882开机事件中断不稳定。
+
+10:30 2011-3-18
+VC0882, SV, sync up
+1, frame rate: shuyu.
+2, benchmark: wangwenlei(VC0882), liuxiaotao(OMAP3530), zhengwei.
+3, fandong. 筛片(SV板), 高低温(产品板). 
+3, zhangjian:
+1), 已有问题报issue。
+2), 优先支持fandong筛片程序。
+
+11:37 2011-3-18
+时间管理
+0, 9:35
+
+1, 本日
+1), 882 sync up. 见"10:30 2011-3-18".
+2), 支持fandong筛片程序. 见"11:39 2011-3-18". 
+3), 和zixi一起查开gpu，video codec开isolation跑死的问题。见"14:27 2011-3-18". 
+4), 总结。
+
+11:39 2011-3-18
+VC0882, SV, power, pmu, VA7882, 筛片程序
+1, fandong实验，升压并delay100ms，对于测试的稳定性没有改善。大约都是30-40次会死。
+liuzixi建议延时到1s，这样完全排除gpu开电造成的问题。
+
+14:27 2011-3-18
+VC0882, SV, power, pmu, gpu, video codec上电流程
+1, IC设计流程
+1), guye: 开电->开clock->开isolation->reset。
+产品板：第一次：38次死在开dcdc2。第二次：45次死在open video codec isolation后。
+SV板第一次在开dcdc2死；第二/三次：2次死在open video codec isolation。
+
+2), guye: 关gpu clock->开电->开clock->开isolation->reset。
+产品板：第一次：第一次死在开dcdc2。第二次：第59次open gpu isolation
+
+3), zixi: 关gpu clock->开电->开isolation->开clock->reset
+产品板：第一次：第一次死在open gpu clock。第二/三/四/五次：第一次死在开dcdc2。
+SV板：第一次：123次open gpu isolation
+
+4), zixi: 关gpu clock->开电->GPU/vcodec_reset=1->开isolation->开gpu clock->GPU/vcodec_reset释放
+产品板：第一次；第二次死在open video codec isolation。第二次：第一次死在open video codec isolation。第三次：第一次死在open video codec isolation。
+
+2, 
+vcodec是异步reset。
+gpu是同步reset。
+
+3, 根据实验1-4)，发现开dcdc2时导致core1.25->1.00, 25us. 
+修改后：
+产品板：第一次；
+
+zixi分析问题时发现开gpu电源时不仅可能拉下arm电压，也有可能拉下core电压(1.25->1.00v, 25us)，所以开gpu，video codec电源时arm和core都需要升压0.3v.
+
+4, 上传代码
+1), 添加autotest_sv_noGpu target。
+2), 添加VIM_CLKRST_GpuClock，VIM_CLKRST_VencClock和VIM_CLKRST_VdecClock三个API用于pmu模块控制时钟开关。
+3), 修改gpu, video codec上电流程。见"VIM_PMIC_Power".
+
+5, 最终：GPU/vcodec_reset=1->关gpu, video codec clock->开电(每个dcdc，ldo delay 1ms)->开gpu, video codec clock->开isolation(10 pmu cycle，假设pmu是xclk不是32k或xclk_ckd，就合并到后面的delay10us)->delay10us(gpu reset有效至少32 apb cycle)->GPU/vcodec_reset释放->gpu delay20us(gpu ip要求128 apb cycle)
+
+6, (10:53 2011-3-19)
+昨日上电流程测试到17xx次没有死。今天和zixi讨论了power off流程。需要实验不加多余延时的power on和off流程。
+
+关机流程
+正常流程：GPU/vcodec_reset有效->delay10us(gpu reset有效至少32 apb cycle)->gpu delay20us(gpu ip要求128 apb cycle)->关gpu, video codec clock->关isolation(10 pmu cycle)->关电(每个dcdc，ldo delay 1ms)
+改进流程（使gpu，video codec尽快掉电）：关isolation(10 pmu cycle)->关电(每个dcdc，ldo delay 1ms)->delay时间(保证电耗尽， ms级别)->关gpu, video codec clock
+
+7, (13:10 2011-3-19)现在流程不清楚，需要重构代码。然后实验。
+
+8, (14:41 2011-3-19)代码重构。
+现在每个模块的上下电需要涉及到：电源控制(dcdc/ldo), reset, clock, isolation, power on/off流程. 
+其中电源控制可以由目前的VIM_PMU_Regulation_Constraints管理。考虑在这一级的上面加入对于reset, clock, isolation的控制。本来想加入rst, clk, iso这些函数指针，后来一想，具体这些功能如何控制其实不是这里需要做的，这里应该关注的是流程，所以根据最初的设想，加入on/off函数，而不是rst, clk, iso这些。
+
+//希望这次函数指针能用对。
+//定义函数指针的方法：先写出函数：
+//VOID func(UINT32 delay)
+//因为定义的是函数指针a，所以(*a)是func。所以函数指针是：
+//typedef VOID (*a)(UINT32 delay)
+
+typedef VOID (*VIM_PMU_PowerFunc)(UINT32 delay);
+typedef struct tag_VIM_PMU_Power
+{
+	VIM_PMU_Regulation_Constraints	regulator;
+	VIM_PMU_PowerFunc		on;
+	VIM_PMU_PowerFunc		off;
+} VIM_PMU_Power;
+
+另外power命令移到pmu目录。
+
+9, (17:20 2011-3-19)经过修改。测试20-30次pass。继续测试中。
+10, (10:10 2011-3-21)20-30次pass的是产品板，产品板跑到周一上午10点还没有出错，共(7+24+10)x720=29530次。SV板一直是重启(\todo 待查)：
+H0x00000000//第一次bootloader启动完成[MMU   MSG]start_memaddr=0x186758
+[MMU   MSG]SDRAM_NCNB_BSS_End_Ptr=0x181658
+[MMU   MSG]SDRAM_BSS_End_Ptr=0x181658
+[MMU   MSG]g_nocache_addr=0x7f00000
+[MMU   MSG]g_nocache_size=0x20000
+[MMU   MSG]g_cache_large_pool_addr=0x186780
+[MMU   MSG]g_cache_large_pool_size=0x7d79840
+[MMU   MSG]g_cache_small_pool_addr=0x7f20000
+[MMU   MSG]g_cache_small_pool_size=0xd7fc0
+[MMU   ERROR]caller  undef
+M0x00000001//系统重启，bootloader开始运行
+
+11, 上传代码。
+1), 移动power命令和结构体到pmu目录
+为了避免pmu编译问题。交换VIM_DRIVER.h里面pmu和pmic的位置，结果如下：
+#include "pmu/VIM_PMIC_Driver.h"
+#include "pmu/VIM_PMU_Driver.h"
+2), 修改VIM_PMIC_Regulation_Constraints定义：加入idx(第几个dcdc/ldo)和type(dcdc or ldo)。
+3), 定义VIM_PMU_Power结构体，用于管理模块上下电流程。
+
+12, (11:29 2011-3-21)后面发现前面测试的产品板的reset flag刚才突然不是1了。之前fandong在7882供电到4.7v时也遇到过这个问题。但我现在的电压是4.1v没有问题。这个问题需要重视，可能和sleep回不来也是这个我问题。
+PS: 上传代码后，在周六的产品板实验，pass次数>700次。
+
+13, (22:34 2011-3-22)给AE发gpu, vcodec上下电流程：
+hi, zhaoyuan, bianrongguang
+
+如下是和zixi讨论和实验后的gpu, vcodec上下电流程，使用ICP的验证环境循环测试上下电29000次没有出错。
+1), 上电流程：
+上电流程保证了gpu和vcodec正确的复位。
+(1), GPU/vcodec_reset=1
+(2), 关gpu, video codec clock
+(3), 开电(每个dcdc，ldo delay 1ms)。开电前arm和core升压300mv，开电后arm和core降回原电压。
+(4), 开gpu, video codec clock
+(5), 开isolation(10 pmu cycle，假设pmu是xclk不是32k或xclk_ckd，就合并到后面的delay10us)
+delay10us(gpu reset有效至少32 apb cycle)
+(6), GPU/vcodec_reset释放
+(7), gpu delay20us(gpu ip要求128 apb cycle)
+2), 下电流程
+修改后的下电流程能使gpu，video codec尽快掉电，如果gpu，video codec没有完全掉电前上电，模块工作可能不正常。
+1), 关isolation(10 pmu cycle)
+2), 关电(每个dcdc，ldo delay 1ms)
+3), delay时间(保证电耗尽， ms级别)
+4), 关gpu, video codec clock
+
+13:00 2011-3-19
+VC0882, SV, power, pmu, 支持jiangbo测试
+1, jiangbo测试电流需要串电流表，由于电流表有内阻，电源电压会下降，所以需要在程序运行前升高arm和core的电压。
+在D:\VC0882\mini_env\arm_coresight_test\arm_core_neon_cache_test加入armBin_sv_vol_scale make target。
+可以在dcdc_vol中指明要修改的dcdc编号和电压(mv)，注意dcdc2,3,6没有打开，如果调整的电压实际不会生效。
+另外jiangbo不希望用ICE，希望使用sdboot。但是原有程序是sram在0x0地址运行，需要修改链接脚步和stack_base。
+汇编里面还是用“IF :DEF:XXX”方式。makefile里面参考linux用法：
+make命令为
+make -f Makefile.arm "EXTRA_CFLAGS=-D__SV__ -DVOLTAGE_SCALE" RUN_ADDR_0X20000000=1
+
+然后在makefile里面判断有无RUN_ADDR_0X20000000定义。
+ifdef RUN_ADDR_0X20000000
+AS_CFLAGS    += --predefine "RUN_ADDR_0X20000000 SETL {TRUE}"
+endif
+LDFLAGS      = --map --no_remove --symbols --list=map.txt --info=totals --datacompressor=off
+LDFLAGS		+= --callgraph
+ifdef RUN_ADDR_0X20000000
+LDFLAGS     += --scatter=ld_script/ads_sram_phy.lds --entry=0x20000000
+else
+LDFLAGS     += --scatter=ld_script/ads.lds --entry=0x00000000 
+endif
+
+13:08 2011-3-19
+时间管理
+0, 10:??-17:26
+
+1, 本日
+1), 30' 14:41-17:20 gpu, video codec上电流程。见"14:27 2011-3-18"6. 
+2), 2h 支持jiangbo测试电流，见"14:27 2011-3-18"12.
+
+10:35 2011-3-21
+时间管理
+0, 10:00
+
+1, 本日
+1), 上传周六的代码。现在pmu发现一个新问题，pmu寄存器有时会丢失。见"11:29 2011-3-21". 
+2), 14:20- VC0882环境改进。见"14:22 2011-3-21". 
+3), 40' 改进AE performance monitor。去楼下支持performance monitor。
+
+13:04 2011-3-21
+VC0882, SV, bootloader, 文档
+shuyu邮件"882 sd boot制作培训"20110321_1230
+在882实验室的任意一台电脑中，都有安装好的编译环境。请直接使用。
+点击桌面图标ARM Workbenck IDE v4.0：
+打开后如下图所示，主要分为三大模块，代码管理，代码显示，工程编译等。
+2.	如何编译
+主要关心一下工程编译管理窗口，编译之前，请先在工程编译管理窗口找到clean这个target，双击。这样就保证你编译出来的工程是一个完成的，全新的工程。
+然后，根据需要，选择你编译的模块。
+1，	需要测试gpu模块，那么你可以在这个工程编译管理窗口找到一个叫gpu_sv的target，双击编译。
+2，	需要测试vdec/venc/de/cif/tv/hdmi模块，那么你可以在这个工程编译管理窗口找到一个叫media_L2_sv的target，双击编译。
+3，	如果想把gpu，memcopy，vdec联合测试，那么我们怎么建立一个自己需要的target呢？
+选中media_L2_sv这个target，单击右键，选择Edit Make Target。弹出如下窗口：
+我们把Build command里面的描述单独拿出来：
+build -m=marb,media,de,cif,vdec,venc,fat,sd,tools,ddr,fd,dmac,i2c,pmu,hdmi -dram=128M -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 –sv
+-m后面的都是跟随的模块名称。这个时候，我们只需要在里面按照相同的格式，添加gpu，mem就行了，添加后如下，添加的位置先后是没有关系的：
+build -m=marb,media,de,cif,gpu,vdec,venc,fat,sd,tools,mem,ddr,fd,dmac,i2c,pmu,hdmi -dram=128M -define=MMU_FLAT_MAP=1 -define=CACHE_L2_ON=1 –sv
+如果你还想加入其它的测试模块，只需把模块名加入就行了。简单吧：）加好好点击Update按钮。然后双击你新编译的这个target进行编译。
+3.	找模块名
+如果你已经知道你所知道的模块名，那么你可以跳过这一节。
+1，	基于你知道你需要的代码在哪里
+在代码管理窗口，每个文件夹下面都有一个叫surbdir.mk的文件，双击打开，在代码显示窗口就能看到显示的内容。最开头，有一个类似于如下的书写：那个***就表式你找到了你需要的模块名
+# Source Code Directory
+SRC := ***
+2，	你不知道代码在哪里
+Ok，去找你的ICP接头人把，让他/她直接告诉你
+二、	制作pack
+在882的工程文件下面，找到制作打包工具
+\VC0882\882bootloader\tools\DfuPack\DfuPack.exe
+双击后打开如下：
+	第一个Cfg File，为我们boot的info文件
+针对SV板，在如下目录找脚本：VC0882\882bootloader\QA_CFG_SV\DDR3\sdboot
+针对AE产品板，在如下目录找脚本：VC0882\882bootloader\QA_CFG_AE\DDR3\sdboot
+Info文件的命名一般都为：cpu*.txt命名。
+	第二个Core Bin File，为我们之前编译好的bin文件。
+Bin文件的路径为：VC0882\panda_os\build\VC0882.bin
+	第三个Pack File，为你需要生成的打包文件，放在一个你找得到的地方就ok了。
+双击Convert，会弹出一个窗口告诉你打包是否成功。走到这里，我们已经成功了一大半了。那个pack文件，如果你经常需要，在软件没有太大改动的情况下，你可以备份一个，以后再需要用到的话，那么只需要走这最后一步了。
+三、	烧录
+在882的工程文件下面，找到烧录工具：
+VC0882\882bootloader\tools\SDPackTool\SDPackTool.exe
+双击后打开如下： 
+分4步：
+1，	找个读卡器，把SD卡插入电脑识别出来。
+2，	选择之前已经做好的打包文件*.pack
+3，	选择SD卡所属的磁盘文件，一定注意别弄错了，错误操作会导致把电脑盘格掉。选对后会弹出一个磁盘大小的说明，由此对比是否选对正确的物理磁盘。
+4，	点击Submit，等待烧录完成，会弹出窗口提示。
+好了，你已经成功的做好了你的sdboot卡。插上板子，开始体验吧。
+
+14:23 2011-3-21
+VC0882, SV, 环境改进, 代码段不允许写， 代码段以外的区域不允许执行代码, dataabort handler
+1, 目标
+1), 代码段不允许写
+2), 代码段以外的区域不允许执行代码
+3), dataabort handler：打印出出错地址，原因。
+
+2, 原因是发现两个问题：
+1), mmu问题上传代码。这是个882 fpga遗留问题，需要反思。<上次修改后还是不行, 这次需要接ICE实验, 并且实验ICE的条件判断语句. 
+2), VC0718 caijin发现edsp遇到问题：软件使用NULL指针结果把代码段写坏。
+
+3, 修改(1-1), 1-2)),添加VIM_MMU_CODE_PROTECT表示本节修改。
+1), 目前我编译的代码段约有1.4Mbytes，打算把rw段改为1M对齐。查arm ld手册如何做对齐。
+LR1 +4 ALIGN 65536
+2), 查页表属性。
+发现原有代码把access permission和domain搞混了。
+
+TTB_AP_NO_ACCESS= 0,	//0 00 No access No access All accesses generate Permission faults
+TTB_AP_PRW_UNO	= 1,	//0 01 Read/write No access Privileged access only
+TTB_AP_PRW_URO	= 2,	//0 10 Read/write Read-only Writes in User mode generate Permission faults
+TTB_AP_PRW_URW	= 3,	//0 11 Read/write Read/write Full access
+TTB_AP_RESERVED	= 4,	//1 00 - - Reserved
+TTB_AP_PRO_UNO  = 5,	//1 01 Read-only No access Privileged read-only
+TTB_AP_PRO_URO_BEFORE_V7  = 6,	//1 10 Read-only Read-only Privileged and User read-only, deprecated in VMSAv7a
+TTB_AP_PRO_URO_V7= 7,	//1 11 Read-only Read-only Privileged and User read-onlyb
+
+3), 代码修改完成：测试！
+
+4), (10:30 2011-3-22)昨天的不稳定问题应该是memory脚本用的不对。今天用正确的1gb 2x16的memory脚本运行没有问题。
+reboot有问题，是跳到实际物理地址出的错：0x80000000地址不允许执行代码。
+reboot应该是否需要跳到物理地址呢？需要，因为reboot时pmu的remap寄存器不会掉电，需要软件将其设为0，也就是根据strappin决定，如果此时没有跳到物理地址，reboot这句话可能没法执行（只是因为一般都进了cache，所以没事）。
+但是关了mmu也有问题，因为stack没有改到0x80000000，所以程序运行也有风险。
+修改后，还是有问题，还需要关中断。
+5), (12:44 2011-3-22)\todo
+VIM_PMU_SoftwareReboot, VIM_PMU_ConfigUSBLoad两个函数功能大部分有问题，需要重构代码。
+6), 准备上传代码。需要修改链接脚本，保证原有配置不变。
+定义VIM_MMU_CODE_PROTECT宏表示保护代码段不可写和非代码段不可执行。该修改还需要进一步测试，默认关闭。
+(1), 添加mmu页表属性_VIM_MMU_TTB_AP和_VIM_MMU_TTB_DOMAIN。_mmu_mem_map_t添加xn(eXecute Never)属性。
+(2), rw段1M对齐：
+MEM_EXEC_RW  +0 ALIGN 1024*1024
+(3), 修改fat_test_cmd.c打印信息：
+iprintf("jump to 0x%x, and go!\n", goAddr);
+(4), 注释padc中配置padc和pmu clksrc的代码（#ifdef __FPGA__)
+(5), pmu初始化中配置pmu, padc, timer均为pmu domain xclk。
+(6), 修改了pmu中原来有风险的VIM_PMU_SoftwareReboot和VIM_PMU_ConfigUSBLoad。同时修改_jumpToPhysicalAddr：修改pc和sp到物理地址。
+
+15:05 2011-3-21
+VC0882, SV, power, pmu, sleep, wakeup
+1, padc wakeup不稳定，zixi建议
+1), 进入halt/sleep是padc来源于pmu xclk。
+2), SYNC_PULSE_WIDTH0/1。至少是padc/pmu clock。
+
+13:25 2011-3-22
+时间管理
+0, 10:00
+
+1, 本日
+1), 20' zixi sleep->wakeup流程讨论
+2), 2h VC0882 panda_os环境改进，alpha, 见"14:23 2011-3-21"4. 
+3), 下午2h 晚上30' VC0882 pmu wakeup调试，见"17:28 2011-3-22".
+4), power: timer有时无法唤醒的问题。见"17:28 2011-3-22"。
+5), 给AE发gpu, vcodec上下电流程，见"14:27 2011-3-18"13. 
+6), 总结。见"22:41 2011-3-22". 
+
+15:04 2011-3-22
+VC0882, SV, 芯片频率离散性测试
+1, fengbeizhan邮件"答复: 882 SV 调试状态（3月22日）"20110322_1211
+Core_ARM= 1.2V ; Core_GPU= 1.2V ; Core_video= 1.2V
+NO.	GPU Max Frq (MHz)	Vdec Max Frq (MHz)	CPU Max Frq (MHz)
+max	440			370			910
+min	400			310			835
+difference	40		60			75
+
+17:28 2011-3-22
+VC0882, SV, power, pmu, wakeup: keypad wakeup解决, 
+1, usb otg device调试需要修改的：
+1), JP16跳线。
+2), boost1(dcdc6)默认不打开，如果检测到device插入到882，才打开。
+
+2, debug gpio wakeup唤醒问题
+1), 0x600510c0(SYNC_PULSE_WIDTH0) = 0xffff
+这个寄存器和0x60050cc0(SYNC_PULSE_WIDTH1)分别用于不同source的唤醒padc到pmu同步的脉冲宽度。
+目的是用于解决跨时钟域的同步问题：例如padc是一个快时钟，pmu是一个慢时钟，padc给pmu的脉冲需要有足够的宽度才能保证pmu能采到padc的信号。推荐配置为(padc/pmu + 3). 
+这里的0xffff，是因为padc是26MHz，pmu是32kHz，所以需要配置的大一些。
+2), 修改为：
+	__PMU_SetPmuClkSel(PMU_CTRL_PMU_X32K);
+	__PMU_SetPadcClkSel(PMU_CTRL_PADC_X32K);
+	VIM_HAL_WRITE_REG32(PADC_SYNC_PULSE_WIDTH0, 0xf);
+	VIM_HAL_WRITE_REG32(PADC_SYNC_PULSE_WIDTH1, 0xf);
+无法启动。
+查a, 7882有无32k。
+  b, 0x60051000[26]=0.
+3), 再次实验，寄存器值如下，和"2)"的差异见注释。
+> ce *((unsigned long*)0x60050004)	//pmu, padc clock selection
+  Result is: 3217609  0x003118C9
+> ce *((unsigned long*)0x60050118)	//enable wakeup source
+  Result is: 16  0x00000010
+> ce *((unsigned long*)0x60051054)	//禁止上升沿，”2)"的bit[12]是1。
+  Result is: 268439552  0x10001000
+> ce *((unsigned long*)0x60051060)	//选择GPIO_INT_SYS_WIDTH0作为输入宽度选择
+  Result is: 0  0x00000000
+> ce *((unsigned long*)0x60051090)	//如果padc是32k，这个宽度有4秒，太宽了！
+  Result is: 65535  0x0000FFFF
+> ce *((unsigned long*)0x600510c0)
+  Result is: 15  0x0000000F
+PASS
+注：0x60051090(GPIO_INT_SYS_WIDTH0)和GPIO_INT_SYS_WIDTH1都是允许的最小输入脉冲，目的是去抖动。
+如果padc是32kHz，0xFFFF意味着输入需要保持的时间是：64k * 2 / 32k =  4秒。
+
+4), 根据"3)"的实验结果，只保持下面三个寄存器的配置，进一步定位问题：
+> ce ((unsigned long *)S:0x60050004)[0]=0x3118C5
+  Result is: 3217605  0x003118C5
+> ce ((unsigned long *)S:0x60051090)[0]=0xF
+  Result is: 15  0x0000000F
+> ce ((unsigned long *)S:0x60051054)[0]=0x10000000
+  Result is: 268435456  0x10000000
+PASS
+
+5), 经过进一步实验，确认是padc和pmu clock选择和搭配问题，也就是GPIO_INT_xxx_WIDTHx和SYNC_PULSE_WIDTHx需要和clock匹配。
+> ce ((unsigned long *)S:0x60050004)[0]=0x3118C5
+  Result is: 3217605  0x003118C5
+> ce ((unsigned long *)S:0x60051090)[0]=0xF
+  Result is: 15  0x0000000F
+PASS
+修改后，可以。tpi halt可以，sleep不行。
+6), 解决tpi sleep无法wakeup的问题，经查是下面0x60051150(SYS_HARD_INTE)[2] SARADC keyscan down中断没有打开。
+0x60051150 [1]应该是1。
+ce ((unsigned long *)S:0x60051150)[0]=0x6	//set bit[2] =1
+0x60051154 [1], 0x60051158 [1]是1。
+0x6005115C=0
+0x60051194=1, 这个也是触发宽度。
+
+完整命令如下：
+AASP SD0:/>tpi
+TPI  SD0:/>init
+[TPI_TEST_MODULE]->tpi_test_Init()
+enable interrupt(0, 1): (Int)/[1]
+work mode(0: manual; 1: dma: (Int)/[0]
+dma enable sel(0: ma_en_sw; 1: pen down/up; 2: key down/up: (Int)/[0]2
+gate(0, 1): (Int)/[0]
+[TPI_TEST_MODULE]MESSAGE:ok!
+
+pmu中输入如下命令：
+pmu  SD0:/>wakeup_source 2 1
+[PMU]->do_pmu_EnWakeupSource()
+[PMU   MSG]     do_pmu_en_wakeup_source...
+
+pmu  SD0:/>write_fastwakeup_pmu_reg 0x82
+[PMU]->do_pmu_WriteFastWakeupPmuReg()
+[PMU   MSG]     set pmu info done.
+pmu  SD0:/>fastsleep
+...
+PASS
+
+目前pmu模式转换已经比较稳定了（除了timer唤醒有时出问题)，把本次修改的代码放到milestone里面。
+\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110322_pmu_halt_sleep_code_update
+
+\todo 思考为什么halt可以唤醒？
+\todo 上传代码。<DONE>
+\todo 提交kpd sleep唤醒。提交gpio有时无法唤醒。<DONE>
+\todo timer唤醒问题：sleep前升压，避免wakeup时把arm， core电压拉低。
+\todo 给AE发上下电流程。
+
+3, (21:12 2011-3-22)上传已有代码
+本次修改解决了两个issue：kpd sleep无法唤醒；gpio有时无法唤醒。
+1), 修改halt和sleep流程，重点把pmu和padc都切到32k并且设置正确的同步宽度。
+__PMU_SetPmuClkSel(PMU_CTRL_PMU_X32K);
+__PMU_SetPadcClkSel(PMU_CTRL_PADC_X32K);
+VIM_HAL_WRITE_REG32(PADC_SYNC_PULSE_WIDTH0, 0xf);
+VIM_HAL_WRITE_REG32(PADC_SYNC_PULSE_WIDTH1, 0xf);
+\todo halt前需要把arm,bus切到xclk，halt唤醒后再切回pll。合并且重写halt和sleep代码后修改。
+2), tpi_sys_Init中打开中断使能：
+__PADC_GpioIntEnable_HARDSomeone(__PADC_GPIO_ENABLE_HARD_SARADC_KEYSCAN_DOWN);
+3), power命令参数由7个改为6个。
+
+4, timer有时无法唤醒的问题。把arm和core升压到1.5v，看看还有没有问题。如果没有问题，可能是唤醒时arm频率太高把arm和core的电拉下来了。
+修改前实验过两次分别跑了4次和12次，目前跑了20次没有出错。
+
+5, (10:31 2011-3-23)昨天这个板子跑了175次（1小时49分)没有唤醒。现在把代码改为上电时调整到arm是1.2v。实验，看看是否sleep->wakeup时升高电压改善了稳定性。
+第一次：65次(41分钟)
+第二次：14次。
+再回去实验升压的情况：35次死，看了升压没有明显改善。
+再回去实验单独的上下电sleep, wakeup流程。测试2小时没问题。
+
+6, (14:22 2011-3-23)beizhan过来讨论，发现fandong在autotest开始做了video相关模块的reset：
+LCDIF_RST
+TVENC_RST
+DE_RST
+FD_RST
+GPU_RST
+VDEC_RST
+VENC_RST
+这里面至少gpu, vdec, venc不需要做，否则和上电流程有矛盾。
+后来beizhan又做了修改：使用timer2唤醒，避免受到其它timer的影响。\todo 关注实验结果。
+
+7, reset修改后仍然不行。去掉一些模块实验。
+0), 对比实验：不包含所有模块。跑了2.5小时正确。
+1), fandong实验包含的模块：reset, venc, gpu, cif, tpi, kpd. 测试次数96，时间1小时38分，这也是一个较好的结果了。
+have test  times = 96
+TEST PMIC: current rtc info 2000-01-01[1] 01:38:31 000761
+(1), reset, venc, cif. 并且给四个dcdc到1.5v和ldo15升压到1.5v。
+
+2), zhangjian实验包含的模块：reset, tv, vdec, nfc, audio, 7882. 跑到12次。(第12次时时间是11分钟)。
+have test  times = 12
+autorun start
+TEST PMIC: current rtc info 2000-01-01[1] 00:11:41 000671
+(1), 继续实验：reset, vdec, nfc, audio. 不测试tv时因为没有屏或电视，不访问7882是为了避免对7882的操作影响（虽然已经确认过不应该有影响）。跑了6分钟就死了。
+(2), (1), 继续实验：reset, vdec. 并且给四个dcdc到1.5v和ldo15升压到1.5v。
+
+18:46 2011-3-22
+VC0882, SV, AE performance monitor改进
+1, 问题
+1), 查除0错误。
+(1), 不设置period会出现除0错误
+echo -n 200000000 > global/clock
+echo -n 500000000 > cpu/clock
+echo -n 200000000 > de/clock
+echo -n 200000000 > ddrc/clock
+echo -n 1 > global/enable
+cat global/enable
+经查，是因为marb monitor周期没有在初始化中配置造成的。把
+marb_write(marb.bus_clock / MS_PER_SECOND * marb.period, MARB_PERF_MONITOR_PERIOD);
+放到v8monitor_init_marb里面。
+(2), 如下流程也会除0。
+disable->change bus clock->set period->enable->trigger：
+echo -n 0 > global/enable
+echo -n 200000000 > ddrc/clock
+echo -n 20 > global/period
+echo -n 1 > global/enable
+echo -n 1 > global/trigger
+
+2), 打印去掉左侧一列时钟。
+
+2, 上面除0错误的直接原因是marb.last_interval=0。在v8monitor_trigger中加入判断后，不再出现除0错误。但是按照上面的流程做还是会提示marb.last_interval=0。分析代码发现，应该是v8monitor_trigger中采集当前数据和performance monitor中断对于数据的处理有冲突。需要修改流程并加锁。
+
+\todo：add logAssistant文档，用正则表达式替换：
+希望把文件中所有如下函数的g_v8arbiter_lock前面加入"&":
+spin_lock_irqsave(g_v8arbiter_lock, flags);
+spin_lock_irqrestore(g_v8arbiter_lock, flags);
+vi中：
+:1,$s/spin_\(un\)*lock\(.*\)(\([a-z]\)/spin_lock\2(\&\3/gc
+
+3, (16:52 2011-3-23)为了测试稳定性，加入循环测试和次数，使用for((e1;e2;e3))的格式不行，不知道什么原因。参考网上改为：
+for i in $(seq $1); do
+        echo "continue $i"
+done
+其中"seq a"是产生1到a的字符串序列。"seq 10"输出1 2 ... 10.
+
+4, 测试通过，上传git
+git add xxx
+git commit -m "fix divide by zero bug: add spin lock in v8monitor_trigger and v8monitor_handler."
+git push origin HEAD:vmc_g
+
+fix divide by zero bug: add spin lock in v8monitor_trigger and v8monitor_handler.
+Change-Id: I20c224215f3e4275a2353ff3a56d8596d210eec7
+
+2), 
+
+21:25 2011-3-22
+VC0882, SV, issue, \todo整理相关issue
+1, fengbeizhan邮件"Vc0882 SV issue review(2011-3-22)"20110322_1755
+Hi，all
+如下是今天issue review结果，部分关闭的issue 已经删除，部分关闭的issue 状态写的是close；fyi
+另外，因为7882 issue比较多，软件加入zhengwei和zhangjian一起进行解决。
+1) venc/vdec：
+说明：使用AE板子后，稳定性好很多，需要进一步在Ae板子上验证；
+i.   vdec不稳定，批量vdec解码最后是在cpu 500M、vdec 100M的频率下测试，但仍然有部分pp无法批量跑，且仍然有fail项
+owner: pengxiaoming
+截止时间：3月25
+思路： 可以在Ae板子上试试；
+ii.   venc不稳定，试过换不同板子，不同频率下进行系统测试，无法顺利测试
+owner：pengxiaoming
+截止时间：3月25日
+iii.  vdec不稳定，试过换不同板子，不同频率下进行系统测试，无法顺利测试
+owner：pengxiaoming
+截止时间：3月25日
+2)TV：
+i. Tv YPBPR输出，有较大的noise； 
+owner：duanlianhua、liujianbo
+截止时间：3月22日
+思路：加入滤波电路后效果好很多，需要fuyali评判效果；
+ii. TV 在输出的过程中（不管什么制式），此时做SD的读写，会引入一个固定频率的噪声干扰，画面有暗纹；liujianbo，guye
+owner：duanlianhua、liujianbo
+截止时间：3月22日
+思路：加入滤波电路后效果好很多，需要fuyali评判效果；
+3)de：
+i. 双屏测试fail，不能切换屏
+owner：shuyu
+截止时间：3月25日
+状态：close
+说明：445不支持；
+ii. DPI panel RGB order Test，16 Bit Panel，配成GBR&BGR，屏会闪。
+owner：shuyu
+截止时间：3月25日
+思路：查看该panel是否支持map；
+状态：close
+说明：是板子问题；
+4)cif：
+i. mi1320的sensor测试Ccir656 data，结果报time out！
+owner：shuyu
+截止时间：3月25日                                       
+ii. Frame drop设置不生效
+owner：shuyu
+截止时间：3月22日
+状态：close
+iii.缺ov2640 sensor做兼容性测试
+owner：shuyu
+截止时间：兼容性后期处理；
+思路：估计是sensor坏了
+iv. openpanel 0#屏（DBI）时，只刷下面一多半屏 
+owner:shuyu
+截止日期：3月25日
+说明：update做的太早，panel还没有正常工作；
+状态：close
+5)video系统测试：因为vdec不稳定的原因，暂缓这部分测试
+		状态：等vdec 稳定后测试；
+6)pmu：
+i.7882
+b.7882，rc有问题，暂不进行测试
+owner：liuzixi
+时间： 3月28日
+状态： 优先级低；
+d.7882，软件调压，core、arm从1.6v降到1.0v，在最后一步从1.05v降到1.0v后死掉
+状态：close
+说明：icd预期1.0V是不稳定的，预期是1.1V；
+ii.寄存器测试
+a. 默认寄存器有3个不对
+owner:wangzhengwei
+时间：3月24日
+b.Pmu_sw_reg30：watchdog reset跟config_usb_load回来后，原本的值0x12345678被写成了0x1a345678
+owner:zhangjian
+时间：3月25日
+状态：close
+说明：该register在bootloader里用到了，bootloader会改变这个值；
+c. Pmu_sw_reg 0~ Pmu_sw_reg31写入值后，sw reboot回不来
+owner:wangzhengwei
+时间：3月25日
+d.Pmu_sw_reg 31复位后，很多次后偶尔会被改变
+owner:zhangjian
+时间：3月25日   
+iii.Uotg
+a.IDLE(OTG as device)接pc，pc resume没有在device端打出resume信号，此问题类似uotg问题。
+owner:jiajihua、mengfandong、wangzhengwei
+时间：3月25日
+b.IDLE(OTG as device)接pc，被枚举成功，被SUSPEND，不用手动（或手动）gateclk，串口死掉。
+owner:jiajihua、mengfandong、wangzhengwei
+时间：3月25日
+iv. Idle/hatl/sleep
+a.有几个pin，应该是低电平触发，可是找了几块板子，都是低电平不能触发，高电平可以触发。
+owner:wangzhengwei
+时间：3月25日               
+说明：padc上要求是默认是高；但是nfc模块初始化为function后，就变成低了，需要找icd再分析是否合理；
+v. Tpi：
+b.Kpd_sleep，待提交测试
+owenr：zhangjian
+时间：3月25日
+说明：目前sleep回不来
+vII. 有的板子上，sleep回不来
+owenr：zhangjian
+时间：3月25日
+7)VA7882：
+i.混合开机fail
+a. 按键开机—alarm开机—charger开机这种混合方式开机，charger开机后寄存器0xf3的值不正确
+owner：liuzixi
+时间：3月25日
+说明：在7882c上实验
+b.      charger开机—alarm开机—按键开机这种混合方式开机，按键开机后寄存器0xf3的值不正确
+owner：liuzixi
+时间：3月25日
+说明：在7882c上实验
+c.     中断 Key up or down  按键没有产生中断
+owner：zhangjian
+时间：3月25日
+ii.RTC 测试，checkdate，从打印信息上看不出每天的临界点
+owner：wangwenlei
+时间：3月25日
+iii.REG测试，有些电压值的偏差超过0.1v
+owner：liuzixi
+时间：3月25日
+说明:部分跳线没有调，在7882C上测试正常；
+状态：close
+8)ARM：SV有的板子在ddr为266M和300M下均有问题，程序会死；有的板子可以在300M下跑起来。Zhangjian初步怀疑是ddr不稳定导致。此问题需要进一步debug。
+owner：zhaobeihua
+状态：和板子相关，优先级降低
+说明：该case是测试arm时，出现的ddr不稳定；可以用该case测试ddr稳定性；
+尝试arm 600M or 500M是否可以；
+在AE板子上尝试ddr 333M是否可以；
+9)ddrc：部分测试项需要zhaobeihua提供测试脚本
+owner：zhaobeihua
+时间：3月24日
+10)clkrst：
+owner：lidongliang、zhaobeihua
+时间：本周3月25日给出稳定的频点
+i. bus/ddr切频：从166M~266M连续切频1000次后，做dmac的搬数100次，fail         
+ii. audio场景切频已提交，但切频本身不稳定，所以未进行此项测试
+iii.  gpu场景切频未提交测试
+11)nf：
+i.AE使用的片子Micron 29F64G08CBAAA，功能测试很多项没有测试通过，这部分fail的case后来是换用其他片子测试通过的。具体测试结果请参见测试报告
+owenr：pengxiaoming
+时间：3月24日
+说明：不带ecc的以后就不用测试这个片子了；
+带ecc的有问题，继续debug；
+ii.兼容性问题：K9F1208U0A，HY27US08121M，HY27UH084G2M (两片)，MT29F4G08BAB    Ecctest  fail，无法测试兼容性。
+owner：pengxiaoming
+时间：3月24日
+说明：改个板子具体再debug
+iii.兼容性问题：H8BCS0SM0MBR boot不起来
+owner：lidongliang
+时间：3月24日
+12）软件调压，arm升压到1.6v死掉
+owner：huangwei
+时间：3月24日
+
+22:41 2011-3-22
+VC0882, SV, 3月21日和3月22日工作总结
+1, 进展
+1), 和zixi一起改进唤醒流程，解决kpd wakeup和gpio唤醒问题。
+原因：kpd中断未使能；跨时钟域采样宽度不合适。
+2), 支持zhaoyuan team使用performance monitor。
+3), 调试timer有时无法唤醒问题，目前把arm和core电压升到1.5v测试60次未发现问题。同一个板子之前测试到4次和12次出错。
+4), 改进VC0882环境，初步解决0x0地址被写坏的问题。
+
+2, 次日安排
+1), 改进AE performance monitor，zhaoyuan调试performance需要使用。
+2), 和zixi一起调试7882 power on丢失的问题（即，混合开机测试）。
+
+10:30 2011-3-23
+时间管理
+0, 9:50
+
+1, 本日
+1), timer wakeup, 见"17:28 2011-3-22"5.
+2), AE performance monitor改进，见"18:46 2011-3-22"
+
+20:34 2011-3-23
+VC0882, SV, clkrst, clkswitch, ddr切频进展; 总结, 文档
+1, 修正了流程的问题后，对比发现dll开关变化会出问题，例如ddr 高->低可以，低->高有问题。
+最后发现pmu升压（LDO15，ddrphy在pmu域）到1.4v就可以。
+2, 总结: 其实大家觉得很难解决时，往往就到了最后解决的机会。
+今天时jiangbo提了建议看看pmu的电压。
+
+11:59 2011-3-24
+VC0882, SV, power, pmu, timer wakeup debug
+1, zixi看umonitor：
+check S:0x60051000 [5:0] = 0
+ce ((unsigned long *)S:0x60051040)[0]=0x3F	//[5:0]
+ce ((unsigned long *)S:0x600510f0)[0]=0x5000	//[31:0]
+看：
+PMU to PSO reset。
+xclk
+en vdd core
+
+2, 上午和dr.yang讨论，
+1), core和pmu之前没有level shift，二者电压不应该超过100mv--200mv。
+2), 会不会是reset没有效果？考虑timer wakeup失败后用wdt reset看看能否reset PSO。
+
+3, en vdd core没有降下来，似乎没有进入sleep。
+会不会是配置pmu mode trans寄存器后，还没有生效就wfi了？这样结合现象，可能是进入了idle状态，而不是sleep。
+加入gpio idle唤醒，便于测试。
+
+jiangbo建议把pclk放慢。
+
+4, sleep后interrupt没有唤醒，怀疑是因为ddr进入了self-refresh，所有无法唤醒。
+变通一下：sleep时关闭中断。
+但是实验没有成功，zixi还是看内部信号。
+
+ce ((unsigned long *)S:0x60051320)[0]=0x0	//[15:0]
+ce ((unsigned long *)S:0x60051340)[0]=0xAAAAAAAA	//[31:0]
+ce ((unsigned long *)S:0x600510f0)[0]=0x5000	//[31:0]
+
+看wfi，sleep, wakeup三个信号，
+第一，二次：没看到wfi信号。
+
+发现sleep时wfi会掉下来然后再上去（如下），但idle和halt时wfi不会掉下来。
+__--__---------
+
+进一步对比rst信号和wfi关系，发现第一个wfi起来后，rst信号正常有效。说明wfi掉下来是因为arm rst后，wfi无效。下一次有效是因为iso有效后把wfi固定到高。
+
+5, 这样有新的问题：如果sleep因为wfi信号无效没有进入sleep状态，那么为什么此时arm无法连接？因为如果arm没有wfi，arm的clock应该不会停止。
+
+6, 和huangwei讨论，如果arm没有执行到wfi，就可能没有拉起wfi信号。
+
+15:16 2011-3-25
+VC0882, SV, power, pmu, timer wakeup debug, 续
+1, 先上传代码
+1), pmic中加入VIM_PMIC_SetBuckVolmv，支持直接输入毫伏的电压，便于用户使用。
+同时加入VIM_PMIC_BuckVol2val函数做电压和7882寄存器配置的转换。
+原有在pmic test cmd里面的dcdc和boost电压表格移到driver.c
+2), 开机后设置arm电压为1.2v，如果sleep前把arm电压调高，这里相当于恢复了arm的默认电压。
+
+2, 根据之前的实验，目前timer wakeup的问题实际是wfi信号没有生效。
+我担心是软件运行到wfi指令之前就停住了，今天希望确认这个猜测。
+具体思路：每次配置ddr寄存器或pmu寄存器后都配置7882的寄存器或打印。原有代码很难用，需要把代码整理为c语言sram版本。
+1), 现在已经关闭了mmu，所以isb和dsb可以不做。不过为了保险使用cp15的dsb和flush pipeline代替dsb和isb两条命令：
+//dsb
+__asm{MCR p15, 0, 0, c7, c10, 4}
+//flush pipeline
+__asm{MCR p15, 0, r1, c7, c5, 4}
+
+wfi可以用instincs: "__wfi"，(18:52 2011-3-25)但是后来发现这个wfi被优化了，\todo待查"18:52 2011-3-25"end
+另外还有其它的用于编译器的同步指令：
+• __schedule_barrier on page 4-86
+• __force_stores on page 4-75
+• __memory_changed on page 4-79.
+
+3, 修改后调试，发现还真不是很快能搞定的。
+1), 自己用错了：
+HAL_WRITE_UINT32_MASK_NOSTACK(DDRC_DRAM_REFRESH, BIT24|BIT25, 3 << BIT24);
+需要改为：
+HAL_WRITE_UINT32_MASK_NOSTACK(DDRC_DRAM_REFRESH, BIT24|BIT25, BIT24|BIT25);
+或
+HAL_WRITE_UINT32_MASK_NOSTACK(DDRC_DRAM_REFRESH, BIT24|BIT25, 3 << 24);
+2), __wfi被优化成了nop，最好还是用汇编函数写的。
+3), 单次测试通过，进行反复测试，看看能否找出哪个步骤没有完成。
+4), 用fandong的autotest测试，发现加入longdelay和reboot。去掉再实验。
+5), 连续测试死在force enter self refresh执行后。
+和jinwenjie，zhaobeihua，yangzuoxing讨论：如果ddr进入自刷新后，还有master访问，可能会有问题，建议把de刷屏停止。
+问shuyu，shuyu屏也关了，de显示背景色不需要访问ddr。
+de停止刷屏的命令是：DE_Stop。
+shuyu建议用performance monitor看哪个master再访问。
+6), 和yangzuoxing，jiangbo讨论，发现没有关中断，关闭中断后再实验。
+关闭中断后，同时打开了performance monitor，没有进入wfi：
+12345670
+(1), performance monitor使用后关闭。
+(2), 每次de和arm的数据一样，发现是marb basefunc定义错了。
+修改后，发现除了arm没有其他master有访问。
+(3), arm进入wfi后，又退出：
+12345670
+发现是有de中断，看来需要和bianrongguang关机流程一样，加入屏蔽所有中断，清srcpnd操作（经过bianrongguang实验，清srcpnd，最好是写回实际的srcpnd，而不是写全f，后者可能无效）。
+
+4, 上传代码。
+本次上传目的：
+a, 更新pmu mode trans实现，便于调试，将来会把halt也用这种方式实现。
+b, 修正有时无法进入sleep的bug。
+1), autotest_sv make target中加入marb模块。其余autotest中也需要加入。
+目的：用performance monitor监测进入sleep前有无arm以外的模块访问总线。
+2), 根据882 bootloader代码更新Panda_Copy_Area，避免size没有word对齐时出错。
+3), 关闭用于ddr switch的pmu升压。
+4), 定义ddr cmd status宏。
+5), 继HAL_WRITE_UINT32_MASK_NOSTACK之后，定义VIM_HAL_READ_UINT32_BITCHECK_NOSTACK和VIM_HAL_READ_UINT32_BITVAL_NOSTACK两个不使用堆栈的寄存器操作宏。主要是用于sram且不使用堆栈的代码。
+6), 修改marb寄存器定义MARB_MP04_RDATA_TX_NUM的错误。
+7), 修改pmu模式转换：sleep模块转换中。不再copy代码到sram，直接把函数SleepIntoSelfRefresh_Sram定义在sram中，这样便于调试。该函数定义在VIM_PMU_Driver_Sram.c（新增）中。
+
+5, 之前一直出错的板子死在
+[PMU   MSG]     set arm voltage to 1.5v(0x12)
+改为渐进调整电压：VIM_PMIC_SetBuckVolStepmv
+
+6, 发信：zhangjian工作进展
+1), timer wakeup：
+最终定位到是系统中断打断了正常代码执行，但此时ddr已经进入自刷新无法访问，所以程序跑飞。当然wfi也没有执行。
+修改后关闭irq模块所有一级中断，并mask和clr所有中断。
+2), 针对系统启动时死在arm升压。根据IC设计要求改为渐进调压：每次调整50mv并delay 1ms。
+
+17:04 2011-3-25
+VC0882, SV, clkrst, clkswitch, ddr切频
+1, 今天dongliang, beihua实验发现如果ddr training时不block AXI，切频就比较稳定。怀疑是ddr training时cache访问ddr把arm挂死了。
+
+17:05 2011-3-25
+VC0882, SV, power, pmu, VA7882
+1, 昨天7882使用问题
+1), 少一个跳线，keep IO没有上电。
+2), LDO11给串口供电。如果串口上电晚于882，会造成882 uart给232芯片数据端到电源端的漏电，也就会造成7882 LDO11有输入电压，所以7882 LDO11没法正常工作。
+
+14:39 2011-3-28
+时间管理
+0, 9:48
+
+2, 本日
+1), 上午: VA7882F讨论。\todo 存邮件。
+2), 请假。
+3), 10' 仪器，示波器trigger使用。见"15:07 2011-3-28".
+4), 10' 给bianrongguang发sleep代码。gpu pak。
+5), halt和sleep调试。见"15:23 2011-3-28"3. \todo 未完成，继续。
+
+15:07 2011-3-28
+VC0882, SV, power, pmu, 仪器仪表, 示波器
+1, 今天终于自己学会如何用示波器捕捉trigger。
+比较容易忘记的是设置触发电平。触发电平和边沿方向结合在一起才能判断事件。
+例如今天是使用示波器，抓pmu arm_avs电压调整是否按照预期的时间做的调整，我设置的是1ms，看到的基本也是1ms。
+
+2, 具体
+trigger一般有tigger menu或按键可以设置：
+一般选择couple Dc, trigger方式可以选择边沿或其它方式（我只用过边沿，边沿一般可以选择上升压，下降沿），触发电平（就是电平变化到什么情况才认为是边沿）等等。
+\todo 待补充。
+
+15:23 2011-3-28
+VC0882, SV, power, pmu, sleep, wakeup, VA7882, halt
+1, 计划
+1), zhangjian2bianrongguang邮件
+sleep流程参见附件的do_pmu_NormalToSleepWithFast()(VIM_PMU_Driver.c)
+2), 修改调压为pmu硬件I2C方式。
+3), 调试halt模式，并和sleep代码合并。
+4), timer idle, halt测试。
+
+2, 1-2)
+后来想了想，这个事情还不是一两下容易完成的。\todo
+这个东西应该是做成一个命令，供大家调整arm, core, vcodec, gpu的电压。同时在上下电流程VIM_PMU_Power中使用。
+另外，VIM_PMU_AvsSet和VIM_PMU_XxxAvs五个函数需要合并。
+
+3, 1-3)
+1), 具体两个：
+(1), halt sram代码使用c语言重写。
+(2), sram代码中需要ddr switch。
+sram代码前后需要做cpu和bus switch。
+
+10:37 2011-3-29
+时间管理
+0, <10:00
+
+1, 本日
+1), 调试AE gpu死的问题，\todo问zhaoyuan具体情况。
+2), 2h VA7882 charger问题。
+3), halt和sleep调试。见"15:23 2011-3-28"3. \todo 未完成，继续。
+4), 给dongliang发信，讨论切频后的training是否会影响刷屏？<DONE, 的确有可能. 后来是当面讨论的>
+
+11:02 2011-3-29
+VC0882, SV, power, video, gpu使用时死
+1, AE发现两种情况下gpu会死：
+1), 个别板子上电后会死。
+2), 一般的板子都是在gpu 2d刚开始使用时死。
+
+2, 在panda_os环境下实验；
+1), 用fandong的autotest完整测试，测试50分钟没有死。
+这里面gpu用的是3d。
+2), 单独实验gpu2d。
+
+3, 
+gpu200 mHz, 死在 idx 0, reset 13次。
+
+4, 发信：
+根据上午讨论实验
+1), gpu上电流程结束后加入查询gpu idle状态和复位操作，发现会一直死循环（大于5秒），没法退出(也就是一直没查到idle)。查询gpu idle状态的语句在gc_start里面已经实现，直接把gc_start加入的gpu上电流程也不行。
+2), 每次gpu的2d测试开始前都会调用gc_start保证gpu处于idle状态。但目前发现一次查询gpu idle状态过程中软件跑飞（下午复现后会接ICE看看问题）。
+
+hi, guye， wenlei
+
+会不会查状态这个不能直接用？
+if (!(gcReadReg(AQHiIdleRegAddrs) ^ 0x7FFFFFFF)) break;
+vivante有没有完整的上电建议流程？
+
+thanks
+zhangjian
+
+5, 根据大家邮件回复；
+Hi, all
+
+1), 
+>gpu上电流程结束后加入查询gpu idle状态和复位操作，发现会一直死循环（大于5秒），没法退出(也就是一直没查到idle)。
+>查询gpu idle状态的语句在gc_start里面已经实现，直接把gc_start加入的gpu上电流程也不行。
+Reset后已经按照guye要求做的delay：
+	while (1)
+	{
+		if (!(gcReadReg(AQHiIdleRegAddrs) ^ 0x7FFFFFFF)) break;
+		VIM_TIMER_DelayMs(100);
+		PMU_MSG("gpu re-reset.\n");
+		//if timeout
+		//GPU/vcodec_reset=1, gpu是同步reset, gpu有时钟后, reset有效至少32 apb cycle
+		VIM_HAL_WRITE_UINT32_BITVAL(CLKRST_MEM_VIDEO_SW_RST, 19, 19, 1);
+		VIM_TIMER_DelayUs(10);
+		VIM_HAL_WRITE_UINT32_BITVAL(CLKRST_MEM_VIDEO_SW_RST, 19, 19, 0);
+		VIM_TIMER_DelayUs(20);
+	}
+如果gpu上电后直接调用上面的代码，实验三次三次都是死循环。
+直接调用gc_start也是同样。
+感觉还是流程有问题，因为后面gpu 2d test中调用gc_start时，最多十几个毫秒就可以等到idle状态，只是随机跑飞，不是每次都死。
+
+2), 
+>每次gpu的2d测试开始前都会调用gc_start保证gpu处于idle状态。但目前发现一次查询gpu idle状态过程中软件跑飞（下午复现后会接ICE看看问题）。
+zhaoyuan给的板子没法联jtag，下午我修改一下环境，确认一下到底实验2死在什么地方。目前打印信息是：
+AASP SD0:/>gpu
+GPU  SD0:/>2dinit
+FRAME buf addr at 0x1171840
+gcVIDEOBASE = 129d940
+gcCMDBASE = 1700000
+GPU  SD0:/>2dgo -idx 0
+Select which test you want to run:
+......(省略测试case列表)
+[GPU_MODULE]->do_gpu_gc2dgo()
+Entering: 0 -- clear test...wait gpu idle i 0 times.
+wait gpu idle i 1 times.
+wait gpu idle i 0 times.
+wait gpu idle i 1 times.
+wait gpu idle i 2 times.
+wait gpu idle i 3 times.
+wait gpu idle i 4 times.
+wait gpu idle i 5 times.
+wait gpu idle i 6 times.
+wait gpu idle i 7 times.
+wait gpu idle i 8 times.
+wait gpu idle i 9 times.
+wait gpu idle i 10 times.
+wait gpu idle i 11 times.
+wait gpu idle i 12 times.
+wait gpu idle i 13 times.
+wait gpu idle i 1
+
+6, 和guye，wenlei讨论。guye建议在2d_init，3d_init里面查gpu idle，如果没有idle就reset。
+1), 后来发现是原来代码有问题造成在gcAppInit之前不能使用gcReadReg, gcWriteReg，所以并不是gpu在reset状态，只是读错了寄存器。
+刚才有点着急了，没有排除清楚软件的问题就去找guye。\todo：反思。
+
+7, 上传代码；
+1), bootscript.c，添加VIM_GPU_2D_REPEAT_TEST
+2), gcReadReg和gcWriteReg加入volatile。
+3), gc3d_init和gc2d_init中加入查询gpu idle。
+
+8, 刚才和bianrongguang讨论，AE测试gpu死是完全死了（串口已经无法输入）。而且已经确认过gpu是idle状态。
+
+9, 加入exception handler。
+1), 结果又是因为卡写保护。这次是用rvdebugger跟踪代码发现汇编变量值不对引起的。
+2), data abort中打印出的值不对（后来发现没有问题，是自己糊涂了）。
+pmu  SD0:/>memwrite 0x10 1
+data abort at 0x134db8 with value 0xe5810000
+[HAL]MESSAGE:0x00000010=0xe59ff018(0x00000001)
+可以参考irq中处理流程，看看是如何得到svc lr的。
+linux中似乎都是跳转到svc再处理。暂时不这样实现。
+
+10, 加入exception handler后在AE和SV板做对比实验。
+1), SV板两次遇到sleep后没有wakeup。\todo debug。
+2), AE板：
+(1), 41次死，25分钟。
+AASP SD0:/>gpu
+GPU  SD0:/>2dinit
+FRAME buf addr at 0x122c640
+gcVIDEOBASE = 1358740
+gcCMDBASE = 1800000
+GPU  SD0:/>2dgo -idx 0
+Select which test you want to run:
+...(省略case列表)
+[GPU_MODULE]->do_gpu_gc2dgo()
+Entering: 0 -- clear test...wait gpu idle i 0 times.
+wait gpu idle i 1 times.
+wait gpu idle i 0 times.
+...（省略1-49 times打印）
+wait gpu idle i 50 times.
+wait gpu idle i 5ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp
+
+似乎是prefatch abort?
+(2), 再试验一次，27次，11分钟。打印信息类似：
+wait gpu idle i 92 times.
+wait gpu idle i 9p°p|pppppp
+
+(3), 看看把异常处理改到sram行不行，和猜测的一样，是prefatch abort（测试8分钟，13次死）：
+wait gpu idle i 92 times.
+wait gpu idle i 9prefretch abort
+
+(4), gc_start中给arm升压(gpu_ae_2d_repeat_with_exceptionHandlerInSram_ArmCoreVolWhileGcStart.pak)
+第一次：死在第二次测试的case23，gpu一直在idle里面无法退出（循环大于30000次，每次循环delay1毫秒）(断电前未死)。
+第二次：死在第一次测试的case23，gpu一直在idle里面无法退出（循环大于9458次，每次循环delay1毫秒）(断电前未死)。
+改为只是在case 0加入调压。case 0一共调用gc_start 10次。gpu_ae_2d_repeat_with_exceptionHandlerInSram_ArmCoreVolWhileGcStartInFirst10times.pak）
+第一次：死在第十次的case 0的第二次gc_start，死循环大于120000次(断电前未死)。
+注：core升压到1.5v，这样和pmu电压不同(core和pmu之前没有level shifter)，会有风险。
+难道只给arm和core升压不够？需要给gpu升压? 给arm升压到1.5, core1.4, gpu1.5：
+第一次：死在第十次的case 0的第二次gc_start，死循环大于73000次(断电前未死)。
+第二次：死在第五次的case 0的第二次gc_start，死循环大于4100次(断电前未死)。
+
+guye建议明天测量电压，看gpu工作时对于arm和core有无影响。
+
+11, (19:45 2011-3-29)发信
+在guye和wenlei的支持下，针对上午发现的两个问题做了debug，进展如下
+1), gpu没有进入idle状态是误判，软件调用的函数没有初始化寄存器基址，所以读到的寄存器不正确。
+目前改为在gpu 2d和3d init中查询gpu是否idle。
+针对这个问题和AE沟通，AE也确认过gpu运行前是处于idle状态的。
+
+2), gpu使用中死在gc_start的查询gpu idle循环中：
+根据目前的分析和实验，目前倾向于是gpu使用时对于系统电源有影响，例如gpu运行时把arm或core的电压拉下来。因为gpu不工作时会从内部关闭clock。此时gpu耗电很少，调用gc_start时gpu才开始工作。明天分线后，和guye一起看看能不能抓到gpu对于arm和core电源的影响。
+今天做了如下实验：
+(1), 在panda_os中加入undefine intruction, svc, prefetch abort, data abort四个异常处理（异常发生时打印一句话并返回）。
+异常处理放在ddr时，出错信息由
+wait gpu idle i 
+变为
+wait gpu idle i 5pppppppp
+看起来是prefetch abort，但是打印不全。怀疑是此时ddrc或ddr sdram已经工作不正常了。于是把具体的异常处理函数放到sram中（vector和第一次跳转还是在ddr中）这样可以打印出完成的prefetch abort：
+wait gpu idle i 9prefretch abort
+由于ICP的验证环境代码都在一个代码段中，所以只要软件没有bug且arm ddr工作正常，不应该有prefretch abort，据此判断是gpu工作时造成arm或ddr出错。
+
+3), 升压实验
+给arm，core或gpu加压可以保证软件不跑飞，但是gpu还是会出错，是否gpu没法回到idle状态时应该reset gpu并且重做该frame？
+实验结果详见下表：
+升压模块	升压位置	在第几次出错	结果
+arm1.5, core1.5	每次gc_start	2	gpu一直在idle里面无法退出（循环大于30000次，每次循环delay1毫秒）
+arm1.5, core1.5	每次gc_start	1	gpu一直在idle里面无法退出（循环大于9458次，每次循环delay1毫秒）。
+arm1.5, core1.5	case0的gc_start	10	case 0的第二次gc_start，死循环120000次。
+arm1.5, core1.4， gpu1.5	case0的gc_start	11	case 0的第二次gc_start，死循环73000次。
+arm1.5, core1.4， gpu1.5	case0的gc_start	7	case 0的第二次gc_start，死循环4100次。
+
+注：1，core升压到1.5v，这样和pmu电压不同(core和pmu之前没有level shifter)，会有风险。			
+2, 这五次测试，每次测试都断点前，软件都没有跑飞。			
+
+12, (11:40 2011-3-30)上传昨日代码
+本次修改主要针对gpu上电后运行出错进行debug。
+如果希望测试gpu上电问题，需要定义如下宏：GPU_POWER_ON_DEBUG，VIM_MMU_CODE_PROTECT。并使用如下链接脚本：
+-lds=ads_code_protect.lds。
+下一步会使链接脚本自动生成，就不需要指定链接脚本了。
+1), 加入异常处理。
+(1), 涉及文件: panda_init.s, Appstart.c, Appstart_Sram.c。
+(2), 加入了undefined instruction, super vision call, prefetch abort, data abort四个异常处理。
+(3), 异常处理的功能：
+如果不定义VIM_SYS_HANDLER_IN_SRAM，异常处理都在ddr中实现，并且打印出出错地址和值，打印后返回出错地址继续执行。对于data abort是返回到出错地址+4的位置继续执行。
+如果定义了VIM_SYS_HANDLER_IN_SRAM，具体的异常处理handler在sram中实现，但是此时无法打印出出错地址和值。
+2), 添加gpu_sv_2d_repeat target用于测试gpu 2d repeat。
+3), add ddrc bit field definition for DDRC_DDRC_CFG1, DDRC_DRAM_CFG and DDRC_DRAM_REFRESH.
+4), 为了debug gpu上电流程，在gc_start被调用的前十次加入arm, core, gpu的升压降压操作。该测试通过宏GPU_POWER_ON_DEBUG控制，默认不打开。
+VIM_PMU_ArmCore函数实现了升压和降压。
+5), fix VIM_PMIC_SetLdoVol中对LDO15设置的错误：bit不对。
+
+14:35 2011-3-29
+VC0882, SV, power, pmu, sleep流程
+1, zhangjian2bianrongguang
+1), panda_os完整代码：
+\\10.0.12.160\share\brg\zhangjian\sleep_code_axf\ panda_os_20110329.rar
+
+2), 附件是bootloader文档，pmu寄存器格式见
+3.3	Pmu register parameter description
+代码参考：VIM_PMU_WriteFastWakeupPmuReg
+
+3), timer wakeup
+脚本：
+init_script\RVD_AE\DDR3_1Gb_2x16_dll_on_333.inc
+
+rvdebugger加载后
+用timer做sleep的唤醒源的命令：
+memread 0x60052010
+memwrite 0x60052010 0x04000000
+pmu
+write_fastwakeup_pmu_reg 0x82
+wakeup_source 2 8
+fastsleep
+
+10:10 2011-3-30
+VC0882, SV, power, video, gpu使用时死
+1, 做两个实验
+1), 不升压，gpu运行时，看core, arm, ddr电压变化。看看是否gpu运行对于三个电源有无影响。
+2), 升压arm1.5, core1.4, pmu1.4, gpu1.4, 打印gpu status，看是gpu内部哪个模块在工作。
+2, 实验2:
+1), 直接使用昨日代码，只是加入status打印：
+arm1.5, core1.4, gpu1.5：第26次的case0第二次调用gc_start：wait gpu idle status 0 times(0x1).循环30000次。
+2), arm1.5, core1.4, pmu1.4, gpu1.4。使用今日代码，包括wenlei加入的gpu busy超导1000次就退出。
+(1), 第11次的case0第一次调用gc_start：wait gpu idle 0 times(current status = 0x1).arm跑死：
+(2), 第1次的case0第一次调用gc_start：wait gpu idle 0 times(current status = 0x1) 次数超过1000次。.arm跑死：
+(3), 去掉wenlei加入的gpu busy超导1000次就退出。
+中间机器死了，最后的打印信息还是。
+gc_start：wait gpu idle 0 times(current status = 0x1)
+(4), 修改一下打印信息，之前的status是取过异或的，现在直接打印寄存器值。
+0x7fffffffe。
+
+3, gpu寄存器含义：
+[0]	IDLE_FE	1'h1	FE is idle.	//Graphics Pipeline Front End
+[1]	IDLE_DE	1'h1	DE is idle.	//Draw Engine
+[2]	IDLE_PE	1'h1	PE is idle.	//Pixel Engine
+[3]	IDLE_SH	1'h1	SH is idle.	/Shader
+[4]	IDLE_PA	1'h1	PA is idle.	//Primitive Assembly
+[5]	IDLE_SE	1'h1	SE is idle.
+[6]	IDLE_RA	1'h1	RA is idle.	//Rasterizer
+[7]	IDLE_TX	1'h1	TX is idle.	//Texture Engine
+[8]	IDLE_VG	1'h1	VG is idle.
+[9]	IDLE_IM	1'h1	IM is idle.
+[10]	IDLE_FP	1'h1	FP is idle.
+[11]	IDLE_TS	1'h1	TS is idle.
+
+GPU:	Graphics Processing Unit
+BLT:	Bit Block Transfer	
+MC:	Memory Controller
+HI:		Host Interface		
+HAL:	Vivante Hardware Abstraction Layer
+SIMD:	Single Instruction, Multiple Data
+
+4, 讨论
+1), gpu busy时，arm读ddr确认ddr是否可用。
+2), 用performance monitor看gpu正常和出错时差异。
+3), 看ddr是否idle？ 
+
+5, 实验
+1), 使用Cpu750MPLL1_Bus333MPLL2_DDR333PLL2_2Gb_2x16_dll_on.txt脚本，现象类似，死在case0, gc_start第一次运行出错，但是没有任何打印，可能还是异常向量也坏了。
+2), ddr测试使用cmdbuffer
+gcCMDBASE_START
+(1), merge pmu sleep和halt sram代码。测试中发现sleep后无法唤醒，后来发现是sleep时mode trans配成了1，应该是2.
+(2), 修改VIM_MMU_PageTable_Section_ChangeAccess, VIM_MMU_PageTable_Section_ChangeAttr需要修改xn和access。
+
+6, 上传代码
+1), 链接时指定INT_Vectors_old作为entry point
+2), gpu上电调试。如果等待gpu busy超过1000次，打印gpu cmd buffer数据，借此判断此时ddr能否正常工作。
+3), 改进
+__cpu_mmu_create_section，VIM_MMU_PageTable_Section_ChangeAttr和VIM_MMU_PageTable_Section_ChangeAccess函数，在后两个函数中加入eXecute Never和access pemission[2]的处理。
+4), 合并halt sram代码到sleep中。sleep可以正常工作。
+5), VIM_PMU_ArmCore函数加入pmu和gpu调压。for gpu上电测试。
+另外加入VIM_PMIC_SetLdoVolStep用于ldo的逐级调压。
+
+7, 继续实验。发信
+根据下午和guye，zixi, jiangbo, yanglei的讨论，在gpu busy时，用arm访问ddr确认ddr是否可用。
+我修改了代码，如果gpu busy超过1000次，打印gpu cmd buffer的内部（cmd buffer是non-cachable，保证arm是访问了ddr）。
+在7882C上实验。前两次死，第三次打印出了ddr中cmd buffer内容。(附后）
+目前的测试是在gc_start前后升压，但arm跑死情况很多，这样软件很难debug。我今天会把异常向量都放在sram中，排除ddr的影响。
+
+2d case 0的cmd buffer中内容如下，请wenlei, guye check一下是否正常：
+wait gpu idle 999 times(current status = 0x7ffffffe).
+0x1700000: 0x804048a
+0x1700004: 0x0
+0x1700008: 0x500
+0x170000c: 0x112c640
+0x1700010: 0x0
+0x1700014: 0x280
+0x1700018: 0x80104ad
+0x170001c: 0x0
+0x1700020: 0x8020498
+0x1700024: 0x1e0
+0x1700028: 0x0
+0x170002c: 0x0
+0x1700030: 0x8010497
+0x1700034: 0x0
+0x1700038: 0x8060480
+0x170003c: 0x30cccc
+0x1700040: 0x0
+0x1700044: 0x0
+0x1700048: 0x6000000
+0x170004c: 0x0
+0x1700050: 0x0
+0x1700054: 0x0
+0x1700058: 0x8010486
+0x170005c: 0x0
+0x1700060: 0x80104b7
+0x1700064: 0x0
+0x1700068: 0x80104b0
+0x170006c: 0x0
+0x1700070: 0x0
+0x1700074: 0xffff
+0x1700078: 0x0
+0x170007c: 0x0
+0x1700080: 0x804048a
+0x1700084: 0xf00140
+0x1700088: 0x500
+0x170008c: 0x112c640
+0x1700090: 0x0
+0x1700094: 0x280
+0x1700098: 0x80104ad
+0x170009c: 0x0
+0x17000a0: 0x8020498
+0x17000a4: 0x1e0
+0x17000a8: 0x0
+0x17000ac: 0x0
+0x17000b0: 0x8010497
+0x17000b4: 0x0
+0x17000b8: 0x8060480
+0x17000bc: 0x30cccc
+0x17000c0: 0x0
+0x17000c4: 0x0
+0x17000c8: 0x6000000
+0x17000cc: 0x0
+0x17000d0: 0x0
+0x17000d4: 0x0
+0x17000d8: 0x8010486
+0x17000dc: 0x0
+0x17000e0: 0x80104b7
+0x17000e4: 0x0
+0x17000e8: 0x80104b0
+0x17000ec: 0x0
+0x17000f0: 0x0
+0x17000f4: 0xdeadbeef
+0x17000f8: 0x140
+0x17000fc: 0x0
+0x1700100: 0x804048a
+0x1700104: 0xf00280
+0x1700108: 0x500
+0x170010c: 0x112c640
+0x1700110: 0x0
+0x1700114: 0x280
+0x1700118: 0x80104ad
+0x170011c: 0x0
+0x1700120: 0x8020498
+0x1700124: 0x1e0
+0x1700128: 0x0
+0x170012c: 0x0
+0x1700130: 0x8010497
+0x1700134: 0x0
+0x1700138: 0x8060480
+0x170013c: 0x30cccc
+0x1700140: 0x0
+0x1700144: 0x0
+0x1700148: 0x6000000
+0x170014c: 0x0
+0x1700150: 0x0
+0x1700154: 0x0
+0x1700158: 0x8010486
+0x170015c: 0x0
+0x1700160: 0x80104b7
+0x1700164: 0x0
+0x1700168: 0x80104b0
+0x170016c: 0x0
+0x1700170: 0x0
+0x1700174: 0xff0000
+0x1700178: 0xf00140
+0x170017c: 0x0
+0x1700180: 0x804048a
+0x1700184: 0x1e00280
+0x1700188: 0x500
+0x170018c: 0x112c640
+0x1700190: 0x0
+0x1700194: 0x280
+0x1700198: 0x80104ad
+0x170019c: 0x0
+0x17001a0: 0x8020498
+0x17001a4: 0x1e0
+0x17001a8: 0x0
+0x17001ac: 0x0
+0x17001b0: 0x8010497
+0x17001b4: 0x0
+0x17001b8: 0x8060480
+0x17001bc: 0x30cccc
+0x17001c0: 0x0
+0x17001c4: 0x0
+0x17001c8: 0x6000000
+0x17001cc: 0x0
+0x17001d0: 0x0
+0x17001d4: 0x0
+0x17001d8: 0x8010486
+0x17001dc: 0x0
+0x17001e0: 0x80104b7
+0x17001e4: 0x0
+0x17001e8: 0x80104b0
+0x17001ec: 0x0
+0x17001f0: 0x0
+0x17001f4: 0xff00
+0x17001f8: 0xf00000
+0x17001fc: 0x0
+0x1700200: 0x804048a
+0x1700204: 0x1e00140
+0x1700208: 0x500
+0x170020c: 0x112c640
+0x1700210: 0x0
+0x1700214: 0x280
+0x1700218: 0x80104ad
+0x170021c: 0x0
+0x1700220: 0x8020498
+0x1700224: 0x1e0
+0x1700228: 0x0
+0x170022c: 0x0
+0x1700230: 0x8010497
+0x1700234: 0x0
+0x1700238: 0x8060480
+0x170023c: 0x30cccc
+0x1700240: 0x0
+0x1700244: 0x0
+0x1700248: 0x6000000
+0x170024c: 0x0
+0x1700250: 0x0
+0x1700254: 0x0
+0x1700258: 0x8010486
+0x170025c: 0x0
+0x1700260: 0x80104b7
+0x1700264: 0x0
+0x1700268: 0x80104b0
+0x170026c: 0x0
+0x1700270: 0x0
+0x1700274: 0xff
+0x1700278: 0xa000d5
+0x170027c: 0x0
+0x1700280: 0x8010e03
+0x1700284: 0x14001ab
+0x1700288: 0x8010e02
+0x170028c: 0x8
+0x1700290: 0x48000000
+0x1700294: 0x701
+0x1700298: 0x10000000
+0x170029c: 0x0
+0x17002a0: 0x0
+0x17002a4: 0x0
+//..以下全0.
+
+10:18 2011-3-31
+时间管理
+0, 9:55
+
+1, 本日
+1), 10:20-12:18 下午继续调试gpu上电流程。见"10:20 2011-3-31". 
+2), 10' OMAP3530价格, 见"14:06 2011-3-31".
+
+10:20 2011-3-31
+VC0882, SV, power, video, gpu使用时死, 续, 异常向量放在sram中
+1, 为了gpu上电流程，把异常向量放在sram中，这个东西原来就想实验，这次借这个机会试试。
+需要看一下Linux里面是怎么做的。
+2, 首先要把昨天改半截的halt问题解决。
+1), 今天跟踪了代码，发现虽然保存了_PMU_DdrRetention_Sram的lr，但是之前的lr丢掉了。所以_PMU_DdrRetention_Sram可以返回，再返回上一级函数就出错了。
+2), 其实现在想一想，还是因为进入sram后，stack没有修改，所以软件很难写。如果加一个wrapper，在跳入sram之前保存和恢复stack。
+软件修改完成，下午再多做些测试，然后加入arm, bus, ddr切频，测试通过并整理代码后上传。
+3), 代码整理
+(1), 加入sys sram：for sram wrapper，sram stack and others。
+4), 给gong'anmin发信。
+为了需要临时增加了_VIM_CLKRST_GetMemPllNum，功能和VIM_CLKRST_GetFreqFromSel有重复，你看怎么改？
+5), 看来halt模式一两下搞不完，先改异常向量。
+6), 把异常向量移到sram：
+(1), 本来想把异常向量直接copy到sram，然后改一下异常基址就行了。但是发现bl命令其实也是用了pc值的。把相关函数改为用blx实现。
+bl	VIM_SYS_Handler_dabort
+改为
+ldr	r1, =VIM_SYS_Handler_dabort
+blx	r1
+
+修改后发现变量区离代码很远。没有copy到sram：从copy 1k改为2k。
+7), gpu实验
+(1), 4分钟：21次的第一个case，第一次gc_start死，
+[GPU_MODULE]->do_gpu_gc2dgo()
+Entering: 0 -- clear test...wait gpu idle 0 times(current status = 0x7prefetch abort
+                                                                                    prefetch abort
+ prefetch abort
+(2), 1分钟。没有打印出异常，arm直接跑死。
+
+3, 发现gpu运行时会有坑。会降低500ms。给gpu升压的1.4v后稳定性改善很大。
+
+4, (14:28 2011-4-1)上传昨日代码
+添加pmu_sv_exceptionSram用于把异常向量表放在sram。用于怀疑ddr不稳定时的debug。
+为了能把异常向量直接copy到sram，
+1), 修改异常处理代码为位置无关代码。
+2), 修改ads_code_protect.lds链接脚本，保留sram前2k用于异常向量表和异常处理函数。
+
+如果定义了VIM_SYS_HANDLER_IN_SRAM，undefined instruction, super vision call, prefetch abort, data abort都可以独立在sram中运行。
+
+11:59 2011-3-31
+软件技巧, rvdebugger, 正确显示数据所有数据
+如果只watch sram_temp_stack，可能只显示前1个或2个数据，可以用强制转换显示所有数据：
+(UINT32[15])(sram_temp_stack)
+
+14:06 2011-3-31
+VC0882, SV, OMAP3530, 价格
+hi, beizhan
+
+考虑到以后用beagle board方便，建议买和beagleboard原理图基本一样的板子，如下：
+1, 深圳天漠科技0755-25636285, 周先生
+Devkit8000不含税，含税价格分别是：
+不带屏：988, 1160
+4.3"屏+HDMI+S-video+Hub: 1699, 2000.
+
+2, 北京瑞泰
+010-62105690/13821102765 赵晓燕，价格均含税(17%)：
+不带屏 995.
+4.3"屏 1595
+4.3"屏+网口：2980
+OMAP3530可以接电视，所以我感觉买不带屏的就可以。
+
+3, 给xiaoduan发配件清单，名称（还是自己粗心了:(）
+1), Devkit8000配件，
+http://www.timll.com/chinese/OMAP/DevKit8000.asp
+(1) Devkit8000评估版  *1 
+(2) SD卡（512MByte） *1 
+(3) 交叉串口线 *1 
+(4) 5V、2A电源适配器 *1
+(5) CD光盘（包含用户手册、PDF原理图、外设驱动、源代码等）*1      
+2), ICETEK-OMAP3530-MINI V3 （4G+2G）开发板配件：
+http://www.realtimedsp.com.cn//product/detail.asp?ID=291
+ICETEK-OMAP3530-MINI V3 （4G+2G）开发板：1块 
+(1), 2G SD卡：1块 
+(2), 配套线：串口线等。 
+(3), 电源适配器：1个 
+(4), 光盘：1份
+
+18:20 2011-3-31
+实验室所有机器以后都会改为自动获取ip。

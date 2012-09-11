@@ -1,0 +1,1774 @@
+﻿
+10:18 2011-7-1
+dvfs昨日结果
+1, 7#次数不够, 原因未知. 
+[zhangjian@centos 20110627_0628_0629_AE_DVFS_cont6_suspend_resume_fail]$ ./check_suspend_dvfs_ret putty_com7_7#_ZJ#\?_BRG#\?_20110630_093304.txt
+version: 20110629_1507
+dt times is 0, console suspend times is 297, rom boot times is 585.
+dvfs: target times is 26391, transition times is 24467, read cpu pll times is 26098, read cpu_clk_cfg times is 26098
+uitest: freq times is 5716, count times is 5717
+
+2, JY#:
+休眠时跑死, 1G切到375MHz, 死时电流130ma, 说明没有进入sleep状态. 我怀疑是cpufreq_resume引入的问题. 在这个板子上实验, panda_os suspend/resume看看有无问题. 
+dt times is 0, console suspend times is 604, rom boot times is 1204.
+dvfs: target times is 52816, transition times is 48944, read cpu pll times is 52204, read cpu_clk_cfg times is 52202
+uitest: freq times is 11174, count times is 11174
+
+3, 4#: deadWhileResume_ABCD, 这个也需要尽快查, 因为休眠唤醒只做了68次. 
+[zhangjian@centos 20110627_0628_0629_AE_DVFS_cont6_suspend_resume_fail]$ ./check_suspend_dvfs_ret putty_com4_9#_20110630_184251_deadWhileResume_ABCD.txt
+version: 20110629_1507
+dt times is 0, console suspend times is 68, rom boot times is 138.
+dvfs: target times is 5948, transition times is 5497, read cpu pll times is 5839, read cpu_clk_cfg times is 5838
+uitest: freq times is 1258, count times is 1258
+
+10:59 2011-7-1
+VC0882, SV, AE sync, zhaoyuan邮件
+\todo 看zhaoyuan邮件. 
+1, 休眠后重启: 
+现在2#, 10#, 创维板子都出现过. 看了是个普遍问题. 
+2, 休眠唤醒优先级高于dvfs(两周后提供). 
+3, 今天要在发掘板上测试pm_dvfs.
+4, gpu超频到800M, 升压. 
+
+13:52 2011-7-1
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关
+1, 目前已经三块板子(2#, 10#, 创维板子)都有复现. 看来是个普遍问题. 
+重启: 和bianrongguang讨论, 似乎是7882 poweroff mode或pmu sw wakeup flag没有设对, 造成系统直接关机或系统唤醒时一级boot没有读到wakeup flag.
+开机第二次唤醒后重启: 一种是两次唤醒都是两次按键; 另一种是第一次是按键唤醒, 第二次是休眠后自动重启. 
+2, action: 
+这两个情况都需要确认7882和pmu寄存器(PMU_BOOT_FLAG_SW和PMU_SW_REG27[2])的配置是否正确. 
+对于第二种情况需要在wfi后面的reset里面打印出是哪个中断. 
+3, 7882 cache会不会有影响. 
+如果是7882寄存器没有写进去, 可以用regdump确认寄存器值是否正确.
+4, (19:07 2011-7-1)
+hi, laobian
+
+发掘机器我跑起来了, 麻烦你帮我看一下跑死没有, 和两个次数:
+1, uitest menu: wakecount. 记录了屏幕亮了多少次. 
+2, "cat /sys/devices/system/cpu/cpu0/cpufreq/stats/total_trans"
+
+测试步骤
+1), 烧写含有cpufreq的版本. 
+2), 复制"10.0.12.160" share/zhangjian目录如下四个文件到882: auto_suspend.sh, cpufreq_test, hexwrite, UITest_dynamic__printWakeCount.apk
+3), 在adb root shell下执行如下命令: 
+# mv /mnt/sdcard/auto_suspend.sh /system/bin/
+# mv /mnt/sdcard/cpufreq_test /system/bin
+# mv /mnt/sdcard/hexwrite /system/bin/
+# echo "/system/bin/busybox sh /system/bin/auto_suspend.sh &" >> /system/etc/ini
+t.vimicro.sh
+# echo "/system/bin/busybox sh /system/bin/cpufreq_test &" >> /system/etc/init.v
+imicro.sh
+重启机器:
+安装并运行uitest, uitest menu "set&start"启动刷屏. 
+
+5, (17:48 2011-7-4)给测试同事重写详细文档. 
+1), 发掘板子没有串口需要使用adb. 
+从"\\10.0.12.140\Project\VC0882\software\"目录复制复制adb__wdt.rar, google-usb_driver__brg.rar, 解压缩. 
+android启动后, 插入usb到pc和pad. 会提示有新设备, 安装google-usb_driver__brg.rar里面的驱动. 
+安装后, 运行里面进入adb__wdt.rar解压缩后的目录. 
+运行"adb root"
+"adb shell"
+
+19:43 2011-7-1
+VC0882, SV, 工作进展
+1, 今日工作进展
+1), 查pm_dvfs测试中发现的唤醒后重启问题, 怀疑是休眠前7882 poweroff mode或pmu sw wakeup flag未设置成功. 软件改进后, 测试10次未出现, 修改前测试一般启动第二次唤醒就会复位. 周一会继续测试. 
+2), 跑发掘量产板的pm和dvfs测试. 没有串口, 为了统计次数, 请qiaowei帮我在uitest加入了显示"屏幕亮"的次数. dvfs可以通过cpufreq已有的接口统计. 
+周末bianrongguang会帮我看结果. 
+3), 创维nand板子休眠唤醒不稳定. 很容易死. 我感觉是上电直接cpu切频到750MHz@1.2v有风险, 考虑给cpu降频测试. 
+
+20:01 2011-7-1
+时间管理
+0, 10:00-20:10
+
+23:33 2011-7-2
+和系统有关的那些事儿
+计划写Power and clock, arm and software ecosystem. 两部分。
+从模块级，模块和系统关系去介绍上面两个专题。
+有些模块不需要特别专门的背景知识，例如sd, Audio codec, pmic. 有些需要：arm, vcodec. 有些需要和其他模块有深入交互：pmu sleep: arm, ddrc.
+
+13:03 2011-7-4
+AE, wifi, media: androidmedia; F5(from SunFengQiang): android-2
+
+13:26 2011-7-4
+时间管理
+0, 10:00
+
+1, 本日
+1), zhaoyuan安排任务. 
+2), 15:13 pm稳定性. 见"15:15 2011-7-4". 
+3), 查pm唤醒后又立刻睡眠的原因. 
+
+13:39 2011-7-4
+Linux, kernel, c语言, "##", "#"
+"##"表示连接: 
+如果代码是这样: 
+#define OS_SWTIMER_CALLBACK(a, b) void os_v##a(void *b)
+OS_SWTIMER_CALLBACK(read, pointer)
+预处理结果是这样:
+void os_vread(void *pointer)
+
+另外, "##"只需要用在语法上是一个完整变量/函数命名里面. 否则不需要用＂##＂. 
+例如, 如果代码是这样: 
+#define OS_SWTIMER_CALLBACK(a, b) a(void *b)
+OS_SWTIMER_CALLBACK(read, pointer)
+预处理结果是这样:
+void read(void *pointer)
+
+还有就是"#"表示转为字符串. 也很常用. 
+代码: 
+[zhangjian@icp-desktop temp]$ cat t0.c
+
+#include "stdio.h"
+
+struct my_struct {
+	int (*func)(struct my_struct);
+	char *name;
+};
+
+#define TO_FUNC_STRING(your_name)\
+	struct my_struct your_name##_struct =  {\
+	.func = your_name,\
+	.name = #your_name\
+}
+
+int test(struct my_struct s)
+{
+	printf("%s", s.name);
+	return 0;
+}
+
+int main()
+{
+	TO_FUNC_STRING(test);
+	test_struct.func(test_struct);
+
+	return 0;
+}
+[zhangjian@icp-desktop temp]$ gcc t0.c -o t0 -Wall
+[zhangjian@icp-desktop temp]$ ./t0
+test[zhangjian@icp-desktop temp]$ 
+
+注: 预处理结果:
+struct my_struct test_struct = {
+	.func = test,
+	.name = "test"
+};
+
+15:15 2011-7-4
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关, 续
+1, 周五晚上测试情况
+1), 2#, auto_suspend.sh脚本运行失败. dvfs测试了93390次没有出错. 
+[zhangjian@centos 20110701_AE_pm_dvfs_wakeupReboot]$ ../20110627_0628_0629_0701_AE_DVFS_cont6_suspend_resume_fail/check_suspend_dvfs_ret 0702_log.txt
+version: 20110629_1507
+dt times is 2, console suspend times is 0, rom boot times is 2.
+dvfs: target times is 93398, transition times is 0, read cpu pll times is 93390, read cpu_clk_cfg times is 93389
+uitest: freq times is 54286, count times is 54286
+2), 6#. 没法开屏, 切频只跑了169次. 有点少.
+[zhangjian@centos 20110701_AE_pm_dvfs_wakeupReboot]$ ../20110627_0628_0629_0701_AE_DVFS_cont6_suspend_resume_fail/check_suspend_dvfs_ret putty_com5_20110701_192310.txt
+version: 20110629_1507
+dt times is 0, console suspend times is 169, rom boot times is 340.
+dvfs: target times is 4531, transition times is 1763, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 3120, count times is 3120
+3), brg发掘板子. 周六看到板子还活着, 但是, uitest没有运行. 插入usb线之后跑死. 
+周一看到板子活着. 没有看次数. 
+
+2, 2#(红色标签), by xiaohe. 
+1), 用我版本测试20次没有死. 
+2), 怀疑是热板子, 把板子关机后(拔掉charger)等待10分钟. 
+测试到第九次唤醒后停在ABCD, 等了8分钟后屏幕才亮(触摸屏正常, 但是速度很慢), 串口仍然无反应.
+这个板子在kernel启动后, 会不停打印"charger done", 系统不会往下启动(有可能是中断太多, 拖慢了系统速度). 需要短暂拔出插入charger后才能正常往下启动. 
+所以上面的现象担心是charger中断有干扰, 所以找zhanguo帮忙换电池. 
+
+3, 创维
+1), 输入"vmtool wr 0x60000040 0x31003", 测试30次没有死. 
+2), 不输入上面命令, 测试10次没有死. 
+3), 怀疑是热板子, 把板子关机后等待10分钟. 不输入命令, 到第三次跑死, 打印ABCD(等了50分钟).
+
+4, 晚上请xiaohe帮我测试发掘MP8#, 文档"\\10.0.12.160\share\zhangjian\20110704_fajue_pm_dvfs\readme.txt".
+
+17:43 2011-7-4
+软件技巧, android, logcat
+清除之前的log
+logcat -c
+后台运行带时间戳的logcat
+logcat -v time &
+
+17:50 2011-7-4
+AE测试正常的游戏:
+\\10.0.2.208\share\`test(这个可不能删啊)\QA-SystemTestReport\游戏测试结果
+
+19:25 2011-7-4
+EDS, EOS
+http://www.2ic.tw/thread-330838-1-1.html
+Damage seen on bond wires and die metalization are typically associated with EOS (slow rise time, high energy).
+Junction degradation, poly melt filaments and contact damage are associated with ESD (fast rise time, high energy). 
+
+20:43 2011-7-4
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 查休眠重启问题, 初步可能是cpu频率偏高有关系. 尝试系统启动时的cpu频率从750MHz降到600MHz, 系统稳定性改善. 
+2), 完善工具, 请QA xiaohe帮忙测试发掘MP板子的suspend/resume和dvfs. 
+2, 明日工作计划
+1), 测试arm 1GHz@1.4v情况. 
+2), 考虑上传周五, 周六对于系统suspend/resume稳定性的修改. 
+3), 写电源总结文档. 
+
+3, (9:57 2011-7-5)zhangjian2zhaoyuan报告
+1), 7月4日上午给我分配的任务
+(1), 休眠唤醒稳定性优先级最高: 
+a, 创维唤醒重启.
+b, 唤醒慢. 
+c, 休眠唤醒死. 
+2), 查创维板子休眠重启问题, 初步可能是cpu频率偏高有关系. 尝试系统启动时的cpu频率从750MHz降到600MHz, 系统稳定性改善. 
+3), 完善工具, 请QA xiaohe帮忙测试发掘MP板子的suspend/resume和dvfs. 
+4), 和zhaoyuan讨论, 我没有时间. reset改开关机, 开关机自动测试给brg做.
+
+9:56 2011-7-5
+时间管理
+0, 9:50
+
+1, 本日
+1), 给zhaoyuan发报告. 见"20:43 2011-7-4"3. 
+2), 发掘客户反映的休眠唤醒问题. 见"10:00 2011-7-5". 
+3), 14:33-15:06 给gong'anmin提供882 IO烧毁的测试pak. 见"11:52 2011-2-17"14. 
+4), 今日总结. 见"21:06 2011-7-5". 
+
+10:00 2011-7-5
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, 续, 发掘客户问题: 休眠唤醒死: 怀疑是resume速度过慢使用户认为系统死机
+1, 发掘客户. 
+1), 无法唤醒(屏幕没有亮, 需要reset). 
+2), 需要多次按唤醒按键才能唤醒. 
+
+2, 看昨天板子结果. 
+昨天xiaohe帮我测试发掘MP7#(haiping), MP8#两个板子. 其中MP8#测试pm 576次, 
+dvfs 47075. 7#测试pm 80次, 看起来次数有些少, 但开机时间是16小时, 说明板子没有跑死. (15:47 2011-7-5)现在是运行了20h40', uitest统计的休眠唤醒次数是180次, 后者可能不准"15:47 2011-7-5"end
+昨天2#(红色), 换电池后, xiaohe用0705 daily build休眠唤醒看起来稳定, 需要进一步测试. 
+创维nand板子, xiaoguo帮忙测试, 如果是凉板子, 输入命令("vmtool wr 0x60000040 0x31003")比不输入命令稳定. 看起来是频率问题, 将来加入dvfs后, 休眠时会切到375MHz. 
+
+14:00 2011-7-5
+VC0882, SV, 竞争对手
+http://bbs.imp3.net/thread-10320343-5-1.html
+55NM只是个噱头，不比65NM好多少 甚至可以说是一样，65NM和55NM流片的时候中芯国际是65/55NM 同一个……不是太能接受RK一贯的宣传方式，纯粹是为了压对手一头而把各项指标标高，把用户当傻子骗，两款芯片明明各项都差不多 就看谁优化的好，结果从RK的宣传一看，从主频，到GPU的三角呈像率，填充率……都大大的领先，用户拿到机器一测又现原形……不要搞这么多虚的，给用户一版好用的固件比这些都实在，除非你体验比AML的好，不然再怎么喊，我芯片这里比它好，那里比它好，但是反应到产品上结果我们都感觉不到……
+
+aml的下一代应该是40nm的双核A9,因为中芯国际的40nm工艺要年底才量产的~ 
+ZJ: 不清楚RK下一步是什么计划. 对于vimicro和rochchip来说, 做双核难度会大一些, 但是如果下一步不做双核, 可能将来vimicro在消费电子就没什么机会了.
+
+觉得这个有点坑爹了Rk
+GC的官方资料上说
+而40nm的LP工艺下的GC800频率为315MHZ，提供了31.5M tri/s的三角形生成率和315M pix/s的像素填充率。
+Rk的55nm就能出这种数据，比较神奇
+
+AML的电源问题不仅仅是续航时间，还有就是充电管理也不是很理想，表现在充电充不满、充电过热、续航时间随着充电次数下降得很快等等。也不排除AML的问题出在方案商上，这点还要看看蓝魔后面出的号称芯片厂商直接优化的AML平板表现如何。
+其实AML虽是A9架构，但A9的多核优势没有发挥出来，Mali400也仅仅是单核，而早期的2918和AML一样都是跑在800的频率下，AML由于制程拖了后腿，发热量上去了，耗电也上去了，续航自然就不理想。
+
+看data sheet:
+rk的方案, boot rom 10k, sram 16k.
+而882是64k+32k, 也就是比96-26=80K. 不清楚L2 sram多少钱, 多大面积. 可以比较一下扩大L2 cache和缩小rom/sram的成本.
+
+\todo 对比882和2918的总线结构. 
+
+15:03 2011-7-5
+软件技巧, Linux, shell, bash, find, 查找大于100M的文件
+find . -name *.pak  -size +100M
+"+"说明见"TESTS"节. 
+
+21:06 2011-7-5
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 请QA测试发掘量产8寸板, 没有出现跑死或唤醒慢的问题.
+2), 尝试解决唤醒迅速休眠问题, 从代码入手, 看看为什么会这样. 没找到系统什么地方处理了input event, 请qiaowei帮忙给点提示. 
+
+10:35 2011-7-6
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关, 续
+1, 昨天测试结果, 4个板子都没有死, brg板子有9/400概率出现唤醒慢(5s). 
+9号   534次      43993
+7号   533次      45324
+10号  0次        434
+brg   0次        63154
+
+[zhangjian@centos 20110705_AE_PM_DVFS_fajue_MP_board]$ ./check_suspend_dvfs_ret  log_0705_1840_9
+version: 20110629_1507
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 386, rom boot times is 0.
+dvfs: target times is 34393, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+[zhangjian@centos 20110705_AE_PM_DVFS_fajue_MP_board]$ ./check_suspend_dvfs_ret log_0705_1825_7_2.TXT
+version: 20110629_1507
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 378, rom boot times is 0.
+dvfs: target times is 33475, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+[zhangjian@centos 20110705_AE_PM_DVFS_fajue_MP_board]$ ./check_suspend_dvfs_ret log_system_0705_2122brg.txt
+version: 20110629_1507
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 350, rom boot times is 0.
+dvfs: target times is 60527, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+[zhangjian@centos 20110705_AE_PM_DVFS_fajue_MP_board]$ ./check_suspend_dvfs_ret log_0705_1939_10#.txt
+version: 20110629_1507
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 417, rom boot times is 0.
+dvfs: target times is 596, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+2, 测试中发现两个其他问题, uitest统计次数不准确, 可能远小于休眠唤醒. 或多(多可以理解, 少不理解).
+adb可能不稳定, 传20M文件可能中间中断, 而且没有任何提示. 
+
+3, 客户:
+1), 没有休眠. 
+
+4, 看详细log
+1), 
+log_0705_1840_9
+5517.580
+2), log_system_0705_2122brg.txt
+5519.597
+5519.612
+5519.620
+5519.622
+5519.633
+5519.639
+5519.650
+5519.679
+5519.689
+3), 
+搜索"PM: resume of devices complete after "
+
+ 86868 <7>[ 9898.030000] i2c i2c-0: resume
+ 86869 <7>[ 9898.030000] va7882 0-0016: resume
+ 86870 <4>[ 9902.410000] i2c-0:timeout for 0x16 (error 0)^M
+ 86871 <4>[ 9902.410000] Msg[0] addr=0x16 W 2 80 00 ^M
+ 86872 <4>[ 9902.410000] <I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+ 86873 <4>[ 9902.410000] <I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+ 86874 <4>[ 9902.410000] <I>[v8-cpu]: v8_target(policy[375000,1000000],375000,0)
+ 86875 <7>[ 9902.410000] va7882-regulator va7882-regulator.0: resume
+
+结合上下文. 发现是7882 pwm是EARLY resume, 如果早于va7882 i2c resume, 就会造成7882 pwm resume有错. 
+进而延长影响唤醒时间. 还可能会导致7882其他的power控制有问题, 造成唤醒花屏或其他唤醒问题.
+
+5, \todo
+1), xiaohe 实验现象. 
+
+brg板（电源插口处接触不良）
+第一次 11点开机  5次休眠唤醒  之间播放视频 游戏，拍照 插着耳机  休眠后长按home键出现重启
+第二次 14点左右  第8次休眠唤醒后    运行游戏   播放录像拍照，更改壁纸，连接蓝牙等，期间反复按某个键。进入休眠后不作任何操作出现
+开机后不作任何操作自动关机重启6次（一直开着蓝牙 插着耳机）休眠后唤醒大约30秒后重启
+
+10号板
+休眠后10几秒 按home键可以唤醒（期间不作任何操作） 
+
+2), 9号
+插USB关机开机后找不到USB设备
+
+3), brg板, xiaoyu发现charger接口有个接地不太好. 另外维修后lcd左边一半有竖条, xiaoyu换了两个屏幕才好. 
+修好后给xiaozhang做插/不插charger和耳机的对比测试. 
+
+6, (16:23 2011-7-6)修pm i2c问题
+device_resume_noirq()里面打印EARLY resume, 所以i2c resume其实在这里面执行. 
+dpm_resume()里面打印resume. 
+所以7882 pwm或其他i2c访问时, i2c应该已经可用了. 
+2), log说明是在led_disable里面设置了7882 reg0x80为0, 
+brightness_set()(即va7882_led_set())->work->va7882_led_disable()
+
+7, 今天发现休眠重启这个问题很突出(保存log后).
+看xiaohe给我发的log, 7882 0x55=0, 也就是说ap off mode是0, 会不会系统上电时改过? 没有.
+
+7882休眠时会不会把arm电压调低了? 把arm dcdc最低电压调为1v2. 
+
+
+echo "cat /proc/kmsg >> /system/log_kernel_\`date +%m%d_%H%M%S\` &" >> /system/etc/init.vimicro.sh 
+echo "logcat -v time >> /system/log_logcat_\`date +%m%d_%H%M%S\` &" >> /system/etc/init.vimicro.sh 
+
+8, (22:11 2011-7-6)(10:10 2011-7-7)给zhaoyuan发文档:
+文档位置: "\\10.0.12.160\share\zhangjian\20110707_fajue_pm_dvfs\readme.txt".
+
+测试说明
+
+by zhangjian, QA zhangwei, xiaohe
+
+1), 注意事项:
+系统不支持重启, 所以
+1）recovery结束后黑屏时, 需要拔掉充电器, 长按reset关机后再开机
+2）关机时拔掉充电器否则不能正常关机
+
+2), 烧写"\\10.0.12.160\share\androidbuilds\vortex_20110707_daily0706_wakeupDebug__1_slow__2_reboot___v3_kernelSameAsV2.pak"
+
+3), android正常启动后
+1), windows下利用adb输入如下命令
+命令行提示符(cmd)下输入"adb root", "adb shell", 进入adb. 
+2), 启动后自动保存kernel和logcat log
+# echo "cat /proc/kmsg >> /system/log_kernel_\`date +%m%d_%H%M%S\` &" >> /system/etc/init.vimicro.sh 
+# echo "logcat -v time >> /system/log_logcat_\`date +%m%d_%H%M%S\` &" >> /system/etc/init.vimicro.sh
+重启机器. 
+
+4), 手动测试:
+测试目的: 模拟用户正常使用时的休眠唤醒稳定性. 重点关注: 唤醒后屏幕长时间才亮(记录大约时间(几秒, 几分钟, 唤醒最长等待10分钟, 超过十分钟认为唤醒失败), 唤醒需要按多次power按键屏幕才能亮(需要继续按power按键次数),  唤醒后系统重启.
+以上每种异常情况都需要保存kernel和logcat log. 
+(1), 休眠后重启时敲得命令(xxx需要替换为, 出错日期_时间_板子编号, 例如"0706_2216_10#")
+adb shell "cat /sys/devices/platform/v8-i2c.0/i2c-0/0-0016/regdump" > 7882_reg_xxx.txt
+adb shell vmtool 0x60000000 80 > vmtool_clkrst_xxx.txt
+取出自动保存的log, 见"6)". 
+(2), 测试结束, 保存所有自动保存的log. 
+
+5), 自动测试
+(1), 复制"10.0.12.160" share/zhangjian目录如下四个文件到882: auto_suspend.sh, cpufreq_test, hexwrite, UITest_dynamic__printWakeCount.apk
+
+(2), 在adb root shell下执行如下命令: 
+# mv /mnt/sdcard/auto_suspend.sh /system/bin/
+# mv /mnt/sdcard/cpufreq_test /system/bin
+# mv /mnt/sdcard/hexwrite /system/bin/
+# echo "/system/bin/busybox sh /system/bin/auto_suspend.sh &" >> /system/etc/init.vimicro.sh
+# echo "/system/bin/busybox sh /system/bin/cpufreq_test &" >> /system/etc/init.vimicro.sh
+重启机器:
+安装并运行uitest, uitest menu "set&start"启动刷屏. 
+
+(3), 看一下跑死没有, 和两个次数:
+(1), uitest menu: wakecount. 记录了屏幕亮了多少次. 
+(2), "cat /sys/devices/system/cpu/cpu0/cpufreq/stats/total_trans"
+
+6), 获得自动log的方法:
+(1), 看"/system"目录下对应文件名
+adb shell ls /system
+log_date_time
+(2), 把名为log_date_time的文件保存到pc: 
+adb pull /system/log_date_time  log_system_time.txt
+
+15:57 2011-7-6
+时间管理
+0, 10:00
+
+1, 本日
+1), 
+2), 16:03- 16:23 中文databook阅读建议, 见"16:21 2011-7-6".
+3), 16:22 修pm i2c问题. 见"10:35 2011-7-6"6. 
+4), 工作总结. 见"22:31 2011-7-6". 
+
+16:21 2011-7-6
+VC0882, SV, 量产, 中文databook阅读建议
+Hi, beizhan
+
+我大概看了arm相关部分. 修改建议详见附件. 
+
+总体感觉: 
+① 硬伤不多. 但全篇机器翻译痕迹很明显, 给人感觉很不好.
+② 可否增加数据, 可以更有说服力. 
+例如功耗数据, arm频率电压对应关系, 像amlogic的A9 1.2只能跑600M, 咱们可以跑到750或800, 这些都可以作为亮点宣传.
+
+PS: http://bbs.imp3.net/thread-10320343-1-1.html
+这个链接对于amlogic的A9和rochchip的对比很不错. 
+咱们可以利用类似形式做软广告. 
+
+21:57 2011-7-6
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关, 续, 测试相关命令
+by QA zhangwei, xiaohe
+一.
+ 发掘板子没有串口需要使用adb. 
+从"\\10.0.12.140\Project\VC0882\software\"目录复制复制adb__wdt.rar, google-usb_driver__brg.rar, 解压缩. 
+android启动后, 插入usb到pc和pad. 会提示有新设备, 安装google-usb_driver__brg.rar里面的驱动. 
+安装后, 运行里面进入adb__wdt.rar解压缩后的目录. 
+下面命令一般需要root权限, 需要在"adb shell"前先运行"adb root"获得root权限. 
+
+二.手动测试需要的命令
+1.保存log到sd卡上
+1）adb root
+   adb shell
+2）cat /proc/kmsg > /system/log_date_time & 
+   cat /system/log_date_time(若有打印表示正确)
+
+2.取log（把log保存到pc上）
+退出adb Shell（exit）
+adb root
+adb pull /system/log_date_time  log_system_time.txt
+
+3.自动存log的命令
+adb root
+adb shell
+# echo "cat /proc/kmsg >> /system/log_kernel_\`date +%m%d_%H%M%S\` &" >> /system/etc/init.vimicro.sh 
+
+# echo "logcat -v time >> /system/log_logcat_\`date +%m%d_%H%M%S\` &" >> /system/etc/init.vimicro.sh
+（敲完这两条命令后重启设备）
+4.休眠后重启时敲得命令
+adb shell "cat /sys/devices/platform/v8-i2c.0/i2c-0/0-0016/regdump" > 7882_reg_0706_1805_brg.txt
+
+adb shell vmtool 0x60000000 80 > vmtool_clkrst_0706_1805_brg.txt
+
+三,自动UItest测试时命令
+ 1）复制"10.0.12.160" share/zhangjian目录如下四个文件到882: auto_suspend.sh, cpufreq_test, hexwrite, UITest_dynamic__printWakeCount.apk
+
+2), 在adb root shell下执行如下命令: 
+# mv /mnt/sdcard/auto_suspend.sh /system/bin/
+# mv /mnt/sdcard/cpufreq_test /system/bin
+# mv /mnt/sdcard/hexwrite /system/bin/
+# echo "/system/bin/busybox sh /system/bin/auto_suspend.sh &" >> /system/etc/ini
+t.vimicro.sh
+# echo "/system/bin/busybox sh /system/bin/cpufreq_test &" >> /system/etc/init.v
+imicro.sh
+重启机器:
+安装并运行uitest, uitest menu "set&start"启动刷屏. 
+
+3), 看一下跑死没有, 和两个次数:
+(1), uitest menu: wakecount. 记录了屏幕亮了多少次. 
+(2), "cat /sys/devices/system/cpu/cpu0/cpufreq/stats/total_trans"
+
+1.系统不支持重启
+1）recovery结束后黑屏拔掉充电器长按reset关机后开机
+2）关机时拔掉充电器否则不能正常关机
+2.不能改时间
+
+22:29 2011-7-6
+VC0882, SV, 分析overlay在android中的使用
+wangwenlei邮件_20110706
+在android的hal层中有一个overlay模块，其中打开并操作了/dev/v8-ovlay设备。
+Hal层的目的是为了把 Android framework 与 Linux kernel 完整隔开，让 Android 不至过度依赖 Linux kernel。
+每一个硬件模块都必须有一个HAL_MODULE_INFO_SYM结构，而其该结构的第一个元素必须是hw_module_t结构，之后是各模块自己的信息。hw_module_t记录了模块的重要信息。
+每一个HAL模块都是以动态库的形式存放在/system/lib/hw/下面，并且以MODULE_ID.platform_name.so命名。
+通过hw_get_module()获取模块的hw_module_t结构，他会根据id（也就是一个字符串name）找到相匹配的动态库。之后，打开该动态库，根据符号表获取hw_module_t结构。
+
+22:31 2011-7-6
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 继续调试休眠唤醒问题, 目前问题和进展
+(1), 唤醒速度慢, 在fajue_MP_brg板子上9/400概率出现需要7秒唤醒. 目前已经找到现象, 但是具体原因还不知道. 加入了一些debug信息, 晚上自动测试. 
+(2), 唤醒后立刻休眠. 目前怀疑是kernel没有上报power key, 或上层没有正确处理power key. Qiaowei已经帮我找到了android上层处理power key的位置, 下一步需要加入打印确认自己的分析. 
+(3), 唤醒后重启. 从目前结果看, 7882的app off mode=0(正确), 怀疑是882芯片本身问题. 
+
+2, 次日工作计划
+1), 给AE深圳同事提供休眠唤醒测试文件. 
+2), 继续调试休眠唤醒问题. 计划调试问题(3). 
+
+11:04 2011-7-7
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关, 续
+1, 昨天试验结果
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110706_AE_pm_dvfs_cont3/night_by_zhangwei$ ./check_suspend_dvfs_ret 9#板UItestlog和次数/log_kernel_0707_9#_000008.txt
+./check_suspend_dvfs_ret 9#板UItestlog和次数/log_kernel_0707_9#_000008.txt
+version: 20110707_1142
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 146, rom boot times is 0.
+dvfs: target times is 12596, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 3, rom boot times is 0.
+dvfs: target times is 824, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110706_AE_pm_dvfs_cont3/night_by_zhangwei$ ./check_suspend_dvfs_ret 7#板Uitestlog和次数/log_kernel_0707_7#_000009.txt
+./check_suspend_dvfs_ret 7#板Uitestlog和次数/log_kernel_0707_7#_000009.txt
+version: 20110707_1142
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 4, rom boot times is 0.
+dvfs: target times is 26, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 48, rom boot times is 0.
+dvfs: target times is 4021, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 7, rom boot times is 0.
+dvfs: target times is 1609, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110706_AE_pm_dvfs_cont3/night_by_zhangwei$ ./check_suspend_dvfs_ret brg板-0707-UItestlog及次数/log_kernel_0707_brg_000008.txt
+./check_suspend_dvfs_ret brg板-0707-UItestlog及次数/log_kernel_0707_brg_000008.txt
+version: 20110707_1142
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 205, rom boot times is 0.
+dvfs: target times is 21168, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110706_AE_pm_dvfs_cont3/night_by_zhangwei$ ./check_suspend_dvfs_ret 10#-0707-UItestlog及次数/log_kernel_0707_000008.txt
+./check_suspend_dvfs_ret 10#-0707-UItestlog及次数/log_kernel_0707_000008.txt
+version: 20110707_1142
+dt times is 0, console suspend times is 0, rom boot times is 0.
+dvfs: target times is 0, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+dt times is 0, console suspend times is 224, rom boot times is 0.
+dvfs: target times is 18887, transition times is 0, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 0, count times is 0
+
+2, <6>[ 4561.500000] PM: Syncing filesystems ... <5>[    0.000000] Linux version 2.6.35.7+ (zhangjian@ubuntu) (gcc versio           n 4.3.3 (Sourcery G++ Lite 2009q1-203) ) #406 PREEMPT Wed Jul 6 21:10:32 CST 2011
+syncing filesystem之后, sd卡就不能用了. 所以不清楚是driver suspend之前, 还是driver suspend过程中. 只能飞串口分析. 
+bianrongguang联系了zhaoyuan, 想办法飞串口. 
+
+3, 看唤醒速度: 
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110706_AE_pm_dvfs_cont3/night_by_zhangwei$ grep PM\:\ resume\ of\ devices\ complete\ after brg板-0707-UItestlog及次数/log_kernel_0707_brg_000008.txt  | cut -d r -f 3 | cut -d \  -f 2 | sort | less
+1), brg, 7#, 9#都没有发现device resume时间过长问题. 
+2), 10#: 1次. 5520.837
+3), 10#的log: 
+142187 <7>[ 7836.780000] i2c i2c-0: resume
+142188 <7>[ 7836.780000] va7882 0-0016: resume
+142189 <4>[ 7841.540000] i2c-0:timeout for 0x16 (error 1)^M
+142190 <4>[ 7841.540000] Msg[0] addr=0x16 W 1 f7 ^M
+142191 <4>[ 7841.540000] Msg[1] addr=0x16 R 1^M
+142192 <4>[ 7841.540000] <I>[va7882]: va7882_read_battery_uvolts:CHARGING 3950909
+
+4, (14:01 2011-7-7)bianrongguang建议说cpufreq里面加入wake_lock, 避免cpufreq切频过程中休眠. 
+另外cpufreq driver suspend/resume在系统最后, 此时i2c没法工作, 所以可能调压会出错.
+
+5, (17:59 2011-7-7)shenzhen leisijun team测试出的问题也是"Syncing filesystem"后没有打印. 
+brg提醒说可能是, .
+
+15:59 2011-7-7
+VC0882, u-boot
+1, u-boot里面arch-arm等还是使用符号链接的方式. 
+但是现在Linux里面已经不是符号链接了. 是为了保证支持多个mach.
+
+16:06 2011-7-7
+时间管理
+0, 10:00
+
+1, 本日
+1), 30' 给zhaoyuan发手动测试, 自动测试版本和文件. 见"10:35 2011-7-6"8.
+
+2, 次日
+
+), 休眠唤醒也要加上次数. 
+
+19:05 2011-7-7
+pm, 休眠失败到uart resume停止
+1, 在fajue板子看到的log
+(1), late suspend失败后到uart resume停止: 
+[  118.980000] power power.0: LATE suspend
+[  118.990000] pm_noirq_op(): platform_pm_suspend_noirq+0x0/0x40 returns -11
+[  118.990000] PM: Device power.0 failed to suspend late: error -11
+...
+[  119.720000] v8-uart v8-uart.0: resume
+(2), 此时按power key无反应, 过了几分钟, 按power key, "[  119.720000] v8-uart v8-uart.0: resume"后面打印出部分trace, 可以看到系统是唤醒了的. 
+之前我发现的加入"no_console_suspend"后系统会唤醒后没有log, 这个问题似乎仍然存在. 
+
+完整log: 
+[  116.820000] PM: Syncing filesystems ... done.
+[  116.850000] PM: Preparing system for mem sleep
+[  116.860000] PM: Adding info for No Bus:vcs63
+[  116.860000] PM: Adding info for No Bus:vcsa63
+[  116.870000] Freezing user space processes ... (elapsed 0.01 seconds) done.
+[  116.900000] Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+[  116.920000] PM: Entering mem sleep
+[  116.920000] power power.0: preparing suspend
+[  116.930000] android_pmem android_pmem.0: preparing suspend
+[  116.930000] android_pmem android_pmem.1: preparing suspend
+[  116.940000] v8-kpd v8-kpd.0: preparing suspend
+[  116.940000] v8-i2c v8-i2c.0: preparing suspend
+[  116.950000] v8-i2c v8-i2c.1: preparing suspend
+[  116.950000] reg-fixed-voltage reg-fixed-voltage.0: preparing suspend
+[  116.960000] reg-fixed-voltage reg-fixed-voltage.1: preparing suspend
+[  116.960000] reg-fixed-voltage reg-fixed-voltage.2: preparing suspend
+[  116.970000] v8-tpi v8-tpi.0: preparing suspend
+[  116.970000] v8-uart v8-uart.0: preparing suspend
+[  116.980000] v8-uart v8-uart.1: preparing suspend
+[  116.980000] v8-uart v8-uart.2: preparing suspend
+[  116.990000] v8-uart v8-uart.3: preparing suspend
+[  116.990000] v8-fb v8-fb.0: preparing suspend
+[  117.000000] v8-ovlay v8-ovlay.0: preparing suspend
+[  117.000000] v8-tvfb v8-tvfb.0: preparing suspend
+[  117.010000] v8-pwm v8-pwm.0: preparing suspend
+[  117.010000] leds_vc88x leds_vc88x.0: preparing suspend
+[  117.020000] arm-pmu arm-pmu.0: preparing suspend
+[  117.020000] v8-sdio v8-sdio.2: preparing suspend
+[  117.020000] v8-sdio v8-sdio.0: preparing suspend
+[  117.030000] v8-sdio v8-sdio.1: preparing suspend
+[  117.030000] musb_hdrc musb_hdrc: preparing suspend
+[  117.040000] android_usb android_usb: preparing suspend
+[  117.040000] usb_mass_storage usb_mass_storage: preparing suspend
+[  117.050000] vc088x-ehci vc088x-ehci: preparing suspend
+[  117.050000] vc088x-ohci vc088x-ohci: preparing suspend
+[  117.060000] va7882-regulator va7882-regulator.0: preparing suspend
+[  117.070000] va7882-regulator va7882-regulator.1: preparing suspend
+[  117.070000] va7882-regulator va7882-regulator.2: preparing suspend
+[  117.080000] va7882-regulator va7882-regulator.3: preparing suspend
+[  117.080000] va7882-regulator va7882-regulator.4: preparing suspend
+[  117.090000] va7882-regulator va7882-regulator.5: preparing suspend
+[  117.100000] va7882-regulator va7882-regulator.6: preparing suspend
+[  117.100000] va7882-regulator va7882-regulator.7: preparing suspend
+[  117.110000] va7882-regulator va7882-regulator.8: preparing suspend
+[  117.120000] va7882-regulator va7882-regulator.9: preparing suspend
+[  117.120000] va7882-regulator va7882-regulator.10: preparing suspend
+[  117.130000] va7882-regulator va7882-regulator.11: preparing suspend
+[  117.130000] va7882-regulator va7882-regulator.12: preparing suspend
+[  117.140000] va7882-regulator va7882-regulator.13: preparing suspend
+[  117.150000] va7882-regulator va7882-regulator.14: preparing suspend
+[  117.150000] va7882-regulator va7882-regulator.15: preparing suspend
+[  117.160000] va7882-regulator va7882-regulator.16: preparing suspend
+[  117.170000] va7882-regulator va7882-regulator.17: preparing suspend
+[  117.170000] va7882-regulator va7882-regulator.18: preparing suspend
+[  117.180000] va7882-regulator va7882-regulator.19: preparing suspend
+[  117.180000] va7882-regulator va7882-regulator.20: preparing suspend
+[  117.190000] va7882-regulator va7882-regulator.21: preparing suspend
+[  117.200000] va7882-regulator va7882-regulator.22: preparing suspend
+[  117.200000] va7882-regulator va7882-regulator.23: preparing suspend
+[  117.210000] va7882-regulator va7882-regulator.24: preparing suspend
+[  117.220000] va7882-regulator va7882-regulator.25: preparing suspend
+[  117.220000] va7882-regulator va7882-regulator.26: preparing suspend
+[  117.230000] va7882-regulator va7882-regulator.27: preparing suspend
+[  117.240000] va7882-regulator va7882-regulator.28: preparing suspend
+[  117.240000] va7882-regulator va7882-regulator.29: preparing suspend
+[  117.250000] test-consumer test-consumer.0: preparing suspend
+[  117.250000] test-consumer test-consumer.1: preparing suspend
+[  117.260000] test-consumer test-consumer.2: preparing suspend
+[  117.260000] test-consumer test-consumer.3: preparing suspend
+[  117.270000] test-consumer test-consumer.4: preparing suspend
+[  117.280000] test-consumer test-consumer.5: preparing suspend
+[  117.280000] test-consumer test-consumer.6: preparing suspend
+[  117.290000] test-consumer test-consumer.7: preparing suspend
+[  117.290000] test-consumer test-consumer.8: preparing suspend
+[  117.300000] test-consumer test-consumer.9: preparing suspend
+[  117.300000] test-consumer test-consumer.10: preparing suspend
+[  117.310000] test-consumer test-consumer.11: preparing suspend
+[  117.320000] test-consumer test-consumer.12: preparing suspend
+[  117.320000] test-consumer test-consumer.13: preparing suspend
+[  117.330000] test-consumer test-consumer.14: preparing suspend
+[  117.330000] test-consumer test-consumer.15: preparing suspend
+[  117.340000] test-consumer test-consumer.16: preparing suspend
+[  117.340000] test-consumer test-consumer.17: preparing suspend
+[  117.350000] test-consumer test-consumer.18: preparing suspend
+[  117.360000] test-consumer test-consumer.19: preparing suspend
+[  117.360000] test-consumer test-consumer.20: preparing suspend
+[  117.370000] test-consumer test-consumer.21: preparing suspend
+[  117.370000] test-consumer test-consumer.22: preparing suspend
+[  117.380000] test-consumer test-consumer.23: preparing suspend
+[  117.390000] test-consumer test-consumer.24: preparing suspend
+[  117.390000] test-consumer test-consumer.25: preparing suspend
+[  117.400000] test-consumer test-consumer.26: preparing suspend
+[  117.400000] test-consumer test-consumer.27: preparing suspend
+[  117.410000] test-consumer test-consumer.28: preparing suspend
+[  117.410000] test-consumer test-consumer.29: preparing suspend
+[  117.420000] va7882-led va7882-led.0: preparing suspend
+[  117.430000] va7882-led va7882-led.2: preparing suspend
+[  117.430000] va7882-led va7882-led.3: preparing suspend
+[  117.440000] va7882-led va7882-led.4: preparing suspend
+[  117.440000] va7882-led va7882-led.5: preparing suspend
+[  117.450000] timed-gpio timed-gpio: preparing suspend
+[  117.450000] va7882-rtc va7882-rtc.0: preparing suspend, may wakeup
+[  117.460000] va7882-power va7882-power.0: preparing suspend
+[  117.460000] va7882-key va7882-key.0: preparing suspend, may wakeup
+[  117.470000] va7882-pwm va7882-pwm.0: preparing suspend
+[  117.470000] va7882-pwm va7882-pwm.1: preparing suspend
+[  117.480000] va7882-pwm va7882-pwm.2: preparing suspend
+[  117.480000] va7882-pwm va7882-pwm.3: preparing suspend
+[  117.490000] va7882-pwm va7882-pwm.4: preparing suspend
+[  117.490000] va7882-pwm va7882-pwm.5: preparing suspend
+[  117.500000] va7882-pwm va7882-pwm.6: preparing suspend
+[  117.500000] switch-headset switch-headset.0: preparing suspend
+[  117.510000] nop_usb_xceiv nop_usb_xceiv: preparing suspend
+[  117.520000] v8-tv v8-tv: preparing suspend
+[  117.520000] v8-hdmi v8-hdmi: preparing suspend
+[  117.520000] v_bench v_bench: preparing suspend
+[  117.530000] usb usb1: preparing type suspend, may wakeup
+[  117.530000] usb usb2: preparing type suspend, may wakeup
+[  117.540000] usb usb3: preparing type suspend, may wakeup
+[  117.550000] alarm alarm: preparing suspend
+[  117.550000] vc088x_cif vc088x_cif: preparing suspend
+[  117.550000] vc088x_vdec vc088x_vdec: preparing suspend
+[  117.560000] vc088x_venc vc088x_venc: preparing suspend
+[  117.560000] vc088xwdt vc088xwdt: preparing suspend
+[  117.570000] vc0882-audio vc0882-audio: preparing suspend
+[  117.570000] galcore galcore: preparing suspend
+[  117.580000] galcore galcore: suspend
+[  117.580000] mmcblk mmc0:e624: legacy suspend
+[  117.590000] vc0882-audio vc0882-audio: suspend
+[  117.590000] leds lcd-backlight: legacy class suspend
+[  117.600000] vc088xwdt vc088xwdt: suspend
+[  117.600000] vc088x_venc vc088x_venc: suspend
+[  117.600000] vc088x_vdec vc088x_vdec: suspend
+[  117.610000] vc088x_cif vc088x_cif: suspend
+[  117.610000] alarm alarm: suspend
+[  117.620000] <I>[va7882]: enter va7882_rtc_setalarm
+[  117.620000] <I>[va7882]: enable va7882 irq
+[  117.630000] input input4: type suspend
+[  117.640000] input input3: type suspend
+[  117.640000] input input2: type suspend
+[  117.640000] input input1: type suspend
+[  117.650000] leds green: legacy class suspend
+[  117.650000] <I>[va7882]: va7882_led_disable
+[  117.660000] leds blue: legacy class suspend
+[  117.660000] leds ac-online: legacy class suspend
+[  117.670000] usb usb3: type suspend, may wakeup
+[  117.670000] usb usb2: type suspend, may wakeup
+[  117.670000] usb usb1: type suspend, may wakeup
+[  117.680000] 
+[  117.680000] leds keyboard-backlight: legacy class suspend
+[  117.690000] <I>[va7882]: va7882_led_disable
+[  117.690000] <I>[va7882]: va7882_led_disable
+[  117.700000] leds spotlight: legacy class suspend
+[  117.700000] <I>[va7882]: va7882_led_disable
+[  117.700000] input input0: type suspend
+[  117.710000] <I>[va7882]: va7882_led_disable
+[  117.710000] rtc rtc0: legacy class suspend
+[  117.720000] v_bench v_bench: suspend
+[  117.720000] i2c 1-0030: suspend
+[  117.730000] i2c 1-0050: suspend
+[  117.730000] i2c 1-0074: suspend
+[  117.730000] i2c 1-0039: suspend
+[  117.740000] v8-hdmi v8-hdmi: suspend
+[  117.740000] v8-tv v8-tv: suspend
+[  117.740000] nop_usb_xceiv nop_usb_xceiv: suspend
+[  117.750000] switch-headset switch-headset.0: suspend
+[  117.750000] it7260-ts 1-0046: suspend
+[  117.760000] mma7660-asensor 1-004c: suspend
+[  117.760000] i2c i2c-1: suspend
+[  117.760000] va7882-pwm va7882-pwm.6: suspend
+[  117.770000] va7882-pwm va7882-pwm.5: suspend
+[  117.770000] va7882-pwm va7882-pwm.4: suspend
+[  117.780000] va7882-pwm va7882-pwm.3: suspend
+[  117.780000] va7882-pwm va7882-pwm.2: suspend
+[  117.780000] va7882-pwm va7882-pwm.1: suspend
+[  117.790000] va7882-pwm va7882-pwm.0: suspend
+[  117.790000] va7882-key va7882-key.0: suspend, may wakeup
+[  117.800000] <E>[va7882]: power_key may wakeup
+[  117.800000] va7882-power va7882-power.0: suspend
+[  117.810000] <I>[va7882]: va7882_power_suspend charging 1200MA
+[  117.810000] 
+[  117.810000] va7882-rtc va7882-rtc.0: suspend, may wakeup
+[  117.820000] <E>[va7882]: RTC may wakeup
+[  117.820000] timed-gpio timed-gpio: suspend
+[  117.830000] va7882-led va7882-led.5: suspend
+[  117.830000] va7882-led va7882-led.4: suspend
+[  117.840000] va7882-led va7882-led.3: suspend
+[  117.840000] va7882-led va7882-led.2: suspend
+[  117.840000] va7882-led va7882-led.0: suspend
+[  117.850000] test-consumer test-consumer.29: suspend
+[  117.850000] test-consumer test-consumer.28: suspend
+[  117.860000] test-consumer test-consumer.27: suspend
+[  117.860000] test-consumer test-consumer.26: suspend
+[  117.870000] test-consumer test-consumer.25: suspend
+[  117.870000] test-consumer test-consumer.24: suspend
+[  117.880000] test-consumer test-consumer.23: suspend
+[  117.880000] test-consumer test-consumer.22: suspend
+[  117.890000] test-consumer test-consumer.21: suspend
+[  117.890000] test-consumer test-consumer.20: suspend
+[  117.900000] test-consumer test-consumer.19: suspend
+[  117.900000] test-consumer test-consumer.18: suspend
+[  117.910000] test-consumer test-consumer.17: suspend
+[  117.910000] test-consumer test-consumer.16: suspend
+[  117.920000] test-consumer test-consumer.15: suspend
+[  117.920000] test-consumer test-consumer.14: suspend
+[  117.930000] test-consumer test-consumer.13: suspend
+[  117.930000] test-consumer test-consumer.12: suspend
+[  117.940000] test-consumer test-consumer.11: suspend
+[  117.940000] test-consumer test-consumer.10: suspend
+[  117.950000] test-consumer test-consumer.9: suspend
+[  117.950000] test-consumer test-consumer.8: suspend
+[  117.960000] test-consumer test-consumer.7: suspend
+[  117.960000] test-consumer test-consumer.6: suspend
+[  117.970000] test-consumer test-consumer.5: suspend
+[  117.970000] test-consumer test-consumer.4: suspend
+[  117.980000] test-consumer test-consumer.3: suspend
+[  117.980000] test-consumer test-consumer.2: suspend
+[  117.990000] test-consumer test-consumer.1: suspend
+[  117.990000] test-consumer test-consumer.0: suspend
+[  117.990000] va7882-regulator va7882-regulator.29: suspend
+[  118.000000] va7882-regulator va7882-regulator.28: suspend
+[  118.010000] va7882-regulator va7882-regulator.27: suspend
+[  118.010000] va7882-regulator va7882-regulator.26: suspend
+[  118.020000] va7882-regulator va7882-regulator.25: suspend
+[  118.020000] va7882-regulator va7882-regulator.24: suspend
+[  118.030000] <E>[va7882]: Warnning:Leave C-class power LDO17 on in suspend mode.
+[  118.030000] va7882-regulator va7882-regulator.23: suspend
+[  118.040000] va7882-regulator va7882-regulator.22: suspend
+[  118.050000] va7882-regulator va7882-regulator.21: suspend
+[  118.050000] va7882-regulator va7882-regulator.20: suspend
+[  118.060000] va7882-regulator va7882-regulator.19: suspend
+[  118.060000] va7882-regulator va7882-regulator.18: suspend
+[  118.070000] va7882-regulator va7882-regulator.17: suspend
+[  118.070000] va7882-regulator va7882-regulator.16: suspend
+[  118.080000] va7882-regulator va7882-regulator.15: suspend
+[  118.080000] va7882-regulator va7882-regulator.14: suspend
+[  118.090000] <E>[va7882]: Warnning:Leave C-class power LDO7 on in suspend mode.
+[  118.100000] va7882-regulator va7882-regulator.13: suspend
+[  118.100000] va7882-regulator va7882-regulator.12: suspend
+[  118.110000] va7882-regulator va7882-regulator.11: suspend
+[  118.110000] va7882-regulator va7882-regulator.10: suspend
+[  118.120000] va7882-regulator va7882-regulator.9: suspend
+[  118.120000] va7882-regulator va7882-regulator.8: suspend
+[  118.130000] va7882-regulator va7882-regulator.7: suspend
+[  118.130000] va7882-regulator va7882-regulator.6: suspend
+[  118.140000] va7882-regulator va7882-regulator.5: suspend
+[  118.140000] va7882-regulator va7882-regulator.4: suspend
+[  118.150000] va7882-regulator va7882-regulator.3: suspend
+[  118.160000] va7882-regulator va7882-regulator.2: suspend
+[  118.160000] va7882-regulator va7882-regulator.1: suspend
+[  118.170000] <E>[va7882]: Warnning:Leave C-class power DCDC2 on in suspend mode.
+[  118.170000] va7882-regulator va7882-regulator.0: suspend
+[  118.180000] va7882 0-0016: suspend
+[  118.180000] i2c i2c-0: suspend
+[  118.190000] vc088x-ohci vc088x-ohci: suspend
+[  118.190000] vc088x-ehci vc088x-ehci: suspend
+[  118.190000] usb_mass_storage usb_mass_storage: suspend
+[  118.200000] android_usb android_usb: suspend
+[  118.200000] musb_hdrc musb_hdrc: suspend
+[  118.210000] v8-sdio v8-sdio.1: suspend
+[  118.210000] v8-sdio v8-sdio.0: suspend
+[  118.220000] v8-sdio v8-sdio.2: suspend
+[  118.220000] arm-pmu arm-pmu.0: suspend
+[  118.220000] leds_vc88x leds_vc88x.0: suspend
+[  118.230000] v8-pwm v8-pwm.0: suspend
+[  118.230000] v8-tvfb v8-tvfb.0: suspend
+[  118.230000] v8-ovlay v8-ovlay.0: suspend
+[  118.240000] v8-fb v8-fb.0: suspend
+[  118.240000] v8-uart v8-uart.3: suspend
+[  118.250000] v8-uart v8-uart.2: suspend
+[  118.250000] v8-uart v8-uart.1: suspend
+[  118.250000] v8-uart v8-uart.0: suspend
+[  118.280000] v8-tpi v8-tpi.0: suspend
+[  118.280000] reg-fixed-voltage reg-fixed-voltage.2: suspend
+[  118.280000] reg-fixed-voltage reg-fixed-voltage.1: suspend
+[  118.290000] reg-fixed-voltage reg-fixed-voltage.0: suspend
+[  118.300000] v8-i2c v8-i2c.1: suspend
+[  118.300000] v8-i2c v8-i2c.0: suspend
+[  118.300000] v8-kpd v8-kpd.0: suspend
+[  118.310000] android_pmem android_pmem.1: suspend
+[  118.310000] android_pmem android_pmem.0: suspend
+[  118.320000] power power.0: suspend
+[  118.320000] PM: suspend of devices complete after 739.305 msecs
+[  118.320000] galcore galcore: LATE suspend
+[  118.330000] vc0882-audio vc0882-audio: LATE suspend
+[  118.330000] vc088xwdt vc088xwdt: LATE suspend
+[  118.340000] vc088x_venc vc088x_venc: LATE suspend
+[  118.340000] vc088x_vdec vc088x_vdec: LATE suspend
+[  118.350000] vc088x_cif vc088x_cif: LATE suspend
+[  118.350000] alarm alarm: LATE suspend
+[  118.360000] input input4: LATE type suspend
+[  118.360000] input input3: LATE type suspend
+[  118.360000] input input2: LATE type suspend
+[  118.370000] input input1: LATE type suspend
+[  118.370000] usb usb3: LATE type suspend, may wakeup
+[  118.380000] usb usb2: LATE type suspend, may wakeup
+[  118.380000] usb usb1: LATE type suspend, may wakeup
+[  118.390000] input input0: LATE type suspend
+[  118.390000] v_bench v_bench: LATE suspend
+[  118.400000] i2c 1-0030: LATE suspend
+[  118.400000] i2c 1-0050: LATE suspend
+[  118.400000] i2c 1-0074: LATE suspend
+[  118.410000] i2c 1-0039: LATE suspend
+[  118.410000] v8-hdmi v8-hdmi: LATE suspend
+[  118.410000] v8-tv v8-tv: LATE suspend
+[  118.420000] nop_usb_xceiv nop_usb_xceiv: LATE suspend
+[  118.420000] switch-headset switch-headset.0: LATE suspend
+[  118.430000] it7260-ts 1-0046: LATE suspend
+[  118.430000] mma7660-asensor 1-004c: LATE suspend
+[  118.440000] i2c i2c-1: LATE suspend
+[  118.440000] va7882-pwm va7882-pwm.6: LATE suspend
+[  118.440000] va7882-pwm va7882-pwm.5: LATE suspend
+[  118.450000] va7882-pwm va7882-pwm.4: LATE suspend
+[  118.450000] va7882-pwm va7882-pwm.3: LATE suspend
+[  118.460000] va7882-pwm va7882-pwm.2: LATE suspend
+[  118.460000] va7882-pwm va7882-pwm.1: LATE suspend
+[  118.470000] va7882-pwm va7882-pwm.0: LATE suspend
+[  118.470000] va7882-key va7882-key.0: LATE suspend, may wakeup
+[  118.480000] va7882-power va7882-power.0: LATE suspend
+[  118.480000] va7882-rtc va7882-rtc.0: LATE suspend, may wakeup
+[  118.490000] timed-gpio timed-gpio: LATE suspend
+[  118.490000] va7882-led va7882-led.5: LATE suspend
+[  118.500000] va7882-led va7882-led.4: LATE suspend
+[  118.500000] va7882-led va7882-led.3: LATE suspend
+[  118.510000] va7882-led va7882-led.2: LATE suspend
+[  118.510000] va7882-led va7882-led.0: LATE suspend
+[  118.520000] test-consumer test-consumer.29: LATE suspend
+[  118.520000] test-consumer test-consumer.28: LATE suspend
+[  118.530000] test-consumer test-consumer.27: LATE suspend
+[  118.530000] test-consumer test-consumer.26: LATE suspend
+[  118.540000] test-consumer test-consumer.25: LATE suspend
+[  118.540000] test-consumer test-consumer.24: LATE suspend
+[  118.550000] test-consumer test-consumer.23: LATE suspend
+[  118.550000] test-consumer test-consumer.22: LATE suspend
+[  118.560000] test-consumer test-consumer.21: LATE suspend
+[  118.570000] test-consumer test-consumer.20: LATE suspend
+[  118.570000] test-consumer test-consumer.19: LATE suspend
+[  118.580000] test-consumer test-consumer.18: LATE suspend
+[  118.580000] test-consumer test-consumer.17: LATE suspend
+[  118.590000] test-consumer test-consumer.16: LATE suspend
+[  118.590000] test-consumer test-consumer.15: LATE suspend
+[  118.600000] test-consumer test-consumer.14: LATE suspend
+[  118.600000] test-consumer test-consumer.13: LATE suspend
+[  118.610000] test-consumer test-consumer.12: LATE suspend
+[  118.610000] test-consumer test-consumer.11: LATE suspend
+[  118.620000] test-consumer test-consumer.10: LATE suspend
+[  118.620000] test-consumer test-consumer.9: LATE suspend
+[  118.630000] test-consumer test-consumer.8: LATE suspend
+[  118.630000] test-consumer test-consumer.7: LATE suspend
+[  118.640000] test-consumer test-consumer.6: LATE suspend
+[  118.640000] test-consumer test-consumer.5: LATE suspend
+[  118.650000] test-consumer test-consumer.4: LATE suspend
+[  118.660000] test-consumer test-consumer.3: LATE suspend
+[  118.660000] test-consumer test-consumer.2: LATE suspend
+[  118.670000] test-consumer test-consumer.1: LATE suspend
+[  118.670000] test-consumer test-consumer.0: LATE suspend
+[  118.680000] va7882-regulator va7882-regulator.29: LATE suspend
+[  118.680000] va7882-regulator va7882-regulator.28: LATE suspend
+[  118.690000] va7882-regulator va7882-regulator.27: LATE suspend
+[  118.690000] va7882-regulator va7882-regulator.26: LATE suspend
+[  118.700000] va7882-regulator va7882-regulator.25: LATE suspend
+[  118.710000] va7882-regulator va7882-regulator.24: LATE suspend
+[  118.710000] va7882-regulator va7882-regulator.23: LATE suspend
+[  118.720000] va7882-regulator va7882-regulator.22: LATE suspend
+[  118.720000] va7882-regulator va7882-regulator.21: LATE suspend
+[  118.730000] va7882-regulator va7882-regulator.20: LATE suspend
+[  118.740000] va7882-regulator va7882-regulator.19: LATE suspend
+[  118.740000] va7882-regulator va7882-regulator.18: LATE suspend
+[  118.750000] va7882-regulator va7882-regulator.17: LATE suspend
+[  118.750000] va7882-regulator va7882-regulator.16: LATE suspend
+[  118.760000] va7882-regulator va7882-regulator.15: LATE suspend
+[  118.760000] va7882-regulator va7882-regulator.14: LATE suspend
+[  118.770000] va7882-regulator va7882-regulator.13: LATE suspend
+[  118.780000] va7882-regulator va7882-regulator.12: LATE suspend
+[  118.780000] va7882-regulator va7882-regulator.11: LATE suspend
+[  118.790000] va7882-regulator va7882-regulator.10: LATE suspend
+[  118.790000] va7882-regulator va7882-regulator.9: LATE suspend
+[  118.800000] va7882-regulator va7882-regulator.8: LATE suspend
+[  118.810000] va7882-regulator va7882-regulator.7: LATE suspend
+[  118.810000] va7882-regulator va7882-regulator.6: LATE suspend
+[  118.820000] va7882-regulator va7882-regulator.5: LATE suspend
+[  118.820000] va7882-regulator va7882-regulator.4: LATE suspend
+[  118.830000] va7882-regulator va7882-regulator.3: LATE suspend
+[  118.830000] va7882-regulator va7882-regulator.2: LATE suspend
+[  118.840000] va7882-regulator va7882-regulator.1: LATE suspend
+[  118.850000] va7882-regulator va7882-regulator.0: LATE suspend
+[  118.850000] va7882 0-0016: LATE suspend
+[  118.860000] i2c i2c-0: LATE suspend
+[  118.860000] vc088x-ohci vc088x-ohci: LATE suspend
+[  118.860000] vc088x-ehci vc088x-ehci: LATE suspend
+[  118.870000] usb_mass_storage usb_mass_storage: LATE suspend
+[  118.870000] android_usb android_usb: LATE suspend
+[  118.880000] musb_hdrc musb_hdrc: LATE suspend
+[  118.880000] v8-sdio v8-sdio.1: LATE suspend
+[  118.890000] v8-sdio v8-sdio.0: LATE suspend
+[  118.890000] v8-sdio v8-sdio.2: LATE suspend
+[  118.900000] arm-pmu arm-pmu.0: LATE suspend
+[  118.900000] leds_vc88x leds_vc88x.0: LATE suspend
+[  118.900000] v8-pwm v8-pwm.0: LATE suspend
+[  118.910000] v8-tvfb v8-tvfb.0: LATE suspend
+[  118.910000] v8-ovlay v8-ovlay.0: LATE suspend
+[  118.920000] v8-fb v8-fb.0: LATE suspend
+[  118.920000] v8-uart v8-uart.3: LATE suspend
+[  118.920000] v8-uart v8-uart.2: LATE suspend
+[  118.930000] v8-uart v8-uart.1: LATE suspend
+[  118.930000] v8-uart v8-uart.0: LATE suspend
+[  118.940000] v8-tpi v8-tpi.0: LATE suspend
+[  118.940000] reg-fixed-voltage reg-fixed-voltage.2: LATE suspend
+[  118.950000] reg-fixed-voltage reg-fixed-voltage.1: LATE suspend
+[  118.950000] reg-fixed-voltage reg-fixed-voltage.0: LATE suspend
+[  118.960000] v8-i2c v8-i2c.1: LATE suspend
+[  118.960000] v8-i2c v8-i2c.0: LATE suspend
+[  118.970000] v8-kpd v8-kpd.0: LATE suspend
+[  118.970000] android_pmem android_pmem.1: LATE suspend
+[  118.980000] android_pmem android_pmem.0: LATE suspend
+[  118.980000] power power.0: LATE suspend
+[  118.990000] pm_noirq_op(): platform_pm_suspend_noirq+0x0/0x40 returns -11
+[  118.990000] PM: Device power.0 failed to suspend late: error -11
+[  119.000000] android_pmem android_pmem.0: EARLY resume
+[  119.000000] android_pmem android_pmem.1: EARLY resume
+[  119.010000] v8-kpd v8-kpd.0: EARLY resume
+[  119.010000] v8-i2c v8-i2c.0: EARLY resume
+[  119.020000] v8-i2c v8-i2c.1: EARLY resume
+[  119.020000] reg-fixed-voltage reg-fixed-voltage.0: EARLY resume
+[  119.030000] reg-fixed-voltage reg-fixed-voltage.1: EARLY resume
+[  119.040000] reg-fixed-voltage reg-fixed-voltage.2: EARLY resume
+[  119.040000] v8-tpi v8-tpi.0: EARLY resume
+[  119.050000] v8-uart v8-uart.0: EARLY resume
+[  119.050000] v8-uart v8-uart.1: EARLY resume
+[  119.050000] v8-uart v8-uart.2: EARLY resume
+[  119.060000] v8-uart v8-uart.3: EARLY resume
+[  119.060000] v8-fb v8-fb.0: EARLY resume
+[  119.070000] v8-ovlay v8-ovlay.0: EARLY resume
+[  119.070000] v8-tvfb v8-tvfb.0: EARLY resume
+[  119.080000] v8-pwm v8-pwm.0: EARLY resume
+[  119.080000] leds_vc88x leds_vc88x.0: EARLY resume
+[  119.080000] arm-pmu arm-pmu.0: EARLY resume
+[  119.090000] v8-sdio v8-sdio.2: EARLY resume
+[  119.090000] v8-sdio v8-sdio.0: EARLY resume
+[  119.100000] v8-sdio v8-sdio.1: EARLY resume
+[  119.100000] musb_hdrc musb_hdrc: EARLY resume
+[  119.110000] android_usb android_usb: EARLY resume
+[  119.110000] usb_mass_storage usb_mass_storage: EARLY resume
+[  119.120000] vc088x-ehci vc088x-ehci: EARLY resume
+[  119.120000] vc088x-ohci vc088x-ohci: EARLY resume
+[  119.120000] i2c i2c-0: EARLY resume
+[  119.130000] va7882 0-0016: EARLY resume
+[  119.130000] va7882-regulator va7882-regulator.0: EARLY resume
+[  119.140000] va7882-regulator va7882-regulator.1: EARLY resume
+[  119.140000] va7882-regulator va7882-regulator.2: EARLY resume
+[  119.150000] va7882-regulator va7882-regulator.3: EARLY resume
+[  119.160000] va7882-regulator va7882-regulator.4: EARLY resume
+[  119.160000] va7882-regulator va7882-regulator.5: EARLY resume
+[  119.170000] va7882-regulator va7882-regulator.6: EARLY resume
+[  119.170000] va7882-regulator va7882-regulator.7: EARLY resume
+[  119.180000] va7882-regulator va7882-regulator.8: EARLY resume
+[  119.180000] va7882-regulator va7882-regulator.9: EARLY resume
+[  119.190000] va7882-regulator va7882-regulator.10: EARLY resume
+[  119.200000] va7882-regulator va7882-regulator.11: EARLY resume
+[  119.200000] va7882-regulator va7882-regulator.12: EARLY resume
+[  119.210000] va7882-regulator va7882-regulator.13: EARLY resume
+[  119.210000] va7882-regulator va7882-regulator.14: EARLY resume
+[  119.220000] va7882-regulator va7882-regulator.15: EARLY resume
+[  119.220000] va7882-regulator va7882-regulator.16: EARLY resume
+[  119.230000] va7882-regulator va7882-regulator.17: EARLY resume
+[  119.240000] va7882-regulator va7882-regulator.18: EARLY resume
+[  119.240000] va7882-regulator va7882-regulator.19: EARLY resume
+[  119.250000] va7882-regulator va7882-regulator.20: EARLY resume
+[  119.250000] va7882-regulator va7882-regulator.21: EARLY resume
+[  119.260000] va7882-regulator va7882-regulator.22: EARLY resume
+[  119.270000] va7882-regulator va7882-regulator.23: EARLY resume
+[  119.270000] va7882-regulator va7882-regulator.24: EARLY resume
+[  119.280000] va7882-regulator va7882-regulator.25: EARLY resume
+[  119.280000] va7882-regulator va7882-regulator.26: EARLY resume
+[  119.290000] va7882-regulator va7882-regulator.27: EARLY resume
+[  119.300000] va7882-regulator va7882-regulator.28: EARLY resume
+[  119.300000] va7882-regulator va7882-regulator.29: EARLY resume
+[  119.310000] test-consumer test-consumer.0: EARLY resume
+[  119.310000] test-consumer test-consumer.1: EARLY resume
+[  119.320000] test-consumer test-consumer.2: EARLY resume
+[  119.320000] test-consumer test-consumer.3: EARLY resume
+[  119.330000] test-consumer test-consumer.4: EARLY resume
+[  119.330000] test-consumer test-consumer.5: EARLY resume
+[  119.340000] test-consumer test-consumer.6: EARLY resume
+[  119.340000] test-consumer test-consumer.7: EARLY resume
+[  119.350000] test-consumer test-consumer.8: EARLY resume
+[  119.350000] test-consumer test-consumer.9: EARLY resume
+[  119.360000] test-consumer test-consumer.10: EARLY resume
+[  119.360000] test-consumer test-consumer.11: EARLY resume
+[  119.370000] test-consumer test-consumer.12: EARLY resume
+[  119.380000] test-consumer test-consumer.13: EARLY resume
+[  119.380000] test-consumer test-consumer.14: EARLY resume
+[  119.390000] test-consumer test-consumer.15: EARLY resume
+[  119.390000] test-consumer test-consumer.16: EARLY resume
+[  119.400000] test-consumer test-consumer.17: EARLY resume
+[  119.400000] test-consumer test-consumer.18: EARLY resume
+[  119.410000] <I>[v8-cpu]: v8_target(policy[375000,1000000],1000000,1)
+[  119.410000] <I>[va7882]: va7882_dcdc_get_voltage(DCDC1-ARM)
+[  119.420000] test-consumer test-consumer.19: EARLY resume
+[  119.420000] test-consumer test-consumer.20: EARLY resume
+[  119.430000] 
+[  119.430000] test-consumer test-consumer.21: EARLY resume
+[  119.440000] test-consumer test-consumer.22: EARLY resume
+[  119.440000] test-consumer test-consumer.23: EARLY resume
+[  119.450000] test-consumer test-consumer.24: EARLY resume
+[  119.450000] test-consumer test-consumer.25: EARLY resume
+[  119.460000] test-consumer test-consumer.26: EARLY resume
+[  119.460000] test-consumer test-consumer.27: EARLY resume
+[  119.470000] test-consumer test-consumer.28: EARLY resume
+[  119.470000] test-consumer test-consumer.29: EARLY resume
+[  119.480000] va7882-led va7882-led.0: EARLY resume
+[  119.480000] va7882-led va7882-led.2: EARLY resume
+[  119.490000] va7882-led va7882-led.3: EARLY resume
+[  119.490000] va7882-led va7882-led.4: EARLY resume
+[  119.500000] va7882-led va7882-led.5: EARLY resume
+[  119.500000] timed-gpio timed-gpio: EARLY resume
+[  119.510000] va7882-rtc va7882-rtc.0: EARLY resume
+[  119.510000] va7882-power va7882-power.0: EARLY resume
+[  119.520000] va7882-key va7882-key.0: EARLY resume
+[  119.520000] va7882-pwm va7882-pwm.0: EARLY resume
+[  119.530000] va7882-pwm va7882-pwm.1: EARLY resume
+[  119.530000] va7882-pwm va7882-pwm.2: EARLY resume
+[  119.540000] va7882-pwm va7882-pwm.3: EARLY resume
+[  119.540000] va7882-pwm va7882-pwm.4: EARLY resume
+[  119.550000] va7882-pwm va7882-pwm.5: EARLY resume
+[  119.550000] va7882-pwm va7882-pwm.6: EARLY resume
+[  119.550000] i2c i2c-1: EARLY resume
+[  119.560000] mma7660-asensor 1-004c: EARLY resume
+[  119.560000] it7260-ts 1-0046: EARLY resume
+[  119.570000] switch-headset switch-headset.0: EARLY resume
+[  119.570000] nop_usb_xceiv nop_usb_xceiv: EARLY resume
+[  119.580000] v8-tv v8-tv: EARLY resume
+[  119.580000] v8-hdmi v8-hdmi: EARLY resume
+[  119.590000] i2c 1-0039: EARLY resume
+[  119.590000] i2c 1-0074: EARLY resume
+[  119.590000] i2c 1-0050: EARLY resume
+[  119.600000] i2c 1-0030: EARLY resume
+[  119.600000] v_bench v_bench: EARLY resume
+[  119.600000] input input0: EARLY type resume
+[  119.610000] usb usb1: EARLY type resume
+[  119.610000] usb usb2: EARLY type resume
+[  119.620000] usb usb3: EARLY type resume
+[  119.620000] input input1: EARLY type resume
+[  119.620000] input input2: EARLY type resume
+[  119.630000] input input3: EARLY type resume
+[  119.630000] input input4: EARLY type resume
+[  119.640000] alarm alarm: EARLY resume
+[  119.640000] vc088x_cif vc088x_cif: EARLY resume
+[  119.640000] vc088x_vdec vc088x_vdec: EARLY resume
+[  119.650000] vc088x_venc vc088x_venc: EARLY resume
+[  119.650000] vc088xwdt vc088xwdt: EARLY resume
+[  119.660000] vc0882-audio vc0882-audio: EARLY resume
+[  119.660000] galcore galcore: EARLY resume
+[  119.670000] PM: early resume of devices complete after 668.800 msecs
+[  119.670000] PM: Some devices failed to power down
+[  119.680000] power power.0: resume
+[  119.680000] android_pmem android_pmem.0: resume
+[  119.690000] android_pmem android_pmem.1: resume
+[  119.690000] v8-kpd v8-kpd.0: resume
+[  119.690000] v8-i2c v8-i2c.0: resume
+[  119.700000] v8-i2c v8-i2c.1: resume
+[  119.700000] reg-fixed-voltage reg-fixed-voltage.0: resume
+[  119.710000] reg-fixed-voltage reg-fixed-voltage.1: resume
+[  119.710000] reg-fixed-voltage reg-fixed-voltage.2: resume
+[  119.720000] v8-tpi v8-tpi.0: resume
+[  119.720000] v8-uart v8-uart.0: resume
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x80041fd8
+M0x00000011
+H0x80041fd8ABM0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x80041fd8
+M0x00000011
+H0x80041fd8ABCDSRCPND_H=00000000 SRCPND_H=00000000
+[  257.230000] ------------[ cut here ]------------
+[  257.230000] WARNING: at drivers/base/sys.c:481 sysdev_resume+0x38/0xb8()
+[  257.230000] Interrupts enabled while resuming system devices
+[  257.230000] Modules linked in: galcore
+[  257.230000] Backtrace: 
+[  257.230000] [<c002f0c0>] (dump_backtrace+0x0/0x110) from [<c0357518>] (dump_stack+0x18/0x1c)
+[  257.230000]  r7:d304de90 r6:c01c9d5c r5:c041a4ae r4:000001e1
+[  257.230000] [<c0357500>] (dump_stack+0x0/0x1c) from [<c0053a78>] (warn_slowpath_common+0x54/0x6c)
+[  257.230000] [<c0053a24>] (warn_slowpath_common+0x0/0x6c) from [<c0053b34>] (warn_slowpath_fmt+0x38/0x40)
+[  257.230000]  r9:00000000 r8:c0083ab0 r7:d301fc00 r6:003fffff r5:00000003
+[  257.230000] r4:c0650ab8
+[  257.230000] [<c0053afc>] (warn_slowpath_fmt+0x0/0x40) from [<c01c9d5c>] (sysdev_resume+0x38/0xb8)
+[  257.230000]  r3:00000000 r2:c041a4df
+[  257.230000] [<c01c9d24>] (sysdev_resume+0x0/0xb8) from [<c00822c4>] (suspend_devices_and_enter+0x13c/0x1e0)
+[  257.230000]  r7:d301fc00 r6:003fffff r5:00000003 r4:00000000
+[  257.230000] [<c0082188>] (suspend_devices_and_enter+0x0/0x1e0) from [<c0082450>] (enter_state+0xe8/0x140)
+[  257.230000]  r7:d301fc00 r6:00000003 r5:c04006e3 r4:00000000
+[  257.230000] [<c0082368>] (enter_state+0x0/0x140) from [<c00824c8>] (pm_suspend+0x20/0x24)
+[  257.230000]  r7:d301fc00 r6:000007ae r5:d304c000 r4:c0472798
+[  257.230000] [<c00824a8>] (pm_suspend+0x0/0x24) from [<c0083b18>] (suspend+0x68/0x12c)
+[  257.230000] [<c0083ab0>] (suspend+0x0/0x12c) from [<c006688c>] (worker_thread+0x17c/0x230)
+[  257.230000]  r6:c04728c8 r5:d304c000 r4:c04728cc
+[  257.230000] [<c0066710>] (worker_thread+0x0/0x230) from [<c006a110>] (kthread+0x88/0x90)
+[  257.230000] [<c006a088>] (kthread+0x0/0x90) from [<c005748c>] (do_exit+0x0/0x660)
+[  257.230000]  r7:00000013 r6:c005748c r5:c006a088 r4:d3019ef8
+[  257.230000] ---[ end trace cae0a03a580a8692 ]---
+[  257.230000] ------------[ cut here ]------------
+[  257.230000] WARNING: at drivers/base/sys.c:359 __sysdev_resume+0x54/0xd8()
+[  257.230000] Interrupts enabled after (null)
+[  257.230000] Modules linked in: galcore
+[  257.230000] Backtrace: 
+[  257.230000] [<c002f0c0>] (dump_backtrace+0x0/0x110) from [<c0357518>] (dump_stack+0x18/0x1c)
+[  257.230000]  r7:d304de70 r6:c01c9ca0 r5:c041a4ae r4:00000167
+[  257.230000] [<c0357500>] (dump_stack+0x0/0x1c) from [<c0053a78>] (warn_slowpath_common+0x54/0x6c)
+[  257.230000] [<c0053a24>] (warn_slowpath_common+0x0/0x6c) from [<c0053b34>] (warn_slowpath_fmt+0x38/0x40)
+[  257.230000]  r9:00000000 r8:c0083ab0 r7:c0461df0 r6:c0615a28 r5:c0650ab8
+[  257.230000] r4:c0615a28
+[  257.230000] [<c0053afc>] (warn_slowpath_fmt+0x0/0x40) from [<c01c9ca0>] (__sysdev_resume+0x54/0xd8)
+[  257.230000]  r3:00000000 r2:c041a4c1
+[  257.230000] [<c01c9c4c>] (__sysdev_resume+0x0/0xd8) from [<c01c9d84>] (sysdev_resume+0x60/0xb8)
+[  257.230000]  r7:d301fc00 r6:c0615a28 r5:c0615a44 r4:c0461df0
+[  257.230000] [<c01c9d24>] (sysdev_resume+0x0/0xb8) from [<c00822c4>] (suspend_devices_and_enter+0x13c/0x1e0)
+[  257.230000]  r7:d301fc00 r6:003fffff r5:00000003 r4:00000000
+[  257.230000] [<c0082188>] (suspend_devices_and_enter+0x0/0x1e0) from [<c0082450>] (enter_state+0xe8/0x140)
+[  257.230000]  r7:d301fc00 r6:00000003 r5:c04006e3 r4:00000000
+[  257.230000] [<c0082368>] (enter_state+0x0/0x140) from [<c00824c8>] (pm_suspend+0x20/0x24)
+[  257.230000]  r7:d301fc00 r6:000007ae r5:d304c000 r4:c0472798
+[  257.230000] [<c00824a8>] (pm_suspend+0x0/0x24) from [<c0083b18>] (suspend+0x68/0x12c)
+[  257.230000] [<c0083ab0>] (suspend+0x0/0x12c) from [<c006688c>] (worker_thread+0x17c/0x230)
+[  257.230000]  r6:c04728c8 r5:d304c000 r4:c04728cc
+[  257.230000] [<c0066710>] (worker_thread+0x0/0x230) from [<c006a110>] (kthread+0x88/0x90)
+[  257.230000] [<c006a088>] (kthread+0x0/0x90) from [<c005748c>] (do_exit+0x0/0x660)
+[  257.230000]  r7:00000013 r6:c005748c r5:c006a088 r4:d3019ef8
+[  257.230000] ---[ end trace cae0a03a580a8693 ]---
+[  257.230000] <I>[v8-cpu]: v8_cpu_resume
+[  257.230000] <I>[va7882]: va7882_dcdc_get_voltage(DCDC1-ARM)
+[  257.230000] 
+[  257.230000] <I>[va7882]: va7882_dcdc_set_voltage(DCDC1-ARM,1500000,1500000)
+[  257.230000] 
+[  257.230000] <I>[va7882]: va7882_dcdc_get_voltage(DCDC1-ARM)
+[  257.230000] 
+[  257.230000] <I>[va7882]: va7882_dcdc_set_voltage(DCDC1-ARM,1400000,1400000)
+[  257.230000] 
+[  257.230000] <I>[v8-cpu]: v8_cpu_resume exit
+[  257.230000] <I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+[  257.230000] <I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+[  257.230000] ------------[ cut here ]------------
+[  257.230000] WARNING: at drivers/base/sys.c:366 __sysdev_resume+0xa8/0xd8()
+[  257.230000] Interrupts enabled after cpufreq_resume+0x0/0x90
+[  257.230000] Modules linked in: galcore
+[  257.230000] Backtrace: 
+[  257.230000] [<c002f0c0>] (dump_backtrace+0x0/0x110) from [<c0357518>] (dump_stack+0x18/0x1c)
+[  257.230000]  r7:d304de70 r6:c01c9cf4 r5:c041a4ae r4:0000016e
+[  257.230000] [<c0357500>] (dump_stack+0x0/0x1c) from [<c0053a78>] (warn_slowpath_common+0x54/0x6c)
+[  257.230000] [<c0053a24>] (warn_slowpath_common+0x0/0x6c) from [<c0053b34>] (warn_slowpath_fmt+0x38/0x40)
+[  257.230000]  r9:00000000 r8:c0083ab0 r7:c0461df0 r6:c0650ab8 r5:c0615a2c
+[  257.230000] r4:c061d9b0
+[  257.230000] [<c0053afc>] (warn_slowpath_fmt+0x0/0x40) from [<c01c9cf4>] (__sysdev_resume+0xa8/0xd8)
+[  257.230000]  r3:c0266d5c r2:c041a4c1
+[  257.230000] [<c01c9c4c>] (__sysdev_resume+0x0/0xd8) from [<c01c9d84>] (sysdev_resume+0x60/0xb8)
+[  257.230000]  r7:d301fc00 r6:c0615a28 r5:c0615a44 r4:c0461df0
+[  257.230000] [<c01c9d24>] (sysdev_resume+0x0/0xb8) from [<c00822c4>] (suspend_devices_and_enter+0x13c/0x1e0)
+[  257.230000]  r7:d301fc00 r6:003fffff r5:00000003 r4:00000000
+[  257.230000] [<c0082188>] (suspend_devices_and_enter+0x0/0x1e0) from [<c0082450>] (enter_state+0xe8/0x140)
+[  257.230000]  r7:d301fc00 r6:00000003 r5:c04006e3 r4:00000000
+[  257.230000] [<c0082368>] (enter_state+0x0/0x140) from [<c00824c8>] (pm_suspend+0x20/0x24)
+[  257.230000]  r7:d301fc00 r6:000007ae r5:d304c000 r4:c0472798
+[  257.230000] [<c00824a8>] (pm_suspend+0x0/0x24) from [<c0083b18>] (suspend+0x68/0x12c)
+[  257.230000] [<c0083ab0>] (suspend+0x0/0x12c) from [<c006688c>] (worker_thread+0x17c/0x230)
+[  257.230000]  r6:c04728c8 r5:d304c000 r4:c04728cc
+[  257.230000] [<c0066710>] (worker_thread+0x0/0x230) from [<c006a110>] (kthread+0x88/0x90)
+[  257.230000] [<c006a088>] (kthread+0x0/0x90) from [<c005748c>] (do_exit+0x0/0x660)
+[  257.230000]  r7:00000013 r6:c005748c r5:c006a088 r4:d3019ef8
+[  257.230000] ---[ end trace cae0a03a580a8694 ]---
+
+2, 另外发现一次v8-sdio.1 resume timeout. 
+系统提示kernel panic system reboot, 之前看到的休眠重启和今天的休眠死机(因为注释了重启), 都应该是kernel panic system reboot. 板子给brg继续debug. 
+
+9:46 2011-7-8
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关, 续, 代码check in
+update code for suspend/resume debug
+1, not cpu voltage and frequency scaling while cpufreq driver suspend/resume in order to avoid i2c read/write error. 
+2, move v8clk_upvol and v8clk_downvol into v8clk_cpu_clk_set_rate.
+file: arch/arm/mach-vc0882/clock-vortex.c, arch/arm/plat-vc088x/cpu.c
+3, change 1GHz@1.45v to 1GHz@1.4v
+file: arch/arm/mach-vc0882/clock-vortex.c
+4, set lowest voltage of arm dcdc from 1.1v to 1.2v. 
+1.1v is not stable for VC0882 arm. 
+5, write pmu flag twice for safe. add "dsb; isb" before pmu switch 32k clock in order to pmu finish configuration before pmu clk switch. 
+file: arch/arm/plat-vc088x/sram-helper.S
+6, charge some log level in driver/mfd/va7882-*.c
+
+10:40 2011-7-8
+VC0882, SV, AE, clock, by bianrongguang
+之前加入cpufreq造成debugfs下面clock目录为空的原因:
+clk_set_parent里面调用了clk_debugfs_init(), 似乎造成clock tree有问题. 
+
+15:32 2011-7-8
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后重启; 和dvfs是否有关, 续, 准备周末实验
+1, zhaoyuan希望周末能测试8个机器. 
+2, 改为低速uart, 保证no_console_suspend后有打印.
+3, rtc suspend中只设置second.
+4, 调试中遇到一次写入7882 0x2寄存器0xd .. 0x12的timeout, 明显是升压流程. 所以在cpufreq里面加入wake_lock. 
+5, 文档
+测试说明
+
+by zhangjian
+
+1), 烧写"\\10.0.12.160\share\androidbuilds\vortex_20110708_wakeupDebug__cpufreqWakeLock___v5.pak"
+烧写后, recovery模式结束后, 在"Hit any key to stop autoboot:  "回车, 输入如下命令: 
+vc088x # set ramfs_args setenv bootargs console=${console} mem=${dram} init=/init no_console_suspend
+vc088x # saveenv
+Saving Environment to MMC...
+vc088x # boot
+以后系统启动不需要输入以上命令. 
+
+2), 系统启动后输入如下命令
+logcat -v time &
+hexdump /dev/input/event0 &
+echo 8 > /proc/sys/kernel/printk
+
+3), 手动测试:
+测试目的: 模拟用户正常使用时的休眠唤醒稳定性. 重点关注: 唤醒后屏幕长时间才亮(记录大约时间(几秒, 几分钟, 唤醒最长等待10分钟, 超过十分钟认为唤醒失败), 唤醒需要按多次power按键屏幕才能亮(需要继续按power按键次数),  唤醒后系统重启.
+以上每种异常情况都需要保存kernel和logcat log. 
+(1), 休眠后重启时敲得命令(xxx需要替换为, 出错日期_时间_板子编号, 例如"0706_2216_10#")
+cat /sys/devices/platform/v8-i2c.0/i2c-0/0-0016/regdump
+vmtool 0x60000000 80
+
+4), 自动测试
+(1), 复制"10.0.12.160" share/zhangjian目录如下四个文件到882(文件有修改, 请重新复制): auto_suspend.sh, cpufreq_test, hexwrite, UITest_dynamic__printWakeCount.apk
+
+(2), 在shell下执行如下命令: 
+# mv /mnt/sdcard/auto_suspend.sh /system/bin/
+# mv /mnt/sdcard/cpufreq_test /system/bin
+# mv /mnt/sdcard/hexwrite /system/bin/
+# sh /system/bin/auto_suspend.sh &
+# sh /system/bin/cpufreq_test &
+
+安装并运行uitest, uitest menu "set&start"启动刷屏. 
+
+(3), 测试结束后, 看一下跑死没有, 和两个次数:
+a, uitest menu: wakecount. 记录了屏幕亮了多少次. 
+b, "cat /sys/devices/system/cpu/cpu0/cpufreq/stats/total_trans"
+
+16:00 2011-7-8
+VC0882, SV, 
+1, 其他按键导致唤醒? 会不会是按键时碰了电源线, 造成charge plug in唤醒. 
+
+22:50 2011-7-8
+(10:26 2011-7-9)
+VC0882, SV, power
+无论系统还是模块，都是这四部分的组合。
+以sd为例说明四者关系。Sd初始化时如果电压过低(e.g. 2v)前几个命令都正确只有acmd41会timeout.
+power: voltage, clock会影响performance. 见arm9 v f 曲线。882 dvfs后文会单独讲解。
+
+周五应该教测试同事用脚本分析结果，这样周一能节省时间。周一下午做这个事情，以后就可以直接看结果了。
+
+11:36 2011-7-25
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, 7月11日-7月22日bianrongguang工作进展, brg对代码的修改
+1, cpufreq: 不是在切频时持有wakelock, 而是休眠唤醒过程中不允许切频(通过注册notify: "register_pm_notifier(&v8_cpu_pm_notifier);").
+2, clock resume时: 即使模块时钟关闭, 也会恢复正确的模块时钟, 恢复前后打开关闭时钟.
+3, update policy after changing cpu freq: cpufreq_update_policy
+就是在cpufreq resume里面先把cpu切到750MHz, 然后通过cpufreq_update_policy通知cpufreq, 使其更新cur_freq. 
+问题: 为什么resume时不恢复系统cpufreq呢? 
+ZJ: 将来可以改进去. 因为系统默认是除了userspace以外的policy, policy自己会设置到所需频率, 系统可以不自动恢复. 
+4, 切频到750MHz不做升压流程. 
+5, i2c里面加入cpu_relax起什么作用? 只用readl/writel不行么? 
+ZJ: 这个改动不是实质改动. 
+6, v8_pm_prepare里面会mask所有中断, 原来也有么? 如果这样wfi后面的reset岂不是就没用了? 
+ZJ: 这个是中间结果, 今天下午的最新代码已经没有这个问题. 
+7, i2c timeout:
+目前: 加入no_console_suspend后, 每次唤醒后必然有i2c timeout, 具体原因不明. brg再继续查. 
+虽然后timeout, 但是i2c操作本身是正确的, 应该是882自身的问题. 
+8, 之前休眠时重启的问题, 应该是i2c操作出错造成的. 
+
+14:56 2011-7-25
+时间管理
+0, 10:00
+
+1, 本日
+1), 20' ICP 882例会. beizhan希望我本周完成寄存器比较工具. 
+2), 1.5h 和bianrongguang交流最近两周的改动, 并看git kernel上最新代码. 见"11:36 2011-7-25".
+3), 准备每天对比u9gt和海纳M8两个产品的销量. 
+"D:\work\VC0882\Documentation\VC0882竞争对手销量统计.xls"
+4), VC0882各模块ASIC sign off频率, 见"16:07 2011-7-25". 
+5), 确认和解决nenamark结果不稳定的问题. 见"16:48 2011-7-25". 
+
+16:07 2011-7-25
+VC0882, clkrst, clock, VC0882各模块ASIC sign off频率
+"D:\work\VC0882\clkrst\mode_func.OC_WC.RC_MAX_1.report_max_frequency", 自fengbeizhan转发guye邮件. 
+参考Max_Frequency(MHz) 这列。
+
+16:48 2011-7-25
+VC0882, sv, power, AE dvfs, 续, 确认和解决nenamark结果不稳定的问题
+1, zhaoyuan: 客户反映, nenamark1在有dvfs情况下, 测试结果不稳定, 可能是16fps, 也可能是12fps. 
+zhangjian: 原来没发现这个问题. 用7月25日凌晨daily build版本, 发现的确有这个问题.
+出错时打印信息如下: 
+01-01 08:01:55.070 E/gralloc ( 1384): handle 0x2bd030 not locked
+01-01 08:01:55.300 E/gralloc ( 1384): handle 0x2a8e30 not locked
+01-01 08:01:55.420 E/gralloc ( 1384): handle 0x2bd030 not locked
+01-01 08:01:56.010 D/SntpClient( 1088): request time failed: java.net.UnknownHostException: asia.pool.ntp.org
+01-01 08:01:56.090 D/SntpClient( 1088): request time failed: java.net.UnknownHostException: asia.pool.ntp.org
+01-01 08:01:56.090 D/SntpClient( 1088): request time failed: java.net.UnknownHostException: asia.pool.ntp.org
+
+bash-4.1# cat scaling_cur_freq
+375000
+
+正常时:
+01-01 08:03:19.420 E/gralloc ( 1384): handle 0x2bc390 not locked
+01-01 08:03:19.560 E/gralloc ( 1384): handle 0x327d28 not locked
+01-01 08:03:19.680 E/gralloc ( 1384): handle 0x2bc390 not locked
+<I>[v8-cpu]: v8_target(policy[375000,1000000],804347,0):0
+
+也就是出错时多了"D/SntpClient( 1088): request time failed", 少了调频请求, 不清楚这二者有没有关系. 搜索这个出错信息:
+frameworks/base/core/java/android/net/SntpClient.java:127:            if (Config.LOGD) Log.d(TAG, "request time failed: " + e);
+frameworks/base/core/java/android/net/SntpClient.java:198:            if (Config.LOGD) Log.d(TAG, "request time failed: " + e);
+
+后面又看到正确log:
+01-01 08:11:51.390 E/gralloc ( 1384): handle 0x29aff0 not locked
+01-01 08:11:51.540 E/gralloc ( 1384): handle 0x30bbf0 not locked
+01-01 08:11:51.660 E/gralloc ( 1384): handle 0x29aff0 not locked
+<I>[v8-cpu]: v8_target(policy[375000,1000000],815217,0):0
+<I>[v8-cpu]: v8_target(policy[375000,1000000],608695,0):0
+<I>[v8-cpu]: v8_target(policy[375000,1000000],497282,0):0
+01-01 08:11:56.020 D/SntpClient( 1088): request time failed: java.net.UnknownHostException: asia.pool.ntp.org
+01-01 08:11:56.060 D/SntpClient( 1088): request time failed: java.net.UnknownHostException: asia.pool.ntp.org
+01-01 08:11:56.060 D/SntpClient( 1088): request time failed: java.net.UnknownHostException: asia.pool.ntp.org
+
+看来"D/SntpClient( 1088): request time failed"和速度快慢也没关系. 
+
+难道是刷机后, 开始运行容易出现? 
+重启后, 第2,3次测试只有12fps. 
+用top看了看, 如果按每秒统计, 发现系统利用率大约是82%, 所以猜测系统运行nenamark1没有切频的原因, 可能是cpu占用率没有到预期的95%, 所以没有切频. 
+目前的解决办法是把up_threshold降低到80, 这样会使切频到1G的机会变多.
+
+17:09 2011-7-25
+VC0882, arm, 环境, Cortex-A8, 文档, 总结
+AE bianrongguang解决关机bug时, 遇到imprecise data abort, 这样没法知道是谁引起的问题, 用apt timeout打印出有没有寄存器配置timeout引起的data abort.
+
+18:22 2011-7-25
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), VC0882例会. 
+2), 向bianrongguang了解最近两周休眠唤醒的改动. 
+3), 看最近两周AE kernel代码变化, 重点是休眠唤醒相关代码. 
+4), 和zhaoyuan, bianrongguang讨论我的工作安排: 目前重点是改进cpufreq代码, 提高效率. 
+5), 看cpufreq对3d benchmark(nenamark1)的影响. 把cpufreq ondemand策略的参数up_threshold(cpu占用率到多高需要升高频率)从95%降到80%, 初步看对nenamark1就没有影响了.
+2, 次日工作安排
+1), 看AE有无android下读取cp15寄存器的工具, 如果没有自己写一个. 
+2), 考虑改进cpufreq代码. 
+3), 完善周四power讲稿. 
+
+22:49 2011-7-25
+VC0882, SV, ICP power总结, 需要更新部分. 
+SD: 
+内卡高低温稳定性好于外卡。不同品牌高低温也有差异。
+电压对初始化Acmd41的影响（配sd初始化流程图）。
+
+Dvfs:
+增加。
+
+增加：
+882 Power domain.
+时钟方案：clock tree. Linux clock structure.
+gpu work around.
+
+
+准备完上述内容，需要882芯片图画出来。
+
+10:05 2011-7-26
+时间管理
+0, 9:52
+
+1, 本日
+1), 更新power ppt. 
+2), 15:40 改进cpu clkswitch代码. 
+3), 工作总结. 见"18:35 2011-7-26". 
+
+10:31 2011-7-26
+公司, IC论坛, IC training
+http://10.0.2.109/bbs/forum.php
+用户名: zhangjian_new
+邮箱: zhangjian@vimicro.com
+密码: 8位.
+
+18:35 2011-7-26
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 更新power ppt, 已上传到CVS:
+D:\VC0882\document\power\power.ppt, 欢迎拍砖. 
+2), 改写AE cpu clkswitch代码, 绕过Linux clk structure, 希望能提高效率. 代码初步完成, 明天调试. 
+
+2, 次日工作计划
+1), 调试AE cpu clkswitch代码.
+2), 看AE有无android下读取cp15寄存器的工具, 如果没有自己写一个. 
+
+18:54 2011-7-26
+VC0882, SV, power, 介绍邮件
+Hi, all
+
+之前要求我整理的882 power文档已经整理了前一部分. 并上传到CVS: D:\VC0882\document\power\power.ppt
+周一例会时beizhan要求我周四例会后介绍. 
+
+Power计划分两次介绍, 第一次偏重基本概念, 介绍如下内容:
+•	Power是何方神圣? 
+•	VC0882的电源管理（模式转换）
+•	开关机和休眠唤醒简述
+•	DVFS
+第二次重点分析休眠唤醒相关问题, 包括
+•	Android电源管理: suspend/resume, early suspend/resume
+•	Linux kernel电源管理: pm, clk, regulator
+•	882 pad休眠唤醒流程
+•	882休眠唤醒中用到的coding技巧
+•	882休眠唤醒遇到的问题总结
+
+另外除了power, 882的arm和环境还差一次总结, 稍候完成.
+
+Best regards
+
+Zhangjian
+
+10:10 2011-7-27
+VC0882, SV, power, 文档阅读, Linux power management architecture
+1, 文档自xiaotao, 已经上传到"D:\VC0882\document\power\linuxpowermanagement.pdf"
+给xiaotao回信:
+很好的文章, 谢谢, 我会放到参考文档里面. 已经上传到CVS: "D:\VC0882\document\power\linuxpowermanagement.pdf". 
+之前和zhicheng看Linux time/timer管理时看的是OLS的资料, 当时就对p19这个图没完全理解, 现在看到这个文章, 感觉明白很多. 
+
+PS: Linux更新到3.0了: 
+http://blog.sina.com.cn/s/blog_722659ab0100t1be.html
+
+2, \todo 需要通过这个文档理解Linux porting的ime/timer问题. 
+3, p36, OMAP cpu idle划分. 这个是882没有的东西, 882的idle只有一种, 就是wfi(图中的C1). 
+看文档, 查CSWR含义. 从描述看, CSWR比OSWR保存的东西更多. 
+MPU retention modes are:
+· Open switch retention (OSwR)
+· Closed switch retention (CSwR)
+
+· Closed-switch retention (CSWR): Full domain logic supply is maintained, and supply voltage can be dropped to minimize leakage.
+· Open-switch retention (OSWR): Full domain logic is switched off, but the context is saved for modules that embed RFFs.
+
+4, 本文档后面的参考资料很有用, 必要时参考. 
+
+10:41 2011-7-27
+时间管理
+0, 9:56
+
+1, 本日
+1), 10:10-10:50 看xiaotao推荐的Linux power management architecture文档, 见"10:17 2011-7-27". 
+2), 20' 看邮件. 
+3), 11:19-11:40 测试昨天写好的AE cpu clkswitch代码. 见"11:19 2011-7-27"
+4), 14:20-15:10 关注敏捷, 关注scrum, 见"14:28 2011-7-27". 
+5), 15:20-18:45 liuxiaotao uart, gong;anmin android基础. 
+6), 工作总结. 
+
+), 请假. 和aiguo确认明天介绍power. 是否需要718参加. 我只能讲到5点. 
+
+11:19 2011-7-27
+VC0882, sv, power, AE dvfs, 续, 改进cpu clkswitch代码. 
+1, "!"和"~"又搞混了...
+\todo 写个程序复习. 运算符号. 
+2, 上午代码测试通过. 接下来看看如何优化. 
+
+14:28 2011-7-27
+开发方法, 项目管理, 敏捷, alige, scrum, 经理2.0：Scrum中经理的角色; 程序员能力矩阵
+http://www.infoq.com/cn/articles/scrum-management-deemer
+Bamvor: 对我来说, scrum是个新东西, 我原来没接触过这个东西.
+
+James Grenning (http://www.renaissancesoftware.net/) also has much to say in the affirmative about using Agile in embedded development.
+
+Yes, also check out Nancy Van Schooenderwoert who's very active in this
+sort of work.
+
+I wrote about this just over a year ago:?a href="http://agilepainrelief.com/notesfromatooluser/2008/12/agile-for-hardware-and-embedded-systems.html">http://agilepainrelief.com/notesfromatooluser/2008/12/agile-for-hardware-and-embedded-systems.html?div> 
+
+一个专业模块, 里面有些敏捷和软件工程的资料: http://padden.blog.51cto.com/#
+
+程序员能力矩阵: http://www.indiangeek.net/wp-content/uploads/Programmer%20competency%20matrix.htm
+中文翻译: http://padden.blog.51cto.com/2514314/465196
+这个要认真看看. 
+
+似乎是个不错的博客, 看看: http://fullof.bs/
+
+17:14 2011-7-27
+VC0882, SV, android, 基础, 待总结文档
+broadcast receiver发出的intent都是功能性的，不会指定具体activity, 但是有优先级。所有注册该intent的应用程序都有机会被调用。
+activity发出的Intent可以具体或抽象，如果多于一个需要用户选择。
+
+18:52 2011-7-27
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 看xiaotao推荐的Linux power management architecture文档, 更新882 power ppt.
+2), 测试昨天写好的AE cpu clkswitch代码, 初步测试通过, 需要长时间测试和优化代码. 
+3), ICP training: liuxiaotao uart, gong'anmin android基础. 
+2, 次日工作计划
+1), 写Linux cp15读写工具. 
+2), ICP power training(上) 
+
+18:58 2011-7-28
+(09:07 2011-7-29)
+VC0882, power, 讲座, 文档, 总结
+
+0728讲的东西感觉普及意义到了，但是深度有点浅。
+
+感觉需要一个能立体表述系统相互关系的工具。多维，可旋转的。
+
+休眠唤醒思路：
+先介绍android休眠唤醒概况。
+android的机制感觉还是了解的比较浅：Early的情况需要看一下。
+
+介绍简单系统的休眠唤醒实现。
+然后过渡到Linux suspend resume机制，能看到设备模型的优势。
+
+
+10:33 2011-7-28
+时间管理
+0, 10:05
+
+1, 本日
+1), 10:10- AE cpu clkswitch改进. 
+2), 下午: VC0882 power文档. 
+
+9:48 2011-7-29
+把Linux kernel timer从一个改为两个，718那个问题就没有了。
+
+10:29 2011-7-29
+VC0882, AE, power问题总结, 续
+1, 系统唤醒后, 立刻睡眠. 之前已经查过, 感觉是因为上层没有收到按键, 所以没有人拿wake_lock. bianrongguang后来查, 确认是gpio 7882中断收到后, 7882 i2c读失败, 所以没读到power key事件. 
+2, jinyang在7882里面注册了timer, 这个timer会读取i2c/adc. bianrongguang感觉这里会有风险. timer休眠在7882之后. 如果7882休眠后timer发生, 系统可能会出错.
+3, i2c驱动里面对于msg的使用风险可能会导致系统启动后i2c timeout. 
+因为brg原有的驱动里面, 对于i2c msg有两处可以使用, 代码里面可能会交替用两种中的一种, 这样可能会造成读到的msg出错, 从而造成i2c读失败.
+现在brg只使用两种方式中的一种. 
+
+11:26 2011-7-29
+VC0882, SV, AE, power, 休眠唤醒, 按power键有时app未收到唤醒事件
+错误: 
+PM: early resume of devices complete after 1.141 msecs
+<I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+<I>[v8-cpu]: v8_target(policy[375000,1000000],1000000,0):-16
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+mi900g_modem_init
+
+正确:
+PM: early resume of devices complete after 1.137 msecs
+<I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[375000,1000000])
+<I>[v8-cpu]: v8_target(policy[375000,1000000],1000000,0):-16
+wakeup wake lock: event0-1091
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+mi900g_modem_init
+
+12:42 2011-7-29
+android, script, sl4a
+豆瓣 SL4A: http://www.douban.com/group/SL4A/
+
+sl4a支持中文: 
+http://www.douban.com/group/topic/20445238/
+
+2011-06-28 08:39:28 永远的许愿 举个例子，可以用u‘\u5173\u4e84'的方式显示中文，其中“5173“及”4e8e”是“关于”二字的Unicode码，可以自己写个小脚本在sl4a中查询汉字的Unicode码。这里就不帖出了
+
+> 删除  2011-07-02 13:19:50 铁骑（PuLee） (http://cooleep.com) 试试在字符串前加u，例如 u“关于”
+
+15:08 2011-7-29
+时间管理
+0, 9:45
+
+1, 本日
+1), 
+2), 15:08- AE cpu clkswitch代码改进. 见"15:09 2011-7-29".
+
+15:09 2011-7-29
+VC0882, SV, AE, power, cpu, clkswitch
+1, 参考brg"drivers/i2c/busses/i2c-vc0882.c"的I2C_DEBUG_TRIGGER功能, 看看切频到底用了多长时间. 
+1), 切频中需要关闭中断保证不被打断. 
+2), 通过看示波器和对照硬盘配置, 切频时间主要花在pll稳定时间, 目前配置是PLL_RST_CFG[6000001c]=[658e0102], 大约1ms, 这里有2倍以上的富裕, 根据r(13 or 26), 大约是250ms到500ms. 
+所以说切频时不变换pll会比较好. 
+
+10:17 2011-7-30
+VC0882, SV, AE, 发掘量产8寸板周末测试情况
+1, cpufreq代码优化后, 整体切频时间在0.5ms-2.6ms, 但是在同样cpufreq参数情况下系统performance反而变差了. 
+2, es文浏览器中打开蓝牙设备搜索会报错退出，智器v5无此问题。
+3, 测试了sl4a(scripting layer for android) perl. 速度比我的智器v5快很多, 比较实用. 
+4, android启动后, 插入我的8G sd卡速度要用5秒钟才能认到, 可能是因为我sd卡里面东西比较多. 
+5, 切水果似乎比原来快了, gpu做了优化? 
+
+9:57
+ICP, sync up
+1, vcodec, gpu dvfs
+2, gonganmin: gpu 375MHz 常温pass. 本周上高低温。
+lmbench给fuyali 测试。
+3, liuxiaotao:
+本周：调试触摸屏驱动。研究linux启动流程。
+4, wangxiaonan:
+882和598联调，速度很低，查emi timing, cpu freq.
+5, wupingping: hdmi
+cif 100MHz不稳定？

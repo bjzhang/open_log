@@ -1,0 +1,2872 @@
+﻿
+9:57 2011-8-1
+VC0882, SV, ICP, sync up
+1, 讨论 AE vcodec, gpu dvfs, aiguo建议不做. 
+2, gonganmin: gpu 375MHz 常温pass. 本周上高低温。
+lmbench给fuyali 测试。
+3, liuxiaotao:
+本周：调试触摸屏驱动。研究linux启动流程。
+4, wangxiaonan:
+882和598联调，速度很低，查emi timing, cpu freq.
+5, wupingping: hdmi
+cif 100MHz不稳定？
+
+11:30 2011-8-1
+时间管理
+0, 9:40
+
+1, 本日
+1), 1h VC0882 ICP例会. 见"9:57 2011-8-1".
+2), 11:31-11:40 14:04-14:36  整理上周power ppt. 见"11:37 2011-8-1". 
+3), 1.5h AE dvfs和performance优化. 见"14:51 2011-8-1". 
+4), 17:40- AE 读cp15工具. 
+
+11:37 2011-8-1
+VC0882, SV, power, 总结, 文档, 笔记, 讲稿
+1, 上传最终文档, 发信:
+1), 上周四power介绍(上)的最终ppt已经上传到CVS: "D:\VC0882\document\power\power.ppt". 我的讲稿在ppt的备注部分. 
+2), 同时上传了刘子熹的"第八讲手持式芯片的电源管理方案"和rk2918的参考设计(PCB): "D:\VC0882\document\competitor\RK2918_参考板_原理图.pdf". 
+3), 上次遗留问题:
+(1), rk2918 audio codec在内部还是外部? 
+882的audio codec集成在芯片内部, 同时也支持外部codec. Rk2918的audio codec在外部(vm8900). 
+详见rk2918参考设计, “D:\VC0882\document\competitor\RK2918_参考板_原理图.pdf”
+(2), gpu bug原因解释. 
+
+2, 我自己新增和修改的备注:
+1), 和竞争对手(RK2918)相比, 882 在power management和performance上设计好于rk:
+(1), 882的发热小于rk. 
+(2), 在硬件模块指标不如rk情况下, 同样800x480的系统, performance与rk差异很小. 
+2), environment, power management, performance和各个模块function关系很紧密, 更需要好的文档或checklist, 这方面感觉还不够完善. 
+3), power对于module function的影响:
+再举例: ddr odt(on-die terminationo, 阻抗匹配)功能, 在882里面可以关闭, 这使功耗降低120ma, 发热量也大大减少. 
+4), 开机要考虑可靠性和用户体样:
+(1), 830的开机要求用户按开机键按倒830芯片给出上电信号维持住系统供电. 如果用户半途松手系统就没法开机. 
+882的开机流程完全由PMIC VA7882和882 PMU模块控制, 用户按键只是触发系统开机事件, 开机事件后用户松手不会打断系统开机过程. 
+(2), 用户体验: 现在AE 方案里面屏幕打出图标的速度感觉还是有些慢, 用户可能会按键按到屏幕亮, 这样用户会感觉实际开机时间比较长. AE的解决办法是系统启动后立刻点亮一个led灯, 提醒用户开机. 
+
+14:51 2011-8-1
+VC0882, sv, power, AE dvfs, 续, dvfs和performance优化
+1, 看看1G, 666MHz, 333Mhz, nenamark1到底有多快. 
+1), 固定频率
+1G: 16.9, 14.6, 16.9
+666M(0x60000040: 0x1032002): 15.0, 15.4, 15.5
+666M(0x60000040: 0x1031002): 15.5
+2), ondemand, 95%, 666M/1G
+14.8(测试后nenamark1无响应, 点强制退出时系统报错自动重启. 
+Unable to handle kernel NULL pointer dereference at virtual address 00000038
+pgd = c0004000
+[00000038] *pgd=00000000
+Internal error: Oops: 17 [#1] PREEMPT
+last sysfs file: /sys/devices/system/cpu/cpu0/cpufreq/stats/time_in_state
+Modules linked in: wlan galcore
+CPU: 0    Not tainted  (2.6.35.7+ #446)
+PC is at __up_write+0x30/0x180
+LR is at up_write+0x10/0x14
+pc : [<c0182644>]    lr : [<c006a8c0>]    psr: 60000093
+sp : d1193ec8  ip : d1193ef0  fp : d1193eec
+r10: 60000013  r9 : 00000000  r8 : 00000000
+r7 : d11a7040  r6 : 00000034  r5 : d0e38b40  r4 : d148ffc0
+r3 : 00000001  r2 : d1192000  r1 : 45c69000  r0 : 00000034
+Flags: nZCv  IRQs off  FIQs on  Mode SVC_32  ISA ARM  Segment kernel
+Control: 10c5387d  Table: 91194019  DAC: 00000017
+...
+Backtrace: 
+[<c0182614>] (__up_write+0x0/0x180) from [<c006a8c0>] (up_write+0x10/0x14)
+[<c006a8b0>] (up_write+0x0/0x14) from [<bf0044b0>] (gckOS_FreeNonPagedMemory+0x128/0x1a8 [galcore])
+[<bf004388>] (gckOS_FreeNonPagedMemory+0x0/0x1a8 [galcore]) from [<bf004554>] (gckOS_FreeContiguous+0x24/0x28 [galcore])
+ r9:00000000 r8:00000018 r7:00100000 r6:d3828d40 r5:d3828b38
+r4:d3828058
+[<bf004530>] (gckOS_FreeContiguous+0x0/0x28 [galcore]) from [<bf007634>] (gckEVENT_Notify+0x200/0x428 [galcore])
+[<bf007434>] (gckEVENT_Notify+0x0/0x428 [galcore]) from [<bf00abac>] (gckHARDWARE_Interrupt+0x90/0xa8 [galcore])
+[<bf00ab1c>] (gckHARDWARE_Interrupt+0x0/0xa8 [galcore]) from [<bf0013b4>] (gckKERNEL_Notify+0x3c/0x4c [galcore])
+ r4:d154edc0
+[<bf001378>] (gckKERNEL_Notify+0x0/0x4c [galcore]) from [<bf000588>] (threadRoutine+0x6c/0x74 [galcore])
+[<bf00051c>] (threadRoutine+0x0/0x74 [galcore]) from [<c00658c0>] (kthread+0x88/0x90)
+ r7:bf00051c r6:d154edc0 r5:d1d05d80 r4:d1193fcc
+[<c0065838>] (kthread+0x0/0x90) from [<c0052c3c>] (do_exit+0x0/0x660)
+ r7:00000013 r6:c0052c3c r5:c0065838 r4:d1d05d80
+Code: e3c2203f e5923004 e2833001 e5823004 (e5900004) 
+---[ end trace 08b1416aad800897 ]---
+Kernel panic - not syncing: Fatal exception
+Rebooting in 5 seconds..M0x00000001
+
+15.6, 15.4
+
+3), ondemand, 80%, 666M/1G
+13.9, 15.4, 
+4), ondemand, 70%, 666M/1G
+nemamark1中没机会起到666MHz. 
+5), 750M:
+15.9, 15.9
+6), 800M:
+0x1033001: 15.0, 16.3, 15.8
+0x1032001: 16.3, 16.3, 14.x, 14.7, 16.4, 16.3. 
+7), 综合这些测试结果, 可以看到. 
+	666->750	750->800	800->1000M
+fps/MHz	0.004761905	0.008		0.003
+从750提高到800M nenamark1性能提高最明显. 所以使用800M和1GHz两个频点比较合适. 
+
+2, 和bianrongguang讨论, 看看怎么修改比较好. 
+1), 用pll1做800M和1G的切频. pll稳定时间缩短(需要修改pll配置函数)到几十us. 
+2), pll4从297MHz改为297x2, 把vcodec和gpu放到pll4. 这样可以把pll6空出来给cpu做800MHz. pll1做1GHz. 这样会影响vcodec driver和gpu driver. 都可以在kernel和module里面修改. 
+3), 如果是pll3从288改为672MHz, cif需要升到336MHz(符合综合频率). 这样ddr需要用pll3, pll1和pll2分别是1G和800MHz, 这样需要改的driver只有cif, 但是这个频率没有用过. 另外ddr换pll需要改512info, 但是对于512info其实没什么控制力, 容易错. 
+
+3, 
+1), 
+333, 666, 1000
+transition_latency = 600*1000
+up_threshold = 78%
+result: 15.6-15.8 
+
+18:12 2011-8-1
+MRC p15, 1, R2, c3, c11, 6
+
+20:31 2011-8-1
+arch/arm/mach-vc0882/clock-vortex.c arch/arm/plat-vc088x/cpu.c arch/arm/plat-vc088x/include/plat/clock.h
+
+20:38 2011-8-1
+hi, zhaoyuan
+
+400, 800, 1G三个频点的版本已经上传. 
+附件是333, 666和1G的版本, 使用时需要修改域值为:
+echo 78 > /sys/devices/system/cpu/cpufreq/ondemand/up_threshold
+
+请QA帮我测试一下, 使用这两个配置在使用不同域值(70-90)情况下效果如何(发热, performance). 
+
+9:56 2011-8-3
+VC0882, SV, AE, power, 休眠唤醒, bianrongguang休眠唤醒慢的问题
+一个原因是late resume中: 背光在触摸屏之后, 触摸屏需要200-300ms(?)才能恢复. 所以应用程序开始控制背光的启动相当于没有响应(应用程序在resume后就开始运行了).
+late resume顺序: framebuffer->backlight->touchpanel ? 找bianrongguang确认. 
+
+bamvor: 为什么休眠唤醒的问题我一个都没有解决过呢?
+
+10:07 2011-8-3
+时间管理
+0, 9:27
+
+1, 本日
+1), 10:30-11:35 14:44- AE cpu clkswitch测试, 见"10:15 2011-8-3". 
+2), 下午把arm cp15工具做出来. 
+
+10:15 2011-8-3
+VC0882, SV, dvfs, AE cpu clkswitch测试
+1, 昨天AE android系统没法正常启动, 需要看一下, 会不会是我上传代码的问题, 把我本地git代码更新到git最新. 后来zhaoyuan说不是. 
+1), 7882 i2c速度调整
+arch/arm/plat-vc088x/i2c0.c
+default_i2c_data0.frequency, 改为400*1000, 这样7882 i2c速度就是400k.
+2), i2c trigger: 测试i2c操作持续时间. 
+drivers/i2c/busses/i2c-vc0882.c
+#define I2C_DEBUG_TRIGGER
+
+2, 用0803凌晨daily build版本给xiaotang测试:
+版本:20110801
+	NO.1	NO.2	NO.3	NO.4	NO.5	NO.6	NO.7	NO.8	NO.9	NO.10
+70	16.6	16.3	16.2	16.3	16.7	16.3	16.5	16.3	16.6	16.3
+75	16.2	15.8	16.1	16.0	16.2	16.1	16.2	16.0	16.1	16.3
+80	15.7	15.6	15.4	15.2	15.9	15.8	15.4	15.3	15.2	15.3
+85	16.1	16.1	15.9	16.2	15.8	16.1	16.0	16.1	16.2	16.2
+90	16.1	16.1	16.1	16.1	16.0	16.0	12.4	16.0	15.9	15.9
+版本:20110803
+70	16.3	15.2	15.8	16.3	15.8	16.3	16.3	16.2	16.3	16.1
+75	15.8	15.2	14.5	15.3	14.5	15.3	14.7	14.7	15.7	16.3
+80	15.7	15.2	15.4	13.5	16.2	16.3	14.6	15.0	14.9	16.3
+85	16.2	16.3	16.3	12.6	15.3	15.4	14.4	16.1	16.2	12.8
+90	15.1	16.0	16.2	15.4	16.3	16.2	16.3	12.6	12.5	16.2
+70%利用率让人担心是一直在1GHz, 需要看log.
+
+3, 常用命令
+1), cat /sys/devices/system/cpu/cpufreq/ondemand/up_threshold
+2), echo 70 > /sys/devices/system/cpu/cpufreq/ondemand/up_threshold
+cat /sys/devices/system/cpu/cpu0/cpufreq/stats/
+
+4, 把最低频率改为200MHz, 发现nenemark1启动会很慢, 降低up_threshold到60%也不行. 
+还是使用400, 800, 1G, 看看up_threshold降低会不会有好处. 
+
+5, xiaotang测试中发现休眠唤醒有问题. 休眠时设置了cpufreq不支持的频率, 造成唤醒后cpufreq没法正常工作, cpu只能工作在休眠前的频率(一般是400MHz). 
+我的代码已修改, 重新做了版本, 明天xiaotang会帮我测试. 
+
+10:27 2011-8-3
+VC0882, SV, AE, android, adobe会支持做flash视频加速, \todo关注进展
+1, 中星微和adobe已经签了协议, adobe会支持做flash视频加速. 
+
+15:22 2011-8-3
+android, 文章, 收藏
+1, 如何成为android高手
+http://blog.csdn.net/menuconfig/article/details/6564131
+
+15:45 2011-8-3
+软件技巧, vi, 函数间跳转, 双击"[", "]"
+
+16:44 2011-8-3
+cpufreq 代码阅读:
+1, SRCU: sleep-RCU structure
+Unlike other sorts of notifier heads, SRCU notifier heads require dynamic initialization.
+
+19:55 2011-8-3
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 测试dvfs是否会影响performance. 测试发现周一修改的代码对于休眠唤醒有影响:
+休眠时设置了cpufreq不支持的频率, 造成唤醒后cpufreq没法正常工作, cpu只能工作在休眠前的频率(一般是400MHz). 
+我的代码已修改, 重新做了版本, 明天xiaotang会帮我测试. 
+2), 编写Linux下读cp15的代码. kernel代码完成, 明天测试, 并编写用户空间代码. 
+
+2, 次日工作计划
+1), 测试dvfs, 看休眠唤醒有无问题. 
+2), 继续Linux下cp15的代码. 
+
+10:18 2011-8-4
+dvfs, 休眠唤醒, 触摸屏
+1, 目前问题
+1), 唤醒后scaling_cur_freq是0. 
+2), 切换ondemand到userspace挂了:
+Unable to handle kernel NULL pointer dereference at virtual address 00000000
+pgd = d0ddc000
+[00000000] *pgd=90ef6031, *pte=00000000, *ppte=00000000
+Internal error: Oops: 817 [#1] PREEMPT
+last sysfs file: /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+Modules linked in: galcore
+CPU: 0    Not tainted  (2.6.35.7+ #466)
+PC is at cpufreq_governor_userspace+0x48/0x184
+LR is at __cpufreq_governor+0xd4/0x11c
+pc : [<c026345c>]    lr : [<c02611c0>]    psr: 60000013
+sp : d0debde0  ip : d0debdf8  fp : d0debdf4
+r10: 0000000a  r9 : d14cec58  r8 : d0debeb8
+r7 : 00000000  r6 : 00000001  r5 : d1cbf5c0  r4 : d1cbf5c0
+r3 : 00000000  r2 : 00000000  r1 : 00000001  r0 : d1cbf5c0
+Flags: nZCv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment user
+Control: 10c5387d  Table: 90ddc019  DAC: 00000015
+
+Backtrace: 
+[<c0263414>] (cpufreq_governor_userspace+0x0/0x184) from [<c02611c0>] (__cpufreq_governor+0xd4/0x11c)
+ r5:d1cbf5c0 r4:c0617ca0
+[<c02610ec>] (__cpufreq_governor+0x0/0x11c) from [<c0261460>] (__cpufreq_set_policy+0x11c/0x164)
+ r7:00000000 r6:d1cbf5c0 r5:d0debe38 r4:c0617ca0
+[<c0261344>] (__cpufreq_set_policy+0x0/0x164) from [<c0262264>] (store_scaling_governor+0x158/0x19c)
+ r7:d1cbf5c0 r6:d1443000 r5:c0617c20 r4:00000000
+[<c026210c>] (store_scaling_governor+0x0/0x19c) from [<c0262ab8>] (store+0x60/0x7c)
+[<c0262a58>] (store+0x0/0x7c) from [<c010734c>] (sysfs_write_file+0x110/0x144)
+ r7:d1cbf610 r6:d14cec40 r5:d1ca3c38 r4:0000000a
+[<c010723c>] (sysfs_write_file+0x0/0x144) from [<c00b45a0>] (vfs_write+0xb8/0x164)
+[<c00b44e8>] (vfs_write+0x0/0x164) from [<c00b4710>] (sys_write+0x44/0x70)
+ r8:40002000 r7:0000000a r6:d0c94140 r5:00000000 r4:00000000
+[<c00b46cc>] (sys_write+0x0/0x70) from [<c002af80>] (ret_fast_syscall+0x0/0x30)
+ r8:c002b128 r7:00000004 r6:0000000a r5:0015e2a8 r4:0000000a
+Code: e5943024 e3530000 1a000002 e3a03000 (e5833000) 
+---[ end trace eea854eddca29f51 ]---
+Kernel panic - not syncing: Fatal exception
+Rebooting in 5 seconds..M0x00000001
+
+找到具体的出错语句: BUG_ON(!policy->cur);
+所以这个问题和前一个是同一个问题. 
+3), 触摸屏似乎不好用? 
+有时唤醒后触摸屏不好用, 做一次early suspend/resume就好了. 
+
+2, rate == 0 的问题, 经查的确是clock resume里面的v8clk_set_parent_and_rate设置后仍然是0. 
+看起来问题出在v8clk_cpu_clk_set_rate_khz里面只是修改了频率, 没有修改parent, 造成v8clk_set_parent_and_rate根据clk parent找到的parent和rate实际对应的parent不一致. 所以似乎rate设置就失败了. 
+
+3, cpu_clk的parent pll的rate也需要修改. 
+修改后简单测试通过, 给zhangwei做测试. 
+
+4, 上传代码.
+fix suspend/resume bug in cpufreq: fix cpufreq policy->cur(current frequency) zero bug after system resume.
+1), currently, cpu op is 400MHz, 800MHz, 1GHz. which is defined by V8CLK_CPU_CLKSWITCH_V4(arch/arm/plat-vc088x/include/plat/clock.h).
+2), add struct clk *parent, unsigned long pll_rate in struct v8clk_cpu_clk_switch. 
+after we change frequency in v8clk_cpu_clk_set_rate_khz, update the cpu clock parent and parent rate in order to fix the system resume bug. 
+
+5, 把闪屏问题改入:
+修改: hardware/libhardware/modules/gralloc/framebuffer.cpp
+编译:
+. build/envsetup.sh
+mmm hardware/libhardware/modules/gralloc
+缺少如下so, 需要复制到"out/target/product/vortex/": 
+system/lib/liblog.so
+system/lib/libcutils.so
+system/lib/libc.so
+system/lib/libstdc++.so
+system/lib/libm.so
+编译结果: 
+out/target/product/vortex/system/lib/hw/gralloc.default.so
+复制到system.img
+
+6, dazhi发现周一后面的代码, camera在唤醒后会绿屏. 
+看看cpufreq是如何处理delay, sleep. 
+1), udelay由loops_per_jiffy得到
+2), CPUFREQ_CONST_LOOPS影响cpufreq切频时是否修改jiffies
+
+include/linux/cpufreq.h
+245 #define CPUFREQ_STICKY          0x01    /* the driver isn't removed even if
+246                                          * all ->init() calls failed */
+247 #define CPUFREQ_CONST_LOOPS     0x02    /* loops_per_jiffy or other kernel
+248                                          * "constants" aren't affected by
+249                                          * frequency transitions */
+250 #define CPUFREQ_PM_NO_WARN      0x04    /* don't warn on suspend/resume speed
+251                                          * mismatches */
+
+cpufreq_out_of_sync()->cpufreq_notify_transition()->adjust_jiffies()->cpufreq_scale():
+cpufreq_scale: old * mult / div
+loops_per_jiffy = loops_per_jiffy_old * ci->new / ci->old
+
+\todo 上层怎么调到cpufreq_out_of_sync()的, 还需要再研究. 
+
+7, xiaoguo测试中发现跑在800MHz时两次死机(系统彻底死了). 会不会和800MHz不能在1.2v稳定工作有关? 
+死的时候并没有切频, 只是维持在800MHz. 如果800MHz需要升压到1.25v, 功耗会上升8%. 
+根据之前xueke测试结果, arm 800MHz下功耗大约是404mW(不考虑NEON), 因此功耗大约会上升32mW(8mA@4v).
+
+\todo继续kernel学习, 四种notifier
+20  *      Atomic notifier chains: Chain callbacks run in interrupt/atomic
+21  *              context. Callouts are not allowed to block.
+22  *      Blocking notifier chains: Chain callbacks run in process context.
+23  *              Callouts are allowed to block.
+24  *      Raw notifier chains: There are no restrictions on callbacks,
+25  *              registration, or unregistration.  All locking and protection
+26  *              must be provided by the caller.
+27  *      SRCU notifier chains: A variant of blocking notifier chains, with
+28  *              the same restrictions.
+
+12:59 2011-8-4
+sdio, usb resume时间比较长. 
+
+17:57 2011-8-4
+arm, arm11, Cortex-A9, 多核OS
+从arm网站看到一个uKernel代码, 说是支持arm11和Cortex-A9多核(SW012-SW-00000-r1p0-00rel0). 
+有空可以看看. 
+
+An area of memory is cache coherent if all the following are true:
+ memory is marked as Normal Shared in the translation table
+ data cache is enabled
+ MMU is enabled
+ SCU is enabled
+ the SMP bit is set in the SCU
+
+18:59 2011-8-4
+时间管理
+0, 9:50
+
+1, 本日
+1), 测试和解决dvfs bug. 800MHz@1.2v有个板子跑死. 晚上升压50mv实验. 
+2), 分析cpufreq driver在切频时如何更新jiffies, 还需要继续. 
+
+13:46 2011-8-5
+emi, pcb, chip, wangshuiming, EMC基础知识——板级设计
+ 信号滤波
+a 电容
+a 磁珠
+a 共模电感
+a 三端滤波器( 三端电容 ， 穿心电容等
+ 
+pcb里面也有天线效应这个概念，估计芯片设计里面是借鉴了pcb的概念。
+
+ 芯片的 EMI 防止建议
+a Substrae 设计 ： 是小的 PCB， 和 PCB 的设计要求一样 ； ` 能用 4 层最好 ， 有完整的地电 Plane； `2 层板电源和地尽量粗 ；
+` 差分线等长 ， 等间距 ， 尽量达到特征阻抗 ； ` 注意和其他信号的距离 ，3W 原则 ；
+` 重要信号如时钟的地线保护 ； ` 不同域的地和电源不 overlay； `2 层板的走线空白处不建议填充 （ 到总地的阻抗大 ， 接收辐射再干
+扰附件的信号 ）； ` 埋入式电容的使用 ； a Package：
+a 采用小引线电感 、 也是小面积的封装 ， 如 BGA>QFN>QFP>DIP； a 供电的电源和地 Pin 成对出现 ， 最好 2 者相邻 ；
+a 多个信号要分配一个回流的地 pin； 时钟单独电源和地线 ；
+a 使用有接地外壳的封装 ；
+
+14:52 2011-8-5
+时间管理
+0, 14:35
+
+1, 本日
+1), 看wanshuiming的pdf: MC基础知识——板级设计. 见"13:46 2011-8-5". 
+
+16:20 2011-8-5
+软件技巧, 函数调用关系, call graph
+1, http://developer.berlios.de/projects/calltree/
+编译没通过.
+
+2, 
+1), 生成rtl文件
+-fdump-rtl-expand
+例如u-boot加入到: 
+arch/arm/cpu/arm_cortexa8/config.mk
+PLATFORM_CPPFLAGS += -march=armv5 -fdump-rtl-expand
+kernel加入到:
+arch/arm/Makefile:KBUILD_CFLAGS +=-fno-omit-frame-pointer -mapcs -mno-sched-prolog
+
+2), 汇总rtl文件: 
+cat *.expand | perl ../egypt-1.9/egypt > kernel.egypt.result
+
+kernel.egypt.result里面没有setup_arch, 检查发现expand文件里面, setup_arch后面写着(unlikely executed), 删除后就有了. 
+
+3), 格式转换: egypt->codeviz
+[dec@localhost kernel]$ perl ../convert4codeviz kernel.egypt.result > kernel.codeviz.result
+
+4), 生成某个调用关系 by codeviz
+../codeviz-1.0.11/bin/gengraph -g kernel.codeviz.result -t -d 2  -f v8_target  --output-type png -k
+
+5), 生成所有函数的调用关系:
+[dec@localhost kernel]$ cat cpufreq*.expand | perl ../egypt-1.9/egypt > cpufreq.result
+[dec@localhost kernel]$ dot -Tjpg cpufreq.result -o cpufreq.jpg
+
+2, 后来发现:
+http://www.openfoundry.org/tw/tech-column/8352-callgraphviz-cscopegraphviz-xdot-call-graph-visualizer
+不错. 周一试试. 
+
+11:21 2011-8-8
+时间管理
+0, 9:15
+
+1, 本日
+1), ICP例会. 
+2), 和gong'anmin讨论arm dvfs fail问题. gong'anmin说可能是gpu问题. 参见"11:39 2011-8-8". 
+3), 给zixi发邮件, 问L2 cache timing. 
+4), 有空调试一下cp15读写函数. 
+
+11:33 2011-8-8
+android, 关注android版本进化, android最新版本是3.2和2.3.4
+1, android3.2
+http://developer.android.com/sdk/android-3.2.html
+支持不同分辨率的设备: 
+Type Density (generalized) Dimensions (dp) smallestWidth (dp) 
+Baseline phone mdpi 320x480 320 
+Small tablet/large phone mdpi 480x800 480 
+7-inch tablet mdpi 600x1024 600 
+10-inch tablet mdpi 800x1280 800 
+
+2, android2.3.4
+http://developer.android.com/sdk/android-2.3.4.html
+
+11:39 2011-8-8
+VC0882, SV, power, clock, cpu clkswitch, AE, dvfs, cpufreq
+1, 周五得到结果fajue_10#, 800@1.2, 1.25, 1.3v都会死机, 看来不是电压本身问题. 
+1), arm L2 cache timing. 
+2), gpu本身出错造成系统跑死. gong'anmin测试中发现过. 
+3), 另外可以试一下750MHz是否文档, 排除其他修改导致的. 
+
+14:55 2011-8-8
+软件技巧, 函数调用关系, call graph
+1, zgrviewer, 在虚拟机下面有些慢, 估计不再虚拟机下面应该可以. 
+下载了graphviz windows 2.28, 感觉zgrviewer速度还可以. 
+2, 实验cctree和ccglue, 感觉速度还是有些慢: 
+加入ccglue从cscope.out生产的文件
+:CCTreeLoadXRefDBFromDisk /home/zhangjian/project/ae_kernel/ccglue.out
+3, 看了一圈, 感觉还是利用cscopegraphviz的思路不错. 
+1), cscope graphviz没法保存dot, 但是我需要dot.
+2), cscope没法处理:
+unlikely(lock_policy_rwsem_write(cpu)))
+这个需要支持用户手工添加. 
+
+14:55 2011-8-8
+给liuzixi邮件, 关注arm L2 cache timing
+hi, zixi
+
+arm里面有个L2 cache timing(cp15 c9, L2 Cache Auxiliary Control Register), 之前huangwei给出的timing是0x42, 也就是tag和data ram latency都是3cycles. 
+我想问一下这个和arm的频率是否有关, 现在AE的arm最高会跑到1G@1.4v, 这个timing需要修改么? 
+目前我们为了保险用的是0xcc, tag ram latency 4cycles, data ram latency 13cycles. 
+
+谢谢
+
+17:12 2011-8-8
+软件技巧, vi
+http://hi.baidu.com/jkxtu1984/blog/item/eded7a1f6b175f0f304e1503.html
+1, w: 以word为单位操作. 
+2, g: 以屏幕分行跳转. 
+3, Ctrl+v: 按矩形选择. 
+
+18:35 2011-8-8
+cpufreq
+1, 
+"/mydroid_f/kernel/drivers/acpi/processor_thermal.c"
+看起来是acpi thermal和cpufreq的代码, 看一下. 
+
+18:38 2011-8-8
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 查fajue mp 10#板, 800MHz运行死机问题. 
+(1), 根据gong'anmin高低温实验经验, 把gpu降频到300MHz, 882仍然死.
+(2), 初步看arm 750MHz + gpu 300MHz稳定. 做整晚测试. 
+2), 分析cpufreq切频时何时更新系统tick. 
+系统通过调用cpufreq_out_of_sync更新系统的loops_per_jiffy, 从而更新udelay, mdelay等时间. loops_per_jiffy在系统启动时通过bogomips计算得到. 
+利用cscope graphviz画图如下. 
+
+22:50 2011-08-08
+Linux, 学习, interrupt, 下半部分, threaded irq
+1, 一个对threaded_irq讨论的帖子:
+http://68.183.106.108/lists/newbies/msg42734.html
+
+2, 
+ 56  * IRQF_ONESHOT - Interrupt is not reenabled after the hardirq handler finished.
+ 57  *                Used by threaded interrupts which need to keep the
+ 58  *                irq line disabled until the threaded handler has been run.
+
+3, 
+Basically, you have two choices :
+
+*) Your interrupt is not shared. In this case, the "handler" parameter
+of request_thread_irq() (the hard interrupt handler) can be NULL,
+and you must pass IRQF_ONESHOT in the flags. As you haven't passed
+an hard interrupt handler, the default one will be used
+(irq_default_primary_handler()), which just wakes up the thread.
+
+*) Your interrupt is shared. In this case, you *must* implement an
+hard interrupt handler which is responsible for checking whether
+the interrupt comes from your device or not. If it comes from your
+device, then you must return IRQ_WAKE_THREAD and disable the
+interrupt. If it doesn't come from your device, you return IRQ_NONE.
+See
+http://lxr.free-electrons.com/source/drivers/mmc/host/jz4740_mmc.c
+for an example of this use case.
+
+4, threaded irq的thread是一个实时进程
+Set proper thread priority and scheduling class. But by default, it's
+already in SCHED_FIFO, at priority MAX_USER_RT_PRIO/2. See irq_thread()
+in kernel/irq/manage.c.
+
+5, threaded irq例子, jz4740 mmc
+简单中断直接在handler里面处理, 需要处理的复杂任务在thread里面处理, 
+http://lxr.free-electrons.com/source/drivers/mmc/host/jz4740_mmc.c
+
+6, 另一篇threaded irq介绍
+https://www.osadl.org/Single-View.111+M5f5e32a2f5a.0.html
+Threaded IRQ handlers on their way to mainline Linux
+By: Carsten Emde
+
+Both real-time (PREEMPT_RT) and standard kernels will benefit
+
+Turning Linux into a real-time operating system consisted - simply spoken - of determining sources of latencies and removing them. One important source of latencies are drivers and specifically their interrupt service routine (ISR). In consequence, a mechanism had to be invented to enable scheduling during ISR execution. This may not be terribly efficient at the top of the ISR where hardware is accessed frequently, e.g. to acknowledge the interrupt and to access the various data and status registers of a particular controller. But it may be very effective at the bottom of the ISR where hardware is accessed less frequently. This feature - called "threaded interrupts" - was always part of the PREEMPT_RT patches (see real-time road map), but did not make it into the mainline kernel yet - until now when the required infrastructure was merged into the release candidate of Linux 2.6.30. Thomas Gleixner, the main author behind the threaded interrupts patch, mentioned several advantages of threaded interrupts in his posting "Add support for threaded interrupt handlers - V3". Some of them apply to the normal non-realtime kernel as well. Among others, threaded interrupts will
+
+
+allow to move long running handlers out of the hard interrupt context,
+avoid complex hardirq -> tasklet/softirq interaction and locking problems by integrating this functionality into the threaded handler code,
+improve debugging of the kernel: faulty handlers no longer take down the entire system,
+allow prioritizing handlers which share a single interrupt line, and
+
+have the potential to improve the I/O performance by decoupling the various parts of the ISR from each other
+In fact, first tests of drivers that have been converted to threaded interrupts have shown considerable performance gains. 
+
+Linux subsystem maintainers will use the remaining two months of the 2.6.30 gestation period to implement threaded interrupt support. If all works well, this feature will then be fully available in the unpatched 2.6.31 kernel. Jonathan, we are coming.
+
+11:00 2011-8-9
+Linux, interrupt, smp, affinity, balance
+1, caijin邮件_20110808, zhangjian回复
+Hi Zhangjian,
+1, Linux下isr(顶半部)代码是irq模式下执行，还是svc模式下执行？
+ZJ: Linux所有异常都会进入SVC32处理. "arch/arm/kernel/entry-armv.S"的macro vector_stub, 1071-1076行.
+
+2, 如果在svc模式下执行，是否存在中断优先级以及中断嵌套的问题？ 
+ZJ: 如果都是irq(不考虑fiq), 中断优先级由882/718的interrupt module管理, 这个和arm无关. 
+ZJ: Linux在SVC状态下处理中断(这时仍然称为中断上下文). 会通过882提供的get_irqnr_and_base(arch/arm/plat-vc088x/include/mach/entry-macro.S)循环查询所有中断并调用asm_do_IRQ处理(中断上半部分). 这时处理的中断都是根据882 irq module的优先级处理的(因为irq module每次只上报一个最高优先级中断). 
+ZJ: 因为这时中断仍然是关闭的, 所以这个处理过程中中断不会嵌套. 但是由于中断是按优先级处理的, 所以高优先级中断其实也最多等了一个低优先级中断的上半部分就会处理. 
+
+3, 如果有中断优先级的话，怎么配置的？ 比如我希望软件上设置A优先级高于B，这个应该和硬件上的中断控制器没有什么必然联系。
+有中断优先级的话，就会存在中断嵌套的问题吧。
+ZJ: 见"2". 
+
+4, 如果存在中断嵌套的话，对spin_lock有困惑：
+linux中断服务程序中spin_lock来对某个资源进行加锁，比如isr1, isr2都需要访问同一个资源, 并且允许中断嵌套，isr1的优先级高于isr2
+Isr2中断先来，进入isr2, 并且执行了spin_lock，在spin_unlock之前isr1来了，是不是要进入isr1
+进入Isr1后，也需要spin_lock, 但此时isr2占有该spin_lock，isr1咋办？
+单cpu的spin_lock实现是个空壳子，是不是就不允许有这种中断嵌套发生？也就是说软件上没法再配置中断优先级？
+ZJ: 单核下: 因为不存在嵌套, 所以没这个问题. 
+多核下: 我的理解(不一定对): 由于有了spinlock, 只有等coreN上低优先级中断释放spinlock, coreM山的高优先级中断才能获得spinlock. 
+
+5, 另外，smp下中断服务程序和cpu之间是有确定的绑定关系，还是动态分配的？
+ZJ: SMP下, 默认情况下系统会自动根据负载给不同core分发中断. driver也可以某个cpu执行某个中断. 
+
+6, "arch/arm/kernel/entry-armv.S"
+从注释看, 这里会进入SVC32状态. 也就是说任何异常都会进入SVC32状态. 
+@
+@ Prepare for SVC32 mode.  IRQs remain disabled.
+@
+mrs     r0, cpsr
+eor     r0, r0, #(\mode ^ SVC_MODE | PSR_ISETSTATE)
+msr     spsr_cxsf, r0
+
+"\mode ^ SVC_MODE"是把当前mode和SVC_MODE(0x13)做异或, 后面再用eor和当前cpsr异或, 就可以把cpsr里面的状态改为SVC. 
+例如当前是irq模式, cpsr低5bit是b10010, 和SVC_MODE(b10011)异或得到b00001. 异或是相同是0, 不同是1, 所以cpsr高27bit不变.
+2), 还有就是要确认是否一定是切换到了SVC32:
+PSR_ISETSTATE当定义thumb2时是0x20, 否则是0.
+(1), 先考虑arm状态. 
+如果没定义thumb2, PSR_ISETSTATE是0. eor时, 如果异常前是arm状态, 结果还是arm状态. 如果异常前是thumb2状态, 结果是thumb2状态?!
+(2), 如果定义了thumb2:
+如果异常前是arm状态, 结果是thumb状态. 如果异常前是thumb状态, 结果是arm状态. 
+也就是说, 如果未定义thumb2, 系统异常前或异常时就不会进入thumb状态? 如果定义了thumb2, 系统异常时肯定是thumb? 
+\todo 这个要查一下arm手册. 
+
+7, 分析smp下中断亲和力.
+1), include/linux/interrupt.h"
+如果定义了IRQF_NOBALANCING, 就不会做平衡. 
+__setup_irq()(kernel/irq/manage.c)会据此设置IRQ_NO_BALANCING到desc->status
+但是这个status只有未定义"CONFIG_AUTO_IRQ_AFFINITY(自动亲和力)"时才会使用. 
+后者(AUTO_IRQ_AFFINITY)只看到alpha架构里面定义. 
+
+所以在kernel/irq/manage.c里面, setup_affinity(): 首先判断是否满足IRQ_AFFINITY_SET和IRQ_NO_BALANCING, 如果满足且cpu online, 会按照该irq decs里面的要求设置亲和力. 
+
+IRQ_AFFINITY_SET需要irq_set_affinity设置. 换句话说, 需要request_irq时使用IRQF_NOBALANCING并且调用irq_set_affinity才可以?
+
+\todo 继续分析. 另外看看: IRQ_NO_BALANCING_MASK
+
+8, (19:27 2011-8-9)工具, 正则表达式
+1), 想搜索in_interrupt或is_interrupt或类似名称, 
+zhangjian@ubuntu:~/mydroid_f/kernel$ grep i[ns]_int * -R
+arch/microblaze/mm/consistent.c:        if (in_interrupt())
+...
+2), 搜索"in_interrupt", 发现找到好几个类似的用法(include/linux/hardirq.h): 
+77 #define hardirq_count() (preempt_count() & HARDIRQ_MASK)
+78 #define softirq_count() (preempt_count() & SOFTIRQ_MASK)
+79 #define irq_count()     (preempt_count() & (HARDIRQ_MASK | SOFTIRQ_MASK \
+80                                  | NMI_MASK))
+81
+82 /*
+83  * Are we doing bottom half or hardware interrupt processing?
+84  * Are we in a softirq context? Interrupt context?
+85  */
+86 #define in_irq()                (hardirq_count())
+87 #define in_softirq()            (softirq_count())
+88 #define in_interrupt()          (irq_count())
+(1), 可以看到系统里面抢占支持256个, softirq支持256个, hardirq嵌套支持1024个(这个和平台相关, 在arm架构下面, 如果NR_IRQS小, HARDIRQ_BITS可能会小于10bit)
+31  * PREEMPT_MASK: 0x000000ff
+32  * SOFTIRQ_MASK: 0x0000ff00
+33  * HARDIRQ_MASK: 0x03ff0000
+34  *     NMI_MASK: 0x04000000
+这样看中断允许抢占?
+
+"include/linux/preempt.h": 
+#define preempt_count() (current_thread_info()->preempt_count)
+
+通过add_preempt_count, sub_preempt_count加减count. 
+13 #if defined(CONFIG_DEBUG_PREEMPT) || defined(CONFIG_PREEMPT_TRACER)
+14   extern void add_preempt_count(int val);
+15   extern void sub_preempt_count(int val);
+16 #else
+17 # define add_preempt_count(val) do { preempt_count() += (val); } while (0)
+18 # define sub_preempt_count(val) do { preempt_count() -= (val); } while (0)
+19 #endif
+
+9, zhangjian回复caijin邮件_2
+Tasklet是中段上下文吗？是否允许被抢占?
+ZJ: 是中断上下文, 我理解中断上下文都不允许. 
+能从linux的代码上看出是否为中段上下文还是进程上下文？
+ZJ: 可以用in_interrupt()宏判断. 
+
+________________________________________
+发件人: Cai Jin 
+发送时间: 2011年8月9日 17:17
+收件人: Zhang jian
+主题: 答复: linux, spinlock, irq
+
+Hi, zhangjian
+解答很清楚，受益匪浅。原来的疑惑主要是红色字体那一点不清楚引起的，网上说法也不一。
+ZJ: arm发生irq后, irq就是关闭的, 只要系统没有打开中断, 就一直是关闭的. 这个我可以确认一下什么时候打开的. 
+882 linux服务器谁管理？ 你说的几个几处代码我在10.0.13.198的linux kernel上都没找到。
+ZJ: 可能是kernel版本不同, 代码位置有变化. 2.6.32上面也没有么? 
+对了，\\10.0.13.101\share\Linux 目录只是备份吧，我转移到\\10.0.13.101\data\backup\Linux下了，share的空间有点紧张。
+ZJ: ok, 新资料都会放到36上. 
+
+10, (15:06 2011-8-10)
+在系统处理完所有中断后, 恢复中断现场时会恢复中断发生前的spsr, 如果中断发生前是中断是打开的(废话), 这时就会恢复中断. 
+
+17:47 2011-8-9
+VC0882, SV, dvfs, cpu 800MHz不稳定
+1, 今天白天测试cpu_750M_gpu_300M正常。
+修改为GPU_600M(vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_driver.c)，继续测试？
+2, 看寄存器, 发现750MHz时寄存器配置是0x31001, 也就是aclk=375MHz, 但是再切频没这个问题, 会不会是800MHz时也是配置有问题.
+\todo 确认切频流程, 会不会有时切到了错误的配置. 
+发现是唤醒后恢复的时钟恢复错了. 
+3, 加入pmu log和no_console_suspend后, 发现休眠时保存寄存器到现场时CKD_ACLKEN_NDIV是2(也就是除3). 
+难道不是每次都错? 做自动测试. 
+(21:16 2011-8-9)测试了半个小时, 死在唤醒. 再次测试. 
+
+18:12 2011-8-9
+VC0816, 量产, arm筛片程序改为480_240_120频点
+代码已提交, 除了增加频点, 还修改了: 
+1, 不需要修改ddr self-refresh参数. 
+筛片程序在sram里面运行, 把代码从24MHz ddr(机台模拟的)copy到sram. 
+2, 原有文档没有说要定义
+SI_480_240_120				EQU 8
+已更新.
+
+21:23 2011-8-9
+VC0882, SV, 今日工作总结
+1, 继续调试800MHz跑死问题. 在750MHz上实验, 发现可能是休眠唤醒时cpu_aclk配置有问题. 在800MHz上实验, 直接死在休眠唤醒, 未能复现. 
+2, 为816修改arm机台代码, 新增480_cpu240_bus120频点. 
+
+21:26 2011-8-9
+时间管理
+1, 本日
+\todo irq "11:00 2011-8-9"
+
+10:06 2011-8-10
+VC0882, SV, power, pmu, 模式转换(同义词: mode transition), fast wakeup, 休眠唤醒命令
+1, 设置唤醒源为GPIO_A12
+AASP SD0:/>padc_int
+padc_int  SD0:/>sys 12 1 1 0 0 16
+padc_int  SD0:/>pmu
+pmu  SD0:/>wakeups _source 1 4
+2, 设置fast wakeup所需的寄存器配置
+pmu  SD0:/>write_fastwakeup_pmu_reg 0x82 0	//for samsung ddr3 1gb 2x16
+//pmu  SD0:/>write_fastwakeup_pmu_reg 0x2 0		//for micro ddr3 1gb 2x16
+3, 做sleep, GPIO_A12会触发fast wakeup. 0表示wakeup时不做training
+pmu  SD0:/>fastsleep 0
+
+12:58 2011-8-10
+时间管理
+1, 本日
+1), 2h 继续昨日分析中断代码, 见"13:00 2011-8-10". 
+
+13:00 2011-8-10
+Linux, 中断, 中断引用技术, softirq和tasklet调用时机和方式; 软件技巧, 函数调用关系, call graph
+1, svc_exit中会恢复svc_entry里面保存的spsr. 如果发生中断前中断是打开的, 退出中断后, 中断会打开. spsr是进入irq异常前arm的cpsr. 
+2, 分析asm_do_IRQ
+1), 启动cscope graphviz:
+(1), visualizer.py和xdot.py需要在同一个目录, 或者需要把xdot.py放到"/usr/share/xdot"目录
+[dec@localhost ~]$ cd /usr/src/embedded_dev/call_graph/
+[dec@localhost call_graph]$ ls
+ccglue-win32-release-0.3.0  codeviz-1.0.11.tar.gz  egypt-1.9                          kernel         result.codeviz      xdot.py    zvtm
+cctree                      convert4codeviz        egypt-1.9.tar.gz                   kernel4ccglue  result.codeviz.jpg  xdot.pyc
+codeviz-1.0.11              cpufreq_out_of_sync    graphviz-2.16.1-0.6.fc10.i386.rpm  kernel.tar.gz  visualizer.py       zgrviewer
+[dec@localhost call_graph]$ 
+[dec@localhost call_graph]$ perl visualizer.py &
+[1] 2323
+[dec@localhost call_graph]$ Xlib:  extension "RANDR" missing on display "localhost:10.0".
+(2), 
+rcu_irq_enter和rcu_irq_exit不清楚是做什么, 涉及到dynticks_nesting, dynticks, dynticks_nmi. 
+另外如果定义了CONFIG_TINY_RCU, 这两个函数定义会不同. 
+(3), irq_enter里面如果cpu idle且没有中断嵌套. 那么会调用__irq_enter()和tick_check_idle(). 否则只调用__irq_enter. 
+后者会增加昨天分析的preempt_count里面的hardirq_count部分. 这样用户就可以通过
+in_irq判断是否在硬件中断中, 通过in_interrupt判断是否在硬件中断或soft irq中. 
+(4), 当定义
+CONFIG_GENERIC_CLOCKEVENTS和CONFIG_TICK_ONESHOT时(882定义). tick_check_idle功能如下: 
+idle_active时: 实际只执行了update_ts_time_stats(). 
+tick_check_oneshot_broadcast为空(882未定义CONFIG_GENERIC_CLOCKEVENTS_BROADCAST). 
+tick_check_nohz()(882定义了CONFIG_NO_HZ).
+sched_clock_idle_wakeup_event为空(882未定义HAVE_UNSTABLE_SCHED_CLOCK). 
+tick_stopped时:
+    697                 tick_nohz_update_jiffies(now);
+    698                 tick_nohz_kick_tick(cpu, now);
+后者是空函数, 前者是更新jiffies. 
+所以我的理解时, 如果中断发生时cpu处于idle(系统从wfi退出), 为了保证中断服务程序能拿到正确的系统时间, 需要在处理具体中断前(也就是irq_enter)里面, 更新系统jiffies. 
+(5), 此外, irq_enter和irq_exit会增减irq计数.
+irq_exit会执行soft_irq. 所以说soft_irq是bottom half里面最快的. 
+tasklet是由一个soft_irq实现. 所以这里也会调用tasklet. 
+(6), 到底有哪些softirq呢? (include/linux/interrupt.h): 
+    378         HI_SOFTIRQ=0,		//raise_softirq_irqoff
+    379         TIMER_SOFTIRQ,		//raise_softirq
+    380         NET_TX_SOFTIRQ,		//raise_softirq_irqoff
+    381         NET_RX_SOFTIRQ,
+    382         BLOCK_SOFTIRQ,		//raise_softirq_irqoff
+    383         BLOCK_IOPOLL_SOFTIRQ,	//__raise_softirq_irqoff
+    384         TASKLET_SOFTIRQ,	//raise_softirq_irqoff or __raise_softirq_irqoff
+    385         SCHED_SOFTIRQ,		//raise_softirq, cfs!
+    386         HRTIMER_SOFTIRQ,	//raise_softirq_irqoff or __raise_softirq_irqoff
+    387         RCU_SOFTIRQ,    /* Preferable RCU should always be the last softirq */	//raise_softirq
+
+soft irq最终是通过__raise_softirq_irqoff设置pending的. 
+(7), __do_softirq需要认真看一看.
+这里是中断处理后，进入__do_softirq：获得pending, 然后按照优先级处理soft irq. 处理完成后如果没有超过max_restart次数会重新按优先级处理, 如果超过优先级会调用wakeup_softirqd(). 
+这样就达到了当时看书时读到过的, 如果soft_irq(或tasklet)过于频繁, 系统为了平衡也不会一直处理的. 
+run_ksoftirqd中只要没有kthread_should_stop(也就是没人用kthread_stop要求该thread停止), 会一直处理softirq. 每轮处理完pending都会允许抢占, 也会主动让出控制权. 
+(8), 图中有个问题, 
+在882里面, invoke softirq其实不会调用do_softirq. 
+(9), 最终结果如下:
+// /usr/src/embedded_dev/call_graph/kernel4ccglue
+// do_softirq __irq_enter preempt_enable_no_resched local_softirq_pending update_ts_time_stats tick_check_nohz sched_clock_idle_wakeup_event tick_nohz_update_jiffies tick_nohz_kick_tick tick_nohz_stop_idle tick_check_oneshot_broadcast rcu_irq_enter tick_check_idle add_preempt_count account_system_vtime irq_enter run_ksoftirqd invoke_softirq __do_softirq tick_nohz_stop_sched_tick kthread_should_stop action irq_exit sub_preempt_count rcu_irq_exit asm_do_IRQ
+digraph G {"do_softirq";"do_softirq" -> "__do_softirq";"do_softirq" -> "local_softirq_pending";"__irq_enter";"__irq_enter" -> "add_preempt_count";"__irq_enter" -> "account_system_vtime";"preempt_enable_no_resched";"local_softirq_pending";"update_ts_time_stats";"tick_check_nohz";"tick_check_nohz" -> "tick_nohz_stop_idle";"tick_check_nohz" -> "tick_nohz_update_jiffies";"tick_check_nohz" -> "tick_nohz_kick_tick";"sched_clock_idle_wakeup_event";"tick_nohz_update_jiffies";"tick_nohz_kick_tick";"tick_nohz_stop_idle";"tick_nohz_stop_idle" -> "sched_clock_idle_wakeup_event";"tick_nohz_stop_idle" -> "update_ts_time_stats";"tick_check_oneshot_broadcast";"rcu_irq_enter";"tick_check_idle";"tick_check_idle" -> "tick_check_oneshot_broadcast";"tick_check_idle" -> "tick_check_nohz";"add_preempt_count";"account_system_vtime";"irq_enter";"irq_enter" -> "__irq_enter";"irq_enter" -> "tick_check_idle";"irq_enter" -> "rcu_irq_enter";"run_ksoftirqd";"run_ksoftirqd" -> "kthread_should_stop";"run_ksoftirqd" -> "preempt_enable_no_resched";"run_ksoftirqd" -> "do_softirq";"run_ksoftirqd" -> "local_softirq_pending";"invoke_softirq";"invoke_softirq" -> "__do_softirq";"__do_softirq";"__do_softirq" -> "action";"__do_softirq" -> "account_system_vtime";"__do_softirq" -> "local_softirq_pending";"tick_nohz_stop_sched_tick";"tick_nohz_stop_sched_tick" -> "local_softirq_pending";"kthread_should_stop";"action";"irq_exit";"irq_exit" -> "invoke_softirq";"irq_exit" -> "account_system_vtime";"irq_exit" -> "preempt_enable_no_resched";"irq_exit" -> "local_softirq_pending";"irq_exit" -> "sub_preempt_count";"irq_exit" -> "rcu_irq_exit";"irq_exit" -> "tick_nohz_stop_sched_tick";"sub_preempt_count";"rcu_irq_exit";"asm_do_IRQ";"asm_do_IRQ" -> "irq_exit";"asm_do_IRQ" -> "irq_enter";}
+
+3, cscope graphviz的结果其实就是标准的dot文件, 可以用下面命令画图. 
+dot -Tjpg cpufreq.result -o cpufreq.jpg
+
+4, zgrviewer用法, 
+1), 运行脚本:
+D:\work\call_graph\zgrviewer\run.bat, Linux下是run.sh
+2), 配置参数, dot要给出绝对路径:
+C:\Program Files\Graphviz 2.28\bin\dot.exe
+
+16:15 2011-8-10
+VC0882, SV, arm, cp15
+MRC p15, 0, r1, c0, c0, 0
+380:   ee103f10        mrc     15, 0, r3, cr0, cr0, {0}
+0xe0001f00
+
+bash-4.1# echo MRC p15, 0, r1, c0, c0, 0 > cp15
+26: MRC p15, 0, r1, c0, c0, 0
+13, MRC, p, 15, 0, r, 1, c, 0, c, 0, 0.
+mrc: 0xee101f10
+result is 0xc01bf478, ret is 0x90de0019.
+bash-4.1# echo MRC p15, 0, r1, c0, c0, 1 > cp15
+26: MRC p15, 0, r1, c0, c0, 1
+13, MRC, p, 15, 0, r, 1, c, 0, c, 0, 1.
+mrc: 0xee101f30
+result is 0x413fc082, ret is 0x90de0019.
+bash-4.1# echo MRC p15, 0, r1, c2, c0, 0 > cp15
+26: MRC p15, 0, r1, c2, c0, 0
+13, MRC, p, 15, 0, r, 1, c, 2, c, 0, 0.
+mrc: 0xee121f10
+result is 0x82048004, ret is 0x90de0019.
+
+echo MRC p15, 0, r1, c0, c1, 0 > cp15
+echo MRC p15, 0, r1, c0, c1, 1 > cp15
+echo MRC p15, 0, r1, c0, c1, 2 > cp15
+echo MRC p15, 0, r1, c0, c1, 3 > cp15
+echo MRC p15, 0, r1, c0, c1, 4 > cp15
+echo MRC p15, 0, r1, c0, c1, 5 > cp15
+echo MRC p15, 0, r1, c0, c1, 6 > cp15
+echo MRC p15, 0, r1, c0, c1, 7 > cp15
+
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 0 > cp15
+result is 0x1131
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 1 > cp15
+result is 0x11
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 2 > cp15
+result is 0x10400
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 3 > cp15
+result is 0x0
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 4 > cp15
+result is 0x1100003
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 5 > cp15
+result is 0x20000000
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 6 > cp15
+result is 0x1202000
+bash-4.1# echo MRC p15, 0, r1, c0, c1, 7 > cp15
+result is 0x211
+
+代码初步pass, 下一步需要测试全部寄存器. 
+static ssize_t
+cp15_store(struct device_driver *driver, const char *buf, size_t count)
+{
+                unsigned val = 0;
+                char m[4] = {'\0', '\0', '\0', '\0'};
+                char co;
+                int co_num;
+                int opc[2];
+                char rt;
+                int rt_num;
+                char crn;
+                int crn_num;
+                char crm;
+                int crm_num;
+                union {
+                        struct {
+                                unsigned long CRm:4;            //[3:0]
+                                unsigned long Constant_4:1;     //[4]
+                                unsigned long opc2:3;           //[7:5]
+                                unsigned long coproc:4;         //[11:8]
+                                unsigned long Rt:4;             //[15:12]
+                                unsigned long CRn:4;            //[19:16]
+                                unsigned long Constant_20:1;    //[20]
+                                unsigned long opc1:3;           //[23:21]
+                                unsigned long Constant_27_24:4; //[27:24]
+                                unsigned long cond:4;           //[31:28]
+                        }f;
+                        unsigned long val;
+                }mrc;
+                unsigned long result;
+                unsigned long ret;
+                unsigned long flags;
+
+                mrc.f.Constant_4 = 1;
+                mrc.f.Constant_20 = 1;
+                mrc.f.Constant_27_24 = 0xe;
+
+//              MRC p15, 0, <Rd>, c9, c12, 0 ; Read PMNC Register
+//              MCR p15, 0, <Rd>, c9, c12, 0 ; Write PMNC Register
+                printk("%d: %s", count, buf);
+                val = sscanf(buf, "%c%c%c %c%d, %d, %c%d, %c%d, %c%d, %d", &m[0], &m[1], &m[2],
+                                &co, &co_num, &opc[0], &rt, &rt_num, &crn, &crn_num, &crm,
+                                &crm_num, &opc[1]);
+                printk("%d, %s, %c, %d, %d, %c, %d, %c, %d, %c, %d, %d.\n", val, m, co, co_num,
+                                opc[0], rt, rt_num, crn, crn_num, crm, crm_num, opc[1]);
+//              if ( !strcmp(m, "mrc") ) {
+                        mrc.f.CRm = crm_num;
+                        mrc.f.opc2 = opc[1];
+                        mrc.f.coproc = co_num;
+                        mrc.f.Rt = rt_num;
+                        mrc.f.Rt = 1;
+                        mrc.f.CRn = crn_num;
+                        mrc.f.opc1 = opc[0];
+                        mrc.f.cond = 0xe;
+                        printk("mrc: 0x%x\n", mrc.val);
+                        spin_lock_irqsave(&bench_arm_lock, flags);
+                        asm volatile (                                  \
+                                "MRC p15, 0, %1, c2, c0, 0;"            \
+                                "mov    r0, %2;"                        \
+                                "add    r1, pc, #20;"                   \
+                                "str    r0,[r1];"                       \
+                                "dsb;"                                  \
+                                "isb;"                                  \
+                                "nop;"                                  \
+                                "nop;"                                  \
+                                "nop;"                                  \
+                                "nop;"                                  \
+                                "nop;"                                  \
+                                "mov    %0, r1;"                        \
+                        : "=r" (result),"=r" (ret) : "r" (mrc.val) : "cc", "r0", "r1", "r2"                             \
+                        );
+                        spin_unlock_irqrestore(&bench_arm_lock, flags);
+                        printk("result is 0x%x, ret is 0x%x.\n", result, ret);
+//              }
+                return count;
+}
+
+18:28 2011-8-10
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 测试Linux kernel下读arm cp15寄存器的工具。经过调试，目前已经可以正确读到任意arm协处理器的寄存器。下一步会添加脚本读出和performance相关寄存器并和推荐值比较。
+2), 分析问题中设计到中断，重新看了xiaotao中断分析文档，同时分析了asm_do_IRQ中进入退出的部分代码。
+(1), irq_enter和irq_exit里面会增加和减少系统硬件中断计数，这样kernel就可以用in_irq判断是否在硬件中断(hard irq)处理上下文。另外kernel中可以用in_softirq(), in_interrupt()判断是否在软中断中，是否在中断上下文中。
+(2), 中断处理后，进入__do_softirq：获得pending, 然后按照优先级处理soft irq. 处理完成后如果没有超过max_restart次数会重新按优先级处理, 如果超过优先级会调用wakeup_softirqd(). 
+这样如果soft_irq(或tasklet)过于频繁, 系统为了平衡也不会一直处理的. 
+run_ksoftirqd中只要没有kthread_should_stop(也就是没人用kthread_stop要求该thread停止), 会一直处理softirq. 每轮处理完pending都会允许抢占, 也会主动让出控制权. 
+相关流程，用graphviz画图如下。
+
+10:44 2011-8-11
+时间管理
+0, 10:35
+
+1, 本日
+1), 10:45-11:40 13:00-16:00 中断分析. 见"11:01 2011-8-11". 
+
+1), 分析adjust_jiffies完成, 分析为什么没有唤醒. 
+2), 寄存器和cp15脚本. 
+
+11:01 2011-8-11
+1, irq_enter都会由谁调用? 
+4    109  /home/zhangjian/mydroid_f/kernel/arch/arm/kernel/irq.c <<asm_do_IRQ>>
+     irq_enter();
+5    407  /home/zhangjian/mydroid_f/kernel/arch/arm/kernel/smp.c <<ipi_timer>>
+     irq_enter();
+2, 发现工具不太好用。
+1), 打开文件时不查询cscope.out，直接用xdot画图。
+这个应该可以用xdot api实现. 
+http://code.google.com/p/jrfonseca/wiki/XDot
+xdot官方examples: 
+#!/usr/bin/env python
+import gtk
+import gtk.gdk
+import xdot
+class MyDotWindow(xdot.DotWindow):
+	def __init__(self):
+		xdot.DotWindow.__init__(self)
+		self.widget.connect('clicked', self.on_url_clicked)
+	def on_url_clicked(self, widget, url, event):
+		dialog = gtk.MessageDialog(                  parent = self,                   buttons = gtk.BUTTONS_OK,                  message_format="%s clicked" % url)
+		dialog.connect('response', lambda dialog, response: dialog.destroy())
+		dialog.run()
+		return True
+
+dotcode = """  digraph G {    Hello [URL="http://en.wikipedia.org/wiki/Hello"]    World [URL="http://en.wikipedia.org/wiki/World"]      Hello -> World  }  """
+
+def main():
+		window = MyDotWindow()
+		window.set_dotcode(dotcode)
+		window.connect('destroy', gtk.main_quit)
+		gtk.main()
+
+if __name__ == '__main__':
+	main()
+发现即使open时按照自己的图画, 后面virtual.py update graph时仍然会查询cscope.out里面的所有数据. 这样自己之前的结果仍然会被覆盖(virtual.py会在save之后自动更新dot文件). 
+(1), python里面通过缩进来表示语句块, 所以缩进绝对不能错!
+(2), 花一个多小时, 终于把脚本改好. 
+\todo 说明修改.
+(3), 看起来图越来越大了, 需要提取子图
+做三处修改后(删除开始的"//"注释, 添加"node [];", 可以用gengraph提取子图. 
+codeviz-1.0.11/bin/gengraph -g asm_do_IRQ.dot.codeviz -t -f irq_enter --output-type png -k
+会生成名为sub.graph的dot文件. 
+\todo 看看能否加入"node [];", 另外看看graphviz, codeviz gengraph本身是否支持注释. 或者如何支持source目录和node. 
+(4), 修改update_graph为update_graph_symbol
+(16:06 2011-8-11)完成. 需要看明白是如何查找的: 在已加入函数中查找function是否被这些函数调用过, 如果调用过, 就加入.
+修改为: 
+在已加入函数中查找new function是否被这些函数调用过, 如果调用过, 就加入. 这样就不会影响已有的图. 
+
+2), 允许用户自己增删连线，这个不太容易。
+\todo
+
+3, 今天得到的脚本:
+// /usr/src/embedded_dev/call_graph/kernel4ccglue
+// do_softirq ipi_timer __irq_enter preempt_enable_no_resched local_softirq_pending update_ts_time_stats tick_check_nohz sched_clock_idle_wakeup_event tick_nohz_update_jiffies tick_nohz_kick_tick tick_nohz_stop_idle tick_check_oneshot_broadcast rcu_irq_enter tick_check_idle add_preempt_count account_system_vtime irq_enter run_ksoftirqd do_IPI invoke_softirq irq_handler asm_do_IRQ tick_nohz_stop_sched_tick kthread_should_stop action irq_exit sub_preempt_count rcu_irq_exit __do_softirq 
+digraph G {
+"do_softirq" [URL="kernel/softirq.c"];
+"do_softirq" -> "__do_softirq";
+"do_softirq" -> "local_softirq_pending";
+"ipi_timer" -> "irq_exit";
+"ipi_timer" -> "irq_enter";
+"__irq_enter" -> "add_preempt_count";
+"__irq_enter" -> "account_system_vtime";
+"tick_check_nohz" -> "tick_nohz_stop_idle";
+"tick_check_nohz" -> "tick_nohz_update_jiffies";
+"tick_check_nohz" -> "tick_nohz_kick_tick";
+"tick_nohz_stop_idle" -> "sched_clock_idle_wakeup_event";
+"tick_nohz_stop_idle" -> "update_ts_time_stats";
+"tick_check_idle" -> "tick_check_oneshot_broadcast";
+"tick_check_idle" -> "tick_check_nohz";
+"irq_enter" -> "__irq_enter";
+"irq_enter" -> "tick_check_idle";
+"irq_enter" -> "rcu_irq_enter";
+"run_ksoftirqd" -> "kthread_should_stop";
+"run_ksoftirqd" -> "preempt_enable_no_resched";
+"run_ksoftirqd" -> "do_softirq";
+"run_ksoftirqd" -> "local_softirq_pending";
+"do_IPI" -> "ipi_timer";
+"invoke_softirq" -> "__do_softirq";
+"irq_handler" -> "asm_do_IRQ";
+"irq_handler" -> "do_IPI";
+"asm_do_IRQ" -> "irq_exit";
+"asm_do_IRQ" -> "irq_enter";
+"tick_nohz_stop_sched_tick" -> "local_softirq_pending";
+"irq_exit" -> "invoke_softirq";
+"irq_exit" -> "account_system_vtime";
+"irq_exit" -> "preempt_enable_no_resched";
+"irq_exit" -> "local_softirq_pending";
+"irq_exit" -> "sub_preempt_count";
+"irq_exit" -> "rcu_irq_exit";
+"irq_exit" -> "tick_nohz_stop_sched_tick";
+"__do_softirq" -> "action";
+"__do_softirq" -> "account_system_vtime";
+"__do_softirq" -> "local_softirq_pending";
+}
+
+20:33 2011-8-11
+(13:39 2011-8-12)
+VC0882, SV, power, suspend/resume, 总结, 待整理文档
+1, 休眠环境对内核移植的影响：
+1), 寄存器可以统一映射，这样ddr self refresh后寄存器空间的页表不需要单独考虑是否进入了tlb。
+2, struct clk需要认真看. 
+3, hal层. 有很多东西没有看. 
+4, 亮度控制:
+vimicro/HAL/liblights/lights.c
+frameworks/base/services/jni/com_android_server_LightsService.cpp
+frameworks/base/services/java/com/android/server/WindowManagerService.java
+frameworks/base/services/java/com/android/server/PowerManagerService.java
+frameworks/base/core/java/android/os/LocalPowerManager.java
+
+10:40 2011-8-12
+Linux, 工作总结
+1, vim, ctags, cscope, emacs.
+2, gdb in emacs/eclipse.
+3, kernel module debug in Rvdebugger and gdb
+4, kernel module launch sequence.
+5, porting kernel and file system to the vimicro second generation arm SOC chip  start from the very beginning. 
+6, experience with the full product life cycle from requirements through first customer shipment. 
+
+2, 需要关注的内容:
+1), cgroups: 管理每个task能使用多少memory. 
+
+3, 资源:
+1), http://www.linuxforum.net/
+有很多不错的文章. 
+
+11:22 2011-8-12
+时间管理
+0, 11:00(?)
+
+1, 本日
+1), 30' 11:10-11:45 看之前Linux都做了什么工作. 
+
+13:16 2011-8-12
+嵌入式, 阅读, 重要文档
+Hi, This is an interesting observation -- http://www.eetimes.com/discussion/-include/4218261/Dumbing-down-embedded-design?cid=NL_Embedded&Ecosystem=embedded 
+ Dumbing down embedded design eetimes.com 
+
+Brian Zimmerman  When I first saw a HW RTOS implementation in 1997, it seemed a logical progression of the interrupt controller that would manage multi-core processors and replace the purely SW RTOS packages introduced since 1982. With the addition of a simple context set management scheme (e.g. 8051 or TI/9900), you get thread or process change in one clock cycle from the event. 
+
+Now the SW designer is free to set up the proper design and doesn't need special compilers. But that has been the biggest challenge I've seen, the inability to properly distinguish sync from async SW behavior. And there is some reluctance to make the HW architecture changes in the processor, no doubt due to the economies of scale. Perhaps the industry will finally become aware of the possibilities that have been laying around for 15 years. 
+
+17:47 2011-8-12
+\todo 阅读, 文档
+Dumbing down embedded design
+http://www.eetimes.com/discussion/-include/4218261/Dumbing-down-embedded-design?cid=NL_Embedded&Ecosystem=embedded
+
+17:55 2011-8-12
+Linux, 用户空间, memory分配
+1, mm_struct->start_code, start_brk... 这些是从vmalloc分配出来的么? 之前AE做1G memory时说, 如果kernel enable high memory, 会优先从high memory分配. 也就是说先从high memory分配再从vmalloc分配? 
+
+不是vmalloc分配的。Vmlloc分配的虚拟地址空间在  0xe0800000 – 0xfe000000 (472MB)，只能内核里面调用Vmlloc函数得到。
+
+mm_struct->start_code, start_brk 这个地址是内核从 0 -3G 的虚拟地址空间里找到合适的空间给，
+
+原则是“先分配虚拟地址，然后使用虚拟地址的时候，由于没有映射，会缺页中断，”
+
+缺页中断里面，会从mem_map查找物理内存中没有使用的物理页。   （物理内存管理的时候，有一个mem_map数据，记录所有的物理页的使用情况）
+
+然后映射到真实得物理内存。并将mmu页表放在mm_struct中。
+
+2, 用户空间能直接分配连续memory么? android里面好像通过pmem实现. 有所谓标准的方法么? 
+
+通常做法，用户空间不能直接分配到连续的物理内存。从上面的流程能看出来，不能得到连续的物理内存。因为最终是（从mem_map查找物理内存中没有使用的物理页。）
+
+物理内存是以4K 物理页为单位的，所有的物理页会断断续续地被使用，（不管内核态，还是用户态，都很难分配特别大的连续内存）
+
+Pmem，可以得到连续的物理内存。原理就是预留一块连续的物理内存，然后mmap到 0 – 3G 的虚拟地址空间上了，然后，用户程序就可以用了。
+
+3, swap这个机制在嵌入式Linux也有么? 好像没见到flash上有swap分区.
+
+这个只是理论上，是这么回事，实际没有深入看进去。
+
+4, 回复1:
+那总得有个函数做这个分配吧, 我就是想知道是用的哪个函数. 既然是分配不连续地址, 我就猜是否是vmalloc. 
+或者是alloc_pages等更底层的函数.
+
+18:14 2011-8-12
+android, 智能指针, from wangwenlei邮件
+bamvor: 感觉自己对于软件了解还是很少啊, 有空看看c++和java的东西. 
+http://developer.51cto.com/art/201001/180894.htm
+1, 在使用智能指针后，动态申请的内存将会被自动释放（有点类似Java的垃圾回收），不需要再使用delete来释放对象，也不需要考虑一个对象是否已经在其它地方被释放了，从而使程序编写工作减轻不少，而程序的稳定性大大提高。
+2, Android中定义了两种智能指针类型，一种是强指针sp（strong pointer），一种是弱指针（weak pointer）。其实成为强引用和弱引用更合适一些。强指针与一般意义的智能指针概念相同，通过引用计数来记录有多少使用者在使用一个对象，如果所有使用者都放弃了对该对象的引用，则该对象将被自动销毁。
+3, 弱指针也指向一个对象，但是弱指针仅仅记录该对象的地址，不能通过弱指针来访问该对象，也就是说不能通过弱智真来调用对象的成员函数或访问对象的成员变量。要想访问弱指针所指向的对象，需首先将弱指针升级为强指针（通过wp类所提供的promote()方法）。弱指针所指向的对象是有可能在其它地方被销毁的，如果对象已经被销毁，wp的promote()方法将返回空指针，这样就能避免出现地址访问错的情况。
+
+20:24 2011-08-14
+博客, android, sogou地图, 海纳M8试用搜狗地图
+[2011-08-09] 搜狗地图Android平板客户端V1.0Beta发布上线
+正好我的海纳M8没有离线地图, 抢鲜试试.
+从如下地址下载了apk, 全国概略和北京地图: 
+http://map.sogou.com/shouji/downApk.jsp
+http://map.sogou.com/shouji/downMapData.jsp
+
+
+根据提示, 安装apk后, 把离线地图文件(beijing-v20110607.smap, quanguogailue-v20110607.smap)复制到/sdcard/SogouMap.
+再次进入搜狗地图后, 系统会提示找到离线地图, 并自动载入.
+
+载入后就可以看了. 
+先来一张全国概略: 
+
+
+全国概略地图和北京地图之间系统会自动切换, 再来几个北京地图: 
+海纳M8核心芯片提供商, 中星微所在地, 世宁大厦
+
+鸟巢和附近的地铁八号线车站, 可以清楚看到每个地铁出口.
+
+最后从什刹海到中南海的全图.
+
+有了这个离线地图, 出去玩儿也方便一些. 下次有空试试搜索功能(需要联网).
+
+PS: 小技巧. 使用时, 有时地图上什么也没显示, 可能是因为地图超出屏幕范围了. 
+. 可以把地图缩小到最大. 这样可以看到地图在什么位置, 拖回来就行. 
+
+20:45 2011-08-14
+ES: Engineering Sample 工程样品
+CS: Commercial Sample  商业样品
+MP: Mass Production 量产
+
+9:11 2011-8-15
+VC0882, SV, AE, 发掘量产8寸板周末测试情况, 版本: 0813晚上daily build
+1, 安装搜狗地图，支持离线浏览模式。使用没问题。
+在线模式下使用地图搜索路线无问题. 使用卫星图片搜索后放大时死机, 不清楚是否是882 pad的问题. 
+2, 想测试882通过蓝牙用我的手机gprs上网，似乎需要root权限，没测试成功。
+3, 测试蓝牙发送文件, pass. 工具: 蓝牙助手.
+4, 游戏兼容性
+1), 轰炸机(archipelago)速度很慢。
+2), csi 迈阿密可以玩儿。
+3), 仍然不能玩儿的游戏
+(1), snesoid(超任sfc模拟器): 可以进入，但运行游戏时退回到主界面。
+
+14:32 2011-8-15
+时间管理
+0, 9:35
+
+1, 本日
+1), 30' ICP 882 例会. 
+2), dvfs稳定性. 见"14:34 2011-8-15".
+3), 休眠唤醒稳定性. 见"14:36 2011-8-15". 
+
+14:34 2011-8-15
+VC0882, SV, AE, dvfs稳定性
+1, 上周800MHz运行会死的板子, 今天找chenying换了芯片, 看有无问题. 
+下午做800MHz频点测试. 晚上做自动测试. 
+下午测试800MHz 2小时没有问题. 测试休眠唤醒5次死在休眠时(按唤醒键无反应). 
+给xiaotang继续做测试. 
+2, (17:43 2011-8-26)
+title: 发掘量产10#板换芯片无问题
+hi, chenying
+
+8月15日换芯片的10#板, 换芯片后当天死过一次, 后来再没有死过(QA用了两周左右). 
+当时死机的现象是: 系统在800MHz运行时突然就不动了(touchpanel, 串口都没有反应).
+尝试cpu跑750MHz也会死. 给GPU降频也会死. 看起来和频率也没有太大关系. 
+
+zhangjian
+
+14:36 2011-8-15
+VC0882, SV, AE, power, 休眠唤醒, 按power键有时app未收到唤醒事件
+1, 这个问题之间brg已经改过一些了, 当时是认为7882读按键事件由于i2c读写错误没有读到. 
+这次需要理清楚代码, 看清楚整个流程. 
+2, 正确错误log见"11:26 2011-7-29". 
+从这个"wakeup wake lock: event0-1091"开始入手. 
+1), grep wakeup\ wake\ lock `find . -name *.[ch]`
+./kernel/power/wakelock.c:                      pr_info("wakeup wake lock: %s\n", lock->name);
+当定义"CONFIG_WAKELOCK_STAT"(882定义)会打印, \todo 看这个宏还有什么作用. 
+2), wake_lock_internal()
+增加wake count
+如果是超时锁, 加入到lock->link tail. 
+如果不是超时锁, 加入到lock->link head. 同时设置expires为LONG_MAX. 
+3, 看看什么情况会不上报按键.
+1), v7882_irq_handler()里面如果三次尝试读写7882 src_pnd/status失败. 就会退出中断处理. 如果出现这个情况, 加入打印. 
+这个可能性不大, 因为i2c读写本身没有报错. 
+2), input_event()里面如果是is_event_supported false, 就不会调用input_handle_event. 
+从实际代码看, 没有问题: 
+input_report_key里面会给input_event设置type(EV_KEY), 所以is_event_supported(type, dev->evbit, EV_MAX)判断肯定是对的. 
+
+68 static inline int is_event_supported(unsigned int code,
+69                                      unsigned long *bm, unsigned int max)
+70 {
+71         return code <= max && test_bit(code, bm);
+72 }
+
+注: 
+va7882-key.c probe里面会设置: 
+107         set_bit(EV_KEY, input->evbit);
+108         set_bit(KEY_POWER, input->keybit);
+
+3), input_handle_event
+211                 if (is_event_supported(code, dev->keybit, KEY_MAX) &&
+212                     !!test_bit(code, dev->key) != value) {
+code是从7882代码传入的, 就是KEY_POWER(7882只会报这一个按键). 所以is_event_supported肯定是true. 
+后面这个实际是测试本次按键是否上次传入过, 把
+!!test_bit(code, dev->key) != value)
+结合后面的: 
+__change_bit(code, dev->key);
+就理解了. 如果dev->key里面有了code这个按键, 这次就应该传入value=0, 如果传入了value=1, "!!test_bit(code, dev->key) != value"就fail了. 
+这个问题实际在7882 key input_event_handler里面处理过了(通过last_event判断).
+
+\todo 明天接着看. 
+\todo input device需要再看一看, 对比7882 power key和其它几个按键. 
+\todo rcu_dereference
+
+18:29 2011-8-15
+VC0882, SV, 今日工作总结
+1, 882ICP例会.
+2, 之前800MHz和750MHz都会跑死的fajueMP_10#板, chenying帮忙换芯片, 换芯片后测试2.5小时死在休眠唤醒. 晚上给测试同事做dvfs和pm测试. 
+3, 分析唤醒后屏没亮立刻入睡的问题: 从7882中断开始分析代码, 看看有无风险. 在有风险处加入打印. 目前分析到input_handle_event, 明天继续分析. 目前的函数调用关系如下. 
+
+9:17 2011-8-16
+Linux, kernel, 读书, Professional Linux Kernel Architecture, virtual process memory, 4.1-4.4
+1, The address space of a task is laid out when an ELF binary is loaded with load_elf_binary — recall that the function is used by the exec system call.
+
+2, struct task_struct的struct mm_struct保存每个进程的memory信息. 包括text, data, heap, stack等等. 
+mm_struct里面通过mmap和mm_rb分别保存每个region的信息. 
+struct vm_area_struct * mmap; /* list of VMAs */
+struct rb_root mm_rb;
+
+struct vm_area_struct里面的: 
+	unsigned long vm_start; /* Our start address within vm_mm. */
+	unsigned long vm_end; /* The first byte after our end address
+	within vm_mm. */
+end-start可以得到size, 可以用这个作为链表的练习. 
+
+3, priority tree that contains all vm_area_struct instances describing the mapping of an interval of the file associated with the inode into some virtual address space.
+
+4, (13:01 2011-8-16)根据上午的阅读, 看看能否打印出struct mm_struct里面的所有vm区域. 
+认真读了读代码, 发现要想打印出所有vm area还真不容易.
+
+5, 沿着xiaotao的思路, 计划先搞清楚用户空间到底是如何分配到各种memory的. 
+不考虑high memory机制. 
+1), elf文件加载. 
+在load_elf_binary里面通过elf_map调用do_mmap. 映射每个区域包括text, data, stack, heap, mmap(?)
+2), heap(malloc)
+这个很清楚, 从heap上分配空间都是通过do_brk实现的. do_brk主要工作就是在mm_struct里面加入一个vm_area_struct.
+Recent malloc implementations (such as those of the GNU standard library) now use a combined approach that operates with brk and anonymous mappings. This approach delivers better performance and certain advantages when returning larger allocations.
+去找binoic代码, 没找到malloc实现, 没法确认android binoic malloc里面是否同时使用了mmap和brk. 
+3), do_brk和do_mmap_pgoff实现类似, 是后者的简化版. 
+do_brk和do_mmap_pgoff的区别是没有调用mmap, 这个可以理解, 因为brk本来是在heap上分配. 而heap上的memory肯定已经在load_elf_binary时调用过mmap(通过elf_map). 
+4), 用户显示调用mmap也是通过do_mmap. 
+5), 从目前的分析看, 用户空间分配memory, 在缺页后应该通过alloc_pages分配.
+但是alloc_pages是否就不消耗kernel vmalloc区域了呢? 应该不是. 因为vmalloc区域同时也是给mmap的. 也就是说所有使用了mmap(也就是所有的应用程序memory)都会消耗vmalloc的memory. 
+6), 如xiaotao所说, 所有mmap都不会直接分配memory, 在page fault时调用fault函数(filemap_fault)中使用alloc_pages分配memory. 
+由于在kernel中mmap和vmalloc共用一个地址空间, 所以用户空间memory分配会消耗系统vmalloc区域memory. 
+
+\todo 另外还有个问题是high memory何时起作用. 
+
+6, 今天分析的结果:
+// /usr/src/embedded_dev/call_graph/kernel4ccglue
+// find_vma_prepare vm_get_page_prot user_elf_execution mmap_pgoff do_munmap user_mmap brk do_brk alloc_pages vma_link filemap_fault kmem_cache_zalloc shmem_zero_setup load_elf_binary user_malloc mmap_region __page_cache_alloc page_cache_alloc_cold page_cache_read do_mmap_pgoff security_file_mmap setup_arg_pages may_expand_vm vma_merge start_thread elf_map generic_file_mmap do_mmap
+digraph G {
+"user_elf_execution"[label="user elf execution"];
+"user_malloc"[label="user space malloc"];
+"user_mmap"[label="user space mmap"];
+"user_elf_execution" -> "user_malloc";
+"user_elf_execution" -> "user_mmap";
+"user_elf_execution" -> "load_elf_binary";
+"user_mmap" -> "mmap_pgoff";
+"mmap_pgoff" -> "do_mmap_pgoff";
+"user_malloc" -> "brk";
+"brk" -> "do_brk";
+"do_brk" -> "find_vma_prepare";
+"do_brk" -> "vma_merge";
+"do_brk" -> "kmem_cache_zalloc";
+"do_brk" -> "vma_link";
+"do_mmap" -> "do_mmap_pgoff";
+"elf_map" -> "do_mmap";
+"load_elf_binary" -> "setup_arg_pages";
+"load_elf_binary" -> "start_thread";
+"load_elf_binary" -> "elf_map";
+"load_elf_binary" -> "do_mmap";
+"do_mmap_pgoff" -> "security_file_mmap";
+"do_mmap_pgoff" -> "mmap_region";
+"mmap_region" -> "find_vma_prepare";
+"elf_map" -> "do_munmap";
+"mmap_region" -> "do_munmap";
+"mmap_region" -> "may_expand_vm";
+"mmap_region" -> "vma_merge";
+"do_mmap_pgoff" -> "kmem_cache_zalloc";
+"mmap_region" -> "kmem_cache_zalloc";
+"mmap_region" -> "vm_get_page_prot";
+"mmap_region" -> "vma_link";
+"mmap_region" -> "generic_file_mmap";
+"filemap_fault" -> "page_cache_read";
+"page_cache_read" -> "page_cache_alloc_cold";
+"page_cache_alloc_cold" -> "__page_cache_alloc";
+"__page_cache_alloc" -> "alloc_pages";
+"mmap_region" -> "shmem_zero_setup";
+}
+
+7, \todo
+1), 明天搭个环境. 验证一下. 为了简单使用同样的kernel在OMAP3530模拟器上测试. 
+2), PLKA上说vmalloc也会导致page fault? 这个可以查一下. 
+
+9:45 2011-8-16
+时间管理
+0, 9:40
+
+1, 本日
+1), 15' 9:45-11:31 12:52-15:14(午睡30') 阅读"Professional Linux Kernel Architecture.pdf" virtual process memory. 见"9:17 2011-8-16". 
+2), 10:20-10:40 816问题讨论. 
+3), 30' 业内动态"15:29 2011-8-16".
+4), 16:15-17:01 复习kernel.
+
+15:29 2011-8-16
+业内动态, qualcomm, Adreno GPU; 小米手机试用贴
+1, 移动GPU：高通Adreno图形处理器全解析
+http://sz.zol.com.cn/217/2170676_all.html#p2171578
+高通GPU技术源于ATI, 但与AMD桌面显卡技术不同. 
+Adreno GPU至今已经发布了几款产品，在移动设备中应用比较广泛，这些产品包括：Adreno 130、Adreno 200、Adreno 205、Adreno 220、Adreno 300。现在我们使用的主流产品主要是Adreno 200和Adreno 205。
+Adreno 220参数: 三角形输出率：88M/s; 像素填充率：  532M/s.
+近期的MWC 2011大展上，高通发布了代号Krait（环蛇）的下一代Snapdragon移动处理器微架构，作为Scorpion核心的继任者。Krait系列包含单核MSM8930，双核MSM8960以及四核APQ8064，将全部采用28nm工艺制造。这三款产品情况如下：
+　· 单核MSM8930：全球首款集成LTE Modem的单芯片解决方案，面向主流智能手机，将集成Adreno 305 GPU，性能是第一代Adreno的6倍。
+　· 双核MSM8960：全球首款集成多模式3G/LTE基带的双核方案，面向多任务智能手机和平板机。双核心可实现异步频率，支持双通道LP DDR内存，集成Adreno 225 GPU，图形性能是第一代Adreno 8倍。
+　· 四核版APQ8064：面向下一代计算和娱乐设备，内置四个异步CPU核心，核心最高频率2.5GHz，集成Adreno 320四核GPU，图形性能将是第一代Adreno的15倍以上。整体性能方面，APQ8064是第一代Snapdragon处理器的12倍，同时功耗下降了75%。
+
+评论: 虎斑猫 发表于 06-22 09:55 
+典型的枪文，竟然只字未提 Adreno 最强的竞争对手之一 Nvidia Tegra 系列，高通的芯片方案中强项是在通信处理，其 GPU 的性能一直是短板，跟 PowerVR、Nvidia Tegra系列相比仍有差距，...
+
+2, 小米系统i9000刷机试用
+http://www.miui.com/thread-182316-1-1.html
+原文链接：http://www.mobile01.com/newsdetail.php?id=10950
+
+17:53 2011-8-16
+VC0882, SV, AE, wudetian邮件, Bluetooth Headset模块相关支持
+To:赵原，苏新
+Cc：audio、ril、media相关各位
+Fm：吴德天
+这两天看了audio相关代码，要在现有代码中添加Bluetooth Headset模块，有以下前提条件：
+1，需要拨号应用程序支持；
+2，需要电话铃声支持；
+3，需要在DTMF,SONIFICATION,PHONE,MEDIA四个场景中进行策略切换；目前我们的系统中只支持，MEADIA场景，不存在切换操作；其余三个跟电话相关，需要在打电话模块中进行调试，调试时需要。
+4，需要在3.5的耳机，speaker，Bluetooth-Headset 三个设备在四个场景中进行路由转换；目前我们只有MEADIA场景，并且在MEADIA场景中这三个设备不能正常路由转换，需要Audio相关开发支持；
+5，需要ril相关支持，modem相关代码还没有进行验证。
+ 
+这些前提条件是Bluetooth Headset接听电话所需要的，请各位老大给予支持。
+
+18:05 2011-8-16
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 整理Linux cp15操作代码. 需要独立为模块. 增加脚本: 用脚本读取指定文件读取cp15寄存器并和golden结果做比较. 未完成. 明天继续. 
+2), 分析用户空间到底是如何分配到各种memory的. 见"9:17 2011-8-16"5. 
+
+19:22 2011-8-16
+\todo 中断现场保存在什么地方。
+上一进程现场保存在什么地方。
+
+ Memory mappings of files can be regarded as mappings between two different address spaces to simplify the work of (system) programmers. One address space is the virtual memory address space of the user process, the other is the address space spanned by the ?lesystem. 
+
+10:20 2011-8-17
+时间管理
+0, 10:00
+
+1, 本日
+1), 业内动态. 见"10:21 2011-8-17".
+
+10:21 2011-8-17
+业内动态
+1, Mentor Graphics Announces Common Embedded Software Development Platform for any Stage of Development from Virtual Prototypes to Hardware Emulation and Boards 
+http://www.mentor.com/esl/news/esd-from-virtual-prototypes-to-hardware-emulation?contactid=1&PC=L&c=2011_08_16_fpga_technical_news
+2, Sencha发布移动HTML5图表库
+http://www.infoq.com/cn/news/2011/08/sencha-touch-charts
+1), Canvas和SVG什么关系? 
+2), 这都什么语法啊...
+InfoQ：你们为何选择了SASS语法来编写样式而非SCSS语法或普通的CSS3？
+Sencha：SASS与SCSS是一回事。SCSS只不过是SASS v3中新语法的名字而已。之所以使用它而没有选择CSS3在于它向CSS中添加了很多类似于元编程的功能。比如说，你可以说按钮的颜色比背景色淡20%，并使用变量与函数来驱动应用的全部样式——而不必手工编写全部样式。
+3, 扩展Android框架功能和底层模块的技术要点, 高焕堂
+http://www.infoq.com/cn/presentations/ght-android-technique
+有些观点, 值得注意. 
+4, Beam.js: Erlang Meets JavaScript
+http://www.infoq.com/presentations/Beamjs-Erlang-Meets-JavaScript
+
+18:11 2011-8-17
+VC0882, SV, 工作总结
+1, 支持VC0816量产. 
+1), 原来切频后autotest重启可能是因为816 wdt没法关闭造成的.
+2), 帮shuyu做一个pll 624MHz打包文件, 可能由于816 bootloader限制, 需要panda启动后重新设置部分模块频率. 但是这个打包文件测试半小时跑死. 目前shuyu用手动切频方式测试300_150. 
+
+10:42 2011-8-18
+时间管理
+0, 9:40
+
+1, 本日
+1), -10:42 新闻. 本来想看看IC training, 今天讲专利, 就没过去. 
+2), 试用gong'anmin推荐的android软件. read it later, 鲜果新闻. 
+3), 14:40- 完成cp15工作. 见"14:41 2011-8-18". 
+
+14:41 2011-8-18
+VC0882, SV, arm, kernel, coprocessor, Linux下用户空间读取arm协处理器工具
+1, 之前已经试验过原型. 前天修改了代码. 今天要调通. 
+1), 加入脚本(命令, 默认值, goldren值)
+2), 支持大小写. 
+3), 加入测试寄存器. 
+4), 驱动需要支持cat到读寄存器的结果(未测试).
+
+2, 测试用脚本
+1), 数据文件
+MRC p15, 0, r1, c0, c0, 0 ; 0x413FC082; 0x413FC082; Main ID Register
+MRC p15, 0, r1, c0, c0, 1 ; 0x82048004; 0x82048004; Cache Type Register
+MRC p15, 0, r1, c1, c0, 0 ; 0x00C50078; 0x0; Read Control Register
+MRC p15, 0, r1, c2, c0, 0 ; Unpredictable; 0x0; Translation Table Base Register 0
+MRC p15, 0, r1, c2, c0, 1 ; Unpredictable; 0x0; Translation Table Base Register 1
+MRC p15, 0, r1, c2, c0, 2 ; Unpredictable; 0x0; Translation Table Base Control Register
+MRC p15, 0, r1, c3, c0, 0 ; Unpredictable; 0x0; Domain Access Control Register
+MRC p15, 1, r1, c9, c0, 2 ; 0x00000042; 0x0; L2 Cache Auxiliary Control Register
+2), shell中一读行
+http://www.linuxquestions.org/questions/programming-9/bash-shell-script-read-file-line-by-line-136784/
+while read line; do
+	echo $line
+done
+3), shell中大小写转换
+http://www.cyberciti.biz/faq/linux-unix-shell-programming-converting-lowercase-uppercase/
+echo ASD33f | tr '[A-Z]' '[a-z]'
+结果是"asd33f"
+4), shell中去掉空格
+(1), ${cmd##\ }
+"##"表示把后面的pattern按最大匹配替换. "#"表示按最小匹配替换. 
+(2), echo $cmd
+http://stackoverflow.com/questions/369758/how-to-trim-whitespace-from-bash-variable
+echo一个字符串时会去掉这个字符串的前后空格. 
+
+3, 测试结果:
+bash-4.1# sh /mnt/sdcard/arm_co.sh < data 
+init: untracked pid 1472 exited
+init: untracked pid 1476 exited
+register " Main ID Register": cmd is mrc p15, 0, r1, c0, c0, 0 , default is 0x413fc082, goldern is 0x413fc082
+mrc: 0xee101f10
+result is 0x413fc082
+init: untracked pid 1482 exited
+init: untracked pid 1485 exited
+init: untracked pid 1493 exited
+register " Cache Type Register": cmd is mrc p15, 0, r1, c0, c0, 1 , default is 0x82048004, goldern is 0x82048004
+mrc: 0xee101f30
+result is 0x82048004
+init: untracked pid 1500 exited
+init: untracked pid 1504 exited
+init: untracked pid 1508 exited
+init: untracked pid 1512 exited
+register " Read Control Register": cmd is mrc p15, 0, r1, c1, c0, 0 , default is 0x00c50078, goldern is 0x0
+mrc: 0xee111f10
+result is 0x10c5387d
+init: untracked pid 1518 exited
+init: untracked pid 1526 exited
+init: untracked pid 1530 exited
+register " Translation Table Base Register 0": cmd is mrc p15, 0, r1, c2, c0, 0 , default is unpredictable, goldern is 0x0
+mrc: 0xee121f10
+result is 0x90808019
+init: untracked pid 1536 exited
+init: untracked pid 1544 exited
+init: untracked pid 1548 exited
+register " Translation Table Base Register 1": cmd is mrc p15, 0, r1, c2, c0, 1 , default is unpredictable, goldern is 0x0init: untracked pid 1551 exited
+mrc: 0xee121f30
+result is 0x80004019
+init: untracked pid 1562 exited
+init: untracked pid 1566 exited
+register " Translation Table Base Control Register": cmd is mrc p15, 0, r1, c2, c0, 2 , default is unpredictable, goldern is 0x0init: untracked pid 1569 exited
+mrc: 0xee121f50
+result is 0x0
+init: untracked pid 1580 exited
+register " Domain Access Control Register": cmd is mrc p15, 0, r1, c3, c0, 0 , default is unpredictable, goldern is 0x0
+mrc: 0xee131f10
+result is 0x15
+init: untracked pid 1597 exited
+init: untracked pid 1602 exited
+register " L2 Cache Auxiliary Control Register": cmd is mrc p15, 1, r1, c9, c0, 2 , default is 0x00000042, goldern is 0x0
+mrc: 0xee391f50
+result is 0xcc
+
+4, 读出的值是对的, 但是结果比对不正确. 
+是脚本问题. 
+
+5, 还是要加cache操作. 否则没法保证. 加入icache invalidate操作. 
+
+6, 写文档:
+1), 编译
+zhangjian@ubuntu:~/project/cp15_test$ make CROSS_COMPILE=/home/zhangjian/mydroid_f/prebuilt/linux-x86/toolchain/arm-eabi-4.4.3/bin/arm-eabi-  KERNELDIR=/home/zhangjian/mydroid_f/kernel/
+make -C /home/zhangjian/mydroid_f/kernel/ M=/home/zhangjian/project/cp15_test
+make[1]: Entering directory `/home/zhangjian/mydroid_f/kernel'
+  CC [M]  /home/zhangjian/project/cp15_test/vc088x_bench_arm.o
+  Building modules, stage 2.
+  MODPOST 1 modules
+  CC      /home/zhangjian/project/cp15_test/vc088x_bench_arm.mod.o
+  LD [M]  /home/zhangjian/project/cp15_test/vc088x_bench_arm.ko
+make[1]: Leaving directory `/home/zhangjian/mydroid_f/kernel'
+
+2), 使用
+把vc088x_bench_arm.ko, data和arm_co.sh放到板子上. arm_co.sh放到/system/bin目录并加可执行权限.
+用"arm_co.sh < data"读出data中指明的寄存器. 结果会保存到result.txt中. 
+也可用"arm_co.sh filename < data"指明保存结果到filename中. 
+如果读出值和goldern值相同结果是打印:
+register diff successful. see result.txt for details
+否则打印: 
+register diff fail. see result.txt for details
+
+data和result文件格式: 
+register; default; goldern; result; name
+mrc p15, 0, r1, c0, c0, 0 ; 0x413fc082; 0x413fc082; 0x413fc082; Main ID Register
+
+除了第一行是表头. 每行有五个元素分别是: 寄存器操作命令, 寄存器默认值, 寄存器预期值, 当前寄存器值, 寄存器名称. 如果寄存器预期值, 当前寄存器值相同认为pass.
+如果是输入文件(data), 当前寄存器值可以为空: 
+mrc p15, 0, r1, c0, c0, 0 ; 0x413fc082; 0x413fc082; ; Main ID Register
+
+7, 复习一些kernel modules Makefile
+# Comment/uncomment the following line to disable/enable debugging
+#DEBUG = y
+
+
+# Add your debugging flag (or not) to EXTRA_CFLAGS
+ifeq ($(DEBUG),y)
+  DEBFLAGS = -O -g -DSCULL_DEBUG # "-O" is needed to expand inlines
+else
+  DEBFLAGS = -O2
+endif
+
+EXTRA_CFLAGS += $(DEBFLAGS)
+
+ifneq ($(KERNELRELEASE),)
+# call from kernel build system
+
+obj-m	:= vc088x_bench_arm.o
+
+else
+
+KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+PWD       := $(shell pwd)
+
+modules:
+	$(MAKE) -C $(KERNELDIR) M=$(PWD) 
+
+endif
+
+
+
+clean:
+	rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c .tmp_versions modules.order Module.symvers
+
+depend .depend dep:
+	$(CC) $(EXTRA_CFLAGS) -M *.c > .depend
+
+
+ifeq (.depend,$(wildcard .depend))
+include .depend
+endif
+
+16:01 2011-8-18
+VC0882, SV, arm, arm Cortex-A series programming guide, 超全的arm Cortex-A编程手册; 文档
+DEN0013A_cortex_a_series_PG.pdf
+download from arm website. 从linkedin arm group看到的. 
+
+18:33 2011-8-18
+VC0882, SV, 今日工作总结
+1, 882 ICP例会. 
+2, 完成Linux下cp15工具. 已上传到"D:\VC0882\document\arm\coprocessor_tool", 文档见该目录readme.txt
+
+8:48 2011-8-19
+时间管理
+0, 8:45-20:30
+
+1, 本日
+1), 8:50-10:00 邮件. 早餐. 业内动态. 见"9:46 2011-8-19". 
+2), 看有无. 一次按键未唤醒的问题. 见"10:01 2011-8-19"
+
+10:01 2011-8-19
+VC0882, SV, AE, power, 休眠唤醒, 按power键有时app未收到唤醒事件, 续
+1, 需要写一个脚本判断按了几次按键. 
+2, 8月16日的测试只有一次出错. 
+3, 还是继续追代码吧. 晚上加入打印. 
+4, 从代码看, 只是power key按键down才会持有5s的wake_lock. 
+所以如果没有进入"if(va7882->key.last_event == EVENT_KEY_UP)"分支就会有问题. 
+
+10:10 2011-8-19
+1, zhaoyuan邮件"答复: 新版本测试。"_20110819
+测试测试Image: 10.0.12.160/share/androidbuilds/20110818
+已知重要缺陷:
+1.       Camera长时间录像时，会一定概率发生黑屏显现.
+2.       Divx/VP6/MJPEG 不支持。
+3.       在非动态壁纸开机，开机后玩大型游戏(Asphlat5),按HOME键让游戏驻留后台，设置动态壁纸会导致白屏。
+4.       蓝牙文件传输后休眠，唤醒时系统重启
+相对20110816所作的修改
+1.       Fix 双U-DISK拷贝断线的BUG， 但是需要量产工具做一下修改, SD 量产工具已做修改，测试通过。NAND工具也要同样做修改。
+2.       AgreeYa五种文件格式已经集成，但是Parser本身存在一些BUG
+3.       修改了发掘版本的PRODUCT_NAME（主要为了Fix：雷霆赛车和疯狂卡丁车在8寸发掘机器上不能玩的BUG）
+4.       修改了Clean Build, NAND版本，要编译两次的ＢＵＧ
+5.       为支持FLASH调试，更新了VMTools
+
+2, zhaoyuan上面邮件的附件(release notes)
+2011.08.16
+重要改进:
+Multimedia：
+1.加速Thumbnail的获取。
+2.增加了AV格式的识别
+	AVI: MPEG1/MPEG2 Video，WMA
+  MKV: MPEG1 Video，WMA
+  MP4: MPEG Audio L2，AC3
+  PS: DAT识别
+3.Fix Bug
+	AVI: fourCC识别问题
+  MKV: 初始化数据问题
+  PS: Thumbnail，seek和码流识别问题
+  RMVB: 修改计算B帧时间戳的算法
+  MP4: 音频为MPEG Audio L2及ac3编码时，parser未识别造成不能播放
+  VDEC: 处理MPEG2/MPEG4序列头+数据帧的情况，修改init/decode容错机制
+HDMI:
+1.修复了一个在视频播放的暂停状态切换HDMI时会导致系统崩溃的bug.
+Camera:
+1.在Preview 状态眠，唤醒时Preview窗口黑屏时间过长
+Storage
+1.SD读卡速度优化.
+2.Mass Storage在Nand文件系统时，拷贝断线的BUG
+GPU
+1.解决都市赛车5玩起来非常卡的问题。
+2.更新GPU Driver
+3.恢复频率 300MHz
+Application
+1.去掉Buildin的Voice Search功能，但客户安装应该可以工作
+2.解决电子市场显示字体不全的BUG
+Power/Clock/System
+1.BT 打开时休眠后，唤醒必定重启
+已知缺陷：
+1.USB在做两个卡一起拷贝时，会发生掉线。
+2.Camera长时间录像时，会一定概率发生黑屏显现.
+3.Agreeya开发的ts,mp2ts,tp,flv,f4v 文件格式的支持，还没有加进去
+4.Divx/VP6/MJPEG 不支持。
+5.疯狂卡丁车在8寸屏上无法玩。
+
+19:10 2011-8-19
+QA, QA
+\\10.0.12.198\本地磁盘 (g)\FromShenZhen\Data & Media相容性测试\Video
+
+14:29 2011-8-22
+时间管理
+0, 9:50
+
+1, 本日
+1), 882 ICP例会, 智能指针(sp), binder:
+早上讲的binder的两个文档，下面目录
+\\10.0.2.36\sqmshare\Document\Linux\training\10-Android_env_IPC_MediaPlayer_SurfaceFlinger\android IPC机制
+2), android休眠唤醒. 见"16:45 2011-8-22". 
+3), 支持jinyang调试创维休眠唤醒, 见"17:53 2011-8-22". 
+
+14:30 2011-8-22
+VC0882, SV, AE, QA, 深圳测试出的问题
+自zhaoyuan今日邮件
+1, leisijun
+发掘16bit_0819软件sanity测试已经完成。
+未新发现严重问题。
+新发现问题：
+1. 往SD卡内写数据（如下载数据，拷贝数据等）的过程中按power键灭屏，再次power键会出现50%概率的屏点不亮，拷贝或下载数据完成后，设备恢复正常。
+2. home界面左上角的滑动条滑动隐藏后很难滑动出来，建议和创维项目一样，屏蔽其滑动功能。只能长按home键或点图标才能出现快捷图标
+3. 有时，在安卓市场下载某些应用安装完成后，在主菜单界面找不到该应用的快捷图标
+历史遗留未解决或新衍生问题：
+Camera类：
+1. 概率性出现长时间录像出现黑屏的情况。
+2. camera录像保存后，概率行出现右上角的预览框为黑色。
+3. 在相机预览界面，睡眠后，唤醒屏幕，会闪下绿屏
+4. 拍照或录像后，点击浏览框进入图库，有时照片长时间显示不出来
+Force close问题：
+1. 删除蓝牙发送成功的图片后，进入“传出历史记录”界面，强制关闭退出
+2. 安装一些应用和游戏后，在试玩的过程中出现force close的现象
+3. 设置电子邮箱的过程中，概率性会出现force close的问题
+4. 浏览网页时经常出现提示无响应
+图库与多媒体类：
+1. 打开vortex后点视频播放时vortex经常自动退出，自动重新扫描媒体问题。
+2. 用vortex播放器播放视频文件，频繁操作，会出现force close的现象
+3. vortex列表界面的3种显示方式无法切换
+4. vortex播放器不能执行上一视频和下一视频。
+5. 图片最大放大显示时，浏览界面的菜单和Icon都没有显示出来
+（注：新加的视频容器和解码格式只进行了快速验证，未做仔细测试）
+其它：
+1. QQ for PAD 不能进行视频通话的问题。
+2. PC拷贝文件到内置SD卡出现中断
+3. 内置SD卡的读写速率过低
+4. 在试用过程中出现重启，有台机器半天重启了2次，另外2台OK
+5. 游戏需要需要旋转90度才能正常试玩。
+6. 长时间游戏中出现的卡顿，游戏画面消失等现象。
+7. 系统默认时间的设置需要更改。
+8. 快速插拔充电器会导致设备开机。
+9. 赛车类游戏中，重力感应过于敏感。赛车的方向根本控制不了。
+该版本测试时间较短，不排除会有其它细节性的问题。
+详细的测试报告见附件。
+
+2, caominfeng
+附件是深圳的测试报告，2天测试。
+我邮寄了一个光盘给李军，里面带了一些视频文件，用这些视频文件（非AgreeYa格式）播放后系统会死机、无法睡眠、重启等严重问题。
+————光盘说明文件————
+1、MOV有第一次不能播放，播放器其它成功之后就可以了。
+2、FLVA不支持，先不管；
+3、不支持视频格式：状态比较混乱，会导致整个系统奔溃
+4、00307200-2ne1&BigBang[Lollipop].mv-640X480-FPM4(29.97fps-平均2466Kbps)-MPEG Audio(44.1KHz-96Kbps).ts 播放一半出现未知错误。
+vortex播放器，在进入视频列表界面，会频繁出现vortex自动退出，又自动开启扫描视频文件。
+
+3, leisijun_0821
+我刚到北京160服务器下载了昨天晚上编译的版本测试了昨天导致系统不稳定的片源。
+发现昨天频繁出现的几个问题没有出现：
+1.  进入vortex后，在视频列表界面，vortex会出现频繁的自动返回到上一级菜单扫描视频文件的问题。
+2.  这些视频在播放过程中经常出现的vortex的force close和视频播放到一半提示未知异常播放失败的问题。
+3.  对这些视频进行操作了不能休眠的问题未再发现。
+发掘拿过来的不支持的视频文件夹中共有18个视频文件，18号晚上build版本在vortex里面会把这18个视频全部扫描到，在这18个视频中操作就很容易引发系统不稳定。
+今天取到版本验证，这18个视频在vortex中只扫描到了13个，在这13个视频随便操作，都不会引起设备报force close的错误，播放到一半出现异常现象，播放视频结束后无法休眠等问题。
+在扫描到这13个文件中，只有3个播放正常，其它都是无声音无图像显示黑屏或者只有声音无图像的结果。
+但是，还是有新的问题：
+1.  在mov中的有个视频  D-2 终结者2018—1920x800.mov 有时播放无声音无图像，显示黑屏，有时播放图像和声音都正常的现象。每次休眠后再唤醒去播放这个视频表现的现象存在不一致的的现象。
+又取了我们深圳在测试过程中常使用到的20个视频，都播放正常。
+
+4, leisijun_0821
+补充一个现象：
+今天取到的最新版本对于发掘昨天拿来的那个不支持播放的文件夹中的18个视频文件，在vortex中被扫描到的有13个能正常播放的只有3个。
+这18个片源在文件管理器中能正常播放的有6个。
+特别是对于视频源： 00307200-2ne1&BigBang[Lollipop].mv-640X480-FPM4(29.97fps-平均2466Kbps)-MPEG Audio(44.1KHz-96Kbps).ts
+这个视频源在今天的版本中不会被扫描到vortex中，但是在文件管理器中又可以正常播放。
+在18号取的版本中，这个片源能被扫描到vortex中，就是每次播放这个片源，播放到一半出现未知异常停止播放的提示后，再操作播放其他视频，播放其他视频的
+现象就会变得很混乱，会出现定屏，重启等现象。但是在文件管理器中选择播放，播放正常，也不会出现播放其他视频状态混乱的问题。
+
+16:45 2011-8-22
+VC0882, SV, AE, power, 休眠唤醒, 按power键有时app未收到唤醒事件, 续2
+1, 周末测试结果
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110820_0821$ ../20110816/check1018 log_kernel_0101_000008
+../20110816/check1018 log_kernel_0101_000008
+version: 20110819_1022
+reseting counter
+result error<232106>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<390244>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<429046>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<431873>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<434693>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<458730>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<472696>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<475527>: <4>Suspending console(s) (use no_console_suspend to debug)
+
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110820_0821$ cat log_kernel_0101_000008 | grep -v "^<7>" > log_kernel_0101_000008_level7
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110820_0821$ ls
+log_kernel_0101_000008  log_kernel_0101_000008_level7
+zhangjian@ubuntu:~/project/VC0882_pad/test_result/20110820_0821$ ../20110816/check1018 log_kernel_0101_000008_level7
+../20110816/check1018 log_kernel_0101_000008_level7
+version: 20110819_1022
+reseting counter
+result error<23453>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<38410>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<42020>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<42211>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<42395>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<49133>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<50167>: <4>Suspending console(s) (use no_console_suspend to debug)
+result error<50362>: <4>Suspending console(s) (use no_console_suspend to debug)
+
+2, 周末测试白测试了. 
+因为自动测试是rtc唤醒. 需要看rtc事件为什么没有报上来. 
+目前的问题是按键. 
+
+17:32 2011-8-22
+VC0882, SV, AE, 休眠唤醒, 创维休眠唤醒fail, 创维新板(P1)
+
+ddr micron批次不同. 共三个板子, 两个正确, 错误板子: 
+开机正常: 大于5次. 
+休眠每次都有问题: 5次. 
+
+看log, 死在第一次唤醒, 没有打印AB. 
+
+和jinyang讨论后, jinyang做两个实验: 
+1, 0x2改为0x82; 
+2, 上电改为做ddr training, 看三个板子training结果是否一致. 
+
+(14:43 2011-8-23)
+有问题的板子dt结果是0x1212, 0xcc. 和0x2222, 0x00的理想值有1/4cycle误差.
+理论上说差1/4cycle也应该没问题. 需要看一下用这个值休眠唤醒对不对. 
+另外需要确认ddr self-refresh状态, 会不会是下拉到0的电阻有问题, 同时需要检查其他板子问题: 供电问题, 连接问题. 
+
+(15:25 2011-8-23)
+今天又和jinyang沟通, 创维p0和p1 micron芯片相同, 据硬件工程师讲p0, p1的板子ddr部分没有变化. 
+
+18:34 2011-8-22
+186101
+
+18:34 2011-8-22
+VC0882, SV, 工作总结
+1, 882 ICP例会, 听讲座: 智能指针(sp), binder. 
+2, 查android休眠唤醒问题, 暂无进展. 
+3, 支持jinyang调试创维新板的休眠唤醒问题. 
+
+16:44 2011-8-23
+\todo, root工具
+http://forum.xda-developers.com/showthread.php?t=1056334
+
+17:24 2011-8-23
+VC0882, SV, bootloader, bootloader log parser, 上传文件到CVS
+最近创维MID P1版本休眠唤醒有问题, 为了方便debug, 改进了原有的bootloader log parser并上传到VC0882 CVS(D:\VC0882\882bootloader\tools\log_parser). 
+文件和使用说明
+1, log_parser(perl脚本):
+1), print "bootloader info parser: \n";
+print "base on the VC0882 bootloader release version.\n";
+print "print the bootloader result behind the bootloader log and maintain the other log.\n";
+print "Usage\n";
+print "$0 txt_file_include_bootloader_log\n";
+
+2), 替换log_parser里面的hash表即可支持其它项目的bootloader. 
+
+2, bootloader_msg.c
+1), generate the hash resouce for log_parser.
+output the bootloader hex info and ascii info. 
+2), bootloader_msg是bootloader_msg.c编译的结果. 
+
+3, log4test和log4test.result分别是log_parser的测试文件和测试结果, 供参考. 
+
+17:28 2011-8-23
+时间管理
+0, 10:30
+
+1, 本日
+1), 
+2), 尝试把kernel的链表拿出来. 做双向链表练习测试. (没开始).
+
+18:01 2011-8-23
+VC0882, SV, AE, power, 休眠唤醒, 按power键有时app未收到唤醒事件, 续3, 发现一个问题, 不清楚是否影响开机
+\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110823_AE_pm_suspend_resume___RESERVED
+1, 在fajue_MP9#发现
+正确log
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x8003d7e4
+M0x00000011
+H0x8003d7e4ABM0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x8003d7e4
+M0x00000011
+H0x8003d7e4ABCD<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<E>[va7882]: va7882_key_suspend: last_event(0 for down, 1 for up): 1
+<E>[va7882]: power_key may wakeup
+<I>[va7882]: va7882_power_suspend charging 1200MA
+
+<E>[va7882]: RTC may wakeup
+<E>[va7882]: Warnning:Leave A/B class power Charger in SW mode.
+<E>[va7882]: Warnning:Leave C-class power LDO17 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power LDO7 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power DCDC2 on in suspend mode.
+PM: suspend of devices complete after 15.631 msecs
+v8i2c_suspend_noirq 1
+v8i2c_suspend_noirq 0
+PM: late suspend of devices complete after 1.169 msecs
+<I>[v8-cpu]: v8_cpu_suspend @ 800000KHz
+wakeup data training disable(use wakeup_ddr_training to enable in kernel args)SRCPND_H=00000000 SRCPND_H=00000000
+<I>[v8-cpu]: v8_cpu_resume @ 800000KHz(pll1: 0x18f000c, cpu_clk_cfg: 0x1032001)
+<E>[v8-cpu]: cpu clock rate: 800000000
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+v8i2c_resume_noirq 0
+v8i2c_resume_noirq 1
+PM: early resume of devices complete after 1.176 msecs
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+<E>[va7882]: Missing key down event
+input_handle_event: va7882-powerkey
+evdev_event: event0
+evdev_pass_event: event0-1099
+wakeup wake lock: event0-1099
+evdev_event: event0
+evdev_pass_event: event0-1099
+input_handle_event: va7882-powerkey
+evdev_event: event0
+evdev_pass_event: event0-1099
+evdev_event: event0
+evdev_pass_event: event0-1099
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+<E>[va7882]: va7882_i2c_resume
+<I>[va7882]: va7882_power_resume charging 300MA
+
+mi900g_modem_init
+rtc0:  system time is 138863690712
+rtc0:  rtc time is 946684800
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_enable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_dcdc_set_voltage(DCDC2,1300000,1300000)
+PM: resume of devices complete after 762.623 msecs
+Restarting tasks ... 
+request_suspend_state: wakeup (3->0) at 139311600442 (2000-01-01 00:02:17.104182979 UTC)
+<I>[va7882]: va7882_led_enable
+01-01 08:02:17.088 D/KeyguardViewMediator( 1099): wakeWhenReadyLocked(26)
+done.
+<I>[v8-cpu]: v8_pm_notifier PM_POST_SUSPEND
+suspend: exit suspend, ret = 0 (2000-01-01 00:02:17.127725714 UTC)
+01-01 08:02:17.098 I/power   ( 1099): *** set_screen_state 1
+01-01 08:02:17.108 E/MediaPlayerService( 1482): ===>OvlayThread [0] [0,0,0] [0,0]
+i2c-1: Nack was received
+i2c-1:IO error 0x46 (error -11)
+01-01 08:02:17.118 W/WindowManager( 1099): !!! Unable to find ITelephony interface !!!
+01-01 08:02:17.128 E/Sensors ( 1099): mDelays[0] = 100000000, wanted=18446744073709551615
+01-01 08:02:17.128 E/Sensors ( 1099): mDelays[0] = 200000000, wanted=18446744073709551615
+01-01 08:02:17.128 E/Sensors ( 1099): mDelays[0] = 100000000, wanted=18446744073709551615
+01-01 08:02:17.208 D/SurfaceFlinger( 1099): Screen about to return, flinger = 0x28c5e8
+<I>[v8-cpu]: no need to change clock source
+<I>[va7882]: va7882_dcdc_get_voltage(DCDC1-ARM)
+<I>[v8-cpu]: v8clk_downvol: cpu_clk: there is no need to change voltage.
+<I>[v8-cpu]: v8_target(policy[400000,1000000],400000,0):0
+<I>[va7882]: va7882_led_disable
+request_suspend_state: sleep (0->3) at 144579034174 (2000-01-01 00:02:22.371615288 UTC)
+01-01 08:02:22.358 I/power   ( 1099): *** set_screen_state 0
+01-01 08:02:22.378 D/SurfaceFlinger( 1099): About to give-up screen, flinger = 0x28c5e8
+bash-4.1# PM: Syncing filesystems ... done.
+<I>[va7882]: va7882_dcdc_get_voltage(DCDC1-ARM)
+<I>[va7882]: va7882_dcdc_set_voltage(DCDC1-ARM,1300000,1300000)
+<I>[v8-cpu]: no need to change clock source
+<I>[va7882]: va7882_dcdc_get_voltage(DCDC1-ARM)
+<I>[va7882]: va7882_dcdc_set_voltage(DCDC1-ARM,1200000,1200000)
+<I>[v8-cpu]: v8_pm_notifier PM_SUSPEND_PREPARE set cpu to 800000KHz
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+
+错误log
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x8003d7e4
+M0x00000011
+H0x8003d7e4ABM0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x8003d7e4
+M0x00000011
+H0x8003d7e4ABCD<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<E>[va7882]: va7882_key_suspend: last_event(0 for down, 1 for up): 0
+<E>[va7882]: power_key may wakeup
+<I>[va7882]: va7882_power_suspend charging 1200MA
+
+<E>[va7882]: RTC may wakeup
+<E>[va7882]: Warnning:Leave A/B class power Charger in SW mode.
+<E>[va7882]: Warnning:Leave C-class power LDO17 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power LDO7 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power DCDC2 on in suspend mode.
+PM: suspend of devices complete after 15.062 msecs
+v8i2c_suspend_noirq 1
+v8i2c_suspend_noirq 0
+PM: late suspend of devices complete after 1.176 msecs
+<I>[v8-cpu]: v8_cpu_suspend @ 800000KHz
+wakeup data training disable(use wakeup_ddr_training to enable in kernel args)SRCPND_H=00000000 SRCPND_H=00000000
+<I>[v8-cpu]: v8_cpu_resume @ 800000KHz(pll1: 0x18f000c, cpu_clk_cfg: 0x1032001)
+<E>[v8-cpu]: cpu clock rate: 800000000
+v8i2c_resume_noirq 0
+v8i2c_resume_noirq 1
+PM: early resume of devices complete after 1.107 msecs
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+<I>[v8-cpu]: v8_target(policy[400000,1000000],400000,0):-16
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+<E>[va7882]: va7882_i2c_resume
+<I>[va7882]: va7882_power_resume charging 300MA
+
+mi900g_modem_init
+rtc0:  system time is 137753704482
+rtc0:  rtc time is 946684800
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_enable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_dcdc_set_voltage(DCDC2,1300000,1300000)
+PM: resume of devices complete after 763.165 msecs
+Restarting tasks ... done.
+wakeup wake lock: mmc_delayed_work
+<I>[v8-cpu]: v8_pm_notifier PM_POST_SUSPEND
+suspend: exit suspend, ret = 0 (2000-01-01 00:02:15.974695023 UTC)
+PM: Syncing filesystems ... done.
+<I>[v8-cpu]: there is no need to switch
+<I>[v8-cpu]: v8_pm_notifier PM_SUSPEND_PREPARE set cpu to 800000KHz
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+
+2, 从log中可以看到, 出错情况下, 
+<E>[va7882]: va7882_key_suspend: last_event(0 for down, 1 for up): 0
+而, 正常是: 
+<E>[va7882]: va7882_key_suspend: last_event(0 for down, 1 for up): 1
+说明睡眠时7882按键没有处理完成?!
+
+看了看代码, 是上电是last event设成了0, 改为"va7882_key->last_event = EVENT_KEY_UP". 
+不知道这样改, 对于上电7882按键处理有无问题. 
+
+18:34 2011-8-23
+VC0882, SV, 工作总结
+1, 查需要按多次power key唤醒问题. 根据几天xiaoguo的测试结果, 发现唤醒需要的一个7882状态在启动时设置可能有问题. 修改后明天请QA继续测试. 
+2, 最近创维MID P1版本休眠唤醒有问题, 为了方便debug, 改进了原有的bootloader log parser并上传到VC0882 CVS(D:\VC0882\882bootloader\tools\log_parser). 
+
+10:05 2011-8-24
+公司, ICP, 部门骨干例会?
+成立分公司。
+380, 370. dvr, 710,
+考勤出入里外都刷卡。
+技术和管理两条线。
+
+部门
+现状
+技术提升，和ae合作。
+人员流动大。
+目标
+提高大家的待遇。
+部门发展。
+
+yangmin
+部门地位问题，icd反馈不及时。
+部门之间配合，在ae, icd之间做好分工。
+
+15:06 2011-8-24
+VC0882, SV, AE, 休眠唤醒, 创维P1
+1, 直接用panda_os的dt程序测试. 
+确认是dt问题还是唤醒ddrc配置流程问题. 
+1), 作dt测试, 10000次里面只有9次是不合理结果, 看了问题不在dt上. 
+Training result[0] : RD_SL=0x1212,  DQS_EN_SEL=0xCC, count=7936
+Training result[1] : RD_SL=0x2222,  DQS_EN_SEL=0x0, count=1992
+Training result[2] : RD_SL=0x1222,  DQS_EN_SEL=0xC0, count=61
+Training result[3] : RD_SL=0x2222,  DQS_EN_SEL=0x10, count=2
+Training result[4] : RD_SL=0x2022,  DQS_EN_SEL=0x20, count=6
+Training result[5] : RD_SL=0x1012,  DQS_EN_SEL=0xEC, count=3
+2), 做了两次休眠唤醒, 也是可以的. 
+3), 做自动休眠测试. 
+(1), 编译pmu_sv_fast_wakeup_repeat_exceptionInSram
+编译前需要修改aasp\bootscript.c里面"VIM_PMU_VA7882_FASTSLEEP_TEST"的
+"sleep -fast -script 1",
+改为
+"sleep -fast -script 9",
+因为最新代码里面, 9是表示repeat wakeup测试. 
+(2), 由于没有烧写. 不能在配置rtc寄存器后做reset, 只能做poweroff. 
+usb下载后, 输入如下命令
+pmu  :/>pmic
+pmic  :/>writereg 0xd0 1 
+[PMIC]->_DO_PMIC_WriteReg()
+[PMU   MSG]TEST PMIC: write register: addr = 0xD0, val = 0x01
+pmic  :/>writereg 0xd0 2 1
+[PMIC]->_DO_PMIC_WriteReg()
+[PMU   MSG]TEST PMIC: write register: addr = 0xD2, val = 0x01
+pmic  :/>writereg 0xa2 2
+[PMIC]->_DO_PMIC_WriteReg()
+[PMU   MSG]TEST PMIC: write register: addr = 0xA2, val = 0x02
+pmic  :/>run  rtc 1023
+[PMIC]->_DO_PMIC_RunRtc()
+[PMU   MSG]TEST PMIC: current rtc info 2000-01-01[1] 00:00:00 000047            
+[PMU   MSG]TEST PMIC: current rtc info 2000-01-01[1] 00:00:00 000573            
+s[PMU   MSG]TEST PMIC: current rtc info 2000-01-01[1] 00:00:01 000074           pmic  :/>pmu
+pmu  :/>poweroff
+[PMU   MSG]
+go Fast poweroff step 1...
+[PMU   MSG]go power off ... 
+
+再次按back和power开机, 下载和刚才一样的pak. 启动后系统会根据前面rtc寄存器的配置做自动休眠唤醒. 
+
+每次唤醒后都会check两个16M的memory:
+[PMU   MSG]check memory pattern...
+[PMU   LOG]addr = 0x355140(size = 0x1000000, type = 0)
+[PMU   MSG]check memory pattern successful
+[PMU   LOG]addr = 0x1358700(size = 0x1000000, type = 0)
+[PMU   MSG]check memory pattern successful
+
+用自动测试脚本测试了100次没有出错. 
+
+2, 为什么android下面会有问题呢? 
+ddr配置是一样的. 看了需要比较一下休眠时寄存器配置. 
+1), 会不会是cpu频率问题?!
+用userspace设置到400MHz, 现象依旧. 
+2), 先看一下bootloader log
+唤醒时出错log: 
+[zhangjian@icp-desktop bootloader_log_parser]$ ./log_parser bootinfo_0824_1703_m3s.txt
+M0x00000001 //SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH
+M0x000000d0 //SYS_CACHE_ICACHE_ON
+M0x00000013 //SYS_WAKEUPFAST_PRTKEY
+M0x00000015 //SYS_WAKEUPFAST_CLKSWITCH
+M0x00000070 //SYS_CLK_SWITCH_CPUPLL_SUCCESSFUL
+M0x00000072 //SYS_CLK_SWITCH_CPU_SUCCESSFUL
+M0x00000078 //SYS_CLK_SWITCH_DDRCPLL_SUCCESSFUL
+M0x00000088 //SYS_CLK_RESET_DDRPHY_DLL_SUCCESSFUL
+M0x0000007a //SYS_CLK_SWITCH_DDRC_SUCCESSFUL
+M0x00000074 //SYS_CLK_SWITCH_BUSPLL_SUCCESSFUL
+M0x00000016 //SYS_WAKEUPFAST_DDR_EXIT_SELFREFRESH
+M0x0000080e //DDRC_FAST_SLEEP_START
+M0x0000081d //DDRC_TRAINING_DIS
+M0x0000081b //DDRC_INIT_DONE
+M0x00000825 //DDRC_DRAM_CMD_FINISHED
+M0x00000825 //DDRC_DRAM_CMD_FINISHED
+M0x00000823 //DDRC_ZQ_CTRL0_DONE
+M0x0000080f //DDRC_FAST_SLEEP_END
+H0x8003ee50
+M0x00000011 //SYS_REMAP_JUMP_TO_PC
+H0x8003ee50
+
+panda os下正确唤醒log:
+[zhangjian@icp-desktop bootloader_log_parser]$ ./log_parser bootinfo_0824_1706_pandaos.txt
+M0x00000001 //SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH
+M0x000000d0 //SYS_CACHE_ICACHE_ON
+M0x00000013 //SYS_WAKEUPFAST_PRTKEY
+M0x00000015 //SYS_WAKEUPFAST_CLKSWITCH
+M0x00000070 //SYS_CLK_SWITCH_CPUPLL_SUCCESSFUL
+M0x00000072 //SYS_CLK_SWITCH_CPU_SUCCESSFUL
+M0x00000078 //SYS_CLK_SWITCH_DDRCPLL_SUCCESSFUL
+M0x00000088 //SYS_CLK_RESET_DDRPHY_DLL_SUCCESSFUL
+M0x0000007a //SYS_CLK_SWITCH_DDRC_SUCCESSFUL
+M0x00000016 //SYS_WAKEUPFAST_DDR_EXIT_SELFREFRESH
+M0x0000080e //DDRC_FAST_SLEEP_START
+M0x0000081d //DDRC_TRAINING_DIS
+M0x0000081b //DDRC_INIT_DONE
+M0x00000825 //DDRC_DRAM_CMD_FINISHED
+M0x00000825 //DDRC_DRAM_CMD_FINISHED
+M0x00000823 //DDRC_ZQ_CTRL0_DONE
+M0x0000080f //DDRC_FAST_SLEEP_END
+H0x000a4c84
+M0x00000011 //SYS_REMAP_JUMP_TO_PC
+H0x000a4c84
+
+对比发现错误log多了:
+M0x00000074 //SYS_CLK_SWITCH_BUSPLL_SUCCESSFUL
+按理说不需要配置bus pll, 因为bus和ddr应该是一样的. 
+这个和guye确认了一下, 配置pll时不会像配置clkrst其它寄存器一样做check, 所以配置ddrc clock后修改ddrc pll可能会影响ddrc phy的工作(估计是dll), 因此是有风险的.
+clkrst里面其他寄存器都会check: 如果值一样, 就不会配置. 
+
+在休眠前把bus从pll2切到pll6(bash-4.1# vmtool wr 0x60000048 0x4010163), 连续实验5次没问题. 
+
+3, 加入mozheyuan的patch
+1), 创维p1用的g sensor有变化:
+CONFIG_SENSOR_VC088X_MMA7660
+改为
+CONFIG_SENSOR_VC088X_MMA8452
+2), 不使用uhost电源. 
+kernel/arch/arm/mach-vc0882/board-vortex.c"
+1408         #ifndef CONFIG_MACH_VC0882_M3S
+1409         rt9702_pdata.gpio = v8padc_gpio_by_name(PIN_USBHOST_EN);
+1410         #endif
+gpio-vortex.c
+77 #ifdef CONFIG_MACH_VC0882_M3S
+78 DEFINE_PIN_STATE( GPIO_ID_D13 , PIN_USBHOST_EN  , PINMUX_GPIO, PINDIR_OUT, PINVAL_L, PINDRAIN_OFF, PINPULL_OFF)
+79 #else
+80 DEFINE_PIN_STATE( GPIO_ID_D13 , PIN_USBHOST_EN  , PINMUX_GPIO, PINDIR_OUT, PINVAL_H, PINDRAIN_OFF, PINPULL_OFF)
+81 #endif
+
+4, \todo 修改"arch/arm/plat-vc088x/pmu.c", 加入arm bus ddrc bypass bit的判断. 
+
+19:22 2011-8-24
+VC0882, SV, 工作总结
+1, 分析创维P1板20#休眠唤醒问题. 经过测试. 使用panda_os下ddr training和休眠唤醒都没有问题. 
+后来发现是休眠时保存的pmu clkrst bypass control有问题, 会造成配置ddrc clock后配置bus pll(ddrc pll和bus pll是一个pll), 也就会导致ddrc pll被重新配置. 这可能导致ddr phy dll工作异常. 
+在android下临时修改bus从pll2到pll6, 休眠唤醒5次都正常. 
+下次会修改这个bug, 并重新测试. 
+
+14:21 2011-8-25
+VC0882, SV, liuxiaotao Linux memory管理
+mem_map: 管理物理memory，以page为单位。
+ "mem=820M vmalloc=372M"
+820 + 372 = 1192, 这里比1024M多出的168M就会被映射为high memory. 
+
+16:39 2011-8-25
+时间管理
+0, 14:00
+
+1, 本日
+1), ICP例会. liuxiaotao介绍Linux memory管理. 见"14:21 2011-8-25". 
+2), \todo 准备休眠唤醒讲座. 9月5日--9月9日周要讲. 
+
+16:44 2011-8-25
+VC0882, SV, AE, 休眠唤醒, 创维P1, 续1, 根据昨天分析结果修改代码并测试
+1, 所以没法从寄存器读出的配置: 
+1), 
+469         pPMU->wake_fast = 1;
+470         V8LOGD(V8TAG_PMU, "wake fast is %d", pPMU->wake_fast);
+471         pPMU->clock_switch = 0;
+472         pPMU->wakeup_pc = (unsigned long)__virt_to_phys(wakeup_entry);
+473         pPMU->dram_refresh = 0x2;//0x82;
+485         pPMU->ddr_initdone_bypass = 0;
+
+487         pPMU->ddrcDllOffModeBypass = 1;
+
+clkBypassCtrl
+
+1), backup功能, 不需要配置. 
+<I>[v8-pmu]: 60 27:          GateEnableDelayCount[27,24]0
+2), 休眠唤醒不需要此功能. 但是PMU_FIELD定义了两次REBOOT_FOR_USBDOWNLOAD, 已修改. 
+<I>[v8-pmu]: 61 27:        REBOOT_FOR_USBDOWNLOAD[20,20]0
+3), 486         pPMU->ddrc_zqctrl0_bypass = 0; //正确
+<I>[v8-pmu]: 62 27:           DDRC_ZQCTRL0_BYPASS[17,17]0
+4), 481         pPMU->ddr_set_training_disable = 1;
+482         pPMU->ddr_traning_bypass = 1;
+<I>[v8-pmu]: 64 27:      DDR_SET_TRAINING_DISABLE[16,16]1
+<I>[v8-pmu]: 69 27:           DDR_TRAINING_BYPASS[ 9, 9]1
+5), 没有配置, 默认值是0, 所以没有问题.  
+应该是DDRPhy_IO_CFG_ByPass=0, SW_DLL_RESET_ByPass=0
+<I>[v8-pmu]: 65 27:          Ddrphy_io_cfg_bypass[13,13]0
+<I>[v8-pmu]: 66 27:           SW_dll_reset_bypsss[12,12]0
+6), 正确
+<I>[v8-pmu]: 67 27:          ddrcDllOffModeBypass[11,11]1
+<I>[v8-pmu]: 68 27:           DDR_INITDONE_BYPASS[10,10]0
+7), 未配置. 需要根据clock source配置. 
+<I>[v8-pmu]: 70 27:            BUS_DIVIDER_BYPASS[ 8, 8]0
+<I>[v8-pmu]: 71 27:                BUS_PLL_BYPASS[ 7, 7]0
+<I>[v8-pmu]: 72 27:            DDR_DIVIDER_BYPASS[ 6, 6]0
+<I>[v8-pmu]: 73 27:                DDR_PLL_BYPASS[ 5, 5]0
+<I>[v8-pmu]: 74 27:           CPU_DIVIDER_BYPSASS[ 4, 4]0
+<I>[v8-pmu]: 75 27:                CPU_PLL_BYPASS[ 3, 3]0
+8), 
+<I>[v8-pmu]: 76 27:                   WAKEUP_FAST[ 2, 2]1
+<I>[v8-pmu]: 77 27:                  CLOCK_SWITCH[ 1, 1]0
+<I>[v8-pmu]: 78 27:                  WAKEUP_DEBUG[ 0, 0]0
+<I>[v8-pmu]: 81 30:         POWER_ON_KEY_USB_BOOT[27,27]0
+<I>[v8-pmu]: 84 31:                        UNUSED[31, 0]0
+
+2, 只替换kernel, 看休眠唤醒问题是否解决.
+创维板子似乎没法用tftp. 
+
+3, 编译创维
+1), 配置环境:
+zhangjian@ubuntu:~/mydroid_f$ . build/envsetup.sh
+including device/htc/passion/vendorsetup.sh
+including device/samsung/crespo/vendorsetup.sh
+including device/vimicro/vortex/vendorsetup.sh
+zhangjian@ubuntu:~/mydroid_f$ lunch
+
+You're building on Linux
+
+Lunch menu... pick a combo:
+     1. generic-eng
+     2. simulator
+     3. full_passion-userdebug
+     4. full_crespo-userdebug
+     5. generic_vortex-userdebug
+     6. full_vortex-userdebug
+     7. fj_vortex-userdebug
+     8. m3s_vortex-userdebug
+
+Which would you like? [generic-eng] 8
+
+============================================
+PLATFORM_VERSION_CODENAME=REL
+PLATFORM_VERSION=2.3
+TARGET_PRODUCT=m3s_vortex
+TARGET_BUILD_VARIANT=userdebug
+TARGET_SIMULATOR=false
+TARGET_BUILD_TYPE=release
+TARGET_BUILD_APPS=
+TARGET_ARCH=arm
+HOST_ARCH=x86
+HOST_OS=linux
+HOST_BUILD_TYPE=release
+BUILD_ID=GRH55
+============================================
+
+zhangjian@ubuntu:~/mydroid_f$ ls
+
+2), 编译gsensor library:
+mmm vimicro/hardware/libsensors
+out/target/product/vortex/system/lib/hw/sensors.vimicro.so
+不知道怎么改system.img, 只能系统启动后再放上去. 
+
+3), 打包(创维nand):
+system.img选ubi.system.img
+userdata.img选ubi.data.img
+udiskdata.img选ubi.userdata.img
+
+4), 烧写
+使用0701工具出错. 需要使用jinyang今天给我的工具. 
+先扫描, 再下载. 烧写过程较慢, 大约5分钟. 
+
+19:04 2011-8-25
+VC0882, SV, 工作总结
+1, 882ICP例会, 听xiaotao讲解Linux memory管理.
+2, 解决创维休眠唤醒问题, 代码修改完成, 测试三次正确. 跑自动测试(pm+dvfs).
+
+10:32 2011-8-26
+1, 
+abcdefgh0123456789:;<
+应该是
+abcdefgh0123456789:;<=>?
+有可能是串口问题. 
+
+2, 去掉pmu log, 会不会是打印引起的问题?!(\todo)
+
+3, 同时用电源供电, 看看是否没有进入休眠. 是进入休眠, 但是没法唤醒. 因为一级boot都没有打印, 估计是唤醒源问题. 
+
+4, 现在一般都是5次以内死. 手工测试20次pass, 给QA测试. 
+
+5, 收藏, bianrongguang写的自动测试脚本. 一键启动. 
+1), zj.bat
+adb root
+adb push auto_suspend.sh /system/bin
+adb push cpufreq_test /system/bin
+adb push hexwrite /system/bin
+adb push ins.sh /system/bin
+adb install UITest_dynamic__printWakeTimes.apk
+adb shell chmod +x /system/bin/*.*
+adb shell chmod +x /system/bin/*
+adb shell /system/bin/ins.sh
+2), ins.sh
+#!/system/bin/sh
+echo "/system/bin/busybox sh /system/bin/auto_suspend.sh &" >> /system/etc/init.vimicro.sh
+echo "/system/bin/busybox sh /system/bin/cpufreq_test &" >> /system/etc/init.vimicro.sh
+echo "echo 1 > /sys/module/printk/parameters/time" >> /system/etc/init.vimicro.sh
+echo "echo 8 > /proc/sys/kernel/printk" >> /system/etc/init.vimicro.sh
+
+6, (13:05 2011-8-26)测试了72次正确, 给zhaoyuan发修改.
+1), 列出mozheyuan修改的所有文件:
+find . -type f
+
+原来一般用-name查找名称, 今天查man手册学习了-type
+       -type c
+              File is of type c:
+              b      block (buffered) special
+              c      character (unbuffered) special
+              d      directory
+              p      named pipe (FIFO)
+              f      regular file
+              l      symbolic link; this is never true if the -L option or the -follow option is in effect, unless  the  sym‐
+                     bolic link is broken.  If you want to search for symbolic links when -L is in effect, use -xtype.
+              s      socket
+              D      door (Solaris)
+2), 
+#       modified:   arch/arm/plat-vc088x/pmu.c
+
+为了调试唤醒后无wakelock问题, 加入7882 key打印: 
+#       modified:   drivers/input/evdev.c
+#       modified:   drivers/input/input.c
+#       modified:   drivers/mfd/va7882-core.c
+#       modified:   drivers/mfd/va7882-key.c
+
+7, 经过分析, 确认昨天晚上跑死的原因是休眠时没有响应7882中断, 7882中断一直有效, 所以没法唤醒882. 这个问题可以直接复现. 
+后来发现昨天第一次休眠唤醒正确的原因是第一次的alarm唤醒时间是20-30s, 后面是5-15s, 所以第一次不会遇到休眠过程中唤醒的问题. 
+
+8, 希望简单绕过上面的问题, 但是wfi后面没有复位?
+abcdefgh0123456789:;<=>?0
+1), 我等的时间太短了, 加入打印确认. 
+2), softwre不应该无效. 需要确认寄存器配置. 除非是pmu工作不正常? 
+
+14:44 2011-8-26
+时间管理
+0, ?
+
+1, 本日
+1), 创维休眠唤醒. 
+2), 编程练习: 链表. 初步完成add_list_head, 简单测试通过, 还需要继续测试. 
+
+17:36 2011-8-26
+VC0882, SV, 工作总结
+1, 调试创维P1版本休眠唤醒
+1), 昨天晚上休眠唤醒测试有问题, 经查是休眠加入了不适当的打印导致的. 
+修改代码后, 今天测试, 在不同板子上做几十次测试都正确, 晚上会做自动测试. 
+
+11:12 2011-8-28
+VC0882, SV, 休眠唤醒; 总结, 文档
+
+对比开关机，模块状态转换和休眠唤醒。
+应用程序会在early或suspend时停止。
+
+android休眠唤醒流程，xiaotao找过找过文档。
+
+需要看power manager service。
+
+(16:59 2011-8-29)
+device休眠时关闭中断, pm_enter时打开中断, 避免睡死.
+
+10:51 2011-8-29
+时间管理
+0, 9:40
+
+1, 本日
+1), 882 AE sync. \todo 整理.
+2), 分析唤醒问题. 见"10:54 2011-8-29". 暂无进展.
+3), 15:56 看创维唤醒为什么没法wfi前的中断没有处理. 见"16:09 2011-8-29". 
+
+10:54 2011-8-29
+VC0882, SV, AE, power, 休眠唤醒, 按power键有时app未收到唤醒事件, 续3
+1, 周五xiaoguo帮我复现的问题(据说是fajue MP 1#)
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x8003d7e4
+M0x00000011
+H0x8003d7e4ABM0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x8003d7e4
+M0x00000011
+H0x8003d7e4ABCD<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<E>[va7882]: va7882_key_suspend: last_event(0 for down, 1 for up): 0
+<E>[va7882]: power_key may wakeup
+<I>[va7882]: va7882_power_suspend charging 1200MA
+
+<E>[va7882]: RTC may wakeup
+<E>[va7882]: Warnning:Leave C-class power LDO17 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power LDO7 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power DCDC2 on in suspend mode.
+PM: suspend of devices complete after 14.898 msecs
+v8i2c_suspend_noirq 1
+v8i2c_suspend_noirq 0
+PM: late suspend of devices complete after 1.110 msecs
+<I>[v8-cpu]: v8_cpu_suspend @ 800000KHz
+wakeup data training disable(use wakeup_ddr_training to enable in kernel args)SRCPND_H=00000000 SRCPND_H=00000000
+<I>[v8-cpu]: v8_cpu_resume @ 800000KHz(pll1: 0x18f000c, cpu_clk_cfg: 0x1032001)
+<E>[v8-cpu]: cpu clock rate: 800000000
+v8i2c_resume_noirq 0
+v8i2c_resume_noirq 1
+PM: early resume of devices complete after 1.042 msecs
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+input_handle_event: va7882-powerkey
+evdev_event: event0
+evdev_pass_event: event0-1097
+wakeup wake lock: event0-1097
+evdev_event: event0
+evdev_pass_event: event0-1097
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+<E>[va7882]: va7882_i2c_resume
+<I>[va7882]: va7882_power_resume charging 300MA
+
+mi900g_modem_init
+rtc0:  system time is 1856413591652
+rtc0:  rtc time is 946684800
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_enable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_dcdc_set_voltage(DCDC2,1300000,1300000)
+PM: resume of devices complete after 763.536 msecs
+Restarting tasks ... done.
+<I>[v8-cpu]: v8_pm_notifier PM_POST_SUSPEND
+suspend: exit suspend, ret = 0 (2000-01-01 00:30:54.633805700 UTC)
+PM: Syncing filesystems ... done.
+<I>[v8-cpu]: there is no need to switch
+<I>[v8-cpu]: v8_pm_notifier PM_SUSPEND_PREPARE set cpu to 800000KHz
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+Freezing user space processes ... <I>[v8-cpu]: v8_target(policy[400000,1000000],400000,0):-16
+(elapsed 0.02 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+
+2, 从log里面可以看出按键后虽然获得了wakeup lock, 但是没有request_suspend_state, 也就是说屏幕没有唤醒. 
+另外, 有两次按键. 
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+input_handle_event: va7882-powerkey
+evdev_event: event0
+evdev_pass_event: event0-1097
+wakeup wake lock: event0-1097
+evdev_event: event0
+evdev_pass_event: event0-1097
+
+3, 在两个地方加入打印: 
+1), 确认睡眠时7882 按键中断是否已经处理了. 唤醒时首先打印7882 按键状态. 
+2), 看看wakelock到request_suspend_state之间的状态. 
+state_store()->request_suspend_state()
+从代码看, 是上层通过sys写入的. 写入的什么呢? 估计是"on"
+
+     28 const char *const pm_states[PM_SUSPEND_MAX] = {
+     29 #ifdef CONFIG_EARLYSUSPEND
+     30         [PM_SUSPEND_ON]         = "on",
+     31 #endif
+     32         [PM_SUSPEND_STANDBY]    = "standby",
+     33         [PM_SUSPEND_MEM]        = "mem",
+     34 };
+
+4, 和正确log对比
+<I>[va7882]: enter va7882_rtc_setalarm
+<I>[va7882]: enable va7882 irq
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<E>[va7882]: va7882_key_suspend: last_event(0 for down, 1 for up): 1
+<E>[va7882]: power_key may wakeup
+<I>[va7882]: va7882_power_suspend charging 1200MA
+
+<E>[va7882]: RTC may wakeup
+<E>[va7882]: Warnning:Leave C-class power LDO17 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power LDO7 on in suspend mode.
+<E>[va7882]: Warnning:Leave C-class power DCDC2 on in suspend mode.
+PM: suspend of devices complete after 14.925 msecs
+v8i2c_suspend_noirq 1
+v8i2c_suspend_noirq 0
+PM: late suspend of devices complete after 1.114 msecs
+<I>[v8-cpu]: v8_cpu_suspend @ 800000KHz
+wakeup data training disable(use wakeup_ddr_training to enable in kernel args)SRCPND_H=00000000 SRCPND_H=00000000
+<I>[v8-cpu]: v8_cpu_resume @ 800000KHz(pll1: 0x18f000c, cpu_clk_cfg: 0x1032001)
+<E>[v8-cpu]: cpu clock rate: 800000000
+v8i2c_resume_noirq 0
+v8i2c_resume_noirq 1
+PM: early resume of devices complete after 1.042 msecs
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[400000,1000000])
+<E>[va7882]: Keyup/Keydown
+<E>[va7882]: VA7882 input_event_handler
+input_handle_event: va7882-powerkey
+evdev_event: event0
+evdev_pass_event: event0-1097
+wakeup wake lock: event0-1097
+evdev_event: event0
+evdev_pass_event: event0-1097
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+<E>[va7882]: va7882_i2c_resume
+<I>[va7882]: va7882_power_resume charging 300MA
+
+mi900g_modem_init
+rtc0:  system time is 1819873621945
+rtc0:  rtc time is 946684800
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_enable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_led_disable
+<I>[va7882]: va7882_dcdc_set_voltage(DCDC2,1300000,1300000)
+PM: resume of devices complete after 763.482 msecs
+<I>[v8-cpu]: v8_target(policy[400000,1000000],400000,0):-16
+Restarting tasks ... 
+request_suspend_state: wakeup (3->0) at 1820305723516 (2000-01-01 00:30:18.089412669 UTC)
+<I>[va7882]: va7882_led_enable
+01-01 08:30:18.078 D/KeyguardViewMediator( 1097): wakeWhenReadyLocked(26)done.
+<I>[v8-cpu]: v8_pm_notifier PM_POST_SUSPEND
+suspend: exit suspend, ret = 0 (2000-01-01 00:30:18.112343349 UTC)
+
+01-01 08:30:18.078 I/power   ( 1097): *** set_screen_state 1
+
+5, 一共有这几处不同:
+1), 错误情况的last_event是down. 
+2), 上面说的多了一个按键.
+3), 都打印了"suspend: exit suspend". 
+这个是"suspend()"中pm_suspend()结束后打印的. 这是一个工作队列. 
+由kernel/power/earlysuspend.c或kernel/power/wakelock.c调用. 
+
+6, 查"/sys/power", 看来是"./hardware/libhardware_legacy/power/power.c"做的操作. 
+zhangjian@ubuntu:~/mydroid_f$ cgrep "\/sys\/power"  -R
+./hardware/libhardware_legacy/power/power.c:52:    "/sys/power/wake_lock",
+./hardware/libhardware_legacy/power/power.c:53:    "/sys/power/wake_unlock",
+./hardware/libhardware_legacy/power/power.c:54:    "/sys/power/state"
+./frameworks/base/services/surfaceflinger/DisplayHardware/DisplayHardwareBase.cpp:50:static char const * kSleepFileName = "/sys/power/wait_for_fb_sleep";
+./frameworks/base/services/surfaceflinger/DisplayHardware/DisplayHardwareBase.cpp:51:static char const * kWakeFileName = "/sys/power/wait_for_fb_wake";
+./system/core/toolbox/powerd.c:179:    const char *powerdev = "/sys/power/state";
+./kernel/include/linux/kobject.h:234:/* The global /sys/power/ kobject for people to chain off of */
+./kernel/include/linux/suspend.h:43: *  Valid (ie. supported) states are advertised in /sys/power/state.  Note
+./kernel/kernel/power/snapshot.c:44: * Preferred image size in bytes (tunable via /sys/power/image_size).
+./kernel/arch/mips/alchemy/devboards/pm.c:17: * This code exports a few sysfs nodes under /sys/power/db1x/ which
+./development/simulator/wrapsim/FakeDev.c:70:    { "/sys/power/state",       wsOpenSysPower },
+./development/simulator/wrapsim/FakeDev.c:71:    { "/sys/power/wake_lock",   wsOpenSysPower },
+./development/simulator/wrapsim/FakeDev.c:72:    { "/sys/power/wake_unlock", wsOpenSysPower },
+./development/simulator/wrapsim/SysPower.c:4: * Magic entries in /sys/power/.
+./development/simulator/wrapsim/SysPower.c:46:    const char* cp = pathName + strlen("/sys/power/");
+
+1), g_fds是该文件的局部变量. 
+acquire_wake_lock, release_wake_lock, set_screen_state分别写入wake_lock, wake_unlock, state文件. 
+估计应该是frameworks里面的调用了set_screen_state.
+2), frameworks/base/core/jni/android_os_Power.cpp:75:    return set_screen_state(on);
+102 static JNINativeMethod method_table[] = {
+103     { "acquireWakeLock", "(ILjava/lang/String;)V", (void*)acquireWakeLock },
+104     { "releaseWakeLock", "(Ljava/lang/String;)V", (void*)releaseWakeLock },
+105     { "setLastUserActivityTimeout", "(J)I", (void*)setLastUserActivityTimeout },
+106     { "setScreenState", "(Z)I", (void*)setScreenState },
+107     { "shutdown", "()V", (void*)android_os_Power_shutdown },
+108     { "rebootNative", "(Ljava/lang/String;)V", (void*)android_os_Power_reboot },
+109 };
+2), 
+zhangjian@ubuntu:~/mydroid_f/frameworks$ jgrep setScreenState
+./base/services/java/com/android/server/PowerManagerService.java:1525:                // we *won't* call setScreenStateLocked(true) if it's set.)
+./base/services/java/com/android/server/PowerManagerService.java:1543:                    int err = setScreenStateLocked(true);
+./base/services/java/com/android/server/PowerManagerService.java:1545:                        Slog.w(TAG, "preventScreenOn: error from setScreenStateLocked(): " + err);
+./base/services/java/com/android/server/PowerManagerService.java:1617:    private int setScreenStateLocked(boolean on) {
+./base/services/java/com/android/server/PowerManagerService.java:1618:        int err = Power.setScreenState(on);
+./base/services/java/com/android/server/PowerManagerService.java:1736:                        err = setScreenStateLocked(true);
+./base/services/java/com/android/server/PowerManagerService.java:1747:                        setScreenStateLocked(false);
+./base/services/java/com/android/server/PowerManagerService.java:1796:        // Power.setScreenState and sendNotificationLocked can both handle being
+./base/services/java/com/android/server/PowerManagerService.java:1801:        int err = setScreenStateLocked(false);
+./base/core/java/android/os/Power.java:79:    public static native int setScreenState(boolean on);
+./base/policy/src/com/android/internal/policy/impl/KeyguardViewManager.java:102:        /* doing the overlay status check @ setScreenStateLocked
+3), 7月6日qiaowei帮我找的:
+PhoneWindowManager.java (frameworks\base\policy\src\com\android\internal\policy\impl) 
+4), 一时还对应不上. \todo
+
+7, last_event需要加打印. 打出按键按下和抬起. 
+
+11:12 2011-8-29
+编程技巧, 实验, \todo
+include/linux/stringify.h
+1 #ifndef __LINUX_STRINGIFY_H
+2 #define __LINUX_STRINGIFY_H
+3
+4 /* Indirect stringification.  Doing two levels allows the parameter to be a
+5  * macro itself.  For example, compile with -DFOO=bar, __stringify(FOO)
+6  * converts to "bar".
+7  */
+8
+9 #define __stringify_1(x...)     #x
+10 #define __stringify(x...)       __stringify_1(x)
+11
+12 #endif  /* !__LINUX_STRINGIFY_H */
+
+16:09 2011-8-29
+VC0882, SV, AE, 休眠唤醒, 创维P1, 续2, 分析休眠时中断和wfi控制
+1, 创维之前有问题的板子, 测试100次休眠唤醒没有问题. 
+2, 之前xiaoguo测试的插usb容易死的这个问题, 可能和wfi前有7882按键这个问题是一个问题. 
+3, pm_enter里面打开irq mask之后, 发现系统没法进入休眠. 原因是timer1停止时, 其一级中断没有清
+
+18:40 2011-8-29
+VC0882, SV, 工作总结
+1, 882 AE例会, 本周Ae重点是集成外包公司的ffmpeg parser代码; 优化flash视频; 调通蓝牙电话. 
+2, 调试休眠唤醒问题: 休眠前如果有唤醒事件应该立刻唤醒. 此问题之前解决过, 由于代码调整有出现了. 
+
+10:01 2011-8-30
+时间管理
+0, 9:55
+
+1, 本日
+1), 15:45- 休眠唤醒: 中断开关问题. 见"10:03 2011-8-30".
+
+\todo: 有空想想拔usb线死机问题. 
+
+10:03 2011-8-30
+VC0882, SV, AE, 休眠唤醒, 创维P1, 续3, 分析休眠时中断和wfi控制, 续1
+1, timer的suspend是syscls的suspend, 比较靠后. 
+未定义CONFIG_GENERIC_CLOCKEVENTS时, 才会调用sys_timer的suspend/resume. 
+目前Linux使用的应该是:
+81    839  /home/zhangjian/mydroid_f/kernel/kernel/time/clocksource.c <<init_clocksource_sysfs>>
+     int error = sysdev_class_register(&clocksource_sysclass);
+82    633  /home/zhangjian/mydroid_f/kernel/kernel/time/timekeeping.c <<timekeeping_init_device>>
+     int error = sysdev_class_register(&timekeeping_sysclass);
+
+2, late suspend之后是system class suspend, 目前882有:
+[   76.050000] Suspending type 'vfp':
+[   76.050000] Suspending type 'clocksource':
+[   76.050000] Suspending type 'timekeeping':
+[   76.050000] Suspending type 'timer':
+[   76.050000] Suspending type 'gpio':
+[   76.050000] Suspending type 'v8-clock':
+[   76.050000] Suspending type 'cpu':
+1), timekeeping:
+613         clockevents_notify(CLOCK_EVT_NOTIFY_SUSPEND, NULL);
+614         clocksource_suspend();
+(1), tick_notifier是clockevents_notify的notifier. 
+kernel/time/tick-common.c:
+    388         case CLOCK_EVT_NOTIFY_SUSPEND:
+    389                 tick_suspend();
+    390                 tick_suspend_broadcast();
+    391                 break;
+
+tick_suspend() -> clockevents_shutdown(td->evtdev);
+
+kernel/time/clockevents.c:
+     88 /**
+     89  * clockevents_shutdown - shutdown the device and clear next_event
+     90  * @dev:        device to shutdown
+     91  */
+     92 void clockevents_shutdown(struct clock_event_device *dev)
+     93 {
+     94         clockevents_set_mode(dev, CLOCK_EVT_MODE_SHUTDOWN);
+     95         dev->next_event.tv64 = KTIME_MAX;
+     96 }
+2), 如前所述, clock source的suspend在timekeeping里面被调用. 所以"Suspending type 'clocksource'"其实没干什么. 
+目前882的cs->suspend里面没有停止clock source, 看起来也没有影响. 
+
+3, 修改后已经没有问题. 晚上做自动测试. 
+auto_suspend.sh时间延长. 
+
+18:31 2011-8-30
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 休眠唤醒: 处理好休眠过程中的唤醒事件. 目前已完成修改: 如果休眠前有唤醒事件, 系统走完休眠流程后会reset, 给用户感觉是唤醒. 如果休眠前没有唤醒事件, 用户输入唤醒事件后会唤醒.
+2), 针对上述问题, 用创维三个板子做自动测试. 
+
+2, 次日工作计划
+1), 用发掘板子做休眠唤醒测试. 再次验证这几天针对休眠唤醒的修改有无问题. 
+
+10:42 2011-8-31
+时间管理
+0, 10:30
+
+1, 本日
+1), 14:17- 看昨天休眠唤醒结果. 
+
+2, \todo
+1), 考虑上传代码. 
+
+11:03 2011-8-31
+业内动态, arm, Cortex-A8, 高通, Scorpion, Amazon’s tablet, Apple’s A6
+1, 今天看linkedin讨论, 看到两篇介绍高通芯片的文章, 感觉不错, 收藏了, 以后细看.
+linkedin讨论, 里面有对于Scorpion和Cortex-A8的对比, 似乎前者性能好一些:
+http://www.linkedin.com/groups/TI-NVIDIA-How-Qualcomm-s-85447.S.68210584
+How Qualcomm’s Snapdragon ARM chips are unique
+http://www.extremetech.com/mobile/94064-how-qualcomms-snapdragon-arm-chips-are-unique
+Qualcomm Reveals Details on Scorpion Core
+http://www.bdti.com/InsideDSP/2007/11/14/Qualcomm
+
+2, 同时发现extremetech这个网站不错, 有空关注一下:
+http://www.extremetech.com/category/mobile
+1), Amazon’s tablet will make or break Android
+http://www.extremetech.com/computing/94228-amazons-tablet-will-make-or-break-android
+2), 
+Shadows of the A6: What to expect from Apple’s next microprocessor
+http://www.extremetech.com/computing/94198-shadows-of-the-a6-what-to-expect-from-apples-next-microprocessor
+If current rumors are accurate, the A6 will be a quad-core Cortex-A9 on 28nm. This will make it one of the first 28nm CPUs on the market.
+
+3, 技巧, linkedin网址转为实际网址
+http://www.linkedin.com/news?viewArticle=&articleID=730435802&gid=85447&type=member&item=68210584&articleURL=http%3A%2F%2Fwww.extremetech.com%2Fmobile%2F94064-how-qualcomms-snapdragon-arm-chips-are-unique&urlhash=hW71&goback=.gde_85447_member_68210584
+对应的实际网址是
+http://www.extremetech.com/mobile/94064-how-qualcomms-snapdragon-arm-chips-are-unique
+
+14:17 2011-8-31
+VC0882, SV, 休眠唤醒
+1, 看昨天测试结果
+
+arch/arm/plat-vc088x/pmu.c.bak.0831_1438
+
+18:11 2011-8-31
+VC0882, SV, 复位方式改变, 影响了dfu工作
+1, rstn会reset整个882. 
+2, 即使882和7882上电前插入了pc usb, 上电后也会检测到插入中断. 
+
+18:30 2011-8-31
+职业规划, zhaoyuan
+下午和zhaoyuan聊了一下，主要涉及到楼下工作评价，未来工作建议，奖金三个事情。
+1, 未来工作建议：
+1), arm方向，做arm专家，考虑去arm公司或芯片公司。
+2), linux方向: 
+(1), 改进现有8系列验证方法：用linux直接做验证。
+(2), 研究双核对kernel的影响。
+3), 另外建议我focus在8系列上。关注一下公司新的8系列芯片。
+不建议我完全转到android上，明年android市场可能会洗牌。
+
+2, 我自己的考虑。
+1), 深入做memory分析
+604的板子上如果有1g memory，考虑结合模拟器研究1g memory下用2G+2G, 这要求对momory有很深的理解，正好和我目前做的东西结合起来。这里面第一个难点可能是要理解library如何加载到linux系统中。
+2), 如果1)能完成，就考虑做882模拟器。
+

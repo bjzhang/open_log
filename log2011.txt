@@ -1,0 +1,1847 @@
+
+13:05 2011-1-4
+项目, 编程练习, logAssistant之后的项目
+logAssistant项目前到了较稳定阶段，考虑开一个c语言的项目配合编程练习。
+今天上午是考虑用魔方, 但是担心这个东西界面上的工作太多, android上面界面又是java的. 担心c语言的练习量不够. 
+刚才简单看了看android应用程序开发, 看起来还需要学习3d. 这基本是学新东西了, c语言编程联系的比重太少. 
+看来还是要想一想其它项目. 
+
+10:58 2011-1-6
+软件技巧, Linux, 加密解密
+1, tar, gzip打包, 加密, 结果是result_file.tar.gz.openssl, 密码是password
+tar zcvf - source_file | openssl des3 -salt -k password | dd of=result_file.tar.gz.openssl
+2, 解密和解压缩. 
+dd if=result_file.tar.gz.openssl | openssl des3 -d -k password | tar zxf - 
+
+14:30 2011-1-10
+软件技巧, Linux, bash, shell; android, sl4a; 递归搜索
+1, 上次nand上面解压缩的kernel, 在界面上没法删除. 
+我的mp4上的andorid, busybox里面rm不支持-f参数, 所以没法删除非空目录. 
+2, 实验android sl4a, 提示找不到"Unix.pm", 搜了搜, sl4a上面有这个issue, 看来找不到unix.pm这个问题是个共性问题, 可能是sl4a还需要完善吧.
+3, 只好用bash解决问题, 开始是在pc上用find找到文件/目录, 然后替换为删除命令, 这样用于删除文件还可以, 删除目录就很费劲了, 因为每次都是先显示目录, 再显示目录下的文件和目录, 相当于删除n级目录需要支持n次, 有点麻烦. 
+4, 最后还是用bash脚本写的, 写下面这个脚本用了半小时: 
+dir=$1
+filelist=`ls -a $dir`
+echo "###currrent dir is $dir"
+#echo "########filelist is $filelist########"
+
+for file in $filelist; do
+        if [ "." = $file ]; then
+                continue
+        fi
+        if [ ".." = $file ]; then
+                continue
+        fi
+        if [ -d $dir/$file ]; then
+                ./test.sh $dir/$file
+        else
+                rm $dir/$file
+        fi
+done
+rmdir $dir
+
+11:29 2011-1-13
+软件技巧, 正则表达式, editplus, 搜索, perl, logAssistant, sl4a, open logfile for android
+1, 先看结果:
+
+use strict;
+use warnings;
+
+use Android;
+
+my $droid = Android->new();
+
+my $year = `date +%Y`;
+my $month = `date +%m`;
+chomp $year;
+chomp $month;
+
+my $file_extension = &selection;
+
+my $filename = "/sdcard/log/log".$year.$month.$file_extension.".txt";
+
+if ( -e $filename ) {
+} else {
+    $filename = "/sdcard/log/log".$year.$file_extension.".txt";
+}
+$droid->view("file://".$filename,"text/plain");
+
+sub selection{
+    my $title = 'Alert';
+    $droid->dialogCreateAlert($title);
+    $droid->dialogSetItems( [ qw /vimicro think other/ ] );
+    $droid->dialogShow();
+    my $response = $droid->dialogGetResponse()->{'result'};
+    my $item = $response->{'item'};
+    print "item is $item\n";
+    my $result;
+    if ( $item eq "0" ) {
+        $result = "vimicro";
+    } elsif ( $item eq "1" ) {
+        $result = "thinking";
+    } else {
+        $result = "";
+    }
+}
+
+2, 这次学了几个东西:
+1), 调用系统命令
+调用系统命令可以用system, exec等, 也可以用``(反单引号). 后者和bash类似, 都会把命令的结果返回. 例如下面命令把date结果保存到$year字符串. 
+my $year = `date +%Y`;
+2), 文件检测命令
+这个也是和bash类似. 例如"-e", "-f", "-d"分别测试文件是否存在, 是否是文件, 是否是目录, 成功返回真. e.g.
+"if ( -e $filename )"
+3), dialog使用和"->"
+这个虽然参考别人的代码(参考了PHP, phony, 它们语法和perl差不多), 还是不太理解. 看来关键是对"->"的理解. 完全没搞懂. 
+my $response = $droid->dialogGetResponse()->{'result'};
+my $item = $response->{'item'};
+现在只能理解到如果前面是"dialogSetItems", 就用上面这个. 如果是which就把item替换为which.
+
+8:31 2011-1-14
+软件技巧, android, 触摸屏
+发现android软件技巧：按住屏幕中央和四边或四角会有不同常用功能，例如ireader: 亮度，字体，跳转等。
+
+12:44 2011-1-14
+业内动态, 博客
+1, Nvidia宣布进军CPU市场挑战英特尔
+http://laoyaoba.com/ss6/?action-viewnews-itemid-159832
+Nvidia表示，将利用ARM架构开发CPU，产品开发代号为“丹佛计划”(Project Denver)。消息宣布后，Nvidia周三在纳斯达克市场常规交易中上涨7.67%，报收于16.98美元。
+与此同时，微软也宣布将开发一款兼容ARM处理器的Windows操作系统。微软以往只针对英特尔处理器开发Windows操作系统，而本次支持ARM表明“Wintel”联盟关系已经逐渐破裂。
+就在Nvidia宣布开发CPU的同时，英特尔刚刚开始对Nvidia的图形处理业务展开进攻。英特尔周三推出了一系列整合图形处理能力的芯片，并有望降低Nvidia低端图形芯片的市场需求。
+bamvor: 看来nv的动向很值得关注. 
+2, 梅耶尔辞职：AMD光鲜下的隐忧
+http://blog.sina.com.cn/s/blog_4cab48ba01017hio.html?tj=1
+凌晨，惊闻AMD公司总裁兼CEO梅耶尔(Dirk Meyer)已经辞职，并退出董事会。对此，业内一片哗然，随即AMD的股价暴跌4%。业内之所以对梅耶尔的辞职感到震惊，是因为自其上任后，AMD的业绩得以恢复，而从目前的势头看，其融合了CPU和GPU（图形处理芯片）的APU（原为Fusion）也取得了业内的认可。在看似利好的形势下，梅耶尔却选择了离开AMD（或者是被离开），确实令人感到费解。对此，AMD称，有信心为股东创造更多价值，这将需要公司实现大幅增长，确立市场主导地位，并获取丰厚利润。我们相信，此时领导层的更迭，将提高公司实现上述目标的能力。
+综上所述，笔者认为，梅耶尔的离去，虽然令业内震惊，但也反映出其在任时留下的隐忧，即并未在传统的PC市场提升和稳固自己的地位，而在进入新的领域之时，又充满了不小的变数。由此看，不管谁是梅耶尔的继任者，AMD目前光鲜下的挑战依然不小。
+
+3, 十大关键词 盘点瑞芯CES2011新品热点
+http://www.esmchina.com/ART_8800113747_1100_2101_3100_0_b6d120cc-05.HTM
+Cortex-A8@1.2G, 1080p, android2.3, TD等等. 
+
+4, MonoDroid架起.NET与Android之间的桥梁
+http://www.infoq.com/cn/news/2011/01/MonoDroid
+作者 Abel Avram 译者 赵劼 发布于 2011年1月9日 下午11时57分
+MonoDroid将完整的Mono虚拟机带到了Android上，让.NET开发人员可以为Google的移动操作系统编写应用程序。开发人员现在可以同时面向iOS，Android和Windows Phone 7编写应用程序了。
+
+14:54 2011-01-15
+嵌入式, 业内动态, 平板电脑, 书: Linux kernel
+1, 对2011年平板电脑的预测
+http://www.eetimes.com/electronics-news/4212178/Tablet-flood-to-disrupt-display-market-
+平板电脑竞争激烈, 苹果的市场份额会不断被蚕食: 
+Global tablet shipments are expected to more than triple in 2011, rising to 57.6 million units, according to the firm's latest forecast. Apple is expected to retain market dominance with 70.4 market share this year and 61.7 percent in 2012,
+平板电脑的发展对存储, LCD的影响: 
+media tablets, already cannibalizing sales of netbooks and smartbooks, will hurt hard disk drive (HDD) sales because tablets utilize solid state drives (SSDs). 
+Massive investments in new materials, processes and production capacity will enable Samsung ...  as well as LG and perhaps one or two other display companies to drive AMOLED penetration deeper into mobile devices, the firm predicted
+
+2, 书: 深入Linux内核架构(全球开源社区集体智慧结晶，领略Linux内核的绝美风光) 
+http://www.china-pub.com/196739#ml
+这里下载了英文版: 
+http://linux.chinaunix.net/bbs/viewthread.php?tid=1050953
+下载下来才发现原来就下载过了, 当时看了一点就没有继续. 
+
+10:29 2011-1-17
+嵌入式, 业内动态(2010年1月16日), 架构, arm, arc, 新岸线, 量产低功耗
+1, Synopsy supports Android on ARC processor
+http://www.eetimes.com/electronics-news/4212201/Synopsy-supports-Android-on-ARC-processor
+EDA software and IP licensor Synopsys Inc. has announced that the Froyo 2.2 version of the Android operating system is supported on the ARC 750D configurable processor core.
+Synopsys gained possession of the ARC 750D when it acquired Virage Logic Inc. for about $300 million in 2010. The processor runs at 1.1-GHz and delivers 1800-DMIPs in an industry standard 40-nm manufacturing process. ARC processors ship in more than 550 million ICs annually, Synopsys said.
+之前没有关注过arc, 去synopsys网站看了看资料:
+http://www.synopsys.com/dw/ipdir.php?ds=arc_750d
+在TSMC 40G工艺下能够到1135MHz.
+七级流水线, 支持dsp指令, 支持jtag调试, 支持amba总线(axi, ahb)
+
+2, 发现大家对于新岸线的arm很关注, 看起来这个SOC是TSMC，ARM，Synopsys, GUC, thundersoft几家参与做的, http://laoyaoba.com/forums/viewthread.php?tid=464906&extra=page=1&page=3:
+
+好像还有人在争议到底谁最有价值？ TSMC，ARM，Synopsys, GUC
+以我的判断：
+1）现在做40工艺，除了TSMC好像也找不到别的合作伙伴了，谁都一样，所以千万别把TSMC扯进来；
+2）ARM，有可能是最大的赢家，除了最开始的license fee之外（好像有人写USD500M，大哥可能对英文数字描写用的不多，500M可是5亿美元啊，新岸线再有钱也付不起！，应该是5M吧！），ARM还要抽Royalty（新岸线每卖出一颗芯片就得给ARM交份子钱），ARM的风险最小利益最大，在中国找了个金主一起完。先把自己的那份拿走，然后等着秋后的收成，如果有的话就大分一笔，没有的话就拍拍收去找下一个有钱的SB金主；
+3）Synopsys, 主要的连接IP（SATA，USB）应该是他们的吧！不知他们在TSMC 40工艺下的IP以前有没有量产（以我的经验来看应该是没有了！），没准他们拿新岸线当了一回白老鼠；
+4）GUC，挣点辛苦钱而已，看能不能接到新岸线的量产订单了？不过别又来一个创毅视讯！其实现在的后端实现没那么神秘了，不过做好也没那么简单！
+
+3, 上面文章提到guc, 原来只知道score. 下面这个网页列出了低功耗的设计:
+http://www.eetrend.com/yellowpage/100019607
+Low Power Design Platform 
+Target Methodology
+ Implementation and Verification  
+Leakage
+Power
+Reduction PSO Power Shut Down
+ .external power shutdown
+.customized low leakage I/O power switch 
+Power Gating ?coarse grain MTCMOS
+.rush current analysis / decap cell insertion
+.isolation cell insertion & verification
+.data retention (FF and memory) 
+Multi-VT
+ .multi-VT libraries optimization 
+Dynamic
+Power
+Reduction Low power CTS ?clock gating clone/de-clone
+.inverter tree & peak power mitigation 
+Multiple Supply Voltage ?multiple voltage library characterization
+.voltage islands with level shifter insertion 
+DVFS
+ .power mode verification/optimization
+.dynamic clock tree balance
+.synchronization logic across power domains 
+
+10:34 2011-1-17
+电视剧, 转帖: LOST 结局全方位解析
+按: 迷失的第一, 第二, 第六季我都完整看了, 最终结局的确有些想不明白, 或者说由于有些剧情我觉得太不合理, 所以没法接受. 
+不过从另一个角度说, 对于一个喜欢思考的也有迷茫的人, 看迷失还是很给我启发/启示的. 
+正如之前看<flash forward>和上周末看<刑事侦缉档案IV>也挺过瘾的. 
+原文地址: 
+1, LOST 结局全方位解析http://tieba.baidu.com/f?z=779417086&ct=335544320&lm=0&sc=0&rn=30&tn=baiduPostBrowser&word=lost&pn=0
+2, 热播美剧《迷失》第6季大结局 观众斥结尾太烂
+http://ent.sina.com.cn/v/u/2010-05-26/11202969695.shtml
+延伸阅读
+《迷失》之后，我们看什么
+《不寻常家庭》
+该剧由《盾牌》男星迈克尔·奇克里斯和《嗜血法医》女星朱莉·本兹主演，讲述一家四口出门旅行遭遇坠机，飞机掉进亚马孙河，劫后余生的四人都产生了超能力，一家人不得不开始适应这不寻常的新生活。
+《泰若星球》
+该剧演员阵容十分强大，由凯文·贝肯和凯尔·钱德勒担任主演。欣闻
+相关链接
+《24小时》走过9年终于结束
+Fox电视台的《24小时》北京时间昨天正式上演大结局。八季反恐故事，带领观众走过了九个年头(中途因编剧工会罢工停播一年)，主角杰克·鲍尔(中国粉丝昵称其为“小强”)也历经了N次升级，变成了一个铁打的超级战士。大结局中，小强与女儿和克洛伊诀别，场面极度感人，很多粉丝看了都禁不住流下眼泪。王文
+
+10:57 2011-1-17
+业内动态, TSMC研发投入位列全球半导体前十
+TSMC vaults into top 10 in R&D spending
+原文地址: http://www.eetimes.com/electronics-news/4212193/TSMC-vaults-into-top-10-in-R-D-spending
+从文章看, TSMC现在是fabless, foundry两条腿走路. 
+The jump in R&D spending by TSMC is the latest result of the success of the fabless-foundry model and the increase in IDMs migrating to fab-lite models, IC Insights noted.
+原来以为TSMC只是foundry, 研发投入其实不是很高, 现在看来是转型了. 
+IDMs and fabless suppliers typically spend about 15 to 20 percent of their revenues on R&D, foundries invest only about 5 to 10 percent of their revenues in R&D.
+研发投入前十二依次是intel, 三星, ST, Rensas, Broadcom, 东芝, Qualcomm, TI, AMD, TSMC, Marvell, Nvidia. 
+这次又看到了nvidia, 看来研发投入高是公司能否快速发展的前提. 
+对比一下2010年十大半导体公司: intel, 三星, 东芝, TI, 瑞萨电子(Rensas), Hynix, ST, Micron, 高通(qualcomm), 英飞凌.
+这里面都进入前十的是: intel, 三星, ST, Rensas, TI, Qualcomm.
+另外Broadcom, AMD, TSMC, Marvell四家是研发前十二但不是收入十大, 也许这几家公司是有潜力的公司, 可以关注一下. 
+
+13:04 2011-1-18
+业内动态, nand之后的存储器, 100款Linux开源软件, 关注Linux2.6.37内核改进
+1, nand之后的存储器
+http://www.eetimes.com/discussion/other/4212245/What-s-after-NAND-
+what's after NAND? And they take a look at a number of alternative candidates to replace floating-gate NAND flash memories, including spin-torque-transfer MRAM, phase change memory (PCM), conductive bridge memory, metal oxide-based valence change memory, as well as vertically stacked implementations of memory cells or 3D memory.
+
+2, 不知道这些你就OUT了！100款开源软件
+http://server.it168.com/a2010/0811/1089/000001089290_all.shtml\
+好的软件可以极大提高工作效率，完成一些不可能完成工作。然而我们也常常为选择哪款软件而头疼，本次为大家推出的100款软件都是经过整理分类的，而且最重要的是100款软件都是开源免费且使用于Linux环境下，大部分都可以直接从官网上下载使用。如果你完全没有接触过以下我介绍的这100款软件，我只能说一句你OUT了!
+这里面有些我用过, 例如meld, eclipse, openoffice等等. 
+还看到其它一些我感兴趣的软件, 例如tkdiff(用tcl写的diff前端工具, 和meld类似), zim(日志工具, 支持插入图片等, 这个思路正是我的日志管理工具下一步希望做的).
+
+3, 关注Linux kernel 2.6.37
+http://kernelnewbies.org/Linux_2_6_37
+Linux 2.6.37 released 4 January, 2011.
+1), power方面, cpufreq改进了ondemand: 
+http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=3f78a9f7fcee0e9b44a15f39ac382664e301fad5
+Adds a new global tunable, sampling_down_factor.  Set to 1 it makes no
+changes from existing behavior, but set to greater than 1 (e.g. 100)
+it acts as a multiplier for the scheduling interval for reevaluating
+load when the CPU is at its top speed due to high load.  This improves
+performance by reducing the overhead of load evaluation and helping
+the CPU stay at its top speed when truly busy, rather than shifting
+back and forth in speed.  This tunable has no effect on behavior at
+lower speeds/lower CPU loads.
+This patch is against 2.6.36-rc6.
+This patch should help solve kernel bug 19672 "ondemand is slow".
+2), ftrace的dynamic trace可以使用了, \todo 有空实验:
+http://git.kernel.org/?p=linux/kernel/git/torvalds/linux-2.6.git;a=commitdiff;h=80be7a7f642719bf99fc49692fc77d6333f51a73
+Dynamic ftrace for ARM has been disabled since 07c4cc1cdaa08f ("ftrace:
+disable dynamic ftrace for all archs that use daemon").  Now that the
+code has been updated, re-enable it.
+
+13:50 2011-1-18
+嵌入式, 回帖, 发展方向, 一个硕士二年级在读学生的困惑
+http://linux.chinaunix.net/bbs/thread-1177084-1-1.html
+1, passionthean
+一个硕士二年级的学生的困惑,我是一名在读的硕士，现在研二了（信号与信息处理专业），硕士时间已经过了一半多，我现在很困惑，因为我的研究方向是图像处理，偏理论的，天天被导师要求到实验室看论文，有机会编程也是在，MATLAB上面编一些小程序。下半年就要找工作了，我现在很急，因为发现自己没有什么技能，C语言会丁点皮毛，还停留在语言层面，连一个熟悉的IDE平台也没有，结合自己本科的专业(电子信息)我想往嵌入式方向走，嵌入式的话对C/C++要求很高吧？但是限于条件，我们实验室没有开发板之类的工具，唯一能利用的就是院里面的集群上面装了linux，可以在上面联系C/C++编程，还有就是我的那台PC机，哪位牛人对我目前的状况有什么好的建议么？
+
+2, linyunxian
+我研究生毕业两年多了... 以过来人的身份说一点浅见吧。
+matlab， 算法 ， 理论... 要比想象中的有用。 学的时候迷惘大多是限于抽象能力不够，与应用场景联系不起来，心里没底。像医疗器械，金融，自动化控制领域等对这块的人需求多些。
+matlab建模，算法等就像内功，需求较长的积累。有一定的积累后，更容易进一些较好的公司，门槛相对较高，起点也高些。没有这些基础基本上较难有机会这些特定的领域内发展。
+语言，开发板等就像招式， 在项目环境里，较短的时间内就可以熟悉一些，有较多的机会和环境去尝试。
+我现在还在补习以前的拉下的理论知识，像 蚁群算法， 遗传算法之类的... 希望来年可以做一些更  intelligent 的工作。
+
+3, 同5楼, 我也是硕士毕业2年多.
+学嵌入式开发用模拟器也可以, 不一定使用开发板. 我当初学习嵌入式Linux, 开始半年都用模拟器玩儿的. 
+例如qemu, skyeye都可以. 现在模拟器做的已经很完善了. 可以模拟lcd, 触摸屏, nand flash, sd等众多设备. 对于学习足够了. 
+
+13:29 2011-01-22
+android, sdk, kernel, 在android模拟器qemu上调试Linux kernel
+1, 上网查了一下, goldfish kernel似乎只支持到2.6.29，难道高版本的kernel在模拟器上有问题？
+PS: 根据"10:32 2010-11-23"的信息，关注linaro qemu进展，看来计划是5月份release：
+Version Series Expected Released Summary 
+ Linaro QEMU 11.05-final  11.05  2011-05-28  not yet released  
+2, 参考"http://www.cnblogs.com/mengshu-lbq/archive/2010/12/23/1914953.html"下载goldfish kernel
+git clone git://android.git.kernel.org/kernel/common.git
+git branch -a
+git checkout remotes/origin/archive/android-gldfish-2.6.29
+3, (21:14 2011-01-22)glibc
+[bamvor@localhost glibc-2.11.3]$ pwd
+/usr/src/embedded/filesystem/glibc/glibc-2.11.3
+error message: 
+configure: error: you must configure in a separate build directory
+[bamvor@localhost glibc-2.11.3]$ cd ../glibc-2.11.3-build/
+[bamvor@localhost glibc-2.11.3-build]$ ../glibc-2.11.3/configure 
+error message: 
+*** On GNU/Linux systems the GNU C Library should not be installed into
+*** /usr/local since this might make your system totally unusable.
+*** We strongly advise to use a different prefix.  For details read the FAQ.
+*** If you really mean to do this, run configure again using the extra
+*** parameter `--disable-sanity-checks'.
+[bamvor@localhost glibc-2.11.3-build]$ ../glibc-2.11.3/configure --prefix=/usr/src/embedded/filesystem/glibc/glibc-2.11.3-install
+4, (14:21 2011-1-25)编译后使用fedora10遇到段错误. 改为ubuntu10.04实验. 
+参考"13:47 2009-7-3"在如下链接: 
+http://android.git.kernel.org/?p=kernel/common.git
+选择goldfish 2.6.29分支下载: 
+http://android.git.kernel.org/?p=kernel/common.git;a=snapshot;h=b0d93fb0426911d0329f861f22c59f1c72cff815;sf=tgz
+速度比较慢. 在ae服务器上在已有android git上可以下载goldfish分支. 
+5, 编译时选择compile kernel with debug info.
+实验arm92ej-s正确, 实验Cortex-A8跑飞, 修改启动参数指明使用Cortex-A8: 
+[zhangjian@icp-desktop tools]$ ./emulator -avd bamvor -kernel /opt/share/zhangjian/development/android/sdk/kernel/arch/arm/boot/zImage -qemu -S -s -cpu cortex-a
+[zhangjian@icp-desktop kernel]$ pwd
+/opt/share/zhangjian/development/android/sdk/kernel
+[zhangjian@icp-desktop kernel]$ arm-eabi-gdb vmlinux
+进入后也是"target remote :1234". 
+运行之后停止, 果然使用了armv7的cpu idle: 
+Program received signal SIGINT, Interrupt.
+0xc002a20c in cpu_v7_do_idle ()
+(gdb) n
+Single stepping until exit from function cpu_v7_do_idle, 
+which has no line number information.
+default_idle () at arch/arm/kernel/process.c:138
+138                     local_irq_enable();
+注: 
+a, 编译kernel还参考了"android kernel下載及編譯(http://hi.baidu.com/zhupan19851230/blog/item/82f89015a6164a43f2de3281.html). 
+b, "Android Linux kernel 编译环境"(http://mr.xjr.blog.163.com/blog/static/907010820107944536720/)提到的对"LDFLAGS_BUILD_ID"的修改已经不需要了. 
+c, 根据commit, 也可以直接用goldfish_armv7_defconfig配置文件. 我对比了goldfish_defconfig, 差异只在armv7, vfp, vfpv3, neon. 其余一样. 
+http://android.git.kernel.org/?p=kernel/common.git;a=commit;h=9d8732354c9efc9f5eb6f70a92ab436ccbfdf119
+
+13:16 2011-1-26
+\todo
+1, 业内动态
+
+The U.S. is falling behind in innovation, education and infrastructure, Obama said.
+
+2, "13:12 2011-1-26"
+
+13:15 2011-1-28
+嵌入式, android, 模拟器, adb
+1, adb位于platform-tools目录, 是平台相关的(也就是Linux和windows不同).
+platforms下面是平台无关的.
+2, 
+
+13:57 2011-2-5
+电池, 型号
+锂电池型号一般是厚度x宽x长, 例如456363表示45x63x63. 
+
+10:15 2011-2-6
+业内动态
+1, arm继Cortex-A15应用处理器后, 发布Cortex-R5, R7实时处理器用于LTE and LTE-Advanced等实时领域. 
+ARM adds to Cortex processors and fills out roadmap
+Fr: http://www.eetimes.com/electronics-news/4212686/ARM-adds-to-Cortex-processors-and-shares-roadmap
+The ARM Cortex-R5 MPCore and the Cortex-R7 MPCore processors have been launched for use in 3G and 4G mobile baseband, mass storage, automotive and industrial markets. A roadmap for the Cortex R-Series processors also enables ARM's customers to future-proof their designs based on a single consistent architecture.
+The Cortex-R5 processor extends the feature set of the Cortex-R4 processor to enable higher levels of system performance, increased efficiency and reliability, and enhanced error management in dependable real-time systems. These system-level features include a high priority low-latency peripheral port (LLPP) for fast peripheral reads and writes, and an Accelerator Coherency Port (ACP) providing cache coherency for increased data transfer efficiency and more reliable firmware.
+2, 微软与 Nokia 下周将宣布合作计划？难道跟 WP7 有关？！
+http://cn.engadget.com/2011/02/05/nokia-microsoft-announcing-partnership-next-week-possibly-invo/
+3, 谷歌发布Android 3.0操作系统SDK
+http://news.chinaunix.net/Enterprise/2011/0127/1220058.shtml
+试了试, 确实可以下载preview. 默认分辨率是WXGA(1280x900).
+
+17:38 2011-2-6
+三国杀
+1, 三国杀王者之路:逐鹿天下·高级攻略(全彩)
+http://www.amazon.cn/mn/detailApp/ref=sr_1_1?_encoding=UTF8&s=books&qid=1296984997&asin=B004IP8BAE&sr=8-1-catcorr
+2, 三国杀标准版官方攻略本
+http://www.amazon.cn/%E6%B8%B8%E5%8D%A1%E6%A1%8C%E6%B8%B8-%E4%B8%89%E5%9B%BD%E6%9D%80%E6%A0%87%E5%87%86%E7%89%88%E5%AE%98%E6%96%B9%E6%94%BB%E7%95%A5%E6%9C%AC/dp/B003O85154/ref=sr_1_10?ie=UTF8&qid=1296984852&sr=8-10
+
+12:47 2011-2-9
+业内动态, 2011年2月9日: TI发布OMAP5处理器, ppt和文档分享网站, 
+1, TI发布基于双核Cortex-A15的OMAP5 SOC：最大8G内存，支持互动投影、手势识别
+看来TI和arm合作很紧密, arm announce Cortex-A15话音未落, TI就announce Cortex-A15的SOC了, 而且覆盖了arm之前提到的嵌入式和低成本高性能领域. Cortex-A15是3.5DMIPS/MHz的SOC, 简单说大家常用的feature phone使用的arm9处理器是0.9DMIPS/MHz, 智能手机多数用的Cortex-A8是2.0DMIPS/MHz(Cortex-A9是2.5DMIPS/MHz), 同频率下TI的OMAP5是arm9的倍, 是Cortex-A8的1.75倍. 再加上TI这次做的是双核. 所以差距巨大, 也许将来windows 8也会先在TI OMAP5使用? 
+另外, OMAP5还对3D, 位置传感器有很好的支持. 
+详细介绍如下: 
+http://www.eetimes.com/electronics-news/4212912/Multiple-cores-power-fifth-generation-of-TI-s-OMAP
+http://focus.ti.com/general/docs/wtbu/wtbuproductcontent.tsp?templateId=6123&navigationId=12862&contentId=101230
+http://laoyaoba.com/ss6/?action-viewnews-itemid-168695
+1), 28 nanometer CMOS low-power process
+2), 2012年量产, 5430和5432分别支持LPDDR2和DDR3的POP封装. 
+TI’s OMAP 5 platform is expected to sample in the second half of 2011, with devices on the market in the second half of 2012. The OMAP5430 processor is offered in a 14x14mm package-on-package  with LPDDR2 memory support.  The OMAP5432 processor is offered in a 17x17mm BGA package with DDR3/DDR3L memory support.
+3), 支持两个Cortex-A15(up to 2GMHz), 2个Cortex-M4(to improve low-level control and responsiveness of mobile devices.). 另外还是C64 dsp和3D处理器. 相当于有6个核. 
+Cortex-A15除了性能高，还突破了4G容量限制(up to 8GBytes), 同时支持hardware virtualization.
+The OMAP 5 processor uses two ARM Cortex-A15 MPCores capable of speeds of up to 2 GHz per core in the OMAP 5 implementation. The 50 percent boost in performance over the Cortex-A9 core (at the same clock frequency), is combined with up to 8GB of dynamic memory access and hardware virtualization support.
+Hardware virtualization through Hypervisor allows power and performance-efficient, multiple guest operating system (OS) support 
+4), 总线方面似乎还是原来的L3, L4. 但是写了"L3 network-on-chip interconnect". 我查了一下原来OMAP3530上面写的是"L3 Interconnect Network-Hierarchial, Performance, and Power Driven". 这似乎说明TI使用了多核中常用NOC架构。 
+呵呵, NOC比我想象的快的多, 继去年tensilica有个100核的cpu后, TI也开始玩儿NOC了. 
+另外memory支持双通道，就是有两个外部ddr接口(EMIF1, EMIF2).
+5), graphics:
+(1), 最高支持四个LCD, 四个摄像头同时使用.
+(2), 2D/3D 1080p.
+(3), gpu是SGX544. 
+(4), OMAP 5平台处理器可同时支援4颗照相镜头，并可录制、播放1080p等级的S3D影片，以及即时将2D影像转换成1080p等级S3D影片。搭配2D或S3D照相镜头的OMAP 5平台还可具备类似Kinect的手势识别功能！
+6), M-Shield安全保护。
+7), 其它：
+(1), 支持手势识别。
+(2), OMAP 5平台处理器在搭配德仪DLP微型投影(Pico projector)晶片组与照相镜头后可提供互动投影功能(interactive projection)，使用者将可“碰触并拖曳”墙上或桌面上的投射影像。
+
+2, 发现一个好网站, 分享ppt和文档:
+http://www.slideshare.net/
+
+3, Android 2.4 ships in April with dual-core support, report claims
+前几天的CES上ViewSonic发布基于android2.4的ViewPad 4 smartphone. 
+http://www.linuxfordevices.com/c/a/News/ViewSonic-ViewPad-4-and-Android-24/
+文中提到, android2.4会支持android3.0上面的双核软件. 目前看起来android2.x和android3.x会各自发展. 之前传说的Ice Cream应该是3.1。
+Pocket Lint's Viewsonic-based source said Android 2.4's launch is being accelerated to make sure dual-core applications tailored for Google's tablet-optimized Android 3.0 build will also work on single-core handsets running Android 2.4. Android 2.3 does not provide such support. 
+"However, we now understand that not to be Ice Cream," Pocket Lint said in response to the Phandroid story, referring apparently to GRI17. "Our source at Viewsonic tells us that he believes Ice Cream to be 3.1, making us believe that Google intends to split the 2+ and 3+ OS variants going forward." 
+
+10:41 2011-2-10
+嵌入式, arm, mmu管理文档阅读, Arm Architecture Reference Manual for Cortex-A,Cortex-R
+这次看arm文档又有新的收获. 
+1, super section descriptor里面已经包含了四十位地址的映射. 也就是armv7a,r架构最高支持1Tbytes. 和x86的地址扩展似乎一样. 
+关闭mmu时, cache maintenance 按照平映射工作, 也就是说如果我不是平映射, 此操作不会对预期的MVA操作. 原来没意识到这一点, 看分析中很容易就包含假设. 细想arm这样规定是合理的: because MVA=PA while mmu is disable.
+分析问题时千万别忘了假设!
+2, arm建议开关mmu的代码va=pa, 否则取指会有问题? \todo 看linux代码.
+3, (10:03 2011-2-12)
+armv7a架构中tlb可以单独设置cache属性.
+ OMAP3530有三个mmu: mpu, iva2.2, camera, 为什么camera也需要呢.
+omap3530 mmu(iva2.2, camera)也是支持16m, 1m, 64k, 4k四种映射方式. 但属性和arm不同
+
+15:46 2011-2-10
+嵌入式, android, mips, mips android wiki
+http://www.mipsandroid.com/
+用户名: zj26zj
+密码: 默认
+
+10:14 2011-2-12
+业内动态
+1, 三星Cortex-A9双核Exynos将于下月发布
+Exynos就是原来说的Orion, 频率一说是1GHz, 一说是1.2GHz. 
+Samsung Orion to ship as Exynos next month
+http://www.eetimes.com/electronics-news/4213068/Samsung-Orion-to-ship-as--Exynos--next-month
+词汇积累, Orion: 猎户座 n.
+1.  in Greek mythology, a giant and hunter, the son of the sea god Poseidon, who was killed by the goddess Artemis and transformed into a constellation
+2.  a constellation near the celestial equator containing the Great Nebula and more than 200 stars visible to the naked eye
+2, 英飞凌完成向Intel出售手机芯片业务交易
+http://www.esmchina.com/ART_8800114228_67a9193f_no.HTM?click_from=1000049460,8737665360,20110212,ESMCOL,ARTICLE_ALERT
+英飞凌科技股份公司于德国纽必堡时间2010年1月31日完成了向英特尔公司出售手机芯片业务（无线解决方案）的交易。
+交易完成后，英飞凌全球共约3,500名员工将进入新公司英特尔移动通信股份公司（IMC）工作。IMC总部设在德国慕尼黑附近的纽必堡。
+
+11:00 2011-2-12
+工艺, arm, 32 nm, IBM 32SOI, arm提供IBM 32nm SOI工艺
+http://designstart.arm.com/ecustomer_enu/start.swe?SWEField=s_1_2_15_0&SWENeedContext=true&W=t&SWECmd=InvokeMethod&SWEMethod=Drilldown&SWESP=false&SWERowIds=SWERowId0%3D1-EJX%2CSWERowId1%3D1-EJY&SWEDIC=false&_sn=JWgRa10TP-ieRocMygnLqmApeynrrBlX2WyJlwswgX8_&SWEReqRowId=1&SWEView=Product+Catalog+View+-+ARM&SWEC=2&SWERowId=1-EJY&SWEBID=-1&SWEHo=designstart.arm.com&SWETS=1297477677&SWEApplet=Product+Foundry+List+Applet+-+ARM
+
+9:39 2011-2-16
+业内动态, 四核ARM, NAND发展趋势, 关注手势识别
+1, Nvidia发布四核ARM SOC
+http://www.eetimes.com/electronics-news/4213186/Nvidia-demos-quad-core-Tegra-in-tablet
+\todo 看看nvidia官方blog: http://blogs.nvidia.com/2011/02/tegra-roadmap-revealed-next-chip-worlds-first-quadcore-mobile-processor/
+四核处理器名称Kal-El. 另外marvell和qualcomm的四核处理器也开发中: 
+In November, Marvell announced a quad-core ARM chip, the Armada XL aimed at servers and other data center systems. 
+Qualcomm said it will ship a quad-core Snapdragon in early 2012.
+
+2, Freescale和TI在通信芯片上的竞争
+Freescale vs. TI: Base station SoC battle
+http://www.eetimes.com/electronics-news/4213097/Freescale-vs--TI--Base-station-SoC-battle
+In response to various network operators’ diverging demands for small to large cells, Freescale Semiconductor and Texas Instruments are unveiling this week at the Mobile World Congress their respective visions for a “base station on a chip.”
+
+3, 收藏: NAND发展预测. 
+NAND 201: the continued evolution of NAND Flash
+http://www.eetimes.com/design/memory-design/4213098/NAND-201--the-continued-evolution-of-NAND-Flash
+
+4, 收藏: 关注手势识别
+Touchless gesturing brings innovation to product designs
+http://www.eetimes.com/design/analog-design/4213121/Touchless-gesturing-brings-innovation-to-product-designs
+
+13:26 2011-2-17
+随笔, 思考职业规划之一: 为谁而工作
+和平年代, 并不需要我们投笔从戎, 也许没有为谁而战的问题. 
+但是为谁而工作, 或者说为什么要工作. 这个问题, 人人都会遇到. 
+可能很多人为钱, 为老板工作. 我总觉得这样不自然, 直觉不同(我一直觉长期看, 直觉和客观是统一的). 
+首先应该是为了自己的某种满足, 当然不排除金钱, 金钱是个组成部分, 而且有比金钱更重要的部分: 我觉得自身内心的快乐, 自己长远的追求这些更为重要.
+例如说我的职业规划是做嵌入式Linux的底层开发, 如果偏离了这个职业规划, 可能给我多少钱都没法让我认真工作. 时间过去了就是过去了, 没有做把有限的时间放在自己想做的时间上, 就是浪费.
+想到这些是因为之前看到报道说家乐福管理层为了完成总部的要求, 对内降低成本, 对外提高对供应商的收费. 这样做的公司恐怕不是一家两家. 这些所谓的高层对得起自己的良心么? 
+虽说老板是出资人, 但是每个人其实都对公司的发展贡献了力量, 目标应该大家共同发展. 如果只是老板挣钱, 这样其实很不合理.
+
+14:26 2011-2-18
+软件技巧, windows, VIM
+1, 打开utf8文件乱码, 参考下面文章还是没有完全解决. 
+http://rainux.org/vim-gvimvim-on-win32
+(9:47 2011-11-25)
+原因是文档里面有utf8不支持的字符, 造成vim职别错误. 只要打开时加入"++enc=utf8"参数即可. 
+例如":e ++enc=utf8 log2011.txt"
+
+10:13 2011-2-19
+业内动态, feature与marketing, ddr nand, tegra2, flash
+如何提高NAND速度, 之前两种方法, 一个是提到数据宽度, 从8bit到16bit, 另一个是用ddr方法, 也就是clock正反沿都收/发数据. 两种技术的优劣和发展趋势, 其实很难看清楚, 如果AP厂商必须要选择支持一种标准的话, 要如何选择呢? 大家肯定是希望选择更有生命力哪个, 也许看看标准的支持程序或有没有行业组织参与可以做个参考: 
+今天看Jim Cooke的NAND 201, 看到"Open NAND Flash Interface(ONFI) workgroup(2006年成立)", 里面的ONFI2.0支持ddr, I/O access rate 200MB/s, 将来的3.0是400MB/s. 如果能关注到这个标准, 就可以判断出ddr nand是个趋势. 
+
+当然, 即使有些market需要的feature不满足, 也未必没有办法. 据说nvidia tegra2没有NEON, 所以专门找ARM做flash优化. 道理和上面一样, 都是影响力再起作用. 
+
+12:46 2011-2-19
+随笔, 客观规律与长期性, perl
+我学习perl有两年了, 从最开始用perl花几倍的时间做工具. 到现在用perl处理文本和手工处理速度差不多. 
+这是我看到脚本, 正则表达式, perl的意义后, 长期坚持的结果. 这里面既要符合客观规律, 又要坚持. 而且不可偏废. 
+
+14:25 2011-2-21
+07550
+888666
+
+15:36 2011-2-24
+软件技巧, learning perl(4th).pdf, 正则表达式中使用变量; logAssistant
+按: 原来写logAssistant时没有实验成功, 今天发现是遗漏了括号. 
+自: learning perl(4th).pdf, 8．5 模式内的内插
+正则表达式可以被内插，如同双引号字符串一样。。这允许我们快速地写出类似grep 的程序：
+#! /usr/bin/perl –w
+my $what = “larry”;
+while(<>){
+if(/^($what)/){ #在字符串前面进行匹配
+print “We saw $what in beginning of $_;”;
+}
+当程序运行时，模式将被$what 的值代替。在本例中，它同使用/^(larry)/是一样的，在行的开头处查找larry。
+
+13:08 2011-3-3
+软件技巧, winmerge, command line
+"C:\Program Files\WinMerge\WinMergeU.exe" /f *.txt k:\log \\10.0.13.101\share\zhangjian\log
+
+19:25 2011-3-3
+买书
+linux内核设计与实现。(感觉第二版第三版差异不大, 没有买)
+android 系统级深入开发。
+
+15:26 2011-3-15
+pdf转word, excel
+http://www.pdftoword.com/
+http://www.hellopdf.com/download.php
+
+13:23 2011-3-18
+游戏
+神雕侠侣
+火焰之文章 高考圣火
+幽城幻剑录
+
+21:44 2011-03-19
+软件技巧(software, skill), Linux, shell, bash, Linux下获得当前目录名称的四种方法, Four ways to extract the current directory name; logAssistant参考资料, 灵活的脚本; bash, replacement
+http://www.linux.com/archive/feature/120291
+1, basename `pwd`
+2, ${PWD##*/}
+(14:31 2012-04-18)
+if used in vim, should add escape before "#". 
+:r !echo ${PWD\#\#*/}
+"14:31 2012-04-18"end
+3, pwd | rev | awk –F \/ '{print $1}' | rev
+4, pwd | sed 's,^\(.*/\)\?\([^/]*\),\2,'
+5, (11:33 2012-03-16)
+replace string in bash, ref "man bash", "Parameter Expansion". 
+${parameter/pattern/string}
+The pattern is expanded to produce a pattern just as in pathname expansion.  Parameter is expanded and the longest match of  pattern  against  its  value  is  replaced with string.
+
+bamvor@linux-bjzhang-2:sp2> ls sp2*
+sp2.odp  sp2.pdf  sp2.ppt
+bamvor@linux-bjzhang-2:sp2> for f in `ls sp2.*`; do f_new=${f/sp2/sp2_virt}; echo change $f to $f_new; mv $f $f_new; done
+change sp2.odp to sp2_virt.odp
+change sp2.pdf to sp2_virt.pdf
+change sp2.ppt to sp2_virt.ppt
+bamvor@linux-bjzhang-2:sp2> ls sp2*
+sp2_virt.odp  sp2_virt.pdf  sp2_virt.ppt
+
+19:39 2011-04-10
+VC0882, arm debug, cortex-a8, jtag: openocd, 重新编译openocd, 留下详细编译, 安装, 使用记录, 文档(userguide), 续, 为了实验openocd对VC0882支持情况实验openocd最新版本, 续; 软件技巧, gdb
+1, 昨天已经实验openocd及其telnet成功, 今天编译了kernel, 实验调试kerel.
+设置断点, 由于符号表是开mmu之后的, 所以打开符号表之前的代码没发通过符号设置断点, 在System.map里面查到stext和__enable_mmu的虚拟地址分别是: 
+c0008000 T stext
+c0008034 t __enable_mmu
+所以断点是(注: gdb中使用"*"表示对后面的地址设置断点).
+#stext
+break *0x80008000
+#__enable_mmu
+break *0x80008034
+break start_kernel
+1), 但是断点没有停, 不知道原因. 
+
+8:44 2011-04-12
+Linux, power, OMAP3530, dvfs分析
+1, 重要函数和数据结构
+1), omap_device_scale: 用于调整OPP(operating performance point)
+arch/arm/mach-omap2/dvfs.c, dvfs.h
+static inline int omap_device_scale(struct device *req_dev, struct devices *target_dev, unsigned long rate);
+
+2),struct voltagedomain 
+3), clk_init_cpufreq_table(&freq_table);
+替换为
+opp_init_cpufreq_table(mpu_dev, &freq_table);
+
+00:03 2011-4-15
+实验室讲座
+测试的重要性和局限。兼职单片机项目：串并转换芯片虽然led点灯正确，但是控制io有问题。
+
+11:49 2011-04-16
+用光驱摇摇篮
+http://forum.eet-cn.com/FORUM_POST_10013_1200201310_0.HTM?click_from=8800077561,8883567706,2011-04-16,EECOL,NEWSLETTER
+
+8:46 2011-4-27
+时间管理
+希望能安排好整天的时间。最近感觉工作目标性不强。希望每天上下班时间和午休时间都能利用好。
+和工作直接相关或和工作上长远有意义的，都在上班时间完成。
+工作相关：
+1, omap run android.
+
+1, 业内动态: 日常类，一周两次，共一小时。
+2, 职业发展思考(含实验室讲座)：最近要完成的事情(五月内要完成)。预计每周三小时。
+3, 专业技能训练(目前是coding练习)，完成实验室讲座后安排。
+4, 节日计划(爸妈结婚纪念视频剪辑)，每周三小时。
+5, 家人健康。每周一小时。
+
+20:37 2011-4-28
+谁言寸草心，报得三春辉。
+
+14:58 2011-5-4
+网络, 一个机器同时使用内网和外网
+今天一个机器接两个网络. 
+发现每次都是先连接了公司网络, 造成外网没法访问.
+后来把两根网线对调一下. 这样默认会先用插在主板网卡的外网上网, 这个网卡不行就会用usb网卡的网卡上网. 
+
+13:28 2011-5-6
+网络, internet, ip地址, 一个机器同时使用内网和外网, 续, 修改路由表(route table)
+1, 加入到10.*.*.*的路由
+C:\Documents and Settings\zhangjian>route add 10.0.0.0 mask 255.0.0.0 10.0.13.23 if 0x10007
+这样就可以在插了外网和内网的机器, 通过内网网卡访问网络. 但是outlook exchange server还是不行, 默认还是会走外网. 难道要修改dns? 
+注: 
+1), 这里的if, 要查询下面的路由表, 从下表可以看到0x10007表示LAN9500. 
+2), 添加后多一条:
+         10.0.0.0        255.0.0.0       10.0.13.23      10.0.13.23       1
+3), 修改后的完整路由表如下: 
+C:\Documents and Settings\zhangjian>route print
+===========================================================================
+Interface List
+0x1 ........................... MS TCP Loopback interface
+0x2 ...00 50 56 c0 00 08 ...... VMware Virtual Ethernet Adapter for VMnet8
+0x3 ...00 50 56 c0 00 01 ...... VMware Virtual Ethernet Adapter for VMnet1
+0x4 ...00 21 9b 63 1b 79 ...... Intel(R) 82566DM-2 Gigabit Network Connection -
+数据包计划程序微型端口
+0x5 ...00 07 e9 4c 6f 66 ...... SoftEther Virtual LAN Card Adapter - 数据包计划
+程序微型端口
+0x10007 ...00 1a a9 29 50 d6 ...... LAN9500 USB 2.0 to Ethernet 10/100 Adapter #
+2 - 数据包计划程序微型端口
+===========================================================================
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0         10.0.0.3      10.0.13.23       20
+          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.8       20
+         10.0.0.0        255.0.0.0       10.0.13.23      10.0.13.23       1
+        10.0.13.0    255.255.255.0       10.0.13.23      10.0.13.23       20
+       10.0.13.23  255.255.255.255        127.0.0.1       127.0.0.1       20
+   10.255.255.255  255.255.255.255       10.0.13.23      10.0.13.23       20
+        127.0.0.0        255.0.0.0        127.0.0.1       127.0.0.1       1
+      192.168.1.0    255.255.255.0      192.168.1.8     192.168.1.8       20
+      192.168.1.8  255.255.255.255        127.0.0.1       127.0.0.1       20
+    192.168.1.255  255.255.255.255      192.168.1.8     192.168.1.8       20
+     192.168.41.0    255.255.255.0     192.168.41.1    192.168.41.1       20
+     192.168.41.1  255.255.255.255        127.0.0.1       127.0.0.1       20
+   192.168.41.255  255.255.255.255     192.168.41.1    192.168.41.1       20
+    192.168.239.0    255.255.255.0    192.168.239.1   192.168.239.1       20
+    192.168.239.1  255.255.255.255        127.0.0.1       127.0.0.1       20
+  192.168.239.255  255.255.255.255    192.168.239.1   192.168.239.1       20
+        224.0.0.0        240.0.0.0       10.0.13.23      10.0.13.23       20
+        224.0.0.0        240.0.0.0      192.168.1.8     192.168.1.8       20
+        224.0.0.0        240.0.0.0     192.168.41.1    192.168.41.1       20
+        224.0.0.0        240.0.0.0    192.168.239.1   192.168.239.1       20
+  255.255.255.255  255.255.255.255       10.0.13.23      10.0.13.23       1
+  255.255.255.255  255.255.255.255      192.168.1.8     192.168.1.8       1
+  255.255.255.255  255.255.255.255     192.168.41.1    192.168.41.1       1
+  255.255.255.255  255.255.255.255    192.168.239.1   192.168.239.1       1
+  255.255.255.255  255.255.255.255    192.168.239.1               5       1
+Default Gateway:       192.168.1.1
+===========================================================================
+Persistent Routes:
+  None
+
+2, 如果修改外网网卡首选dns为内网dns10.0.10.16, 这样outlook exchange serve就会由这个dns解析. 但是可能造成有些外网无法访问(可能是因为time过长): 
+Reply from 50.56.81.148: bytes=32 time=447ms TTL=48
+
+3, 现在的方法是使用外网时再打开, 使用outlook时关闭外网. 
+在网络连接里面停用启用设备既可. 
+
+4, (16:00 2011-5-9)后来发现只要删除内网访问外网的ip, 也可以解决policy deny的问题. (route add还是要加的). 
+route delete 0.0.0.0 mask 0.0.0.0 if 0x10007
+
+5, (13:00 2011-6-27)换了位置, 现在是网口接内网, 无线网络接外网.
+命令修改如下: 
+C:\Documents and Settings\zhangjian>route add 10.0.0.0 mask 255.0.0.0 10.0.13.23 if 4
+C:\Documents and Settings\zhangjian>route delete 0.0.0.0 mask 0.0.0.0 if 4
+
+修改后路由表:
+C:\Documents and Settings\zhangjian>route print
+===========================================================================
+Interface List
+0x1 ........................... MS TCP Loopback interface
+0x2 ...00 50 56 c0 00 08 ...... VMware Virtual Ethernet Adapter for VMnet8
+0x3 ...00 50 56 c0 00 01 ...... VMware Virtual Ethernet Adapter for VMnet1
+0x4 ...00 21 9b 63 1b 79 ...... Intel(R) 82566DM-2 Gigabit Network Connection -
+数据包计划程序微型端口
+0x5 ...00 07 e9 4c 6f 66 ...... SoftEther Virtual LAN Card Adapter - 数据包计划
+程序微型端口
+0x20007 ...00 24 01 04 59 6b ...... D-Link AirPlus G DWL-G122 Wireless USB Adapt
+er(rev.C) #3 - 数据包计划程序微型端口
+===========================================================================
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.6       25
+         10.0.0.0        255.0.0.0       10.0.13.23      10.0.13.23       1
+        10.0.12.0    255.255.254.0       10.0.13.23      10.0.13.23       20
+       10.0.13.23  255.255.255.255        127.0.0.1       127.0.0.1       20
+   10.255.255.255  255.255.255.255       10.0.13.23      10.0.13.23       20
+        127.0.0.0        255.0.0.0        127.0.0.1       127.0.0.1       1
+      192.168.1.0    255.255.255.0      192.168.1.6     192.168.1.6       25
+      192.168.1.6  255.255.255.255        127.0.0.1       127.0.0.1       25
+    192.168.1.255  255.255.255.255      192.168.1.6     192.168.1.6       25
+     192.168.41.0    255.255.255.0     192.168.41.1    192.168.41.1       20
+     192.168.41.1  255.255.255.255        127.0.0.1       127.0.0.1       20
+   192.168.41.255  255.255.255.255     192.168.41.1    192.168.41.1       20
+    192.168.239.0    255.255.255.0    192.168.239.1   192.168.239.1       20
+    192.168.239.1  255.255.255.255        127.0.0.1       127.0.0.1       20
+  192.168.239.255  255.255.255.255    192.168.239.1   192.168.239.1       20
+        224.0.0.0        240.0.0.0       10.0.13.23      10.0.13.23       20
+        224.0.0.0        240.0.0.0      192.168.1.6     192.168.1.6       25
+        224.0.0.0        240.0.0.0     192.168.41.1    192.168.41.1       20
+        224.0.0.0        240.0.0.0    192.168.239.1   192.168.239.1       20
+  255.255.255.255  255.255.255.255       10.0.13.23      10.0.13.23       1
+  255.255.255.255  255.255.255.255      192.168.1.6     192.168.1.6       1
+  255.255.255.255  255.255.255.255     192.168.41.1    192.168.41.1       1
+  255.255.255.255  255.255.255.255    192.168.239.1   192.168.239.1       1
+  255.255.255.255  255.255.255.255    192.168.239.1               5       1
+Default Gateway:       192.168.1.1
+===========================================================================
+Persistent Routes:
+  None
+
+为了避免outlook exchange server ip地址解析错误, 直接修改如下文件, 指定解析. 
+BJ-MAIL-04.vimicro.com的内网地址(10.0.10.20)在不连接外网情况下, 通过ping得到.
+C:\Documents and Settings\zhangjian>notepad c:\WINDOWS\system32\drivers\etc\hosts
+# Copyright (c) 1993-1999 Microsoft Corp.
+#
+# This is a sample HOSTS file used by Microsoft TCP/IP for Windows.
+#
+# This file contains the mappings of IP addresses to host names. Each
+# entry should be kept on an individual line. The IP address should
+# be placed in the first column followed by the corresponding host name.
+# The IP address and the host name should be separated by at least one
+# space.
+#
+# Additionally, comments (such as these) may be inserted on individual
+# lines or following the machine name denoted by a '#' symbol.
+#
+# For example:
+#
+#      102.54.94.97     rhino.acme.com          # source server
+#       38.25.63.10     x.acme.com              # x client host
+
+127.0.0.1       localhost
+10.0.10.20      BJ-MAIL-04.vimicro.com
+(13:25 2011-8-15)
+10.0.10.90	cvs.vimicro.com
+10.0.10.05	xterm03.vimicro.com
+
+19:42 2011-5-9
+乐复能
+http://www.tianya.cn/techforum/content/100/1/715910.shtml
+http://www.jh509.com/net_zh/products.jsp?pType=1&pName=productContent&sort_id=9e238c802e1e11de965100219b39d322&c_sort_id=79df6bd02e2011de965100219b39d322&uPage=lfnIntro
+
+问题: 
+安全性.
+几期实验.
+
+9:37 2011-5-11
+博客, 关注业内动态, 正则表达式
+1, 看来订阅每周综述还是挺好的. 
+今天看到讲正则表达式的例子, 正是我希望深入了解的: 
+http://www.infoq.com/cn/articles/regular-expressions-5-match
+同时了解了ReDoS(Regular expression Denial of Service), 将来用正则表达式匹配复杂情况时, 可能就需要考虑效率
+http://en.wikipedia.org/wiki/ReDoS
+
+13:55 2011-5-17
+\todo 买书
+1911年中国大革命
+http://www.amazon.cn/1911%E5%B9%B4%E4%B8%AD%E5%9B%BD%E5%A4%A7%E9%9D%A9%E5%91%BD-%E9%A9%AC%E5%8B%87/dp/B004XYJ77Q/ref=sr_1_1?ie=UTF8&qid=1305611741&sr=8-1
+蚕丝:钱学森传
+http://www.amazon.cn/gp/product/B004TOGLRE/ref=s9_simh_gw_p14_d0_i1?pf_rd_m=A1AJ19PSB66TGU&pf_rd_s=center-1&pf_rd_r=1VSF7N3W111GA2GEH5NJ&pf_rd_t=101&pf_rd_p=58840952&pf_rd_i=899254051
+
+14:52 2011-5-23
+android游戏
+http://android.zone.it.sohu.com/forums/viewthread.php?tid=5095890&extra=&page=1
+
+10:17 2011-5-26
+博客, 难以捉摸的bug
+最近半个月解的这个bug很难解, 几次有渺茫的希望, 感觉和李白的《梦游天姥吟留别》类似：
+海客谈瀛洲， 烟涛微茫信难求。 
+越人语天姥， 云霓明灭或可睹。 
+
+20:31 2011-5-30
+汽车安全座椅
+baby on board ！儿童安全座椅解析(一)
+http://www.autohome.com.cn/use/201105/153334-1.html
+带着孩子去攻弯：马坛首尝ISOFIX儿童安全座椅，详细作业（22楼使用感受） 
+http://www.xcar.com.cn/bbs/viewthread.php?tid=6755098&extra=&page=1
+
+14:30 2011-6-3
+http://211.100.97.123/forum.php
+26cm
+
+9:38 2011-6-14
+技术, 阅读, 职业规划, <成为技术领导者>, 博客
+1, p59: 这里需要总结一下创新的三大障碍:
+1), 自蔽, 看不到自己的行为, 所以也就无法改变. 
+2), 没问题综合征, 自信已经知道了所有问题的答案.
+3), 对理论心理学中心教条的信仰, 阻止你去发现其它可选择的解决方案, 即使那些方案是你不需要任何人的帮助就可以发现的. 
+
+2, 这本书和<小强升职记>都强调, 时间的管控. 我最近说是在做时间管理, 但是还是觉得时间如白驹过隙, 可能是因为没有详细记录每天的都在做什么事情吧, 而且做事情之前需要估计出时间, 完成后对比估计是否准去, 感觉这样也能提高自己对于时间的管控能力. 
+
+13:10 2011-6-14
+软件技巧, freedur
+
+14:30 2011-6-19
+www.monster.com
+
+16:15 2011-07-15
+http://blog.csdn.net/chen__jinfei/article/details/5178144
+不要一辈子靠技术混饭吃 
+
+回复：
+可以这么说：顶这篇文章的大部分人在技术领域这条路最终很可能成为失败者。
+如果真心想从事IT技术路线这条路的朋友并且走好的话（也就是有一份可观的收入），从这篇评论的网友来看其实你们已经失去了大部分竞争对手，可以看得出没几个是热爱，适合干这行的，大部分是混饭的，这很容易！其他的我不多作解释。
+最后推荐2个人写的书可以看看——《Java程序员上班那些事儿》、《走出软件作坊》
+
+讨论：
+就是要靠技术混饭吃? (zt)
+http://forum.eet-cn.com/FORUM_POST_10008_1200153527_0.HTM?click_from=8800081216,8883567706,2011-07-15,EECOL,NEWSLETTER
+
+13:16 2011-7-25
+开放课程, MIT, introduction to computer science and programming
+感觉MIT的计算机科学及编程导论不错, 有空看看一个是理解计算机的基本思维, 一个是了解Python
+MIT官网, 可以看到完整文字材料:
+http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-00-introduction-to-computer-science-and-programming-fall-2008/video-lectures/lecture-1/
+新浪收集了视频, 中英文对照: 
+http://edu.sina.com.cn/video/open/MITocw6.00IntroductiontoComputerScienceandProgramming.html
+
+12:54 2011-7-26
+业内动态, Linux3.0发布, android高速增长, 摩托罗拉发布双核1GHz droid3
+几天没关注业内动态, 真是有大新闻.
+大家一直猜测的Linux3.0终于发布了, 虽然没什么跨时代的改进, 但新数字新气象, 我很有兴趣重新做一次Linux kernel porting.
+另外安卓平板迅速增长, 听起来是个好消息, 市场大了, 公司的MID AP芯片的机会也大了一些. 
+1, Linux3.0发布
+http://www.linuxfordevices.com/c/a/News/Linux-30-released/ Linux 3.0 scrubs up Btrfs, gets more Xen
+http://os.51cto.com/art/201107/273451.htm
+Linux3.0并不像Linux2.6一样有改进，具体改进如下：
+Besides a new version numbering scheme, Linux 3.0 also has several new features: Btrfs data scrubbing and automatic defragmentation, XEN Dom0 support, unprivileged ICMP_ECHO, wake on WLAN, Berkeley Packet Filter JIT filtering, a memcached-like system for the page cache, a sendmmsg() syscall that batches sendmsg() calls and setns(), a syscall that allows better handling of light virtualization systems such as containers. New hardware support has been added: for example, Microsoft Kinect, AMD Llano Fusion APUs, Intel iwlwifi 105 and 135, Intel C600 serial-attached-scsi controller, Ralink RT5370 USB, several Realtek RTL81xx devices or the Apple iSight webcam. Many other drivers and small improvements have been added. 
+
+中文翻译自：http://linuxtoy.org/archives/linux-kernel-30.html
+新功能有： 
+Btrfs：实现自动碎片整理、数据校验和检查，并且提升了部分性能。 
+添加 sendmmsg()：提升约 UDP 发送性能 20%，接口发送性能 30%。 
+XEN dom0 支持。 
+增加 Cleancache 支持， 
+Berkeley 即时包过滤器，配合 libpcap/tcpdump 提升包过滤规则的运行效率。 
+支持通过 WLAN 唤醒。 
+实现非特殊授权的 ICMP_ECHO (ping 命令)。 
+setns() syscall 更好的命令空间处理。 
+添加 Alarm-timers，具有高精度计时器的特点，但是可以在通过 RFC 设备唤醒挂起状态的系统。 
+支持微软Kinect体感设备
+
+Linux kernel资源网站：
+http://www.kernel.org/ 官网
+https://lkml.org/ Linux Kernel Mailing List archive
+http://lwn.net/Kernel/ Kernel coverage at LWN.net
+www.linuxsymposium.org OLS, 有大量Linux最新动态. 
+
+2, android平板高速增长331%，达到30%市场占有率。
+http://www.linuxfordevices.com/c/a/News/Strategy-Analytics-and-Good-Technology-2Q-2011-tablet-reports/
+Android tablets took a 30 percent share of global tablet shipments in the second quarter, compared to 61 percent for Apple, as part of a 331 percent growth in total sales since Q2 2010
+
+3, 摩托罗拉发布双核1GHz droid3
+$199.99 on contract from Verizon Wireless
+The Droid 3 has a crisp 4-inch, qHD (quarter-high-definition) display running at 960 by 540 pixel resolution, and it's powered by a 1GHz dual-core chip. (As noted in earlier LinuxDevices coverage, this is a Texas Instruments OMAP4430.)
+
+14:01 2011-7-26
+软件技巧, office2010密码
+
+14:48 2011-7-29
+业内动态, arm, mips, android, TransferJet
+1, ARM与MIPS阵营的Android TV最新进展
+http://www.esmchina.com/ART_8800116554_1100_2100_3100_0_4759a743.HTM
+博通未来到底会支持谁还是一个未知数，因为据悉它已获得了ARM Cortext A9和A15授权。从目前来看，一边是支持ARM的ST，Fujitsu，飞思卡尔，海思，Amlogic，MTK，三星等芯片厂商；一边是支持MIPS的SiS、SigmaDesign、博通、Trident，Mstar等芯片厂商。各方阵营都不容小觑，而博通未来的走向亦变得相当重要。
+
+2, 潜力股：传说可以干掉USB的无线技术
+http://forum.esm-cn.com/FORUM_POST_1000164064_1200644280_0.HTM?click_from=1000053626,8737665360,20110729,ESMCOL,FORUM_ALERT
+TransferJet 是一种直觉式的数据交换接口，其传输距离短，只有约2～3cm。定位如此短距离的原因，是可保证传送速度外，也可减少数据外泄等安全问题。只要两部机器互相靠近至3cm以内，就能直接以最高560Mbps的速率彼此传输数据，可以省去一般无线系统需要事前设定传输选项，或寻找无线网络网桥等动作。此外，TransferJet也提供连接器材登录的功能，只允许登录在案的器材连接，进一步加强信息传输的保护。
+
+3, 关注: SystemC design
+Using SystemC to build a system-on-chip platform
+How Texas Instruments' designers used the SystemC hardware design language to do performance modeling when creating both the company's OMAP-2 platform and the devices based on it.
+http://www.eetimes.com/design/embedded/4212778/Using-SystemC-to-build-a-system-on-chip-platform?pageNumber=0
+
+1:06 2011-8-5
+觉得自己思维很活跃
+1，教育资源过于集中。
+2，call graph: 希望把cscope用起来，并支持把自己的分析加入dot. 画成一个图。顺便可以学习python.
+3, 有了上面的工具，决心把android power认真分析一下。
+结合2， 3一起向大家介绍power。
+
+12:14 2011-08-06
+电脑, 笔记本电脑
+1, 
+查HP, 联想, 三星专卖店. 
+
+2, 看发热, 键盘手感, 屏幕坏点亮点约定. 
+
+3, 
+HP Pavilion 畅游人 g4-1055tu 笔记本电脑 (LZ771PA)
+(http://h10010.www1.hp.com/wwpc/cn/zh/ho/WF06b/321957-321957-3329744-64354-64354-5046252-5105006.html)
+HP Pavilion 畅游人 g4-1017tu 笔记本电脑 (LQ366PA) 
+有什么区别.
+散热如何. 
+
+
+4, 
+G470GH-ITH
+http://appserver.lenovo.com.cn/Lenovo_Product_Detail.aspx?CategoryCode=A03B08&gdsid=A0300013843
+windows7 64bit
+
+5, 
+三星RV420-S0D
+三星RV420-A02 
+
+6, 2G内存, windows7 32位还是64位好? 
+
+7, 买电信. 
+1), 限时 or 限流量? 限时
+2), 支持windows7.
+3), 双模? 
+
+3d20 1140
+
+8， 专卖店
+联想
+百脑汇
+1d14 82668360 天晴
+
+惠普
+联拓2069，2023
+美捷美
+恒昌
+
+
+19:26 2011-8-7
+软件技巧, 函数调用关系, call graph
+1, windows cscope
+http://hi.baidu.com/zengzhaonong/blog/item/4c02a601eb587e04728da535.html
+最新的cscope.exe 15.7 编译过的win32版本下载 
+http://sourceforge.net/project/showfiles.php?group_id=196604&package_id=232374
+
+2, ZGRViewer: java编写函数调用关系工具
+http://zvtm.sourceforge.net/zgrviewer.html
+
+3, cscope line oriented
+G:\bamvor'doc\vimicro\panda_os\aasp>I:\doc\嵌入式\call_graph\emacs\bin\cscope.ex
+e  -L -2  aasp_requestMain_r
+
+G:\bamvor'doc\vimicro\panda_os\aasp>I:\doc\嵌入式\call_graph\emacs\bin\cscope.ex
+e  -L -1  aasp_request_r
+
+18:08 2011-8-11
+embedded, Linux, LF(Linux foundation), OE(Open Embedded), yocto
+1, 
+FAQ: https://wiki.yoctoproject.org/wiki/FAQ
+Yocto project介绍: http://www.linuxfordevices.com/c/a/News/Linux-Foundation-Yocto-Project/
+Yocto是OE并入lF的结果: 
+http://lwn.net/Articles/430576/
+1), 支持beagle board. 
+Q: What is the Yocto Project? 
+A: The Yocto Project provides open source, high-quality infrastructure and tools to help developers create their own custom Linux distributions for any hardware architecture and across multiple market segments. The Yocto Project is intended to provide a helpful starting point for developers. The Linux Foundation welcomes the participation of embedded vendors, developers, and other open source projects. 
+Q: For which software development boards will Yocto Project v0.9 be validated? 
+A: ARM Beagleboard, Intel Atom Black Sand, PowerPC - fsl-mpc8315e-rdb, and MIPS - Ubiquity Networks Router Station Pro 
+2), The project also uses QEMU full system emulation across all supported architectures
+
+8:35 2011-08-14
+共享上网, windows mobile, wifi热点, wmwifirouter
+http://bbs.weiphone.com/read-htm-tid-784498.html
+http://www.ruan8.com/soft_3967.html
+
+13:27 2011-8-15
+电脑共享手机上网, 蓝牙, usb
+PDAnet: 支持windows mobile, android等
+
+14:14 2011-8-18
+业内动态, samsung celox(galaxy s II)由sk telecom发售
+看起来sk telecom在业内也有些影响的. 
+16:28 2011-8-18
+青海电信, 3G上网卡
+60小时, 10G. 超出1分钟/1毛(1小时6元). 
+按自然月扣费.
+
+查询电话: 0971-10000, 按0进入人工服务查询已用时间和流量: 
+8月份: 已用161分钟, 0.06G.
+
+买全国充值卡充值. 
+
+9:46 2011-8-19
+业内动态, lenovo lepad A1, TI OMAP3622
+1, lenovo lepad A1
+TI OMAP3622, android2.3, 7inch(1024x600), 3550mAh
+
+22:57 2011-8-21
+海纳m8
+1, 新版本解决的问题:
+snes, nes升级后终于可以玩儿了。二者支持虚拟按键很适合M8这种按键少的pad。
+2, read it later和鲜果新闻很适合只有wifi的m8。
+3, 仍然存在的问题
+播越狱(rmvb)会中途退出。
+
+分享我的android软件(海纳m8)
+1, 游戏方面我比较怀旧，喜欢模拟器游戏。
+原来不能玩儿的snes, nes，模拟器升级后终于可以玩儿了。二者支持虚拟按键很适合M8这种按键少的pad。 
+最近找到了"模拟器游戏大全"这个软件，相当于模拟器market，能找到fc, sfc, md, psx, gba等多种模拟器及其游戏，从下载到运行一条龙服务。原文：
+http://bbs.zhiqi.com.cn/thread-40476-1-1.html
+"看阿文发了一个模拟器游戏的帖子，某九忍不住跟一个。
+如果你觉得模拟器找游戏rom，到处搜，下载，再放到ten上，折腾半天。那么这个应用一定适合你。
+这款应用提供了几千款模拟器游戏（包含NES/FC、SNES/SFC、GBA、MD/Genesis、PSX），应用界面类似于电子市场，使用它来搜索、查找、下载喜欢的游戏，非常方便。
+当然你还可以通过该应用下载对应的模拟器，设置bios。有了它，玩模拟器游戏一步到位！"
+
+2, 看新闻，网页我使用read it later和鲜果新闻，二者都支持离线模式， 很适合只有wifi的m8。我经常在公司sync好，上下班路上看。
+read it later省去了原来保存网页，拷贝到m8的繁琐过程，只要一个按钮就能自动同步当前网页到平板。
+
+3, 文档浏览: repigo pdf，office suite。
+
+4, 工作日志：六年来我一直坚持记工作日志，用perl脚本打开和搜索。android sl4a也支持perl，这就允许我把原有pc上的perl脚本几乎不加修改的用在android上。
+
+5, console.
+
+上班路上还做了广告。
+
+智器ten的资源帖, 对M8很有价值
+http://bbs.zhiqi.com.cn/thread-36488-1-1.html
+http://bbs.zhiqi.com.cn/thread-40499-1-1.html
+
+查xda论坛. 
+1, 一个是中文的
+http://bbs.xda.cn/forum.php
+xda软件: http://www.xda.cn/news.php?bcid=10
+2, 一个是英文的, 专门给台湾HTC手机做支持
+http://forum.xda-developers.com/
+
+18:14 2011-8-22
+37309
+
+15:00 2011-8-23
+劳动法
+http://www.laodong66.com/ldfg/gjfg/225755861.html
+第二十三条　用人单位与劳动者可以在劳动合同中约定保守用人单位的商业秘密和与知识产权相关的保密事项。
+
+　　对负有保密义务的劳动者，用人单位可以在劳动合同或者保密协议中与劳动者约定竞业限制条款，并约定在解除或者终止劳动合同后，在竞业限制期限内按月给予劳动者经济补偿。劳动者违反竞业限制约定的，应当按照约定向用人单位支付违约金。
+
+　　第二十四条　竞业限制的人员限于用人单位的高级管理人员、高级技术人员和其他负有保密义务的人员。竞业限制的范围、地域、期限由用人单位与劳动者约定，竞业限制的约定不得违反法律、法规的规定。
+
+　　在解除或者终止劳动合同后，前款规定的人员到与本单位生产或者经营同类产品、从事同类业务的有竞争关系的其他用人单位，或者自己开业生产或者经营同类产品、从事同类业务的竞业限制期限，不得超过二年。
+
+第四十六条　有下列情形之一的，用人单位应当向劳动者支付经济补偿：
+
+　　(一)劳动者依照本法第三十八条规定解除劳动合同的;
+
+　　(二)用人单位依照本法第三十六条规定向劳动者提出解除劳动合同并与劳动者协商一致解除劳动合同的;
+
+　　(三)用人单位依照本法第四十条规定解除劳动合同的;
+
+　　(四)用人单位依照本法第四十一条第一款规定解除劳动合同的;
+
+　　(五)除用人单位维持或者提高劳动合同约定条件续订劳动合同，劳动者不同意续订的情形外，依照本法第四十四条第一项规定终止固定期限劳动合同的;
+
+　　(六)依照本法第四十四条第四项、第五项规定终止劳动合同的;
+
+　　(七)法律、行政法规规定的其他情形。
+
+　　第四十七条　经济补偿按劳动者在本单位工作的年限，每满一年支付一个月工资的标准向劳动者支付。六个月以上不满一年的，按一年计算;不满六个月的，向劳动者支付半个月工资的经济补偿。
+
+　　劳动者月工资高于用人单位所在直辖市、设区的市级人民政府公布的本地区上年度职工月平均工资三倍的，向其支付经济补偿的标准按职工月平均工资三倍的数额支付，向其支付经济补偿的年限最高不超过十二年。
+
+　　本条所称月工资是指劳动者在劳动合同解除或者终止前十二个月的平均工资。
+
+2010年全市职工年平均工资50415元。3倍是3x50415=15k, 我还不到. 
+
+17:32 2011-8-25
+\todo 看电影
+生命最后一个月的花嫁
+http://www.suncolor.com.tw/event/wedding/index.htm
+
+10:32 2011-8-30
+博客, 小常识, MayDay, 一词多义, 航空, 航海, 求救, 五一劳动节, 空中浩劫, 五月天
+最近吉祥航空和卡航的事件学到了MayDay这个词. MayDay这个词其实有很多含义
+1, 在航空和航海上“Mayday”是求救信号
+使用Mayday作求救信号源自1923年一个名叫Federick Stanley Mockford的英国人。当时他在英国伦敦的一个机场任高级无线电生。机场要求他提出一个简单明了的字，给所有机师及地勤工作人员在紧急时求救。当时机场的飞机多数来往法国巴黎，故此他提出源自法文“Venez m'aider.”的Mayday。
+“Mayday”直译为中文是“五月天”，但与季节无关，是一个用于船只、飞机遇险时使用的无线电求救信号。其由法语的“m'aidez”演化而来，意为“救我”。 因为朗朗上口，易于在无线电噪音中被分辨出来，后被用作国际通用求救信号。
+
+2, 另外, 加拿大的Cineflix公司所制作的纪录片节目也叫MayDay, 中文译为空中浩劫. 
+分别在世界各地的国家地理频道及Discovery频道播出。此节目主要介绍1970年代黑匣子发明之后所发生的近代重大航空事故。目前已播完10季，第11季中也正在计划中。在第三季时，有三集穿插铁道事故及航海事故。
+
+3, MayDay英语中表示五月一日:
+May Day on May 1 is an ancient northern hemisphere spring festival and usually a public holiday.[1]
+May Day is also a traditional spring holiday in many cultures.
+Since the end of the nineteenth century, May Day has also become synonymous with International Workers' Day, or Labour Day, a day of political demonstrations and celebrations organised by communists, anarchists, socialists, unionists, and other groups.
+
+4, MayDay还是台湾乐团五月天的英文名
+五月天（英语译名：Mayday）[1]是一组台湾乐团，成员共有五人。前身为“So Band”乐团，在1997年3月29日改为现名五月天，乐团的名称是来自贝斯手玛莎在网络论坛上的代号“May-day”[2]。乐团由怪兽（团长暨吉他手）、阿信（主唱）、玛莎（贝斯手）、石头（吉他手）和冠佑（鼓手）组成，除了冠佑以外，其余四人皆毕业自台北市的国立师大附中。
+
+参考资料
+http://msn.ynet.com/3.1/1108/25/6126631.html
+http://zh.wikipedia.org/wiki/Mayday
+http://zh.wikipedia.org/wiki/%E7%A9%BA%E4%B8%AD%E6%B5%A9%E5%8A%AB
+http://en.wikipedia.org/wiki/May_Day
+
+10:47 2011-8-30
+新婚姻法案例, 和我自己想想的一致
+http://money.msn.com.cn/internal/20110830/07511290411.shtml
+
+15:55 2011-9-6
+医学百科
+http://www.wiki8.com/
+
+15:07 2011-9-7
+收藏, android, 文档
+Android，开源还是封闭？
+http://www.ruanyifeng.com/blog/2010/02/open_android_or_not.html
+
+19:32 2011-9-7
+网站
+1, 开源中国社区
+http://www.oschina.net/
+
+19:33 2011-9-7
+android, qt, android上运行qt
+http://sourceforge.net/p/necessitas/home/necessitas/
+http://www.meegozu.com/thread-1199-1-1.html
+http://blog.csdn.net/ak47zhangzhiwei/article/details/6566209
+
+19:41 2011-9-7
+不错的技术博客
+1, 似乎java, jsp据说, 不懂:
+http://blog.csdn.net/g9yuayon?viewmode=contents
+
+06:41 2011-9-22
+embeded, android, software, jota text editor, 博客, 我的海纳M8常用软件, 文件流量, 编辑
+1, 文本编辑器
+平时记日志，写脚本都需要文本编辑。
+原来用astro, es浏览器自带的编辑器，但是没法自动识别编码。
+后来发现一个很好用的text editor, 支持utf，gb18030，iso8859等常用编码。还可以用滚动条很方便的翻页, 有贴心的下划线提示当前行, 搜索还支持regular expression. 能满足我多数要求。
+如果能支持user macro和搜索选中文字就更方便了。
+
+10:42 2011-9-23
+原中美检测场验车札记
+家里的小蓝满两年第一次年检，心里有点忐忑，上网查了查攻略，要点如下：带齐东西（行驶本，未到期的交强险副页，三脚架，未过期的灭火器），年检前做两次急刹车保证后轮制动测试通过，可能会说灯光不合格，师傅态度不好。
+本来想去买车时去的盛华，可是大家评价不好（地方大不容易迷路，态度差），后来发现西大望路的中美不错。我去中美验车很顺利，我九点半才到，十一点四十就完事了，支出166大洋，所有检测一次合格，没有额外消费，师傅也很热心，态度还算不错。
+唯一一个问题是拓号时在师傅的帮助下把地胶开了个口。本来师傅想打开右前踏板深进去拓号但是够不到，所以只能割开了。
+用graphviz画流程图如下（正好实验一下显示中文）：
+拓号->外观检查(含灯光)->交费200->尾气检查->上线检测->业务大厅退44元拿年检合格标志
+注：绿色环保标志不需要换新的。
+
+14:35 2011-10-8
+博客, 程序员阅读, 2011年10月
+1, android, auto test, monkeyrunner, monkeyrunner使用phthon编写可以调用android api, 这个和sl4a有关系么.
+2, 看书: debug hacks，linux内核调试
+
+17:13 2011-10-19
+1, 还是利用这个时间做编程练习. 
+想做编程练习, 结果原来系统程序员修炼之道不知道放什么地方了.
+\todo 下载. 
+
+2, 看看要不要看看设计模式的书.
+
+18:32 2011-10-19
+编程练习, 系统程序员修炼之道
+加入了del和print函数. 下一步是实践最近新学习的gdb调试技巧. 
+
+11:40 2011-10-21
+编程练习, 系统程序员修炼之道, 续
+1, 任务
+1), 对一个存放整数的双向链表，找出链表中的最大值。
+对一个存放整数的双向链表，累加链表中所有整数。
+2), 突然想起原来是希望用Linux list函数做的. maybe 还是先把目前的代码写好. 然后再添加新功能. 
+3), 用valgrind(http://valgrind.org/)检测自己有没有内存泄漏. 
+
+2, (14:33 2011-10-21)自己编译运行valgrind
+1), 下载tar包自己编译. 
+2), valgrind支持x86, ppc和arm架构:
+- x86/Linux
+- AMD64/Linux
+- PPC32/Linux
+- PPC64/Linux
+- ARM/Linux
+- x86/MacOSX
+- AMD64/MacOSX
+3), 命令"valgrind --leak-check=full ./dlist 12 44 66 888 6". 
+(1), 用昨天没有加free的版本. 可以看到add函数造成memory泄漏(==29882==    by 0x80485E5: add_list_head_with_data (dlist.c:56)
+):
+zhangjian@icp882-desktop:/opt/share/zhangjian/programming/dlist$ valgrind --leak-check=full ./dlist 12 44 66 888 66
+==29882== Memcheck, a memory error detector
+==29882== Copyright (C) 2002-2010, and GNU GPL'd, by Julian Seward et al.
+==29882== Using Valgrind-3.6.1 and LibVEX; rerun with -h for copyright info
+==29882== Command: ./dlist 12 44 66 888 66
+==29882==
+[0]: 888 @ 0x41960e8, prev 0xbef9a5d4, next 0x41960a8
+[1]: 66 @ 0x41960a8, prev 0x41960e8, next 0x4196068
+[2]: 44 @ 0x4196068, prev 0x41960a8, next 0x4196028
+[3]: 12 @ 0x4196028, prev 0x4196068, next 0xbef9a5d4
+after deleting...
+[0]: 888 @ 0x41960e8, prev 0xbef9a5d4, next 0x4196068
+[1]: 44 @ 0x4196068, prev 0x41960e8, next 0x4196028
+[2]: 12 @ 0x4196028, prev 0x4196068, next 0xbef9a5d4
+==29882==
+==29882== HEAP SUMMARY:
+==29882==     in use at exit: 36 bytes in 3 blocks
+==29882==   total heap usage: 4 allocs, 1 frees, 48 bytes allocated
+==29882==
+==29882== 36 (12 direct, 24 indirect) bytes in 1 blocks are definitely lost in loss record 2 of 2
+==29882==    at 0x4025230: malloc (vg_replace_malloc.c:236)
+==29882==    by 0x80485E5: add_list_head_with_data (dlist.c:56)
+==29882==    by 0x80487BD: main (dlist.c:119)
+==29882==
+==29882== LEAK SUMMARY:
+==29882==    definitely lost: 12 bytes in 1 blocks
+==29882==    indirectly lost: 24 bytes in 2 blocks
+==29882==      possibly lost: 0 bytes in 0 blocks
+==29882==    still reachable: 0 bytes in 0 blocks
+==29882==         suppressed: 0 bytes in 0 blocks
+==29882==
+==29882== For counts of detected and suppressed errors, rerun with: -v
+==29882== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 11 from 6)
+(2), 修改后提示访问越界(==30311== Invalid read of size 4), 从提示可以看到是free_list里面的两句话需要调换位置:
+                free_item(head->prev);
+		head = head->next;
+改为
+                head = head->next;
+                free_item(head->prev);
+完整log:
+zhangjian@icp882-desktop:/opt/share/zhangjian/programming/dlist$ valgrind --leak-check=full ./dlist 12 44 66 888 66
+==30311== Memcheck, a memory error detector
+==30311== Copyright (C) 2002-2010, and GNU GPL'd, by Julian Seward et al.
+==30311== Using Valgrind-3.6.1 and LibVEX; rerun with -h for copyright info
+==30311== Command: ./dlist 12 44 66 888 66
+==30311==
+[0]: 888 @ 0x41960e8, prev 0xbede95d4, next 0x41960a8
+[1]: 66 @ 0x41960a8, prev 0x41960e8, next 0x4196068
+[2]: 44 @ 0x4196068, prev 0x41960a8, next 0x4196028
+[3]: 12 @ 0x4196028, prev 0x4196068, next 0xbede95d4
+after deleting...
+[0]: 888 @ 0x41960e8, prev 0xbede95d4, next 0x4196068
+[1]: 44 @ 0x4196068, prev 0x41960e8, next 0x4196028
+[2]: 12 @ 0x4196028, prev 0x4196068, next 0xbede95d4
+==30311== Invalid read of size 4
+==30311==    at 0x804858D: free_list (dlist.c:40)
+==30311==    by 0x8048873: main (dlist.c:142)
+==30311==  Address 0x41960e8 is 0 bytes inside a block of size 12 free'd
+==30311==    at 0x4024E4A: free (vg_replace_malloc.c:366)
+==30311==    by 0x804854B: free_item (dlist.c:27)
+==30311==    by 0x8048589: free_list (dlist.c:39)
+==30311==    by 0x8048873: main (dlist.c:142)
+==30311==
+==30311==
+==30311== HEAP SUMMARY:
+==30311==     in use at exit: 0 bytes in 0 blocks
+==30311==   total heap usage: 4 allocs, 4 frees, 48 bytes allocated
+==30311==
+==30311== All heap blocks were freed -- no leaks are possible
+==30311==
+==30311== For counts of detected and suppressed errors, rerun with: -v
+==30311== ERROR SUMMARY: 3 errors from 1 contexts (suppressed: 11 from 6)
+
+3), ARM嵌入式LINUX系统编译valgrind-3.6.1 
+http://hi.baidu.com/wind_liao/blog/item/e48d13d255ce4b3507088bb3.html
+bamvor: 看起来valgrind主要是对armv7提供支持. 
+原文: 
+// 编译valgrind-3.6.1
+1.先将configure里原有的armv7*)改成armv7*|arm)
+2.执行:./configure --host=arm-linux --prefix=valgrind_install;
+3.make;
+4.make install;
+5.将valgrind_install/*拷贝到板上系统的/usr/local/
+6.valgrind --tool=memcheck --leak-check=full --error-limit=no --track-origins=yes 执行程序
+
+3, (16:45 2011-10-21)对比kernel list函数和我自己实现的list函数.kernel实现的更舒服一些. 
+
+14:10 2011-10-21
+博客, 电脑迷201110, windows8跨版本兼容仅限于Metro触控程序
+据悉，Windows 8桌面版可在英特尔和AMD生产的X86芯片上运行，Windows 8平板电脑则使用ARM芯片。 
+辛诺夫斯基在举行的微软Build开发者大会上曾表示，Windows 8平板电脑和桌面版本上的程序将跨版本兼容。 
+微软一位发言人随后表示，辛诺夫斯基所谓的跨版本兼容仅限于Metro触控程序，这类程序可以同时支持平板设备和Windows PC。 
+辛诺夫斯基随后也表示，Windows 8桌面版软件与Windows 8平板程序跨版本兼容并不现实，程序开发商需对程序进行优化，才能充分的利用硬件。 
+
+0:19 2011-10-24
+linaro, qemu, beagle, versatileep, 关注linaro在beagle和arm versatileep板子上的进展, 有对应的qemu模拟器可以运行
+https://wiki.linaro.org/Resources/HowTo/Qemu-beagleboard
+http://seabright.co.nz/2011/03/01/running-the-fedora-arm-beta-on-qemu-linaro/
+https://bugs.launchpad.net/linaro-image-tools/+bug/673335
+http://www.cnx-software.com/2011/03/15/qemu-linaro-versatile-express-image-on-ubuntu-10-10/
+https://wiki.linaro.org/PeterMaydell/QemuVersatileExpress
+(15:27 2011-10-24)"https://wiki.linaro.org/Platform/Android/ImageInstallation"adb使用指南(不清楚qemu里面能否使用): Using Android Debug Bridge (ADB) via TCP/IP.
+如果是通过TCP/IP使用, 在beagle板子上通过usb-net就有可能可以使用adb. 
+在adb命令里面确实看到支持tcp/ip连接. 
+
+10:11 2011-10-24
+软件技巧, xmanager, Xmanager-v3.0Build0143.zip, serial number: 101210-450789-147200
+
+09:04 2011-10-25
+读书笔记, debug hacks; 调试, debug, gdb, backtrace, disassembly(反汇编)
+gcc编译选项: -fomit-frame-pointer不影响gdb backtrace，因为gdb根据记录在调试信息中的栈使用量来计算帧位置。
+除了gdb和objdump外，还可以用crash看反汇编。
+
+14:00 2011-10-26
+软件技巧, cootedit, 提取音乐, 音乐渐弱
+1, coolcedit支持从视频中提取音乐. 
+2, 渐弱: 选择一段音乐, 菜单effects->amplitude->ampify->fade out. 
+
+23:07 2011-10-26
+博客, 提取视频音乐发不到新浪博客
+1, 从cooledit提取音乐. 
+
+2, 参考
+http://wenku.baidu.com/view/245051145f0e7cd184253641.html
+获得skydrive的外链. 
+http://skydrive.live.com/
+
+3, 在新浪博客的页面设置中添加音乐播放器.
+
+16:48 2011-11-10
+编程练习, 系统程序员修炼之道, 续2
+1, 写链表. 
+1), 对一个存放整数的双向链表，找出链表中的最大值。
+2), 对一个存放整数的双向链表，累加链表中所有整数。
+2, 借助kernel本来提供好的list_for_each函数, 可以很容易写入max和sum两个函数. 自己也考虑到要用回调函数visit做max, sum的实际工作, 但是又觉得如果这样做, 基本所有的遍历函数都是这样做, 是否有必要呢? 
+另外, 文中建议回调函数里面传一个ctx(callback context)保存临时变量, 这个主意不错. 
+3, 下一个要求: 对一个存放字符串的双向链表，把存放在其中的字符串转换成大写字母。
+4, 这里就设计到链表的通用性了. 看看我自己的链表, 从struct list_ex到每个函数, 都对这个类型的兼容考虑不足. 今天可能要先做这个通用类型的事情了. 
+1), 首先复习一个刚才kernel提供的list_for_each是怎么实现的, 先自己写写试试. 
+自己写了三次才记住: 
+#define list_for_each(pos, head)   \
+        for(pos = head->next; pos != head; pos = pos->next)
+safe版本也是写了三次才记住, 对于起临时作用的这个n(next), 没想清楚. 
+#define list_for_each_safe(pos, n, head)        \
+        for(pos = head->next, n = p->next; pos != head; pos = n, n = n->next)
+另外, 注意到kernel代码中所有对head的使用都加了"(", ")", 我也忘记了, 这是使用宏定义的基本要求. 
+2), 然后从stuct list_ex开始修改. \todo 明天继续. 
+
+15:54 2011-11-18
+编程练习: 
+文件系统：inode, dentry区别。对于一个hardlink和softlink二者有什么区别。
+kernel进程间同步方法。spinlock, semaphore, completion.
+memory management: kmalloc和kmap_cache区别，malloc做的工作。color是什么意思. 
+中断：spin_lock, spin_lock_irq区别
+
+如下函数运行有什么问题。
+#define N (10)
+void func(int a[N]);
+int main()
+{
+    int c[N];
+    func[c];
+}
+
+下面两个写法有什么区别，print地址有何区别。
+char *a=0;
+char *a='\0';
+第一个print应该会出错
+
+20:09 2011-11-18
+编程练习, c语言基础
+1, 如下函数运行有什么问题。
+#define N (10)
+void func(int a[N])
+{
+    //...
+}
+
+int main()
+{
+    int c[N];
+    func(c);
+}
+
+在pc上试了试, 不论我在func里面读a还是写a, 都没有问题(运行结果正确, valgrind也没有错误). 修改的数据也会同时修改到c. 奇怪了, 到底什么地方有问题呢?
+PS: 即使如此简单的代码, 我还是有两次编译错误, 一次是func(c)写成了func[c], 一次是rand()写成了rand. 
+
+2, 想写dentry和inode的练习. 
+UNIX_Linux编程实践教程 p120说符号链接是新建一个inode, 硬链接不是(建立dentry?). 
+发现dentry在kernel定义, 在用户空间还没法写代码. 看看有没有什么办法可以试试. 
+
+22:32 2011-11-19
+embeded, android, software, 博客, 我的海纳M8常用软件(VC0882, android2.3)
+1, 阅读器
+1), RepliGo Reader v3.1.0, 好用的pdf阅读器. 
+2), jota_text_editor: 自动识别各种编码格式的文本文件编译器. 
+平时记日志，写脚本都需要文本编辑。但原来用astro, es浏览器自带的编辑器，但是没法自动识别编码。后来发现这个很好用的text editor, 支持utf，gb18030，iso8859等常用编码。还可以用滚动条很方便的翻页, 有贴心的下划线提示当前行, 实用的搜索和替换功能(支持regular expression).
+3), office文件浏览: OfficeSuite, 对word, excel, ppt都有不错的支持. 
+DocumentToGo虽然可以支持编辑, 但是需要注册. 
+
+2, 输入法: 百度输入法: 支持拖拽选择标点符号. 拼音输入中支持首笔画选字. 
+
+3, 游戏
+1), 武士复仇II.
+2), 模拟器游戏大全. 支持很多模拟器. 下载游戏后支持自动设置环境并一键启动. 
+有些模拟器在M8上运行会退出, 好在东边不亮西边亮, "大全"推荐的模拟器, 总有一个是M8可用的. 
+
+4, 多媒体
+1), 看图我使用"快图浏览". 
+2), 音乐: 摸手音乐. 
+
+5, 远程桌面. 
+2X client, 充分利用平板的多点触控, 比remote desktop好用. 
+
+6, 加密软件
+filelocker. 
+
+7, 辅助开发工具. 可用用脚本写一些简单的应用程序, 方便自己使用. 见我的另一篇博文. 
+
+12:56 2011-11-21
+视频剪辑, 编辑锦儿翻身视频
+1, 用edius剪辑视频. 
+在家里用摄像机拍摄的视频是1024x576的但是格式是mpeg2, 后者的标准尺寸是720x576, 所以直接截取视频是按照mpeg2格式, 这样人都被压瘦了. 
+今天是用edius, 建立了一个1280x720的视频, 把锦儿的视频加入. 这样输出就不会失真了. 为了便于上传到博客, 我选择了mpeg格式, edius自动根据原始尺寸做了剪裁, 输出426x240的视频. 
+2, 借助百度文库上传. 
+公司网络没法上传到博客, 尝试借助百度文库上传, 上传倒是挺快的, 现在卡在"文档附件转换中"这个状态, 不知道需要多长时间. 
+后来发现即使嵌在word里面上传了, 也没法在服务器上再提取出单独的视频文件. 所以这个方法不行. 
+
+17:24 2011-11-22
+编程练习, memory management, kmalloc和kmap_cache区别
+1, 实际编程调用kmalloc和kmap_cache, 看看分配的memory有何不同. 
+写了, 但是还没有编译, 明天继续实验. 
+/opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/linux-linaro-3.1-2011.10-1/drivers/misc/vim_simple/vim_malloc.c
+2, (14:24 2011-11-23)
+检查程序, 看看能不能一次编译通过. 
+1), drivers/misc/vim_simple/vim_malloc.c:23: error: expected ',' or ';' before 'static'
+前面的struct后面没有加空格. 
+2), drivers/misc/vim_simple/vim_malloc.c:25: error: 'vimc_alloc' undeclared (first use in this function)
+定义时把vimc_alloc写成了vim_alloc.
+3), drivers/misc/vim_simple/vim_malloc.c:35: error: too few arguments to function 'kmalloc'
+kmalloc没有加gfp参数. 
+4), drivers/misc/vim_simple/vim_malloc.c:40: warning: initialization from incompatible pointer type
+SYSDEV_CLASS_ATTR所需的show和store参数遗漏了sysdev_class_attribute.
+5), drivers/misc/vim_simple/vim_malloc.c:75: error: expected expression before 'int'
+drivers/misc/vim_simple/vim_malloc.c:75: warning: excess elements in struct initializer
+drivers/misc/vim_simple/vim_malloc.c:75: warning: (near initialization for 'vimc_alloc_attr_grp')
+struct attribute_group后面没有加"};". 
+6), 工作三年还是会犯一些基础的错误, 什么时候我写的代码能一次编译通过呢? 
+
+3, 尝试使用gdbtui. 感觉比直接用gdb方便很多, 又不像ddd和eclipse需要图形界面, 尤其是后者费资源. 
+1), gdbtui中上面是source code. 当前执行的语句用反白表示. 这样就不需要用list命令看代码了. 可以用上下箭头直接浏览代码. 如果这样就没法用上下箭头看历史命令了, 改成什么快捷键了呢?
+2), 跟踪时顺便复习了进程指针位置, \todo看thread_info. 
+static inline struct thread_info *current_thread_info(void) 
+{
+    register unsigned long sp asm ("sp");
+    return (struct thread_info *)(sp & ~(THREAD_SIZE - 1));
+} 
+3), kmem_cache_alloc里面看到color, \todo 查. 
+4), vimc_malloc_init看起来没有问题. 通过sysfs分配memory
+/sys/devices/system/vimc_alloc_test/alloc
+用"cat /proc/buddyinfo"(以2^0 PAGE_SIZE开始, 详见"Documentation/filesystems/proc.txt"), 看看对于buddy系统的影响. 
+
+(gdb) p vimc_kmem_cache_alloc
+$1 = (struct kmem_cache *) 0xce263e40
+
+后面通过cache_alloc_allc分配的memory小于vimc_kmem_cache_alloc地址. 看来并不是简单的从vimc_kmem_cache_alloc分配. 里面会有算法. \todo. 
+
+4, 根据lingming的文档, "cat /proc/slabinfo"可以看到slab信息:
+slabinfo - version: 2.1
+# name            <active_objs> <num_objs> <objsize> <objperslab> <pagesperslab> : tunables <limit> <batchcount> <sharedfactor> : slabdata <active_slabs> <num_slabs> <sharedavail>
+vimc_kmem_cache     2140        2233       16         203         1              : tunables  120    60           0              : slabdata  11             11           0
+分配20次再看(bash: for语句, seq生成序列命令):
+[root@beagleboard alloc]# for i in $(seq 20); do  echo 1 > vimc_kmem_cache; cat vimc_kmem_cache; cat /proc/buddyinfo; usleep 100000;  done
+[root@beagleboard alloc]# cat /proc/slabinfo  | grep vimc_kmem_cache
+vimc_kmem_cache     2160   2233     16  203    1 : tunables  120   60    0 : slabdata     11     11      0
+2233-2160=73, 也就是再申请73+1个vimc_kmem_cache slab后, num_objs和num_slabs都要增加. 
+申请73个以后: 
+[root@beagleboard alloc]# cat /proc/slabinfo  | grep vimc_kmem_cache
+vimc_kmem_cache     2233   2233     16  203    1 : tunables  120   60    0 : slabdata     11     11      0
+[root@beagleboard alloc]# echo 1 > vimc_kmem_cache; cat vimc_kmem_cache
+0x1 @ 0xce1d06f8
+[root@beagleboard alloc]# cat /proc/slabinfo  | grep vimc_kmem_cache
+vimc_kmem_cache     2234   2436     16  203    1 : tunables  120   60    0 : slabdata     12     12      0
+果然如此. 从中也可以看出slab似乎也浪费了空间, 因为一个slab占一个page(pagesperslab=1), 而且一个slab里面有203个objects(objperslab=203), 这样203x16=3248, 离4096还差848. 随手算了几个slab, 都是3000多字节. 难道是因为slab有最小空间限制? 
+
+看了lingming的memoyr文档, 文档中提到通常用GFP_KERNEL作为kmallocgfp表示. kmem_cache_alloc一般也用GFP_KERNEL. GFP_KERNEL是普通优先级, 允许阻塞的分配. GFP_ATOMIC是不允许阻塞的分配.
+linux/gfp.h
+#define GFP_KERNEL      (__GFP_WAIT | __GFP_IO | __GFP_FS)
+这三个参数分别表示: 允许等待和睡眠, 允许IO操作, 允许文件系统操作. 
+"《slab分配器.doc》"里面有代码分析, \todo 路上看. 
+
+5, 加入kmap代码. 
+有没有kmap_cache? 没有. 
+
+13:53 2011-11-23
+博客; 软件技巧, android, 快图浏览, 根据图像尺寸更改屏幕方向
+注: 图片见"D:\personnal\log\blog\快图浏览"目录. 
+快图浏览这个软件第一次加载缩略图和android默认图库速度差不多. 第二次就快很多.
+<pic 1_桌面.png>
+<pic 2_快图浏览主界面.png>
+<pic 3_文件夹浏览.png>
+快图有个功能是根据图片方向设置屏幕方向. 对于看垂直方向的图片比较方便(横板pad看竖板照片, 竖板pad看横板照片), 比如海纳M8是横板pad, 对于看这种竖板照片, 默认系统设置(根据系统方向设置快图浏览的屏幕方向).
+<pic 4_默认是按照屏幕方向.png>
+<pic 5_竖版照片不会自动做适应_1.png>
+<pic 6_竖版照片不会自动做适应_2.png>
+如果修改为根据图片方向设置快图方向, 不论你横拿竖拿, 都会满屏:)
+<pic 7_修改为根据照片方向设置方向.png>
+<pic 8_竖版照片不论pad横竖都会满屏_1.png>
+<pic 9_竖版照片不论pad横竖都会满屏_2.png>
+
+15:52 2011-11-24
+编程练习, memory management, 理解mmap函数
+1, 任务: 单独写一个mmap函数. vimc_mmap.c及其测试程序. 
+实验mmap功能. 
+2, 设置开发环境
+1), cat ~/.vimrc
+" enable smart indent
+set si
+
+" enable auto indent when change line
+set ai
+
+2), 设置ctags和cscope, 在kernel source tree的上一级目录建立ctags和cscope所需的索引文件, 脚本和生成的文件如下.
+这个上面花了1个小时, 刚开始cscope建立的索引有重复, 原因是我同时用了-R和-s两个参数, 等于同一个目录通过-R递归搜索建立了一次索引, 再用-s在additional source里面建立一次索引. 
+[zhangjian@icp882-desktop linux-linaro-3.1-2011.10-1]$ cat update_cross_ref
+#!/bin/sh
+
+echo ctags
+rm kernel_arch_arm_tags -f
+ctags -f kernel_arch_arm_tags -R ${PWD}/linux-linaro-3.1-2011.10-1/arch/arm
+rm kernel_include_tags -f
+ctags -f kernel_include_tags -R ${PWD}/linux-linaro-3.1-2011.10-1/include
+rm kernel_drivers_tags -f
+ctags -f kernel_drivers_tags -R ${PWD}/linux-linaro-3.1-2011.10-1/drivers
+
+echo cscope
+rm kernel.out -f
+cscope -b -R -f kernel.out
+
+[zhangjian@icp882-desktop linux-linaro-3.1-2011.10-1]$ ./update_cross_ref
+[zhangjian@icp882-desktop linux-linaro-3.1-2011.10-1]$ ll -h
+total 499M
+drwxr-xr-x  3 zhangjian icp 4.0K 2011-11-25 00:44 ./
+drwxr-xr-x  3 zhangjian icp 4.0K 2011-11-16 23:27 ../
+-rw-r--r--  1 zhangjian icp  23M 2011-11-25 00:41 kernel_arch_arm_tags
+-rw-r--r--  1 zhangjian icp 158M 2011-11-25 00:42 kernel_drivers_tags
+-rw-r--r--  1 zhangjian icp  32M 2011-11-25 00:41 kernel_include_tags
+-rw-r--r--  1 zhangjian icp 288M 2011-11-25 00:44 kernel.out
+drwxr-xr-x 24 zhangjian icp 4.0K 2011-11-25 00:40 linux-linaro-3.1-2011.10-1/
+-rw-r--r--  1 zhangjian icp  332 2011-11-25 00:17 tags
+-rwxr-xr-x  1 zhangjian icp  488 2011-11-25 00:44 update_cross_ref*
+
+同时需要在"~/.vimrc"里面将索引加入:
+[zhangjian@icp882-desktop linux-linaro-3.1-2011.10-1]$ cat /home/zhangjian/.vimrc
+set tags+=/opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/kernel_arch_arm_tags
+set tags+=/opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/kernel_include_tags
+set tags+=/opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/kernel_drivers_tags
+
+cscope add /opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1/kernel.out /opt/share/zhangjian/linaro/beagle/kernel/linux-linaro-3.1-2011.10-1
+
+3, 根据lingming文档, 参考"fb_map()(drivers/video/fbmem.c)", 未完成, 明天继续. 
+
+12:51 2011-11-25
+软件技巧, vi
+1, VI高级命令集锦
+http://xghzgm203.blog.163.com/blog/static/3951257320087583323394/
+1), 上下两行合并: J
+2, 一个vim配置，方便写perl的（转）
+http://blog.163.com/csk1103/blog/static/859114092008884451529/
+3, vim使用perl
+1), 执行":perl"提示需要perl512.dll, 于是上网下载activeperl5.12
+安装后":help perl"里面的命令就可以执行了. 由于vim提供了perl的接口, 将来logAssistant应该可以和vim有紧密的配合. 
+
+13:15 2011-12-2
+软件技巧, perl学习; 标点符号的读法
+1, 标点符号的读法
+dash(破折号, 短线): "-" 
+single quote(单引号): '
+double quote(双引号): "
+parentheses(圆括号): (, )
+
+13:41 2011-12-2
+缩写, adb, gdb
+Android Debug Bridge (ADB)
+GDB（GNU DeBugger）
+
+12:00 2011-12-5
+moto, e6, 备份, 刷机
+小6最近先是容易死机, 然后是电话本和短信都看不到了. 所以希望先备份电话本再刷机. 
+1, moto e6电话本备份
+1), 自: http://hi.baidu.com/liuefox/blog/item/7c8eeaef2c60fd32acafd5f5.html
+A1200/A1200R/A1200E 系统文件解析
+**电话本 080111
+\\192.168.16.2\system\ezxlocal\sysDatabase\main.db
+如果开机或查看电话本时显示“等待db..”请将此目录下log.xxx日志文件删掉重启试试
+2), 触摸屏损坏下备份Moto E6电话本和短信  
+http://blog.163.com/xuxi_1990/blog/static/50757954201171023033784/
+可以用"yan0_SMS_CONTACT_DUMP"提取上面main.db的数据. 
+3), 根据"http://tech.163.com/mobile/09/0108/09/4V4JQH3F00112K95.html", 直接用moto的工具应该也可以备份电话本. 
+2, 下载moto工具(mobile PhoneTools)备份电话本:
+http://zone.it.sohu.com/forums/viewthread.php?tid=3084135&extra=&page=1
+用MPT没法读出电话本. 
+3, moto主复位默认密码是: 000000
+4, moto e6刷机教程. 
+http://zone.it.sohu.com/forums/thread-988391-1-1.html
+刷机包是"E6_E6e终结者4". 
+刷机后电话本和短信正常. 
+用起来感觉打开系统默认功能有些慢. 但是上网速度快了很多. 
+先试用一下, 如果必要再刷其他包. 
+
+18:27 2011-12-5
+网络, 341, 735
+
+8:37 2011-12-6
+偶尔换个上班的路线还挺有意思的。在国贸换乘一号线，发现人也没那么多，只是人挨人，没有人挤人。新车箱的空调也不错，感觉空气尚可，温度合适。
+
+10:45 2011-12-8
+呼家楼西南街6号, 呼家楼路口北, 路东. 近泰康金融大厦. 
+1680, 50.
+66yuan. 
+A: 50, 300M,  
+B: 200, 60M
+C: 380本地, 
+
+问周末能否办理业务. 
+查多普达S1是什么网络. 
+
+11:28 2011-12-9
+zhangnairan, android, HD lab, 虚拟电池技术. 
+
+13:21 2011-12-10
+资料, 辞职信
+苹果CEO乔布斯提出辞职 附辞职信全文
+自: http://tech.163.com/11/0825/06/7C9K04I0000915BD.html
+网易科技讯  8月25日消息，苹果CEO史蒂夫·乔布斯周三正式向苹果董事会提交辞职申请。他推荐公司COO蒂姆·库克接任。他在辞职信中表示，自己无法继续担任CEO，不过自己愿意担任公司董事长、董事或普通职员。
+
+以下为辞职信全文： 
+
+给苹果董事会和苹果公司：
+
+我常说，如果有那么一天，我无法再胜任苹果CEO，无法再达到大家的期望值，我会在第一时间告诉你们。不幸的是，那个日子终于到了。
+
+在此，我宣布辞去苹果首席执行官职务。如果董事会认为合适的话，我想担任董事长，或者董事甚至普通职员都可以。
+
+至于我的继任者，我强烈建议实施我们已定的继任计划，并提名蒂姆·库克担任苹果CEO。
+
+我认为，苹果最光明和最具创新力的日子还在后头。我期待着在新的岗位上看护苹果的成功并为此做出贡献。
+
+在苹果我交了一些生命中最好的朋友，我要感谢多年来与我共同努力的所有人。（木秀林）
+
+附辞职信英文原文：
+
+To the Apple Board of Directors and the Apple Community:
+
+I have always said if there ever came a day when I could no longer meet my duties and expectations as Apple’s CEO, I would be the first to let you know.
+
+Unfortunately, that day has come.
+
+I hereby resign as CEO of Apple. I would like to serve, if the Board sees fit, as Chairman of the Board, director and Apple employee.
+
+As far as my successor goes, I strongly recommend that we execute our succession plan and name Tim Cook as CEO of Apple.
+
+I believe Apple’s brightest and most innovative days are ahead of it. And I look forward to watching and contributing to its success in a new role.
+
+I have made some of the best friends of my life at Apple, and I thank you all for the many years of being able to work alongside you.
+
+12:59 2011-12-12
+地理知识, 省: 内蒙古, 民族: 蒙古族
+清政府将蒙古地区分为内属蒙古和外藩蒙古，又将外蒙古分为内扎萨克蒙古和外扎萨克蒙古，一般称瀚海以南或大漠以南为内蒙古，即内扎萨克蒙古，内扎萨克蒙古就地域而言相当于今天内蒙古自治区的兴安盟、哲里木盟、乌兰查布盟的部分地区、巴彦淖尔盟、伊克昭盟、赤峰市、包头和锡林郭勒盟的北半部以及东北黑龙江、辽宁和吉林三省与内蒙古的交界的一小部分，东西长达万余里。
+　　内扎萨克蒙古共有二十四个部落。分别是：科尔沁部、扎赉特部、杜尔伯特部、郭尔罗斯部、敖汉部、奈曼部、巴林部、扎鲁特部、阿鲁科尔沁部、翁牛特部、克什克腾部、喀尔喀左翼、喀喇沁部、土默特部、乌殊穆沁部、浩齐特部、苏尼特部、阿巴噶部、阿巴哈纳尔部、四子部、茂明安部、乌喇特部、喀尔喀右翼部、鄂尔多斯部、这二十四部被组成六盟、分四十九个旗，
+
+扎萨克: zh.wikipedia.org/wiki/扎萨克
+扎萨克，又作札萨克（蒙古语：「执政官」的意思），是一种清朝时的主要对蒙古人和藏人（西番）授予的军事、政治官职爵位。其等级依次为汗、亲王、郡王、贝勒、贝子等，均由朝廷册封，受当地办事大臣或参赞大臣节制。札萨克是朝廷册封的，都有爵位，大多可以世袭。一般称为「王爷」。
+
+在札萨克的封地内，山川、河流、山林、牧地、田产均归其所有，且不向政府担负任何徭役、税赋。人民统归其管辖并交纳赋税，承担徭役，而且札萨克对他们有生杀予夺之权。
+
+史海沉钩之七——外藩与内属：臣服满州
+http://www.baotounews.com.cn/zjbt/2008-09/23/content_3974.htm
+详细描述了蒙古历史. 
+
+内蒙古, 历史沿革
+http://baike.baidu.com/view/5318.htm
+南匈奴人和东胡人逐渐和华夏民族融和，形成今天的汉族的前身。
+
+蒙古习俗: http://baike.baidu.com/view/2675.htm
+若门前有火堆或挂有红布条等记号，表示这家有病人或产妇
+
+中华民族构成: http://baike.baidu.com/view/1917.htm
+中国民族构成
+1 汉族12,2593,3000 
+2 壮族1617,8811 
+3 满族1068,2263 
+4 回族981,6802 
+5 苗族894,0116 
+6 维吾尔族839,9393 
+7 土家族802,8133 
+8 彝族776,2286 
+9 蒙古族581,3947 
+10 藏族541,6021
+
+13:53 2011-12-12
+地理知识, 省: 河北
+
+19:05 2011-12-12
+中国古代史, 读书笔记, 国史大纲, 元, 第三十五编, 暴风雨之来临
+元是中国历史上第一次完全由少数民族统治。
+蒙古取金，宋都采取迂回策略。
+先从西康绕攻大理，再回攻荆襄。但只攻陷襄陽一城，已先後费时六年。自襄陽陷後至宋滅，又六年。
+蒙古南下时大量任用汉人，但灭宋后汉臣渐疏，元政亦衰。
+蒙古族南下前，其他少数民族都是在汉族内乱时南下，但也没有统一中国。蒙古南下不同，且统一了中国。所以近代大家都教育国人说，积弱就会亡国，并不确切。
+
+9:04 2011-12-13
+中国古代史, 读书笔记, 国史大纲, 明
+中国历朝历代，只有汉，明建立者是农民。
+
+10:51 2011-12-14
+coding, 编程练习, 系统程序员修炼之道, 续3, 大小写转换
+0, 觉得还是需要实际写代码. 系统程序员成长计划. 打算还是写一写. 每天半天时间写代码? 今天写字符串(查之前日志).
+1, 对一个存放字符串的双向链表，把存放在其中的字符串转换成大写字母。
+我现在这个链表本来是希望写成通用的, 但是目前处理整数和通用链表实现耦合在一起了. 需要修改. 
+2, 还是没法忍了, 版本维护很困难. 先建立一个GIT吧. 
+1), Git入门教程
+http://hi.baidu.com/eehuang/blog/item/37af8d54242d6351564e00b5.html
+如果是自用的话. 其实很简单.
+[zhangjian@icp882-desktop dlist]$ git init
+Initialized empty Git repository in /opt/share/zhangjian/programming/dlist/.git/
+然后就可以用git add, git commit命令提交了. 
+
+14:31 2011-12-20
+JD和简历修改
+1, 发件人： Chin Tsai (biteye@gmail.com) 
+发送时间： 2011年12月15日 21:50:26 
+
+下面这个是招聘帖子，附件是上周写的简历，尽量把项目经验往职位需求相关靠拢，呵呵。 
+ 
+发信人: nsnl (Vision), 信区: VideoCoding
+标  题: 国内知名通信企业媒体实验室招聘
+发信站: 水木社区 (Sun Dec  4 16:12:07 2011), 站内
+一个长远的目标，一个大的平台，只要你对视频/图象处理领域的研究/应用有兴趣，并渴望
+在视频/图象处理领域积累自己，发展自己，希望你可以联系<yunsn.li@gmail.com>。
+
+职位（视频图象处理系统工程师）
+信号处理，视频图象处理，原型硬件系统设计
+
+要求：
+1. 电子工程，计算机科学相关专业的硕士博士；
+2. 视频图象编解码和多媒体系统知识背景，或视频前后处理领域的研究经验；
+3. 视频图象硬件处理架构，硬件系统设计和FPGA逻辑设计；
+4. 3年以上的视频/图象/硬件设计领域的的研究工作经历；
+5. 主动积极，有较强的学习能力，良好的沟通能力；
+
+工作地点：北京/深圳
+ 
+2, 从JD看, 感觉更像是招算法和IC工程师, 貌似不是软件工程师. 
+
+简历修改建议. 
+1), 能力综述(我是叫"自我评价")可以对应JD要求写, 放到个人资料后面. 
+这样有助于面试官一下看到你的亮点. 
+2), 我的简历里面把工作经历和项目经验交叉在一起, 统一按照时间顺序排列. 
+3), 我的简历里面"Project Description"和"Responsibility"是明显分开写的. 而且要在Responsibility里面强调量化的工作成果. 
+我感觉看着有点累, 是否字号, 字间距调整一下? 
+可以考虑分出层次. 尤其是项目情况和自己做的东西要分开. 
+4), hantro, 7170, 718等公司/项目名称一般不写. 
+
+9:19 2011-12-27
+腾讯soso地图，街景服务。
+查红山寺。
+
+10:14 2011-12-27
+地图, android, baidu maps(百度地图), api
+http://dev.baidu.com/wiki/imap/index.php?title=Android%E5%B9%B3%E5%8F%B0
+
+10:33 2011-12-27
+博客, 中国三大淡水湖的前世今生（顺便说说北京周边的三个水库）
+
+转帖: 中国三大淡水湖的前世今生
+http://hi.baidu.com/lsq19661001/blog/item/12b36befbcaa681bfcfa3c51.html
+注: 原文有三大淡水湖的湖域历史变迁图, 这里没有引用. 代之全家福
+
+    长江中下游平原及其三角洲地区，是我国湖泊分布密度最大的地区。这些湖泊大多是与新构造断陷与河床演变有关的构造湖或河成湖。 
+    泥沙大量淤积、洲滩迅速发育。围湖造田不断发展是本区湖泊发生迅速演变的主要原因。据不完全统计，仅长江中下游湘、鄂、赣、皖、苏5省，因围垦而消亡的湖泊面积就多达12000km2，其结果是导致湖泊对江河的调蓄作用日益减少，湖泊生态系统及资源组成遭到不同程度的影响和破坏。
+
+    【洞庭湖】燕山运动的断裂作用在今湖区产生了地堑式的拗陷，形成了洞庭湖盆的原始雏型。随着湖盆多次下沉，古云梦泽逐渐解体，荆江洪水南移，湖盆积水逐渐增加，湖泊面积扩大，发展成为烟波浩渺的“八百里洞庭”。1825年，湖面达6000km2。
+
+    19世纪以后，由于夺沙改道，大量分泄江洪，泥沙入湖量增多，形成高洲，围成垸田。据1956～1977年实测资料，平均每年进入洞庭湖泥沙为1.32×108m3，其中长江三口来沙占82.6％，每年从城陵矶输出沙量只占入湖总量的26.5％，四分之三的泥沙沉积在洞庭湖内，平均每年淤高3.2cm，大水之年可达4.6cm。1977年湖面为2740km2，1984年为2691km2，1995年实测湖泊面积仅为2625km2。河流挟沙入湖是洞庭湖淤积的重要原因。
+
+    人类的围湖垦殖是洞庭湖淤浅变小的另一重要原因。20世纪的二三十年代，豪绅在洞庭湖区竞相围湖筑堤，湖泊面积迅速缩小。到50年代初期，大面积围湖造田，加速了天然湖面的萎缩进程，1978年从卫星实拍照片测算，枯水期湖水面仅1070km2。
+
+    在湖面迅速缩小的同时，洞庭湖水深也在迅速变浅，湖泊容积锐减。1983年洞庭湖容积为174×108m3，只有1949年的45％，1995年实测湖泊容积为167×108m3（城陵矾水位33.0m），湖泊调蓄能力大为降低，洪涝灾害日趋严重。现今的洞庭湖已演变为以陆洲为主体的平原——湖泊景观了。
+
+    【鄱阳湖】在历史时期的消长和每年季节性水位变化都比较大，汛期碧波万顷，枯水时水束如带，滩地出露，是典型的吞吐型湖泊。 
+
+    距今1500年前，由于长江主泓道南移至湖口一带，长江江水阻碍了鄱阳湖北去的泄水，淹没了众多古代城邑，使鄱阳湖面积迅速扩大，唐初湖面扩至约6000km2。
+
+    唐末至明初，赣江等五河三角洲迅速伸展，由于开辟农田，建筑农舍，使鄱阳湖水域大为缩小。明代中叶长江张家洲的出露和东南移，再次束窄湖口入江断面，加上梅家洲继续发展，明清以来鄱阳湖又一次扩张。赣江、修水的三角洲前缘地带已屯垦的农田、村宅均被水淹。
+
+    20世纪70年代前，在湖的偏南部，即五大河下游的出口冲积平原处，由于大面积围垦、水土流失加剧和三角洲加速充填湖盆，鄱阳湖水位呈上升趋势。
+
+    【太湖】成湖不超过2000～2500年历史。春秋战国以前，太湖地区原是陆地的冲积平原，后因气候变化引起洪涝灾害，地面被洪水淹没，加之泥沙淤塞，人类围垦，引起河道渲泄不畅，涝水内积，许多洼地积水成湖，太湖就是在原有河道基础上因洪泛而扩展成湖的。近代太湖的变迁以东太湖地区最为突出。唐代湖水可达吴江塘岸。
+
+    洞庭东山和西山原为湖中两大岛屿，后因东山与木读间泥沙淤积，滩地扩展，至清代中期，岛与沙洲相接，使东太湖成为太湖的一大湖湾。近一二百年来，因东太湖东岸和西北岸淤积加甚，加之围垦湖滩地，东太湖实际上已成为一个狭长见阻水严重的浅涸湖区。
+
+    20世纪六七十年代，太湖及其周围湖群，因围湖种植和围湖养殖，湖泊面积减少13.6％，消失或基本消失的湖荡有165个，合计面积161km2。其中以太湖、隔湖最为突出，太湖西北的马迹山岛因围湖造田已与陆地相连。隔湖的北、东、南面因加速围湖，使原有湖面大为缩小。
+
+引用五个淡水湖全家福(log\blog\中国三大淡水湖\中国三大淡水湖.jpg, 中国三大淡水_地形图.jpg, 中国三大淡水湖_卫星图.jpg)
+----------------------------------转帖结束-----------------------------------------
+下面是我自己找的北京附件的三个水库的资料. 
+密云水库
+密云水库在密云县城北13公里处，它位于燕山群峰之中，横跨潮、白两河。水库是亚洲最大的人工湖（引注：这个说法有问题，至少目前不是），有“燕山明珠”之称。它是北京市民用工业用水的主要来源。库区夏季平均气温低于市区3℃，是一处避暑胜地。
+密云水库建于1958年9月-1960年9月，主要建筑有挡水的白河主坝（高66米，长960.2米）、潮河主坝（高56米，长1100米）和5道副坝、2条输水隧洞、3个大型溢洪洞、2座发电站、1座大型调节池和1条密云至北京引水渠。水库全面积188平方公里，水面137000亩，水深40米至60
+密云水库 风景图(19张)米，分白河，潮河、内湖三个库区，总蓄水量为43.17亿立方米，相当于67个十三陵水库或150个昆明湖，环湖公路110公里，乘车转一圈需三个多小时。 
+
+官厅水库
+官厅水库在位于河北省张家口市和北京市延庆县界内，于1951年10月动工，1954年5月竣工，是新中国成立后建设的第一座大型水库；主要水流为河北怀来永定河，水库运行40多年来，为防洪、灌溉、发电发挥了巨大作用。官厅水库曾经是北京主要供水水源地之一。20世纪80年代后期，库区水受到严重污染，90年代水质继续恶化，1997年水库被迫退出城市生活饮用水体系。之后在2007年8月被重新启用作为北京饮用水水源地。
+永定河为海河水系主要干流之一，大部流经黄土地区，含沙量大(最大达32.2%)，有「小黄河」之称。下游受到泥沙淤积，河床抬高，常泛滥成灾。为了根治永定河，1951年10月开始兴修官厅水库，1954年5月5日建成。水库建于官厅山峡入口处。据传明代在此设有「把水官」，监视水情。旧有官厅村，水库因以官厅命名。水库坝高45米，把永定河水蓄积在坝以上桑乾河、洋河、妫水冲积的怀来盆地中，面积230平方公里，控制永定河97%的流域面积的径流，库容22.7亿立方米(近年因泥沙淤积，库容已逐年减少)。可以拦蓄官厅以上百年一遇的洪水，解除平、津地区洪水威胁，保证京山、京汉两铁路的安全。还供应北京城市用水，利用废水还可灌溉北京东南郊2万多公顷农田。库内为北京等城市提供大量水产。发电站装机容量为3千瓦，1955年建成，电力供平津唐电网高峰负荷时工业和照明用。
+
+于桥水库(天津, 蓟县)
+控制流域面积2060 k㎡，占整个州河流域面积的96%。州河由沙河、淋河、黎河三大于桥水库支流汇合而成，各支流上游沟涧甚多，支流分散成辐射状汇集于州河盆地，水库库区即位于该盆地，最大回水长东西约30km，南北宽8km，最大淹没面积250k㎡（正常蓄水位时淹没面积86.8 k㎡）。州河流域境内雨量充沛，多年平均降雨750mm，多年平均径流量5.06亿m3。水库运用初期，曾出现过坝下游大面积沼泽化、管涌等现象，唐山大地震后，主河床附近坝段坝坡脚产生裂缝，坝基出现砂层液化现象。“75.8”河南大水后，水库被列为病险水库，因此按千年一遇设计，最大可能洪水校核标准对水库进行除险加固，设计洪水位25．62米，洪峰流量8327立方米／秒，校核洪水位27.72米，洪峰流量17960立方米／秒。为保证引滦工程输水1982至1983年对大坝实施了加高坝顶、加固坝坡及坝基截渗等工程措施。1995年1996年采用高喷防渗墙结合坝后压重的方法再次对大坝进行了局部加固处理。2001年至2003年再次对大坝进行加固处理(包括420米的防渗墙，高压喷射灌浆、补喷、接触灌浆、现浇砼防浪墙、减压沟回填、坝后压重、迎水坡护砌)。
+
+引用近北京水库全家福(log\blog\中国三大淡水湖\北京周边三大水库.jpg, 北京周边三大水库_地形图.jpg, 北京周边三大水库_卫星图.jpg)。
+
+看到官厅水库属于张家口，不仅想起前不久看到的《“环首都贫困带”再调查：北京依然孤独地繁荣着》(http://www.21cbh.com/HTML/2011-12-24/zNMDY5XzM5MDgzNQ.html)，里面提到了赤城县。部分引文如下：
+2005年8月17日，亚洲开发银行资助的一份调查报告首次提出“环京津贫困带”的概念：在国际大都市北京和天津周围，环绕着河北的3798个贫困村、32个贫困县，年均收入不足625元的272.6万贫困人口。如果以150公里的直线距离计算，与北京接壤的河北省张家口、承德、保定三市就有25个国家级和省级贫困县。谓之“环首都贫困带”，名副其实。
+如今，6年过去，“环首都贫困带”不仅未能缩小与北京周边郊县的贫富差距，反而愈加落后，嫉妒与不满广泛存在。
+从东京到上海，从巴黎到伦敦，从纽约到芝加哥……综观全球，依托特大城市的辐射能力而形成特大城市经济圈/带，是全球区域发展中引人瞩目的现象。在中国，无论是上海为代表的长三角，还是广州、深圳为代表的珠三角，都是特大城市经济圈的典型代表，在长三角或珠三角城市群内部，经济发展水平差距不是非常大，但在环首都经济圈里，却出现了这样一个环首都贫困带。北京何以孤独地繁荣着？
+
+不仅仅是赤城与延庆，滦平与密云之间，涞水与房山之间，也都存在这类似的情况：一条马路紧相连，一个界碑两重天。
+比如，同样是“村村通”工程，北京每公里补助35万元，而河北仅补助3.5万元；同样是护林员，延庆的月工资能到1800，而赤城只有五六百；延庆的孩子上学、老年人坐车，都是全免费，赤城174个村公路都不通；同样是交医保，报销上限不一样……从就学就医到养老就业，差别无处不在。
+“这导致紧邻北京的几个乡镇动员参加医保的工作开展起来很困难。”一位曾担任东卯镇副镇长的官员说，“人家是要给的补贴都给全了，咱这儿是没钱补。”
+2010年，赤城全部财政收入为6.3亿元，延庆9.9亿元，差距不是太大；但赤城可用财力为5.7亿元，延庆却高达60亿元！
+以赤城县为例。赤城是河北省的资源大县，境内矿产、水利、林牧业资源都很丰富。其中赤铁矿和磁铁矿储量均居全省第二位，沸石矿储量居亚洲第一。但是，由于赤城地处北京的上风上水区，供应了密云水库53%的上游来水，近几年，赤城县对资源开发实行了限制政策，共砍掉70多个可能造成水源污染的经济合作项目，造成每年损失利税近亿元；关停、压缩了59家企业，近千人因此下岗。
+畜牧业曾是赤城县的支柱产业，占到很多家庭收入的一半以上。然而，为了配合京津风沙源治理工程，自2002年12月起，首都周边这些山区全部实行了禁牧政策。赤城县畜牧局统计，实行禁牧政策后，短短三四年时间，全县羊、牛存栏量分别减少了48万只、4.6万头，几个畜牧业为主的乡镇，居民收入出现下降。
+
+2006年10月11日，京冀两地政府在北京签署《北京市人民政府河北省人民政府关于加强经济与社会发展合作备忘录》。
+该《备忘录》确定，京冀两地分两期合作实施密云、官厅水库上游承德、张家口地区18.3万亩水稻改种玉米等低耗水作物，北京市按照每年每亩450元的标准给予“稻改旱”农民“收益损失”补偿。从2005年至2009年五年内，北京市安排水资源环境治理合作资金1亿元，支持密云、官厅两水库上游张承地区治理水环境污染、发展节水产业。
+
+河北省社科院原副院长杨连云则告诉记者，在私下里，关于京津冀的调整的三套方案已讨论多年，几成“公开的秘密”。
+
+三套方案分别是：一、恢复清朝时的直隶省——也就是京津冀合并；二、冀北地区划归北京，剩下的保定、沧州以南地区形成小河北省；三、河北一分为三，以天津为省会，与秦皇岛、唐山一起成立渤海省，张家口承德划归北京，剩下的地方构成河北省。
+“这三个方案都可让河北免于目前这种不成体系的尴尬。”杨连云认为，河北省的悲剧就在于没有中心、不成体系——唐山虽然位居河北经济龙头，但偏居冀东北一隅，且实力远不及京津；石家庄就更弱、更没有辐射能力。更早一些时候，河北甚至连出海口都没有，而要走天津。也因此被理论界愤恨地嘲讽为“没心没肺”。
+1949年以来，先后划入北京的河北辖区包括：通县、平谷、顺义、密云、怀柔、昌平、大兴、宛平、良乡、房山、延庆。
+
+\todo 河北地图，画出三个方案。
+
+注: 所有图片引自google地图. 
+
+17:57 2011-12-27
+琴房, 钢琴
+1, 看看58同城，国贸附近练琴
+http://bj.58.com/guomao/gangqinpeixun/
+
+2, 北航附近的琴房
+自: http://bbs.popiano.org/viewthread.php?tid=127811
+1), 翠微大厦旁边的希佳，到8：30.
+或者是语言文化大学十字路口的麦当劳旁边的那个琴行，叫什么我没记住。
+这两个琴行有没有包月我不清楚，你自己问问吧。
+再远一点的话，你就冲向中国音乐学院吧。。。
+2), 我没找到希佳,但是找到了五道口的君艺.那里不错.有包月但是很贵,400.我下个月就回深圳了,那包月才260
+3), 后来我还找到了海淀医院对面的姜杰，本来钢琴很差，音都不准，键也有坏的。好在便宜，五块钱一小时，谁知，今天回来发现长到10块钱了！就那破琴，不值！
+还是去君艺好了，可是他们每天七点开始都上课，根本没有琴房可以弹。
+我准备今天去那个牡丹园的看看去
+
+3, bamvor: 看地图，想起矿大东北角也有琴房。

@@ -1,0 +1,3059 @@
+﻿
+9:48 2011-6-1
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后跑死, 续, 使用固定ddr training结果稳定性有很多提高
+1, 昨天发现加了no_console_suspend, 唤醒后, kernel无打印. 
+暂时不查这个问题, 继续实验
+1), 333MHz, power on不training, 使用2222, 00配置. wakeup后使用同样参数. 
+BRG#: putty_20110601_101530, 目前654次.
+1#: putty_20110601_103432: 255次后无法休眠唤醒. 
+2), 1#板跑到255次后, 打印如下信息后停住:
+request_suspend_state: sleep (0->3) at 8796118866649 (2000-01-01 03:58:12.555991308 UTC)
+PM: Syncing filesystems ... done.
+找bianrongguang和jinyang帮忙看, 感觉没法恢复了, 于是重启后继续测试:
+1#(putty_20110601_170051): 157次wakeup后, kernel正常运行中重启:
+request_suspend_state: sleep (0->3) at 5205878805163 (2000-01-01 08:39:45.545957384 UTC)
+M0x00000001
+M0x000000d0
+
+第三次测试死在, 第4次唤醒后: 
+Suspending console(s) (use no_console_suspend to debug)
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x80041a18
+M0x00000011
+H0x80041a18
+
+2, 给leisijun(18665831182)发邮件, 测试96MHz稳定性
+1), zhangjian2leisijun邮件.
+(1), 用附件的烧写脚本(vortex_flash_96.ini, 改名为vortex_flash.ini)烧写(\\10.0.12.160\share\androidbuilds\vortex_20110531_Suspend_Resume_Test_8Inch_WakeupDt.pak), 复制"\\10.0.12.160\share\zhangjian\auto_suspend.sh"到882 pad sd内卡. 
+(2), android主界面出现后, 输入如下两条命令, 系统会随机1-2分钟做自动休眠唤醒: 
+bash-4.1# hwclock -w
+bash-4.1# sh /mnt/sdcard/auto_suspend.sh &
+(以下是打印信息, 供参考)
+1466
+bash-4.1# alarm after 33 seconds
+request_suspend_state: sleep (0->3) at 266762394232 (2000-01-01 00:00:46.529126538 UTC)
+PM: Syncing filesystems ... done.
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+M0x00000001
+M0x000000d0
+...
+(3), 请保存完整log, 便于分析.
+
+有问题电联: 013810498791
+
+2), leisijun说没法休眠. brg猜测可能是误报的charger中断, 所以我建议他更换没有usb口的串口线试试. 
+
+3, 发邮件.
+今天实验1#和BRG#两块板子(固定用0x2222和0x0作为ddr training结果):
+1#板: 实验两次:
+1), 第一次: 在kernel正常运行中出错(255次休眠唤醒)
+2), 第二次: 在kernel正常运行中重启(157次休眠唤醒), 重启后死在第四次wakeup后跳转到ddr后.
+3), 第三次: 第46次唤醒后跑到usb boot. 
+⒋), 如果power和wakeup都training, 1#板一般在10次内死, 没有超过20次测试. 
+BRG#目前跑了382次没有死. 
+从以上结果看, 改为0x2222和0x0对于板子的稳定性有很大提高. 晚上正在继续测试多个板子. 
+
+4, (10:02 2011-6-2)更新测试结果邮件:
+1), BRG#(putty_20110601_101530_BRG#.txt): 654次. 
+2), 1#
+1), 第一次: 在kernel正常运行中出错(putty_20110601_103432, 255次休眠唤醒)
+2), 第二次: 在kernel正常运行中重启(putty_20110601_170051_1#_2stTest_Dead_Reboot_Test_Dead, 157次休眠唤醒), 重启后死在第四次wakeup后跳转到ddr后.
+3), 第三次: 第46次唤醒后跑到usb boot(putty_20110601_211732_1#3rdTest_Dead_UsbBoot). 
+4), 第四次: 611次(putty_20110601_225453_1#4thTest_Pass). 
+
+2), 128x8x4:
+344次
+
+1, 13, 14, 17
+
+14:20 2011-6-1
+(10:15 2011-9-9)
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, 问题汇总; 文档; 新增关机死机bug; bug外的代码修改
+在楼下四个月主要是调试suspend/resume稳定性, 这里汇总一下
+1, 休眠不下去, 或跑死: 
+1), 休眠过程中有中断, 导致driver suspend出错退出, 会接着执行resume流程. 
+认为是正常情况, 未修改. 
+2), driver休眠后(arm中断也已经关闭), 发生中断, 跑死. 
+分析: 如果wfi前发生中断, 这样会跑过wfi, 如果后面没有处理, 代码会跑死.
+修改: wfi后, 做sw rst. 一级boot会根据设置走wakeup流程, 这样保证系统不会跑死. 
+这样修改的问题是, 系统实际是直接用这个中断做了类似唤醒的操作, 并没有针对这个中断进行处理, 这样可能有问题.
+3), 休眠中ddr进入自刷新后跑死. 
+分析: 出错原因可能是ddr进入自刷新后, 软件为了访问寄存器空间造成mmu访问ddr的页表但是ddr已经进入自刷新无法响应.
+修改: 修改882寄存器映射为section映射, 这样ddr进入自刷新的操作就能保证寄存器页表已经在tlb中.
+这个问题是bianrongguang分析得到的, 道理上说得通, 但是没法确认.
+
+2, 唤醒后跑死. 
+1), 唤醒后一级boot完成, driver suspend之间系统跑死. 
+目前认为是ddr training有bug造成有些时候结果不正确. 解决办法所有板子用理想值(0x2222, 0x00)代替training. 或者是在烧写时用举手表决得到正确值. 以后每次开机和唤醒都固定用这个值. 
+2), (13:40 2011-9-8)唤醒时一级boot启动失败. 见于一个创维P1板. 原因是休眠前给一级boot保存的clk信息有误(clkbypassctrl), 可能会导致ddrphy里面模拟电路工作不正常. 
+这个问题和之前ICP 512info check时提出的问题一样. 只是一个影响上电稳定性, 一个影响唤醒稳定性. 
+"13:40 2011-9-8"end
+
+3, 其它:
+1), 系统唤醒后driver resume速度不确定, 一般在900ms-1000ms, 但有时也在5000ms-6000ms. 
+(13:57 2011-7-26)这个问题后来bianrongguang查明就是i2c timeout导致的. 
+
+4, (13:58 2011-7-26)之前还发现过关机死机bug, backtrace里面能看到是imprecise data abort导致出错. 后来建议bianrongguang用apb寄存器查看是否是寄存器配置timeout导致的, 据此判断出是关机时可能系统背光pwm已经关(时钟也关了)了, 再访问该pwm寄存器就会导致data abort. 
+
+5, (13:43 2011-9-8)遗留问题.
+1), 唤醒时可能屏幕没亮就又进入休眠. 由于已经持有了wakelock, 初步判断app/framework问题. 
+2), 休眠时gpu suspend可能超时(大于3s), 导致系统自动重启. 这个问题和youhai
+gpu问题和youhai沟通了, youhai说原来就有这个问题, vivante后来说修正了. youhai说优化完游戏会查一下. 
+这个问题只是周一之前(9月2日和9月5日)抓到过问题, 后来没有复现, 但是log里面可以看到gpu休眠时不仅仅是涉及到gcvPOWER_OFF state, 还涉及到gcvPOWER_ON_BROADCAST x 2, gcvPOWER_IDLE_BROADCAST. 估计是gpu休眠时gpu工作没有做完导致的休眠超时. 
+
+6, 其它问题:
+1), 休眠时电流过大. 
+VC0882芯片休眠电流过大__但功能正常
+创维P1板子上本来休眠电流是正常的(20-30mA@8V), 后来发现休眠电流过大(160-170mA@8V), 更换VC0882芯片后电流恢复正常.
+换下来这颗芯片可以正常启动android, 休眠唤醒软件跑的是对的. 
+换下来这个芯片: 原来做dvfs和休眠唤醒一段时间后会跑死(没有死在休眠唤醒里面). 
+换芯片后, 跑dvfs+休眠唤醒20个小时没有跑死. 
+换下来这颗芯片筛片可以用open short pattern筛出. 
+
+7, bug外的代码修改
+1), 在va7882 i2c里面加入auto_suspend, 用于自动测试. 
+2), 写hexwrite用于唤醒后解锁. 
+
+8, brg解决的问题
+1), i2c device之前的电的依赖关系如何解决?
+每个i2c device都拿自己需要的电和对自己使用有影响的电.
+2), 按power键有时app未收到唤醒事件
+当时是认为7882读按键事件由于i2c读写错误没有读到. 
+
+17:22 2011-6-1
+Linux, power, suspend/resume
+suspend_devices_and_enter():	suspend_console()(printk.c)
+				dpm_suspend_start()
+ /**
+  * suspend_console - suspend the console subsystem
+  *
+  * This disables printk() while we go into suspend states
+  */
+void suspend_console(void)
+{
+        if (!console_suspend_enabled)
+                return;
+        printk("Suspending console(s) (use no_console_suspend to debug)\n");
+        acquire_console_sem();	//包含down(&console_sem)和console_locked=1.
+        console_suspended = 1;
+        up(&console_sem);
+}
+
+void resume_console(void)
+{
+        if (!console_suspend_enabled)
+                return;
+        down(&console_sem);
+        console_suspended = 0;
+        release_console_sem();
+}
+
+20:58 2011-6-1
+VC0882, SV, beihua讲解ddr
+pcb等效传输延迟除以信号transition大于6, 需要调整输出电阻，做odt等方式调整信号。
+882访问row后，不关闭该row, 如果下次访问同一个bank的不同row, 才需要关闭。
+
+22:18 2011-6-1
+VC0882, SV, 工作总结; AE suspend/resume实验结果
+1, 今天工作总结
+1), AE suspend/resume稳定性调试, 今日实验结果见"3". 
+2), 整理到目前位置AE在suspend/resume上遇到的问题, 见"4".
+3), 听beihua讲解VC0882 ddr. 
+
+2, 遇到的问题:
+1), suspend->resume后, 如果定义了no_console_suspend, kernel中打印丢失. 
+
+3, 今日AE suspend/resume实验结果, 见"9:48 2011-6-1"
+
+4, 目前位置AE在suspend/resume上遇到的问题. 见"14:20 2011-6-1".
+
+22:20 2011-6-1
+时间管理
+0, 9:25-22:50
+
+1, 本日
+1), AE suspend/resume稳定性调试. 见"9:48 2011-6-1".
+2), 整理到目前位置AE在suspend/resume上遇到的问题. 见"14:20 2011-6-1".
+
+10:33 2011-6-2
+时间管理
+0, 9:15
+
+1, 本日
+1), 30' 整理昨日实验结果. 
+
+14:01 2011-6-2
+\todo 
+1, 需要继续改进./check_dt_ret, 能自动支持多个文件(含通配符), 并给出最合理的结果. 
+2, 改进auto_suspend.sh脚本: 打印次数. 
+
+15:04 2011-6-2
+training的余量? 
+
+19:34 2011-6-2
+VC0882, SV, 882芯片评测, 网址, 评测, 讨论
+http://www.shanzhaiben.com/05/n-5105.html
+(14:51 2011-6-3)网上对于882的讨论
+http://bbs.imp3.net/forum-viewthread-tid-10329034-highlight-M8.html
+http://211.100.97.123/forum.php?mod=viewthread&tid=10328177&page=1
+http://99pad.com/forum-74-1.html
+(18:28 2011-6-4)高分辨率游戏收集
+http://bbs.imp3.net/thread-10317519-1-1.html
+
+19:36 2011-6-2
+VC0882, SV, 竞争对手, 瑞萨等
+1, 海纳 M9的标准配置是使用瑞萨A9主控芯片，双核心，533MHz，512M内存，4GB FLASH存储。7寸多点电容屏，标准分辨率为800x480，配置的电池容量为3500mAh，整机重量385克。
+ZJ: 海纳是发掘的客户. 
+2, 一些A8, A9芯片公司介绍: 
+http://www.shanzhaiben.com/39/n-5039.html
+3, (14:38 2011-6-3)目前市面上的MID芯片介绍: 
+http://211.100.97.123/thread-894970-1-1.html
+2011年MID主控展望——后A8时代与A9的到来
+http://bbs.imp3.net/thread-980345-1-1.html
+
+21:04 2011-6-2
+VC0882, SV, suspend/resume
+1, 1#使用sram ddr training, 如果去掉有0的结果, 其余结果是围绕0x2222, 0x00的:
+第一次: 
+Training result[0] : RD_SL=0x2222,  DQS_EN_SEL=0x0, count=4226
+Training result[1] : RD_SL=0x2222,  DQS_EN_SEL=0x50, count=605
+Training result[2] : RD_SL=0x2212,  DQS_EN_SEL=0xC, count=1184
+Training result[3] : RD_SL=0x2222,  DQS_EN_SEL=0x10, count=496
+Training result[4] : RD_SL=0x2212,  DQS_EN_SEL=0xD, count=22
+Training result[5] : RD_SL=0x2222,  DQS_EN_SEL=0x1, count=8
+第二次: 
+Training result[0] : RD_SL=0x2222,  DQS_EN_SEL=0x0, count=4698
+Training result[1] : RD_SL=0x2222,  DQS_EN_SEL=0x10, count=240
+Training result[2] : RD_SL=0x2212,  DQS_EN_SEL=0xD, count=37
+Training result[3] : RD_SL=0x2212,  DQS_EN_SEL=0xC, count=780
+Training result[4] : RD_SL=0x2222,  DQS_EN_SEL=0x50, count=842
+Training result[5] : RD_SL=0x2222,  DQS_EN_SEL=0x1, count=35
+Training result[6] : RD_SL=0x2222,  DQS_EN_SEL=0x51, count=7
+
+21:37 2011-6-2
+android里面有些库是固定好的位置, 所以改为2G+2G不可行: 
+build/core/prelink-linux-arm.map
+
+21:55 2011-6-2
+bash-4.1# ifconfig eth0 10.0.12.145 netmask 255.255.254.0
+bash-4.1# eth0: link up, 100Mbps, full-duplex, lpa 0x45E1
+bash-4.1# ping 10.0.12.160 -c 4
+PING 10.0.12.160 (10.0.12.160): 56 data bytes
+64 bytes from 10.0.12.160: seq=0 ttl=64 time=4.590 ms
+64 bytes from 10.0.12.160: seq=1 ttl=64 time=0.569 ms
+64 bytes from 10.0.12.160: seq=2 ttl=64 time=0.656 ms
+64 bytes from 10.0.12.160: seq=3 ttl=64 time=0.608 ms
+
+--- 10.0.12.160 ping statistics ---
+4 packets transmitted, 4 packets received, 0% packet loss
+round-trip min/avg/max = 0.569/1.605/4.590 ms
+bash-4.1# tftp -g -r zhangjian/ioctl_seg_fait_test 10.0.12.160
+bash-4.1#
+
+从下面打印信息看, target Executable下面的内容是没有stripped, 更适合反汇编的. 
+make: Entering directory `/home/zhangjian/mydroid_f'
+build/core/main.mk:307: implicitly installing apns-conf_sdk.xml
+target thumb C++: ioctl <= vimicro/suspend/ioctl.cpp
+target Executable: ioctl (out/target/product/vortex/obj/EXECUTABLES/ioctl_intermediates/LINKED/ioctl)
+target Non-prelinked: ioctl (out/target/product/vortex/symbols/system/bin/ioctl)
+target Strip: ioctl (out/target/product/vortex/obj/EXECUTABLES/ioctl_intermediates/ioctl)
+Install: out/target/product/vortex/system/bin/ioctl
+
+9:47 2011-6-3
+时间管理
+0, 9:18
+
+9:49 2011-6-3
+VC0882, SV, suspend/resume
+1, 昨天1# ddr training结果可以看到有50%概率结果是0x2222, 0x0.
+看起来suspend/resume不稳定和dt关系不大. 会不会是其它原因造成问题? 
+例如流程, 时钟, 电源上面的问题. 
+1), brg想到会不会是给ddrc的clock太高了, 直接分333会不会好一些. 
+ddr pll改为0x02990119(26/26*666/2=333), dt结果相差不大:
+Training result[0] : RD_SL=0x222,  DQS_EN_SEL=0x80, count=1939
+Training result[1] : RD_SL=0x2222,  DQS_EN_SEL=0x50, count=599
+Training result[2] : RD_SL=0x2212,  DQS_EN_SEL=0xC, count=1200
+Training result[3] : RD_SL=0x212,  DQS_EN_SEL=0x8C, count=643
+Training result[4] : RD_SL=0x2222,  DQS_EN_SEL=0x0, count=4193
+Training result[5] : RD_SL=0x222,  DQS_EN_SEL=0x90, count=881
+Training result[6] : RD_SL=0x2222,  DQS_EN_SEL=0x10, count=520
+Training result[7] : RD_SL=0x2212,  DQS_EN_SEL=0xD, count=15
+Training result[8] : RD_SL=0x2222,  DQS_EN_SEL=0x1, count=4
+Training result[9] : RD_SL=0x212,  DQS_EN_SEL=0x8D, count=4
+Training result[10] : RD_SL=0x222,  DQS_EN_SEL=0x81, count=2
+没出现data abort是因为我整个training过程都在sram中. 如果我发现training结果太差(也就是含有0), 就不做memory copy测试, 所以系统没机会data abort. 
+
+2, 还是把ddrpll改为666MHz. 在1#板上用panda_os实验, 看看多少次跑死, 如果测试正确次数远多于android, 说明还是软件流程或者硬件状态有差异.
+1), dt
+(1), 26次死:
+M0x00000807
+H0x00000212
+M0x00000808
+H0x0000008c
+M0x0000081c
+M0x0000080f
+H0x000aed24
+M0x00000011
+H0x000aed24
+prefetch abort lr = 0xADDBC, DDRC_CFG1 = 7000
+arm IFAR = ADDBC IFSR = 0
+(2), 11次死: 
+M0x00000807
+H0x00000212
+M0x00000808
+H0x0000008c
+M0x0000081c
+M0x0000080f
+H0x000aed24
+M0x00000011
+H0x000aed24
+H0x000aed24 data abort lr = 0xprefetch abort lr = 0xAD878, DDRC_CFG1 = 7000
+arm IFAR = AD878 IFSR = 0
+(3), 2次死: 
+M0x00000807
+H0x00000212
+M0x00000808
+H0x0000008c
+M0x0000081c
+M0x0000080f
+H0x000aed24
+M0x00000011
+H0x000aed24
+data abort lr = 0x386AC, DDRC_CFG1 = 7000
+arm DFAR = 386D8 DFSR = 1008
+data abort lr = 0xAD00E, DDRC_CFG1 = 7000
+arm DFAR = 1533F0 DFSR = 1008
+[PMU   LOG]data abort lr = 0xAD00E, DDRC_CFG1 = 7000
+arm DFAR = 1533F0 DFSR = 1008
+sleep return!
+[PMU   MSG]check memory pattern...
+[PMU   LOG]addr = 0xprefetch abort lr = 0xACEFA, DDRC_CFG1 = 7000
+arm IFAR = ACEFA IFSR = 0
+(4), 248次死. 
+M0x00000807
+H0x00000212
+M0x00000808
+H0x0000008c
+M0x0000081c
+M0x0000080f
+H0x000aed24
+M0x00000011
+H0x000aed24
+data abort lr = 0x6F0, DDRC_CFG1 = 3000
+arm DFAR = 714 DFSR = 1008
+data abort lr = 0x386AC, DDRC_CFG1 = 7000
+arm DFAR = 386D8 DFSR = 1008
+prefetch abort lr = 0xADDBC, DDRC_CFG1 = 7000
+arm IFAR = ADDBC IFSR = 0
+
+2), no dt(fix 0x2222, 0x0):
+(1), (休眠2s)1842次未死. 
+(2), 改为休眠5秒, 测试78次未死, 看电流过大, 加入gpio控制. 加入gpio控制后, 发现休眠时功耗仍然是90ma左右: 原因是de openpanel过. 暂时让de不openpanel, 功耗可以降下来. 再次实验.
+755次未死. 
+(3), 用(2)相同代码, 继续实验. 
+(13:12 2011-6-4)测试18小时, 6453次没有跑死"13:12 2011-6-4".
+
+3), 上传代码.
+为了和AE suspend/resume环境一致, 调整部分休眠唤醒代码.
+(1), target pmu_sv_fast_wakeup_repeat_exceptionInSram_withGpuPowerOnWorkAround 删除de, tools. 避免de修改lcd gpio为function mode. 
+(2), sleep命令, PMU_TEST_NormalToSleep()函数等, 加入gpioLp/isGpioLp参数. 该参数表示sleep前把GPIO_I, GPIO_K改为指定状态. \todo 看到底做了什么修改. 
+(3), write_fastwakeup_pmu_reg命令, VIM_PMU_SetDdrcInfor2Pmu()等, 加入ddr_training flag: 该flag为一时表示wakeup后重新做training. 
+
+16:30 2011-6-3
+VC0882, SV, arm, index, tag
+1, L1 cache
+an instruction cache that is virtually indexed, IVIPT
+a data cache that is physically indexed, PIPT
+2, L2 cache
+physically indexed and tagged
+
+18:56 2011-6-3
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 在休眠唤醒最不稳定的1#板实验ICP panda_os, 实验两次都没有死:
+data training都使用0x2222, 0x0固定值, wakeup后不做training. 
+(1), 休眠2s,1842次未死.  check memory pattern 200MBytes, 休眠时gpio没有控制上下拉(休眠功耗90ma左右). 
+(2), 休眠2s, 755次未死.  check memory pattern 200MBytes, 休眠时gpio控制上下拉(休眠功耗25ma左右). 
+(3), 晚上会用case(2)同样代码, 继续实验, 确认使用ICP panda_os下使用固定值没有问题.
+2), 和bianrongguang讨论AE和ICP休眠唤醒流程差异, 发现AE休眠时没有关闭UHost VBUS电, 而硬件设计上是要求关闭的. 
+3), 目前AE休眠唤醒还发现有时rtc没有唤醒, 但此时用power key可以唤醒, 需要确认是什么原因导致的, 怀疑是I2C读写出错. 
+
+2, 次日工作计划
+1), 休眠时关闭UHost VBUS, 使用0x2222/0x0固定值测试10块8寸板.
+2), 确认rtc休眠唤醒问题. 如果有问题可能需要在panda_os下复现. 
+
+00:17 2011-6-4
+VC0882, 电源总结, 文档
+从clk out看power,clock划分。
+1, 882 clk out需要在sleep时仍然是外部设备提供时钟, 所以只能放在pmu域和pso域两部分. 
+2, 电源不走会有奇怪的问题, 参见"17:37 2009-5-8".
+
+13:15 2011-6-4
+时间管理
+0, 12:40
+
+1, 本日
+1), AE suspend/resume稳定性, 见"18:47 2011-6-4". 
+
+15:11 2011-6-4
+VC0882, SV, AE, 882 pad端午节试用体会
+1, 优盘复制大文件有问题(外卡). 
+复制1.3G的电影, 复制了很久后停在剩余5分钟. 最后windows explorer死了. 
+用同一张卡在读卡器里面复制正确, 速度也有些慢, 有可能是我的SD卡东西太多了? 
+2, 在腾讯视频看"家的N次方"比较卡, 调到1GHz@1.45v后很流畅. 为了说明问题, 比较了1G和750MHz的性能, 1G的结果在milestone和MES525(TI OMAP3630 A8 800M?)之间. 
+内存, cpu, 2D, 3D(1G 3D, 750M 3D测试过程中分别做过early suspend, 所以结果可能偏小).
+264, 614, 90, 81
+179, 513, 81, 90
+3, 优化网上视频播放的思路: 
+优酷支持: ipad HTML5和flash 10两种模式切换, 咱们如果用HTML5, 有没有可能知道是什么视频格式进而用硬件解码呢? 
+
+18:46 2011-6-4
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后跑死, 续, 使用固定ddr training, 休眠时关闭Uhost VBUS
+1, 今天计划实验现有的9块板子, 看看用固定值稳定性如何. 
+1), 加入bianrongguang提供的关闭UHost VBUS代码:
+    //disable Uhost Vbus power
+    // D13 C1, K29
+    gpio_set_value(GPIO_ID_D13,0);  // USBHOST_EN
+    gpio_set_value(GPIO_ID_K19,0);  // 5V_EN
+//  gpio_set_value(GPIO_ID_C1,0);   // LCD_EN
+    v8sram_pm_sleep();
+    gpio_set_value(GPIO_ID_K19,1);  // 5V_EN
+    gpio_set_value(GPIO_ID_D13,1);  // USBHOST_EN
+//  gpio_set_value(GPIO_ID_C1,0);   // LCD_EN
+2), 还需要加入I2C retry的函数. 
+(13:41 2011-6-5)其实如何7882用了cache reg, 即使读出正确也不能认为操作成功. \todo 问brg. 
+为了简单可以用timer7作为备用唤醒源. 
+
+12:33 2011-6-5
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后跑死, 续, 使用固定ddr training, 休眠时关闭Uhost VBUS, 续, debug 1#出错情况
+1, 昨天实验的1#板, 到目前共测试三轮(第三轮仍在继续), suspend/resume分别做了272, 210, 71次.
+昨天实验时没有拔掉usb网卡, 不知道有没有影响. 
+机器usb口不够用了, ICE只好用网络方式. 
+2, \todo修改:
+1), 用timer7作为备用唤醒源. 
+2), 系统启动时打印是否是watch dog复位. 
+
+13:32 2011-6-5
+时间管理
+0, 9:40
+
+1, 本日
+1), AE suspend/resume: debug 1#出错情况. 见"12:33 2011-6-5". 
+2), 6月4日 AE suspend/resume结果分析, 改进check脚本. 
+3), 写邮件建议尽快发布882的测试视频. 需要涵盖各方面内容. 
+4), 总结. 见"18:46 2011-6-5"
+
+17:06 2011-6-5
+职业规划, 项目管理, 好文章
+MVM对“如何用正确的方法来写出质量好的软件的75条体会”的回答及我跟在MVM后
+http://blog.sina.com.cn/s/blog_48dc562301000c69.html
+
+17:26 2011-6-5
+VC0882, SV, memory, ddr, ddr training
+1, zhaobeihua邮件"DDRn PHY Datatraining错误"_20110603_1910
+你好。目前我们在VC0882产品开发阶段发现DDRn PHY的data training功能有比较严重的问题。这个问题其实以前也跟你说过。
+一部分445封装的VC0882芯片（工作在333MHz）在data training结束后会报出类似RD_SL=0x2022（或者0x2202，0x2220，0x0220等等），DQS_SEL=0x0的错误结果，但是DDRC并没有报告Data training error，可是我们从这个值可以明显看出data training有问题，另外当出现类似这样的错误后，系统会立即死机。所以我们可以确认DDRn PHY的DT有严重问题。
+但是，通过降低DDRn PHY的Core电压可以在一部分芯片上解决这个问题，也就是说把PVDD的电压从1.2V降低至1.1V以后，大部分在1.2V DT出错的芯片就不再出错了。
+另外，如果不降低PVDD电压而是把Slave DLL的测试时钟引出，也可以在一部分芯片上解决这个DT出错的问题，这一点令我们非常困惑。
+还有一个值得注意的现象是，如果我们把Master DLL的测试时钟引出，DT出错的现象会变得更加严重。
+希望你们可以针对这个现象给出解释或者说明。这个DT error的问题一直困扰着VC0882而且严重影响芯片的量产，希望你们给予高度的重视。
+
+2, CuiYunFei邮件"答复: DDRn PHY Datatraining错误"20110605_1529
+和beihua用逻辑分析仪抓波形后，发现的确出现第二次training就pass的情况，而这是绝对不合理的，然后抓到training时输入给phy的控制信号也是正确的，最终怀疑可能是在每次training中给PHY 中的ITM 的reset信号嫌疑最大了，经过仔细翻阅DDR PHY的databook，发现无论是给ITMD的硬件reset信号还是soft reset信号都有最小脉冲宽度的要求（4个 clock cycle），而training时的ITMD soft reset 脉冲宽度只有一个clock周期。这很可能导致ITMD reset不起作用，而使DQS Gate处于一直打的开状态，至使接下来本应该是错误的training 结果变成正确了的。根据逻辑分析仪抓到的波形，也可以充分说明我们给PHY的控制信号是正确的，但PHY却返回了与预期不符的read valid信号，所以应该是给PHY的其他输入信号导致，而training期间除了 PHY的控制信号之外，只有ITM reset信号会变化，其他都是静止不变的，所以由于ITMD reset信号导致training出问题的概率应该非常大，即此问题很有可能就是有reset信号脉冲宽度不够造成的，为了验证这一点，可能有如下事情需要做：
+1.   选取5～6片由training问题引起fail的片子，要比较恶劣的，即会经常出现trraining不合理的片子。
+2.   给出 一个如何做FIB 的方案。
+3.   仿真验证FIB方案。
+4.   做FIB ，回来测试，看是否fail依旧，正常情况应该是100% pass。
+5.   逻辑分析仪上观察到每次training只是有4～5个点是可用的，所以需要仿真再继续分析一下，是否的确有4～5个点是pass的（理论分析应该没有这么多点），如果的确是4～5个点，在FIB实验没做完之前，目前的系统可以选取固定值而不training来bypass这个问题，因为4～5个点的magin已经足够大了，对于同一批板子和芯片不可能超出这个范围。
+6.   对于这个问题我做一下自我检讨，是由于我在设计时没有仔细研读PHY data book造成的，希望以后大家和我吸取教训，对仿真不能验证的东西一定要做仔细的check，尤其是对未明确定义的timing参数之类的东西。
+
+3, FengBeiZhan邮件"答复: DDRn PHY Datatraining错误"20110605_1625
+会议概要：
+1）   询问synopsys，itm reset 信号spec要求保持4个信号，如果只保持了一个信号，会有什么后果？  Owner:beihua
+2）   基于网表给出fib 的方案; Owner: yunfei 
+3）   Double check ddr 相关信号，看是否满足spec 要求； Owner: yunfei
+4）   使用固定值、不进行ddr training 进行高低温实验； Owner： gonganmin
+5）   推进AE 目前都是用固定值进行开发和测试工作，以便于进一步验证固定值的稳定性； Owner：zhangjian
+6）   从逻辑分析仪检查到，有4、5个有效值，需要仿真得到 ddr training 的波形，并把仿真后的波形发给beihua、yunfei进行分析； owner： yanglei 
+另外， 以前发现动态补偿也不稳定， 需要后期继续debug； owner：beihua
+
+4, ZJ: 
+"3"的会议是dr.yang, beizhan, yunfei, beihua, xiaotao, zhangjian参加. 会议最后dr.yang还问了我实验的情况. 
+除了上面描述外, 我自己的记录如下: 
+1), yunfei对于ITM reset和ddr training错误结果之间的关系已经说明的很清楚了. 
+(1), 为什么没有发现这个问题? 原本计划由软件控制, 但是仿真发现每个lane的dt后都需要ITM reset, 所以加入了dt中硬件控制ITM reset. ZJ: 设计改变是最容易出错的地方. 
+(2), model里面也没有check这个timing, 不过据cuiyunfei讲, 没有check的timing不知这一个. 所以说, 凭借可以使用作为判断依据有时会有问题, 这个问题有时我也会出现. 
+2), beihua和xiaotao实验了软件training, 目前没有试通. 感觉是因为设置dq, dqs后, 可能造成, ddr无法访问, 进而造成无法工作.
+3), FIB方案, 目前yunfei和beihua各想到一个方案:
+(1), 利用ddrc里面状态机能持续大于4个cycle的信号给出dt过程中的ITM复位信号. 但是这样在本轮四个lane dt后, 软件需要发ITM reset. 这样bootloader能否支持? 
+beizhan当初给ddrc留的寄存器还剩余4个(可以支持读写和bit mask), 需要做dt trigger, check dt done, ddrc init, ddrc init done四个事情, 一点不富裕, 需要实验. 
+(2), 直接利用ECO逻辑. 利用四个触发器得到四个周期的高电平, 再用一个四路与门得到一个持续四个cycle的reset信号. 这样不需要软件干预. 但是这样修改比较复杂, 不知道FIB能不能做. 
+4), 做FIB需要按照后端最后给出的网表给出修改脚本, 然后另有同事看FIB能不能做. 
+5), dr.yang问我的进展. 
+固定值需要给所有人使用. 
+
+17:47 2011-6-5
+VC0882, SV, storage, nand, AE android nand问题思路
+hi, zhaoyuan
+
+nand不稳定的问题, 这两天我想了想, 感觉下面三点有嫌疑, 可以确认一下: 
+1, cache导致: huanglei说的nand出错时arm寄存器值和memory值对不上, 和cache一致性问题有些类似.
+例如bootloader里面dcache关闭流程有问题, 造成kernel本身加载就有错. 
+2, ddr training: ddr trianing结果如果不好会造成系统不稳定. 
+3, cdc问题, 这里huanglei应该是知道的:
+nfc寄存器配置流程需要改为
+(1), gate nfc aclk;
+(2), ecc ckd disable;
+(3), 修改寄存器; 
+(4), ungate nfc aclk;
+(5), ecc ckd enable;
+(6), 发送dma_trigger,让nfc开始工作
+
+best regards
+zhangjian
+
+18:46 2011-6-5
+VC0882, SV, 今日工作总结
+1, 整理昨晚测试结果, 除了1#板, 其余板子都没有跑死. 但有些板子休眠后rtc没有唤醒, 怀疑是i2c问题. 
+尝试修改, 未完成.
+1#板也没有在休眠唤醒跑死(在运行中系统复位或程序跑飞), 
+2, 讨论ddr training问题. 
+
+23:11 2011-6-6
+VC0882, SV, 文档, 竞争对手
+给赵原发信
+4, 网上视频升频到1GHz很流畅。
+如果适当优化，应该可以用更低频率。
+5, 从网上视频上看，系统整体比竞争对手落后不多，如果能及时通过网络做一些介绍，视频等，可能会缩小差距，或赶上。
+可以以芯片潜力大为宣传点。
+
+给艾国，备战发信：
+882的优势在于综合性能，amlogic, rockchip feature看起来比我们好，但是实际性能基本持平。如果feature准确，说明882的卖点在于芯片总体性能，或者说自主研发比外包的优势。
+举例：amlogic arm性能不比882有优势。882 a8, am a9同频下性能相当：对于网上视频。
+rk2918 gpu指标强于882, 但切水果不比882流畅。
+酒香也怕巷子深，何况882和别人香的不一样：咱们胜在综合性能。
+我对882很有信心。
+
+问公司对于下一颗芯片的规划. 
+多核是趋势. 必须上a15，因为我们没做a9.
+
+8:59 2011-6-7
+前天实验忘了设置时间，造成端午三天只实验了二十四小时。
+前天的工作效率确实比较低。
+
+15:16 2011-6-7
+时间管理
+0, 9:35
+
+1, 本日
+1), 1h10' AE sync up. 见"16:49 2011-6-7". 
+2), 50' 讨论uhost suspend/resume. 见"17:16 2011-6-7". 
+3), 20' + 17:44- AE suspend/resume稳定性调试: 1#板稳定性; rtc alarm问题. 见"17:44 2011-6-7". 
+4), 20' 给zhaoyuan发信更换新的烧写脚本, dt用固定值.
+
+), 改进check脚本, 发端午实验结果. 需要等3#超过1000次. 
+), 实验rtc不能唤醒问题: 先加入timer7唤醒功能. (9:57 2011-6-14)后来没有加入timer唤醒, 通过rtc_read_time确认读写正确, 保证rtc每次都能唤醒. 
+
+16:49 2011-6-7
+VC0882, SV, AE, sync up
+1, 目前三个bottleneck: NAND, suspend/resume, AV录像. 
+bottleneck上的人平时需要每天加班. 其余人加班两天. 
+后面是过每个人情况, 下面列出一些我关心的. 
+2, suxin: 1G memory系统. 目前看其它平台做的方式有两种: 一个是乐pad使用high memory映射kernel没法直接管理的memory; 另一个是三星的方式, driver中几乎不使用vmalloc区域. 
+3, sunfengqiang, tiankuan: 
+1), 多媒体互斥. 
+2), 软件解码后需要硬件pp.
+3), AV录像. 目前能做到28fps@VGA, 但是画面会切. 
+
+17:16 2011-6-7
+VC0882, SV, suspend/resume, uhost VBUS需要关闭
+1, uhost VBUS 5v在休眠唤醒时需要关闭.
+uhsot VBUS是给882以外的设备供电, 882自身不使用. 882使用的dp, dm是3v3 B类电源, 休眠时会关闭. 如果VBUS没有关闭, 会往dp, dm漏电.
+因为882休眠时uhost掉电, 本来没法支持usb协议的suspend/resume, 所以这样一般也没有问题. 
+除了接usb moderm(不是dangon)可能有问题, 这个问题将来再考虑. 
+
+17:44 2011-6-7
+VC0882, SV, AE, power, pmu, mode trans: sleep, AE suspend/resume不稳定, wakeup后跑死, 续, 使用固定ddr training, 休眠时关闭Uhost VBUS, 续, debug 1#出错情况, 
+1, 1#板跑实验, 去掉watch dog. 看看是否会复位. "putty_com6_1#_20110607_152601".
+2, rtc问题. 
+和bianrongguang讨论, 可能是rtc进位时读到的数据有问题.
+读rtc时读两次, 如果二者差异小于10秒, 就认为是第一次时间正确, 否则就再读一次, 以最后一次为准.
+
+21:37 2011-6-7
+VC0882, SV, 今日工作总结
+1, 今日工作
+1), 1h10' AE sync up. 目前三个bottleneck: NAND, suspend/resume, AV录像. 
+2), 讨论uhost suspend/resume. 休眠时需要关闭uhost VBUS 5v电源. 
+3), AE suspend/resume稳定性调试: 目前除了1#板在测试中重启(但没有死在休眠唤醒中), 端午测试的其余8个板子都做了800-1300次休眠唤醒, 均正确. 
+4), 7882 rtc read time有风险, 代码已修改, 测试中. 
+
+2, 明日工作
+1), 上传AE suspend/resume代码. 给zhaoyuan发dt固定值的512info. 
+2), 继续调试rtc不稳定问题. 
+3), zhaoyuan希望我尽快开始做dvds: arm, gpu, vcodec. 
+
+9:26 2011-6-8
+VC0882, SV,
+1, 上传代码.
+1), plat-vc088x/pmu.c: add kernel param "wakeup_ddr_training" for wakeup training. default is close: no ddr training after wakeup. 
+2), va7882_rtc_readtime()(va7882-rtc.c): fix fault rtc time while second carrys.
+
+2, 给zhaoyuan发信
+android suspend/resume更新
+
+1, 附件是烧写脚本, ddr training使用固定值0x2222, 0x0, 对于所有16bitx2的产品板都适用. 
+2, 目前唤醒后不会做ddr training. 我昨天用6月6日的daily build+最新git代码跑了一晚上, jinyang和14#板子跑了877, 718次没有出错. 
+3, 同时修改了rtc read time代码. 
+
+2, \todo 
+1), 问jiabo uhost关闭电源有没有上传. 如果已上传, 就去掉我在pm.c的代码. 
+2), 删除: va7882_test_wakealarm()(va7882-core.c): max 10 times retry while rtc set alarm. 
+
+11:37 2011-6-8
+VC0882, SV, bootloader, memory, ddr training; 影响ddr training的因素; 关注烧片子: ddr phy io
+1, fengbeizhan邮件"答复: ddr training 举手表决"20110608_1527
+现有rom bootloader情况：
+1）power on时，理论上分析可以行；
+ 编写一个sram里运行的程序，打包时放在二级bootloader的前部分，由一级bootloader先把该sram的程序load到sram里进行ddr  training和举手表决，然后再继续搬移剩余的二级bootloader进行运行；
+ 该方案，需要修改打包程序、下载程序、编写举手表决程序；
+2）normal sleep and fast sleep 时， 由于一级bootloader只读取ddr参数，然后就直接跳转运行，没有机会把数据搬运到sram里进行training，所以现有bootloader 不支持sleep 的举手表决；
+3)128*8 256*8 training的值是多少，需要beihua去debug, 查看和目前的值的区别。 owner:beihua
+4）目前量产工具里，dfu下载时使用的是固定的ddr参数，如果 ddr 有焊接或者其他有问题，将不能运行；所以，需要考虑做个tools，在sram里运行，进行一些debug，例如 举手表决；
+考虑修改bootloader情况：
+5）直接在bootloader里把举手表决的算法修改进去，好处是只需要修改bootloader，和Ae没有多大关系，坏处是bootloader里的举手表决将做死，以后不能更新程序；
+6）在bootloader里添加一些flag，通过这些flag，进行读取sd、nandflash上的数据到sram，然后进行举手表决；好处是举手表决的程序以后任何时候都可以修改； 不便之处是打包、烧写工具都需要同步升级；
+7）软件考虑如何使用chip id进行一些特殊化操作；
+
+2, 我自己的记录
+1), 已经下了50个wafer, 50k芯片。
+2), 第一个客户发掘，可能2‰返修率，刚开始应该可以接受。
+3), 客户发现有一个芯片烧了，和dongliang之前误操作击穿的是同一个ddr phy io. 这个问题需要查清楚。
+4), 影响ddr training的因素，线长，882芯片电容，ddr sdram电容。
+ddr training最小单位是1/4 cycle, 333MHz的一个cycle 3ns, 1/4 cycle = 0.75ns. pcb上线长相差一英寸差0.13ns, 所以八寸，七寸产品板，performance板的training结果不会有差异。
+如果频率更高，dt结果对板级差异会敏感一些。
+5), \todo mlm和mp各什么意思？
+
+14:10 2011-6-8
+时间管理
+0, 9:10
+
+1, 本日
+1), 20' 上传代码. 给zhaoyuan发ddr training固定值的烧写脚本.
+2), 2h ddr training举手表决讨论. 见"15:28 2011-6-8"
+3), 1h AE bootloader 启动失败debug, 做一个bootloader脚本信息自动parser工具. 见"14:45 2011-6-8". 
+4), AE dvfs. 见"16:07 2011-6-8". 
+
+14:45 2011-6-8
+VC0882, SV, coding, 做一个bootloader脚本信息自动parser工具; AE bootloader 启动失败debug; 工具, perl, 正则表达式, 哈希(hash)
+位置: /opt/share/zhangjian/vc0882/bootloader_log_parser
+1, 把bootloader里面相关函数贴出来就行. 
+2, 有的东西时间长了就记不清了. -c只是表示编译, 不会生成最后可执行程序, 对于如下两个命令
+1), 直接生成可执行程序, bootloader_msg会带可执行权限. 
+gcc  bootloader_msg.c -Wall -o bootloader_msg
+bootloader_msg: ELF 32-bit LSB executable, Intel 80386, version 1 (SYSV), dynamically linked (uses shared libs), for GNU/Linux 2.6.15, not stripped
+2), 先生成object, bootloader_msg.o没有可执行权限. 
+gcc -c bootloader_msg.c -Wall -o bootloader_msg.o
+bootloader_msg.o: ELF 32-bit LSB relocatable, Intel 80386, version 1 (SYSV), not stripped
+gcc bootloader_msg.o -o bootloader_msg
+
+3, perl脚本
+#!/usr/bin/perl
+
+my %info = (
+        "0x00000000" => "SYS_MSG",
+        "0x00000001" => "SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH",
+        "0x00000002" => "SYS_UART_INIT_DONE_AFTER_STRAPPIN_SWITCH",
+        "0x00000003" => "SYS_TIMER_INIT_DONE",
+        "0x00000004" => "SYS_REBOOT_FOR_USBDOWNLOAD",
+        "0x00000005" => "SYS_NAND_BOOT_START",
+#...中间结果省略
+        "0x00000958" => "PADC_NO_KEYDONW",
+        "0x00000959" => "PADC_KEYDONW",
+        "0x00001000" => "RESERVED",
+);
+
+while(<>) {
+        if ( /M(0x[0-9a-z]{8,8})/ ) {
+#               print "$1\n";
+                print "$info{$1}\n";
+        }
+}
+
+4, 回复lijun报的bug:
+附件的txt应该是两次启动, 第一次由于读sd卡fail跳转到usb boot; 第二次从现象看是bootloader跑飞了, 但是第二次还没有操作ddr, 除非是系统复位有问题, 否则不会跑飞. 
+综合这两个log, 我认为系统复位本身有风险造成的. 
+之前也看到过类似现象, 当时给的建议如下:
+1, 按reset按键时拔掉charger, 按住reset保证系统断电. 
+2, 松开reset, 插入charger. 
+
+log信息含义如下: 
+SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH
+SYS_CACHE_ICACHE_ON
+SYS_CLK_SWITCH_CPUPLL_SUCCESSFUL
+SYS_CLK_SWITCH_CPU_SUCCESSFUL
+SYS_CLK_SWITCH_EMI_SUCCESSFUL
+SYS_CLK_SWITCH_BY_STRAPPIN_CORE_SUCCESSFUL
+SYS_CLK_SWITCH_BY_STRAPPIN_MODULE_SUCCESSFUL
+SYS_UART_INIT_DONE_AFTER_STRAPPIN_SWITCH
+SYS_CLK_SWITCH_BY_STRAPPIN_SUCCESSFUL
+SYS_TIMER_INIT_DONE
+PADC_NO_KEYDONW
+SYS_SD_HC_BOOT_START
+SYS_LOAD_IMAGE_FAIL
+SYS_USB_BOOT_START
+SYS_UART_INIT_DONE_BEFORE_STRAPPIN_SWITCH
+SYS_CACHE_ICACHE_ON
+SYS_CLK_SWITCH_CPUPLL_SUCCESSFUL
+SYS_CLK_SWITCH_CPU_SUCCESSFUL
+SYS_CLK_SWITCH_EMI_SUCCESSFUL
+SYS_CLK_SWITCH_BY_STRAPPIN_CORE_SUCCESSFUL
+SYS_CLK_SWITCH_BY_STRAPPIN_MODULE_SUCCESSFUL
+SYS_UART_INIT_DONE_AFTER_STRAPPIN_SWITCH
+SYS_CLK_SWITCH_BY_STRAPPIN_SUCCESSFUL
+SYS_TIMER_INIT_DONE
+PADC_NO_KEYDONW 
+
+16:07 2011-6-8
+VC0882, SV, AE dvds
+1, 先做arm dvfs. 
+1), cpuinfo.transition_latency需要计算. 
+2), 之前测试已经证明了cpu切频对于功耗影响不大, 所以计划保留三个频点: 50, 750, 1000. 50就是平时不会切到的频点, 只有准备休眠时会用到(暂不实现). 1G是run高性能时需要的, 1G需要升压到1.4v or 1.45v. 计划用I2C直接调整. 需要逐级调整. 
+3), 用之前好的kernel, 加入cpufreq可以运行. 但是加入clkrst打印后启动到adb open后就没法打印信息了. clean一下试试. 
+clean也不行. 发现vim log level改为2就可以, 4不行. 和brg讨论, 估计是在不该打印时打印造成系统跑死. 
+bash-4.1# echo 1000000000 > rate
+<E>[v8-clk]: No clk nod can handle the request.
+bash: echo: write error: Invalid argument
+调整打印信息后可以看到是因为pll1没有调整频率造成的: 
+bash-4.1# echo 900000000 > rate
+<E>[v8-clk]: Ask parent(pll1_clk) to help.(with rate:900000000)
+<E>[v8-clk]: Ask parent(xclk) to help.(with rate:900000000)
+<E>[v8-clk]: No clk nod can handle the request.
+bash: echo: write error: Invalid argument
+
+set bootargs console=${console} mem=${dram} init=/init initrd=0x81000000,0x81479 cpufreq.debug=4
+还是没有打印信息. 后来想起, 想看882 cpufreq打印应该是打开cpufrq debug和882 log cpu. 
+
+2, 尝试750M->1G变频, 出错: 
+1), 如上修改后, 发现经常出现"BUG: scheduling while atomic", 每次提示信息都是一样的. 
+BUG: scheduling while atomic: v8sensor_mma766/568/0x00000002
+Modules linked in: wlan galcore
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0360efc>] (dump_stack+0x18/0x1c)
+ r7:d3110980 r6:00000000 r5:c04780d8 r4:00000000
+[<c0360ee4>] (dump_stack+0x0/0x1c) from [<c004dba8>] (__schedule_bug+0x54/0x60)
+[<c004db54>] (__schedule_bug+0x0/0x60) from [<c03611ac>] (schedule+0x70/0x2fc)
+ r5:c04780d8 r4:d32f8000
+[<c036113c>] (schedule+0x0/0x2fc) from [<c0362364>] (__mutex_lock_slowpath+0x18c/0x2c8)
+[<c03621d8>] (__mutex_lock_slowpath+0x0/0x2c8) from [<c03624b4>] (mutex_lock+0x14/0x28)
+[<c03624a0>] (mutex_lock+0x0/0x28) from [<c00383c4>] (clk_set_rate+0x2c/0x290)
+ r5:00030d40 r4:c046e4c4
+[<c0038398>] (clk_set_rate+0x0/0x290) from [<c02591a4>] (v8i2c_message_start+0x3c/0x3d0)
+[<c0259168>] (v8i2c_message_start+0x0/0x3d0) from [<c02599e4>] (v8i2c_xfer+0xb4/0x2dc)
+ r7:00000002 r6:d32f8000 r5:d32f9e08 r4:d315c400
+[<c0259930>] (v8i2c_xfer+0x0/0x2dc) from [<c025646c>] (i2c_transfer+0xa8/0xfc)
+[<c02563c4>] (i2c_transfer+0x0/0xfc) from [<c0256800>] (i2c_smbus_xfer_emulated+0x340/0x47c)
+[<c02564c0>] (i2c_smbus_xfer_emulated+0x0/0x47c) from [<c0256a20>] (i2c_smbus_xfer+0xe4/0xf8)
+[<c025693c>] (i2c_smbus_xfer+0x0/0xf8) from [<c0256ae0>] (i2c_smbus_read_i2c_block_data+0x4c/0x70)
+[<c0256a94>] (i2c_smbus_read_i2c_block_data+0x0/0x70) from [<c0251940>] (mma7660_xyz_read_and_filter+0x24/0x84)
+ r5:d328b080 r4:d328b09c
+[<c025191c>] (mma7660_xyz_read_and_filter+0x0/0x84) from [<c02519d8>] (v8sensor_mma7660_work_func+0x1c/0x38)
+[<c02519bc>] (v8sensor_mma7660_work_func+0x0/0x38) from [<c0066d6c>] (worker_thread+0x184/0x230)
+ r5:d32db400 r4:d32f8000
+[<c0066be8>] (worker_thread+0x0/0x230) from [<c006a91c>] (kthread+0x84/0x8c)
+[<c006a898>] (kthread+0x0/0x8c) from [<c0057700>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c0057700 r5:c006a898 r4:d3019ef0
+(1), 感觉是i2c clk_set_rate等待mutex的时候已经持有了其它不允许调度的锁. 
+v8i2c_message_start没有锁.
+v8i2c_message_start会在i2c中断, v8i2c_doxfer调用. 后者会持有spinlock. 
+这样看起来除非是clk_set_rate里面也改为spinlock, 但是clk_set_rate是否可以使用spinlock需要确认. 
+
+中断中应该是不允许睡眠的, mutex是允许睡眠的, 同时i2c中断里面应该也不需要修改i2c频率(\todo 需要确认). 
+这样看起来, 可以把clk_set_rate移到v8i2c_doxfer获得spinlock之前. 
+修改后不再报这个bug. 
+
+2), 但是还是会死, 想一想, 应该是pll在750和1000之前切换时没有把cpu切到其它pll, 这样早晚会死. 
+clk_set_rate里面如果去修改parent的clock, 并没有重新进入这个函数, 而是用goto跳转, 感觉不太好改. 暂时在cpu.c的target里面直接修改. 
+目前看切频没问题. 本来想实验看优酷视频, 提示没有sd卡不让我装flash. 
+
+3, 看看7882调压如何做. 
+int regulator_set_voltage(regulator, min_uV, max_uV);
+
+18:58 2011-6-8
+VC0882, SV, 调试经验
+1, 今天听suxin和指点另一个同事解bug. 
+让人感到是一种很严谨的风格, 不靠猜测进行调试. 
+从问题源头开始进行分析, 一步一步的找到问题原因. 
+看起来android开发中, 按垂直方向进行分割是很有必要的. 
+
+21:33 2011-6-8
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 给zhaoyuan发ddr training固定值烧写脚本.
+2), 上午讨论ddr training. 
+3), 分析8寸板按reset失败问题. 建议测试同事先断电再启动实验. 
+4), 做arm dvfs: 主要目的是希望能使用1GHz@1.4xv这个频点. 
+今天在修正clk子系统的问题, 明天可以考虑加入调压. 
+
+16:49 2011-6-9
+VC0882, SV, AE, dvfs
+1, 
+regulator_get里面的id应该是consumer supply.
+
+2, 
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: braces around scalar initializer
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: (near initialization for 'cpu_voltage[0]')
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: initialization makes pointer from integer without a cast
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: excess elements in scalar initializer
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: (near initialization for 'cpu_voltage[0]')
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: excess elements in scalar initializer
+arch/arm/mach-vc0882/clock-vortex.c:2346: warning: (near initialization for 'cpu_voltage[0]')
+
+3, 放到set_rate里面做切频, 很容易和其它module的set_rate冲突, 即使不跑死, 也会影响效率(因为调压远远慢于调频). 
+还是把调压放到cpu target函数里面. 使用中发现, dvfs速度似乎过慢, 造成频率变化时android运行不正常. 
+另外, 加入dvfs后, early_suspend/resume间隔显得更短了, 用户基本没法解锁.
+如果把transition时间调长, 似乎又不会切到750MHz. 效果都不好. 
+
+4, (00:51 2011-6-10)下一步实验计划
+统计调频调压时间长短和使用时间。
+dvfs主要问题在于切频阈值：dvfs本身所需时间，设置合适的governer(conservative?)
+实验1.2g
+
+19:34 2011-6-9
+软件技巧, vi, 正则表达式
+check_up_voltage, check_down_voltage改为v8clk_upvol, v8clk_downvol, 在vi中用正则表达式: 
+:1,$s/check_\(.*\)_voltage/v8clk_\1vol/gc
+
+23:20 2011-6-9
+时间管理
+0, 15:40-23:21
+
+1, 本日
+1), 工作总结:
+今天在android里面加入arm dvfs, 目前重点测试750和1GHz之间互相切换. 
+代码已经加入完成. 但是调压影响了系统的一些工作, 系统变得不稳定. 
+今天晚上先测试加入dvfs后休眠唤醒是否问题, 明天debug android正常运行时dvfs问题. 
+
+10:31 2011-6-10
+时间管理
+0, 9:45
+
+1, 本日
+1), AE dvfs, 见"10:35 2011-6-10". 
+
+), 周工作总结. 
+
+10:35 2011-6-10
+VC0882, SV, dvfs
+1, 今日计划
+1), 看昨天, 前天1#板测试情况. 
+2), 看调频调压时间长短(软件统计, 示波器观察)和每个频点使用时间(直接看cpufreq sys)。
+3), dvfs主要问题在于切频阈值：dvfs本身所需时间，设置合适的governer(conservative?)
+4), 实验1.2GHz切频, 看看对于优酷播放效果. 通过882 performance monitor看系统瓶颈在什么地方. 
+
+2, 6月8日-6月10日 dvfs测试
+\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110610_AE_DVFS\0608_0610_dvfs_log
+1), 1#板: 电压固定在1.45v, 在750和1GHz之间切换, 测试1192次跑死. 
+[zhangjian@centos 0608_0610_dvfs_log]$ ../../20110604_AE_suspend_resume_cont11/check_dt_ret putty_com6_20110608_213751.txt
+version: 20110602_1052
+dt times is 0, dt dis times is 2382, console suspend times is 1192, rom boot times is 2382.
+
+本来估计是因为升频时没有给出电压的余量, 造成1.45v运行时出错? 但是log中显示出错时是要降频, 所以可能是其它原因, 最后log如下: 
+<I>[v8-cpu]: v8_target(policy[750000,1000000],750000,0)
+<I>[v8-cpu]: cpufreq-v8: transition: 1000000 --> 750000
+
+<I>[v8-cpu]: lock clock: pll1_clk.
+<I>[v8-cpu]: unlock clock: pll1_clk.
+<E>[v8-cpu]: set rate fail while parent is locked, try to change parent rate.
+resume done
+alarm after 34 seconds
+request_suspend_state: sleep (0->3) at 44192821197856 (2011-06-09 09:46:12.550980308 UTC)
+
+2), 1#板, 750MHz@1.2v, 1GHz@1.45v相互切换, 测试657次没有死. 
+[zhangjian@centos 0608_0610_dvfs_log]$ ../../20110604_AE_suspend_resume_cont11/check_dt_ret putty_com6_1#_20110609_200338.txt
+version: 20110602_1052
+//省略测试次数小于10的结果
+dt times is 0, dt dis times is 1314, console suspend times is 657, rom boot times is 1314.
+
+3, 看调频调压时间长短
+1), 用示波器实测, 750->1G调压大约需要25ms. 调一级电压: 最快需要4ms, 最慢12.3ms, 看了dvfs必须用硬件I2C, 否则系统开销太大. 
+policy->cpuinfo.transition_latency   the time it takes on this CPU to switch between two frequencies in nanoseconds (if appropriate, else specify  PUFREQ_ETERNAL)
+2), 修改前需要看一下, 如果改为硬件I2C, transition是500ms, 看看系统是什么行为. 
+临时改下面三个文件: 
+zhangjian@ubuntu:~/mydroid_f/kernel$ vim arch/arm/plat-vc088x/cpu.c
+zhangjian@ubuntu:~/mydroid_f/kernel$ vim arch/arm/mach-vc0882/board-vortex.c
+zhangjian@ubuntu:~/mydroid_f/kernel$ vim arch/arm/mach-vc0882/clock-vortex.c
+改到500us, 也是会固定到1GHz. 
+这样走不通? 不行的话就需要加入根据场景切频了. 
+
+还是先认真看一下cpufreq
+1), 可以先看一下详细的打印信息, 看看系统到底需要切到什么频率. 
+2), 看ondemand, conservative各自详细的参数, 看看有没有调整余地. 
+
+4, (14:37 2011-6-10)看ondemand, 里面的up_threshold改为99后, 会在出现750和1G的切频. 
+但是运行切水果时, 系统会有卡一下, 从打印信息看是因为cpu切到xclk上造成的. 
+这个改为切到pll2. 
+1), 如果把transition时间改为25ms, 系统不允许使用ondemand
+bash-4.1# echo ondemand > scaling_governor 
+<I>[v8-cpu]: v8_verify_speed(policy[750000,1000000])
+<I>[v8-cpu]: v8_verify_speed(policy[750000,1000000])
+ondemand governor failed, too long transition latency of HW, fallback to performance governor
+bash-4.1# cat cpuinfo_transition_latency
+25000000
+2), bianrongguang建议用i2c_transfer一次发多个msg. 
+试一试, 如果可以, 需要修改bianrongguang regulator驱动.
+(1), i2c_transfer参考: 
+drivers/video/vc088x/hdmi/vc088x_i2c4hdmi.c
+
+static struct i2c_adapter *lvdsAdapter;
+struct i2c_msg msg1 = { .flags = 0, .buf = buf1, .len = 2 };
+
+lvdsAdapter = i2c_get_adapter(1);
+
+msg1.addr = LVDS_SLAVE_ADDR;
+ret = i2c_transfer(lvdsAdapter, &msg1, 1);
+
+i2c_put_adapter(lvdsAdapter);
+
+(2), 每个msg是连续发多个数据, 从第一个地址运行写. 如果发了stop, 就需要重新给出地址. 
+Linux i2c里面每个msg都会有stop. 
+修改后150us/50mv, 共920us. 
+把这个修改改到va7882_dcdc_set_voltage
+
+这次要借机会看看i2c driver. 
+
+18:13 2011-6-10
+VC0882, SV, 工作总结
+1, 6月9日工作总结
+今天在android里面加入arm dvfs, 目前重点测试750和1GHz之间互相切换. 
+代码已经加入完成. 但是调压影响了系统的一些工作, 系统变得不稳定. 
+今天晚上先测试加入dvfs后休眠唤醒是否问题, 明天debug android正常运行时dvfs问题. 
+
+2, 6月10日工作总结
+1), 在昨天实验基础上测试不同cpufreq参数(transition_latency, up_threshold)对于系统切频的影响, 希望找一个平衡点: 只有系统负载最终时才切频到1GHz, 对于普通UI操作系统运行造750MHz.
+2), 经过测试, 已经android i2c操作函数需要25ms左右才能完成调压, 今天正在优化这个调压时间, 基本完成. 
+
+23:38 2011-6-10
+VC0882, SV, dvfs, 进展
+1, zhangjian2zhaoyuan(赵原)
+dvfs进展
+1), 现在调压代码都已经加入了. 但是调压速度过慢(最长25ms). 周五做了一些实验, 尝试调整一些参数使dvfs工作更好. 
+根据实验结果, 如果能把调压时间缩短到1ms以内. 用cpufreq ondemand governer, upthreshold=99时效果应该不错, 希望能做到只有上网看flash等部分应用才切到1GHz
+2), 针对调压时间的调压的代码已经完写完, 正在调试，周一应该可以调试完成，周一晚上多个板子测试。
+
+23:45 2011-6-10
+VC0882, SV, 项目体会
+882项目产品方案阶段，刚开始很有信心很有干劲，做到中间遇到较多困难，当时干劲就比较弱了，后来问题有进展，同时发现综合实力强于竟争对手，于是又很有信心。
+
+00:24 2011-6-12
+VC0882, SV, memory, ddr training
+ddr training: 128x8的结果也是0x2222, 0x00.
+问所有产品板是否都使用了，固定值，效果如何。(13:00 2011-6-13)beijing无问题.
+
+9:04 2011-6-13
+VVC0882, SV, 周工作总结
+1, 本周工作总结
+1), AE android suspend/resume稳定性调试完成，主要是三个问题：ddr training bug导致的不合理结果使系统跑死。休眠时ddr不能访问时mmu页表需要放在tlb中。休眠时c类电源未关闭：uhost vbus.
+2), 针对ddr training bug需要做举手表决：讨论软件work around, bootloader metal fix。
+3), 开始做AE dvfs(arm): 为了验证功能只加入了750MH, 1GHz两个频点对应的电压。
+代码初步完成，需要做优化。
+
+12:58 2011-6-13
+时间管理
+0, 9:45
+
+1, 本日
+1), 上午: VC0882 ICP sync up. 
+2), AE dvfs优化. 见"15:22 2011-6-13". 
+
+13:51 2011-6-13
+VC0882, SV, 竞争对手, RK2918, U9Gt
+1, 屏下方热, 感觉热度和882类似. 但是背面不热, 不知道为什么. 
+2, youku视频: 家的N次方. 标清流畅, 高清略有不畅且声音不连续. 
+882@1G 标清情况下基本流畅.
+
+15:22 2011-6-13
+VC0882, SV, AE, dvfs
+1, 修改代码, 看看为什么周五调压是直接从1.2到1.5v了. 
+1), 命令:
+sleep 2; echo 750000 > scaling_setspeed; echo 1000000 > scaling_setspeed; echo 750000 > scaling_setspeed; echo 1000000 > scaling_setspeed; echo 750000 > scaling_setspeed
+2), 用示波器发现, 其实调压函数没有问题. 周五抓到的是宏观结果: 1.2->1.5->1.45->1.2, 把示波器频率升高就看到实际的调压波形了. 
+3), 调压到1.6v后跑飞:
+<I>[v8-cpu]: set cpu_clk parent as pll1_clk.
+Unable to handle kernel paging request at virtual address 22222204
+Unable to handle kernel NULL pointer dereference at virtual address 0000000a
+Unable to handle kernel NULL pointer dereference at virtual address 0000000a
+估计是因为1.2G频率太高了不稳定. 
+4), 在 kernel cmdline里面加入: cpufreq.debug=4
+发现需要切到1G时确实是需要准确切频到1GHz.
+调整up_threshold到99, 有时可以在正常运行在375MHz, 但有时也会固定在1GHz. 重启后再实验, 感觉判断不是很稳定. up_threshold切都啊95, 多数情况下效果也可以. 
+
+2, 调试中发现cpu切频时没有切到pll1以外的clksrc, 但是修改出错:
+bash-4.1# request_suspend_state: wakeup (3->0) at 317069001618 (2011-06-13 09:32:29.510460847 UTC)
+<I>[v8-cpu]: v8_target(policy[375000,1000000],1000000,1)
+<I>[v8-cpu]: cpufreq-v8: transition: 375000 --> 1000000
+<E>[v8-clk]: v8clk_upvol: cpu_clk
+<E>[v8-clk]: cpu_clk: try to get regulator vdd_dcdc1
+<I>[v8-clk]: cpu_clk: try to get destination voltage
+<I>[v8-clk]: cpu_clk: destination voltage is 1500000
+<I>[v8-clk]: cpu_clk: final destination voltage is 1500000
+up: 3: 13.
+up: 3: 14.
+up: 3: 15.
+up: 3: 16.
+up: 3: 17.
+up: 3: 18.
+i2c_transfer: 6
+<I>[v8-clk]: cpu_clk: try to put regulator
+<I>[v8-cpu]: lock clock: pll1_clk.
+<E>[v8-clk]: Trying to change locked clock(pll1_clk)
+<I>[v8-cpu]: unlock clock: pll1_clk.
+<E>[v8-cpu]: set rate fail while parent is locked, try to change parent rate.
+<I>[v8-cpu]: set cpu_clk clk to 666000000 @ parent pll2_clk.
+<I>[v8-clk]: v8src_setrate(cpu_clk,666000000,1000)
+<E>[v8-clk]: div_calculator(cpu_clk) invalid div.
+<E>[v8-clk]: div_calculator(cpu_clk,26000000,666000000,1000) error
+<I>[v8-cpu]: cpu_clk clk is 666000000.
+<I>[v8-cpu]: set cpu_clk parent pll1_clk to 1000000000.
+<I>[v8-clk]: v8pll_setrate(pll1_clk,1000000000,1000)
+<I>[v8-clk]: v8pll_parser(pll1_clk, c0477afc,26000000,1f3000c,0) [13,500]
+<I>[v8-cpu]: set cpu_clk parent as pll1_clk.
+<I>[v8-cpu]: set cpu_clk to rate: 1000000000.
+<E>[v8-clk]: v8clk_downvol: cpu_clk
+<E>[v8-clk]: cpu_clk: try to get regulator vdd_dcdc1
+<I>[v8-clk]: cpu_clk: try to get destination voltage
+<I>[v8-clk]: cpu_clk: destination voltage is 1450000
+<I>[v8-clk]: cpu_clk: final destination voltage is 1450000
+down: 3: 17.
+i2c_transfer: 1
+<I>[v8-clk]: cpu_clk: try to put regulator
+<I>[v8-cpu]: v8_target(policy[375000,1000000],760869,0)
+<I>[v8-cpu]: v8_target(policy[375000,1000000],586956,0)
+<I>[v8-cpu]: cpufreq-v8: transition: 1000000 --> 750000
+<I>[v8-cpu]: lock clock: pll1_clk.
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361ef4>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361edc>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c018627c>] (Ldiv0+0x8/0x10)
+[<c0038f14>] (clk_set_rate+0x0/0x2e4) from [<c0042f18>] (cpu_clk_set_rate+0x48/0x1c0)
+[<c0042ed0>] (cpu_clk_set_rate+0x0/0x1c0) from [<c0043194>] (v8_target+0x104/0x140)
+ r7:0008f4cc r6:c0630220 r5:000003e8 r4:00000000
+[<c0043090>] (v8_target+0x0/0x140) from [<c026d7e4>] (__cpufreq_driver_target+0x68/0x84)
+ r7:0000008c r6:0008f4cc r5:00000000 r4:d1c875c0
+[<c026d77c>] (__cpufreq_driver_target+0x0/0x84) from [<c0270250>] (do_dbs_timer+0x2fc/0x360)
+ r6:c0627e60 r5:d1c875c0 r4:c0627ec8
+[<c026ff54>] (do_dbs_timer+0x0/0x360) from [<c0067ba8>] (worker_thread+0x184/0x230)
+[<c0067a24>] (worker_thread+0x0/0x230) from [<c006b758>] (kthread+0x84/0x8c)
+[<c006b6d4>] (kthread+0x0/0x8c) from [<c005853c>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c005853c r5:c006b6d4 r4:d3019ee0
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361ef4>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361edc>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c018627c>] (Ldiv0+0x8/0x10)
+[<c0038f14>] (clk_set_rate+0x0/0x2e4) from [<c0042f18>] (cpu_clk_set_rate+0x48/0x1c0)
+[<c0042ed0>] (cpu_clk_set_rate+0x0/0x1c0) from [<c0043194>] (v8_target+0x104/0x140)
+ r7:0008f4cc r6:c0630220 r5:000003e8 r4:00000000
+[<c0043090>] (v8_target+0x0/0x140) from [<c026d7e4>] (__cpufreq_driver_target+0x68/0x84)
+ r7:0000008c r6:0008f4cccat scaling_cur_freq  r5:00000000 r4:d1c875c0
+[<c026d77c>] (__cpufreq_driver_target+0x0/0x84) from [<c0270250>] (do_dbs_timer+0x2fc/0x360)
+ r6:c0627e60 r5:d1c875c0 r4:c0627ec8
+[<c026ff54>] (do_dbs_timer+0x0/0x360) from [<c0067ba8>] (worker_thread+0x184/0x230)
+[<c0067a24>] (worker_thread+0x0/0x230) from [<c006b758>] (kthread+0x84/0x8c)
+[<c006b6d4>] (kthread+0x0/0x8c) from [<c005853c>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c005853c r5:c006b6d4 r4:d3019ee0
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361ef4>] (dump_stack+0x18/0x1c)
+ r7:2cb41780 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361edc>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c018627c>] (Ldiv0+0x8/0x10)
+[<c0038f14>] (clk_set_rate+0x0/0x2e4) from [<c0042f18>] (cpu_clk_set_rate+0x48/0x1c0)
+[<c0042ed0>] (cpu_clk_set_rate+0x0/0x1c0) from [<c0043194>] (v8_target+0x104/0x140)
+ r7:0008f4cc r6:c0630220 r5:000003e8 r4:00000000
+[<c0043090>] (v8_target+0x0/0x140) from [<c026d7e4>] (__cpufreq_driver_target+0x68/0x84)
+ r7:0000008c r6:0008f4cc r5:00000000 r4:d1c875c0
+[<c026d77c>] (__cpufreq_driver_target+0x0/0x84) from [<c0270250>] (do_dbs_timer+0x2fc/0x360)
+ r6:c0627e60 r5:d1c875c0 r4:c0627ec8
+[<c026ff54>] (do_dbs_timer+0x0/0x360) from [<c0067ba8>] (worker_thread+0x184/0x230)
+[<c0067a24>] (worker_thread+0x0/0x230) from [<c006b758>] (kthread+0x84/0x8c)
+[<c006b6d4>] (kthread+0x0/0x8c) from [<c005853c>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c005853c r5:c006b6d4 r4:d3019ee0
+<E>[v8-clk]: Trying to change locked clock(pll1_clk)
+<I>[v8-cpu]: unlock clock: pll1_clk.
+<E>[v8-cpu]: set rate fail while parent is locked, try to change parent rate.
+<I>[v8-cpu]: set cpu_clk clk to 666000000 @ parent pll2_clk.
+<I>[v8-clk]: v8src_setrate(cpu_clk,666000000,1000)
+<E>[v8-clk]: div_calculator(cpu_clk) invalid div.
+<E>[v8-clk]: div_calculator(cpu_clk,26000000,666000000,1000) error
+<I>[v8-cpu]: cpu_clk clk is 666000000.
+<I>[v8-cpu]: set cpu_clk parent pll1_clk to 750000000.
+<I>[v8-clk]: v8pll_setrate(pll1_clk,750000000,1000)
+<I>[v8-clk]: v8pll_parser(pll1_clk, c0477afc,26000000,2ed0019,0) [26,750]
+<I>[v8-cpu]: set cpu_clk parent as pll1_clk.
+<I>[v8-cpu]: set cpu_clk to rate: 750000000.
+<E>[v8-clk]: v8clk_downvol: cpu_clk
+<E>[v8-clk]: cpu_clk: try to get regulator vdd_dcdc1
+<I>[v8-clk]: cpu_clk: try to get destination voltage
+<I>[v8-clk]: cpu_clk: destination voltage is 1200000
+<I>[v8-clk]: cpu_clk: final destination voltage is 1200000
+down: 3: 16.
+down: 3: 15.
+down: 3: 14.
+down: 3: 13.
+down: 3: 12.
+i2c_transfer: 5
+<I>[v8-clk]: cpu_clk: try to put regulator
+
+2), 修改后仍然有问题
+<I>[v8-cpu]: v8_target(policy[375000,1000000],380434,0)
+<I>[v8-cpu]: cpufreq-v8: transition: 1000000 --> 750000
+<I>[v8-cpu]: cpu_clk_set_rate: lock clock: pll1_clk.
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361f54>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361f3c>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c01862dc>] (Ldiv0+0x8/0x10)
+[<c0038f4c>] (clk_set_rate+0x0/0x2e4) from [<c0042f54>] (cpu_clk_set_rate+0x4c/0x1ec)
+bash-4.1# [<c0042f08>] (cpu_clk_set_rate+0x0/0x1ec) from [<c00431f8>] (v8_target+0x104/0x140)
+ r7:0005ce12 r6:c0630220 r5:000003e8 r4:00000000
+[<c00430f4>] (v8_target+0x0/0x140) from [<c026d844>] (__cpufreq_driver_target+0x68/0x84)
+ r7:0000008c r6:0005ce12 r5:00000000 r4:d1cc85c0
+[<c026d7dc>] (__cpufreq_driver_target+0x0/0x84) from [<c02702b0>] (do_dbs_timer+0x2fc/0x360)
+ r6:c0627e60 r5:d1cc85c0 r4:c0627ec8
+[<c026ffb4>] (do_dbs_timer+0x0/0x360) from [<c0067c0c>] (worker_thread+0x184/0x230)
+[<c0067a88>] (worker_thread+0x0/0x230) from [<c006b7bc>] (kthread+0x84/0x8c)
+[<c006b738>] (kthread+0x0/0x8c) from [<c00585a0>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c00585a0 r5:c006b738 r4:d3019ee0
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361f54>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361f3c>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c01862dc>] (Ldiv0+0x8/0x10)
+[<c0038f4c>] (clk_set_rate+0x0/0x2e4) from [<c0042f54>] (cpu_clk_set_rate+0x4c/0x1ec)
+[<c0042f08>] (cpu_clk_set_rate+0x0/0x1ec) from [<c00431f8>] (v8_target+0x104/0x140)
+ r7:0005ce12 r6:c0630220 r5:000003e8 r4:00000000
+[<c00430f4>] (v8_target+0x0/0x140) from [<c026d844>] (__cpufreq_driver_target+0x68/0x84)
+ r7:0000008c r6:0005ce12 r5:00000000 r4:d1cc85c0
+[<c026d7dc>] (__cpufreq_driver_target+0x0/0x84) from [<c02702b0>] (do_dbs_timer+0x2fc/0x360)
+ r6:c0627e60 r5:d1cc85c0 r4:c0627ec8
+[<c026ffb4>] (do_dbs_timer+0x0/0x360) from [<c0067c0c>] (worker_thread+0x184/0x230)
+[<c0067a88>] (worker_thread+0x0/0x230) from [<c006b7bc>] (kthread+0x84/0x8c)
+[<c006b738>] (kthread+0x0/0x8c) from [<c00585a0>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c00585a0 r5:c006b738 r4:d3019ee0
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361f54>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361f3c>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c01862dc>] (Ldiv0+0x8/0x10)
+[<c0038f4c>] (clk_set_rate+0x0/0x2e4) from [<c0042f54>] (cpu_clk_set_rate+0x4c/0x1ec)
+[<c0042f08>] (cpu_clk_set_rate+0x0/0x1ec) from [<c00431f8>] (v8_target+0x104/0x140)
+ r7:0005ce12 r6:c0630220 r5:000003e8 r4:00000000
+[<c00430f4>] (v8_target+0x0/0x140) from [<c026d844>] (__cpufreq_driver_target+0x68/0x84)
+ r7:0000008c r6:0005ce12 r5:00000000 r4:d1cc85c0
+[<c026d7dc>] (__cpufreq_driver_target+0x0/0x84) from [<c02702b0>] (do_dbs_timer+0x2fc/0x360)
+ r6:c0627e60 r5:d1cc85c0 r4:c0627ec8
+[<c026ffb4>] (do_dbs_timer+0x0/0x360) from [<c0067c0c>] (worker_thread+0x184/0x230)
+[<c0067a88>] (worker_thread+0x0/0x230) from [<c006b7bc>] (kthread+0x84/0x8c)
+[<c006b738>] (kthread+0x0/0x8c) from [<c00585a0>] (do_exit+0x0/0x65c)
+ r7:00000013 r6:c00585a0 r5:c006b738 r4:d3019ee0
+3), 进一步实验发现, 1G->750有问题:
+bash-4.1# echo 750000 > scaling_setspeed  
+<I>[v8-cpu]: v8_target(policy[375000,1000000],750000,0)
+<I>[v8-cpu]: cpufreq-v8: transition: 1000000 --> 750000
+<I>[v8-cpu]: cpu_clk_set_rate: lock clock: pll1_clk.
+<I>[v8-cpu]: cpu_clk_set_rate: try to set cpu_clk clk to 750000000.
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361f74>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361f5c>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c01862fc>] (Ldiv0+0x8/0x10)
+[<c0038f4c>] (clk_set_rate+0x0/0x2e4) from [<c0042f6c>] (cpu_clk_set_rate+0x64/0x208)
+[<c0042f08>] (cpu_clk_set_rate+0x0/0x208) from [<c0043214>] (v8_target+0x104/0x140)
+ r7:000b71b0 r6:c0630220 r5:000003e8 r4:00000000
+[<c0043110>] (v8_target+0x0/0x140) from [<c026d864>] (__cpufreq_driver_target+0x68/0x84)
+ r7:d1723000 r6:000b71b0 r5:00000000 r4:d32d75c0
+[<c026d7fc>] (__cpufreq_driver_target+0x0/0x84) from [<c026f478>] (cpufreq_set+0x74/0x9c)
+ r6:00000007 r5:d32d75c0 r4:000b71b0
+[<c026f404>] (cpufreq_set+0x0/0x9c) from [<c026ca6c>] (store_scaling_setspeed+0x64/0x7c)
+ r5:00000007 r4:d32d75c0
+[<c026ca08>] (store_scaling_setspeed+0x0/0x7c) from [<c026ea1c>] (store+0x60/0x7c)
+ r5:c0627b4c r4:d32d75c0
+[<c026e9bc>] (store+0x0/0x7c) from [<c010ffcc>] (sysfs_write_file+0x110/0x144)
+ r7:d0d5f900 r6:00000007 r5:d1709f70 r4:d32d5398
+[<c010febc>] (sysfs_write_file+0x0/0x144) from [<c00bc24c>] (vfs_write+0xb8/0x164)
+[<c00bc194>] (vfs_write+0x0/0x164) from [<c00bc3bc>] (sys_write+0x44/0x70)
+ r8:00000007 r7:00000000 r6:00000000 r5:40002000 r4:d1fb5ac0
+[<c00bc378>] (sys_write+0x0/0x70) from [<c002af80>] (ret_fast_syscall+0x0/0x30)
+ r8:c002b128 r7:00000004 r6:00000007 r5:0015e2a8 r4:00000007
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361f74>] (dump_stack+0x18/0x1c)
+ r7:00000000 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361f5c>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c01862fc>] (Ldiv0+0x8/0x10)
+[<c0038f4c>] (clk_set_rate+0x0/0x2e4) from [<c0042f6c>] (cpu_clk_set_rate+0x64/0x208)
+[<c0042f08>] (cpu_clk_set_rate+0x0/0x208) from [<c0043214>] (v8_target+0x104/0x140)
+ r7:000b71b0 r6:c0630220 r5:000003e8 r4:00000000
+[<c0043110>] (v8_target+0x0/0x140) from [<c026d864>] (__cpufreq_driver_target+0x68/0x84)
+ r7:d1723000 r6:000b71b0 r5:00000000 r4:d32d75c0
+[<c026d7fc>] (__cpufreq_driver_target+0x0/0x84) from [<c026f478>] (cpufreq_set+0x74/0x9c)
+ r6:00000007 r5:d32d75c0 r4:000b71b0
+[<c026f404>] (cpufreq_set+0x0/0x9c) from [<c026ca6c>] (store_scaling_setspeed+0x64/0x7c)
+ r5:00000007 r4:d32d75c0
+[<c026ca08>] (store_scaling_setspeed+0x0/0x7c) from [<c026ea1c>] (store+0x60/0x7c)
+ r5:c0627b4c r4:d32d75c0
+[<c026e9bc>] (store+0x0/0x7c) from [<c010ffcc>] (sysfs_write_file+0x110/0x144)
+ r7:d0d5f900 r6:00000007 r5:d1709f70 r4:d32d5398
+[<c010febc>] (sysfs_write_file+0x0/0x144) from [<c00bc24c>] (vfs_write+0xb8/0x164)
+[<c00bc194>] (vfs_write+0x0/0x164) from [<c00bc3bc>] (sys_write+0x44/0x70)
+ r8:00000007 r7:00000000 r6:00000000 r5:40002000 r4:d1fb5ac0
+[<c00bc378>] (sys_write+0x0/0x70) from [<c002af80>] (ret_fast_syscall+0x0/0x30)
+ r8:c002b128 r7:00000004 r6:00000007 r5:0015e2a8 r4:00000007
+Division by zero in kernel.
+Backtrace: 
+[<c002f0c8>] (dump_backtrace+0x0/0x110) from [<c0361f74>] (dump_stack+0x18/0x1c)
+ r7:2cb41780 r6:2cb41780 r5:00000000 r4:c0471ed4
+[<c0361f5c>] (dump_stack+0x0/0x1c) from [<c002f93c>] (__div0+0x18/0x20)
+[<c002f924>] (__div0+0x0/0x20) from [<c01862fc>] (Ldiv0+0x8/0x10)
+[<c0038f4c>] (clk_set_rate+0x0/0x2e4) from [<c0042f6c>] (cpu_clk_set_rate+0x64/0x208)
+[<c0042f08>] (cpu_clk_set_rate+0x0/0x208) from [<c0043214>] (v8_target+0x104/0x140)
+ r7:000b71b0 r6:c0630220 r5:000003e8 r4:00000000
+[<c0043110>] (v8_target+0x0/0x140) from [<c026d864>] (__cpufreq_driver_target+0x68/0x84)
+ r7:d1723000 r6:000b71b0 r5:00000000 r4:d32d75c0
+[<c026d7fc>] (__cpufreq_driver_target+0x0/0x84) from [<c026f478>] (cpufreq_set+0x74/0x9c)
+ r6:00000007 r5:d32d75c0 r4:000b71b0
+[<c026f404>] (cpufreq_set+0x0/0x9c) from [<c026ca6c>] (store_scaling_setspeed+0x64/0x7c)
+ r5:00000007 r4:d32d75c0
+[<c026ca08>] (store_scaling_setspeed+0x0/0x7c) from [<c026ea1c>] (store+0x60/0x7c)
+ r5:c0627b4c r4:d32d75c0
+[<c026e9bc>] (store+0x0/0x7c) from [<c010ffcc>] (sysfs_write_file+0x110/0x144)
+ r7:d0d5f900 r6:00000007 r5:d1709f70 r4:d32d5398
+[<c010febc>] (sysfs_write_file+0x0/0x144) from [<c00bc24c>] (vfs_write+0xb8/0x164)
+[<c00bc194>] (vfs_write+0x0/0x164) from [<c00bc3bc>] (sys_write+0x44/0x70)
+ r8:00000007 r7:00000000 r6:00000000 r5:40002000 r4:d1fb5ac0
+[<c00bc378>] (sys_write+0x0/0x70) from [<c002af80>] (ret_fast_syscall+0x0/0x30)
+ r8:c002b128 r7:00000004 r6:00000007 r5:0015e2a8 r4:00000007
+<E>[v8-clk]: Trying to change locked clock(pll1_clk)
+<I>[v8-cpu]: cpu_clk_set_rate: unlock clock: pll1_clk.
+<E>[v8-cpu]: cpu_clk_set_rate: set rate fail while parent is locked, try to change parent rate.
+<I>[v8-cpu]: cpu_clk_set_rate: set cpu_clk clk to 666000000 @ parent pll2_clk.
+<I>[v8-clk]: v8src_setrate(cpu_clk,666000000,1000)
+<E>[v8-clk]: div_calculator(cpu_clk) invalid div.
+<E>[v8-clk]: div_calculator(cpu_clk,26000000,666000000,1000) error
+<I>[v8-cpu]: cpu_clk_set_rate: cpu_clk clk is 666000000.
+<I>[v8-cpu]: cpu_clk_set_rate: set cpu_clk parent pll1_clk to 750000000.
+<I>[v8-clk]: v8pll_setrate(pll1_clk,750000000,1000)
+<I>[v8-clk]: v8pll_parser(pll1_clk, c0477afc,26000000,2ed0019,0) [26,750]
+<I>[v8-cpu]: cpu_clk_set_rate: set cpu_clk parent as pll1_clk.
+<I>[v8-cpu]: cpu_clk_set_rate: set cpu_clk to rate: 750000000.
+<E>[v8-clk]: v8clk_downvol: cpu_clk
+<E>[v8-clk]: v8clk_downvol: cpu_clk: try to get regulator vdd_dcdc1
+<I>[v8-clk]: v8clk_downvol: cpu_clk: try to get destination voltage
+<I>[v8-clk]: v8clk_downvol: cpu_clk: destination voltage is 1200000
+<I>[v8-clk]: v8clk_downvol: cpu_clk: final destination voltage is 1200000
+down: 3: 16.
+down: 3: 15.
+down: 3: 14.
+down: 3: 13.
+down: 3: 12.
+i2c_transfer: 5
+<I>[v8-clk]: v8clk_downvol: cpu_clk: try to put regulator
+bash-4.1# 
+4), 最后发现是clk_set_rate: 
+lcm里面当传入的clock过大时, 会返回0, 后面"max_times = min_parent/lcm_rate;"里面会造成除0错误. 
+但是修改LCM这个问题影响较大. 而且本身这样用开销也比较大. 
+后来和bianrongguang讨论, 他建议我如下修改, 感觉简单很多:
+cpu_parentp = clk_get_parent(cpu_clk);
+if ( cpu_parentp->rate % rate == 0 ) {
+        clk_set_rate(cpu_clk, rate);
+} else {
+        pll2_clk = clk_get(NULL, "pll2_clk");
+        clk_set_parent(cpu_clk, pll2_clk);
+        clk_put(pll2_clk);
+        clk_set_rate(cpu_parentp, rate);
+        clk_set_parent(cpu_clk, cpu_parentp);
+}
+V8LOGI(VTTAG_CPU, "%s: set cpu rate to %d.", __FUNCTION__, clk_clk->rate);
+5), (21:49 2011-6-13)
+想把aclk配置到一个合适的值, 发现有个顺序问题, 如果aclk div要扩大, 需要后设置, 如果aclk div减小需要先设置. 当然一起设置最好(不过现有接口不支持). 
+
+17:43 2011-6-13
+软件技巧, 正则表达式
+V8LOGI(V8TAG_CLK, "%s: final destination voltage is %d", clk->name, uV);
+改为
+V8LOGI(V8TAG_CLK, "%s: %s: final destination voltage is %d",__FUNCTION__ , clk->name, uV);
+用正则表达式很简单: 
+:1,$s/\(V8LOG.*\)\"\(.*\)\"\(.*\)$/\1"%s: \2",__FUNCTION__ \3/gc
+
+9:51 2011-6-14
+时间管理
+0, 9:28
+
+1, 本日
+1), 20' 阅读: <成为技术领导者>
+2), 20' 做今日工作计划. 
+3), 10:16- AE dvfs: 修正cpu_aclk配置. 见"10:07 2011-6-14". 
+被4),5), 6)打断. 
+4), 40' bianrongguang调试我板子g-sensor问题. 见"11:29 2011-6-14".
+5), 午饭1h.
+6), 20' 882量产(MP)情况, 见"12:50 2011-6-14".
+7), AE dvfs: 规划合理的cpu频率, 看各种场景下cpu切频是否合理. 
+8), 针对各种应用做测试: 3D, hw video, sw video...
+9), 工作总结：见“
+21:29 2011-6-14”.
+今天基本按照计划工作，除了没清604 issue. 今天上午比较抓紧时间，下午看电视剧时间有点长。晚上也还可以。明天注意改进。
+
+10:07 2011-6-14
+VC0882, SV, power, AE, dvfs, 续, 细节优化, 修正cpu_aclk配置; dvfs场景测试
+1, 昨天实验发现cpu切频时, cpu_aclk没有根据情况调整, 得到不合适的cpu_aclk.
+clk架构里面的当parent cpu_clk变化时, 对于cpu_aclk的处理似乎有问题. 我设置了target_clk和tolerance没有效果. 
+2, 为了简单先在cpu_clk_set_rate里面设置cpu_aclk: 升频时先设置cpu_aclk div, 降频时后设置cpu_aclk div. cpu_aclk范围设置在<=375. 
+昨天是用多个if else语句设置频率, 这样感觉不够灵活, 考虑新增一个函数u32 v8clk_get_cpu_aclk_div(u32 cpu, u32 cpu_aclk_max);
+返回值是对于cpu频率的小于等于cpu_aclk_max的cpu_aclk divider.
+3, 预计需要30' 分钟完成. 10:16-. (10:52)测试遇到问题预计还需要60'
+为了测试方便, 写一个脚本. 
+echo hello > /sys/power/wake_lock
+cd /sys/devices/system/cpu/cpu0/cpufreq/
+
+echo "375000"
+echo 375000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "750000"
+echo 750000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "1000000"
+echo 1000000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "750000"
+echo 750000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "375000"
+echo 375000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "1000000"
+echo 1000000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "375000"
+echo 375000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "750000"
+echo 750000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "1000000"
+echo 1000000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "750000"
+echo 750000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "enlarge max freq to 1.2GHz"
+echo 1200000 > scaling_max_freq
+
+echo "1200000"
+echo 1200000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "1000000"
+echo 1000000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "375000"
+echo 375000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "1200000"
+echo 1200000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "750000"
+echo 750000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+echo "1200000"
+echo 1200000 > scaling_setspeed
+vmtool 0x60000004
+vmtool 0x60000040
+
+4, (13:13 2011-6-14)
+1), 切到1.2G, 播视频也不见流畅. 
+2), cpufreq_debug_printk: 5 callbacks suppressed
+是cpufreq_debug_printk里面, printk_ratelimit打印的. 看起来只是因为提示过于频繁会supress一部分信息. 应该没什么影响, 暂时不管. 
+
+5, (17:24 2011-6-14)更新GIT, 备份旧文件:
+for name in `git status | grep modified | cut -d :  -f 2`; do echo $name; mv $name $name.bak`date +%m%d_%H%M`; done
+1), 今天板子用3D有问题, 需要输入如下命令:
+bash-4.1# cd /system/lib
+bash-4.1# cp libEGL_VIVANTE.so egl/
+bash-4.1# cp libGLES_android.so egl/
+
+6, 规划合理的cpu频率, 看各种场景下cpu切频是否合理. 针对各种应用做测试: 3D, hw video, sw video...
+发现对于有硬件加速的场景基本375MHz够用，有用户操作时需要短暂切到高频。
+今天画的excel表格没有画出实际切频的曲线，明天需要重画。
+
+7, (10:17 2011-6-15)昨天实验的结果. 
+\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110614_AE_DVFS_cont1
+播放视频过程中测试cpu dvfs(375, 750, 1G, 1.2G)测试17658次没有出错, 测试时间12小时. 视频选的是循环播放, 早晨来的时候已经退出了, 再次进入播放视频50分钟, 播放/切频都正常. 
+
+11:29 2011-6-14
+VC0882, SV, 调试, i2c, g-sensor; 总结, 文档; 软件技巧, shell, bash, 用shell脚本建立简单命令"3-3)"
+bianrongguang调试g-sensor不可用
+1, i2c nack, 
+brg查发现是g-sensor, 但是同样的i2c1的0x46触摸屏是好的. 
+i2cdump读不出0x4c寄存器.
+查电: 2v8, 软件状态和硬件测量都没问题. 
+后来laobian认为会不会是虚焊了, 用手按一下g-sensor, i2cdump就可以读到寄存器了. 
+
+2, 总结过程
+brg调试中是从软到硬的检查, 先从协议(I2C)角度检查, 然后查供电(查软件状态, 万用表测量). 都没有效果后, 再看是否是纯硬件问题, 由于原来是可用的, 所以怀疑虚焊问题. 
+
+3, 总结命令
+1), i2cdetect:
+bash-4.1# i2cdetect -r -y  1
+WARNING! This program can confuse your I2C bus, cause data loss and worse!
+I will probe file /dev/i2c-1 using read byte commands.
+I will probe address range 0x00-0xff.
+Continue? [Y/n] 
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f
+00: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+10: -- -- -- -- -- 15 -- -- -- -- -- -- -- -- -- -- 
+20: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+30: 30 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+40: -- -- -- -- -- -- UU -- -- -- -- -- UU -- -- -- 
+50: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+60: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+70: -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- 
+2), i2cdump: 
+bash-4.1# i2cdump -y -f 1 0x4c
+No size specified (using byte-data access)
+     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f    0123456789abcdef
+00: 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00    ........?.......
+10: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+20: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+30: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+40: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+50: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+60: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+70: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+80: 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00    ........?.......
+90: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+a0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+b0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+d0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+e0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+f0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00    ................
+
+3), power相关命令: 
+bash-4.1# . pwr.sh
+Try clk, clock, pwr, reg, led commands
+bash-4.1# reg
+Regulators
+--------------------------------------
+VDD_5V        5000000mVenabled ---     1
+HOSTUSB_5V    5000000mVenabled ---     1
+LCD_PWR      10000000mVdisabled---     0
+DCDC1-ARM     1200000mVenabled standby 0
+DCDC2-3D      1300000mVenabled normal  1
+DCDC3-Video   1300000mVdisablednormal  0
+DCDC4-Core    1200000mVenabled standby 0
+DCDC5-DDR     1500000mVenabled standby 0
+BST1USB       5000000mVdisablednormal  0
+vled           300000mVdisabledunknown 0
+LDO0-IO2V8    2800000mVenabled standby 0
+LDO1-IO1V8    1800000mVenabled standby 0
+LDO2-AUD3V3   3300000mVdisabledstandby 0
+LDO3-USB3V3   3300000mVdisabledstandby 0
+LDO4-CAM1V8   1800000mVdisablednormal  0
+LDO5-TVOUT2V5  2500000mVdisabledstandby 0
+LDO6-COMBO2V8  2800000mVenabled normal  1
+LDO7-LCDTP2V8  2800000mVenabled normal  1
+LDO9-COMBO3V3  3300000mVenabled normal  1
+LDO10-COMBO1V8  1800000mVenabled normal  1
+LDO11-BACKUP  3300000mVdisablednormal  0
+LDO12-NAND3V3  3300000mVenabled standby 0
+LDO13-HDMI1V2  1200000mVdisablednormal  0
+LDO14-CAM2V8  2800000mVdisablednormal  0
+LDO15-PMU1V2  1200000mVdisabledstandby 0
+LDO16-TF2V8   2800000mVdisabledstandby 0
+LDO17-GS2V8   2800000mVenabled normal  1
+LDO18-RTC2V8  2800000mVenabled unknown 0
+LDO19-PMU2V8  2800000mVenabled unknown 0
+LDO20-TP3V3   3300000mVenabled standby 0
+LDO21-HUB3V3  3300000mVdisabledstandby 0
+Charger        200000mAdisabledstandby 0
+(1), 这个命令是其实就是function. 如果用". script.sh", function就会留在系统中. 如果是直接执行脚本("./script.sh"), 函数不会留在系统中. 
+
+12:50 2011-6-14
+VC0882, SV, MP(量产), 所有metal fix都不做否则没法meeting mp schedule
+1, yangzuoxing邮件(收件人没有zhangjian)"about 882 mp status"20110614_2235
+这次882 MP需要（或者可能）改如下6项，他们的状态如下：
+1.       DE/CIF MBIST ECO
+1)       GDS上的修改完成
+2)       STA跑完，正在CHECK TIMING
+3)       大部分GLS跑完
+[yinong] good.
+2.       SAR_ADC 为高采样率修改
+1)         GDS修改完成
+2)        Ip merge 完成
+[yinong] good.
+3.       AUDIO CODEC
+1）   没有发现POP NOISE CANCELATION的离散性。放弃跟新。
+4.       DDR TRAINING
+1）   SNOPSYS确认ITM的RESET信号至少需要两个周期
+2）   其它的确认正在进行
+3）   FIB基本确认做不了
+4）   在没有FIB结果的情况下，我们是否要决定直接改？ （这个请YINONG确认一下）    
+[yinong] 直接改
+5）   改完后需要FPGA验证么？ （这个请YUNFEI, BEIHUA确认一下）
+[yinong] FPGA怎么验证法？
+5.       DDR PHY电源IO失效问题
+1）   目前SNOPSYS还没有找到原因。
+2）   如果下礼拜还找不到原因，我们等这个结果么？（这个请YINONG确认一下）
+[yinong] 要尽最大努力把这个问题 debug出来。  下周我们再根据具体情况讨论一下。 
+6.       BOOTLOADER 为DDR TRAINING的灵活性修改
+1）    这个请BEIZHAN更新一下状态。
+[yinong] 这个很重要。 在无法通过fib验证root cause的情况下， 软件的背手要过硬。
+
+2, Yangzuoxing邮件2All_882_engineer"答复: about 882 mp"20110614_2228
+按原来的计划，我们MP需要改如下5个ITEM:
+1.       DE/CIF MBIST BUG
+2.       SAR_ADC高频率采样问题
+3.       DDR PHY PVDD 电源IO被击穿
+4.       DDR PHY TRAINING RESET问题
+5.       为解决DDR PHY TRAINING问题，修改BOOTLOADER，提高灵活性
+经过今天下午的会议，我们感觉可以不用修改，直接将MLM的GDS 当MP TAPEOUT. 理由如下：
+对于第一个问题：
+我们目前采用FUNCTION PATTERN来覆盖，覆盖率为99%。根据前面6K片子的测试结果，DE/CIF MBIST的失效率为0.2%， 因此采用功能PATTERN造成的漏检率为0.2%%。这个值对整体的漏检率影响非常小。可以不用修改。
+对于第二个问题：
+我们目前采用低的采样率，没有发现问题，并且目前还没有高采样率的要求。因此也可以不修改。
+对于第三个问题：
+目前看来应该是这个电源IO的ESD能力不是特别强（但2000V没问题），但VDD_CORE是板级内部信号，不太容易受到2000V以上高压的攻击。而且这个问题，如果要修改GDS,短时间没法MP量产，会影响今年882对公司收入的贡献。 这个问题可以不改，为保证量产SCHEDULE，也来不及改。
+对于第四，第五个问题：
+这两个问题都是由TRAINING不稳定引起的。目前我们采用固定值，不用TRAINING,使用起来没有发现问题。我们尝试过7寸屏的板子，8寸屏的板子，PERFORMANCE板子，4片DDR的板子，得到的TRAINING值是一致的。我们试过-20度低温，70度高温的情况，发现TRAINING值没有明显差异。而且在理论上，DDR TRAINING值至少有+-1/4周期的MARGIN. 从这些数据来看，固定值是基本满足应用需求的。我们可以在POWER ON的时候做一个举手表决，以后就一致采用表决值。这个值能在一定程度上适应不同板子，不同初始电压，不同地区（或不同时间）的温度变化，比固定值应该要更理想一些。基于上面这些理由，我们认为这两项也可以不修改。
+从追求完美的角度，我们是应该完全FIX上面的几个问题再MP. 但我们目前有量产SCHEDULE的压力，而且最主要的是，做上面的修改是有风险的，一旦出问题，我们882今年就没有收入，客户跟着遭殃，882没有了信誉，明年也没有了前景。综合平衡下来，我们认为采用MLM直接量产在质量上可以接受，没有什么风险，是目前最合适的方案。
+为了完成这个方案，需要在两天内完成如下ACTION ITEMS:
+1.       POWER ON 举手表决程序 （ OWNER: LI DONGLIANG, GONG ANMIN）
+2.       增加DE/CIF PATTERN，达到99%的测试覆盖率，并优化测试时间 （OWNER: GUYE, XUEKE, PENG XIAOMING, LU JUCHUN, LIU XIAOTAO）
+有什么问题，请回这个EMAIL.
+
+3, ZJ: MP这个事情其实是个取舍的过程. 
+本来以为bootloader一定会改. 大家担心改动风险较大, 所以没有修改, 这里面昨天上午大家的讨论也起了作用(aiguo, beizhan, dongliang, zhangjian, gong'anmin), 大家讨论发现基本思路是清楚的, 同时发现要考虑的细节和要验证的case还是比较多的, 所以dongliang觉得一周内完成可能来不及.
+dr.yang说担心影响量产进度很有道理. 
+当时830 dither问题本来也说要metal fix, 后来通过调整alpha等参数基本看不出dither的影响了.
+所以882 bootloader不修改, 目前需要试通power on load image到sram做ddr training(含举手表决)然后再load二级boot(u-boot). 
+
+21:29 2011-6-14
+VC0882, SV, 工作进展
+1, 6月13日, 6月14日工作进展
+1), 882 ICP例会. 
+2), 讨论882 bootloader修改.
+3), AE dvfs
+(1), 修改dvfs涉及到的调压调整函数和clk配置函数. 修改测试完成. 已经和今日最新代码merge.
+(2), 测试dvfs所需频点, 对于实际使用来说需要四个频点: 375M, 1G, 1.2G, 375和1G直接的频点(暂定为750MHz, 因为这是不需要升压的最高频率, 可以减少系统调压次数). 
+(3), 在播放视频情况下循环做cpu dvfs测试(正在测试). 
+
+9:55 2011-6-15
+时间管理
+0, 9:30
+
+1, 本日
+1), 10' 今日工作安排.
+2), 10:05-11:40 AE dvfs merge最新代码测试. 考虑提交测试. 见"10:02 2011-6-15"
+3), 11:45- 查suspend/resume不稳定问题: 是否和cpufreq加入有关? 见"10:032011-6-15"
+
+10:02 2011-6-15
+vc0882, sv, power, AE dvfs, 续, merge最新代码测试
+1, 昨天kernel代码修改很小, 测试后, 如果不编译cpufreq suspend/resume就稳定, 提交代码. 
+考虑提交测试
+2, 昨天kernel代码没什么修改, merge后, 基本测试没问题.
+好像还是需要用昨天"10:07 2011-6-14"5的方法才能用3D. 
+1), 烧写:
+"\\10.0.12.160\share\androidbuilds\vortex_20110615_dvfs0.3_mergeLastCode.pak" 
+一定用最新的烧写脚本, 里面有一句是"ddrcRegConfNum = 0x23". 
+
+2), 用3D有问题, 需要输入如下命令:
+bash-4.1# cd /system/lib
+bash-4.1# cp libEGL_VIVANTE.so egl/
+bash-4.1# cp libGLES_android.so egl/
+
+3), 测试内容. 
+(1), 测试加入dvfs后, 对于正常使用有无影响, 例如操作不流畅. 
+测试3D, 游戏, 上网, 上网看flash视频, 硬件视频播放等. 
+(2), 复制"\\10.0.12.160\share\zhangjian\cpufreq_test"到sd内卡. 
+循环播放视频, 运行"sh /mnt/sdcard/cpufreq_test &", 系统会自动反复切频, 用于测试dvfs本身是否稳定.
+
+10:03 2011-6-15
+VC0882, SV, power, pmu, mode trans: sleep, 查suspend/resume不稳定问题: 是否和cpufreq dvfs加入有关?
+1, 目前死在一级之后, 一级AB, 一级ABCD三个地方, 前两个位置还没有到brg恢复clk的位置. 
+是否休眠时应该设置为userspace? 这样保证休眠过程中不会调频. 
+2, 我的现有代码去掉cpufreq, 
+1), 第一次实验: 第五次死: 第二次wakeup后打印ABCD, 然后系统重启, 会不会是usb电源没关导致的? 
+2), 第二次实验: 第一次死. 第一次wakeup后打印AB后停止.
+3, 下一步思路: 
+1), 定位是我的代码问题, 还是其它问题. 
+2), rvdebugger调试.
+4, 所有ddr寄存器都一致, clkrst中arm, bus, ddrc clock一致. 
+5, 休眠时如果关闭uhost vbus, 试了两次, 都可以唤醒, 但是系统运行出错, 感觉是ddr不稳定? 第三次是死在第一次唤醒的A. 
+(12:55)下午还是需要做替换(软件, 硬件), 定位问题. 
+(13:59 2011-6-15)
+6, 做软件替换
+1), 用suspend/resume测试通过的版本. 证明我板子没问题. 
+1#测试5次就重启了. JY#: 测试15次没有死(但是LVDS没有死)
+2), 用今天daily build, 确认不是我自己修改代码引入的问题. 
+JY#: 测试13次未死. 
+3), 看git log, 看看有没有可能影响我的代码. 
+看了从我上次checkin到现在的log, 没看到对我有影响的. 
+4), 从现象看是我1#板子问题. 
+用1#, 9#, JY#都用加入cpufreq的代码测试. 
+其中1#, JY#是今天下午最新代码(1523), 9#是我今天上午1#出问题的版本. 
+(1), 测试结果:
+A, 1#测试了4次就重启了. 再次实验第一次就死了. 发现这两次都是死在375MHz休眠唤醒. 
+把1#固定在750MHz做休眠唤醒, 一次也死了. 
+给1#升压100mv. 测试7次重启. 
+B, 9#测试64次正确.
+C, JY#测试55次正确. 
+(2), 从测试结果看, 我感觉1#板做过1.2G超频后, 似乎750_375这个频率在休眠唤醒也不稳定了. 要想证明这一点, 需要加入一个很保守的频率: 500_250吧. 
+1#不稳定会不会是由于g-sensor有问题造成的? 
+找zhanguo帮忙吹了芯片, 系统更不稳定, 有时u-boot tftp没法启动. 
+7, (19:05 2011-6-15)上传代码.
+update code arm dvfs support
+1), configs: arch/arm/configs/vc0882_vortex_lvds_pm_cpuDvfs_defconfig
+2), add v8clk_upvol/v8clk_downvol for voltage up and down.
+add v8clk_cpu_clk_set_rate for cpu clk set rate: set the proper cpu_aclk, explicit change the cpu parent while needed. 
+code: arch/arm/mach-vc0882/clock-vortex.c
+3), modify va7882_dcdc_set_voltage only for ID_VA7882_DCDC1.
+set dcdc1 voltage step by step, step = 50mv. 
+code: drivers/mfd/va7882-regulator.c
+4), set dcdc1 range from 1.2 to 1v1--1v5 while CONFIG_CPU_FREQ defined
+code: arch/arm/mach-vc0882/board-vortex.c
+5),  update v8_target and transition_latency for cpu dvfs
+code: arch/arm/plat-vc088x/cpu.c
+6), change log level:
+code: arch/arm/plat-vc088x/clock.c
+7), add clk_lock and clk_unlock to global function
+code: arch/arm/plat-vc088x/include/mach/clock.h
+8), add CLK_FLAG_DVC for the clock which support dynamic voltage control
+code: arch/arm/plat-vc088x/include/plat/clock.h
+9), default close bus clk switch 
+code: arch/arm/plat-vc088x/vc088x_monitor.c
+10), set i2c clock in v8i2c_doxfer not in irq. 
+code: drivers/i2c/busses/i2c-vc0882.c
+
+20:03 2011-6-15
+软件技巧, git, push遇到权限问题
+zhangjian@ubuntu:~/mydroid_f/kernel$ git push origin HEAD:vmc_g
+zhangjian@10.0.12.140's password:
+Permission denied, please try again.
+zhangjian@10.0.12.140's password:
+Counting objects: 46, done.
+Delta compression using up to 8 threads.
+Compressing objects: 100% (24/24), done.
+Writing objects: 100% (24/24), 18.06 KiB, done.
+Total 24 (delta 21), reused 0 (delta 0)
+error: insufficient permission for adding an object to repository database ./objects
+
+fatal: failed to write object
+error: unpack failed: unpack-objects abnormal exit
+To git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git
+ ! [remote rejected] HEAD -> vmc_g (n/a (unpacker error))
+error: failed to push some refs to 'git+ssh://zhangjian@10.0.12.140/pub/git/android/common.git'
+
+有可能是有同事用root权限提交, 造成有些文件我没有权限修改. 所以把权限改为777既可: 
+zhangjian@soft:/pub/git/android$ sudo chmod 777 common.git -R
+zhangjian@soft:/pub/git/android$ pwd
+/pub/git/android
+
+20:33 2011-6-16
+vc0882, sv, power, AE dvfs, 续, 分析实验结果
+1, 昨天实验结果: 
+[zhangjian@centos 20110615_AE_DVFS]$ grep target  2号板_死机.log  | wc -l
+2753
+[zhangjian@centos 20110615_AE_DVFS]$ vim 2号板_死机.log
+[zhangjian@centos 20110615_AE_DVFS]$ grep transition  2号板_死机.log  | wc -l
+2744
+[zhangjian@centos 20110615_AE_DVFS]$ grep transition  16号板_自动重启.log | wc -l
+3177
+[zhangjian@centos 20110615_AE_DVFS]$ grep target  16号板_自动重启.log | wc -l
+3177
+
+3#: 69593
+14#: 72939
+
+2, 确认昨天编译的cpufreq版本有无问题. 
+
+3, 查2#, 16#板子为什么不稳定. 升压? 
+能否在瞬间升到1.5v以上? 
+
+4, (10:04 2011-6-17)昨天实验结果
+昨天晚上测试2#, 3#, 9#, JY#四块板子, 四块板子都活着. 其中3#, 
+测试500, 750, 1G三个频点, 每个频点都测试了15000次以上(三个频点测试次数比例: 4:9:7)
+1), 2#, 切频88324次. 未测试休眠唤醒. 
+2), 3#, 切频79310次, 测试休眠唤醒53次没有死. 
+3), 9#, 切频80587次, 测试休眠唤醒47次没有死. 
+4), JY#, 切频75259次. 测试休眠唤醒38次没有死. 
+
+23:54 2011-6-16
+882, 市场，竞争对手
+综合现在市场情况，我感觉882硬件综合性能第一，欠缺的是软件，例如flash播放，rockchip明显比我们流畅。
+如果今后希望继续做消费电子市场，应该尽早布局下一个芯片，至少尽早开始做预研。例如软件上需要做双核cpu的研究，profiling.
+
+10:35 2011-6-17
+时间管理
+0, 9:25
+
+1, 本日
+1), 30' 看昨天结果, 继续昨天实验. 见"20:33 2011-6-16"4
+2), fix warning: plat-vc088x/cpu.c, va7882-regulator.c. 之前上传dvfs代码时引入了两个warning, 我自己没有注意, 后来是brg和suxin帮我改的, 以后要注意. 
+3), 40' 和gong'anmin一起实验加入sram DT后能否启动android, 见"14:28 2011-6-17". 
+4), 14:30-15:25 午睡. 
+5), dvfs: 模拟更为真实的场景. 见"15:28 2011-6-17". 
+
+14:28 2011-6-17
+VC0882, SV, sram, DT
+1, 和gong'anmin一起实验加入sram DT后能否启动android, 遇到两个问题: dt举手结果不对, u-boot里面是乱码.
+1), 从打印信息看dt举手应该是0x2222, 0x00, 但是结果却是0x2222, 0x15:
+--------------------------- dt result
+0x00002222,0x00000000
+0x00002222,0x00000015
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000015
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000015
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x00002222,0x00000000
+0x0000611c,0x00008e32
+--------------------------- dt result sorting
+0x00002222,0x00000000,0x8a825a1f
+0x00002222,0x00000015,0xf2b22660
+0x0000611c,0x00008e32,0x73415b2e
+--------------------------- dt result golden
+0x00002222,0x00000015
+--------------------------- set golden value
+--------------------------- print final value
+0x00002222,0x00000015
+--------------------------- begin ddr test
+--------------------------- ddr test successfully
+--------------------------- byebye
+gong'anmin修改后举手表决正确. 
+
+2), u-boot打印乱码问题可能是ICP和AE时钟方案不同. 
+
+15:28 2011-6-17
+VC0882, sv, power, AE dvfs, 续, 在更为真实的场景测试
+1, 之前自动测试不够真实. 
+用\\10.0.12.160\share\brg\UITest_dialog.apk试试. 
+
+16:07 2011-6-17
+VC0882, SV, x2p, imprecise data abort, 支持bianrongguang调试关机死机bug
+1, 是imprecise data abort, 从现象看可能是访问寄存器出错, 建议brg在backtrace里面打印出x2p寄存器的状态, 确认是否是这个问题.
+最后通过X2P寄存器确认是PWM寄存器访问出错, 因为关机过程中, 上层应用都在运行, 有可能由于应用或用户按键进入early suspend, 也就会关闭背光. 
+
+16:44 2011-6-17
+VC0882, SV, AE training
+我负责: clock, power, gpio三部分. 
+
+18:24 2011-6-17
+VC0882, SV, 今日工作总结, dvfs测试结果
+1, 今日工作总结
+1), 整理最近两天dvfs测试结果.
+2), 支持bianrongguang调试关机死机bug, 发现是apb timeout导致的data abort. 
+3), 在gong'anmin, lidongliang支持下把sram dt加入到AE环境中, 目前一级boot load image处停住, 次日用ICE调试看看具体什么问题.
+
+2, 次日工作计划
+1), sram dt运行android正确. 
+2), 看gpu work around在604和445 SV上为什么运行有问题. 
+3), 准备周二AE training. 
+
+3, 6月15日--6月16日 dvfs测试结果
+用脚本循环测试频点, 下面五个板子都没有死: 
+1), 2#, 切频88324次. 未测试休眠唤醒. 
+2), 3#, 切频79310次, 测试休眠唤醒53次没有死. 
+3), 9#, 切频80587次, 测试休眠唤醒47次没有死. 
+4), JY#, 切频75259次. 测试休眠唤醒38次没有死. 
+5), 14#: 切频72939次. 
+
+另外测试同事用两个板子在实际android中测试系统动态调频, 未发现问题. 
+
+9:02 2011-6-20
+VC0882, SV,  本周工作总结, DVFS
+1, 6/12--6/19工作总结
+1), 优化CPU dvfs效率，做稳定性测试。
+由于目前clk代码限制，例用clk部分api单独封装了cpu_clk_set_rate。
+调压部分修改：修改regulator_dcdc_set_voltage使其支持逐级电压调整。目前做了id限制，只允许cpu dcdc如此调整。单独封装up_vol, down_vol, 通过struct clk的频率电压对应表格得到目标电压。
+稳定性测试：五(自动测试)加二(手工测试)个板子测试通过。
+
+10:17 2011-6-20
+VC0882, SV, 给xiaotao, dongliang发初始化脚本，ramfs, 发disable clk位置。
+
+16:48 2011-6-20
+VC0882, SV, 882 pad测试报告
+D:\work\VC0882\Documentation\Vimicro882项目8寸屏质量报告_V2.pdf
+
+16:52 2011-6-20
+VC0882, sv, power, AE dvfs, 续, 继续实验
+1, 实验ui test, uitest运行中系统可以切到1G. 明天zhaoyuan会找同事帮我修改ui test, 使其一直运行. 
+2, 1#板上次吹过后, 系统没法启动到android主界面. 更换g-sensor后可以启动到android主界面. 
+3, 我之前的测试代码休眠时功耗有170-180mA. 换最新代码无此问题(但是gpu符号对不上). 
+用我之前打过包的daily build实验vortex_20110615_pm_dvfs.pak, 休眠功耗40ma-50ma. 
+4, 确认uhost suspend/resume时有没有控制vbus 5v: 
+gpio_set_value(GPIO_ID_D13,0);  // USBHO        ST_EN
+gpio_set_value(GPIO_ID_K19,0);  // 5V_EN
+v8sram_pm_sleep();
+gpio_set_value(GPIO_ID_K19,1);  // 5V_EN
+gpio_set_value(GPIO_ID_D13,1);  // USBHO        ST_EN
+已经控制了, 见"ehci_hcd_vc088x_drv_suspend()和ehci_hcd_vc088x_drv_resume()(drivers/usb/host/ehci-vc088x.c)". 
+5, 今天测试
+1), guobaozu: 系统测试1#. 
+2), QA: 17#, 
+3), ??: 13#. 
+4), 6?_18?
+
+20:45 2011-6-20
+VC0882, SV, 工作总结
+1, 继续做dvfs稳定性测试. 晚上跑了之前未测试的6个板子, 做dvfs测试.
+2, 考虑做dvfs压力测试(之前的稳定性测试中cpu负载不够, 实际上不需要1G的频率)和dvfs与休眠唤醒的混合测试.
+
+10:23 2011-6-21
+VC0882, SV, AE, training
+1, 系统供电, 时钟方案, gpio
+
+gpio: "mach-vc0882/gpio-vortex.c"
+gpio wakeup: enable wake, disable wake? 
+
+10:59 2011-6-21
+VC0882, sv, power, AE dvfs, 续, 昨天实验结果, 修改频点; 编译gpu galcore.ko的方法
+1, 昨天测试结果
+6#: dvfs 80652次, 休眠唤醒29次. 
+13#: dvfs 91903次, 未测试休眠唤醒. 
+16#: dvfs 86341次, 休眠唤醒32次. 
+17#: dvfs 92465次, 未测试休眠唤醒. 
+QA1#: dvfs 77372次, 休眠唤醒39次. 
+QA2#: dvfs 87305次, 未测试休眠唤醒. 
+
+汇总"18:24 2011-6-17"3的测试结果. 
+
+2, zhangjian邮件
+11个板子dvfs测试通过
+
+hi, zhaoyuan, bianronggaung
+
+使用20110615 daily build出的pm_dvfs板子, 测试11个板子都测试通过, 详情如下:  
+测试2,3,6,9,13,14,16,17,jinyang, QA1, QA2 11个板子, 播放视频过程中做500, 750, 1G三个频点的切频(枚举了所有情况), 测试了72900次以上没有出错. 
+3,6,9,16,jinyang, QA1这7块板子在dvfs测试后测试了20次以上休眠唤醒正常. 
+
+下一步就等Qiaowei的ui_test做测试了, 播视频的方法就不打算测了. 
+另外, 今天QA反应说今天的pm_dvfs daily build没法玩儿游戏. 我会查一下. 
+
+3, (13:01 2011-6-21)看今天pm_dvfs有问题. 
+1), 启动时提示gpu galcore符号表对不上: 
+galcore: disagrees about version of symbol contig_page_data
+galcore: Unknown symbol contig_page_data (err -22)
+galcore: disagrees about version of symbol __alloc_pages_nodemask
+galcore: Unknown symbol __alloc_pages_nodemask (err -22)
+galcore: Unknown symbol page_address (err 0)
+2), 但是kernel是新编译的, 
+Linux version 2.6.35.7+ (root@ubuntu) (gcc version 4.4.0 (GCC) ) #2 PREEMPT Tue Jun 21 05:29:32 CST 2011
+除非是galcore没有更新. 
+二者大小一样: 
+pm_dvfs: 
+-rw-r--r--    1 0        0           845869 Jun 20  2011 galcore.ko
+pm: 
+-rw-r--r--    1 0        0           845869 Jun 20  2011 galcore.ko
+用diff比较也一样: 
+zhangjian@ubuntu:/home/share/androidbuilds/20110620$ pwd
+/home/share/androidbuilds/20110620
+zhangjian@ubuntu:/home/share/androidbuilds/20110620$ diff android_out_lvds_pm/rootfs/system/lib/modules/galcore.ko android_out_lvds_pm_dvfs/rootfs/system/lib/modules/galcore.ko
+
+3), 感觉galcore.ko可能是pm版本的, 但是不适合pm_dvfs版本. 实验.
+source build/envsetup.sh
+zhangjian@ubuntu:~/mydroid_f$ mmm vimicro/bsp/vivante_drv_new/
+Adding CUSTOM_LOCALES [hdpi] to PRODUCT_LOCALES []
+============================================
+PLATFORM_VERSION_CODENAME=REL
+PLATFORM_VERSION=2.3
+TARGET_PRODUCT=generic_vortex
+TARGET_BUILD_VARIANT=userdebug
+TARGET_SIMULATOR=
+TARGET_BUILD_TYPE=release
+TARGET_BUILD_APPS=
+TARGET_ARCH=arm
+HOST_ARCH=x86
+HOST_OS=linux
+HOST_BUILD_TYPE=release
+BUILD_ID=GRH55
+============================================
+make: Entering directory `/home/zhangjian/mydroid_f'
+build/core/main.mk:307: implicitly installing apns-conf_sdk.xml
+make[1]: Entering directory `/home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new'
+make[2]: Entering directory `/home/zhangjian/mydroid_f/kernel'
+  CC [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_debug.o
+  CC [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_device.o
+  CC [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_driver.o
+  CC [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_linux.o
+  CC [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/os/linux/kernel/gc_hal_kernel_os.o
+  LD [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/driver/galcore.o
+  Building modules, stage 2.
+  MODPOST 1 modules
+  CC      /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/driver/galcore.mod.o
+  LD [M]  /home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new/hal/driver/galcore.ko
+make[2]: Leaving directory `/home/zhangjian/mydroid_f/kernel'
+make[1]: Leaving directory `/home/zhangjian/mydroid_f/vimicro/bsp/vivante_drv_new'
+make: Leaving directory `/home/zhangjian/mydroid_f'
+zhangjian@ubuntu:~/mydroid_f$ 
+
+4), 给wangweizhong发信.
+daily build pm_dvfs galcore.ko需要单独编译
+hi, weizhong
+
+6月19日, 6月20日两天的daily build: pm_dvfs, gpu符号表对不上. 如果用vc0882_vortex_lvds_pm_cpuDvfs_defconfig配置文件编译kernel后再编译galcore.ko是没问题的. 
+麻烦你帮我修改了一下. 使pm_dvfs这个版本能直接用. 
+
+谢谢
+
+4, (15:49 2011-6-21)QiaoWei UITest.apk
+实验结果如下: 
+frequency=1, count=1: cpu运行在500MHz. 
+frequency=10, count=1: cpu运行750MHz. 
+frequency=10, count=2: cpu运行1GHz. 
+qiaowei会帮我在这三个case做随机.
+将来自动测试流程如下: 
+运行cpufreq_test(不获得wake_lock)和auto_suspend.sh, 打开"logcat &", 在命令行或者kernel里面在唤醒时发menu key解锁. 
+
+11:15 2011-6-21
+时间管理
+0, 9:30-19:50
+
+1, 本日
+1), 50' 在昨天dvfs测试后, 测试休眠唤醒. 结果见"10:59 2011-6-21"1.
+2), 30' 整理最近一周dvfs大量测试结果, 发邮件. 见"10:59 2011-6-21"1,2.
+3), 12:50-13:48 测试同事说今天pm_dvfs版本没法运行游戏. "10:59 2011-6-21"3. 
+4), 午休(13:50-14:30)
+5), 10' mail zhaoyuan: 用不同分辨率解决游戏兼容性问题. 见"14:31 2011-6-21"1-1). 
+6), 20' 整理AE量产中遇到的问题. "14:31 2011-6-21".
+7), 20' 上楼去包裹. 看包裹内容. 
+8), 15:13-15:49 16:20- 准备明天training ppt. 见"10:23 2011-6-21". 
+被9)打断. 
+9), 15:49-16:20 dvfs自动测试. 见"10:59 2011-6-21"4
+10), 下午找wangweizhong确认daily build修改. 
+
+13:40 2011-6-21
+公司, 同事信息, Alex Wang(Wangdazhi), wifi F4有mac地址限制, 找dazhi加入mac地址
+
+14:31 2011-6-21
+VC0882, SV, AE, 影响量产的问题: 分辨率问题; 改写g-sensor驱动
+1, 游戏兼容性. 
+1), 有些rk2918能玩儿的游戏, 我们没法玩儿. 
+智器V5里面可以选择高低两个分辨率, 如果有些对于不同分辨率支持不好, 通过修改这个设置可以解决部分问题. 代价是修改分辨率后系统需要重新启动. 
+2), g-sensor有问题. 
+android其它平台的g-senrsor基本都用input设备+普通设备ioctl方式做g-sensor. 
+后者只是用于设置采样率(input设备无此接口). input设备用于给HAL上报xyz和持续时间. 
+本身input设备是支持3轴设备的, 虽然不是像g-sensor一样的3轴加速度, 但是不影响我们. 使用input设备的好处是input设备不会发重复的数据, 例如xyz相同, 只会发持续时间. 相当于帮我们做了去抖动. 
+原有g-sensor驱动是直接把所有数据都上报, 这样应用会处理过多的数据, 所以造成应用程序有问题. 
+
+19:47 2011-6-21
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 整理最近一周dvfs大量测试结果, 附后. 
+2), AE android daily build出的pm_dvfs没法玩儿游戏, 发现是gpu符号表和kernel不对应. daily build同事已经帮我修改build脚本. 
+3), 写power, clock文档. 
+4), dvfs需要做更真实的自动测试应用, 并且需要和休眠唤醒交替做. AE qiaowei帮我做了所需的一个android应用程序. 
+
+2, dvfs测试结果
+使用20110615 daily build出的pm_dvfs板子, 测试11个板子都测试通过, 详情如下:  
+测试2,3,6,9,13,14,16,17,jinyang, QA1, QA2 11个板子, 播放视频过程中做500, 750, 1G三个频点的切频(枚举了所有情况), 测试了72900次以上没有出错. 
+3,6,9,16,jinyang, QA1这7块板子在dvfs测试后测试了20次以上休眠唤醒正常. 
+
+13:47 2011-6-22
+时间管理
+0, 9:35
+
+1, 本日
+1), 20' 准备AE TW/SZ power/clock training.
+2), 9:50-11:40 AE TW/SZ power/clock training.
+3), -13:00 午饭 -13:15 午休. 13:05-14:10 系统恢复. 
+4), 14:17-17:15 dvfs自动测试
+5), 40' 和aiguo交流, aiguo问我发展问题, 技术?管理?
+6), 20' 和dong'anmin讨论nand normal wakeup问题. 目前系统启动后memory比对未通过, 需要确认是ddr本身丢数还是软件意外修改了该memory. 
+7), 10' VC0882 venc问题解决, 见"18:24 2011-6-22". 
+8), 总结. 今天时间还算抓的比较紧. 见"18:30 2011-6-22". 
+
+14:17 2011-6-22
+VC0882, sv, power, AE dvfs, 续, dvfs自动测试
+1, 续"10:59 2011-6-21"
+试试monkey的直接写入input设备能否上报到系统event. 
+1), 从android如下代码可以看到向event设备写入
+"development/cmds/monkey/src/com/android/commands/monkey/MonkeyFlipEvent.java"
+// inject flip event
+try {
+    FileOutputStream f = new FileOutputStream("/dev/input/event0");
+    f.write(mKeyboardOpen ? FLIP_0 : FLIP_1);
+    f.close();
+    return MonkeyEvent.INJECT_SUCCESS;
+} catch (IOException e) {
+    System.out.println("Got IOException performing flip" + e);
+    return MonkeyEvent.INJECT_FAIL;
+}
+
+frameworks/base/libs/ui/EventHub.cpp
+frameworks/base/include/ui/EventHub.h
+
+2), 看input或event设备到底有没有这个功能 
+如果是实际驱动收到按键事件:
+input_report_key()->input_event()->input_handle_event()
+
+看write函数: 
+input.c里面没看到. 
+drivers/input/evdev.c可以看到有可能会上报事件: 
+evdev_write()->input_inject_event()->input_handle_event()
+
+3), 做实验, 首先需要看看menu是哪个设备, 从实验中都可以知道menu是event1. 
+bash-4.1# pwd
+/dev/input
+bash-4.1# hexdump event1 &
+
+0000140 0088 0000 03e8 0009 0001 008b 0001 0000
+0000150 0088 0000 0403 0009 0000 0000 0000 0000
+0000160 0088 0000 7210 000b 0001 008b 0000 0000
+0000170 0088 0000 7227 000b 0000 0000 0000 0000
+
+0000180 008b 0000 ddca 0000 0001 008b 0001 0000
+0000190 008b 0000 dde5 0000 0000 0000 0000 0000
+00001a0 008d 0000 5034 000e 0001 008b 0000 0000
+00001b0 008d 0000 504d 000e 0000 0000 0000 0000
+
+4), 看含义. 
+evdev_read()
+include/linux/input.h: 
+struct input_event {
+	struct timeval time;
+	__u16 type;
+	__u16 code;
+	__s32 value;
+};
+
+struct timeval {
+	__kernel_time_t         tv_sec;         /* seconds */
+	__kernel_suseconds_t    tv_usec;        /* microseconds */
+};
+
+5), 用文件直接写入:
+vimicro/suspend/event.cpp
+source build/envsetup.sh
+mmm vimicro/suspend
+写入的不对. 
+
+扩大buffer后, 可以用如下命令实验menu按键按下和抬起
+event 0 0  9109505 1 0 0
+event 0 0  9109505 0 0 0
+event 0 0  10354689 1 0 0
+event 0 0  10354689 0 0 0
+
+修改代码后, 用如下名录就可以解锁, 同时保证ui_test不会退出. 
+event 0 0 9109505 1
+event 0 0 0 0
+event 0 0 9109505 0
+event 0 0 0 0
+
+6), 其实也可以驱动里面加入, 只是不希望影响代码. 
+"arch/arm/mach-vc0882/board-vortex.c"
+board_keymap
+
+u32 gkeycode = 0;
+input_report_key( pkpd->pinput, pkpd->keymap[gkeycode], 1 );
+input_sync( pkpd->pinput );
+input_report_key( pkpd->pinput, pkpd->keymap[gkeycode], 0 );
+input_sync( pkpd->pinput );
+
+2, 做系统实验. 
+上传代码. 
+
+18:24 2011-6-22
+VC0882, SV, AE, 量产问题, video, venc, cache属性
+shuyu给我转发的邮件
+Alex Wang[mailto:wangdazhi@vimicro.com]邮件"关于venc编码问题"20110622_1816
+经过昨天下午和今天上午的时间，对882 venc做了测试。
+代码是利用的yangmin和shuyu提供的hantro原始代码生成的可执行应用。
+修改了底层接口部分，加载了目前产品板使用的kernel，也就是应用读写寄存器采用/dev/mem，内存分配采用/dev/pmem-vdec模式
+有如下发现：
+问题基本定位在venc的ewl初始化中，hantrol原始代码ewl6280_common.c中line 279 
+enc->fd_mem = open("/dev/mem", O_RDWR );
+正确的应该为
+enc->fd_mem = open("/dev/mem", O_RDWR | O_SYNC);
+经过对mem.c的跟踪，发现mmap最终映射生成页表的时候需要检测这个fie flag，否则不能创建生成uncached页表。这应该是导致venc应用层读写寄存器不正确的原因。Pmem内存分配模式没有问题
+Vdec是采样的同样的模式工作，hantrol原始代码dwl_x170_linux_no_drv.c line 144
+/* open mem device for memory mapping */
+dec_dwl->fd_mem = open("/dev/mem", O_RDWR | O_SYNC);
+所以vdec工作没有出现问题。
+在yangmin的代码中做了修正，目前编码mobile_cif.yuv每帧大小都固定在了184，167字节，用streamEye看文件正常
+
+18:30 2011-6-22
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), AE 台湾/深圳 team power/clock training.
+2), 自己工作PC有问题, 恢复系统. 
+3), 继续做dvfs自动测试工具. 目前各个工具基本完成. 
+4), 和dong'anmin讨论nand normal wakeup问题. 目前系统启动后memory比对未通过, 需要确认是ddr本身丢数还是软件意外修改了该memory. 
+
+2, 次日工作进展
+1), 开始做dvfs自动测试, 需要写脚本把各个功能连接起来. 
+2), 继续整理电源文档. 
+
+9:54 2011-6-23
+时间管理
+0, 9:50
+
+1, 本日
+1), 20' zhaoyuan分配工作. 见"11:25 2011-6-23". 
+2), 10:17-11:25 提供1G高低温和750M, 1G功耗测试版本. 见"10:17 2011-6-23". 
+3), 11:35 午饭
+4), 20' 15:00-20:00 休眠唤醒鼠标花屏bug. 见"13:24 2011-6-23".
+5), 13:45-13:55 午睡. 
+6), 14:00-14:50 ICP sync up. 
+
+10:17 2011-6-23
+VC0882, SV, power, 高低温, 提供1G高低温和750M, 1G功耗测试版本
+1, 发现galcore.ko符号表仍然对不上. 
+参考"10:59 2011-6-21"3重新编译. 
+(起始目录是zhangjian@ubuntu:~/daily_backup/20110623, 以下省略): 
+$ cp /home/share/androidbuilds/20110622/android_out_lvds_pm_dvfs/system.img . -p
+$ mkdir temp
+$ sudo mount system.img -o loop temp/
+$ cd temp/lib/modules
+temp/lib/modules$ ls
+bt8xxx.ko  galcore.ko  wlan.ko
+temp/lib/modules$ sudo cp /home/zhangjian/mydroid_f/kernel/out/target/product/vortex/system/lib/modules/galcore.ko . -p
+temp/lib/modules$ ll
+total 1112
+-rw-r--r-- 1 root      root  40671 2011-06-23 04:45 bt8xxx.ko
+-rw-r--r-- 1 zhangjian git  843960 2011-06-23 10:30 galcore.ko
+-rw-r--r-- 1 root      root 244784 2011-06-23 04:46 wlan.ko
+temp/lib/modules$ cd ../../app
+temp/app$ ls
+AccountAndSyncSettings.apk    ContactsProvider.odex                    
+...
+NenaMark1-v1.5.apk         TtsService.odex
+temp/app$ sudo cp /home/share/tozhangjian/tools/UITest_static.apk . -p
+temp/app$ cd ../../
+$ sync
+$ sudo mumount temp/
+修改后, gpu符号表正确, 另外复制了UItest到"/system/app"目录, 这样系统第一次启动时会自动安装. 
+
+2, zhangjian2zhaoyuan邮件
+dvfs 1G和750M测试版本
+1), 烧写\\10.0.12.160\share\androidbuildsvortex_20110622_pm_dvfs_dailyBuild_update__galcore_ko.pak
+2), 运行uitest, 按menu键选择"set&start", 按确认运行. 
+3), 切换cpu频率:
+系统默认情况下会根据系统性能需要自动调整cpu频率.
+如果希望指定cpu频率, 可以执行如下操作:
+cd /sys/devices/system/cpu/cpu0/cpufreq
+echo switch to manual control
+echo userspace > scaling_governor
+echo switch cpu to 1GHz
+echo 1000000 > scaling_setspeed
+echo verify our setting
+cat scaling_cur_freq
+
+echo switch cpu to 750MHz
+echo 750000 > scaling_setspeed
+echo verify our setting
+cat scaling_cur_freq
+
+如果希望恢复系统自动切频:
+echo switch to auto control
+echo ondemand > scaling_governor
+
+11:25 2011-6-23
+VC0882, SV, AE, zhaoyuan分配工作
+其中1-1), 1-2)需要今天完成. 其余工作优先级: 2 > 1 > 3.
+1, dvfs: 
+1), 提供1G版本用于高低温测试. 
+2), 提供手动切频到750M@1.2v, 1G@1.45v的版本用于fanzhijun测试功耗. 
+3), 做dvfs自动测试. 
+
+2, suspend/resume bug, 插入usb鼠标后, 花屏. 
+
+3, 解决系统复位后gpio状态问题. 两个方法
+1), u-boot里面恢复gpio状态. 
+2), 用关机-rtc alarm开机代替reset. 
+和zhaoyuan讨论后, 打算用"2)". 
+
+13:24 2011-6-23
+VC0882, SV, AE, 插usb鼠标时休眠唤醒导致屏幕花屏
+1, 用6#, 正常使用时也会花屏. 
+用1#测试, 正常使用不会花屏. 休眠唤醒5次没有出错. 
+请xiaohe帮忙复现, 实验我今天dvfs版本和daily build pm版本. 
+2, (15:14 2011-6-23)
+xiaohe板子(16#)被zhaoyuan拿走了, 他是用昨天(0622) daily build的pm版本测试的. 
+用1#加0622 daily build没有问题. 
+3, 用16#测试, 实验三次都会出现这个问题. 
+1), 这个板子发现有时有漏电10-30ma的漏电.
+2), 插usb鼠标休眠唤醒时, 如果再次做early suspend/resume, 会提示i2c 0x7e操作错误. 
+usb 2-1: new low speed USB device using vc088x-ohci and address 5
+input: USB Optical Mouse as /devices/platform/vc088x-ohci/usb2/2-1/2-1:1.0/input/input7
+generic-usb 0003:0461:4D22.0004: input: USB HID v1.11 Mouse [USB Optical Mouse] on usb-vc088x-ohci-1/input0
+request_suspend_state: sleep (0->3) at 407096561431 (2000-01-01 00:06:45.919391353 UTC)
+bash-4.1# echo test again
+test again
+bash-4.1# 
+bash-4.1# PM: Syncing filesystems ... done.
+Freezing user space processes ... (elapsed 0.01 seconds) done.
+Freezing remaining freezable tasks ... (elapsed 0.01 seconds) done.
+Suspending console(s) (use no_console_suspend to debug)
+M0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x80042688
+M0x00000011
+H0x80042688ABM0x00000001
+M0x000000d0
+M0x00000013
+M0x00000015
+M0x00000070
+M0x00000072
+M0x00000078
+M0x00000088
+M0x0000007a
+M0x00000074
+M0x00000016
+M0x0000080e
+M0x0000081d
+M0x0000081b
+M0x00000825
+M0x00000825
+M0x00000823
+M0x0000080f
+H0x80042688
+M0x00000011
+H0x80042688ABCDPM: suspend of devices complete after 21.314 msecs
+PM: late suspend of devices complete after 1.184 msecs
+wakeup data training disable(use wakeup_ddr_training to enable in kernel args)SRCPND_H=00000000 SRCPND_H=00000000
+PM: early resume of devices complete after 5.143 msecs
+wakeup wake lock: event0-1092
+usb usb1: root hub lost power or was reset
+usb usb2: root hub lost power or was reset
+mi900g_resume
+mi900g_modem_init
+usb 2-1: reset low speed USB device using vc088x-ohci and address 5
+PM: resume of devices complete after 1429.848 msecs
+Restarting tasks ... 
+request_suspend_state: wakeup (3->0) at 438797357099 (2000-01-01 00:07:17.620186136 UTC)
+done.
+suspend: exit suspend, ret = 0 (2000-01-01 00:07:17.630424668 UTC)
+request_suspend_state: sleep (0->3) at 443390380048 (2000-01-01 00:07:22.213210431 UTC)
+request_suspend_state: wakeup (3->0) at 444556291199 (2000-01-01 00:07:23.379120083 UTC)
+request_suspend_state: sleep (0->3) at 446040923740 (2000-01-01 00:07:24.863753662 UTC)
+request_suspend_state: wakeup (3->0) at 446568313822 (2000-01-01 00:07:25.391142705 UTC)
+request_suspend_state: sleep (0->3) at 448757577700 (2000-01-01 00:07:27.580408161 UTC)
+i2c-1: Nack was receivedi2c-1:incomplete for 0x7e (error -11)
+Msg[0] addr=0x7e W 3 f8 31 a0 
+request_suspend_state: wakeup (3->0) at 449245502619 (2000-01-01 00:07:28.068331694 UTC)
+3), 进一步实验. 
+(1), 休眠前插入鼠标, 唤醒前拔出鼠标: 正常.
+(2), 休眠前拔出鼠标, 唤醒前插入鼠标: 花屏, 但是没有一直插鼠标花的厉害.
+(3), 休眠前拔出鼠标, 唤醒前插入鼠标: 花屏, 能明显看出屏幕本来是正常的, 然后会花.
+感觉像是鼠标事件影响了de或lvds的resume? 
+(4), 休眠前拔出鼠标, 唤醒前插入鼠标: 花屏, 能明显看出屏幕本来是正常的, 然后会花.
+下次实验, 看看是否提示鼠标事件后就会有问题. 
+(5), 休眠前拔出鼠标, 唤醒前插入鼠标: 花屏, 能明显看出屏幕本来是正常的, 感觉是检测到鼠标插入后才花.
+4), 看一看硬件鼠标相关代码. 
+(1), de hardware cursor代码:
+drivers/video/vc088x/hwc.c, 里面提供了v8hwc_xxx api. 
+vc088x_ovlay.c里面调用上面的api, 封装为v8ovlay_hwcopen, v8ovlay_hwcclose, v8ovlay_hwcmove. 最终由v8ovlay_ioctl调用. 
+(2), 下一步需要看hal层. 
+查V8OVLAY_IOCS_HWCOPEN, V8OVLAY_IOCS_HWCCLOSE, V8OVLAY_IOCS_HWCMOVE.
+frameworks/base/libs/ui/InputReader.cpp
+ov_open, ov_close, ov_move
+搜索看看什么地方调用了这三个函数: "ov_\(open\|close\|move\)"
+MouseInputMapper::MouseInputMapper
+MouseInputMapper::~MouseInputMapper
+MouseInputMapper::sync
+
+InputReader::process()->InputReader::addDevice()->InputReader::createDevice()->"device->addMapper(new MouseInputMapper(device, associatedDisplayId));"
+
+看起来比较复杂. 一时理不清楚. 
+(3), 直接确认以下是否因为fb resume/early_resume没有完成时就操作了硬件鼠标? 
+注意到硬件鼠标里面没有suspend/resume函数. 
+用我最新的kernel加入打印后. 实验两次: 如果插入鼠标休眠, 会花屏. 实验两次: 如果休眠后再插入鼠标, 不会花屏. 
+再次测试时, 休眠唤醒跑死. 死在ABCD之后. 和插入鼠标有关么? \todo 查. 
+5), 根据中午suxin的建议, 看看是否是de恢复寄存器时直接恢复硬件鼠标寄存器会有问题. 
+(1), 在framebuffer suspend时不保存硬件鼠标状态: 如果插入鼠标休眠, 唤醒后系统不会花屏. 实验两次: 如果休眠后再插入鼠标, 不会花屏. 
+(2), 在hwc resume时恢复硬件鼠标寄存器. 
+直接恢复硬件寄存器也会花屏. 
+按照硬件鼠标操作顺序恢复也有问题, 现在感觉是, 上层不知道鼠标的插入拔出, 所以唤醒后系统不会重新做硬件鼠标的操作.
+修改代码, 直接用v8ovlay_hwcopen()重新open硬件鼠标是可以的. 
+6), 针对"5)"的修改做三个实验
+插入鼠标休眠, 唤醒前不拔鼠标: 实验两次pass. 
+插入鼠标休眠, 唤醒前拔鼠标: 第一次正确, 第二次唤醒后跑死(只打印ABCD), 第三次正确. 
+不插入鼠标休眠, 唤醒前插入鼠标: 实验两次
+
+15:00 2011-6-23
+软件技巧, 清除网络连接用户名的方法
+自: \\10.0.2.208\public\Readme.txt
+1. 如果您以前映射过208网络驱动器，请先断开。
+2. 如果您以前连接 208 时选择过记住密码，请检查『控制面板』>『用户账户』>『高级』>『管理密码』，清除系统记住的密码。
+3. 如果您以share用户连接过208：
+?  请打开 cmd 窗口，输入 net use，查看已经建立的连接
+?  使用命令 net use \\10.0.2.208\IPC$ /delete 删除其连接
+?  使用命令 net use \\10.0.2.208\IPC$ password /user:account 建立新连接即可。
+
+18:35 2011-6-23
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 提供1G高低温和750M, 1G功耗测试版本. 由于daily build gpu符号表不对应, 需要自己手动替换galcore.ko; 同时在系统默认加入了UItest应用程序. 
+2), ICP sync up.
+3), 查休眠唤醒鼠标花屏bug. 
+
+2, 明日工作计划
+1), 准备dvfs和休眠唤醒的混合自动测试. 
+2), 继续休眠唤醒鼠标花屏bug. 
+
+9:59 2011-6-24
+时间管理
+0, 9:40
+
+1, 本日
+1), 上午2h 13:30- 继续休眠唤醒鼠标花屏bug. 
+2), 午饭2h
+
+10:00 2011-6-24
+VC0882, SV, AE, 插usb鼠标时休眠唤醒导致屏幕花屏, 续; 测试方法
+1, 昨天少测试一个情况, 就是系统从来没有插入过鼠标, 休眠唤醒.
+今天发现如果这样的话, 会open一个64x64的白色矩形.
+相当于是只测试了新case, 没有测试老case. 
+2, 用daily build pm_dvfs测试. 
+6#: 
+启动时不插鼠标, 休眠唤醒: 无问题. 
+插入鼠标: 休眠唤醒: 花屏. 
+不同板子现象不同? 看log发现是我用了昨天的kernel, 不是最新的. 
+用自己编译的最新版本实验. 在6#上还是会花屏. 
+1#上实验. 每次系统启动后, 拔掉usb网卡都会导致系统重启. 
+1#板上休眠唤醒, 每次死的地方都不一样.
+3#测试: 无鼠标休眠唤醒, 有鼠标休眠唤醒, 有鼠标休眠无鼠标唤醒, 无鼠标休眠有鼠标唤醒各测试10次. 
+1), 后两个情况联合测试, 测试到第八次时, 解锁后, 鼠标用一会儿后, 屏花了. 做early suspend/resume后屏幕正常. 
+2), 再次测试, 又出现了这个问题, 但是还是没有看寄存器. 
+3), 还发现一次: 休眠前有鼠标, 休眠后拔鼠标, 唤醒后白屏. 
+4), 
+
+3, 测试中发现由于有gps持有wake_lock, 导致系统没法休眠: 
+bash-4.1# cat /sys/power/wake_lock
+GPS
+解决办法是, 在"setting"->"位置和安全"中, 取消"使用GPS". 并且手动释放GPS wake_look:
+bash-4.1# echo GPS > /sys/power/wake_lock
+
+3, 顺便学习以下InputReader和鼠标是怎么配合的: 
+usb 2-1: new low speed USB device using vc088x-ohci and address 8
+mma7660_early_resume
+input: USB Optical Mouse as /devices/platform/vc088x-ohci/usb2/2-1/2-1:1.0/input/input11
+E/EventHub( 1086): could not get driver version for /dev/input/mouse1, Not a typewriter
+I/EventHub( 1086): limx debug, event_hub, mouse classgeneric-usb 0003:0461:4D22.0007: input: USB HID v1.11 Mouse [USB Optical Mouse] on usb-vc088x-ohci-1/input0
+I/EventHub( 1086): New device: path=/dev/input/event5 name=USB Optical Mouse id=0x70004 (of 0x5) index=5 fd=221 classes=0x100
+I/InputReader( 1086): mouse construct
+I/InputReader( 1086): first open1 w<1280>h<768>
+I/InputReader( 1086): mouse v8-ovlay open
+I/InputReader( 1086): show mouse 0
+I/InputReader( 1086): Device added: id=0x70004, name=USB Optical Mouse, sources=00002002
+I/InputManager-Callbacks( 1086): No input device calibration properties found for device USB Optical Mouse.
+resume done
+alarm after 11 seconds
+E/StatusBarService( 1141): updateIcon slot=wifi index=10 viewIndex=6 old=StatusBarIcon(pkg=com.android.systemui id=0x7f020061 level=0 visible=true num=0 ) icon=StatusBarIcon(pkg=com.android.systemui id=0x7f020063 level=0 visible=true num=0 )
+request_suspend_state: sleep (0->3) at 1591301970188 (2011-06-24 06:45:46.577907340 UTC)
+mma7660_early_suspend
+I/power   ( 1086): *** set_screen_state 0
+D/SurfaceFlinger( 1086): About to give-up screen, flinger = 0x11d3f0
+E/StatusBarService( 1141): updateIcon slot=battery index=15 viewIndex=10 old=StatusBarIcon(pkg=com.android.systemui id=0x10802c2 level=100 visible=true num=0 ) icon=StatusBarIcon(pkg=com.android.systemui id=0x10802c2 level=100 visible=true num=0 )
+D/dalvikvm( 1311): GC_EXPLICIT freed <1K, 60% free 2712K/6727K, external 1629K/2141K, paused 31ms
+E/StatusBarService( 1141): updateIcon slot=battery index=15 viewIndex=10 old=StatusBarIcon(pkg=com.android.systemui id=0x10802c2 level=100 visible=true num=0 ) icon=StatusBarIcon(pkg=com.android.systemui id=0x10802c2 level=100 visible=true num=0 )
+usb 2-1: USB disconnect, address 8
+E/EventHub( 1086): remove device: /dev/input/mouse1 not found
+I/EventHub( 1086): Removed device: path=/dev/input/event5 name=USB Optical Mouse id=0x70004 (of 0x5) index=6 fd=221 classes=0x100
+I/InputReader( 1086): Device removed: id=0x70004, name=USB Optical Mouse, sources=00002002
+I/InputReader( 1086): limx debug, mouse reset
+I/InputReader( 1086): limx debug, mouse destroy
+I/InputReader( 1086): mouse v8-ovlay close
+I/InputReader( 1086): reset to hide
+I/InputReader( 1086): mouse v8-ovlay open
+I/InputReader( 1086): hide mouse open
+I/InputReader( 1086): reset to move
+I/InputReader( 1086): mouse v8-ovlay close
+
+1), 插入鼠标的过程, 基本和我昨天分析的一样, 但是再往上走, 今天还是没看明白. 
+MouseInputMapper::MouseInputMapper
+
+InputReadThead::threadLoop
+	loopOnce():
+		mEventHub->getEvent()
+		process()
+
+2), 拔出鼠标的过程.
+
+10:39 2011-6-24
+VC0882, SV, power, A,B,C类电源; 文档
+自: VA7882_MAS_POWER_CTRL_V0.20.doc p9
+对于LDO1/LDO12来说，可以根据pin LDO1EN_SEL的值来改变其类型。
+如果LDO1EN_SEL=0 (default, 芯片内部下拉), LDO1就归入C类；
+如果LDO1EN_SEL=1, LDO1就归入A类。
+系统里面: 
+If BUCK5_OUT=1.5/1.35v,
+This LDO used for  3.3v Nand device以及IO
+所以我估计目前LDO1EN_SEL=1, 因为buck5需要是1.5给ddr3供电
+
+16:25 2011-6-24
+VC0882, SV, AE, 量产问题, g-sensor
+1, 本来以为g-sensor是精度问题.
+后来brg发现是HAL层有一个数据少除了8, 造成抖动很大. 
+
+11:27 2011-6-27
+公司, 邮件, 设置静态dns: exchange server; cvs服务器
+BJ-MAIL-04.vimicro.com [10.0.10.20]
+cvs.vimicro.com [10.0.10.90]
+
+13:57 2011-6-27
+android, 手机, ril
+RIL(radio interface layer)
+http://blog.csdn.net/maxleng/archive/2010/05/10/5576509.aspx
+
+13:58 2011-6-27
+时间管理
+0, 9:45
+
+1, 本日
+1), 1.5h ICP, AE例会. 
+2), 30' 设置PC外网. 见"13:28 2011-5-6"5.
+3), 1.5h 午饭, 休息.
+4), 30' 了解android 手机部分(ril), 见"13:57 2011-6-27"
+5), 45' 午休+电话. 
+6), 14:50- 准备dvfs和休眠唤醒的混合自动测试. 见"14:03 2011-6-27". 
+7), 15:45-15:51 gong'anmin讨论nand normal wakeup fail. 
+
+14:03 2011-6-27
+VC0882, sv, power, AE dvfs, 续, dvfs自动测试, 续
+1, 把之前的测试项都串起来. 
+1), 修改了auto_suspend.sh和cpufreq_test两个脚本. 
+在6#上测试没有问题. 
+2, 可能需要在休眠时对cpu频率做保护. 
+1), 按照硬件设计要求, 切频step不能太大. 
+本来想在v8clock_sysclass(plat-vc088x/clock.c)的suspend/resume实现, 这样很符合保存时钟这个考虑. 但是需要调用clock-vortex.c里面的v8clk_cpu_set_rate, v8clk_upvol, v8clk_downvol. 
+后来看了代码, struct cpufreq_driver里面也有suspend/resume函数. 需要知道cpufreq和v8clock_sysclass的先后顺序. 因为后者会设置cpu频率. 但是后者是因为"struct clk"->rate设置了clock, 所以先后顺序应该没关系.
+恢复cpu频率时还有个问题: regulator driver有没有恢复.
+实测是可以用的, 暂时这样. 其实有两个办法: 一个是自己在cpufreq_driver.resume恢复, 一个是利用governor自动恢复. 后者需要查一下. 
+2, 晚上实验6#和10#. 
+(9:25 2011-6-28)
+6#一直在跑. 
+10#第一次休眠后就系统重启了, 会不会是brg提到的watchdog正好快到时间这个问题. 重新测试, 现象相同, 并且"M0x00000001"只打印了一次, 说明唤醒后一级bootloader都没有读到pmu状态. 
+
+18:39 2011-6-27
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), ICP例会. 
+2), AE例会.
+3), 支持gong'anmin调试nand normal wakeup.
+4), 准备dvfs和suspend/resume联合自动测试. 基本完成, 还有代码需要完善, 上传. 
+2, 次日工作计划
+1), 继续做dvfs和suspend/resume联合自动测试. 
+2), 看suspend/resume花屏问题. 
+
+9:27 2011-6-28
+时间管理
+0, 9:05
+
+1, 本日
+1), 9:20-9:43 AE dvfs计划, 见"9:28 2011-6-28"1. 
+2), 9:43-10:00 11:20-11:50 14:38-18:16 AE dvfs 10#板唤醒后复位. 见"9:28 2011-6-28"2.
+被3), 6)打断. 
+3), 10:00-11:19 11:30-11:50 VC0718 L2 cache power on work around. 见"10:49 2011-6-28". 
+4), 午饭, 13:05-13:55 午休. 
+5), 14:00-14:29 看支持1G memory, u-boot和kernel做了哪些修改. 见"14:16 2011-6-28".
+6), 16:52-17:30 和hanchen讨论882 Linux kernel clock, gpio设计. 
+
+9:28 2011-6-28
+VC0882, sv, power, AE dvfs, 续, dvfs自动测试, 续2
+1, dvfs相关需要解决的问题
+1), 10#板唤醒变复位的问题, 需要debug. 
+2), cpufreq resume里面是自己恢复频率还是由governor恢复? 需要看代码, 做实验. 
+3), watchdog正好快到时间这个问题可能导致唤醒后系统直接复位. 
+4), hexwrite需要规范化. 加入-n表示word个数, 不加-n表示4个word. 另外加入-h. 
+5), update脚本, 同时统计切频次数. 
+6), 查wangweizhong板子为什么i2c不好用, 和cpufreq有无关系? 
+
+2, "1-1)"
+1), 如果单独测试auto_suspend.sh没有问题, 可能就是dvfs引入的风险? 需要看是哪个频点出的错. 
+之前加cpufreq_test和UITest(dynymic)时, 两次唤醒重启, 都是睡前脚本切到750MHz. 睡眠时可能还要切到375MHz, 这样看应该也没问题风险. 
+不运行UITest(dynamic), 只运行auto_suspend.sh和cpufreq_test, 实验两次, 一次正确, 一次重启. 
+如果只运行auto_suspend.sh, 实验两次, 分别运行了14次和66次. 
+考虑是watch dog复位, 但是我注视掉watch后, 实验一次也是这样. 
+但是, 如果不是watch dog复位, 又说不通. 
+看了看u-boot代码, 看起来只有在v8gpu_init()(arch/arm/cpu/arm_cortexa8/vc088x/gpu.c)里面的gpu上电流程之前加入才比较合适. v8gpu_init在arch/arm/lib/board.c调用. 
+
+2), 修改u-boot后实验. 
+(1), 第一次休眠唤醒pass. 第二次休眠唤醒重启. 看了看log, 发现是softwre reset. 和休眠唤醒有关的唯一一次software reset是wfi后面的sw rst. 但是即使是这样rst, pmu状态应该也是在的. 
+看bootloader log: 
+[zhangjian@icp-desktop bootloader_log_parser]$ pwd
+/opt/share/zhangjian/vc0882/bootloader_log_parser
+[zhangjian@icp-desktop bootloader_log_parser]$ ./log_parser bootinfo_0628_1550 
+(2), 10#板有个特点, 似乎系统一直在扫描外卡, 所以休眠很慢. 卸载外卡后实验. 
+看log发现, "PM: Syncing filesystems ..."之后没有立刻休眠. 过了10s左右才休眠. 
+(3), 还是修改kernel, 看看是否真的运行到了wfi sw rst. 
+\todo 明天继续. 
+
+3, 暂时提交测试: 
+1), 烧写:
+"\\10.0.12.160\share\androidbuilds\vortex_20110628_pm_dvfs_test__uboot_rst_type.pak" 
+一定用最新的烧写脚本, 里面有一句是"ddrcRegConfNum = 0x23". 
+
+2), 测试内容. 
+系统唤醒情况下uitest会刷屏, 一定时间后系统自动休眠->唤醒->uitest自动刷屏
+(1), 复制"\\10.0.12.160\share\zhangjian"的如下四个文件到sd内卡(文件有更新, 一定要重新复制):
+cpufreq_test, auto_suspend.sh, hexwrite, UITest_dynamic.apk
+(2), 安装UITest_dynamic.apk
+运行uitest, 按menu键选择"set&start"运行uitest. 
+(3), 复制hexwrite到"system/bin"
+mv /mnt/sdcard/hexwrite /system/bin
+(4), 运行如下三个命令:
+sh /mnt/sdcard/auto_suspend.sh &
+sh /mnt/sdcard/cpufreq_test &
+logcat &
+(5), 需要保存完成log. 
+
+3), 晚上找了5个板子测试. 
+
+4, (16:21 2011-6-29)昨天实验结果.
+总结: 
+2#测试次数过少, 需要重新测试. 
+10#和QA2#都有重启问题. QA2#不加cpufreq_test继续测试. 
+6#, 12#(QA1#), 16#, QA3#测试通过. suspend > 498 times, dvfs > 39618 times. 
+
+1), 2#: suspend 113, dvfs 9188, uitest 2095. 
+dt times is 0, console suspend times is 114, rom boot times is 226.
+dvfs: target times is 9914, transition times is 9188, read cpu pll times is 9802, read cpu_clk_cfg times is 9801
+uitest: freq times is 2095, count times is 2095
+
+2), 6#: 休眠唤醒1408次, dvfs 127008次, uitest 34840次.
+dt times is 0, console suspend times is 1408, rom boot times is 2818.
+dvfs: target times is 128513, read cpu pll times is 127008, read cpu_clk_cfg times is 127008
+uitest: freq times is 34840, count times is 34840
+注: uitest里面有5个case随机循环. 这里记录的是总的测试次数. 
+
+3), 10#: 休眠唤醒528次, dvfs 5107次, uitest 740次.
+
+注: 运行cpufreq_test和auto_suspend.sh系统就很容易重启(4/5次), 所以晚上测试时, 没有运行cpufreq_test, 完全通过uitest的负载变化触发cpufreq ondemand governor区切频. 
+dt times is 0, console suspend times is 528, rom boot times is 1050.
+dvfs: target times is 19003, transition times is 5107, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 740, count times is 740
+
+4), 12#, QA1#: suspend 498次, dvfs 39618次, uitest 9083次.
+dt times is 0, console suspend times is 498, rom boot times is 994.
+dvfs: target times is 42774, transition times is 39618, read cpu pll times is 42220, read cpu_clk_cfg times is 42220
+uitest: freq times is 9083, count times is 9083
+
+5), 16#: suspend 523次, dvfs 41817次, uitest 19254次.
+dt times is 0, console suspend times is 523, rom boot times is 1040.
+dvfs: target times is 45132, transition times is 41817, read cpu pll times is 44589, read cpu_clk_cfg times is 44588
+uitest: freq times is 19254, count times is 19254
+
+6), QA2#: suspend 3, dvfs 527, uitest 111. 
+休眠三次后, 唤醒系统重启. 
+dt times is 0, console suspend times is 3, rom boot times is 6.
+dvfs: target times is 582, transition times is 527, read cpu pll times is 548, read cpu_clk_cfg times is 548
+uitest: freq times is 111, count times is 111
+
+7), QA3#: 休眠唤醒553次, dvfs 44263次, uitest 10158次.
+dt times is 0, console suspend times is 553, rom boot times is 1108.
+dvfs: target times is 47797, transition times is 44263, read cpu pll times is 47131, read cpu_clk_cfg times is 47129
+uitest: freq times is 10158, count times is 10158
+
+10:49 2011-6-28
+VC0882, VC0718, FPGA, cache sram问题work around; arm, Cortex-A8, L2 cache debug register
+1, 718 arm使用DTI sram. 718 DTI sram上电后需要一个clock做复位.
+但是arm只有在读写时才有clock. 这样会造成arm第一次访问L2的结果会不对. 因此718项目要求arm L2 cache上电后需要访问tag sram和8个way中每个way的data sram.
+做这个访问有两个办法, 见lingming下面邮件. 
+其实要想让L2动起来, 还有个办法, 就是用ple(preload engine).
+
+2, lingming邮件"ARM L2 cache simulation"20110628_1052
+刚才的会议记录如下：
+1. 1级bootloader 没有使用L2 cache所以不关心这个问题。
+2. 该问题只在上电后第一次访问这些sram的时候有，enable/disable L2 cache不会有该问题；718 没有sleep；所以只用由Uboot程序做一下处理；
+3. L2  sram的8个way和tag 的sram都需要访问一下，然后再都invalidate一下；
+4. 两种实现方案：
+a) 在enable L2之前，使用ARM  debug寄存器，读L2 8个way和tag 的sram；然后再都invalidate一下；然后再正常enable L2；
+b) 关闭Icache; 创建MMU表并设置代码段为uncache的；打开Dcache和L2 cache; 通过读数据来用到L2 8个way和tag 的sram；然后都invalidate一下；然后再正常enable L2；
+以上方案均需要Li Shu Jie仿真通过。
+
+HI，Yi Nong：
+718 ICP这边没有工程师像Kong Yingqi和Zhang jian那样很熟悉L2 cache还有ARM；学习也不是一时半会就能会的，怕有很多问题考虑不到；而且也怕来不及；支持仿真还有写软件有一定难度。
+不知道Kong Yingqi和Zhang jian忙不忙，能不能安排他们帮帮忙啊。如果Kong Yingqi能直接和Li Shu Jie交流，给出一个代码，仿真通过；然后我们消化吸收掉代码就最好了。
+谢谢了。
+
+3, zhangjian邮件
+L2 cache debug寄存器文档, 见"VC1600WCVS\doc\module\Cortex-A8\doc\trm\pdf_trm\DDI0344J_cortex_a8_r3p2_trm.pdf", p280: 
+3.2.81 c15, L2 system array debug data registers
+3.2.83 c15, L2 tag array operations
+3.2.84 c15, L2 data array operations
+
+读tag和data的函数: 
+1), 访问指定地址对应的tag: 
+int  VIM_CACHE_L2cacheGetTag(register UINT32 addr)
+{
+	INT32 tag;
+
+	__asm{
+    	mcr  p15,0,(addr),c15,c9,2
+        mrc  p15,0,(tag),c15,c8,0
+	};
+
+	/* Bit 2 is DCache enable */
+	return tag;
+}
+
+2), 循环访问8个way中的同一个偏移的data.
+static int do_L2cache_getdata(int argc, char *argv[])
+{
+	//...
+	for(i = 0;i < 8; i++)
+	{
+		CACHE_GetL2CacheDataArray(addr);
+		addr += (UINT32)0x8;
+	}
+}
+VOID CACHE_GetL2CacheDataArray(UINT32 addr)
+{
+    UINT32 *data = __CACHE_Malloc(4*3*8);
+    UINT32 i;
+    addr &= ~0xe0000000;
+    for(i = 0; i < 8; i++)
+    {
+         VIM_CACHE_L2cacheGetData(addr,data+(i*3));
+         CACHE_MSG("num=0x%x ,addr = 0x%x,  ",i,addr);
+         CACHE_MSG("data = 0x%x  ", *(data+(i*3)));
+         CACHE_MSG("data = 0x%x  ", *(data+(i*3+1)));
+         CACHE_MSG("data = 0x%x  ", *(data+(i*3+2)));
+	     CACHE_MSG("\n\n\n");
+         addr += 0x20000000;
+    }
+}
+
+void  VIM_CACHE_L2cacheGetData(register UINT32 addr, UINT32 *data)
+{
+	UINT32 data0 = 0;
+	UINT32 data1 = 0;
+	UINT32 data2 = 0;
+
+	 __asm{
+    	 mcr  p15,0,addr,c15,c9,3
+        mrc  p15,0,(data0),c15,c8,0
+        mrc  p15,0,(data1),c15,c8,1
+        mrc  p15,0,(data2),c15,c8,5
+	 }
+	 *data = data0;
+	 *(data + 1) = data1;
+	 *(data + 2) = data2;
+}
+
+3, zhangjian回复lingming邮件
+Hi，Zhang jian：
+     谢谢了。代码里面标红色的那个有什么特殊的吗？？直接用一个temp 数组可以吗？
+ZJ:  可以. 这个malloc就是咱们nucleus里面的malloc函数. 
+     还有我对L2 cache的组织方式不太懂，因此对于“循环访问8个way中的同一个偏移的data”；的实现不怎么了解，特别是下面标绿的那些。
+	ZJ: 访问8个way体现在” CACHE_GetL2CacheDataArray”里面, 从下述文档可以知道高三个bit表示8个way, 所以addr += 0x20000000;循环8次就访问了8个way.
+do_L2cache_getdata代码可能本意是想访问整个cache line, 因为每次调用VIM_CACHE_L2cacheGetData都会读8bytes, 循环8次就是64bytes,  这个和目前这个仿真没啥关系, 我看可以不用. 
+详细情况还是看arm文档吧. 附件是yangxing当初总结的文档(D:\VC0882\document\arm\cache\ L2CACHE总结.doc), 供大家参考. 
+
+Hi, Li Shu Jie；Kong Yingqi: 
+你们就基于下面的代码，改改，拿去仿真吧。Kong Yingqi对这些肯定比我熟悉多了，多支持支持。
+仿真有什么情况，就发信吧。
+
+4, (14:06 2011-6-29)zhangjian回复lishujie邮件
+1), 测试时dcache和mmu是打开还是关闭的? 使用cache debug寄存器访问cache不需要 打开dcache和mmu, 打开了就不好分析了. 
+2), VIM_CACHE_L2cacheGetData的addr是cache的way, set地址, 并不是ddr地址. 对于718/882 L2 cache来说只有给VIM_CACHE_L2cacheGetData addr的[31:29]和[13:2]是有效的, 前者表示way号, 后者表示是该way里面的第几个8byte数据. 所以对于0x81000000--0x81000070这8个地址,  VIM_CACHE_L2cacheGetData只是访问了way0.
+如果希望访问不同的way需要遍历addr的[31:29], 例如] 0x00000000, 0x20000000, 0x40000000, 0x60000000, ... 0xe0000000
+
+14:16 2011-6-28
+VC0882, SV, Linux, kernel, 使用1G memory
+1, 前段时间, jinyang, suxin, bianrongguang实验如何使用1G memory. 
+最后使用high memory, u-boot里面需要如下设置: 
+"mem=820M vmalloc=372M"
+820 + 372 = 1192, 这里比1024M多出的168M就会被映射为high memory. 
+u-boot commit见"http://10.0.12.140/cgi-bin/gitweb.cgi?p=android/u-boot.git;a=commitdiff;h=984bb847dcdd17014be89f61c0e718badb296a72". 
+kernel commit见"http://10.0.12.140/cgi-bin/gitweb.cgi?p=android/common.git;a=commitdiff;h=035492fa87825789daa4358827ee9539c866240a", 可以看到里面做了如下改动:
+1), CONFIG_HIGHMEM
+2), 减小和后移系统其他memory定义:
+(1), 
+-#define CONSISTENT_DMA_SIZE    SZ_32M
++#define CONSISTENT_DMA_SIZE    SZ_2M
+(2), change sram/register remap address
+二者改为连续地址, 只映射一次. 原来是不连续地址, 需要映射两次. 据brg实验, 映射两次就是不行. 
+
+15:11 2011-6-28
+VC0882, SV, 电源总结
+
+\todo 加入如下内容. 
+7882开机方式
+brg clk图
+driver spec.
+
+18:17 2011-6-28
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 继续查dvfs和suspend/resume bug. 
+昨天晚上实验发现10#(慢sd卡)dvfs和suspend/resume联合测试时, 唤醒后系统直接重启(software reset). 暂时未查明原因. 
+作为对照的6#板, dvfs_pm联合测试24小时正确(休眠唤醒843次, dvfs 72397次). 
+2), 晚上请测试同时做5个板子的dvfs_pm测试. 
+3), 讨论VC0718 L2 cache power on work around, 并提供方案一的参考代码. 
+4), 看AE Linux kernel 1G memory, u-boot和kernel做了哪些修改: 主要是利用了high memory. 
+5), 和hanchen讨论882 Linux kernel clock, gpio设计. 
+
+2, 次日工作计划
+1), 继续解决10#板唤醒复位问题. 
+2), dvfs需要完善代码. 做好提交代码的准备. 
+3), 写电源总结文档. 
+
+10:38 2011-6-29
+时间管理
+0, 9:43
+
+1, 本日
+1), 9:45- 洗漱, 吃饭, 看邮件, 杂. 
+11:00-11:38 看最近两天重要邮件. 看到hanchen, 还需要继续看. 
+20' 上传部分婚礼视频到新浪博客. 
+2), 30' 718 cache simulation: 回复lishujie邮件. 见"10:49 2011-6-28"4. 
+3), 40' 看docbook和git工具, 见"13:24 2011-6-29".
+4), 14:40-16:20 AE dvfs. 看昨日实验结果. 见"9:28 2011-6-28"4. 
+5), 20' 看arm文档. 见"16:40 2011-6-29".
+6), dvfs 见"14:40 2011-6-29".
+
+10:54 2011-6-29
+VC0882, SV, 工作安排, 工作计划, from zhaoyuan
+zhaoyuan邮件"关于最近一周的工作安排"20110628_2258
+由于我出差时间可能比较长，所以请大家按照以下计划完成日常工作，每天Reporter请发一封Email总结当天工作。
+1.       USB 热插拔问题：
+Team：Jia Bo, Zhang Qun, Wu Detian.
+Reporter: Zhang Qun
+2.       游戏兼容性:
+Team：Wang Weizhong，Guo Baozu, Yao Haiping
+Reporter: Wang Weizhong
+3.       HDMI
+Team: Sun Fengqiang, Zhang Mingxin
+Reporter: Zhang Mingxin
+4.       Audio 工作交接:
+Owner&Reporter：Zhang Mingxin
+5.       G-Sensor XYZ Settting
+Team: Bian Rongguang, Liu Jie
+Reporter: Liu Jie
+6.       DVFS&Reboot
+Reporter&Owner: Zhang Jian
+7.       Camera Debug
+Team: Tian Kuan, Hao Baopeng
+Reporter: Hao Baopeng
+8.       Others(Include QA, BUGs….)
+Reporter: Sun Fengqiang.
+
+11:30 2011-6-29
+VC0882, SV, 微软项目, 双sensor
+1, 关注wangxiaonan的882和598联调
+wangxiaonan邮件_20110628: 
+2、   882+598联调：
+1) 找zouweiran测试EMI和BIU接口之间是否存在压差，结果是电压匹配，不存在灌电流的问题；
+2) 到caifeihua处演示目前882+598初始化之后的情况，帮助寻找可能存在的问题；
+3) 找lidongliang支持882控制598的调试，dongliang给了几条建议，一是比较598挂掉前后相关寄存器的数值，另一是通过JTAG将598 core下到598 AE板中，正在实施第一条；
+
+13:24 2011-6-29
+技术, 文档管理, DocBook, Git
+1, docbook
+官网
+http://www.docbook.org/
+DocBook 助你完成传世之作
+http://www.worldhello.net/doc/docbook_howto/
+Writing Documentation Using DocBook
+http://xml.web.cern.ch/XML/goossens/dbatcern/
+群英汇: 版本管理, 项目管理
+http://www.ossxp.com/
+Impressive DocBook example?
+http://stackoverflow.com/questions/1277132/impressive-docbook-example
+FreeBSD Documentation Project Primer for New Contributors
+http://www.freebsd.org/doc/en/books/fdp-primer/index.html
+
+2, git
+GotGit，Git权威指南
+官网: 
+www.ossxp.com/doc/gotgit
+官方微博, 注册后可以下载样章
+http://q.weibo.com/567527
+
+14:40 2011-6-29
+VC0882, sv, power, AE dvfs, 续, dvfs自动测试, 续3
+1, dvfs相关需要解决的问题
+1), 10#板唤醒变复位的问题, 需要debug. 
+bamvor: 根据昨天实验结果, 可能是运行cpufreq_test的本身影响了系统. 今天对于
+QA2#也要做同样实验. 
+2), cpufreq resume里面是自己恢复频率还是由governor恢复? 需要看代码, 做实验. 
+3), watchdog正好快到时间这个问题可能导致唤醒后系统直接复位. 
+4), hexwrite需要规范化. 加入-n表示word个数, 不加-n表示4个word. 另外加入-h. 
+5), update脚本, 同时统计suspend, dvfs和uitest次数. 
+bamvor: done. 
+6), 查wangweizhong板子为什么i2c不好用, 和cpufreq有无关系? 
+
+2, "1-2)"
+1), 之前看到的ondemand在resume后自动恢复, 可能并不是cpufreq resume及其work_queue的做的. 我估计是因为375MHz情况下系统负载过重, 所以cpufreq升高cpu频率. 
+看看cpufreq resume代码, 如果driver本身没有提供set_policy, 会利用__cpufreq_set_policy调用policy->governor->governor()再调用: 
+__cpufreq_governor(data, CPUFREQ_GOV_LIMITS);
+对于ondemand governor, CPUFREQ_GOV_LIMITS event只是会检查governor的min, max有没有超出policy范围, 如果超出范围, 会修改governor范围. 
+所以目前是cpufreq driver里面suspend会切到375MHz, resume时恢复原有频率. 
+
+3, (10:17 2011-6-30)整理昨天测试结果. 需要和原来休眠唤醒, dvfs单独测试结果对比. 
+总结: 今天晚上测试结果不好, 只有3#pass. 7#_ZJ?_BRG?: 跑了一晚上没有死但是没有log, 需要重新测试. 
+guobaozu的板子由于插了usb otg到PC, 所以系统不会休眠. 
+有两个板子(2#, QA2#)疑似出现唤醒失败问题. 这两个板子需要用ICP panda_os测试, 如果通过用上次测试休眠唤醒的pak(\\10.0.13.101\share\zhangjian\projects\VC0882\code\20110607_AE_suspend_resume_cont12\vortex_newGitCod__rtcTst.pak)测试. 
+JY唤醒重启: 今天白天复现这个问题, 如果出现, 只测试auto_suspend.sh
+1), 2#: suspend 101, dvfs 8118, uitest 1883. 
+第一次而是: log不全, 怀疑是串口有问题. 下次请其他同事帮忙测试. 
+dt times is 0, console suspend times is 102, rom boot times is 202.
+dvfs: target times is 8760, transition times is 8118, read cpu pll times is 8659, read cpu_clk_cfg times is 8659
+uitest: freq times is 1883, count times is 1883
+6月30日上午测试: 测试时间不长停在kernel唤醒ABCD, 5分钟不动. 
+2), 3#: suspend 527, dvfs 42643, uitest 9797. 
+dt times is 0, console suspend times is 530, rom boot times is 1054.
+dvfs: target times is 46013, transition times is 42643, read cpu pll times is 45485, read cpu_clk_cfg times is 45486
+uitest: freq times is 9797, count times is 9797
+3), QA2#: suspend 279, dvfs 2508, uitest 5309
+跑到两点跑死. 到kernel ABCD后跑死. 
+dt times is 0, console suspend times is 280, rom boot times is 558.
+dvfs: target times is 9310, transition times is 2508, read cpu pll times is 0, read cpu_clk_cfg times is 0
+uitest: freq times is 5309, count times is 5309
+4), JY#有问题. 唤醒重启. 
+5), 7#_ZJ?_BRG?: 跑了一晚上没有死, 但是pc死了, 所以不清楚具体测试次数. 
+
+15:00 2011-6-29
+软件技巧, Linux, bash, find, find命令在搜索范围内执行可能搜索不全
+今天希望找自己写的check开头的脚本, 结果发现找到的结果不全: 
+[zhangjian@centos 20110627_0628_AE_DVFS_cont6_suspend_resume_fail]$ find ../ -name check*
+../20110530_AE_suspend_resume_cont6/check_dt_ret
+../20110620_AE_DVFS_cont4_mass_test/check_suspend_dvfs_ret
+../20110604_AE_suspend_resume_cont11/check_dt_ret
+如果返回到上一级目录, 就正确
+[zhangjian@centos code]$ find . -name check*
+./20110530_AE_suspend_resume_cont6/check_dt_ret
+./20110627_0628_AE_DVFS_cont6_suspend_resume_fail/check_dt_ret
+./20110620_AE_DVFS_cont4_mass_test/check_suspend_dvfs_ret
+./20110604_AE_suspend_resume_cont11/check_dt_ret
+
+copy ./20110620_AE_DVFS_cont4_mass_test/check_suspend_dvfs_ret 到 20110627_0628_AE_DVFS_cont6_suspend_resume_fail, 结果又变了: 
+[zhangjian@centos 20110627_0628_AE_DVFS_cont6_suspend_resume_fail]$ find ../ -name check*
+../20110530_AE_suspend_resume_cont6/check_dt_ret
+../20110627_0628_AE_DVFS_cont6_suspend_resume_fail/check_dt_ret
+../20110604_AE_suspend_resume_cont11/check_dt_ret
+
+16:40 2011-6-29
+VC0882, SV, Cortex-A8文档阅读
+1, 如果L2EN=0, dcache maintemance opertion不会影响L2. 
+bamvor: 这是符合直觉的, 否则L2EN=0就没意义了. 
+Cache maintenance operations have an effect on the L1 and L2 caches when they are disabled. A cache maintenance operation can evict a cache line from the L1 data cache. If the L2EN bit is set to 1, the evicted cache line can be allocated to the L2 cache. If the L2EN bit is not set to 1, then evictions from the L1 data cache are sent directly to external memory using the AXI interface.
+
+18:33 2011-6-29
+VC0882, SV, 工作总结
+1, 今日工作总结
+1), 分析昨天dvfs实验结果, 
+2#测试次数过少, 需要重新测试. 
+10#和QA2#都有唤醒重启问题. 10#如果不运行dvfs脚本只通过uitest切频不会唤醒重启, 晚上测试QA2#不加dvfs脚本. 
+6#, 12#(QA1#), 16#, QA3#测试通过. suspend > 498 times, dvfs > 39618 times. 
+2), check cpufreq_driver suspend/resume有无问题. 目前是休眠时切频到375MHz, 唤醒后恢复频率. 
+
+9:36 2011-6-30
+时间管理
+0, 9:10
+
+1, 本日
+0), 感觉时间抓的还是不够紧, 没怎么着时间就过去了. 
+1), 9:50-10:40 整理dvfs昨天测试结果. 见"14:40 2011-6-29"3. 
+2), 10:40-11:50 dvfs
+3), 午饭, 午休. 
+4), 14:00-15:05 ICP 例会. 
+\todo AE有没有读CP15寄存器的工具. 
+5), 15:20-16:25 上午把kernel休眠唤醒的流程又看了一遍, 基本理清楚了, 下一步需要用ftrace打印出这个流程, 看看和自己预期是否一致. 不过今天需要现在pm的文档写出来. 
+
+10:57 2011-6-30
+VC0882, sv, power, AE dvfs, 续, dvfs自动测试, 续3, 针对测试问题分析
+1, 总结目前pm_dvfs情况:
+1), 3#pass. 6#, 7#_ZJ?_BRG?, 12#(QA1#), 16#, QA3#. pass. 
+2), 10#和QA2#都有唤醒重启问题. 10#不加cpufreq_test pass. 
+3), 2#, QA2#疑似出现唤醒失败问题. 
+4), JY唤醒重启: 今天白天复现这个问题, 如果出现, 只测试auto_suspend.sh
+
+2, dvfs还需要做的事情:
+1), 10#板唤醒变复位的问题, 需要debug. 
+bamvor: 根据昨天实验结果, 可能是运行cpufreq_test的本身影响了系统. 今天对于
+QA2#也要做同样实验. 
+2), cpufreq resume里面是自己恢复频率还是由governor恢复? 需要看代码, 做实验. 
+bamvor: done, 见昨天dvfs日志. 
+3), watchdog正好快到时间这个问题可能导致唤醒后系统直接复位. 
+4), hexwrite需要规范化. 加入-n表示word个数, 不加-n表示4个word. 另外加入-h. 
+5), update脚本, 同时统计suspend, dvfs和uitest次数. 
+bamvor: done. 
+6), 查wangweizhong板子为什么i2c不好用, 和cpufreq有无关系? 
+
+3, 目前看起来dvfs本身没有遇到问题, 目前遇到的问题是pm和reset, 不清楚和dvfs有无关系. 
+
+4, 考虑clock resume和cpufreq resume的先后顺序. 
+clock先resume: cpu clock是375MHz, 所以cpu不会切频. 
+cpufreq先resume: switch cpu clock到suspend前的rate. 后面clock resume时还是不是切频. 
+所以顺序应该无关. 但是需要了解这个顺序. 
+
+5, 重新看系统suspend/resume流程. 
+1), dpm_suspend(): 
+(1), 遍历dpm_list, 循环调用device_suspend(): 分为同步suspend和异步suspend. 
+(2), 遍历后, 调用"async_synchronize_full()", 确保所有异步suspend都完成. 
+
+2), device_suspend(): 原来以为这里就是按注册(?)顺序suspend设备. 今天发现可能是允许异步suspend的: 
+pm_async_enabled && dev->power.async_suspend
+前者是系统全部属性, 后者是每个设备自己的属性, 由device_enable_async_suspend设置. device_enable_async_suspend()在scsi, pci, usb里面可能会设置. 也就是说这三类设备可能会异步休眠. 
+异步唤醒我理解只是起了thread做suspend的工作, 最终还是调用driver自己的suspend函数: 
+async_schedule()->__async_schedule(): 把device_suspend传入的async_func_ptr()(async_suspend(): 调用__device_suspend())赋给新建立的async_entry.func()
+
+async_thread()(kernel/async.c)->run_one_entry()
+async_thread()由运行async_manager_thread(), 后者在系统启动时建立. 
+
+__device_suspend()里面会按照class, type, bus的顺序调用suspend(), 也就是说每个class或bus的suspend函数会调用它们device个数的次数? 原来以为只是调用一次. \todo 确认. 
+
+会不会异步唤醒? 下文分解. 
+
+3), 每个设备都suspend后, 才是sysdev_suspend():
+按照kset里面按照class顺序suspend, 对于每个class, 都先做class driver suspend, 再做class suspend. 
+sysdev_suspend后, 会调用SOC自己的pm enter函数使整个系统进入suspend状态. 
+
+4), resume: 
+suspend_devices_and_enter()->dpm_resume_end()->dpm_resume()
+
+5), dpm_resume()和dpm_suspend()功能对应. 
+(1), 先发起异步resume()
+(2), 然后按照链表顺序做非异步aync的设备的: device_resume()
+(3), 最后同样用async_synchronize_full()等待异步resume完成. 
+
+device_resume和__device_suspend相反, 按照bus, type, class顺序调用resume. 
+
+6, 到目前为止dvfs和suspend/resume联合测试情况. 
+1), 3#pass. 6#, 7#_ZJ?_BRG?, 12#(QA1#), 16#, QA3#. pass. 
+2), 10#和QA2#都有唤醒重启问题. 10#不加cpufreq_test pass. 
+3), 2#, QA2#疑似出现唤醒失败问题. 2#白天复测没有问题, 晚上会继续测试. 
+QA2#板子问题需要分析. 
+4), JY唤醒重启: 今天白天测试未复现, 跑了8小时pm_dvfs正确, 晚上会继续跑. 
+
+15:58 2011-6-30
+VC0882, SV, 电源总结
+1, 其实如果想用1小时时间把power和clock说清楚. 感觉有点困难. 
+到底要说什么呢? 
+应该是让大家理解power和clock的重要性, 有一些基本的概念. 
+
+16:41 2011-6-30
+android, kernel, power, wake_lock
+1, wake_lock
+1), HAL层: 
+acquire_wake_lock(), release_wake_lock()
+hardware/libhardware_legacy/include/hardware_legacy/power.h
+hardware/libhardware_legacy/power/power.c
+看了看, 没看到java层如何使用. 
+2), 参考之前xiaotao找的文档"电源管理的 HAL 与 Kernel 分析.pdf": 
+android_os_power.cpp在jni层，具有方法acquireWakeLock。对应Frameworks层的58 frameworks/base/core/java/android/os/Power.java的acquireWakeLock
+3), 其实自己刚才搜索时log里面也有, 但是眼睛看的时候漏过去了. 把刚才的log过滤以下, 去掉和其他平台设备具体相关的, 剩余文件如下:
+1 frameworks/base/libs/ui/EventHub.cpp
+2 frameworks/base/services/jni/com_android_server_location_GpsLocationProvider.cpp
+3 frameworks/base/services/audioflinger/AudioPolicyService.cpp
+4 frameworks/base/core/jni/android_os_Power.cpp
+5 hardware/libhardware_legacy/include/hardware_legacy/power.h
+6 hardware/libhardware_legacy/power/power.c
+7 hardware/ril/libril/ril.cpp
+8 system/extras/tests/fstest/perm_checker.conf
+9 system/extras/tests/sdcard/testcase.cpp
+10 system/extras/tests/cpueater/daemonize.c
+11 vimicro/HAL/libaudio-alsa/AudioStreamOutALSA.cpp
+12 vimicro/HAL/libaudio-alsa/AudioStreamInALSA.cpp
+4), 能看出上面这些文件中4是通用接口. 先看看4: acquireWakeLock
+java层: frameworks/base/core/java/android/os/Power.java
+从这些文件里面找到了PowerManagerService, 这个class似乎很重要. 
+
+2, early suspend/resume
+
+set_screen_state
+
+开屏幕:
+request_suspend_state: wakeup (3->0) at 475801131214 (2000-01-01 00:08:42.907318559 UTC)
+D/KeyguardViewMediator( 1090): wakeWhenReadyLocked(26)
+I/power   ( 1090): *** set_screen_state 1
+W/WindowManager( 1090): !!! Unable to find ITelephony interface !!!
+D/SurfaceFlinger( 1090): Screen about to return, flinger = 0x11d3f0
+W/InputManagerService( 1090): Window already focused, ignoring focus gain of: com.android.internal.view.IInputMethodClient$Stub$Proxy@40823d80
+
+关闭屏幕: 
+request_suspend_state: sleep (0->3) at 163851803310 (2000-01-01 00:02:42.634650540 UTC)
+I/power   ( 1090): *** set_screen_state 0
+D/SurfaceFlinger( 1090): About to give-up screen, flinger = 0x11d3f0
