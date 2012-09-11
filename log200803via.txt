@@ -1,0 +1,1269 @@
+﻿14:01 2008-3-3
+VT3406，LCD，继续看DMA.c
+从UARTDMAStartRead，UARTDMAStopRead到Mp3DescriptorTrans没有看。
+ProgramLCDDMADesctiptor()
+typedef struct LCD_DESCRIPTOR
+{
+     DATA_DESCRIPTOR_t     DataDescriptor ;
+     END_DESCRIPTOR_t       EndDescriiptor ;
+}LCD_DESCRIPTOR_t ;
+
+static UINT32 LCDDescriptorArray[]= {	(
+	DCTLR_IND_IS_DATA_DSC|
+	DCTLR_DI_IS_FIX|
+ 	DCTLR_SI_IS_INC|
+ 	DCTLR_DMODE_IS_BLOCK|
+ 	DCTLR_SMODE_IS_BLOCK|
+ 	DCTLR_DWIDTH_IS_HALFWORD|
+	DCTLR_SWIDTH_IS_HALFWORD
+ ), (
+	DCFGR_FLOWCTRL_IS_M2M|
+	DCFGR_S_MASTER2|
+	DCFGR_D_MASTER2
+ ),0,0,0,0,0,0,0,0,0}; 
+设置了源和目的数据宽度都是半字。
+
+LCD_Descriptor->DataDescriptor.DCFGR = (((len << 1)+2) << 12) |DCFGR_FLOWCTRL_IS_M2M|DCFGR_S_MASTER2|DCFGR_D_MASTER2);
+这里设置(len<<1+2)<<12，移位是把以半字为单位的长度转为字节数。加2的含义不太明白。待做：查。
+
+INT_Disable()，是禁止中断，是MMI的函数，在Driver中是一个空函数，仅仅打出禁止中断的提示。待做：查MMI中的对应函数。
+
+完成此函数：
+1, 填充LCD_Descriptor结构体。其中固定设置从LCDDescriptorArray得到。
+2, 禁止中断情况下设置DMA通道8的中断和中断使能有效；
+3, 把LCD_Descriptor写入DMA_C8_DBAR_ADDR，并开始DMA传输。
+查被谁调用；
+
+15:19 2008-3-3
+Nuclesu学习
+http://www.mentor.com/products/embedded_software/nucleus_rtos/kernels/index.cfm
+Nucleus支持ANSI C, POSIX real-time extensions, C++ for real-time, and micro-ITRON APIs。
+待做（重要）：Nucleus学习计划包括POSIX和micro-ITRON的学习。
+
+16:05 2008-3-3
+VT3406学习，DMA
+DMA desciptor操作可以支持把Block数据到线性数据的传送。参见VT3406 datasheet P164。
+主要是设置DBCFR(Data Block Transfer Configuration Register)的行宽，列宽和LINE_BLK和DBLWR(Data Block Transfer Line Width Register)寄存器的LINE_WID。不是很明白LINE_BLK和LINE_WID的作用。从操作结果看，前者是描述传递几行。后者是目的地址的每行长度。
+
+16:33 2008-3-3
+VT3406，LCD
+1, LCD.c实现液晶驱动通用部分。待做，继续分析
+2, LCD_SPFD5408A.c实现SPFD5408A液晶特有部分：
+1), DispUpdateDisplayRect()：更新某个矩形区域的图像。
+首先错误检查；
+如果Mp3未使用DMA，用DMA传送；否则用CPU传送。两种方法都需要先设置液晶GRAM的水平垂直地址范围，实际显示区域（水平垂直的开始的结束地址）。DMA方式采用DMA给LCD对应寄存器传递数据。CPU方式是使用CPU向对应寄存器传递数据。
+传送结束后，恢复显示GRAM全体区域。（？待做，细看）
+2), UpdateGA_FullScreen_Descriptor(), UpdateGA_QVGA_Descriptor()
+
+gSpecialColorEffect设置GFX_CTRL1 [19:16]的Image Effects，[21:20]曝光阈值和[23:22]油画效果强度。
+
+"media\cameraif\HDdc3406.c: HDDCSetCameraColorEffect()"会修改gSpecialColorEffect，gSepiaTone_U和gSepiaTone_V。
+
+待做：
+1, 查"media\cameraif\HDdc3406.c: gGABitbltMode"变量。
+2, 可以通过学习cameraif了解LCD的使用。对后面可能的移植camera驱动也有帮助。
+
+18:22 2008-3-3
+VT3406学习，照相机，HDDCSetCameraColorEffect()
+1, gSpecialColorEffect：
+1), 设置color effect，曝光阈值和油画特效强度。
+参VT3406datasheet P174。
+color effect: 
+sw\GenesisMmi\MMI\Mmi\App\CameraApp: void VCameraApp::KeyHandler(UINT32 MsgId,void *pMsg)找到:
+0-Effect disable
+1-Black and white
+2-Sepia
+3-Negative
+4-Solarization
+5-Oil painting
+6-Black and white negative
+7-Black and white solarization
+8-Black and white oil painting
+加7之后，正好是VT3406的对应特效(见VT3406 datasheet p174)的取值。
+曝光阈值固定设为0,4，油画特效强度固定设为强。
+
+2, gSepiaTone_U和gSepiaTone_V：
+是褐色效果Cb，Cr颜色的取值。
+注：褐色效果：Y不变，Cb, Cr取固定值。参见VT3406 datasheet P193。
+
+18:35 2008-3-3
+今日总结，进入继续阅读了LCD和GA代码，开始接触camera。
+明日继续看：UpdateGA_FullScreen_Descriptor(), UpdateGA_QVGA_Descriptor()。争取本周看完LCD, GA和camara代码。
+下周开始看其他2D图形加速相关（MP4？）代码。
+
+11:18 2008-3-4
+VT3406学习，LCD
+看"Driver_API_Interface_Spec.pdf"。
+DispBitBlt把数据写入缓冲区。DispUpdateDisplay和DispUpdateDisplayRect函数可以把缓冲区数据写入LCD。
+待做：查，何时调用这两个函数？
+
+17:49 2008-3-4
+Nucleus学习，driverres.c分析
+"DeviceDriver\Device\DriverSystem\DriverOS\Nucleus"
+定义全部任务，定时器。由"driverosnust.c" DRIVER_Application_Initialize()调用，初始化。
+1, 定义每个Task的Wrapper函数（都是静态函数）。
+
+2, 定义任务优先级结构体：
+typedef struct
+{
+	unsigned char Name[8];
+	unsigned char Priority;
+	
+} TaskPriority_t ;
+注意：这里Name[8]是根据NU_Create_Task()函数要求（Nucleus reference文档P36）确定的。任务名称是8个字符长，可以不用"\0"作为结尾。
+
+3, 定义任务的优先级，HD_Tasks，用于"HD_GetTaskPrioByName()"函数：
+static const TaskPriority_t HD_Tasks[HD_TASK_NUM_END]
+任务优先级定义在"driversys.h"文件。
+HD_TASK_NUM_END是最大任务编号+1，位于driversys.h文件。
+待做：查注释"// driver task name is 5 byte aligned."的含义。每个TaskPriority_t的大小都是5字节，这有什么特殊意图？
+
+4, 定义全部中断名称数组DRIVERHISRNames；
+
+5, 定义全部定时器ID号数组DriverTimerExpIDs。
+定时器ID同样位于"driversys.h"文件。
+
+6, 定义每个任务的堆栈，例如：
+char HITaskStack [HI_STACK_SIZE];
+任务栈大小定义在"driverres.h"文件。所有任务栈的大小是DRIVER_TASK_STACK_DEFAULT_SIZE或DRIVER_TASK_STACK_DOUBLE_SIZE。
+#define DRIVER_TASK_STACK_DEFAULT_SIZE 0x400*3 // 1 KB
+#define DRIVER_TASK_STACK_DOUBLE_SIZE  (2 * DRIVER_TASK_STACK_DEFAULT_SIZE) // 2 KB
+#define HI_STACK_SIZE   (DRIVER_TASK_STACK_DEFAULT_SIZE)
+待做：查：这里任务栈大小是0x400*3=3k，和注释不符。
+
+7, 定义其它，待做，看：
+char DRIVERQueueSpace [NUM_OF_DRIVER_QUEUES][DRIVER_QUEUE_DEFAULT_SPACE_SIZE];
+NU_MEMORY_POOL ApplicationMemoryPool;
+NU_TASK DRIVERTasks [NUM_OF_DRIVER_TASKS];
+NU_QUEUE DRIVERQueues [NUM_OF_DRIVER_QUEUES];
+NU_SEMAPHORE DRIVERSemaphores [NUM_OF_DRIVER_SEMAPHORES];
+NU_EVENT_GROUP DRIVEREventGroups [NUM_OF_DRIVER_EVENT_GROUPS];//定义Event Group Control Block
+NU_HISR DRIVERHISR [NUM_OF_DRIVER_HISRS];//定义HISR control data structure
+//NU_TIMER DriverTimers;  //added by wx
+NU_TIMER DriverTimers[NUM_OF_DRIVER_TIMERS];  //added by wx
+
+8, 定义任务初始化列表
+const DRIVERTaskInit_t DRIVERTaskInitList[NUM_OF_DRIVER_TASKS] 
+DRIVERTaskInit_t位于driverres.h：
+/* Nucleus Plus task initialization data block */
+typedef struct
+{
+    NU_TASK *Task ;     /* Pointer to task name */
+    void *Stack; /* stack space */
+    DRIVER_TaskEntry_t TaskEntry ;  /* Address of Task entry */
+//    char *Name ;        /* Name of a task */
+    UNSIGNED StackSize ; /* stack size in bytes */
+    OPTION Priority ; /* priority */
+    OPTION AutoStart; /* start task */
+}DRIVERTaskInit_t ;
+例如，HI：
+    { /* index = 0x1  */ /* HI */
+        &DRIVERTasks [HI_TASK_ID],
+        HITaskStack,
+        HITaskEntry,
+        HI_STACK_SIZE,
+        HI_TASK_PRIO,
+        NU_START,
+	
+    },
+
+注：这里的DRIVER_TaskEntry_t是"typedef VOID (*DRIVER_TaskEntry_t)(UNSIGNED, VOID *);"(driverres.h)，与NU_Create_Task()函数定义的task_entry----(*task_entry)(UNSIGNED, VOID *)，相同。
+
+9, extern void NUHISR_CamSysIntEntry(void);待做，看。
+
+10, 定义HISR初始化列表
+const DRIVERHISRInit_t DRIVERHISRInitList[NUM_OF_DRIVER_HISRS]
+/* Nucleus Plus HISR initialization data block */
+typedef struct
+{
+    NU_HISR *HISR ;     /* Pointer to task name */
+    void *Stack; /* stack space */
+    DRIVER_HISREntry_t Entry ;  /* Address of HISR */
+    char *Name ;        /* Name of a task */
+} DRIVERHISRInit_t ;
+例如，按键按下：
+    { /* index = 0x00 */ /* keypad on */
+        &DRIVERHISR [KEYON_INT_HISR_ID],
+        DRIVERHISRStacks [KEYON_INT_HISR_ID],
+        NUHISR_KeyPadOnEntry,
+        DRIVERHISRNames [KEYON_INT_HISR_ID],
+    },
+DRIVERHISRInit_t位于driverres.h
+/* Nucleus Plus HISR initialization data block */
+typedef struct
+{
+    NU_HISR *HISR ;     /* Pointer to task name */
+    void *Stack; /* stack space */
+    DRIVER_HISREntry_t Entry ;  /* Address of HISR */
+    char *Name ;        /* Name of a task */
+} DRIVERHISRInit_t ;
+注：NUHISR_KeyPadOnEntry函数的分析见"16:39 2008-3-5"。
+
+11, 定义任务入口的Wrapper函数，类型为DRIVER_TaskEntry_t，例如HI task
+static void HITaskEntry (UNSIGNED argc, void *argv)
+{
+    argc = 0;
+    argv = NULL;
+
+    HI_TaskMain ();
+}
+
+12, 定义任务优先级，用于HD_GetTaskPriority函数。
+static const unsigned char HD_TaskPriority[HD_TASK_NUM_END]
+
+13, 定义"HD_GetTaskPriority()"函数。大于HD_TASK_NUM_END则返回优先级是250。
+待做：查，原因。根据Nucleus文档，优先级数字越小优先级越高，250是很低的优先级了（UINT8最大值是255。
+
+14, 定义"HD_GetTaskPrioByName()"函数。
+UINT8 HD_GetTaskPrioByName(char *taskname)
+大于HD_TASK_NUM_END则返回优先级是253。待做：查为什么和HD_GetTaskPriority函数在大于HD_TASK_NUM_END情况下返回值不同？看起来HD_GetTaskPriority函数是后加入的。为了改善效率？
+函数分析：
+由于任务名称最长8位，直接用taskname和HD_Tasks[i].name逐位比较，如果相同退出循环，否则继续。
+
+待做：
+1, 分析HD_GetTaskPriority和HD_GetTaskPrioByName的调用者。
+2, 分析任务和定时器具体是如何被初始化的。（完成，见"19:19 2008-3-4"）。
+3, 完善按键驱动文档。
+4, LISR如何调用HISR？（完成）见"15:02 2008-3-6"2
+
+19:19 2008-3-4
+VT3406学习，驱动，DRIVER_Application_Initialize()，待做，完成
+位于"...\nucleus\driverosnust.c"
+暂时只分析初始化任务和定时器部分：
+1, 利用NU_Create_Task函数建立任务。
+(10:30 2008-3-5)NU_Create_Task函数的原型如下，参见"PLUS_Reference.pdf P36"和"Nucleus.h"：
+STATUS NU_Create_Task(NU_TASK *task, CHAR *name, VOID (*task_entry)(UNSIGNED, VOID *), UNSIGNED argc, VOID *argv, VOID *stack_address, UNSIGNED stack_size, OPTION priority, UNSIGNED time_slice, OPTION preempt, OPTION auto_start)
+
+任务相关取值来自"driverres.c"，值得注意的是
+1), NU_Create_Task函数要求任务栈大小小于无符号长整数的取值范围()，这远远超出了32位CPU的地址空间。另外估计是同时考虑了系统的实际内存大小，DRIVER_Application_Initialize函数中调用NU_Create_Task时把任务栈的大小强制转为UINT16，就是限制任务栈最大是64k。（无符号16位整数的最大值是2^16-1=64k）。
+2,) 关闭了时间片，这些任务主要靠优先级进行调度。这和Linux中使用时间片和可抢占进行调度有所不同。设置任务是可抢占的，任务自动开始。比较MMI的应用程序的调度。
+
+2, 检查返回值。除了NU_SUCCESS=0外，其余STATUS都小于0。
+
+3,建立 定时器
+tstatus= NU_Create_Timer(&DriverTimers[i], GET_DRIVER_TIMER_NAME(i) , DRIVERTimerExpRoutine, DriverTimerExpIDs[i], 1, 0, NU_DISABLE_TIMER);
+函数原型：
+STATUS NU_Create_Timer(NU_TIMER *timer, CHAR *name, VOID (*expiration_routine)(UNSIGNED), UNSIGNED id, UNSIGNED initial_time, UNSIGNED reschedule_time, OPTION enable)
+1), expiration_routine，有个参数是UNSIGNED，不知如何起作用，需要查：
+DRIVER_Application_Initialize()函数内：
+void (*DRIVERTimerExpRoutine)(UNSIGNED); //adde by wx,2005_0707
+DRIVERTimerExpRoutine = NUHISR_DriverGetTimerExpRoutine(); 
+
+nucleus\driverisr.c
+/*=============================================================================
+Function Name: NUHISR_DriverGetTimerExpRoutine
+Description: Returns the entry of Nucleus Plus Timer expiration Routine.
+Input:
+Return: The address of the Nucleus Plus system timer expiration routine.
+
+Note:
+=============================================================================*/
+DRIVER_TimerExpRoutine_t NUHISR_DriverGetTimerExpRoutine (void)
+{
+    return &NUHISR_DriverTimerExpRoutineEntry ;
+}
+
+void NUHISR_DriverTimerExpRoutineEntry (UNSIGNED TimerID) 
+{
+     
+	switch (TimerID)
+	{
+                	case TS_TIMER_ID:
+			NU_Activate_HISR(&DRIVERHISR [TS_TIMER_HISR_ID]);  
+			 INT_Disable();
+			 gCurPenState=PEN_MOVE;
+			 INT_Enable();
+			break;
+
+		case MP3_TIMER_ID :
+			   NU_Activate_HISR(&DRIVERHISR [MP3_TIMER_HISR_ID]);    
+			 break;
+//......
+		default:
+			break ;
+	}
+
+
+}
+TimerID应该是"expiration_routine()"中的UNSIGNED参数。在NUHISR_DriverTimerExpRoutineEntry 函数之前都只是传递了函数地址，所以没有传递UNSIGNED参数。待做，确定这个想法。
+此外没有找到何时给DRIVERHISR赋值，查看Nucleus代码得知，是从调用TCC_Create_HISR函数时为对应DRIVERHISR[i]结构体赋值。参见"15:24 2008-3-7"
+2), 定时器名称从GET_DRIVER_TIMER_NAME得到，是宏定义：
+#define DRIVER_TIMER_NAMES      "MP3\0USB\0MP4\0TS \0ATR\0REV\0STP\0USP\0"
+/*                                 0    1     */
+#define GET_DRIVER_TIMER_NAME(TimerId) ((DRIVER_TIMER_NAMES)+((TimerId)*4))
+3, init time=1, reshedule time=0, 定时器禁止(NU_DISABLE_TIMER)。
+
+4, 用NU_Create_HISR函数建立HISR。
+tstatus = NU_Create_HISR(DRIVERHISRInitList [i].HISR, DRIVERHISRInitList [i].Name, DRIVERHISRInitList [i].Entry, 0, DRIVERHISRInitList [i].Stack, DRIVER_HISR_STACK_DEFAULT_SIZE);
+
+STATUS NU_Create_HISR(NU_HISR *hisr, CHAR *name, VOID (*hisr_entry)(VOID), OPTION priority, VOID *stack_pointer, UNSIGNED stack_size)
+这里设置优先级是0（最高优先级）。栈大小是DRIVER_HISR_STACK_DEFAULT_SIZE，由DRIVERHISRStacks确定，里面每个HISR栈大小都是DRIVER_HISR_STACK_DEFAULT_SIZE。NU_Create_HISR函数所需的其余变量都是DRIVERHISRInitList 定义的。
+
+19:32 2008-3-4
+今日总结：
+看LCD和GA还是没有条理。
+下午后来看任务相关内容，希望完全理解键盘驱动是如何工作的。明天先完成此任务。然后完成"17:49 2008-3-4"待做。GA部分后移。
+
+16:39 2008-3-5
+Nucleus学习，继续分析键盘驱动
+NUHISR_KeyPadOnEntry：
+Description: Entry of Nucleus Plus HISR for Keypad On Interrupt.
+    LISR of Keypad On Interrupt activates this HISR.
+    This function sets a bit to the event group on which HI suspends.
+
+void NUHISR_KeyPadOnEntry(void)
+{
+	SAVE_QB( 7 );
+    OS_DRIVER_SetEvent(PERIPH_EVENT_ID, PERIPH_KEYON_EVTBIT);
+}
+注：driver_inc\driversys.h
+#define PERIPH_EVENT_ID			0x00
+#define PERIPH_KEYON_EVTBIT		0x00000004
+PERIPH_EVENT_ID貌似是全部硬件驱动的事件，这里对事件分的很细。键盘事件分为按下和释放两个，UART分为DATA_OUT, DATA_INT, RSP, RX, AT和TXOK几个事件。PERIPH_KEYON_EVTBIT属于PERIPH_EVENT_ID。待做，理解全部event group的内容和分类依据。
+
+OS_DRIVER_SetEvent , nucleus\driverosif.c:
+------------------------------------------
+
+Description: Set bits on of a 32-bit event group.
+    The bits of 1 are the bits to set.  This function does not effect the bit already
+    being set.
+    This function is a wrapper of the system call.
+Input:
+    EvtGrpId: the ID of the event group.
+    EvtBit: the bits to set.
+=============================================================================*/
+void OS_DRIVER_SetEvent (UINT16 EvtGrpId, UINT32 EvtBit)
+{
+    STATUS s;
+    NU_EVENT_GROUP *e;
+
+    e = &DRIVEREventGroups [EvtGrpId];
+
+    s = NU_Set_Events (e, EvtBit, NU_OR);
+    if (s)
+    {
+        /* OS error */
+        OS_DRIVER_NUError (s, 0, __FILE__, __LINE__);
+    }
+}
+NU_Set_Events()函数，PLUS_Reference.pdf, P193：
+This service sets the specified event flags in the specified event group. Any task waiting
+on the event group whose event flag request is satisfied by this service is resumed.
+设置特定时间组的特定事件，设置结束后，等待此事件组此事件的任务会通过TCC_Resume_Task函数被释放。我理解应该是释放HI_Task了。现在如果能确认APIMISC_ObtainDSleepSemaphore()和APIMISC_ReleaseDSleepSemaphore()函数可以使任务进入suspend状态。就基本可以证明此想法了。明天继续!!!
+
+OS_DRIVER_NUError()函数，处理系统错误。同样是Nucleus系统函数的Wrapper函数。待做：分析此函数。
+
+17:23 2008-3-5
+待做
+1, 找Nucleus分析报告，完成。
+自：http://bbs.ee365.cn/index.php。
+待做：有空看看这个网站和http://www.weeqoo.com/网站。
+2, 查找这篇文章的英文版
+向嵌入式Linux移植实时设备驱动程序，作者：Bill Weinberg
+http://tech.ddvip.com/2007-03/117369834020977_7.html
+3, 扩展知识的学习，参考i.MX27
+freescale i.MX系列：http://www.freescale.com/webapp/sps/site/taxonomy.jsp?nodeId=0162468rH311432973ZrDR
+1), 学习arm9，arm926ej-s芯片。买arm soc体系结构。
+2), DDR2, DDr
+3), ms记忆棒
+4), ts流(Transport Stream)：
+自：http://www.52video.net/term_view282.html
+DVD节目中的MPEG2格式，是MPEG2-PS，全称是Program Stream，TS的全称则是Transport Stream。MPEG2-PS主要应用于存储的具有固定时长的节目，如DVD电影，而MPEG-TS则主要应用于实时传送的节目，比如实时广播的电视节目。这两种格式的主要区别是什么呢？你将DVD上的VOB文件的前面一截剪掉（或者干脆就是数据损坏），那么就会导致整个文件无法解码，而电视节目是你任何时候打开电视机都能解码（收看）的，所以，MPEG2-TS格式的特点就是要求从视频流的任一片段开始都是可以独立解码的。
+4, 保存网页，重要资料：
+http://www.gd-emb.org/detail/id-40965.html
+嵌入式环境中Nucleus到Linux的程序移植方案
+5, 去学校数据库看Nucleus论文。
+6, #MCE(BJ)-RD-Software-Kernel组可能是做Linux, wince移植的。
+7, 找Nucleus论坛或maillist。
+8, 下载i.MX31资料，看有没有2D图形加速。或找其它带有2D图形加速的芯片。
+
+19:47 2008-3-5
+今日总结：
+键盘分析又进了一步。快看到最终的曙光了。明天如果状态好就回到看GA的函数。否则看"17:49 2008-3-4"待做。
+
+11:09 2008-3-6
+今日计划，待做
+1, 彻底理解Nucleus 中断的使用方法。完全理解键盘驱动。
+2, 如果有时间，看GA。
+3, 阅读部分Nucleus分析报告。
+
+11:46 2008-3-6
+待做完成：继续分析EVC_Set_Events(NU_Set_Events)，到底释放的是哪个task？
+(13:54 2008-3-6)
+Nucleus学习，EVC_Set_Events((NU_Set_Events)函数分析
+没有考虑所有的错误检查
+1, 根据操作是与还是或，把event bit设置到相应的event_group->ev_current_events 。
+    if (operation & EV_AND)
+    
+        /* AND the specified events with the current events.  */
+        event_group -> ev_current_events =  
+                        event_group -> ev_current_events & events;
+    else
+    
+        /* OR the specified events with the current events.  */
+        event_group -> ev_current_events =  
+                        event_group -> ev_current_events | events;
+2, 如果这个event_group存在suspend的任务。进入循环，取出event_group -> ev_suspension_list的每一个suspend_ptr -> ev_suspend_link进行下面操作
+1), 找出ev_requested_events和ev_current_events的共同事件。
+            compare =  event_group -> ev_current_events & 
+                                        suspend_ptr -> ev_requested_events;
+    如果还设置操作是与模式。需要compare和ev_requested_events相等才能判定有事件请求可以被释放。
+2), 如果有事件可以释放，释放该任务。
+TCC_Resume_Task((NU_TASK *) suspend_ptr -> ev_suspended_task,
+                                                       NU_EVENT_SUSPEND);
+
+3), 循环结束
+3, 如果释放的事件中有preempt标志，通过TCT_Control_To_System函数把控制权 to the system 。
+
+因此，如果键盘事件被suspended，经过NU_Set_Events()函数会把这个事件释放。
+
+13:22 2008-3-6
+请教吴瑕
+1, GA主要是camera在用；
+2, 直接刷屏没有用DMA，是因为有可能与camera冲突；
+3, 3406基本频率一般是七十几兆，标称频率是一百多兆，产品实际没跑过这么快。一般为了降低功耗，二是因为protocol有可能有冲突。
+
+15:02 2008-3-6
+待做
+1, 查APIMISC_ReleaseDSleepSemaphore和Obtain函数作用。回到"16:39 2008-3-5"
+2, 查NUHISR_ActivateKeyPadOnHISR函数由谁调用。完成。
+
+15:04 2008-3-6
+VT3406学习，查NUHISR_ActivateKeyPadOnHISR函数由谁调用
+1, 分析driverisr.c：
+driverisr.c是实现driverisr.h文件定义的函数。分为两类Entry和HISR。
+前者调用OS_DRIVER_SetEvent函数释放任务。后者调用NU_Activate_HISR()激活对应HISR
+2, NUHISR_ActivateKeyPadOnHISR()函数定义，"driverhisr.c"：
+void NUHISR_ActivateKeyPadOnHISR(void)
+{
+   STATUS status;
+   status = NU_Activate_HISR(&DRIVERHISR [KEYON_INT_HISR_ID]);
+}
+3, 调用者，INT_IRQ_3406.s。待做，查INT_IRQ_3406.s，3360, 3363等三个文件由谁调用。
+ IMPORT LISRKeyCode    ; Keyon interrupt read support
+LISRKeyCodeAddr DCD     LISRKeyCode
+IRQ_KEYON   ;vector 30     
+    ; KEYON interrupt is level sensitive, can not be cleared by writing ISR reg
+
+    ;read and store key value
+    LDR     r1,  =KPD_KEY_ADDR
+    LDRH    r2,  [r1]      
+    LDR     r1,  LISRKeyCodeAddr ;
+    STRH    r2,  [r1] ;      
+
+    MOV     r4, lr
+    BL      TCT_Interrupt_Context_Save
+    BL      NUHISR_ActivateKeyPadOnHISR
+    B       IRQ_Shell
+
+1), KPD_KEY_ADDR, HDRegdef_vt3406.h
+#define KPD_KEY_ADDR             0xE0070002  // Keypad key register
+2), LDRH/STRH是传送半字。LDR/STR是传送一个字。0xE0070002是KPD_KEY寄存器，大小是半字。
+3), 待做，查TCT_Interrupt_Context_Save函数。
+应该是和体系结构有关，没查到在哪里。
+4), IRQ_Shell。整段都不是很理解。查作用。
+IRQ_Shell
+    MRS     r1,CPSR                         ; Pickup current CPSR
+    BIC     r1,r1,#MODE_MASK                ; Clear the mode bits
+    ORR     r1,r1,#(IRQ_MODE:OR:LOCKOUT)    ; Set the IRQ mode bits and Lockout interrupts
+    MSR     CPSR_cxsf,r1                    ; Lockout interrupts/change to IRQ mode
+
+    LDMIA   sp!,{r1}                        ; Get IRQ enable value off IRQ stack zt@1115@待做，查作用
+    
+    MRS     r1,CPSR                         ; Pickup current CPSR
+    BIC     r1,r1,#MODE_MASK                ; Clear the mode bits
+    ORR     r1,r1,#SUP_MODE                 ; Set the SVC mode bits
+    MSR     CPSR_cxsf,r1                    ; Change to SVC mode
+    B       TCT_Interrupt_Context_Restore  ; restore context manually
+
+@@@@@@@自 hwdef.s@@@@@@@@@@@@@@@@@@@@
+LOCKOUT         EQU     &C0                 ; Interrupt lockout value
+LOCK_MSK        EQU     &C0                 ; Interrupt lockout mask value
+MODE_MASK       EQU     &1F                 ; Processor Mode Mask
+SUP_MODE        EQU     &13                 ; Supervisor Mode (SVC)
+
+IRQ_MODE        EQU     &12                 ; Interrupt Mode (IRQ)
+FIQ_MODE        EQU     &11                 ; Fast Interrupt Mode (FIQ)
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+4, 从这里就是标准的中断处理阶段了。中断向量表：
+INT_IRQ_3406.s: 
+;**************************************************************
+; IRQ interrupt tables
+;**************************************************************
+; AREA IRQTABLE, DATA, READONLY
+IRQ_TABLE
+   DCD  IRQ_SW              ;vector 0
+   DCD  IRQ_WDT             ;vector 1
+;......
+   DCD  IRQ_GPIO            ;vector 29
+   DCD  IRQ_KEYON           ;vector 30
+   DCD  IRQ_UART0           ;vector 31
+
+5, 中断处理：
+@**************************************************************
+@ IRQ interrupt hander
+@**************************************************************
+
+INT_IRQ_Handler:
+
+    STMDB   sp!,{r0-r4}                 @ Save r0-r4 on temporary IRQ stack@待做：查irq堆栈位置。查各堆栈指针在何处调用
+    SUB     lr,lr,#4                    @ Adjust IRQ return address
+
+    STMDB   sp!,{r4}                    @ Put the enable register value on the IRQ stack@待做：查作用
+@--------------HOOK-------------
+@用UART1做串口输出
+    .if INTERNAL_RELEASE
+     @ldr r1,=0xe00d0000;
+     @ldr r2,='a'
+     @strh r2,[r1]		@UART寄存器是16位寄存器
+     .endif
+@-------------------------------
+    LDR     r2, =INT_ISR_ADDR	@#define INT_ISR_ADDR  0xE0000000 @HDRegdef_vt3406.c
+    LDR     r2, [r2]                    @ Get IRQ status register value
+    LDR     r3, =INT_IRQ_Priority       @ Get the Priority table address
+@INT_IRQ_3406.s
+@INT_IRQ_Priority           ;  highest priority
+@DCD  INT_WDT_VECTOR       ; when watch dog interrupt, system is crash, do not do others.
+@......
+@DCD  INT_KEYON_VECTOR     ;
+@IRQ_PRIORITY_END
+
+@按Priority table的顺序查看ISR寄存器中哪个中断有效。
+@待做，查：
+@1, 这里的优先级的固定优先级？
+@2, 没有考虑同时发生多个中断的情况？也可能是前面考虑了。
+IRQ_VECTOR_LOOP:
+    LDR     r0, [r3,#0]                 @ Load first vector to be checked from priority table
+    MOV     r1, #1                      @ Build mask
+    MOV     r1, r1, LSL r0              @ Use vector number to set mask to correct bit position
+    TST     r1, r2                      @ Test if pending bit is set
+    BNE     IRQ_VECTOR_FOUND            @ If bit is set, branch to found section...
+
+    ADD     r3, r3, #4                  @ Move to next word in the priority table
+    LDR     r0, =IRQ_PRIORITY_END       @ Load the end address for the priority table
+    CMP     r0, r3                      @ Make sure not at the end of the table (should not happen!)
+    BNE     IRQ_VECTOR_LOOP             @ Continue to loop if not at the end of the table
+
+@--------------HOOK-------------
+    .if INTERNAL_RELEASE
+     ldr r1,=0xe00d0000
+     ldr r2,='!'  
+     strh r2,[r1]@ 
+     .endif
+@-------------------------------
+    @ No bits in pending register set, restore registers and exit interrupt servicing
+@待做：查汇编返回（IRQ等）
+    ADD     sp,sp,#4                    @ Adjust sp above IRQ enable value
+    LDMIA   sp!,{r0-r4}                 @ Restore r0-r4
+    SUBS    pc,lr ,#0                   @ return to the point of the exception
+
+IRQ_VECTOR_FOUND:
+@--------------HOOK-------------
+    .if INTERNAL_RELEASE
+     ldr r1,=0xe00d0000;
+     ldr r2,=INT_BIT_TABLE_3406@;'A'
+@INT_BIT_TABLE_3406:
+@    .byte  'A'
+@    .byte  'B'
+@......
+@    .byte  '''
+     add r2,r2,r0@; r0: 0-31  
+     ldrb r2,[r2]	@INT_BIT_TABLE_3406每个字符都是一个字节。
+     strh r2,[r1]
+     .endif
+@-------------------------------
+@跳转到实际的中断处理
+    LDR     r3,=IRQ_TABLE               @ Get IRQ vector table address
+    MOV     r2, r0, LSL #2              @ Multiply vector by 4 to get offset into table
+    ADD     r3, r3, r2                  @ Adjust vector table address to correct offset
+    LDR     r2, [r3,#0]                 @ Load branch address from vector table
+ 
+    MOV     PC, r2                      @ Jump to correct branch location based on vector table
+
+
+6, 中断向量表：
+Sysmap.s: （Zac_sysmap.s与此类似）
+;************************************************************
+;                     Boot Code Area                        ; 
+;************************************************************
+ AREA map_code, CODE, READONLY, INTERWORK
+; we assume this point of code must be started from 0x30000, for v315 based projects.
+    IF  SINGLE_ENTRY
+    ;
+    ELSE
+ ENTRY       ;   ENTRY       ads tool look this like +FIRST.
+    ENDIF
+    LDR PC,= sysboot_Map                     ;0x00    For asm code compatible with sysboot.s in the first line for decryption.
+    LDR PC,= INT_Undef_Inst_Map      ;0x04
+    LDR PC,= INT_Software_Map         ;0x08
+    LDR PC,= INT_Prefetch_Abort_Map ;0x0c
+    LDR PC,= INT_Data_Abort_Map      ;0x10 
+    LDR PC,= INT_Reserved_Map         ;0x14
+    LDR pc,= INT_IRQ_Handler            ;0x18
+    LDR pc,= INT_FIQ_Handler            ;0x1c
+待做。需要查中断向量建立者，Sysmap.s和Zac_sysmap.s文件调用关系。并补充"14:25 2008-3-7"1(2)
+
+18:28 2008-3-6
+待做，
+1, 3-4待做
+1), 查DRIVER_Application_Initialize是否就是Application_Initialize？
+2), 查MMI的应用程序是如何调度的：时间片?优先级。回到"19:19 2008-3-4"1 2)。
+3), Nucleus参考文档中指出优先级设置要合理，不宜多，否则会影响系统效率。深入理解。
+2, 继续"15:02 2008-3-6"5
+
+14:25 2008-3-7
+Nucleus学习，中断总结，完成中断使用和触发过程简述，待做，等待"15:04 2008-3-6"6
+根据"15:04 2008-3-6","15:24 2008-3-7"等日志：
+1, 建立中断
+1), 建立中断向量表等中断公共部分。
+2), 建立特定中断
+首先定义建立中断所需资源（结构体，名字，入口点，优先级，堆栈的起始地址和大小），然后通过函数TCC_Create_HISR建立中断。
+2, 中断处理
+处理器进入中断模式后，查找哪个中断置位，首先进入汇编阶段处理（例如IRQ_KEYON），相当于Nucleus文档中写的LISR，对于键盘程序是读取键值。保存现场（TCT_Interrupt_Context_Save）后，调用NUHISR_ActivatexxxHISR（对键盘是NUHISR_ActivatKeyPadOnHISR），此函数通过NU_Activate_HISR激活HISR中断。
+
+15:24 2008-3-7
+Nucleus学习，阅读TCC_Create_HISR函数，待做，补充
+STATUS NU_Create_HISR(NU_HISR *hisr, CHAR *name, VOID (*hisr_entry)(VOID), OPTION priority, VOID *stack_pointer, UNSIGNED stack_size)
+1, 填充NU_HISR *hisr_ptr结构体，包括填充HISR入口函数：
+hisr -> tc_entry =                  hisr_entry;
+2, 在TCT_Protect保护下，该hisr节点isr -> tc_created通过CSC_Place_On_List插入链表。
+此链表是有头节点的双向链表。
+
+17:01 2008-3-7
+公司信息，广州信卫科技有限公司(Guangzhou Simware)
+http://www.simware.cn/index.htm
+有VIA-Telecom CDMA基带芯片和Skyworks GSM/GPRS套片的方案设计授权。看来是用Via产品的公司，可能是给他们做参考设计？或者e200用的是Skyworks公司的设计，现在想改为Via的芯片功能类似？
+网页上查到e100这个芯片，应该就是这个公司。
+google上还能搜到一个simware：广州西维尔计算机系统有限公司http://www.gzsimware.com/，看起来比前者规模大。
+Skyworks公司介绍：
+自：Skyworks公司网站
+http://www.zaobao.com/stock/pages9/taiwan210602.html
+Skyworks Solutions, Inc. 是全球最大的无线半导体公司,专注于无线半导体解决方案。 本公司为世界顶级无线手持设备和基础架构 OEM、ODM 以及合同厂商提供前端模块、RF 子系统和蜂窝系统。
+从射频到基频，Skyworks 已开发出业内最广泛的产品组合，包括主流交换机和功率放大器模块。 此外，我们还提供全球集成度最高的直接转换收发器，且已启动业内最完善的下一代手持设备蜂窝系统。
+凭借广泛的产品组合和无与伦比的系统专业技术，Skyworks 能够帮助您简化体系架构并加快开发周期。无论您是顶级无线系统制造商还是行业新贵，Skyworks 都是您的理想合作伙伴。
+
+17:34 2008-3-7
+待做，不知道下面邮件什么意思
+今天下午William W. Fan发的邮件。
+CdmaRes.rep and resources.rep are changed. Please undo hijack and update them.
+
+11:20 2008-3-10
+代码改进（Phoenix Li），flash，答复: 通用flash结构设计review
+自：David Li mail
+1．   从底层驱动上来讲，我们所用的Flash指令集只有2种。但是各种Flash之间存在某些性能改进上的驱动函数和操作机制上的差异；
+2．   不同的Flash主要是在组织结构上的差异，这些差异会导致很多关联性问题(如内存分布文件，bootloader)，乃至一些性能问题；
+3．   flash是MCP，包括SRAM，不同的MCP，flash，sram的时序是不一致的，某些功能，如page-mode是有差异的；
+4．   Flash对外部的接口，包括文件系统FSM，DSP, calibration，tracer，bootloader。从app和bootloader角度而言，需要两套函数。
+5．   由于使用上比较多而且分散，抽象出单一的底层的驱动，需要考虑的细节问题比较多。
+
+13:57 2008-3-10
+代码改进（Phoenix Li），flash
+假设系统只有nor flash。
+flash可以这样封装
+1, 同一SOC的flash操作函数在同一个文件（因为flash接口相同）。部分SOC的操作函数用宏定义为统一函数；
+2, 同一SOC不同flash只有时间参数不同，可以用结构体保存不同的结构参数。根据启动时读出的flash id判断使用哪个flash。
+
+14:39 2008-3-10
+本周总结(3.3-3.7)
+weekly status
+Finished last week:
+1, continue reading lcd, GA code and some relative code in camera. (1 day)
+2, continue reading keypad driver code, understand ISR routine; write a document(draft) for summary.  (3.5 days)
+3, read e200 and lcd datasheet in VGM project; google Guangzhou Simware. (0.5 day)
+Todo this week:
+1, compile V10 with Zac;
+2, read camera code or start VGM.
+
+15:19 2008-3-10
+driver spec for ClearCase
+element * CHECKEDOUT
+element * ...\v3360_zj_debug1\LATEST 
+element * ...\ref_driver_main\LATEST -mkbranch v3360_zj_debug1
+element * REF_DRIVER_BASE -mkbranch  ref_driver_main
+element * \main\LATEST -mkbranch ref_driver_main
+#element * \main\LATEST 
+ 
+load \Ref_vob\sw\Driver
+load \Ref_vob\sw\Dsp
+load \Ref_vob\sw\FileSystem
+load \Ref_vob\sw\Protocol
+load \Ref_vob\sw\Build
+load \Ref_vob\sw\GenesisMmi
+load \Ref_vob\Release
+load \Ref_vob\CoreTeamRelease
+load \Ref_vob\Vendor
+
+18:33 2008-3-10
+编译失败。首先需要checkout才行。
+编译dma时没有找到dc.h，可能得修改make.rule?待做
+
+10:16 2008-3-11
+编译V10，
+日志位置：CompileV10
+编译结果是Media\viamedia_zac.lib, Device\Project\driver_zac_debug.lib以及Device下子目录若干个*.o文件。
+使用DeviceDriver\testbuild文件：
+1, 
+cd Media
+make -f makefile.media clean
+make -f makefile.media
+成功；
+
+2, 
+cd ../Device/Project
+make -f makefile.driver.debug clean
+make -f makefile.driver.debug
+
+出错，修改\VT3406\DeviceDriver\Device\Project\make.rule：
+INC_DRIVER中加入
+		-I$(PRJ_ROOT)/DC
+结果见：make_makefile.driver.debug_log，从结果看，不是这个头文件。
+改为：
+		-I$(PRJ_ROOT)/../Media/DC
+结果见：make_makefile.driver.debug_log_1，缺少atrecv.h
+增加：
+		-I$(PRJ_ROOT)/../Device/AT
+成功，结果见"make_makefile.driver.debug_log_2_successful"。
+现在的INC_DRIVER：
+INC_DRIVER = -I$(MMI_ROOT)/MMIInc      \
+......
+		-I$(PRJ_ROOT)/HD/VIAIC/DCMP810	\
+		-I$(PRJ_ROOT)/../Media/DC	\
+		-I$(PRJ_ROOT)/../Device/AT
+
+3, 
+cd ../../../../public_vob/Release/V8
+rm ./test/*.*
+rm ./test/*
+build
+待做：
+a, 未找到build脚本。查，
+b, 没有测试。因此不知正确与否。
+
+11:18 2008-3-11
+待做，任务，液晶驱动
+1, 看VT3406（完成）和lcd datasheet的SPI接口部分（完成）；
+2, 看5408液晶和vgm 液晶具体学习液晶初始化过程；
+3, 写SPI驱动，用SPI接口控制液晶。提供与原来液晶同样的接口。SPI代码参考cc2420代码。
+已有spi驱动，见"espi\espi_drv.c"。待做：看与液晶需求的差异。
+4, 学习DMA Desciptor模式的使用方法。参考uart1 蓝牙的通信。
+
+13:45 2008-3-11
+VT3406学习，阅读epsi驱动和相关代码
+1, ESPI_init()
+禁止中断情况下使能SPI。把CGBR1[27]置一，这样SPIDI,SPISTB_N,SPICK,  SPIDO信号连接到DGPIO3-0。
+CGBR1：0xc0000004。用于设置DSP启动模式，选择IO功能。
+待做：查INT_Disable和INT_Enable函数。
+
+2, ESPI_MasterWrite()
+1), 现有调用者，tchscr\ts_drv.c：TsInit和Ts_GoSleepMode
+UINT8 TsInit(void)
+{
+	UINT16 Dummy =0 ;
+	ESPI_init();
+	ESPI_MasterWrite(AK4182_RESET_CMD, 0, &Dummy,1);
+		
+}
+2), 函数分析：
+a, 使能SPI时钟；
+b, 写ESPICR寄存器，使能SPI。
+c, 把cmd移到[24:31]位。
+d, 根据DataLength变量向SPI_DLR_ADDR写入数据长度；
+e, 向ESPICKGR写入SPICLK时钟=SCLK/128。(0x7f)
+f, 中断使能
+	  WRITE_REG32(SPI_IIE_ADDR, 0);
+g, 写入数据
+	  WRITE_REG32(SPI_TDR_ADDR,cmd);
+h, 开始传输
+	   WRITE_REG32(SPI_CR_ADDR, (SPI_CR_SPIEN_BIT|SPI_CR_SPITXEN_BIT));
+i, 延迟：	 /*Delay some Time, the  delay time should be adjust by  the  timing of the slave device**/
+	 OS_DRIVER_Sleep(1) ;
+j, 禁止SPI时钟
+	//OS_DRIVER_ReleaseSemaphore(ESPI_SEMAPHORE_ID); 
+	DisablePDClk(PD_CCKEN_SPI_BIT);
+3), 存在的问题和需要的改进：
+a, 未使用fifo；
+b, 没有DMA传送模式
+
+3, ESPI_MasterRead()与Write函数类似。但引入了触摸屏的特殊预编译指令，代码结构更不好。
+
+15:29 2008-3-11
+VT3406学习，ESPI模块学习，待做，补充完整
+1, 重要！IO复用。UART1和SPI复用IO，所以二者不能同时使用。复位后，UART1可以使用，SPI不能使用功能。
+2, 需要注意的寄存器：
+1), ESPICR(0xe00c0008)：ESPI Control Register Description
+[7]ESPIMWD：ESPI Mutiple Words enable；
+2), ESPIFCR(0xe00c001c)：ESPI FIFO Control Register Description
+[0]FIFOEN：1表示使能FIFO。
+
+15:35 2008-3-11
+VGM项目，ssd1815r1_5液晶学习，待做：补充
+ssd1815是单色132*43点阵液晶。
+1, SPI接口
+D7: SDA
+D6: SCK
+D/C: 1:Data, 0: Command
+片选：/CS1 且 CS2
+The serial interface consists of serial clock SCK (D6), serial data SDA (D7), D/C, CS1 and CS2. SDA is shifted into a 8-bit shift register on every rising edge of SCL in the order of D7, D6,... D0. D/C is sampled on every eighth clock to determine whether the data byte in the shift register is written to the Display Data RAM or command register at the same clock. 
+P23, TABLE 5. Serial Interface Timing Characteristics。
+2, P12，Reset Circuit部分有LCD复位后的芯片状态。
+
+18:13 2008-3-11
+今日总结：
+1, 编译通过V10。但没有测试。因此不知正确与否。"10:16 2008-3-11"
+2, 阅读ESPI代码。"13:45 2008-3-11"。
+明日计划：
+1, 解决今日1的待做。问吴瑕；
+2, 下午1点-3点讨论Phoenix Li的flash文档。
+3, 完成"11:18 2008-3-11"4
+远期，本周完成"11:18 2008-3-11"全部内容。最好找一个VT3406开发板。
+
+10:20 2008-3-12
+via同事信息，Linux
+VIA Telecom(BJ)-GSM Chips Multimedia-Linux
+邹秋波(Willy Zou) , 3583
+王震(Winson Wang), 2635
+杨长刚(Changgang Yang), 2368。VIA QT4和Android比较文档的作者。
+廖源隆(Yeric Liao), 没有分机
+周静(Cathy Zhou), VIA Telecom(BJ)-GSM Sales-Program Management-Program Management 1
+
+10:38 2008-3-12
+VT3406学习，DMA，UART1（蓝牙）
+1, Descriptor：
+//UART1 for BlueTooth
+volatile UINT32 UARTReadDescriptorBuf[25]={0x40010100, 0xe00d000e, 0x00080008, 0x00080008, 0x0, 0x85300000, 0x1008, 0xe00d0002, 0x0, 0, 0, 0, 0, 0, 0,  0x40020000, 0, 0x20400000, 0xffffffff, 0x0, 0xC0010000, 0xe00d0006, 0x00470047, 0xffffffff, 0};
+
+volatile UINT32 UARTWriteDescriptorBuf[25]={0x40010100, 0xe00d000e, 0x00000000, 0x00020002, 0x0, 0x88700000, 0x1008, 0x0, 0xe00d0000, 0, 0, 0, 0, 0, 0, 0};
+
+0xC0010000: EAMCR0, EBIFAsynchronous Memory Configuration Register. 数据宽度及各种时间常数。
+0xe00d0000: URTDR, UART Transmit Data Register.
+0xe00d0002: URRDR, Receive Data Register. [9:0], 帧错误，校验位，8位数据。
+0xe00d0006: URCR, UART Control Register. 收/发使能，数据长度，停止位长度，校验设置，RTS设置，loop back模式。
+0xe00d000e: URUSR, UART Status Register. 有无FIFO下的收/发状态；是否有校验错误，帧错误；CTS信号；接收FIFO超时。
+注：0xe005xxxx和0xe00dxxxx分别是UART0/1的寄存器。
+
+/*
+The data deSCRiptor composed of 3 words. The first word is used for control information such as Transfer count
+number, data transfer size, and destination/source address fixed. The second word is used for Source address and the
+third is for Destination address.
+*/
+typedef struct DATA_DESCRIPTOR
+{
+	UINT32 DCTLR;  		/*data control register*/
+	UINT32 DCFGR; 		/*data configuration register*/
+	UINT32 DSAR; 		/* data DMA source Register*/
+	UINT32 DDAR ;     		/*data DMA Destination  Register*/
+	UINT32 DLAR;		/*Data transfer length Address Register*/
+	UINT32 DBCFR;		/*Data block transfer configuration Register*/
+	UINT32 DBLWR;		/*Data block transfer Line width Register*/
+	UINT32 DNSAR ;  	 	/*next  data DMA source Register*/
+	UINT32 DNDAR ; 		/* next data DMA Destination  Register*/
+	UINT32 DDCR ; 		/*  data Descriptor Counter  Register*/
+	
+}DATA_DESCRIPTOR_t ;
+
+/*
+The command deSCRiptor also composed of 3 words. The first word is used to deSCRibe data transfer size. The second
+word and the third word are used for write address and write data respectively.
+*/
+typedef struct COMMAND_DESCRIPTOR
+{
+	UINT32 CCTLR; 		/*control register*/
+	UINT32 CWAR; 		/*write address*/
+	UINT32 CWDR; 		/*write data*/
+	UINT32 CWMR; 		/*write Maks data*/
+}COMMAND_DESCRIPTOR_t ;
+
+/*
+The status deSCRiptor composed of 4 words. The first word is used to deSCRibe data transfer size and the second word is
+used for read address and the third word and the fourth word are used for expected data and mask information
+respectively.
+*/
+typedef struct STATUS_DESCRIPTOR
+{
+	UINT32 SCTLR; 		/*Status control register*/
+	UINT32 SRAR;		/*StatusRead Register*/
+	UINT32 SEDR; 		/*Statusexpect data*/
+	UINT32 SMDR; 		/*StatusMask data*/
+	UINT32 SEAR; 		/*Status else branch Address Register*/
+}STATUS_DESCRIPTOR_t ;
+
+/*
+The end deSCRiptor composed of 1 word. This word is used to indicate the end point of deSCRiptor block, and it can be
+used to deSCRibe the repeat number. If DMAC meets the end deSCRiptor with repeat number, then it will repeat the whole
+deSCRiptor’s job again as many times as the repeat number
+*/
+typedef struct END_DESCRIPTOR
+{
+	UINT32 ECTLR; 		/*End control register*/
+}END_DESCRIPTOR_t ;
+
+
+2, UARTDescriptorRead()
+1), #define UARTDescriptorStart	0x31000380
+定义在dma.h。0x31000380位于片内SRAM（当EBIF启动或片内ROM启动时），地址范围：0x31000000--0x31000400。
+这样应该是为了提高效率。本部分记入VT3406体系结构的学习。待做：查片内ram的作用？
+经查找，主要是DMA操作：
+#define JCODEC_EOI_REG     0x31000000 // 
+#define GA_BLT_DONE_REG    0x31000004
+#define DMACH6INSTRUTIONADDR 0x31000020// Len:128
+#define DMA3LCDINSTRUCTIONADDR    0x310000a0//Len:96 
+#define GAINSTRUCTIONADDR0   0x31000100  //Changed to GA desrcriptor ping-pong buffer
+#define GAINSTRUCTIONADDR1   0x31000200  //to switch faster from V8 LEN:256x2
+
+#define UARTDescriptorStart	0x31000380
+#define ATUARTDesStart          0x31000300    //used in V10 project, total 100 bytes 
+现在的问题是，如果SPI也用DMA Descriptor方式，是否需要放到片内SRAM？是否有剩余的SRAM？待做：解决。
+FIXME: 如果用片内SRAM启动。0x3100xxxx地址位于0x30000100到0x40000000的Reserved区域。所以如果系统从片内SRAM启动，相关定义都会无效。待做：FIXME。思考解决这个 BUG。
+
+待做：继续分析！学习DMA descriptor使用方法。
+
+15:36 2008-3-12
+公司资源，实验设备
+1, Guisheng Pan。有登记表；
+1), 直流稳压电源 GJ000273, #8
+2), 手机调试接口板 #47。#47有问题，当日已更换为#60。
+2, Alex Liu. JTAG调试器B4129900721。
+
+16:11 2008-3-12
+(17:09 2008-3-13)
+VT3406学习，编译，下载
+1, 驱动测试程序用sdt编译，工程文件位于\DeviceDriver\Test，在v9_view_forDebug中是"Source_TEST_Thumb.APM"。
+2, 编译结果是*.axf需转为*.bin，例如把Source_TEST_Thumb.axf到0312\1610.bin目录：
+D:\work\v9_view_forDebug\moses_vob\DeviceDriver\Test\Debug>fromelf Source_TEST_Thumb.axf -bin 0312 1610.bin Translation to BIN format successful.
+3, 使用vgt lite下载：
+1), 有boot情况下。打开vgt，然后安装驱动程序BulkUsbDrv。
+选择文件->Flash download下载BOOT(0x00000000), APP(0x00040000),DSP(0x00020000) 三个文件。
+相关问题见"15:30 2008-3-13"
+2), 无boot情况下，需要先用SDT（软件）和JPC（硬件）下载ramboot。
+JPC无法使用。下周待做。
+
+16:25 2008-3-12
+SDT是否需要设置？现在选择的是arm7TDMI，初始状态是Thumb。不需要修改。
+
+16:46 2008-3-12
+Xia WuPC机位于网上邻居->整个网络->Microsoft Windows Network->Xiawu-xp。也可以在运行菜单中输入"\\Xiawu-xp"进入。
+
+10:21 2008-3-13
+团队年度目标，by Yuguang Liu
+提高，流程，质量
+
+10:24 2008-3-13
+待做，改进日志助手
+是编写c语言程序，还是用其它工具？尝试wiki。要考虑跨平台（Windows, Linux），手机可查询信息，远期可能需要建立网站。
+
+15:30 2008-3-13
+VT3406学习，烧写flash
+遇到很多问题：
+1, usb驱动装不上。发现是usb线有问题。换线
+2, usb驱动安装后提示设备无法启动。关闭vgt后和设备后，再顺序打开设备和vgt问题解决。
+3, 下载。前两次都是烧写BOOT成功后，在烧写APP 32780字节后出错。
+下面是超级终端的提示，前面一部分是烧写BOOT成功后的启动信息。后面是烧写flash过程中的提示。
+(乱码)uild date:Mar 12 200815:37:45V9-V1VGT mode 0.28  FLASH_START_ADDR=0x0--FLASH_
+CHIP_SIZE=0x1000000--BOOT_RAM_TEMP_START=0x20110000--FLASH_IS_SPANSION_S71GL128T
+--Enable LDO11--
+usb3.3vInit RTC--Check USB chip...Check USB chip... USB is VT3360 USB cable in--
+-Check USB chip...Check USB chip... USB is VT3360 USB cable in---ok. Now try con
+nect USB--  Disconnect usb   Connect usb  RSTRSTRST--(乱码)uild date:Mar 12 20081
+5:37:45V9-V1VGT mode 0.28  FLASH_START_ADDR=0x0--FLASH_CHIP_SIZE=0x1000000--BOOT
+_RAM_TEMP_START=0x20110000--FLASH_IS_SPANSION_S71GL128T--Enable LDO11--
+usb3.3vInit RTC--Check USB chip...Check USB chip... USB is VT3360 USB cable in--
+-Check USB chip...Check USB chip... USB is VT3360 USB cable in---ok. Now try con
+nect USB--  Disconnect usb   Connect usb  RSTRSTRST--€øbuild date:Mar 12 200815:
+37:45V9-V1VGT mode 0.28  FLASH_START_ADDR=0x0--FLASH_CHIP_SIZE=0x1000000--BOOT_R
+AM_TEMP_START=0x20110000--FLASH_IS_SPANSION_S71GL128T--Enable LDO11--
+usb3.3vInit RTC--Check USB chip...Check USB chip... USB is VT3360 USB cable in--
+-Check USB chip...Check USB chip... USB is VT3360 USB cable in---ok. Now try con
+nect USB--  Disconnect usb   Connect usb  RSTRSTRSTVGT command to loop test-Flas
+hDownBoot. Data for writing to boot-flash will be store to(Len=0x10000):0x201100
+00FlashDwld_Addr=0x0FlashDwld_Len=0x9380Check flash IDNeedn't decode--Rar0x0
+Rev:0x8000--Rar0x8000
+Try Boot erase...BootErase_start=0x0BootEraseNum=0x5-0x0bear=0x0-0x1-0x2-0x3-0x4
+Boot erase ok
+--WRITE bootloader...ok--Try download data to FLASH-App, FlashDwld_Addr=0x30000F
+lashDwld_End=0x144B5C-->e>e+DEV_VERIFY_ERRORWriteBufferProgram Fail stage 1 Writ
+e flash fail--
+4, 擦写flash。在进度条的最后提示MS无响应，失败。怀疑是ramboot（可以用JCP下载）损坏，但是在吴瑕那边可以正常下载，而且速度比我这边快很多。
+找同事解决，发现是在flash download中开启了print reponses和print cmds。另外如果main log windows的log信息很多也占有很多系统资源。
+这个问题似乎是问的Zhen Zhou（周镇），分机3291。
+
+16:47 2008-3-13
+待做：
+2, 尝试JPC；
+3, 尝试串口工具；
+4, 4月初完成液晶程序。
+
+18:06 2008-3-13
+今日总结：
+1, 最终完成v9代码的下载。
+
+18:13 2008-3-13
+周报
+weekly status (3-10--3-13)
+i am on leave at friday(3-14).
+in this week, i do the preparation work for lcd driver of vgm project: 
+1, compile V10 and V9 project. download and run V9 code successful. (2days).
+2, study DMA Descriptor. (0.5day).
+3, read ESPI. prepare for LCD driver. (0.5day).
+4, discuss about common flash interface for V10 by Phoneix Li. (0.5day).
+5, try SDT debugger. install JPC fail (to be continued). (0.5day).
+
+Todo next week:
+write lcd driver for vgm project.
+
+11:20 2008-3-17
+SDT调试，使用JPC
+重要步骤：需要先按电源按键！！！
+仍然有问题。
+更换为EPP1.9后，Target CpuId：出现过0x00063121，提示Unknown zac Core。后来关闭软件，再按开机键，成功启动一次，这时是JPC Plus的Configure中是No CPU，Target CpuId是0x00000000。
+Target CpuId是0xffffffff，也是"Unknown zac Core"
+
+14:44 2008-3-19
+面试，Advance Software
+面试者见"10:20 2008-3-12"同事信息。
+气氛比较轻松。主要是了解我的情况。
+待做：补充面试中的不足。
+0, 面试大约持续1个小时。
+1, USB的枚举过程不知道。当时就分析的不深入，再加上没有文档，到现在就没剩下什么。PCI也是同样情况。好在从LEON以后都有完整日志和文档了。
+2, SDIO有什么应用？Changgang Yang的意思似乎是有很多应用。
+3, 用的Marvell的芯片（PXA31x）。GSM和CDMA芯片是VIA的。
+
+16:12 2008-3-20
+公司项目，了解Olympia项目，Linux+GSM+CDMA+GPS，待做：查里面不了解的内容
+根目录：Ref_vob\Project\Olympia
+1, Management\BudgetOlympia Budget_005.xls
+------------------------------------------
+1), Littleton Form Factor Boards：5块。用途：2 Driver, 2 UI, 1 Navigation。单价：11250RMB？待做：查。
+2), qtopia4：3个lisense。每个58875RMB。
+3), 计划中比较Dopod P800, and Nokia N95. Edge phone三个手机。但是下一页写的是Dopod P800和Samsung SCH-I839。
+4), 输入法（含手写输入法）：eZI。为什么不用汉王的？
+
+2, MRD Features BOM
+-------------------
+作者是Cathy Zhou和Andy Monteiro
+1), Olympia_Phone Features_V007.xls
+A, Chinese input is developped by Changgang's team。从完全自己开发么？是否有必要。是否考虑加入类似梅花输入法的九宫格输入法。重要***
+B, DTMF用的什么芯片？
+C, PTT（Push To Talk）：暂时没定有没有。用在手机上怎么用？
+D, 字典没有确定：是否可以考虑用金山词霸？
+E, Navigation：不太了解。待查。
+2), Olympia_Phone Features_V009.xls
+A, Phone factors
+ARM11
+B, 界面：Qtopia4。可选：Open Moko, GTK。风格有两种：Qtopia和Android。
+C, 提到“三维感知更换UI”——感应到手机方向改变是可以自动切换屏幕。但是备注写的是不支持。
+待做：查。可能是用陀螺仪（MEM技术？）吧，加速度传感器似乎做不到这点。
+D, FM调频：可通过扬声器或耳机播放。
+E, 浏览器用的是Opera。和moto e6相同。
+F, 蓝牙功能	2.0+EDR 升级版本为 2.1+EDR
+
+3, Org\Olympia contact list_002.xls。包括VIA，Vender等全部联系方式。
+Changgang Yang是应用程序的leader，共10人；Willy Zou是Driver的leader，共5人。
+
+4, 项目总体规划（重要***）：Management\Presentations\Olympia Roadmap 07.ppt
+ Linux
+ CDMA
+ GSM
+ eMap 		--- Q2, 2008
+ GPS
+ Navigation	--- Q3, 2008
+ Mobile TV	--- Q1, 2009
+ WiFi
+ 3D Games	--- Q2, 2009
+这里的WIFi如果在国内是不让卖的。可能到时也会考虑其它无线协议。
+
+5, 文档阅读进展：
+Management目录除了Weekly Report，都浏览过。Weekly report到Olympia_Program_Review_1A_2007_12_07就没有了，不知何故。
+待做：看Management\Weekly report和与Management同级的其它目录。看verder目录中相关verder的资料，例如eZI。查次项目用的哪个数据库。
+
+10:39 2008-3-21
+Olympia项目，
+今天算是正式加入这个项目组了。
+可能会做BBU（Bring Up Unit），李松说BBU和bootloader是平行的，也就是说和我原来跑的2410 test代码一样。而不是优龙做的那个mon测试程序。可能后者适合提供给需要二次开发的用户验证板子硬件用。
+
+11:06 2008-3-21
+同事信息，非技术类
+1, Sara Yu(喻思斯)
+楼层管理师
+Ext, 3862
+2, Donny Song(宋冬旭)，(15:38 2008-4-14)现在outlook上已经找不到他了，离职了？"15:38 2008-4-14"结束
+eBusiness-Technical Service Engineering
+Ext. 3236
+负责：电子表单系统，员工入口网站，Single Sign on，CN Performance Appraisal。
+解决outlook分机有误
+3, (15:38 2008-4-14)解决outlook分机有误中：
+ivy wang（王巍）
+
+15:29 2008-3-21
+Olympia项目，任务分配，待做
+Dear Bamvor and phoenix,
+Your tasks are listed as following:
+Task                        Owner
+KeyPad                     Phoenix Li
+FM                           Bamvor Zhang
+GPS                         Bamvor Zhang / Phoenix Li
+
+10:56 2008-3-24
+本周总结：
+1, 了解Olympia项目和Olympia项目组同事交流。浏览Ref_vob\Project\Olympia\Management目录下的全部文档。对该项目的包括的内容，总体计划等有了了解。1.5天
+2, 分析GUI和Linux等操作系统的界面。主要是比较了QT和Minigui这两种比较著名的嵌入式GUI对图像设备和输入设备的抽象层次和结构。2.5天。
+3, 尝试用JPC调试，失败。0.5天。
+4, 请了半天假，去买灯。
+待做，下周计划：
+1, 看PXA3xx data sheet
+2, 看FM相关内容。
+3, 进一步了解Olympia项目
+Weekly status
+I was leave on 18 May morning.
+1, commucation with Olympia project members. read project documentation at Ref_vob\Project\Olympia\Management. 1.5 days
+2, Study the interface between GUI and OS. comparing the different between Qt and Minigui. 2.5 days.
+3, try to debug with JPC. failed. 0.5 day
+TODO next week:
+1, read PXA31x datasheet;
+2, read relative doc about FM module.
+3, deeply knowledge of Olympia project.
+
+14:01 2008-3-25
+Olympia项目，PXA3xx学习，PXA310
+porting guide.pdf
+1, Intel StrataFlash2 Cellular Memory(M18): NOR flash
+2, Intel Wireless MMX 2 technology coprocessor支持Intel Wireless MMX technology and Streaming SIMD Extension (SSE) and New Media Technology Extensions.
+关键字：SIMD: single-instruction multiple data
+3, 阅读3.0 Architectual Change Overview，需要仔细看。待做：看，重要。
+3.1.9 Replacement Policy，替换算法：当没有locked lines时使用pseudo LRU，有locked lines时使用true LRU。这里的两个LRU都没看懂。
+参考资料：http://dev.csdn.net/article/73/73207.shtm
+ LRU页面置换算法模拟  
+http://www.hongen.com/pc/diy/know/mantan/cache2.htm
+进一步深入CACHE（下）
+http://www.arm.com/support/faqip/8682.html
+Why are the read and write address buses defined with all four bits of ACACHE. Does a read transaction need to give the write allocate information and vice versa?
+http://cos360.blog.sohu.com/72550572.html
+C64x L1 L2 cache，涉及到read-allocate
+http://www.61ic.com/Article/DaVinci/DM64X/200702/11946.html
+TI-DM642学习报告（4）---C64x L2 cache，涉及到read-allocate
+
+14:01 2008-3-28
+Olympia项目，Olympia Linux开发包学习
+这里的Linux开发包指PlatformRel_Linux2.6.21_MHLV_A2.tar.gz，下同。
+0, 名词
+-------
+处理器：PXA300，PXA310之前的code-named分别是"monahans L"和"monahans LV"。
+开发板：littleton
+
+1, Linux代码SOC和板级移植相关，待做：分析：
+----------------------------------------
+Linux代码：pxalinux\package\preview-kit-7.2.2.2\linux-gpl\linux-gpl.tar.gz
+内核配置文件：arch\arm\configs\littletonlv_defconfig：
+	CONFIG_ARCH_PXA=y
+	CONFIG_MACH_LITTLETON=y
+	CONFIG_CPU_PXA310=y
+linux-2.6.21\arch\arm\mach-pxa：
+	littleton.c：板级硬件，包括按键，lcd，wifi，ssp等
+	pxa3xx.c
+	pxa3xx_gpio.c
+	pxa3xx_pm.c
+	pxa3xx_pmic.c
+	pxa3xx_suspend.s
+drivers\video\pxafb.c：液晶驱动，pxa系列都位于这个文件。注意到这里考虑了电源管理，如果定义了CONFIG_PM就增加pxafb_suspend和pxafb_resume这对函数。
+static struct platform_driver pxafb_driver = {
+	.probe		= pxafb_probe,
+#ifdef CONFIG_PM
+	.suspend	= pxafb_suspend,
+	.resume		= pxafb_resume,
+#endif
+	.driver		= {
+		.name	= "pxa2xx-fb",
+	},
+};
+
+10:36 2008-3-31
+本周总结：
+3.26请假一天
+1, 初步了解Olympia项目Linux开发包。0.5day
+2, 阅读PXA31x datasheet CPU和存储器管理部分内容。0.5day
+2, 深入分析Linux framebuffer显示设备驱动。3days
+下周计划：
+1, 继续阅读PXA 31x datasheet。
+2, 继续了解Olympia项目Linux开发包。
+3, 继续分析Linux framebuffer显示设备驱动。
+
+Weekly status
+I am leaved on Wednesday (3.26).
+1, study Linux development kit for Olympia project. 0.5day
+2, read PXA31x datasheet include CPU core and memory management. 0.5day.
+3, study Linux framebuffer display device driver. 3 days.
+TODO
+continue to do the above tasks.
+
+12:55 2008-3-31
+Olympia项目，Olympia Linux开发包学习，GStreamer
+pxalinux\package\gstreamer-7.0.6
+What is GStreamer?
+自：http://www.gstreamer.net/
+GStreamer是一个创建流媒体应用程序的框架
+GStreamer is a library that allows the construction of graphs of media-handling components, ranging from simple Ogg/Vorbis playback to complex audio (mixing) and video (non-linear editing) processing.
+Applications can take advantage of advances in codec and filter technology transparently. Developers can add new codecs and filters by writing a simple plugin with a clean, generic interface. 
+GStreamer is released under the LGPL. 
+
+12:55 2008-3-31
+Olympia项目，Olympia Linux开发包学习，总体目录结构, bash, shell, software skill
+create-project-marvell.sh：建立开发环境的脚本，需要root权限。
+package：全部开发包。具体内容可以参考下面script目录下脚本的注释。
+script：建立package目录下全部开发包的脚本，由"create-project-marvell.sh"脚本调用。
+toolchain：工具链，包括代码和编译结果。
+
+create-project-marvell.sh脚本中值得注意的地方：
+1, bash, ${1##/*}
+===========
+自：3.5.3 Shell Parameter Expansion
+http://www.gnu.org/software/bash/manual/bashref.html#Shell-Parameter-Expansion
+原文：
+if [ -z "${1##/*}" ]
+then
+	export TARGET_DIR="${1}"
+else
+	export TARGET_DIR=`pwd`"/${1}"
+fi
+export TARGET_SRC=${TARGET_DIR}/src
+含义：
+${parameter#word}
+${parameter##word}
+#或##表示删除$parameter中满足word这个pattern的最短和最长匹配内容后的结果。
+例如（cygwin环境）：
+$ cat test.sh
+#!/bin/bash
+test1="${1##/a*f}"
+echo $test1
+test2="${1#/a*f}"
+echo $test2
+
+$ ./test.sh /a1fa12f123
+123
+a12f123
+
+2, sed, /regexp/
+===========
+sed -i -e '/PXA_ROOT_DIR/s/\/vobs\/xscalelinux/'$tmpstr'/g' ${TARGET_SRC}/Rules.make
+"/regexp/"表示对满足regexp的行进行操作。
+上面命令的作用是把PXA_ROOT_DIR所在行的"\vobs\xsalelinux"替换为$tmpstr。
+另外，不明白为什么执行下面的操作，查CONFIG_CC_DEVELOPMENT的作用。待做。
+sed -i -e 's/CONFIG_CC_DEVELOPMENT=y/CONFIG_CC_DEVELOPMENT=n/g' ${TARGET_SRC}/Rules.make
+
+3, bash, function
+check_program() {
+for cmd in "$@"
+...
+}
+check_program sed tar gunzip gcc
+函数调用过程中$@表示函数的全部参数：$1, $2, ...。即sed tar gunzip gcc是check_program函数的四个参数。
+
+99:99 9999-9-99
+待做（置底）：
+看下列组的成员
+1, GSM Reference Design组成员；
+2, #VIA Telecom(BJ)-GSM Chips-GSM-Driver
+3, MCE(BJ)-RD-Software-kernel和#MCE(BJ)-RD-Audio/Video-Mixed-Signal Engineering-MS System；
+4, 周三下午开会讨论Phoenix li的“通用FLASH驱动设计文档”。（完成）
+5, 下班待做：把CompileV10复制到移动硬盘。
+6, 有空看MIK_MMI_20070808.pdf。学习MTK软件结构。
+

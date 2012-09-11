@@ -1,0 +1,1286 @@
+﻿13:20 2008-5-6
+Olympia项目，FM，信号不好问题的解决（by Phoenix Li，李哲）
+1, 复位延时从1ms改为10ms。信号改善；
+2, 更换天线。信号改善。
+待做：实验李哲代码后开始写驱动，参考driver\media\radio框架编写。
+willy已经试过FM驱动，但没有写成驱动程序的形式，而且不是video4linux的FM框架。
+
+13:23 2008-5-6
+待做
+1, 看全部未读邮件；
+2, 找willy
+1), 周日邮件。Now ETS is ready for testing HW through USB.Please contact HW relative guys to discuss relative HW basic functions testing. After that, please provide the code and interface you implemented to Eric S. Li.
+3, 请假；（完成）
+4, 华夏银行卡。（取消，尚未发放）
+5, (16:23 2008-5-6)
+整理usbnet使用方法；
+usbnet驱动位置：服务器 /opt/Marvell/pxalinux/installed/src/preview-kit/linux-2.6.21/Documentation/usb/linux.inf
+6, 周报中建议willy在服务器开nfs服务，便于大家调试；建议完成X-server的配置，现在xmanager不能用。这样不能用grep等工具，不太方便。
+7, 看willy给david发的音频驱动加入到内核的问题。
+8, 找sara领工资条。（完成）
+9, (18:14 2008-5-6)重看gdb-guide=++.txt，位置：“Documents\bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\软件设计”
+10, 整理下午会议内容。
+11, 看邮箱（完成）
+
+21:06 2008-5-6
+Olympia项目，FM，进展
+看Radiotrack.txt及代码。计划先写普通字符驱动。然后改为video4linux驱动。
+
+19:43 2008-5-7
+FM现有代码是"FM lab cod 2008-5-7 1942"。在李哲代码（MHL_AE_Littleton_Labcode Phoenix Li FM 2008-5-5）上修改了DAC, DSP的阈值。get freq功能没有加，等知道ETS怎么做后一起改。
+
+20:33 2008-5-7
+Olympia项目，FM，待做：
+1, I2C使用
+2, video4linux使用
+3, I2C字符设备驱动；
+4, video4linux驱动
+
+11:45 2008-5-8
+Olmypia项目，Linux，gpio使用
+David Wm8991中开3v电源的方法：
+#include<pxa-gpio.h>
+pxa3xx_mfp_set_afds(MFP_PIN_GPIO24, MFP_AF0, MFP_DS03X);
+pxa3xx_gpio_set_direction(MFP_PIN_GPIO24 ,GPIO_DIR_OUT);
+//pxa3xx_mfp_set_pull(gpio, MFP_PULL_NONE);
+pxa3xx_gpio_set_level(MFP_PIN_GPIO24, GPIO_LEVEL_HIGH);
+
+11:53 2008-5-8
+Olmypia项目，Linux，I2C驱动，FM
+0, #include <linux/i2c.h>
+1, probe
+建立i2c_client：
+//每个芯片的7位地址，用','分隔
+static unsigned short normal_i2c[] = {0x10, I2C_CLIENT_END };
+I2C_CLIENT_INSMOD
+
+2, i2c_driver结构体：
+static struct i2c_driver RDA5800_driver = {
+	.driver = {
+		.name	= "RDA5800",
+	},
+	.attach_adapter	= RDA5800_attach_adapter,
+	.detach_client	= RDA5800_detach_client,
+//TODO: implement these functions. for mute while shutdown, power management
+//	.shutdown	= RDA5800_shutdown,
+//	.suspend	= RDA5800_suspend,
+//	.resume		= RDA5800_resume,
+}
+
+static int RDA5800_attach_adapter(struct i2c_adapter *adapter)
+{
+	return i2c_probe(adapter, &addr_data, RDA5800_probe);
+}
+
+static int RDA5800_detach_client(struct i2c_client *client)
+{
+	int err;
+
+	err = i2c_detach_client(client);
+	if (err)
+		return err;
+
+	kfree(i2c_get_clientdata(client));	//kfree can handle null pointer error
+
+	return 0;
+}
+
+
+static int RDA5800_probe(struct i2c_adapter *adapter, int address, int kind)
+{
+	struct i2c_client *new_client;
+//	struct RDA5800_data *data;
+	//check whether there is Plain i2c-level commands or not
+	if (!i2c_check_functionality(adapter, I2C_FUNC_I2C) ) {
+		//TODO. debug output.
+		goto exit;
+	}
+	//allocate driver private data. not need at this time.
+	//check power and power on
+
+//	new_client = &data->client;
+//	memset(data->data, 0xff, EEPROM_SIZE);
+//	i2c_set_clientdata(new_client, data);
+	new_client->addr = address;
+	new_client->adapter = adapter;
+	new_client->driver = &RDA5800_driver;
+	new_client->flags = 0;
+
+	/* Fill in the remaining client fields */
+	strlcpy(new_client->name, "RDA5800", I2C_NAME_SIZE);
+
+	//write initial register, and read ID. 
+	//register this device to I2C layer if success. 
+	//I2C read/write function see "2"
+
+	/* Tell the I2C layer a new client has arrived */
+	if ((err = i2c_attach_client(new_client)))
+		goto exit_kfree;
+
+
+	return 0;
+
+exit_detach:
+	i2c_detach_client(new_client);
+exit_kfree:
+//	kfree(data);
+exit:
+	return err;
+
+}
+
+注：I2C_FUNC_I2C表示实现了I2C协议，定义于"include\linux\i2c.h"。I2C文档"functionality"有这些定义的解释：
+  I2C_FUNC_I2C                    Plain i2c-level commands (Pure SMBus
+                                  adapters typically can not do these)
+
+
+3, FM读写需要连续读写，所以使用i2c_master_send和i2c_master_recv函数，SMBUS函数不适合，文档中提到"(for read), The block buffers need not be longer than 32 bytes"，待做，确定。另外，I2C文档"writing-clients"建议尽量用SMBUS。
+二者原型如下：
+#include<i2c.h>
+int i2c_master_send(struct i2c_client *client,const char *buf ,int count)
+int i2c_master_recv(struct i2c_client *client, char *buf ,int count)
+
+4, 测试用的模块初始化和退出函数
+static int __init RDA5800_init(void)
+{
+	return i2c_add_driver(&RDA5800_driver);
+}
+
+static void __exit RDA5800_exit(void)
+{
+	i2c_del_driver(&RDA5800_driver);
+}
+
+module_init(RDA5800_init);
+module_exit(RDA5800_exit);
+
+MODULE_AUTHOR("Bamvor Zhang <bamvorzhang@viatech.com.cn>");
+MODULE_DESCRIPTION("FM tuner RDA5800 driver");
+MODULE_LICENSE("GPL");
+
+12:40 2008-5-8
+待做：
+1, 完成Linux I2C下读ID。驱动加在i2c chip目录下。完成全部功能。
+eeprom中读通过读sysfs完成。RDA5800中的控制操作如何完成？可能需要单独使用字符设备的fops完成。参李哲gpio代码。
+1), rda5800.c
+2), Kconfig, Makefile
+2, 整理这两天工作内容和工作时间。
+3, 疑问：
+1), 是否应该使用gpio.h操作gpio？
+
+17:56 2008-5-8
+待做：下载试验RDA5800模块。读出ID即可。
+
+19:50 2008-5-8
+Olympia项目，FM
+log_rda5800_1948_dmesg.txt说明执行RDA5800: RDA5800_probe() 159: writing initial 43 register.后"(i2c_master_send+0x0/0x54) "出错，可能是client没初始化？
+改为先attach后，出现：
+[<c02b9354>] (mutex_lock+0x0/0x28) from [<c014bef8>] (i2c_attach_client+0x34/0x190)
+困惑，明天用8991的方法试试。待做。
+
+10:56 2008-5-9
+周报（4.28-5.4）
+===============
+0，4.28-5.4，5.1-5.3放假，工作日三天，24小时。
+1，13:45 2008-4-28
+工作时间>2小时：和David一起编译wm8991音频驱动。
+2，17:24 2008-4-30
+工作时间>2小时：音频驱动的proc和sysfs文件系统。
+3，14:48 2008-4-28，19:10 2008-4-30
+FM lab code 读出ID。工作时间：5，7，4，2=18小时
+
+Key Activities of the week:
+1, compile audio driver and study audio driver virtualy filesystem(proc and sysfs) with david. 6
+2, Write FM lab code and Read ID from FM chip. 18
+Major Progress:
+Read ID from FM chip
+Issues:
+NULL
+
+周报（5.5-5.9）
+===============
+5.5, 5.6病假，5.9例会。工作时间三天，24小时。
+1，了解李哲lab code，调整部分FM lab code。3小时
+2, 学习Linux I2C chip驱动编写方法。4小时
+3, 编写FM驱动，阶段一：I2C chip驱动，调试中。17小时。
+Key Activities of the week:
+1, read Phoenix Li FM lab code, modify some codes. 3
+2, study how to write FM I2C chip driver. 4
+3, write FM I2C chip driver, debugging. 17
+Major Progress:
+NULL
+Issues:
+NULL
+
+11:33 2008-5-9
+待做，整理：
+一，4.28开始，所有待做：
+1, "11:18 2008-4-28"，阅读linux makefile 学习，并理解Linux模块编译机制。改原来log中对应内容；
+2, "11:21 2008-4-28"，杂；
+3，"10:50 2008-4-30"，如果编译为多个模块；
+4，"17:10 2008-4-30"，整理RDA5800调试思路。
+5, "13:23 2008-5-6"，杂
+6, "20:33 2008-5-7", FM
+二，4.1-4.27，全部待做：
+1, "14:21 2008-4-1"，Linux驱动学习相关文章；
+2, "13:26 2008-4-2"，分析arm linux启动流程；
+3, "11:49 2008-4-3"，读内核部分代码；
+4, "17:06 2008-4-8"，Linux顶层Makefile；
+5, "17:46 2008-4-8"，Linux I2C驱动分析；
+6, "19:46 2008-4-8"和"18:27 2008-4-9"：整理wm8991加入内核和编译过程；
+7, "12:39 2008-4-9"，保存网页；
+8, "15:43 2008-4-10"，音频驱动分析；
+9, "16:17 2008-4-21"，XDB如何调试Linux内核（另见20:44 2008-4-21），理解memory配置，学习启动脚本。分析batch file；
+10, "17:19 2008-4-21"，*.xsf细节理解；
+11, "20:37 2008-4-21"，试验SDT和XDB debugger一同使用；
+12, "10:40 2008-4-23"，3, 查ioremap作用；
+13, "12:35 2008-4-25"，willy回信；
+14, "15:27 2008-4-25"，Linux下开发板与PC机通信方法（待做：记入Weekly Report）；
+15, "15:33 2008-4-25"，XDB擦写flash方法。
+
+11:26 2008-5-12
+待做完成：
+1, 日志；（完成）
+2, 邮件；（完成）
+3, 补请周五上午假；（完成）
+4, 周报；（完成）
+
+12:36 2008-5-12
+Olmypia项目，FM，I2C驱动
+0, 需要找一个可以编译的I2C模块与RDA5800对比。
+1, 加入id，
+.id				= I2C_DRIVERID_DS1672,
+这是个RTC的驱动；
+2, 其余与WM8991相同：
+static unsigned short normal_i2c[] = {0x10, I2C_CLIENT_END };
+static unsigned short ignore[] = { I2C_CLIENT_END };
+static struct i2c_client_address_data addr_data = {
+	.normal_i2c	= normal_i2c,
+	.probe		= ignore,
+	.ignore		= ignore,
+};
+//I2C_CLIENT_INSMOD;
+3, (13:29 2008-5-12)
+有个很弱智的问题，i2c_client没有分配空间，所以才有下面的提示：
+  CC [M]  drivers/i2c/chips/rda5800.o
+drivers/i2c/chips/rda5800.c: In function 'RDA5800_probe':
+drivers/i2c/chips/rda5800.c:146: warning: 'new_client' is used uninitialized in this function
+
+15:17 2008-5-12
+示波器使用，LeCroy 434
+不显示余晖：菜单：显示->余晖设置，
+
+15:42 2008-5-12
+Olympia项目，文件系统，启动脚本
+为了便于使用在"/etc/init.d/rc.local"最后加入：
+#bamvor.add.2008-5-12
+echo 8 > /proc/sys/kernel/printk
+#bamvor.add.2008-5-12.end
+"mount -t proc none /proc"位于"/etc/init.d/rcS"
+"mount -t sysfs none /sys"位于"/etc/init.d/rc.local"
+另外rcS中把ramfs挂到了tmp目录。
+但是目前Linux没有运行rcS，所以启动后需要手工启动之。
+
+18:09 2008-5-12
+Olympia项目，FM，I2C
+err = i2c_smbus_write_word_data(new_client, 0xd0, 0x81);
+RDA5800: RDA5800_probe() 192: write word data test.
+RDA5800: RDA5800_probe() 194: i2c write return value is 0.
+似乎是正确的。难道是连续写间隔太短造成失败？
+这部分的相关日志是"log_rda5800_200805121649"	
+
+
+11:31 2008-5-13
+Olympia项目，FM，I2C
+可能昨天理解有误，I2C程序都是<0才算出错。
+SMBUS一般都是检测是否<0；
+i2c_master_xxx有的检测是否<0，有的检测是否等于length。
+
+11:52 2008-5-13
+Olympia项目，FM，I2C
+读ID正确，遇到问题如下：
+1, i2c_client没有分配空间，所以调用任何I2C函数都会出现无效指针的错误；
+2, I2C代码检测是否<0即可，可能不同体系结构处理不同，有的i2c_master_xxx的确是检测的是否是length，但pxa的i2c不是。返回0表示成功。开始检测是否返回length，所以看起来都没有成功；
+3. 开电源；
+4, msleep是毫秒睡眠，开始以为是us睡眠，造成看起来是写43个寄存器时间很长，判断方向就错了。
+5, pxa的i2c实现中（drivers\i2c\busses\i2c-pxa.c），
+连续写等待最长是50毫秒：i2c_pxa_do_write->i2c_pxa_polling_txempty(50000)
+连续读等待最长是12毫秒：i2c_pxa_do_read->i2c_pxa_polling_rxfull(12000)
+注：地址是7位地址，不算读写位。所以FM RDA5800地址是0x10，不是0x20。
+
+13:52 2008-5-13
+Olympia项目，FM，学习如何使用V4L2驱动
+V4L2: Video for Linux two
+阅读Video4Linux2 part x系列文章，自"http://lwn.net/Articles/203924/"
+0, 参考资料
+1), The V4L2 API Specification. This document covers the API from the user-space point of view.
+2), The "vivi" driver found in the kernel source as drivers/media/video/vivi.c. It is a virtual driver, in that it generates test patterns and does not actually interface to any hardware. As such, it serves as a relatively clear illustration of how V4L2 drivers should be written. 
+1, 头文件
+1), #include <linux/videodev2.h>
+其中可能与我有关的：
+(1), enum v4l2_tuner_type："V4L2_TUNER_RADIO	     = 1,"
+(2), I O C T L   C O D E S
+VIDIOC_G_FREQUENCY，VIDIOC_S_FREQUENCY等。
+2), include\media\v4l2-dev.h
+这个文件从videodev2.h分离出来，是v4l2通用函数(v4l2-common.o)的头文件，例如定义了"video_device"结构体，video_register_device，video_unregister_device。
+该文件由"media\v4l2-common.h"包含，驱动程序一般包含"media\v4l2-common.h"即可。
+"video_device"结构体介绍：
+Finally, a useful field to know from the beginning is debug. Setting it to either (or both - it's a bitmask) of V4L2_DEBUG_IOCTL and V4L2_DEBUG_IOCTL_ARG will yield a fair amount of debugging output which can help a befuddled programmer figure out why a driver and an application are failing to understand each other. 
+
+2, V4L2要求支持多次打开，但是现有FM驱动无此必要，在驱动中考虑多次打开的情况，并给用户提示。
+V4L2要求open操作时不改变，现有硬件配置。V4L2 driver should endeavor to keep existing settings until an application explicitly resets them. 
+
+3, Video4Linux2 part 7: Controls说明如何修改硬件参数。
+预定义的Control包括V4L2_CID_AUDIO_VOLUME，V4L2_CID_AUDIO_MUTE。待做：DSP增益如何控制。V4L2_CID_GAIN？
+
+15:11 2008-5-13
+Olympia项目，FM，学习如何使用V4L2驱动，阅读vivi.c代码
+v4l2驱动的example code是driver/media/video/vivi.c
+1, 头文件
+代码版本：
+#define VIVI_MAJOR_VERSION 0
+#define VIVI_MINOR_VERSION 4
+#define VIVI_RELEASE 0
+#define VIVI_VERSION KERNEL_VERSION(VIVI_MAJOR_VERSION, VIVI_MINOR_VERSION, VIVI_RELEASE)
+KERNEL_VERSION宏定义于"include\linux\version"：
+#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))
+由主版本号，次版本号，和release版本号组成。与Linux内核版本相同，同一文件中定义了内核版本：
+#define LINUX_VERSION_CODE 132629
+132629转为十六进制是0x020615，即2.6.21版本。
+2, 杂。待做：分析。
+/* Wake up at about 30 fps */
+#define WAKE_NUMERATOR 30
+#define WAKE_DENOMINATOR 1001
+#define BUFFER_TIMEOUT     msecs_to_jiffies(500)  /* 0.5 seconds */
+
+/* These timers are for 1 fps - used only for testing */
+//#define WAKE_DENOMINATOR 30 /* hack for testing purposes */
+//#define BUFFER_TIMEOUT     msecs_to_jiffies(5000)  /* 5 seconds */
+
+#include "font.h"
+
+#define VIVI_MAJOR_VERSION 0
+#define VIVI_MINOR_VERSION 4
+#define VIVI_RELEASE 0
+#define VIVI_VERSION KERNEL_VERSION(VIVI_MAJOR_VERSION, VIVI_MINOR_VERSION, VIVI_RELEASE)
+
+/* Declare static vars that will be used as parameters */
+static unsigned int vid_limit = 16;	/* Video memory limit, in Mb */
+static struct video_device vivi;	/* Video device */
+static int video_nr = -1;		/* /dev/videoN, -1 for autodetect */
+
+3, Controls
+static struct v4l2_queryctrl vivi_qctrl[] = {	
+	{
+		.id            = V4L2_CID_AUDIO_VOLUME,
+		.name          = "Volume",
+		.minimum       = 0,
+		.maximum       = 65535,
+		.step          = 65535/100,
+		.default_value = 65535,
+		.flags         = 0,
+		.type          = V4L2_CTRL_TYPE_INTEGER,
+	},
+//...
+};
+static int qctl_regs[ARRAY_SIZE(vivi_qctrl)];//待做：查作用。
+
+4, 调试：
+#define dprintk(level,fmt, arg...)					\
+	do {								\
+		if (vivi.debug >= (level))				\
+			printk(KERN_DEBUG "vivi: " fmt , ## arg);	\
+	} while (0)
+
+5, "15:59 2008-5-13"跳过中间的部分，看vivi_open
+1), 从inode得到次设备号：
+static int vivi_open(struct inode *inode, struct file *file)
+	int minor = iminor(inode);
+2), 利用list_for_each和list_entry得到vivi_devlist中每一个vivi_dev，根据次设备号判断哪个是当前打开的设备。如果未找到对应设备返回"-ENODEV"。
+相关代码：
+	list_for_each(list,&vivi_devlist) {
+		h = list_entry(list, struct vivi_dev, vivi_devlist);
+		if (h->vfd.minor == minor) {
+			dev  = h;
+			type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		}
+	}
+	if (NULL == dev)
+		return -ENODEV;
+3), 用户数量加1，所有代码都考虑了多个用户使用的情况。FM驱动暂时不考虑多次打开等操作；当检测到多次打开时进行提示，并返回错误代码："设备忙"。
+4), 分配vivi_fh空间，并为其赋值。包括type: V4L2_BUF_TYPE_VIDEO_CAPTURE；dev: vivi_dev。
+5), 所有Controls都设为默认值。音频需要设为静音。
+6), vivi.c使用的ioctl
+.ioctl          = video_ioctl2, /* V4L2 ioctl handler */
+7), 疑问：自动搜台在哪里实现？待做：查。scanning freq？
+8), vivi.c暂时阅读至此。待做：继续分析。
+
+6, (14:39 2011-1-26)vimciro
+Linux2.6.25.3时, 在顶层Makefile定义kernel版本:
+VERSION = 2
+PATCHLEVEL = 6
+SUBLEVEL = 35
+EXTRAVERSION = .3
+后面会定义LINUX_VERSION_CODE和KERNEL_VERSION两个宏. 
+define filechk_version.h
+	(echo \#define LINUX_VERSION_CODE $(shell                             \
+	expr $(VERSION) \* 65536 + $(PATCHLEVEL) \* 256 + $(SUBLEVEL));     \
+	echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))';)
+endef
+
+没找到filechk_version.h, 发现这两个宏都定义在include/linux/version.h这个文件(也只有这两个宏). 
+\todo define是什么作用? filechk字头做什么用的? 
+
+15:21 2008-5-13
+Olympia项目，FM，学习如何使用V4L2驱动，阅读V4L2 spec
+1, 设备文件：/dev/radiox，x=0-63，主设备号81，次设备号64-127。
+Video for Linux Two API Specification: Revision 0.24 
+Chapter 4. Interfaces
+Fr: http://www.linuxtv.org/downloads/video4linux/API/V4L2_API/spec/x7578.htm
+--------------------------------------------------------------------------------
+4.10. Radio Interface
+This interface is intended for AM and FM (analog) radio receivers.
+Conventionally V4L2 radio devices are accessed through character device special files named /dev/radio and /dev/radio0 to /dev/radio63 with major number 81 and minor numbers 64 to 127.
+4.10.1. Querying Capabilities
+Devices supporting the radio interface set the V4L2_CAP_RADIO and V4L2_CAP_TUNER flag in the capabilities field of struct v4l2_capability returned by the VIDIOC_QUERYCAP ioctl. Other combinations of capability flags are reserved for future extensions.
+4.10.2. Supplemental Functions
+Radio devices can support controls, and must support the tuner ioctls.
+They do not support the video input or output, audio input or output, video standard, cropping and scaling, compression and streaming parameter, or overlay ioctls. All other ioctls and I/O methods are reserved for future extensions.
+4.10.3. Programming
+Radio devices may have a couple audio controls (as discussed in Section 1.8) such as a volume control, possibly custom controls. Further all radio devices have one tuner (these are discussed in Section 1.6) with index number zero to select the radio frequency and to determine if a monaural or FM stereo program is received. Drivers switch automatically between AM and FM depending on the selected frequency. The VIDIOC_G_TUNER ioctl reports the supported frequency range.
+
+16:39 2008-5-13
+Olympia项目，FM，学习如何使用V4L2驱动，分析radio-sf16fmr2.c
+1, 注意fmr2_getsigstr函数
+2, 该文件中使用fmr2_do_ioctl完成ioctl，这和V4L2要求不符：
+	.ioctl          = fmr2_ioctl,
+static int fmr2_ioctl(struct inode *inode, struct file *file,
+		      unsigned int cmd, unsigned long arg)
+{
+	return video_usercopy(inode, file, cmd, arg, fmr2_do_ioctl);
+}
+fmr2_do_ioctl函数用switch-case完成各个ioctl功能。
+video_usercopy函数已经指明是遗弃的函数，可能将来就不会支持。
+
+16:59 2008-5-13
+基本完成V4L2了解；
+自动搜台似乎可以用 VIDIOC_S_TUNER 实现？
+
+19:29 2008-5-13
+Olympia项目，FM，待做：
+1, 5-14下午5点前写完V4L2驱动的get/set 频率，mute，然后应用程序测试。正确后加入除了自动搜台外的全部功能。
+2, 编译并下载最新内核到板子，如果没有音频驱动，找david要。了解如何使用音频驱动使FM音频接到喇叭。
+3, 解决自动搜台问题。
+
+14:40 2008-5-14
+Olympia项目，willy邮件，ClearCase中驱动位置
+Linux Kernel source code with drivers have been uploaded to  /Ref_vob/Project/Olympia/Engineering/SW/Driver/src/,
+
+14:42 2008-5-14
+Olympia项目，项目软件资料，待做：看
+位置：\Ref_vob\Project\Olympia\Engineering\SW
+1, QT，
+\Ref_vob\Project\Olympia\Engineering\SW\Application
+重点看doc\presentations目录文档。
+2, 驱动
+看其中文档：\Project\Olympia\Engineering\SW\Driver\Doc。打印。
+
+15:25 2008-5-14
+Olympia项目，FM
+把rda5800驱动分为：I2C和V4L2 radio两部分：
+1, 学习micco.*的方式。
+1), drivers\i2c\chips\micco.c实现了micco I2C接口部分，抽象出micco统一操作，例如pxa3xx_pmic_read等。
+2). include\asm\arch\pxa3xx_pmic.h中声明了pxa3xx_pmic_read等接口：
+extern int pxa3xx_pmic_read(u8 reg, u8 *pval);
+3), 需要调用pxa3xx_pmic_read函数的文件包含该文件：
+#include <asm/arch/pxa3xx_pmic.h>
+2, 步骤
+1), FM lab code的功能实现（搜台，音量调整）等是否都基于统一的读/写函数？
+2), 若1)成立实现抽象出i2c_driver（attach，dettach，关闭，低功耗），读，写的RDA5800 I2C驱动。并编写应用程序测试；完成RDA5800抽象层。
+3), 写V4L2 radio驱动。按"19:29 2008-5-13"计划做。此步骤整体推迟到5.15上午。预计5.15完成"19:29 2008-5-13"1,2。
+4), 改进向宾FM代码，尽量用rda5800参考代码。
+
+16:41 2008-5-14
+Olympia项目，FM，RDA5800抽象层
+1, RDA5800读写寄存器实际利用i2c_master_xxx函数，但是不一定所有I2C驱动有有此函数，另外为了保证驱动与lab code一致，对i2c_master_xxx函数进行封装。RDA5800 I2C驱动中，如果未检测到i2c_master_xxx函数应有替代方案。待做。
+还有Wait_mS，debug函数，printk函数。
+
+2. (18:14 2008-5-14)需要定义rda5800_device
+struct rda5800_device;
+enum rda5800State {ACTIVE, SHUTDOWN, SUSPEND, RESUME};
+
+struct rda5800_driver {
+	i2c_driver i2c_driver;
+	int (*readReg)(struct rda5800_device *dev, int numOfReg);
+	int (*writeReg)(struct rda5800_device *dev, int numOfReg);
+};
+
+struct rda5800_device {
+	UINT8 *readData8;
+	UINT8 *writeDate8;
+	enum rda5800State state;
+	struct rda5800_driver driver;
+};
+是否利用i2c_set_clientdata，i2c_get_clientdata？
+
+3, 电源管理。rda5800的shutdown，suspend，resume由i2c_driver结构体的对应函数实现。这样便于I2C总线做功耗控制，但是如果用户也做了功耗控制，要保证没有冲突没有副作用。用标志位表示rda5800状态(active, shutdown，suspend，resume)，在改变状态时需要保证是原子操作。
+电源管理在"19:29 2008-5-13"后，自动搜台前做。
+
+16:41 2008-5-14
+Olympia项目，FM，进展
+定义了RDA5800_device_type是rda5800_device的简化版本，抽象了read/write：成功代码位于"Olympia\FM\Linux driver\0514\test_RDA5800_device_and_RDA5800_read"。
+暂时不分开写代码，如果分开写就把read/write也并入到RDA5800_device_type结构体。
+下次开始写V4L2 radio代码。
+
+11:03 2008-5-15
+(10:28 2008-5-21)
+Olympia项目，FM，进展：
+1, 待做，报错不应用dprintk（可关闭的调试信息），修改RDA5800中出错语句为printk。（优先解决）
+2, 待做，EXPORT_SYMBOL_GPL是否要求是静态变量？确定，并查原因。
+EXPORT_SYMBOL_GPL(soc_codec_dev_wm8991);
+3, 待做，RDA5800_probe应用不用看开wm8991的电源，2v8电源是否需要开？（完成，不需要开）
+4, 待做，debug方式改为，I2C debug和rda5800 debug都打开表示打开rda5800 i2c debug，radio debug同理。
+5, 待做，radio_aztech.c是完全按照V4L2编写的，打印。（取消）
+6, 待做，"14:22 2008-5-15"rda5800_read和rda5800_write如果出错都返回-EIO（wm8991 write如此）。是否合适？
+7, 现有ioctl操作出错没有报错，因为在"__video_do_ioctl"中，如果(vfd->debug & V4L2_DEBUG_IOCTL_ARG)条件成立，会提示何种ioctl出错。
+8, "14:27 2008-5-15"vidioc_s_ctrl中变量溢出由谁负责？（完成）驱动程序自己负责。
+9, 设置声音出错也返回"-EIO"，是否合理？
+10, "14:59 2008-5-15"是否有竟态，是否需要加锁？，似乎不需要。（完成）现在是在open和release中加锁。
+
+12:57 2008-5-15
+Olympia项目，FM，V4L2应用程序的编写
+参考：/opt/marvell/src/usage-model/still_capture/camera.c的camera_open等函数，对/dev/video0的操作。
+
+13:04 2008-5-15
+Olympia项目，FM，继续上午写V4L2 radio驱动
+1, V4L2中writeData8和readData8从堆栈分配。I2C中用kzalloc分配。Register_Map在V4L2注册时用kzalloc分配NUM_OF_REG大小。
+
+14:13 2008-5-15
+Linux，驱动，V4L2，ioctl的实现。待做：补充
+打印：drivers\media\video\videodev.c
+video_ioctl2->__video_do_ioctl
+
+15:10 2008-5-15
+换位置：15:10-17:10，待做：加入周报。
+
+19:07 2008-5-15
+Olympia项目，FM，调试FM代码
+1, 根据log_rda5800_200805151917的提示，最终知道是因为read buffer没有分配（readData8=NULL），为了避免困扰修改read/write函数，
+typedef INT32 (*read_t)(struct rda5800_i2c_device* , UINT32);
+改为
+typedef INT32 (*read_t)(struct i2c_client *client,INT8 *buf ,INT32 count);
+把i2c_master_xxx三个参数都暴露出来，否则使用不变。这样参数和i2c_master_xxx一致，封装的目的就是为了支持多种底层i2c操作函数。
+这里没有考虑内核中应该如何分配空间，目前buf是在栈上分配的空间。
+2, 修改后有引用0地址的错误，难道是不能用内核栈分配变量？！
+把readData8和writeData8改为kzalloc分配方式。
+实验结果改为kzalloc就没有错误了。日志见"log_rda5800_200805152012"和"log_rda5800_200805152016"。
+
+21:30 2008-5-15
+Olympia项目，FM
+编译成功，插入模块：
+~/FM_driver_0515 # insmod radio-rda5800_2121.ko
+Using radio-rda5800_2121.ko
+videodev: "RDA5800" has no release callback. Please fix your driver for proper s
+ysfs support, see http://lwn.net/Articles/36850/
+RDA5800 driver init successful.
+insmod: cannot insert `radio-rda5800_2121.ko': Success (-1090501376): Success
+原因：ret没有初始化，是随机值"-1090501376"，虽然video_register_device成功，但返回值不是0，Linux认为rda5800_init未成功。
+解决：ret初始化为0。
+现有代码："Olympia\FM\Linux driver\0515\insmod_successful"，可以看到设备号和设备名称都正确。符合"15:21 2008-5-13"1的描述。根据"15:21 2008-5-13"1，手工建立的对应的设备文件。
+下一步是编写测试程序。
+(22:32 2008-5-15)
+VIDIOC_QUERYCAP正确，测试硬件读写。
+设置声音出错：
+	if ( volume != readData8[23] & 0x0F) {
+改为
+	if ( volume != (readData8[23] & 0x0F)) {
+另外设置成功后没有更新rda5800_radio_device.volume。
+进展，待做：测试querycap，get/set频率，声音成功（寄存器读写正确）。
+现在还有静音和vidioc_queryctrl没有测试。还需要编写自动搜台的程序（是否在驱动中实现？）。还需要实际连接到wm8991测试声音。
+
+23:13 2008-5-15
+李哲的信：
+刚才发给你的代码是我当前FM驱动代码。
+1, 状态：
+测试querycap，get/set频率，声音成功（寄存器读写正确）。
+现在还有静音和vidioc_queryctrl没有测试。还需要编写自动搜台的程序（是否在驱动中实现？）。还需要实际连接到wm8991测试声音。
+2, 我板子上对应文件位于"/root/FM_driver_0515"。系统启动后运行"/etc/init.d/rcS"，会挂载sysfs，proc，设置pritnk输出级别为8，挂载ramfs到"/tmp"目录。这样便于测试。
+
+23:18 2008-5-15
+(12:52 2008-5-19)
+Olympia项目，FM，待做：
+1, 加入除自动搜台外的全部功能，并测试：（完成）
+用户空间寄存器读写，DSP增益（用gain函数实现），立体声开关。
+2, 加入自动搜台功能。（转移）
+3, 细节修改：(10:25 2008-5-21)修改。
+1), 完成"11:03 2008-5-15"的待做
+2), 代码最低最高频率不直接使用数字，而且要和rda5800寄存器设置一致。例如：
+UINT16 getFreqLO()
+{
+	if ( (radio_tuner.capability & V4L2_TUNER_CAP_LOW) == V4L2_TUNER_CAP_LOW) {
+		return radio_tuner.rangelow * 62.5 / 100000;
+	}
+}
+需要修改freqToChan，chanToFreq，rda5800_setfreq等。
+(13:54 2008-5-20)另外，vidioc_g_frequency和vidioc_s_frequency也使用了固定的62.5Hz。"13:54 2008-5-20"结束
+4, 解决radio-rda5800.ko加载时的no release错误。
+看http://lwn.net/Articles/36850/：Avoiding sysfs surprises。
+5, (16:45 2008-5-19)
+rda5800_read/rda5800_write中可以加入显示寄存器读写的dprintk，这样便于调试。
+6, rda5800_radio_device中已经保存了必要的信息，RegisterMap是否还有必要？
+很可能是不必要了。
+7, (14:07 2008-5-20)（优先解决）
+Olympia项目，FM，加入区分Linux驱动和lab code的定义：
+#ifndef _LINUX
+#define _LINUX
+#endif
+目前没有加全，驱动测试通过后加入。待做。
+8, (18:44 2008-5-20)（优先解决）
+内核和用户空间使用统一的单位转换函数：
+基本函数分为需要round和不需要round两类：unit_L2S_round，unit_S2L_round，unit_L2S，unit_S2L，都是内联函数。声音，DSP声音，频率等分别封装对应的函数，用宏或内联函数。
+9, "16:41 2008-5-14"电源管理。（优先解决）（完成）
+
+12:47 2008-5-19
+待做完成：
+1, 找willy：（完成）
+1), V4L2 radio如何自动搜台。s-tuner有没有自定义数据？（取消）
+2), 如何报销车费；应该不用签字，审批完成后给财务（完成）
+3), 周报周五交本周的？（取消）
+4), (13:24 2008-5-20)关于周四会议，周四我已经请假。不参加。（完成）
+"13:24 2008-5-20"结束
+2, 问李哲有无编写FM驱动。（完成）
+3, 看邮箱；（完成）
+4, 写周报。（完成）
+
+13:14 2008-5-19
+周报（5.12-5.16）
+===============
+0，5.16请假，工作日四天，32+2.5=34.5小时。
+1，2008-5-12 -- 13:11 2008-5-13，2008-5-14
+工作时间18小时：完成FM I2C接口层
+2，2008-5-13 -- 2008-5-14
+工作时间6小时：学习如何使用V4L2驱动，阅读V4L2文章和spec，vivi.c（V4L2 example），radio-aztech.c（V4L2 radio）等代码。
+3，2008-5-15
+工作时间10.5小时：编写和测试FM V4L2驱动，除自动搜台外，基本完成。
+
+Key Activities of the week:
+1, write and test rda5800(FM radio) hardware interface(I2C bus). 18
+2, study video for Linux two (V4L2)，read relative articles and codes. 6
+3, write and test rda5800 V4L2 driver(FM media driver), except autoseek function. 10.5
+Major Progress:
+finish basic function of rda5800 V4L2 driver(FM media driver).
+Issues:
+NULL
+TODO
+release rda5800 driver
+
+17:36 2008-5-19
+Olympia项目，FM，播放声音
+切换FM到喇叭
+加载音频
+/ # ./snd_ismod.sh
+切换通路（FM到SPk）：
+amixer cset numid=108 on
+amixer cset numid=110 on
+
+108 on表示静音。
+
+21:16 2008-5-19
+Olympia项目，FM，进展：
+修改至此：
+	dprintk("convert %d value to actural range and do setting\n", ctrl.id);	
+	switch (ctrl->id) {
+		case V4L2_CID_AUDIO_MUTE:
+			return rda5800_setmute(rda5800,ctrl->value);
+			break;
+		case V4L2_CID_AUDIO_VOLUME:
+			ctrl->value = ctrl->value / radio_qctrl[i].step + 1;
+			return rda5800_setvol(rda5800,ctrl->value);
+			break;
+		case V4L2_CID_AUDIO_VOLUME:
+			ctrl->value = ctrl->value / radio_qctrl[i].step + 1;			
+			return rda5800_setDSPvol(rda5800,ctrl->value);
+			break;
+明天测试除autoseek以外的其它功能。autoseek计划用ext ctrl实现。
+
+21:17 2008-5-19
+Olympia项目，计入周报(weekly report)
+18:30-21:00开会。ETS and bootloader。
+
+10:33 2008-5-20
+Olympia项目，内核，开发板问题
+1, 自己这里xdb无法连接；
+2, david帮我烧写flash失败；
+3, jack帮我烧写最新内核成功。内核启动时有段错误，另外"/lib/modules"是个文件，不是目录。
+1), 新内核已经挂载了proc和sysfs；
+2), Ctrl+C也能用了。待做：问解决方法。
+3), 段错误可能由下面命令引起：
+[@Linux /etc]#udevd -d
+Segmentation fault
+这条命令位于"/etc/profile:"
+4), 加入了reboot命令。
+5), usbnet有的板子能用有的板子不能用。
+(16:45 2008-5-20)jack帮我重新烧写后问题解决"16:45 2008-5-20"结束
+
+10:43 2008-5-20
+今日安排，待做：
+1, 完成除autoseek的测试。（转移）
+2, "10:33 2008-5-20"学习新内核。
+
+11:32 2008-5-20
+Olympia项目，FM，思考
+rda5800_radio_device类型中是使用V4L2定义的变量范围还是使用rda5800的范围？
+使用V4L2的范围可能转换的机会少一些。
+影响：
+1, 声音：vidioc_g_ctrl/vidioc_s_ctrl的V4L2_CID_AUDIO_VOLUME和V4L2_CID_GAIN，
+2, 频率：rda5800_radio_device.freq_low/freq_high，vidioc_g_frequency/vidioc_s_frequency
+
+13:24 2008-5-20
+Olympia项目，会议
+1, ETS
+1), 每周周报要有ETS进展；
+2), 会用Phoenix Li的GPIO驱动做一个例子。
+3), blob和kernel都做ETS。
+2, LIDS
+LIDS是Linux下的入侵检测和防护系统，是linux内核的补丁和安全管理工具，它增强了内核的安全性，它在内核中实现了参考监听模式以及强制访问控制（Mandatory Access Control）模式。 
+自：http://cisco.ccxx.net/cisco/9147.html，LIDS攻略
+LIDS官网：http://www.lids.org/。
+参考：http://cisco.ccxx.net/ch/68.html，IDS，入侵检测
+
+14:44 2008-5-20
+Olympia项目，FM，测试会议
+讨论FM测试方法。
+0, Xin jiang，Qinghua Tong。时间14:10-14:45。25分钟。加入周报。
+1, 测试内容：自动搜台，指定频率的RSSI和音质，功耗；
+1), 所需修改：FM软开关机，关闭GPIO和I2S。（完成）
+2, 现有问题：自动搜台假台多信号差。优先怀疑是天线问题（现在没有加匹配电路），也有可能是电源或晶振的问题。硬件解决此问题；
+
+16:23 2008-5-20
+1, 用我的板子（jack内容）运行rda5800_test出现段错误。在李哲板子无此问题；
+(16:45 2008-5-20)jack帮我重新烧写后问题解决"16:45 2008-5-20"结束
+2, 李哲板子。
+1), 出错，errno=5, error message Input/output error.
+发现是应用程序的范围没有修改。改为0-65535后解决。
+
+17:04 2008-5-20
+Olympia项目，FM，进展，待做转移
+解决range检测问题，并完成现有所有功能的测试。
+
+18:02 2008-5-20
+Olympia项目，FM，进展
+qinghua tong调天线后信号没有好转。
+(18:40 2008-5-20)
+1, 只有102.5信号比较强：
+FM_RDA5800: rda5800_setfreq() 226: tune freq=10250 rssi=b
+2, 88.7：5，100.6：6。
+
+19:33 2008-5-20 
+Olympia项目，FM，驱动，调试
+1, radio-rda5800.c中get_qctrl_index函数的范围有错，应该是<和>，不是<=和>=，修改后代码：
+	if ( ctrl->value < ctrl_array[i].minimum 
+		|| ctrl->value > ctrl_array[i].maximum ) {
+2, (19:42 2008-5-20)
+从setvol改为setDSPvol时有遗漏：
+1), 	writeData8[7]=(DSP_volume)|(readData8[23]&0x0F);
+应该是：
+	writeData8[7]=(DSP_volume<<4)|(readData8[23]&0x0F);
+2), 	if ( DSP_volume != (readData8[23]&0x0f)) {
+应该是
+	if ( DSP_volume != (readData8[23]>>4)) {
+
+	dev->curDSPvol = DSP_volume;
+3, VIDIOC_QUERYCTRL得不到name。很奇怪，vidioc_queryctrl方法中可以输出name。
+进展：
+完成除了autoseek外测试，遗留问题： VIDIOC_QUERYCTRL得不到name；没有完整测试超出范围的情况。
+待做转移：测试autoseek。
+
+10:15 2008-5-21
+待做：
+1, 项目；
+1), 测声音。（完成）
+2), VIDIOC_QUERYCTRL得不到name；没有完整测试超出范围的情况。
+3), 测试autoseek。（完成）
+4), "17:04 2008-5-20"解决range检测问题，并完成现有所有功能的测试。（完成）
+5), 在lab code和驱动中加入"14:44 2008-5-20"所需内容。（完成）
+6), 完成"23:18 2008-5-15"3——细节问题。
+2, 看邮箱；（完成）
+3, 申工作餐。（完成）
+4, 整理usbnet。
+
+14:36 2008-5-21
+Linux，驱动，和David一起看GPIO中断，待做：详细分析代码，补充
+0, 时间。30分钟+
+1, request_irq注册中断时，flags可以是SHARED等和中断触发类型（电平，沿共四种）。中断触发类型会通过irqaction的mask传给setup_irq。setup_irq如果是共享中断，需要检测mask是否与已有中断是否一致，如果不一致无法共享。并通过setup函数把mask设置给硬件。
+2, 具体使用方法。（看david代码）
+
+15:00 2008-5-21
+Linux，驱动，学习platform bus
+详见李哲代码："Olympia\GPS\Phoenix Li\gps_driver_with_platform_bus\gps.c"
+platx_gps_driver和platx_gps_device分别是platform_driver和platform_device结构体指针。
+1, module_init：
+platx_gps_device = platform_device_alloc("pxa3xx_gps",0);
+platform_device_add(platx_gps_device);
+platform_driver_register(&platx_gps_driver);
+
+2, module_exit:
+platform_driver_unregister(&platx_gps_driver);
+platform_device_unregister(platx_gps_device);
+
+3, 如果是在板子启动时注册platform_device，驱动init时注册platform_driver。一般是使用platform_device_register和platform_driver_register。这种情况下需要定义platform_device结构体而不是指针，另外，module_exit中不需要进行platform_deivce_unregister。
+
+4, (15:56 2008-5-21)
+假设platx_gps_device是platform_device结构体指针。如果platform_device_unregister(&platx_gps_device)，在rmmod时会发生无效指针错误。backtrace会回溯到platform_device_del和platform_device_unregister函数。编译时的提示信息：
+sound/soc/pxa/wm8991-littleton.c:1797: warning: passing argument 1 of 'platform_device_unregister' from incompatible pointer type
+当时和David一起查这个错误时，就是根据backtrace提示platform_device_del引用了无效指针，且platform_device_del是platform_device_unregister调用的第一个函数，platform_device_del只有一个参数pdev，也是platform_device_unregister传过来的。因此猜测是传入的指针不正确。
+platform_device_unregister代码：
+/**
+ *	platform_device_unregister - unregister a platform-level device
+ *	@pdev:	platform device we're unregistering
+ *
+ *	Unregistration is done in 2 steps. First we release all resources
+ *	and remove it from the subsystem, then we drop reference count by
+ *	calling platform_device_put().
+ */
+void platform_device_unregister(struct platform_device * pdev)
+{
+	platform_device_del(pdev);
+	platform_device_put(pdev);
+}
+
+17:00 2008-5-21
+板子使用方法：
+1, 加载音频驱动：
+执行"snd_insmod.sh"，"snd_insmod.sh"需要与snd-soc*.ko在同一目录；
+2, 加载rda5800驱动：
+执行"rda5800_insmod.sh"，"rda5800_insmod.sh"需要与rda5800.ko和radio-rda5800.ko在同一目录。
+rda5800_insmod.sh内容：
+#!/bin/sh
+module_insert(){
+        insmod $1 || ret=fail
+        if [ "${ret}" = "fail" ]; then
+                echo insmod $1 fail, exit.
+                return 1
+        fi
+        return 0
+}
+
+RDA5800_I2C_M=rda5800.ko
+RDA5800_V4L2_M=radio-rda5800.ko
+
+module_insert ${RDA5800_I2C_M}; RET=$?
+#bamvor. great than zero means error occurs
+if [ $RET -gt 0 ];then
+        exit 1
+fi
+
+module_insert ${RDA5800_V4L2_M}
+if [ $RET -gt 0 ];then
+        exit 1
+fi
+echo insert rda5800 driver module successful
+
+insmod  && ret=0 | ret=-1
+3, 开关声音；见"17:36 2008-5-19"
+4, rda5800_test方法：
+0-6分别表示：
+printf("VIDIOC_QUERYCAP test.\n");
+printf("set and get frequency test.\r\n");
+printf("set/get mute test.\r\n");
+printf("set/get volume test.\r\n");
+printf("set/get DSP volume test.\r\n");
+printf("VIDIOC_G_TUNER and VIDIOC_S_TUNER test.\n");
+printf("VIDIOC_QUERYCTRL test.\n");
+取值：频率8750-10800，mute：0,1；volume：0-15。
+
+17:03 2008-5-21
+待做：学习littonton.c，gpio使用方法等。
+
+19:11 2008-5-21
+Olympia项目，FM
+编写了加载FM驱动的rda5800_insmod.sh，
+从环境变量获得DA5800_I2C_M和RDA5800_V4L2_M并插入模块，如果模块载入会出错。
+
+20:18 2008-5-21
+Olympia项目，FM，调试驱动
+1, 发现一个bug，vidioc_g_ctrl调用的get_qctrl_index中有变量范围检测的代码，但vidioc_g_ctrl时不需要检测，把范围检测代码独立出来，改名为check_qctrl_range函数。在vidioc_s_ctrl加入check_qctrl_range函数后。发现vidioc_s_ctrl会出错，检查后发现get_qctrl_index把查到的index值存在ret中供后面程序使用，但check_qctrl_range会改变ret。把index值独立后，问题解决。
+
+20:30 2008-5-21
+今日工作：
+1, 今天主要是全面测试了已有功能，包括溢出等情况。
+现在主要还有readID，低功耗（进入，退出），自动搜台没有实现。计划都用PRIVATE CTRL实现。
+代码位于"Olympia\FM\Linux driver\0521"。
+2, 得到音频驱动，会用amixer把FM输出到喇叭。
+
+9:55 2008-5-23
+今日计划，待做完成
+1, 加入readID，低功耗（进入，退出），自动搜台。并测试。
+
+10:13 2008-5-23
+周报（5.19-5.23）
+===============
+0，5.12请假（毕业答辩），工作日四天，32+4=36小时。
+1，2008-5-19，5-20，5-21
+FM驱动测试，fix 3 bugs。
+工作时间：6+8+7=21小时。
+2，5-19 18:30-21:00, 13:24 2008-5-20，14:44 2008-5-20
+1), ETS and bootloader；2), ETS(组内)；3), 测试会议（Xin Jiang, Qinghua Tong）
+工作时间：2.5+0.75+0.5 = 3.75。
+3，14:36 2008-5-21，15:00 2008-5-21
+Linux驱动学习with Phoenix Li and David，如何写gpio驱动，如何写platform驱动。
+工作时间：0.5+1 = 1.5。
+4, 2008-5-23
+编写FM驱动剩余功能代码，自动搜台，进入退出低功耗。
+6小时。
+
+Key Activities of the week:
+1 basic FM driver function test and fix 3 bugs. 21
+2 meeting, ETS and testing. 3.75
+3 Study Linux driver, how to write gpio driver, how to write platform bus driver
+4 write autoseek, suspend and resume code for FM. 6
+
+Major Progress:
+finish pass test for basic FM function.
+Issues:
+NULL
+TODO
+finish FM driver
+
+11:01 2008-5-23
+网络，portal
+ip地址不应该是10.2.140.xxx或10.2.144.xxx，如果是这两个范围无法访问内网（如portal）。
+今天无法访问服务器也是这个原因。早晨来时还奇怪怎么一封邮件都没有。
+现在的ip是：10.2.160.184
+
+11:13 2008-5-23
+Olympia项目，待做：看书。
+Andy推荐大家看Symbian for Software Leaders - Principles of Successful Smartphone Development Projects - Wiley(2005)（位置：Olympia\Documentation）：
+This is a good book to understanding the processes that we will use on Olympia. Try to read the sections on CM and Defects.
+不知道CM是哪章。
+
+11:38 2008-5-23
+Olympia项目，FM，关于自动搜台
+1, 在内核中实现自动搜台是实现RDA5800_AutoSeekStep，不用RDA5800_AutoSeek。
+2, rda5800 datasheet中用gpio中断和RSSI综合判断是否有台，似乎比只看STC效果好。
+3, 用户自动搜台需要设置信号强度。如果不设置用RDA5800_GetRSSI获得。
+4, (11:38 2008-5-23)
+1), 自动搜台tune完成后延时100ms再读rssi。
+2), clear STC后需要延时多长时间？现在是200ms，qinghua tong说没必要。
+
+11:38 2008-5-23
+Olympia项目，FM，电源管理，待做完成
+加入电源管理需要使用platform bus参考drivers/media/video/pxa_camera_zl.c
+
+15:41 2008-5-23
+Olympia项目，FM，V4L2
+vidioc_g_frequency要求ret是0时，才能会用
+			dbgarg (cmd, "tuner=%d, type=%d, frequency=%d\n",
+						p->tuner,p->type,p->frequency);
+打出信息。
+待做：查如何打开dbgarg开关。
+vidioc_s_frequency函数无此要求。
+
+18:10 2008-5-23
+编译通过，晚上测试全部功能。
+音频驱动无法加入。
+
+18:33 2008-5-23
+Olmypia项目，FM，测试除低功耗外的全部功能
+1, 发现设置频率时任何情况都是设置的8750，发现是下列代码的错误：
+	if( (freq <= FREQ_HI) && (freq >= FREQ_LO)) {
+		freq=FREQ_LO;
+		channel=freqToChan(freq);
+		bandType= 0;
+原有代码是若频率溢出则设为最低频率，但现在代码是根据频率范围选择频率到通道的转换和band类型，if的作用和原来相反。
+改代码时还是不动脑子。
+2, 把check_qctrl_range函数的溢出错误从ERANGE改为EOVERFLOW。前者主要表示数学运算导致了结果无法比较，后者表示超出范围。
+3, 无法读出立体声，后来发现
+setforcemono中：
+	dev->forcemono = mono;
+	dev->stereo = !mono;
+写成了：
+	dev->forcemono = 1;
+	dev->stereo = 0;
+4, 信号不好，把getRssi中：
+	ret = (rssia+rssib+rssic)/3+8;
+改为 
+	ret = (rssia+rssib+rssic)/3+5;
+5, (20:02 2008-5-23)
+加入rda5800_setsigstr。现在应用程序虽然给出了rssi，但是没有写入寄存器。
+6, (20:45 2008-5-23)
+问题仍然是自动搜台只会搜台9910，没有继续向前。
+rda5800_getRssi函数使用setfreq函数设置频率并得到rssi，但没有把频率改回。
+由于setfreq会修改curfreq，所以执行getRssi前需要保存当前curfreq，最后再将其写回到寄存器。
+7, (21:04 2008-5-23)
+仍然有问题，rda5800_autoseekOneStation中rda5800_AutoSeekStep成功后会用setfreq设置频率，但失败且是ERANGE错误时也应该设置频率，因此代码改为；
+	if ( ( ret= rda5800_AutoSeekStep(dev,dir,rssi) ) < 0 && ret != -EAGAIN ) {
+		goto exit;
+	}
+8, 后来还是会停在某个频点不动。例如9300, 9600。现在采取的办法是每次搜台前信号强度+10，这样避免停在某个频点。
+现在可以连续执行自动搜台了。每次都有10390。
+周一需要加入低功耗。然后改善搜索速度。现在延时太多。
+(21:42 2008-5-23)现有代码：Olympia\FM\Linux driver\0523。
+
+13:44 2008-5-26
+Olympia项目，FM，进展，待做
+1, 上周出现的加载音频驱动时的mmap错误，重新下载驱动后解决；（完成）
+2, 解决停在某个频点不动的问题。看向宾代码；
+3, 完成platform bus设备加入，加入低功耗代码。学习如何使用。
+4, 初始化后静音。自动搜台时静音。（完成，rda5800_probe修改）
+5, 低于设置的rssi仍然会返回。原因是rda5800_AutoSeekStep函数的错误值"-EAGAIN"，被随后的setfreq函数返回值覆盖，没有返回给用户空间。测试代码中需要加入一个独立的自动搜台功能，自动搜台后提示是否成功，并显示频率和信号强度。
+6, ioctl是否成功应该看返回值。不应该直接把get和set比较
+6, 优化性能：
+1), 加入read_cache，硬件寄存器未改变时直接读保存的寄存器值（Register_MAP？），而不是从硬件读出。
+2), 设置频率，声音，静音时，若与之前值相同，不设置，直接返回成功。（完成）
+7, (20:41 2008-5-26)向下搜台有问题。
+
+17:48 2008-5-26
+Olympia项目，FM，进展
+1, 给qinghua tong的板子下载了现在的驱动。他要测天线。
+2, 自动搜台基本可以了。晚上做platform bus和电源管理。
+3, (20:26 2008-5-26)
+在rda5800_setsigstr后面加入50ms，延时后，搜台间隔明显加大，不再是100k, 100k走了。
+
+13:18 2008-5-27
+Olympia项目，FM，待做：
+1, 电源管理；（完成，没有通过应用程序测试，未测试电路变化）
+2, 改进自动搜台；
+
+13:20 2008-5-27
+Olympia项目，FM，修改
+1, 改变get/set设备私有数据的方法：
+从v4l2-dev.h看：
+#ifdef OBSOLETE_OWNER /* to be removed soon */
+/* obsolete -- fops->owner is used instead */
+struct module *owner;
+/* dev->driver_data will be used instead some day.
+	* Use the video_{get|set}_drvdata() helper functions,
+	* so the switch over will be transparent for you.
+	* Or use {pci|usb}_{get|set}_drvdata() directly. */
+void *priv;
+#endif
+所以把rda5800_radio.priv=&rda5800_device;
+改为：
+	video_set_drvdata(&rda5800_radio, (void*)&rda5800_device);
+
+#ifdef OBSOLETE_OWNER /* to be removed soon */
+/* helper functions to access driver private data. */
+static inline void *video_get_drvdata(struct video_device *dev)
+{
+	return dev->priv;
+}
+
+static inline void video_set_drvdata(struct video_device *dev, void *data)
+{
+	dev->priv = data;
+}
+
+#endif
+OBSOLETE_OWNER表示的应该是旧代码，尽量不用其中的内容。看来video_get_drvdata和video_set_drvdata将来会有其它的定义。
+
+2, 学习platform bus续：platform_device_alloc。代码阅读：
+platform_device_alloc函数会分配platform_object结构体的空间，设置名字（platform_object.name和platform_object.pdev.name相同），id，初始化设备结构体（platform_object.pdev.dev），把platform_device_release函数指针赋给platform_object.pdev.dev.release，做为设备dev release的方法。若分配成功，返回platform_object.pdev指针。
+struct platform_object {
+	struct platform_device pdev;
+	char name[1];
+};
+也就是说platform_device_alloc函数分配的返回的不是一个内容，返回的是对驱动来说有意义的platform_device结构体指针。
+实际上platform_object结构体只有platform_device_alloc和platform_device_release使用。
+为什么要使用platform_object结构体？
+感觉可能是为了dev release时可以直接释放platform_object的全部空间。如果是像platform_device_register一样，是需要注册前分配好platform_device空间的（一般都是全局的），这样，release dev时其实不能释放做为全局变量的platform_device结构体。因此platform_device_alloc和platform_device_add配置适用于需要卸载整个设备的动态注册注销设备的情况，platform_device_register和platform_device_unregister适合不需要注销设备(device)的情况，也就是系统中一定存在的模块（例如SOC片内模块），比如lcd，I2C等。
+待做：看platform_device_add函数。
+
+3, 参考：
+drivers/serial/8250.c
+	ret = platform_device_add(serial8250_isa_devs);
+	if (ret)
+		goto put_dev;
+
+	serial8250_register_ports(&serial8250_reg, &serial8250_isa_devs->dev);
+
+	ret = platform_driver_register(&serial8250_isa_driver);
+	if (ret == 0)
+		goto out;
+
+	platform_device_del(serial8250_isa_devs);
+ put_dev:
+	platform_device_put(serial8250_isa_devs);
+
+4, 待做：
+和rda5800_radio_device最好都是指针，运行时分配。且video_device在rda5800_radio_device下层，和rda5800_i2c_device在一层。
+video_device的分配和和释放可以用：video_device_alloc和video_device_release。
+最好在platform_device.probe完成V4L2设备注册。
+为了便于修改建立了rda5800_V4L2_init和rda5800_V4L2_exit函数。
+
+5, 
+static __init int rda5800_V4L2_init(void)
+写成：
+static __init int rda5800_V4L2_init()
+会提示：
+drivers/media/radio/radio-rda5800.c:1175: warning: function declaration isn't a prototype
+
+6, 注销设置出现kernel panic:
+[root@Linux 0527]#insmod radio-rda5800_1638.ko
+Using radio-rda5800_1638.ko
+FM_RDA5800: rda5800_V4L2_init() 1174: video device register
+videodev: "FM_RDA5800" has no release callback. Please fix your driver for prope
+r sysfs support, see http://lwn.net/Articles/36850/
+FM_RDA5800 Load status: 0
+FM_RDA5800: rda5800_init() 1224: platform device and driver register
+FM_RDA5800: rda5800_init() 1235: rda5800 Platform device register succeed
+FM_RDA5800: platx_rda5800_probe() 1060: platx_rda5800_probe called.
+FM_RDA5800: rda5800_init() 1241: rda5800 Platform driver register succeed
+FM_RDA5800 driver init successful.
+[root@Linux 0527]#rmmod radio-rda5800
+FM_RDA5800: platx_rda5800_remove() 1067: platx_rda5800_remove called.
+Kernel panic - not syncing: videodev: bad unregister
+
+7, 问题没有解决，明天详细对比26和27代码。
+(11:05 2008-5-28)问题解决。
+经过对比，发现问题是rda5800_V4L2_init函数正常结束后没有"return err"，而是进入了exit_register注销了rda5800 V4L2设备。
+其实昨天查看/sys/class/video4linux/时，没有看到radio0就应该想到这点了。如果V4L2设备成功注册肯定会有这个目录的。
+
+11:48 2008-5-28
+Olympia项目，FM，进展
+电源管理完成。resume和suspend都可以运行。没有测电流。
+下午整理存在的问题，并逐一解决。
+
+11:48 2008-5-28
+Olympia项目，FM，进展
+初始化寄存器mute后，还是有噪声，估计所有d88x都得改。
+
+13:35 2008-5-28
+英语学习
+Swipe Card，刷卡
+
+13:40 2008-5-28
+Olympia项目，FM，剩余问题：
+"10:15 2008-5-21"
+"13:44 2008-5-26"
+"13:20 2008-5-27"
+
+14:22 2008-5-28
+加入读/写寄存器缓存函数。
+原因：rda5800_setvol，rda5800_setDSPvol等没有需要读写寄存器的函数，都需要知道当前寄存器取值。
+所需修改：
+阶段一：
+1, 寄存器缓存按照寄存器0-15排列，不包括只在初始化时使用的寄存器。
+2, 原有read/write，删除buf参数，每次读写后更新寄存器缓存。
+原有read/write函数改为hw_read/hw_write，仿照wm8991方式，直接采用i2c_master_recv/send。
+原有在radio-rda5800.c中调用read/write改为read/write_reg_cache
+3, 新建一个clearSTC函数。
+阶段二：
+radio-rda5800.c的结构体尽量都改为动态分配。
+
+18:17 2008-5-28
+Olympia项目，FM，进展，待做
+1, 完成"14:22 2008-5-28"和其它待做。
+1), 修改到rda5800_AutoSeekStep；
+2), 现在没有用read/write_reg_cache，还用么？感觉还是for循环好用，是否可以把for循环和hw_read/write都放到read/write_reg_cache。
+关键是是否每次读需要更新全部reg_cache。
+2, 加入低功耗函数加入都ioctl。
+
+12:13 2008-5-29
+Olympia项目，FM，进展，待做
+为了给调天线提供适用的软件，调整测试程序。
+现在把ctrl改为接受set，get，mute已经改对，其余ctrl按照mute修改。然后修改其余get/set。
+(12:53 2008-5-29)
+1, 电源管理需要加入到ioctl中。
+2, 在setsigstrength中加入延时设置，qinghua tong需要每隔0,1M一个结果。
+3, 需要加上版本。驱动用sysfs platform的属性；应用程序用-v。
+
+
+15:11 2008-5-29
+Olympia项目，FM，进展，待做
+1, 问题
+default:
+	fprintf(stderr, "Invalid arguments");
+	help(argument[0]);
+	break;
+总是显示(null)
+2, 加载"0528/radio-rda5800_1145.ko"有段错误。
+原因是：
+首先申请了argument[0]的空间，后来又申请argument的空间，具体原因还是需要看内核转储文件，待做。
+	if ( ( argument[0] = (char*)malloc(strlen(*argv)*sizeof(**argv))) == NULL ){
+		fprintf(stderr, "Allocate error");
+		return -1;
+	}
+
+	if (( argument=(char**)malloc(numOfPara*sizeof(**argv)) )
+		== NULL){
+		fprintf(stderr, "Re-Allocate error");
+		return -1;
+	}
+把第一个argument[0]改为单独指针后问题解决。
+3, 后来又出了一次段错误，发现是该做上面修改时有个argument[0]的地方没改为name。
+
+18:30 2008-5-29
+在修改rda5800_test.c目的是改为通用形式。如果新加功能只需修改很少代码。未完成。
+
+11:05 2008-5-30
+周报（5.26-5.30）
+===============
+0，工作日五天，>40小时。上周周报"10:13 2008-5-23"。
+1, 测试自动搜台和电源管理函数（for ETS），6小时。
+2，FM驱动测试，fix 2 bugs。约10小时；
+3, 改进FM驱动。22小时。
+4, 与qinghua tong一起改善信号。6小时。
+
+Key Activities of the week:
+1 test autoseek and power management(for ETS). 6
+2 FM driver debug, fix 2 bugs. 10
+3 improbe FM driver and test code. 22
+4 improve signal strength with Qinghua Tong. 6
+
+Major Progress:
+finish FM function in Linux driver.
+Issues:
+NULL
+TODO
+1 improbe FM driver and test code
+2 ETS
+
+11:57 2008-5-30
+待做：给qinghua tong发邮件
+
+14:59 2008-5-30
+完成一个脚本，处理setfreq扫描频点的结果，结果第一列是频率，第二列是rssi。
+扫描脚本是"freq_scanning.sh"
+cat parse_freq_scanning.sh
+#!/bin/sh
+FILENAME=$1
+if [ -f $FILENAME ]; then
+        echo using $FILENAME as filename
+else
+        echo $FILENAME is not a regular file
+        exit
+fi
+cat $FILENAME | grep after\ 100ms > $FILENAME.1
+cut -d "," $FILENAME.1 -f 2 > $FILENAME.2
+mv $FILENAME.2 $FILENAME.1
+sed "s/\t\ tune\ freq=//" $FILENAME.1 > $FILENAME.2
+sed "s/\ rssi=/\ /" $FILENAME.2 > $FILENAME.3
+sed "s/a/10/"  $FILENAME.3 > $FILENAME.4
+sed "s/b/11/"  $FILENAME.4 > $FILENAME.5
+sed "s/c/12/"  $FILENAME.5 > $FILENAME.6
+sed "s/d/13/"  $FILENAME.6 > $FILENAME.7
+sed "s/e/14/"  $FILENAME.7 > $FILENAME.8
+sed "s/f/15/"  $FILENAME.8 > $FILENAME.9
+mv $FILENAME.9 $FILENAME.result
+
+rm $FILENAME.1 $FILENAME.2 $FILENAME.3 $FILENAME.4 $FILENAME.5 $FILENAME.6 $FILENAME.7 $FILENAME.8
+
+18:45 2008-5-30
+Olympia项目，FM，进展，待做
+1, 在继续改进测试程序，现在框架搭好了，周一首先把非ctrl的改完，然后改ctrl（可能需要有点新方法）
+首先是建立并全部使用下面的宏，这样代码会简洁很多。
+(rda->func[rda->func_sel].value)
+用
+#define rda_value(r) ((r)->func[(r)->func_sel].value)
+替换为：
+rda_value(rda)
+
+rda.func[rda.func_sel].get(&rda);
+用
+#define rda_get(r) ((r)->func[(r)->func_sel].get((r)))
+替换为：rda_get(&rda);
+2, 计划周二开始继续改进驱动。

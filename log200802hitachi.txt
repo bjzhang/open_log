@@ -1,0 +1,281 @@
+14:15 2008-02-12
+整理系统移植文档
+把"fv/kernel_driver/kernel/zImage_final_0107"保存到"fv/release"，改名为zImage2410_hitachi_8。针对8寸液晶。
+
+14:34 2008-02-12
+待做：
+1，整理文档；（完成）
+完成："build_development_envirionment.txt，systemporting.txt，QTprogramming.txt"。
+QT文档：类图；序列图（省略，参考设计文档即可）；对于扩展接口做详细说明。
+QPEEnhanceDataTimeEdit中生成日期和时间的方法可以改进。
+参：
+file:///usr/src/src2/FV_project/qt/qtopia/doc/html/qdatetime.html
+Related Functions
+(Note that these are not member functions.)
+
+    * QDataStream & operator<< (QDataStream & s, const QDateTime & dt)
+    * QDataStream & operator>> (QDataStream & s, QDateTime & dt) 
+2，2440开发板移植现有文件系统。应该只需要重新编译内核即可。
+3，张志霞可以根据文档建立Linux开发环境。
+4，杂
+1)从日立机器复制：
+A，内核源代码；
+B，文件系统最终结果
+C，其它非重复资料。
+2)从/usr/src/src2/fft_linux/release复制文件。
+3)"22:14 2008-02-12"
+完善烧写文件日志。
+(17:37 2008-02-13)
+继续能力在日立机器上的所有资料
+
+09:51 2008-02-14
+待做
+1，fft2440_bootlog(fv/log/)是张健修改fft2440开发板前，系统的启动日志。该系统是叶博在傅立叶提供文件系统上修改的，可以运行Qtopia1.7。（完成）
+2，完善QT文档。解释编译方法(*.pro)文件，补充DB2GUI，readDB。（完成）
+3，下班前，复制release.tar.gz到移动硬盘。（完成）
+4，重看所有实习日志。
+
+15:01 2008-02-14
+修改2440板子的文件系统；
+下载root.yaffs后并修改命令行后启动Linux，出现Kernl panic错误。见"fv/log/fft2440_boot_fail_with_root.yaffs_.txt"。
+用erase工具擦除user分区后，问题解决。但脚本启动有错。日志见"fv/log/fft2440_boot_successful.txt"
+
+15:23 2008-02-14
+待做：
+1，加入usb storage驱动；
+2，修改脚本；
+3，生成modules.dep
+4，修改2410根文件系统：
+1)/etc/bash, 50行。
+2)linuxrc，
+/bin/mount -t cramfs -r /dev/mtdblock/5 /mnt/cramfs
+
+17:12 2008-02-14
+2440未修改完的文件系统：
+/usr/src/fft_linux/fs/temp
+
+09:45 2008-02-15
+待做，必要内容加入到日立文档中。
+1，修改USB配置，加入usbdevfs（USB设备文件系统）的支持。
+mount: Mounting none on /proc/bus/usb failed: No such file or directorya
+把"Support for USB"改为模块。
+加入usbdevfs支持：USB support -> Preliminary USB device filesystem
+(11:48 2008-02-15)
+去掉了：
+USB support  --->
+	< >   USB Device(S3C) driver
+USB Device Support
+注：modprobe usb_ohci_s3c2440/2410后，会自动建立/proc/bus/usb目录。
+"11:48 2008-02-15"end
+
+2,声音驱动已经加载，下面的加载可以省略。
+mounting audio(uda1341) driver
+insmod: s3c2410-uda1341.o: no module by that name found
+3，生成root.yaffs.2410.tar.gz，root.yaffs.2440.tar.gz，指出二者不同。
+只有驱动部分不同。
+4，没有网络连接。
+1)，cs8900有时检测不到。原因未知。
+内核启动时正确检测到css8900的提示：
+eth0: cs8900A rev J found at 0xd3000300
+cs89x0: Extended EEPROM checksum bad and no Cirrus EEPROM, relying on command
+line
+cs89x0 media RJ-45, IRQ 37, programmed I/O, MAC 00:00:c0:ff:ee:48
+未检测到cs8900的提示，signature也有不是0x18的情况：
+eth0: incorrect signature 0x18
+cs89x0: no cs8900 or cs8920 detected.  Be sure to disable PnP with SETUP
+
+2)，dm9000没有使用。有驱动，可以正常加载。没有配置文件。
+5，显示不正常，是320*240的驱动：
+[root@(none) bin]# ./framebuffertest 
+frame buffer: 320(640)x240, 16bpp, 0x25800byte
+framebuffer: pixclock 39721.
+framebuffer: hsync_len 5,        left_margin 61,         right_margin 9.
+framebuffer: vsync_len 1,        upper_margin 3,         lower_margin 0.
+LCD controller: 0x01b00b79, 0x003bc000 0x00f13f23 0x00000d04 0x00014b01.
+修改液晶驱动，直接从2410代码中复制LCD配置。
+
+11:04 2008-02-15
+从proc文件系统读取开发板信息：
+"/proc/cpuinfo"保存CPU core和SOC芯片信息。
+下面脚本判断是2440还是2410开发板：
+HARDWARE=`cat /proc/cpuinfo  | grep Hardware  | cut -d \  -f 2`
+if [ "$HARDWARE"="Samsung-SMDK2440" ]; then
+	echo 2440
+elif [ "$HARDWARE"="Samsung-SMDK2410" ]; then	
+	echo 2410
+fi
+
+11:30 2008-02-15
+待做取消
+完成2440内核和文件系统修改后，把二者的内核和文件系统合并。
+
+12:10 2008-02-15
+需要加载的模块：
+[root@(none) root]# lsmod
+Module                  Size  Used by    Not tainted
+s3c2440-rtc             4264   0 (unused)
+usbmouse                1688   0 (unused)
+mousedev                4284   0 (unused)
+evdev                   3364   0
+mmcsd_disk              2948   0 (unused)
+mmcsd_slot              3468   0 (unused)
+mmcsd_core              6128   1 (autoclean)  [mmcsd_disk mmcsd_slot]
+usb-storage            57184   0 (unused)
+sd_mod                 10684   0 (unused)
+scsi_mod               55840   2 [usb-storage sd_mod]
+usbkbd                  2768   0 (unused)
+input                   3528   0 (autoclean)  [usbmouse mousedev evdev usbkbd]
+usb-ohci-s3c2440        2608   0 (unused)
+usb-ohci               16480   0 (autoclean)  [usb-ohci-s3c2440]
+usb-ohci-pool           1920   1 (autoclean)  [usb-ohci-s3c2440 usb-ohci]
+usbcore                57008   1 (autoclean)  [usbmouse usb-storage usbkbd usb-ohci]
+路径：/usr/src/fft_linux/temp/2.4.20_elfin-d1.5
+保存完整启动日志
+2440文件系统更换驱动后可以用于2410。测试所有硬件：lcd，优盘，sd卡，音频播放，网口。
+
+13:00 2008-02-15
+待做：查如何设置hostname。
+
+13:56 2008-02-15
+使用zImage_2440_usbdevfs时使用键盘会出错kernel panic。Null pointer：
+[root@(none) /]# /root/bin/hexdump /dev/input/event0
+Unable to handle kernel NULL pointer dereference at virtual address 00000000
+pgd = c0004000
+*pgd = 00000000, *pmd = 00000000
+Internal error: Oops: 0
+CPU: 0
+pc : [<00000000>]    lr : [<c00bca50>]    Not tainted
+sp : c0167d6c  ip : c016adac  fp : c0167d94
+r10: c0197a24  r9 : 00000000  r8 : c01712d8
+r7 : 00000000  r6 : 00000000  r5 : 000000e0  r4 : 000000e0
+r3 : c01ac434  r2 : 00000000  r1 : c0167d6f  r0 : 000000e0
+Flags: nZCv  IRQs on  FIQs on  Mode SVC_32  Segment kernel
+Control: C000317F  Table: 33D1C000  DAC: 0000001D
+Process swapper (pid: 0, stack limit = 0xc016638c)
+Stack: (0xc0167d6c to 0xc0168000)
+7d60:                            00000001 00000061 000000c2 00000001 c48f8400
+7d80: 00000001 c350f820 c0167db4 c0167d98 c48f8100 c00bc9a8 00000061 00000061
+7da0: 00000001 00000001 c0167dc8 c0167db8 c48f81ec c48f8070 c2c98ea4 c0167df0
+7dc0: c0167dcc c48cc3f0 c48f81d8 c03b3d60 00000001 c03b3dd8 c2c98ea4 00000001
+7de0: 00000004 c0167e10 c0167df4 c48d1e00 c48cc070 c2c98000 c03b3dd8 00000001
+7e00: c03b3d60 c0167e2c c0167e14 c48cef9c c48d1c7c c0167e30 00000010 00000030
+7e20: c0167e94 c0167e30 c48cf254 c48cef80 00000000 00000000 00000000 00000000
+7e40: 00000001 00000000 00000000 00000000 00000020 00000008 c0167e30 00000001
+7e60: 00000008 c2c98cdc c2c98000 c2e9f400 00000000 00000008 c2c98cdc c2c98000
+7e80: c0167f64 c38cc000 c0167eb8 c0167e98 c48cf4c8 c48cefcc c2c98c80 c350f980
+7ea0: c350f980 c490d670 00000000 c0167ec8 c0167ebc c48cf514 c48cf3c8 c0167ee4
+7ec0: c0167ecc c48c03f8 c48cf4f8 00000000 c2c98c80 c350f980 c0167f0c c0167ee8
+7ee0: c48c2958 c48c039c 00000002 c38cc000 e9000000 c01792b8 00000002 c017fb60
+7f00: c0167f34 c0167f10 c48c3654 c48c2888 c3f6f940 0000001a 04000000 c01792b8
+7f20: c0178f78 c017fb60 c0167f60 c0167f38 c0019fac c48c35ac c0167f98 c0167fac
+7f40: ea000000 c001a4bc 60000013 ffffffff 30014230 c0167fb8 c0167f64 c00193e0
+7f60: c0019efc 00000080 f6000000 000000eb 60000013 c0166000 c001a470 c01698a8
+7e80: c0167f64 c38cc000 c0167eb8 c0167e98 c48cf4c8 c48cefcc c2c98c80 c350f980
+7ea0: c350f980 c490d670 00000000 c0167ec8 c0167ebc c48cf514 c48cf3c8 c0167ee4
+7ec0: c0167ecc c48c03f8 c48cf4f8 00000000 c2c98c80 c350f980 c0167f0c c0167ee8
+7ee0: c48c2958 c48c039c 00000002 c38cc000 e9000000 c01792b8 00000002 c017fb60
+7f00: c0167f34 c0167f10 c48c3654 c48c2888 c3f6f940 0000001a 04000000 c01792b8
+7f20: c0178f78 c017fb60 c0167f60 c0167f38 c0019fac c48c35ac c0167f98 c0167fac
+7f40: ea000000 c001a4bc 60000013 ffffffff 30014230 c0167fb8 c0167f64 c00193e0
+7f60: c0019efc 00000080 f6000000 000000eb 60000013 c0166000 c001a470 c01698a8
+7f80: c0179800 c016967c 41129200 30014230 c0167fb8 c0167fbc c0167fac c001a4b0
+7fa0: c001a4bc 60000013 ffffffff c0167fd4 c0167fbc c001a508 c001a480 c01828c4
+7fc0: c01ac450 c0179818 c0167fe4 c0167fd8 c0019020 c001a4d4 c0167ffc c0167fe8
+7fe0: c000868c c0019010 c0179c2c c01ac450 00000000 c0168000 c0008080 c0008578
+Backtrace:
+Function entered at [<c00bc998>] from [<c48f8100>]
+Function entered at [<c48f8060>] from [<c48f81ec>]
+ r7 = 00000001  r6 = 00000001  r5 = 00000061  r4 = 00000061
+Function entered at [<c48f81c8>] from [<c48cc3f0>]
+ r4 = C2C98EA4
+Function entered at [<c48cc060>] from [<c48d1e00>]
+Function entered at [<c48d1c6c>] from [<c48cef9c>]
+ r7 = C03B3D60  r6 = 00000001  r5 = C03B3DD8  r4 = C2C98000
+Function entered at [<c48cef70>] from [<c48cf254>]
+ r6 = 00000030  r5 = 00000010  r4 = C0167E30
+Function entered at [<c48cefbc>] from [<c48cf4c8>]
+Function entered at [<c48cf3b8>] from [<c48cf514>]
+ r8 = 00000000  r7 = C490D670  r6 = C350F980  r5 = C350F980
+ r4 = C2C98C80
+Function entered at [<c48cf4e8>] from [<c48c03f8>]
+Function entered at [<c48c038c>] from [<c48c2958>]
+ r6 = C350F980  r5 = C2C98C80  r4 = 00000000
+Function entered at [<c48c2878>] from [<c48c3654>]
+Function entered at [<c48c359c>] from [<c0019fac>]
+Function entered at [<c0019eec>] from [<c00193e0>]
+Function entered at [<c001a470>] from [<c001a508>]
+Function entered at [<c001a4c4>] from [<c0019020>]
+ r6 = C0179818  r5 = C01AC450  r4 = C01828C4
+Function entered at [<c0019000>] from [<c000868c>]
+Function entered at [<c0008568>] from [<c0008080>]
+Code: bad PC value.
+Kernel panic: Aiee, killing interrupt handler!
+In interrupt handler - not syncing
+
+使用zImage_2440_8没有问题。后来又不行了，见当天后面日志。
+
+14:06 2008-02-15
+待做完成：
+触摸屏定位不准。
+
+14:20 2008-02-15
+待做：
+2440板子挂载mmc/sd有问题。
+一般拔卡有提示：
+[root@(none) mmcsd]#  mmca:end_request: I/O error, dev 3c:00 (mmc), sector 0
+end_request: I/O error, dev 3c:00 (mmc), sector 2
+end_request: I/O error, dev 3c:00 (mmc), sector 4
+end_request: I/O error, dev 3c:00 (mmc), sector 6
+end_request: I/O error, dev 3c:00 (mmc), sector 0
+end_request: I/O error, dev 3c:00 (mmc), sector 2
+end_request: I/O error, dev 3c:00 (mmc), sector 4
+end_request: I/O error, dev 3c:00 (mmc), sector 6
+ unable to read partition table
+ mmca:end_request: I/O error, dev 3c:00 (mmc), sector 0
+end_request: I/O error, dev 3c:00 (mmc), sector 2
+end_request: I/O error, dev 3c:00 (mmc), sector 4
+end_request: I/O error, dev 3c:00 (mmc), sector 6
+end_request: I/O error, dev 3c:00 (mmc), sector 0
+end_request: I/O error, dev 3c:00 (mmc), sector 2
+end_request: I/O error, dev 3c:00 (mmc), sector 4
+end_request: I/O error, dev 3c:00 (mmc), sector 6
+ unable to read partition table
+偶尔插入卡时，程序可以自动检测到卡，并显示：
+ mmca:<6> mmca: p1
+ p1
+但是"/dev/mmc/"下没有设备文件。
+傅立叶建立把2410和2440开发板的核心板调换验证是否是SD卡接口的问题。考虑到核心板和底板用DIP插座连接，插拔可能造成接触不良。
+另外mmc/sd卡驱动是通用驱动。
+综合考虑认为SD卡插座接触不良可能性较大。
+
+15:40 2008-02-15
+把Usb support 多数都改为直接编译进入内核，出错：
+/usr/local/arm/2.95.3/bin/arm-linux-ld -p -X -T arch/arm/vmlinux.lds arch/arm/kernel/head-armv.o arch/arm/kernel/init_task.o init/main.o init/version.o init/do_mounts.o \
+                --start-group \
+                arch/arm/kernel/kernel.o arch/arm/mm/mm.o arch/arm/mach-s3c2440/s3c2440.o kernel/kernel.o mm/mm.o fs/fs.o ipc/ipc.o \
+                 drivers/l3/l3.o drivers/char/char.o drivers/block/block.o drivers/misc/misc.o drivers/net/net.o drivers/base/base.o drivers/base/fs/base-fs.o drivers/media/media.o drivers/serial/serial.o drivers/net/wan/wan.o drivers/sound/sounddrivers.o drivers/mtd/mtdlink.o drivers/video/video.o drivers/usb/usbdrv.o \
+                net/network.o \
+                arch/arm/nwfpe/math-emu.o arch/arm/lib/lib.a /tmp/fvdac/kernel_2440/lib/lib.a \
+                --end-group \
+                -o vmlinux
+drivers/usb/usbdrv.o: In function `hidinput_hid_event':
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:309: undefined reference to `input_event'
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:310: undefined reference to `input_event'
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:321: undefined reference to `input_event'
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:324: undefined reference to `input_event'
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:325: undefined reference to `input_event'
+drivers/usb/usbdrv.o:/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:332: more undefined references to `input_event' follow
+drivers/usb/usbdrv.o: In function `hidinput_connect':
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:417: undefined reference to `input_register_device'
+drivers/usb/usbdrv.o: In function `hidinput_disconnect':
+/tmp/fvdac/kernel_2440/drivers/usb/hid-input.c:424: undefined reference to `input_unregister_device'
+make: *** [vmlinux] 错误 1
+原因是input设备编译为模块，所以"input_xxx"系列函数尚未编译，把Input core support改为直接编译入内核。
+编译完成后键盘错误同样。放弃......
+待做。学习usb驱动结构，否则无法调试。
+
+16:36 2008-02-15
+待做：
+需要整理全部日立文档。
+FV_Project.tar.gz中有qt_embedded在x86, arm_3.3.2，arm_2.95.3的编译结果。
+

@@ -1,0 +1,951 @@
+﻿
+9:27 9:27 2008-9-01
+Gstreamer，release包进展，续，pre-release
+1, 文档：
+1), 修改库的代码后，使用"./build.sh libname"重新编译即可，make会自动调用dep_libname规则查看依赖关系，并判断从哪个阶段开始make。
+2), 如果log中显示错误13：error occured in compile, exit。可以"./build.sh stage_init libname"恢复库状态到初始状态后"./build.sh libname"重新编译。
+2, 由于周五没有重新打包gst_mvl。今天需要修改很多重复错误。
+3, (10:57 2008-9-01)出现一个问题：
+gst-plugins-base：STATUS是CONFIGURE，但没有Makefile。
+
+4, 编译gst_mvl出错：
+==================
+arm-linux-gcc -g -Waggregate-return -Wmissing-noreturn -W -Wall -mcpu=iwmmxt -mtune=iwmmxt -mabi=aapcs-linux -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/build/include/gstreamer-0.10 -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/build/include/glib-2.0 -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/build/lib/glib-2.0/include -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/gst_mvl/gst/gst_include -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/build/include/libxml2 -L/harddisk/home/bamvor/dev/test/multimedia/gstreamer/build/lib -L/harddisk/home/bamvor/dev/test/multimedia/gstreamer/gst_mvl/gst/gst/lib -L/harddisk/home/bamvor/dev/test/multimedia/gstreamer/gst_mvl/gst/gstdeps/lib -DHAVE_CONFIG_H -fPIC -g  -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/gst_mvl/src/gst_plugin/include/ -I/harddisk/home/bamvor/dev/test/multimedia/gstreamer/gst_mvl/ipp/ipp_include -L/harddisk/home/bamvor/dev/test/multimedia/gstreamer/gst_mvl/ipp/lib -c -o src/gst_plugin/overlay2VSelements/gstoverlay2VSelements.o src/gst_plugin/overlay2VSelements/gstoverlay2VSelements.c
+In file included from src/gst_plugin/overlay2VSelements/display_ov2.h:28,
+                 from src/gst_plugin/overlay2VSelements/gstoverlay2VSelements.h:30,
+                 from src/gst_plugin/overlay2VSelements/gstoverlay2VSelements.c:30:
+src/gst_plugin/overlay2VSelements/gcu.h:28:21: error: m2d_lib.h: No such file or directory
+
+m2d_lib.h位于：
+/home/bamvor/dev/pxalinux/installed/rel/host/include/m2d_lib.h
+修改gst_mvl/Makefile：
+# PXA_HOST_INCLUDE_DIR for m2d_lib.h and other pxa package header files.
+# LIBDIR for libm2d.so and other pxa package lib.
+CFLAGS += -I$(PXA_HOST_INCLUDE_DIR) $(LIBDIR)
+#bamvor.modified.2008-8-29.end
+
+5, 修改：
+=======
+PXA_ROOT_DIR从Rule.make移到../set-env。
+export PXA_ROOT_DIR = /home/bamvor/dev/pxalinux/installed
+
+6, (14:14 2008-9-01)
+gstreamer编译通过。写文档中。
+
+11:03 2008-9-01
+Jack，Bluetooth(bluez)，bug
+1, 应编程为动态库。目前是静态库。
+2, 编译arm版本时需要提前编译一个x86版本的工具程序。可能需要两次编译。现在的问题是如果编译arm版本前把x86版本工具复制到arm版本对应目录，arm版本会覆盖x86的编译结果。
+目前是arm版本编译出错后，再把x86版本工具复制过去。
+(14:36 2008-9-4)
+包位置"E:\work\Olympia\multimedia\Bluetooth\bluetooth-20080904.tar.gz"。
+Jack:
+解压后Makefile在顶层目录，source在app目录下
+在app/bluez-utils-3.36-arm目录下的common，hcid，sdpd目录下的三个静态库变成动态库
+在app/dbus-glib-0.76-arm目录下dbus内有一个需要编译为x86版本：.libs/lt-dbus-bonding-tool
+
+14:38 2008-9-01
+ETS会议，Phoenix Li
+更新后的kernel ETS需要驱动如何修改。见RNp3。
+大意：
+每个驱动的Trace和Spy都是AP Trace和AT Spy子功能。例如FM子ID是700-799。另外子ID"0"表示全关。
+ETS example text file：
+"Olympia\driver\ETS\Phoenix\0901\ets txt.rar"
+
+14:46 2008-9-01
+Gstreamer，release包进展，续，pre-release，文档
+0, 结构：文件目录介绍，如何make，如何加入新的库，遗留问题（不开放）
+1, How to make:
+===============
+Note: using short library name make progress. you can get it from lib.make.
+e.g. check-0.9.4 package named check;
+
+(0), preparing:
+untar multimedia-release package, a directory named "multimedia" will be created:
+bamvor@winson-desktop:/home/bamvor/dev$ tar zxvf multimeda_release_0901.tar.gz
+(1), enter multimedia directory:
+bamvor@winson-desktop:/home/bamvor/dev$ cd multimedia/
+bamvor@winson-desktop:/home/bamvor/dev/multimedia$ pwd
+/home/bamvor/dev/multimedia
+bamvor@winson-desktop:/home/bamvor/dev/multimedia$ ls
+backup  extra-dep.tar.gz  gstreamer  set-env
+(2), edit set-env script: 
+a, change VIA_MULTIMEDIA_DIR environment variable to your multimedia directory.
+e.g.:
+export VIA_MULTIMEDIA_DIR=/home/bamvor/dev/multimedia
+b, PXA_ROOT_DIR is pxa linux package install directory. gst_mvl need some header file and lib in it. only read from this directory. 
+export PXA_ROOT_DIR=/opt/marvell
+or
+export PXA_ROOT_DIR=/home/bamvor/dev/pxalinux/installed
+...
+(3), run set-env script:
+source set-env
+d, cd gstreamer
+(4), untar and make simbol link
+a, untar and make simbol link for all package:
+./build.sh prep
+b, untar and make simbol link for a specified package:
+./build.sh prep libname
+e.g. untar and make simbol link for check-0.9.4
+./build.sh prep check
+Note: make log: log/log.make_${DATETIME}_target_libname.
+(5), build package
+a, build all package:
+./build.sh all
+Note: 
+i, if there is no gettext package installed in your host PC. you need to untar extra-dep package, and uncomment the following line in set-env script and re-source set-env:
+#source $VIA_EXTRADEP_DIR/src/gettext-0.16/build.finish
+ii, using the following command to get the make progress.
+cat logfile | grep \#make\#
+
+b, build a a specified package:
+./build.sh libname
+e.g. build check library:
+./build.sh check
+Note: the Makefile will check dependent library describe in lib.make, and compile all dependent library if needed. but the Makefile CAN NOT automaticly untar and make simbol link for package. So I sugget you run "./build.sh prep" to untar and make simbol link for all package before make.
+
+2, how to add a new library
+===========================
+for example, add gstreamer-0.10.20.tar package:
+edit lib.make and add the followings:
+###############################################################################
+# define packet name, extension, extract command. only support tarball at \
+# present
+# variable is compose by varName_libname, libname means short name for library.
+# current libname is gstreamer. 
+libname_gstreamer=gstreamer
+# lib_tartype means extesion name for library;
+lib_tartype_gstreamer=tar
+# libfullname means full name for library excluding extesion;
+libfullname_gstreamer=gstreamer-0.10.20
+# library used by current lib
+dep_lib_gstreamer=check glib libxml2
+# dependent library of current lib
+next_lib_gstreamer=gst-plugins-base
+# define for configure stage: shell_extra_command and configure_extra_param
+# shell command before configure, semicolon and back-slash ";\" should add at the end of one command,
+# except the last line.
+define shell_extra_command_gstreamer
+sed "s/check_pic/check/" configure > configure.new;     \
+mv configure configure.ori;     \
+mv configure.new configure;     \
+chmod --reference=configure.ori configure
+endef
+# configure extra parameter excluding prefix, HOST, CC. 
+configure_extra_param_gstreamer=--disable-valgrind $(configure_pkg-config-path) --with-check=${BUILD_DIR}
+# extra cflags for libname
+EXTRA_CFLAGS_gstreamer=
+
+Note: 
+1), if there is no shell command needed. Makefile need write "$(shell_extra_command_nop)" in defined variable, e.g.:
+define shell_extra_command_gst-plugins-good
+$(shell_extra_command_nop)
+endef
+2), there are two pre-defined variables for set pkg config path:
+a, set pkg config path in configure:
+$(configure_pkg-config-path)
+b, set pkg config path in shell command before configure, only for no --with-pkg-config-path parameter in configure script:
+define shell_extra_command_liboil
+$(DEF_PKG_CONFIG_PATH)
+endef
+3), you can search the dep library quinkly in vim by enter the follow command:
+/\<dep.*=.*libname
+e.g.
+"/\<dep.*=.*check" will find "dep_lib_gstreamer=check glib libxml2".
+"/\<dep.*=.*gst\-plugins\-base" will find "dep_lib_gst-plugins-good=gst-plugins-base".
+
+3, Structure
+============
+D:\GnuWin32\bin>tree Z:\dev\temp\multimedia
+Z:\dev\temp\multimedia
+|   `-- extra-dep.tar.gz: extra library depends by gstreamer package
+|   `-- README:	this file
+|   `-- gstreamer: gstreamer directory
+|   |-- Makefile: top level Makefile for gstreamer directory
+|   |-- Rules.make: top level Rules.make for gstreamer directory. included by Makefile.
+|   |-- build: directory for installing in "make install" stage
+|   |-- build.sh: utility for make gstreamer package.
+|   |-- gstbin: directory for installing in "make install-target" stage
+|   |-- lib_test.make: describe each library's make parameter. only for test. used with package: test1-1.1.0.tar.gz, test2-1.0.0.tgz and test3.tar
+|   |-- lib.make: describe each library's make parameter.
+|   |-- log: directory for store log. used by build.sh
+|   |-- mkgstpkg.sh: script for "make install-target", evoked by toplevel Makefile gstreamer.
+|   `-- package: via gstreamer souce code package
+|       |-- alsa-lib-1.0.13_via.tar.gz: alsa-lib via package changed from 
+|       |-- alsa-lib.tgz: original alsa-lib package
+|       |-- alsa-tools-gpl.tgz: original alsa-tools package
+|       |-- check-0.9.4.tar.gz
+|       |-- glib-2.12.12.tar.gz
+|       |-- gst-ffmpeg-0.10.3.tar.gz
+|       |-- gst-ffmpeg-0.10.4.tar.gz
+|       |-- gst-plugins-0.8.12.tar.gz
+|       |-- gst-plugins-bad-0.10.7.tar.gz
+|       |-- gst-plugins-base-0.10.20.tar.gz
+|       |-- gst-plugins-good-0.10.8.tar.gz
+|       |-- gst-plugins-ugly-0.10.8.tar.gz
+|       |-- gst_mvl_via.tar.gz: change from pxalinux/installed/src/gstreamer.
+|       |-- gstreamer-0.10.20.tar
+|       |-- liboil-0.3.15.tar
+|       |-- libxml2-2.6.30.tar.gz
+|       |-- test1-1.1.0.tar.gz: package for test top level Makefile, used with lib_test.make
+|       |-- test2-1.0.0.tgz: package for test top level Makefile, used with lib_test.make
+|       `-- test3.tar: package for test top level Makefile, used with lib_test.make
+`-- set-env: environment script. should run before make gstreamer.
+
+5 directories, 28 files
+
+4, TODO. 遗留问题
+=================
+0), 与之前编译的结果对比：
+与gavin相比：
+Only in /harddisk/home/bamvor/dev/multimedia/gstreamer_gavin/gstbin/gst/gst/lib: liboil-0.3.14.so
+Only in gstbin/gst/ipp/lib: libcodecjpegdec.so
+Only in gstbin/gst/ipp/lib: libcodecjpegencmved.so
+Only in gstbin/gst/ipp/lib: libcodecjpegenc.so
+Only in gstbin/gst/ipp/lib: libcodecwmvdecmved.so
+Only in gstbin/gst/ipp/lib: libippcam.so
+其中liboil是版本不同。脚本应该和gavin一样的。
+与gstreamer_bamvor.tar.gz相比，后者有libgstmpeg2dec.so。
+1), 按"19:04 2008-8-26"文件解决方法修改"__gst_debug_min"未定义问题。需要在EXTRA_CFLAGS中加入link gstreamer-0.10.20库的参数。
+2), (22:14 2008-8-28)修改gst_mvl Makefile的情况，编译通过，下列文件与gavin不同。未运行测试：
+gst_mvl is speficial package. I change the Makefile directly.
+if need previous CFLASG uncomment the CFLAGS after "#bamvor.modified.2008-8-29" and comment the CFLAGS after "#common gstreamer CFLAGS" and "#Marvell gstreamer CFLAGS".
+目前对gst_mvl/Makefile的修改方式：via gstreamer build目录已有库和头文件使用该目录中的，没有的使用gst_mvl包中的。此外：CFLAGS引用了pxalinux包的下列文件：
+CFLAGS += -I$(PXA_HOST_INCLUDE_DIR) $(LIBDIR)
+3), (10:33 2008-8-22)
+通过configure脚本自动根据用户指定的依赖关系生成Makefile
+4), 加入规则：
+(1), 加入check_env规则，检查env是否正确：环境变量是否为空，目录是否齐全，是否有响应的权限。
+(2), 加入make script规则。在没有库的目录下生成build.xxx脚本，用户可以直接执行build.xxx脚本进行make。
+(3), 加入make tar, make dist规则。
+
+16:09 2008-9-01
+FM，Ryan duan 2164，support app，待做完成：记入下周周报。1h
+自"16:24 2008-8-28"
+
+11:36 2008-9-02
+今日计划，待做完成：
+1, (16:09 2008-9-01)
+问claire 2352。8.8补休问题（我请了假）；在职证明进展，急；9月工资几号发。
+2, cdma bug，先试服务器上的内核，再试加DMA的内核。
+
+13:37 2008-9-02
+jffs2，使用文件描述dev目录下的设备文件
+谢谢，我已经在mkfs.jffs2的WebCVS里找到了。用在我们的项目里也验证过没问题。
+
+On 10/15/07, Li Yang-r58472 <LeoLi在freescale.com> wrote:
+> > -----Original Message-----
+> > From: linux-kernel-bounces在zh-kernel.org
+> > [mailto:linux-kernel-bounces在zh-kernel.org] On Behalf Of Shuduo Sang
+> > Sent: Friday, October 12, 2007 4:18 PM
+> > To: linux-kernel在zh-kernel.org
+> > Subject: 谁熟悉mkfs.jffs2的 --devtable 参数
+> >
+> > 请教：
+> > 开发工作中需要能让非root的用户自己生成 rootfs image，但是非root用户无法建立 dev下的设备文件。
+> > 发现mkfs.jffs2 有个参数 --devtable=FILE，通过指定一个文件来建立设备文件。
+> > -D, --devtable=FILE
+> >     Use the named FILE as a device table file, for including
+> > devices and changing permissions in the created image when
+> > the user does not have appropriate permissions to create them
+> > on the file system used as source.
+> >
+> > 现在的问题是不知道这个文件的格式是什么，请问哪位知道？多谢！
+>
+> 这里有个device table的例子，里面应该写得比较清楚了。
+详见回帖：
+http://zh-kernel.org/pipermail/linux-kernel/2007-October/001024.html
+
+18:56 2008-9-02
+潘鹏，CDMA bug，续
+tty_flip_buffer_push函数显示的内容少于tty2socket显示的。可能是调试函数有问题。
+使用DMA uart模式可以正常运行。明天要潘鹏脚本，看在DMA模式下有无这个问题。
+image位于"E:\work\Olympia\driver\CDMA\0902\image.tar.gz"，其中xxx_1901是DMA模式。xxx_1615是无DMA模式。二者都没有加入任何调试信息。
+
+21:02 2008-9-2
+待做完成：
+1, 找潘鹏(kevin, 3572)要那天的脚本；（完成）
+2, release第一版FM驱动，主要为了支持Ryan。需要修改frequency low high的单位。（转移）
+3, 找jack要蓝牙资料和问题。（完成）
+
+10:39 2008-9-3
+潘鹏，CDMA bug，续
+1, 使用潘鹏那天的脚本：PhoneSpeaker.sh，没有出问题。应该是开DMA的作用。
+脚本位于："Olympia\driver\CDMA\0903\pps.tar.gz"。
+需要实验关DMA的情况：关DMA后仍然没有这个bug？！下午再找潘鹏。
+(14:34 2008-9-3)
+使用的内核版本不同：应该使用"\\bjna02\VIA_Telecom\Public\F628\Intg\APP"（自潘鹏。app release服务器，有每次release的内核，rootfs和qtopia），目前是"20080819"。
+使用20080819的内核和根文件系统。mtdblock3分区比昨天的加入了潘鹏今天给我的audioscript脚本。位于mtdblock3分区的/bin/audioscirpt。这时会出错，映像和log位于"Olympia\driver\CDMA\0903\1445"。
+想起其实内核还有一点与kevin不同——波特率是115200，改为38400试试。
+(16:16 2008-9-3)仍然没有再现这个错误，映像和log位于"Olympia\driver\CDMA\0903\1530"。
+为了保证确实是0827版本没有这个bug，从linux-2.6.21_fromJackWu_CC0827重新解包，使用默认配置编译。再次试验。如果没问题就，这个bug就不用解决了。
+(18:15 2008-9-3)
+有问题。映像和log位于"Olympia\driver\CDMA\0903\1625"。
+内核代码位于"/home/bamvor/dev/linux-2.6.21_CC0827_0903new"。
+(9:45 2008-9-4)
+这样实际就是连个内核只有是否有DMA不同了。现在把CC0827内核改为无DMA方式，CC0827_0903new改为有DMA方式。试验，只是更好内核，rootfs和MassStorage与0903 1625相同：
+1), CC0827无DMA：
+进一步测试：
+发at+cmgl=6时有无PhoneSpeaker脚本两种情况各测试20次。除了运行脚本但脚本基本运行结束这种情况，at命令(at+cmgl=6)出错与有无有无PhoneSpeaker脚本完全对应。
+进一步试验PhoneSpeaker脚本的5个子脚本和剩余脚本这六部分，发现每部分都会引起at命令(at+cmgl=6)出错。
+2), CC0827_0903new有DMA：
+发at+cmgl=6时有无PhoneSpeaker脚本两种情况各测试20次以上，都没有出错。
+可以确定开DMA后cdma bug解决。不过现在并不知道造成这个bug的原因。待做：深入分析原因。
+待做：
+1), 问jack开DMA对蓝牙有无影响。若无问题，此bug暂时解决。
+2), 如果jack蓝牙无问题，给kevin发信——bug解决。
+
+10:43 2008-9-3
+Ryan，FM，support，1h，待做，加入周报
+1, 待做：
+1), 开放测地噪的函数，getRssi。
+2), frequency low high
+2, 如果输出错误信息：
+strerror, perror，都使用errno变量，该变量由kernel设置，在内核头文件中定义。
+
+14:50 2008-9-3
+待做，转移自(2008-8-1~~2008-8-11)：
+1, FM相关：
+1), "16:57 2008-8-1"rda5802
+rda5802编程指南p7说tune需要10ms，判断是否是真台需要20ms。这样比rda5800时间短很多，代码功能完成后。提升效率时测试，修改。
+2), "18:08 2008-8-11"
+(1), 完成rda5802全部驱动：扫描整个频段，自动搜台，调整音量等。
+(2), 完成rda5802全部ETS。
+(3), 完成rda58xx其余未完成问题。
+2, LCD相关
+, (14:44 2008-8-5)
+/linux-2.6.21_gavin/drivers/video/olympiafb/pxafb.c
+pxafb_set_backlight函数
+
+14:40 2008-9-4
+待做，对目前任务排优先级
+1, 原有计划：
+根据"10:19 2008-8-13"描述。比较急的是FM完成和gstreamer详细支持的格式列表。
+其中FM还包括"14:50 2008-9-3"1中Ryan的需求。考虑到FM app的将要release，FM应该比gstreamer优先级高。
+2, 新增任务：
+1), Kevin CDMA 串口bug。完成，等待Jack确认新板子是否支持DMA中。若无问题，基本不需要多余的时间。
+2), Jack bluez编译问题。应该不是很急。
+结论：FM和bluez编译问题交替完成。然后再做其它的任务。
+
+15:01 2008-9-4
+Gstreamer，release包进展，续，post-release，bug
+注：这两个bug没有加入到我的release包中，目前gstreamer由David的svn服务器维护。
+1, neon出错
+David编译gst-plugins-bad时系统配置neon库为需要编译的库，编译时出错。经查我自己的0901\log.make_164637_all_all，没有编译这个库。可能是David系统中已存在的PC版本的某些库使gst-plugins-bad认为neon库可以编译。目前是在configure_extra_param_gst-plugins-bad最后加上"--disable-neon"。David估计还会有类似的bug，慢慢解决。
+2, mkgstpkg.sh复制库时没有保留符号链接。把该脚本中所有复制命令(cp)，改为(CP)，并定义CP：
+CP="cp -a"，开始没有加引号，脚本运行出错。于是开放bash调试选项"-x"，看到是把cp和-r分开识别的，所以出错。加引号后正常。
+
+15:56 2008-9-4
+待做完成：
+1, 新release一个内核：
+1), Ryan(电话：2164)要release FM；完成
+2), 改CDMA bug。完成
+2, 周报。完成
+
+16:22 2008-9-4
+周报（9.1-9.5）
+====================
+0, 工作日5，40小时。上周周报"15:18 2008-8-28"。
+1, 支持Ryan FM release 2h
+2, 调试CDMA串口丢数据bug for 潘鹏。22
+3, 写gstreamer release package 文档。 4
+4, 修gstreamer release package bug。4
+4, 解决蓝牙开发包编译bug。7
+5, ETS meeting。1h
+
+Key Activities of the week:
+1, Support APP(Ryan Duan) FM release 2h
+2, debug CDMA bug about lost data for Kevin pan. 22
+3, write gstreamer release package documentation 4
+4, fix 2 gstreamer release package bugs 4
+5, fix bluez package build bug 7
+6, ETS meeting 1h
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 fix bluez package build bug 
+2 modify FM RDA5802 driver according to RDA's suggestion
+
+10:23 2008-9-5
+Gstreamer，release包进展，续，post-release，bug
+1, ff-mpeg没有正确install到gstbin；发现是mkgstpkg.sh没有对应语句：
+#----------------------------------------------
+#Copy gst-ffmpeg
+#----------------------------------------------
+${CP} ${BUILD_DIR}/lib/gstreamer-0.10/libgstffmpeg.so* ${TARGET_DIR}/gst/gst/lib/gstreamer-0.10/
+
+2, 加入jpeg库，发现bug：
+1), 加入jpeg-6b后，gst-plugins-good没有重新configure。
+2), jpeg-6b库STATUS更新后，gst-plugs-good没有重新configure。
+1), 2), 解决：加入新库后，依赖这个库的库需要运行"./build.sh stage_init libname"
+3), 没有libtool：
+解决：在gstreamer目录下建立tools目录，暂时是从gstreamer目录复制libtool到tools目录。这个目录应做为release的目录。
+3, ./build.sh不好用，无法自动提示。最好还是改为make。
+注：david gsteamer目录：
+/harddisk/home/david/multimedia_devel/multimedia/trunk/gst-bk-devel/gstreamer
+4, build.sh脚本中加入-c，参数。如果修改了源文件需要重新编译某个库可以执行：
+./build.sh libname -c，系统会重新执行make和make install命令。
+这是参考"/usr/share/doc/util-linux/examples/getopt-parse.bash"的getopt例子改写的。
+
+15:42 2008-9-5
+潘鹏，CDMA bug，续
+bugzilla位置：
+http://10.4.71.243/show_bug.cgi?id=8793
+用户名是邮箱，密码是"changeme"。
+
+17:55 2008-9-5
+编译Jack0624内核，音频中有两处printk语句的换行部分没有一起注释，造成编译错误。例如：
+sound/soc/soc-dapm.c:387: error: expected ';' before ')' token
+需要把：
+//printk(KERN_ERR "is_connected_output_ep name:%s\n",
+                                              widget->name);
+改为
+//printk(KERN_ERR "is_connected_output_ep name:%s\n",
+//                                              widget->name);
+(18:25 2008-9-5)
+第二个错误：
+  LD      .tmp_vmlinux1
+drivers/built-in.o: In function `pxa_camera_resume':
+drivers/media/video/pxa3xx/pxa_camera_zl.c:3787: undefined reference to `pxa3xx_pmic_set_voltage'
+drivers/media/video/pxa3xx/pxa_camera_zl.c:3791: undefined reference to `pxa3xx_pmic_set_voltage'
+drivers/built-in.o: In function `camera_init':
+drivers/media/video/pxa3xx/pxa_camera_zl.c:1948: undefined reference to `pxa3xx_pmic_set_voltage'
+drivers/media/video/pxa3xx/pxa_camera_zl.c:1952: undefined reference to `pxa3xx_pmic_set_voltage'
+drivers/built-in.o: In function `sensor_power_on':
+drivers/media/video/pxa3xx/ov3640_hw.c:3374: undefined reference to `enable_CAM2V8'
+drivers/media/video/pxa3xx/ov3640_hw.c:3376: undefined reference to `pxa3xx_pmic_read'
+drivers/media/video/pxa3xx/ov3640_hw.c:3379: undefined reference to `pxa3xx_pmic_read'
+drivers/built-in.o: In function `pxa_mss_host_probe':
+drivers/mmc/pxa3xx_controller.c:1342: undefined reference to `enable_SD2V8'
+make: *** [.tmp_vmlinux1] Error 1
+(9:36 2008-9-8)
+找Xia wu帮忙看看。
+
+11:00 2008-9-8
+Olympia, 制作根文件系统，jffs2
+mkfs.jffs2 -e 0x20000 -n -r dir/to/rootfs -o outputfile.jffs2
+我的习惯：
+mkfs.jffs2 -e 0x20000 -n -r rootfs -o rootfs`date +%Y%H%M%S`.jffs2
+
+11:50 2008-9-8
+合并FM驱动到内核代码（直接编译入内核）
+自己制作的rootfs启动失败。
+仅仅测试内核。这个交给jack做。
+(15:44 2008-9-8)
+这次radio-rda58xx注册成功。但是I2C设备没有注册成功。怀疑是由于radio和i2c设备中init和exit函数名称一样。
+修改：
+radio-rda5800.c中：
+rda5800_init/exit为rdaio_rda5800_init/exit。
+
+现在：
+bamvor@winson-desktop:/home/bamvor/dev/linux-2.6.21-ets_Jack0623$ arm-linux-nm vmlinux | grep rda58xx_init
+c0021078 t __initcall_radio_rda58xx_init6
+c002100c t __initcall_rda58xx_init6
+c001ade4 t radio_rda58xx_init
+c00184cc t rda58xx_init
+原来：
+bamvor@winson-desktop:/home/bamvor/dev/linux-2.6.21-ets_Jack0623$ arm-linux-nm vmlinux | grep rda58xx_init
+c002100c t __initcall_rda58xx_init6
+c0021078 t __initcall_rda58xx_init6
+c00184cc t rda58xx_init
+c001ade4 t rda58xx_init
+为了提高效率，这次只下载内核。
+(16:49 2008-9-8)
+仍然不行，这次把init/exit用函数指针传到radio-rda58xx中。(20080908/1639)。
+只好打出信息，把所有rda58xx的dprink的RDA58XX_DEBUG_LEVEL从KERN_DEBUG改为KERN_INFO。(20080908/1701)
+没成功。make clean;make。(20080908/1729)。
+发现是readID出错，看具体问题，是否是偏移有问题。(20080908/1747)。
+偏移应该是98(rda5802是108)。(20080908/1747)。
+待做：
+1), 目前是固定偏移，改为使用原有"readData8[(NUM_OF_FULL_REG-READ_REG_OFFSET+1)<<1])"方法计算。
+2), getRssi功能有问题。
+3), 找qinghua tong焊个喇叭。
+
+16:01 2008-9-8
+include\linux\init.h
+#define pure_initcall(fn)		__define_initcall("0",fn,1)
+
+#define core_initcall(fn)		__define_initcall("1",fn,1)
+#define core_initcall_sync(fn)		__define_initcall("1s",fn,1s)
+#define postcore_initcall(fn)		__define_initcall("2",fn,2)
+#define postcore_initcall_sync(fn)	__define_initcall("2s",fn,2s)
+#define arch_initcall(fn)		__define_initcall("3",fn,3)
+#define arch_initcall_sync(fn)		__define_initcall("3s",fn,3s)
+#define subsys_initcall(fn)		__define_initcall("4",fn,4)
+#define subsys_initcall_sync(fn)	__define_initcall("4s",fn,4s)
+#define fs_initcall(fn)			__define_initcall("5",fn,5)
+#define fs_initcall_sync(fn)		__define_initcall("5s",fn,5s)
+#define rootfs_initcall(fn)		__define_initcall("rootfs",fn,rootfs)
+#define device_initcall(fn)		__define_initcall("6",fn,6)
+#define device_initcall_sync(fn)	__define_initcall("6s",fn,6s)
+#define late_initcall(fn)		__define_initcall("7",fn,7)
+#define late_initcall_sync(fn)		__define_initcall("7s",fn,7s)
+
+10:11 2008-9-9
+合并FM驱动到内核代码（直接编译入内核），续
+1, 为了便于调试把FM驱动编译为模块。
+2, 由于setfreq返回值改为是否有台，所以getrssi函数工作不正常。修改后：rssic = dev->cur_status.rssi;，正常。
+"20080909/1144"。加载驱动模块后音频正常。
+3, 下一步是CDMA和FM编译入内核，另外信号强度很高，一般都是40以上，10250, 10390都是63——最大值。用其它板子试验。待做。
+4, 待做：DAC get返回值不正确。
+5, (16:24 2008-9-9)
+把音频编译入内核出错：
+	LD      .tmp_vmlinux1
+	sound/built-in.o: In function `closeallroute_control_put':
+sound/soc/pxa/wm8991-littleton.c:1971: undefined reference to `dapm_set_path_status'
+make: *** [.tmp_vmlinux1] Error 1
+解决：
+sound\soc\soc-dapm.c的
+static void dapm_set_path_status(struct snd_soc_dapm_widget *w,
+	struct snd_soc_dapm_path *p, int i)
+改为：
+void dapm_set_path_status(struct snd_soc_dapm_widget *w,
+	struct snd_soc_dapm_path *p, int i)
+即可。困惑...待做。
+"20080909/1608"
+使用kevin板子测试"at+cmgl=6"bug，bug未出现。是否运行PhoneSpeak.sh的对比试验测试次数>15。
+使用自己板子测试FM驱动，没有问题。
+release给Jack，位置：
+Olympia\backup\0909\linux-2.6.21-ets_Jack0623_FM_CDMA-bug_bamvor.tar.gz。
+加入的新特性：
+1, 串口配置为DMA方式。
+目的：解决bug8793: CDMA at命令"at+cmgl=6"在运行PhoneSpeaker.sh脚本时返回数据不完整。
+2, 加入了FM驱动。
+当前配置为RDA5800芯片。RDA5802芯片驱动尚未完成。
+
+11:07 2008-9-9
+待做完成：
+联系qinghua tong定FM搜台算法。大约是明天。
+
+12:20 2008-9-9
+脚本学习，bash，参数处理：getopt
+目前还没有完全理解，以后详述，暂时先把代码贴到这里。
+注意：
+1, 对于长选项：每个长选项之间用逗号分割，如果没有参数不加冒号，一定有参数加一个冒号，参数可有可无加两个冒号。
+2, case语句中，字符串是否使用双引号都可以。完全一样。
+#!/bin/sh
+#parse parameter
+#copy from  /usr/share/doc/util-linux/examples
+TEMP=`getopt -o h --long image:: -n '$0' -- "$@"`
+
+if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+
+# Note the quotes around `$TEMP': they are essential!
+eval set -- "$TEMP"
+
+while true ; do
+	case "$1" in
+		--image) 
+			echo copy down driver to current cir
+#			case "$2" in
+#				"") echo copy i2c, radio, test_code.;shift;;
+#				*)  echo copy one file.;shift 2 ;;
+#			esac 
+			echo $2
+			copy_driver=$2; shift 2;
+			;;
+		-h)
+			echo there is no help documentation right now.
+			;;
+		--) shift ; break ;;
+		*) echo "Internal error!" ; exit 1 ;;
+	esac
+done
+echo "Remaining arguments:"
+for arg do echo '--> '"\`$arg'" ; done
+#copy from  /usr/share/doc/util-linux/examples.end
+
+14:19 2008-9-9
+待做：把gstreamer config.h放到build目录下合适的位置。
+为/home/bamvor/dev/multimedia/gstreamer/gstreamerbktest库加入lib.make，并release给david。
+
+14:57 2008-9-9
+待做完成：
+1, 关bug, 8793
+2, jack内核；
+
+18:10 2008-9-9
+今天日志：
+\Olympia\backup\0909\log
+JackKernel：使用linux-2.6.21-ets_Jack0623_FM_CDMA-bug_bamvor.tar.gz内核的FM和CDMA测试结果。
+
+15:11 2008-9-10
+Gstreamer，release包进展，续，post-release，update
+位置：Olympia\backup\0910\gstreamer_release。
+加入了David Yi用于测试的库gstreamerbktest.tar.gz，该库需要设置glib，libxml2，gstreamer三个库的cflags和ldflags。另外CFLGAS需要"-DHAVE_CONFIG_h -fPIC -I./"。其中"-I./"的目的是包含config.h，这个config.h是从gstreamer库（../gstreamer/config.h，）做的符号链接。
+
+17:23 2008-9-10
+(17:36 2008-9-11)
+Olmypia，FM搜台算法，rda5800
+100k，autoseek
+先两次积分，底噪+6
+去掉91MHz，104MHz两个台。78MHz也是噪声，目前只搜索87.50-108MHz，不考虑78MHz。
+(10:14 2008-9-12)
+1, 先在PC机测试。用"Olympia\backup\0909\log\JackKernel\log_uart_20080909172832_FM_bamvorBoard.1"的rssi实验。
+1), 数据结构：
+typedef struct {
+	int freq;
+	int rssi;
+} freqRssi;
+freqRssi fr[205];
+2), 
+a, R_1(n)=R(n)-R(n-1), R_1(n+1)=R(n+1)-R(n);
+b, R_2(n+1)=R_1(n+1)-R_1(n) = R(n+1)-R(n) - R(n) + R(n-1) = R(n+1)-2*R(n) + R(n-1)
+c, if station is not 9100 or 10400 (or 7800); then
+	if R_2(n+1)<=-5; then
+		n is a station
+	fi
+   fi
+注：R_x表示R的几阶差分。差分的分母是1。联：高等数学，微积分的应用。
+(12:09 2008-9-17)
+如果加入域值大于等于底燥+6且二次差分小于-4的条件，10250能被找到。但是10610也会认为是台。
+下午放到驱动里面。
+
+19:23 2008-9-10
+Jack，Bluetooth(bluez)，bug，续
+1, 解包；
+bluetooth/app/bluetooth/cscope.po.out
+bluetooth/app/bluetooth/cscope.in.out
+
+bzip2: Compressed file ends unexpectedly;
+        perhaps it is corrupted?  *Possible* reason follows.
+bzip2: Inappropriate ioctl for device
+        Input file = (stdin), output file = (stdout)
+
+It is possible that the compressed file(s) have become corrupted.
+You can use the -tvv option to test integrity of such files.
+
+You can use the `bzip2recover' program to attempt to recover
+data from undamaged sections of corrupted files.
+
+tar: Unexpected EOF in archive
+tar: Unexpected EOF in archive
+tar: Error is not recoverable: exiting now
+2, 编译bluez-utils，需要编译bluez-libs，dbus库。
+其中dbus库使用了gstreamer中的libxml2库。
+编译dbus库未通过，提示bus_config_parser_check_doctype未找到。
+包位于服务器："/home/bamvor/dev/bluetooth"
+今日进展:"Olympia\backup\0910\bluez"。
+待做完成：要Jack的全部build结果。
+
+21:05 2008-9-10
+支持Ryan FM，1h，待做完成：加入日志。
+
+10:17 2008-9-11
+Jack，Bluetooth(bluez)，bug，续
+1, Jack bluez make install结果：
+release-20080910.tar.bz2: is the rel/host dir in marvell package. it is bluetooth-20080904.tar.bz2 prefix directory.
+位置：Olympia\multimedia\Bluetooth。
+待做：移动硬盘备份。
+
+14:44 2008-9-11
+周报（9.8-9.12）
+====================
+0, 工作日5，40小时。上周周报"16:22 2008-9-4"。
+1, 修改内核代码，加入FM驱动，修正了CDMA at命令bug。16小时
+2, 更新gstreamer release包：加入了gstreamerbktest库（David测试用）。3小时
+对于这种没有configure脚本，但是需要设置依赖库的CFLAGS和LDFLAGS的库。采取方法如下：
+1), 编写configure脚本，目的是生成包含库所需的CFLAGS和LDFLAGS的Rules.make（libname目录下）。
+2), libname/Makefile中include Rules.make，并删除Rules.make中已经包含的CFLAGS和LDFLAGS。
+3, 修正bluez包编译bug。14小时
+4, 支持app FM开发人员(Ryan Duan)。4小时
+5, FM rda5800搜台算法讨论。Qinghua tong。3小时。
+
+Key Activities of the week:
+1 modify kernel code: compile FM driver into kernel, fix CDMA AT command bug. 16
+2 update gstreamer release package: add gstreamerbktest library by David Yi. 3
+3 fix bluez package compile bug. 14
+4 Support APP(Ryan Duan) FM release 4h
+5 discuss FM seek station algorithm with Qinghua tong. 3h
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 fix bluez package build bug 
+2 modify FM RDA58xx driver to improve the seek station result.
+
+15:50 2008-9-17
+FM，自动搜台算法
+1, 修改驱动：
+把rda5800_getsigstr从直接读当前rssi改为tune后得到Rssi。
+
+9:26 2008-9-18
+待做：
+找qinghua tong商量搜索算法。"17:23 2008-9-10"的算法的缺点是两次差分后的差分结果在不同扫描情况下，差异较大。有的差分结果要“<=-3”才能去到较多的台。
+
+10:36 2008-9-18
+脚本学习，被转义搞晕了
+每次shell处理时都会处理转义字符。
+所以如果在命令行使用sed命令替换内容为"\"，需要使用四个反斜杠——经过shell转义后是两个反斜杠，正好给sed做为输入，sed会把两个反斜杠处理为一个反斜杠字符。
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ echo $prefix
+/home/bamvor/dev/bluetooth/bluetooth/jack_build
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ echo $prefix | sed "s/\//\\\\\//g"
+\/home\/bamvor\/dev\/bluetooth\/bluetooth\/jack_build
+但，如果使用``的话，也就是先执行了一次shell命令，所以还要多加一倍的反斜杠——也就是8个反斜杠，在sed中其实才是两个。
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ a=`echo $prefix | sed "s/\//\\\\\\\\\//g"`; echo $a
+\/home\/bamvor\/dev\/bluetooth\/bluetooth\/jack_build
+这样很麻烦，而且命令缺乏通用性，因此可以sed -e参数，指定脚本：
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ bscript="s/\//\\\\\//g"
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ echo $bscript
+s/\//\\\//g
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ echo $prefix | sed -e $bscript
+\/home\/bamvor\/dev\/bluetooth\/bluetooth\/jack_build
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ a=`echo $prefix | sed -e $bscript`
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/pkgconfig$ echo $a
+\/home\/bamvor\/dev\/bluetooth\/bluetooth\/jack_build
+这里的bscript是脚本，只是赋值时经过一次转义，实际的bscript是"s/\//\\\//g"，很清晰。
+
+11:11 2008-9-18
+LCD省电模式：关闭driverIC，背光，lcd controller
+
+12:03 2008-9-18
+bluez，脚本
+完成修改*.pc文件中prefix变量的工作
+使用：change_prefix  dir/to/build/result
+目录是绝对路径和相对路径均可。
+位置：Olympia\backup\0918\change_prefix.sh
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth$ cat change_prefix.sh
+#!/bin/bash
+
+usage()
+{
+        echo Usage: $0 dir/to/build/result
+}
+
+check_status()
+{
+        task_name=$1
+        ret=$2
+#       echo $ret
+        if [ "${ret}" != 0 ]; then
+                echo run ${task_name} fail with error ${ret}, exit
+                exit 1
+        fi
+
+}
+
+if [ "$1" = "" ]; then
+        usage
+        exit 1
+else
+        build_result=$1
+fi
+
+test `echo $build_result | grep ^\/`
+if [ "$?" = "1" ]; then
+        build_result=${PWD}/$build_result
+fi
+echo build base is $build_result
+cd $build_result/lib/pkgconfig
+#cd $build_result/lib/pkgconfig 2> /dev/null
+check_status "enter pkgconfig directory" $?
+fileArray=`ls *.pc 2> /dev/null`
+#fileArray=`ls *.pc`
+check_status "find pc file" $?
+
+prefix=$build_result
+sed_script="s/\//\\\\\//g"  #actual it is "s/\//\\\//g" after excape
+prefix=`echo $prefix | sed  -e $sed_script`
+echo prefix is $prefix
+for file in $fileArray; do
+        echo current file is $file
+        regexp=`cat $file | grep \^prefix= | sed "s/prefix=//"`
+        regexp=`echo $regexp| sed  -e $sed_script`
+        echo regexp is $regexp
+        sed "s/$regexp/$prefix/" $file -i
+done
+(17:21 2008-9-18)
+查找需要替换的文件：
+grep build_path * -R | grep -v ^Binary\ file.*matches$  | cut -d : -f 1
+用于bluetooth库的提取待替换路径的命令：
+ cat lib/alsa-lib/libasound_module_ctl_sco.la | grep ^libdir | sed "s/^libdir=//g" | sed "s/'//g" | sed "s/\/lib\/alsa\-lib//g"
+ cat share/man/man1/dbus-daemon.1 | grep configured\ in\ the\ files\  | sed "s/configured\ in\ the\ files\ //g" | sed "s/\"//g" | sed "s/\/etc\/dbus\-1\/system\.conf\ and//g"
+ 后来没有使用类似的命令，因为包括bluetooth，gsteamer都需要，所以存这些命令进行“智能分析”待替换内容的意义不大。
+(16:22 2008-9-22)
+change_prefix.sh脚本完成，位置：Olympia\backup\0922。
+readme:
+用于修改包括*.pc文件在内的文本文件中路径，用法：
+change_prefix.sh 新路径
+例如，gstreamer的build目录原来位于/home/1下面，现在位于/home/new下面。需要把文本文件中"home/1"改为"/home/new"
+执行"change_prefix.sh /home/new"，新路径可以是绝对或相对路径。如果是相对路径脚本会自动加上绝对路径。但建议不要使用".."，否则修改后的文本文件中是包含".."的路径，不易读。
+注：/home/1/lib/pkgconfig/下必须有*.pc文件，否则脚本不知道替换哪些路径
+
+主要是加入了修改除了*.pc文件的其它文件的命令。
+目前的问题：
+1, 是先替换*.pc文件，再搜索整个build目录替换其它文件。其实可以先从pc文件中读到需替换的路径。其实可以lib目录下只是替换*.pc文件，再次搜索是不包括lib的搜索，这样能快一些。
+2, 如果文件没有增删，每次都用grep查找哪些文件需要修改很不方便。
+3, 没有替换二进制文件，不知链接时会不会有问题。
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth$ cat change_prefix.sh
+#!/bin/bash
+
+usage()
+{
+        echo Usage: $0 dir/to/build/result
+}
+
+check_status()
+{
+        task_name=$1
+        ret=$2
+#       echo $ret
+        if [ "${ret}" != 0 ]; then
+                echo run ${task_name} fail with error ${ret}, exit
+                exit 1
+        fi
+
+}
+
+if [ "$1" = "" ]; then
+        usage
+        exit 1
+else
+        build_result=$1
+fi
+
+test `echo $build_result | grep ^\/`
+if [ "$?" = "1" ]; then
+        build_result=${PWD}/$build_result
+fi
+echo build base is $build_result
+cd $build_result
+
+cd lib/pkgconfig
+#cd $build_result/lib/pkgconfig 2> /dev/null
+check_status "enter pkgconfig directory" $?
+fileArray=`ls *.pc 2> /dev/null`
+#fileArray=`ls *.pc`
+check_status "find pc file" $?
+
+prefix=$build_result
+sed_script="s/\//\\\\\//g"  #actual it is "s/\//\\\//g" after excape
+prefix=`echo $prefix | sed  -e $sed_script`
+echo prefix is $prefix
+for file in $fileArray; do
+        echo current file is $file
+        regexp=`cat $file | grep \^prefix= | sed "s/prefix=//"`
+        regexp=`echo $regexp| sed  -e $sed_script`
+        echo regexp is $regexp
+        sed "s/$regexp/$prefix/" $file -i
+done
+cd -
+echo current path is $PWD
+
+echo replace other file exclude *.pc. e.g. *.la
+#pattern=`cat lib/alsa-lib/libasound_module_ctl_sco.la | grep ^libdir | sed "s/^libdir=//g" | sed "s/'//g" | sed "s/\/lib\/alsa\-lib//g"`
+#pattern=`echo $pattern | sed  -e $sed_script`
+pattern=$regexp
+echo pattern is $pattern
+fileArray=`grep $pattern * -R | grep -v ^Binary\ file.*matches$  | cut -d : -f 1`
+regexp=$pattern
+for file in $fileArray; do
+        echo current file is $file
+        echo regexp is $regexp
+        sed "s/$regexp/$prefix/" $file -i
+
+done
+
+15:51 2008-9-18
+bluez
+1, jack bluez的build参考顶层Makefile。
+2, 修改Makefile.in
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/app/bluez-utils-3.36-arm$ cat common/Makefile.in | grep AM_CFLAGS\ = -w
+#AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @GDBUS_CFLAGS@
+AM_CFLAGS = @DBUS_CFLAGS@ @GLIB_CFLAGS@ @GDBUS_CFLAGS@ @BLUEZ_CFLAGS@
+重新configure后Makefile改变：
+bamvor@winson-desktop:/home/bamvor/dev/bluetooth/bluetooth/app/bluez-utils-3.36-arm$ cat common/Makefile | grep AM_CFLAGS\ =
+#AM_CFLAGS = -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/include/dbus-1.0 -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/dbus-1.0/include   -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/include/glib-2.0 -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/glib-2.0/include   -I$(top_srcdir)/gdbus
+AM_CFLAGS = -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/include/dbus-1.0 -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/dbus-1.0/include   -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/include/glib-2.0 -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/lib/glib-2.0/include   -I$(top_srcdir)/gdbus -I/home/bamvor/dev/bluetooth/bluetooth/jack_build/include
+
+9:23 2008-9-22
+Camera bug果然是FM驱动引起的。
+log: Olympia\driver\V4L2\FM\bug\0922\FM bug trace.txt
+目前Camera和FM有两个交点：V4L2接口，工作队列。
+测试文件：
+Si_main为测试文件，st.par为参数文件。
+命令形式为：./si_main st.par
+(11:36 2008-9-22)使用板子原有内核启动camera有问题。log见"log_uart_20080922112427"。Xia说是LCD的问题。
+Xia怀疑是硬件问题，换块板子实验刚刚编译的内核并使用20080908/1506的文件系统。
+把刚才编译好的内核放到杨济的板子上，错误一致。都是出现"overlay2fb_open LCCR0=0x39008f9"后停住不动了。
+这两次的映像分别是1047和1150。
+(13:44 2008-9-22)这次实验Xia wu的内核(1339)
+这版本的内核加入了电源管理，不能用usb供电。
+最终还是不行，改用xia的板子。
+后来发现是数据文件的问题。
+(1401)内核是Xia内核加我0910 release的rootfs。
+(9:59 2008-9-23)
+两次queue_work，第二次出的错，从__list_add开始查，看看是哪个指针有问题。
+为了便于调试链表，打开"CONFIG_DEBUG_LIST"选项。在list_debug.c的"__list_add"中加入调试代码。
+(11:07 2008-9-23)
+Linux，数据结构，链表
+与链表有关的文件：
+include/linux/list.h：链表数据结构定义，
+lib/list_debug.c：当定义"CONFIG_DEBUG_LIST"，__list_add，list_add和list_del使用该文件的定义。
+(11:26 2008-9-23)
+上面说的两次queue_work，有可能前一次不是Camera的。
+(13:06 2008-9-23)
+果然不是Camera的，是在"sync QCI with Vsync"后面触发了"pxa_camera_irq"。
+无效指针是prev指针((&cwq->worklist)->prev：0x0006101a)。
+也就是说可能是使用工作队列的函数使得prev指针有问题。所以出错。
+实验把FM编译为模块，并且不加载模块的情况。
+如果编译为模块(1317)，无论加载FM驱动Camera都可以正常工作。FM也可以正常工作。
+和Xia讨论后，FM暂时不合并到内核中。
+注：FM还有两个bug：
+1), "log_uart_20080923134620"中成功插入FM驱动后，bus error，内核跑飞；此bug偶尔出现。
+2), "log_uart_20080923135109"的卸载模块时：
+FM_RDA58xx: radio_rda58xx_exit() 2234: rda58xx_exit exit.
+Unable to handle kernel paging request at virtual address 1644004c
+
+16:53 2008-9-22
+待做：完成这个bug后完成FM搜台搜台算法。
+
+11:46 2008-9-23
+修改change_prefix.sh脚本：
+1, 加入了对于中文提示信息的支持：
+fileArray=`grep $pattern * -R | egrep -v \(^Binary\ file.*matches$\|^二进制文件.*匹配$\)  | cut -d : -f 1`
+2, 使用sed时没有加入g参数，所以只替换了第一个。
+
+12:02 2008-9-24
+测试jack内核，又出现kernel panic没有init问题。
+于是重新烧板子，20080910 rootfs和加入了Camera测试程序si_main, st.par, libcodecjpegenc.so的MassStorage.jffs2
+
+17:43 2008-9-24
+FM bug
+今日日志：“Olympia\driver\V4L2\bug\0925\log”。
+后来发现是取消SINGLE_MODULE就对。
+待做：用我的板子测试。如果没有问题告诉Jack。一边查具体原因。一边和qinghua tong解决搜台算法。
+(13:51 2008-9-25)
+取消RDA5800_SINGLE_MODULE，此时链表调试选项打开。（1338）
+内核在启动fb时出现链表错误(__list_add)，详见"log_uart_20080925134143"。
+取消链表调试，再试验。（1350）。FM和Camera都可以使用。详见"log_uart_20080925140553"。
+不过既然上面已经发现了问题，说明与链表有关的操作可能有bug。
+
+15:39 2008-9-25
+待做完成：9月26日联系qinghua tong。
+见"10:28 2008-9-26"
+
+10:28 2008-9-26
+FM，RDA5800，自动搜台
+1, 手动自动搜台：
+1), 底噪+6
+2), 判断尖峰。
+3), 尖峰情况：两个取左，三个取中，四个取第二个（中间靠左），五个取中间，大于五个不是台。 
+2, 芯片里面自动搜台：
+1), 自动搜台域值：底噪+4。
+2), 手动自动搜台筛选。
+3, 计划现在app中实现，然后移植到驱动中。
+(10:56 2008-9-26)
+写自动搜台算法顺便复习一下正则表达式的“[]”，"()"和“\x”，x是1-9。
+比如把：
+1, xxx
+2, xxx
+3, xxx
+替换为：
+1), xxx
+2), xxx
+3), xxx
+可以搜索”([0-9]),"，替换为"\1),"。

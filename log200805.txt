@@ -1,0 +1,866 @@
+﻿19:55 2008-5-5
+嵌入式，Linux, Arm Linux中断学习，irq_chip结构体分析
+内核版本：2.6.21.1 snapgear linux p36
+struct irq_chip("include\linux\irq.h")是"hardware interrupt chip descriptor"。
+下面是24xx uart0 irq_chip结构体相关代码分析。(arch\arm\plat-s3c24xx\irq.c)：
+1，定义uart0的mask value
+========================
+/* mask values for the parent registers for each of the interrupt types */
+#define INTMSK_UART0	 (1UL << (IRQ_UART0 - IRQ_EINT0))
+IRQ_EINT0是ARM第一个中断，1UL << (IRQ_UART0 - IRQ_EINT0即得到UART0的掩模位。
+IRQ_UART0和IRQ_EINT0定义在"include\asm-arm\arch-s3c2410\irqs.h"：
+#define S3C2410_CPUIRQ_OFFSET	 (16)
+#define S3C2410_IRQ(x) ((x) + S3C2410_CPUIRQ_OFFSET)
+/* main cpu interrupts */
+#define IRQ_EINT0      S3C2410_IRQ(0)	    /* 16 */
+//...
+#define IRQ_UART0      S3C2410_IRQ(28)	    /* 44 */
+这是按照24xx INTxxx寄存器顺序排列了32个中断。
+待做：查为什么S3C2410_CPUIRQ_OFFSET是16。从前面注释看可能和ISA总线有关系。
+
+2，屏蔽中断
+===========
+屏蔽irqno指定的uart0中断位，irqno取值是IRQ_S3CUART_RX0, IRQ_S3CUART_TX0, IRQ_S3CUART_ERR0。这是根据s3c_irqsub_mask代码分析得到的，待做：分析。
+/* UART0 */
+static void s3c_irq_uart0_mask(unsigned int irqno)
+{
+	s3c_irqsub_mask(irqno, INTMSK_UART0, 7);
+}
+
+分析s3c_irqsub_mask()函数，位置"include\linux\asm-arm\plat-s3c24xx\irq.h "：
+static inline void s3c_irqsub_mask(unsigned int irqno, unsigned int parentbit, int subcheck)
+{
+	unsigned long mask;
+	unsigned long submask;
+/*
+用底层__raw_readl读出S3C2410_INTSUBMSK和S3C2410_INTMSK。
+S3C2410_INTSUBMSK是s3c24xx的INTSUBMASK寄存器，这里使用的是其虚地址0xf000001c。
+S3C2410_INTMSK是s3c24xx的INTMASK寄存器，这里使用的是其虚地址0xf0000008。
+待做：查Linux存储器映射，原来日志中有。
+*/
+	submask = __raw_readl(S3C2410_INTSUBMSK);
+	mask = __raw_readl(S3C2410_INTMSK);
+/*
+设置submask
+IRQ_S3CUART_RX0是submask第零位，irqno - IRQ_S3CUART_RX0表示irqno是submask的第几位。
+*/
+	submask |= (1UL << (irqno - IRQ_S3CUART_RX0));
+/*
+如果该中断所有submask都已经屏蔽，屏蔽父中断。
+例如，uart0中断有INT_RXD0, INT_TXD0, INT_ERR0三个submask，三者分别是0,1,2位，三者都选是0x7，subcheck也是0x7。
+这时"submask  & subcheck) == subcheck"，执行"_raw_writel(mask | INTMSK_UART0, S3C2410_INTMSK)"
+*/
+	/* check to see if we need to mask the parent IRQ */
+
+	if ((submask  & subcheck) == subcheck) {
+		__raw_writel(mask | parentbit, S3C2410_INTMSK);
+	}
+/*
+设置submask
+*/
+	/* write back masks */
+	__raw_writel(submask, S3C2410_INTSUBMSK);
+
+}
+
+3，取消屏蔽中断
+===============
+static void s3c_irq_uart0_unmask(unsigned int irqno)
+{
+	s3c_irqsub_unmask(irqno, INTMSK_UART0);
+}
+
+s3c_irq_uart0_unmask()函数取消irqno指定的中断。s3c_irqsub_unmask()函数的原型：
+static inline void s3c_irqsub_unmask(unsigned int irqno, unsigned int parentbit)
+取消submask的irqno位和mask的parentbit位的屏蔽。
+
+4，ack函数，触发中断
+====================
+" * @ack:		start of a new interrupt"
+static void s3c_irq_uart0_ack(unsigned int irqno)
+{
+	s3c_irqsub_maskack(irqno, INTMSK_UART0, 7);
+}
+
+位置"include\linux\asm-arm\plat-s3c24xx\irq.h "
+static inline void s3c_irqsub_maskack(unsigned int irqno, unsigned int parentmask, unsigned int group)
+{
+/*得到submask位*/
+	unsigned int bit = 1UL << (irqno - IRQ_S3CUART_RX0);
+/*屏蔽irqno中断*/
+	s3c_irqsub_mask(irqno, parentmask, group);
+/*触发bit位的中断*/
+	__raw_writel(bit, S3C2410_SUBSRCPND);
+/*
+触犯父中断(parentmask)
+S3C2410_SRCPND和S3C2410_INTPND都表示有中断。前者不管是否mask都有效。后者只有未被mask时才有效。
+*/
+	/* only ack parent if we've got all the irqs (seems we must
+	 * ack, all and hope that the irq system retriggers ok when
+	 * the interrupt goes off again)
+	 */
+
+	if (1) {
+		__raw_writel(parentmask, S3C2410_SRCPND);
+		__raw_writel(parentmask, S3C2410_INTPND);
+	}
+}
+
+5，定义s3c_irq_uart0结构体。
+static struct irq_chip s3c_irq_uart0 = {
+	.name		= "s3c-uart0",
+	.mask		= s3c_irq_uart0_mask,
+	.unmask		= s3c_irq_uart0_unmask,
+	.ack		= s3c_irq_uart0_ack,
+};
+
+23:42 2008-5-5
+嵌入式，Linux, Arm Linux中断学习，续，待做：
+1), 细读irq_chip结构体每个变量的作用。
+2), 查irq_chip何处使用，如何使用。
+3), 完成对arch\arm\mach-s3c2440\irq.c的分析。
+
+19:42 2008-5-6
+编程，c语言，给贺明数值分析作业的回信
+贺明：
+    信已收到。想看你的数值分析代码主要是看代码风格，觉得你写的不错。
+    建议：
+    1, 适当有注释。函数名字和变量名都很清楚，的确不需要注释。文件开始建议加注释，说明功能，作者，日期等。附件中“文件注释例子（CVS格式）.txt ”是我日立实习时用的文件注释供你参考。
+    2, 编写Makefile。FFT和样条各编写一个Makefile，然后在FFT和样条的上一级目录（假设是math目录）编写一个顶层的Makefile，在终端下math目录输入"make"可以在FFT和Hermite目录分别编译得到fft和Hermite两个可执行程序，输入"make test"可以分别执行这两个可执行程序。另外定义的debug调试开关在Makefile中设置，用户修改Makefile可以控制是否打开调试开关。可以参考“跟我一起写makefile.doc”这个文档，“软件方面释疑3-21”中提到过这个文档。
+    3, 修改复数的表示方法。C99中已经支持复数，你可以用C99的复数类型重写这个程序。（GCC4.0符合C99标准）。最好把复数的操作封装起来——为复数提供统一的接口——不论用哪种复数类型，使用复数的程序都不受影响。如果能编译时自动判断C99和C89两类编译器，就更好了：）
+    应该有两个附件，我总是遗漏附件>。...
+
+                                                                       张健
+                                                                   2008-5-6
+待做：完成。学C99复数表示与使用。编程练习。
+
+20:12 2008-5-6
+编程，个人发展，家庭实验室，招聘信息
+注意到下面的招聘信息中要求超过五万行的实际编码经验，在嵌入式linux相关领域有二年以上开发经验。这样算来，我现在有1万行经验，要想满足这个要求需要后面两年每年写2万行以上。也就是半年1万行。感觉的确是这样才能真正提高，在家做实验应该注重读代码和写代码。计划读:写=2:1。每两个月检查一次。
+
+飞曼软件招聘信息：
+自我hotmail邮件，标题：[FMSoft-Announce] Jobs from FMSoft【飞漫软件高薪诚聘高级软件工程师】‏，发送时间：2008年5月6日 19:59:36
+ 要求
+ 1.擅长 C/C++ 语言，熟悉 UNIX/Linux 操作系统上的软件开发环境及工具；
+ 2.具有丰富的嵌入式平台工作经验，掌握一定的设计模式和开发技能；
+ 3.具有英文文档的读写能力；
+ 4.具有独立工作能力；
+ 5.良好的团队协作意识；
+ 6.了解 MFC, Qt, GTK+ 等基础类库结构，有丰富的设计模式经验以及优秀的开发技能；
+ 7.超过五万行的实际编码经验和大型项目开发经验；
+ 8.大学本科以上学历；
+ 9.在嵌入式linux相关领域有二年以上开发经验；
+ 10.此职位工作地点在深圳。
+
+16:45 2008-5-8
+扩展芯片，GPIO，待做
+查Max7320芯片，看是否能独立改单个GPIO或能独立锁存。Max7320是GPIO扩展芯片，littleton包中有这个驱动。
+
+16:51 2008-5-8
+FM驱动估计有很多错：
+1, #include <asm/arch/pxa3xx_gpio.h>	//for gpio operation
+写成了
+#include <asm/arch/pxa-gpio.h>	//for gpio operation
+
+2, I2C_CLIENT_INSMOD;写成了I2C_CLIENT_INSMOD
+drivers/i2c/chips/rda5800.c:36: error: expected ',' or ';' before 'static'
+
+3, 函数定义顺序有错。
+
+4, 没有加入"#include <asm/hardware.h>"，造成下面错误：
+drivers/i2c/chips/rda5800.c:112: warning: implicit declaration of function '__REG'
+drivers/i2c/chips/rda5800.c:112: error: invalid lvalue in assignment
+drivers/i2c/chips/rda5800.c:113: error: invalid lvalue in assignment
+drivers/i2c/chips/rda5800.c:115: error: invalid lvalue in assignment
+
+5, RDA5800_driver定义后面没加分号
+
+6, 161行
+	if ( (NUM_OF_INIT_REG<<1) == err ) {
+写成了
+	if ( (NUM_OF_INIT_REG<<1) == ret ) {
+ret变量后来删除了。
+173行错误相同。
+
+7, DRV_NAME是字符串。
+	dprintk("read %s ID, it should be 0x%x.", DRV_NAME, DRV_ID);
+写成了
+	dprintk("read %d ID, it should be 0x%x.", DRV_NAME, DRV_ID);
+8, 最终编译log，和warning
+bamvor@winson-desktop:/home/bamvor/dev/linux$ make M=drivers/i2c/chips
+  CC [M]  drivers/i2c/chips/rda5800.o
+drivers/i2c/chips/rda5800.c: In function 'RDA5800_probe':
+drivers/i2c/chips/rda5800.c:178: warning: format '%d' expects type 'int', but argument 4 has type 'char *'
+drivers/i2c/chips/rda5800.c:203: warning: label 'exit_detach' defined but not used
+drivers/i2c/chips/rda5800.c:137: warning: 'new_client' is used uninitialized in this function
+  Building modules, stage 2.
+  MODPOST 1 modules
+  CC      drivers/i2c/chips/rda5800.mod.o
+  LD [M]  drivers/i2c/chips/rda5800.ko
+
+21:00 2008-5-9
+给研一同学的信
+1, 贺明的信
+《嵌入式Linux驱动程序设计从入门到精通》，【作 者】冯国进。这本书是依据最新Linux2.6内核写的，介绍了包括platform总线在内的驱动程序开发。
+platform总线是Linux2.6内核中新引入的虚拟总线，是一种新的驱动程序编写框架，主要用于嵌入式系统和PC机一些老的设备。在Linux2.6.21中，不论是LEON还是s3c24xx都大量使用了这个方式。Linux设备驱动由于写的比较早，并没有介绍这个总线。等你写完按键驱动可以考虑了解一下基于platform总线方式驱动的编写方法，参考Documentation\driver-model\platform.txt。
+另外，《Linux设备驱动开发详解》【作 者】宋宝华。网上口碑不错，从目录上看内容也不错。如果有精力可以看看。
+
+21:00 2008-5-9
+待做：
+1, 看周中华工作日志：（完成）
+H:\log\Lab\同学工作日志\周中华。先看今年2月之后的内容。
+2, 金辉份子。
+3, 贺明邮件。
+
+23:10 2008-5-9
+近期安排
+考虑这段时间先做完答辩PPT（参考原来师兄的答辩PPT），然后围绕grsim仿真器学习，先是移植Minigui，以后可以改内核。
+测试minigui：Grsim中显示设备用vfb模拟。用cat抓图，比较Grsim，arm板子（或qvfb）的结果是否相同。
+
+19:17 2008-5-10
+给研一同学的信
+1, 贺明；
+附件：1，log_make，编译snapgear 2.6 p36的log。
+嗯，好的，我买之前一般都去西单看看。
+我编译snapgear-2.6-p36没有问题。使用root权限，就是选择"Template Configuration"的gr_xc3s_1500，Update Configuration with above selection选择y，然后编译通过。编译日志是log_make，你们可以和你们的log比较一下，看看有什么不同。难道是编译环境有问题？
+(11:08 2008-5-11)
+贺明回信：
+1, jiffies的作用
+05-07-2008 (2)关于timer的相关系统函数
+日志：全局变量jiffies是Linux系统时钟计数器，系统每一次时钟中断（即时间到达KBD_TIMER_DELAY1)jiffies都会增加1。
+bamvor: 好像你写的不太清楚，一个jiffies是1/HZ，当前是1ms。
+2, 05-08-2008 (3)关于开关中断函数
+(6)关于copy_to_user()和copy_from_user()函数
+待做：分析copy_to_user()和copy_from_user()函数代码。
+
+2, 周中华
+(11:51 2008-5-11)
+0, 大致看了你的日志，感觉日志写的不错，最好每条日志都有个关键字或标题，便于日后查找。另外，LEON的配置下载流程你有没有总结文档？"14:45 2008-4-17"做完之后可以写个文档系统整理一下前面的日志；
+1, http://www.openhw.org/project/list.php?sort=commend
+是Xilinx Student Club。看起来不错，不知你们去过没。待做，看。
+2, "LEON3硬件开发入门" "LEON3 SnaperGear linux开发入门"，这两个文档我没搜到，麻烦你给我发一份。
+
+19:24 2008-5-10
+待做：
+1, 看贺明，中华日志，回信；（完成）
+2, 看大头ppt，找ppt要求，ppt提纲。
+
+21:19 2008-5-10
+编译snapgear-2.6-p36没有问题。使用root权限，就是选择"Template Configuration"的
+gr_xc3s_1500，Update Configuration with above selection选择y，然后编译通过。编译日志是log_make，你们可以和你们的log比较一下，看看有什么不同。难道是编译环境有问>题？
+修改为grsim可用。
+Rom bank size 2mb, Rom rws 8, Rom wws 8, Enable writecycles to PROM: n.
+sram大小16mb，SRam banks 1, rws 0, wws 0, rms 0.
+
+21:40 2008-05-10
+c语言，编程，gcc
+主要学习sparc-linux-gcc 3.4.4，与gcc4.1.2不同之处会说明。
+1，"-nostdinc"
+Do not search the standard system directories for header files. Only the directories you have specified with -I options (and the directory of the current file, if appropriate) are searched.
+不搜索系统标准目录下的头文件，只搜索"-I"表明的目录和当前文件所在目录。
+2, "-isystem dir"
+Search dir for header files, after all directories specified by -I but before the standard system directories.  Mark it as a system directory, so that it gets the same special treatment as is applied to the standard system directories.
+当作系统目录，按照系统标准目录方式特殊对待。在"-I"之后，系统标准头文件之间搜索dir目录。
+待做：查special treatment具体指什么内容。
+
+22:04 2008-05-10
+snapgear Linux, grsim
+在grsim上运行出错：
+grsim> load /usr/src/src2/snapgear-2.6-p36/images/image.dsu
+section: .stage2 at 0x40000000, size 10240 bytes
+section: .vmlinux at 0x40004000, size 3617024 bytes
+total size: 3627264 bytes (107.3 Mbit/s)
+read 4917 symbols
+entry point: 0x40000000
+grsim> run
+IU in error mode (tt = 0x01)
+ 4716209345  f0004010(p:0x00c280d4)  0x00c280d4   unknown opcode: 0x00c280d4  
+但是运行"/media/NEW/log/Linux on LEON/old/imageCompileLeon3mmu/image.dsu"没有问题。
+用相同配置，与p26对比：
+存储器，编译起与前面相同，无论用新旧编译器选择glibc_from_compiler还是ulibc，都在编译srmmu时出错，错误相同。
+p36编译为romfs：
+grsim> load /usr/src/src2/snapgear-2.6-p36/images/image.dsu
+section: .stage2 at 0x40000000, size 10240 bytes
+section: .vmlinux at 0x40004000, size 1892608 bytes
+section: .rdimage at 0x401ee2c8, size 1740408 bytes
+total size: 3643256 bytes (517.5 Mbit/s)
+read 4920 symbols
+entry point: 0x40000000
+grsim> run
+IU in error mode (tt = 0x01)
+ 4716209346  f0004010(p:0x00be08ca)  0x00be08ca   bn  0xeff86338       
+
+yamancakmakci说他的内核在grsim1.1.21上运行正常，不行就给他发个邮件。
+
+从之前参数看，可能是mkprom参数不正确。
+更换编译器后，启动正确。编译log，映像，启动过程, Configration file位于"/media/NEW/log/Linux on LEON/RFID Demo/Snapgear_2.6_p36/grsim_2355_successful"。需要启动grsim，然后load文件，run。如果run Linux之后再load, run会出现上述错误。
+待做：下一步可以移植Minigui了；加入给贺明的邮件。
+
+
+(12:17 2008-5-11)
+整理上面的日志
+在grsim上运行出错：
+grsim> load /usr/src/src2/snapgear-2.6-p36/images/image.dsu
+section: .stage2 at 0x40000000, size 10240 bytes
+section: .vmlinux at 0x40004000, size 3617024 bytes
+total size: 3627264 bytes (107.3 Mbit/s)
+read 4917 symbols
+entry point: 0x40000000
+grsim> run
+IU in error mode (tt = 0x01) 
+4716209345  f0004010(p:0x00c280d4)  0x00c280d4   unknown opcode: 0x00c280d4  
+但是运行我原来编译的Linux2.6.11的LEON Linux"/media/NEW/log/Linux on LEON/old/imageCompileLeon3mmu/image.dsu"没有问题。
+更换当时的旧编译器，而且把初试文件系统改为romfs：启动正确。
+编译log，映像，启动过程, Configration file位于"/media/NEW/log/Linux on LEON/RFID Demo/Snapgear_2.6_p36/grsim_2355_successful"目录。需要启动grsim，然后load文件，run。如果run Linux之后再load, run会出现上述错误。
+下一步我打算移植Minigui/QT到LEON Linux
+
+14:39 2008-5-14
+工作日志
+又犯晕了，把昨天工作日志覆盖了。
+昨天主要是孙远的公司信息和二维码相同资料
+
+16:03 2008-5-14
+张元华朋友项目
+基于arm(2410) Linux的QT应用程序开发。
+基本需求：这是一个手持终端，通过串口和下面的设备通讯。
+公司位置：西三旗西北角，金达园写字楼
+报酬按项目结。需要面谈确定是否接这个项目。预计下周四后面谈。
+面谈内容：项目需求，报酬，Linux底层完善程度（文件系统有无ECC校验），有无有经验的驱动和底层Linux工程师（及其重要！）。
+
+19:30 2008-5-14
+调试，成功代码位于"Olympia\FM\Linux driver\0514\test_RDA5800_device_and_RDA5800_read"
+1, 错误：drivers/i2c/chips/rda5800.c:106: error: expected '}' before ';' toke
+static struct RDA5800_device_type RDA5800_device = 
+{
+	.readData8	= NULL,
+	.writeData8	= NULL,
+};
+写成了
+static struct RDA5800_device_type RDA5800_device = 
+{
+	.readData8	= NULL;
+	.writeData8	= NULL;
+};
+
+2,drivers/i2c/chips/rda5800.c:191: error: incompatible type for argument 2 of 'i2c_set_clientdata'
+1),  		i2c_set_clientdata(new_client,(void *)&RDA5800_device);
+写成了
+	i2c_set_clientdata(new_client,RDA5800_device);
+RDA5800_device是全局静态结构体，不是指针。
+2), 
+	RDA5800_read(&RDA5800_device);
+写成了
+	RDA5800_read(RDA5800_device);
+
+15:02 2008-5-15
+编译rda5800.c和radio-rda5800.c
+1, 出错：drivers/i2c/chips/rda5800.c:17:71: error: driver/media/radio/radio-rda5800.h: No such file or directory
+#include "drivers/media/radio/radio-rda5800.h"	//for rda5800_i2c_device
+写成了
+#include "../../media/radio/radio-rda5800.h"	//for rda5800_i2c_device
+
+2, 错误：
+drivers/i2c/chips/../../media/radio/radio-rda5800.h:19: warning: 'struct rda5800_i2c_device' declared inside parameter list
+drivers/i2c/chips/../../media/radio/radio-rda5800.h:19: warning: its scope is only this definition or declaration, which is probably not what you want
+drivers/i2c/chips/../../media/radio/radio-rda5800.h:20: warning: 'struct rda5800_i2c_device' declared inside parameter list
+
+struct rda5800_i2c_device;
+typedef UINT32 (*read_t)(struct rda5800_i2c_device* , UINT32);
+typedef UINT32 (*write_t)(struct rda5800_i2c_device* , UINT32);
+改为：
+typedef UINT32 (*read_t)(struct rda5800_i2c_device* , UINT32);
+typedef UINT32 (*write_t)(struct rda5800_i2c_device* , UINT32);
+
+3, (18:21 2008-5-15)错误：
+drivers/i2c/chips/rda5800.c:346: error: 'struct i2c_client' has no member named 'i2c_driver' 
+	client = container_of(&rda5800_driver,struct i2c_client,i2c_driver);
+改为：
+	client = container_of(&rda5800_driver,struct i2c_client,driver);
+原因：笔误。
+4, 错误：1) drivers/i2c/chips/rda5800.c:347: error: too few arguments to function 'rda5800_read'
+2), drivers/i2c/chips/rda5800.c:347: error: stray '\243' in program
+drivers/i2c/chips/rda5800.c:347: error: stray '\254' in program
+drivers/i2c/chips/rda5800.c:347: error: called object 'client->driver' is not a function
+	ret = rda5800_read(client->driver);
+改为
+	ret = rda5800_read(client->driver，NUM_OF_REG<<1);
+没改对，出现错误2)，改为：
+	ret = rda5800_read(client->driver, NUM_OF_REG<<1);
+原因：1), 修改rda5800_read函数后，没有修改之前的函数调用。2), 笔误，错误2)是加入全角字符的错误提示，待做：单独整理。
+
+5, 警告：drivers/i2c/chips/rda5800.c:347: warning: passing argument 1 of 'rda5800_read' from incompatible pointer type
+	ret = rda5800_read(client->driver, NUM_OF_REG<<1);
+改为：
+	device = i2c_get_clientdata(client);
+	ret = rda5800_read(device, NUM_OF_REG<<1);
+原因：笔误。
+
+6, 警告：
+ drivers/i2c/chips/rda5800.c:357: warning: assignment from incompatible pointer type
+原因：rda5800_read函数与device->read类型不一致——返回值前者是int，后者是INT32。
+
+7, 警告：
+drivers/i2c/chips/rda5800.c:346: warning: initialization from incompatible pointer type
+原因：container_of需要通过member地址和名称得到type的地址，但"&rda5800_driver"是i2c_client.driver所指向内容的地址，二者不符，所以会有上面的提示。没有想到解决办法，只能是使用已经定义的"rda5800_hw_device"。想想这也很有道理，现在这种情况用container_of的确是绕远了。
+	client = container_of(&rda5800_driver,struct i2c_client,driver);
+	device = i2c_get_clientdata(client);
+	ret = rda5800_read(device, NUM_OF_REG<<1);
+改为：
+	ret = rda5800_read(&rda5800_hw_device, NUM_OF_REG<<1);
+
+
+15:11 2008-5-15
+待做：保存网页：
+1, http://www.linux-cn.com/html/linux/beginner/20070903/55541.html
+2, http://blog.chinaunix.net/u2/63379/showart_526357.html
+Linux Device Driver 3 笔记三
+3, http://www.bitscn.com/linux/kernel/200710/116600.htmlLinux
+嵌入式系统的内存管理方法详细介绍
+
+17:05 2008-5-15
+软件，shell，命令行
+windows命令行下，&&，||作用和Linux下相同：
+C:\Documents and Settings\bamvorzhang>ping 10.2.160.66 && echo successful || echo fail
+
+Pinging 10.2.160.66 with 32 bytes of data:
+
+Request timed out.
+Request timed out.
+Request timed out.
+Request timed out.
+
+Ping statistics for 10.2.160.66:
+    Packets: Sent = 4, Received = 0, Lost = 4 (100% loss),
+fail
+ping失败，显示fail。
+
+20:31 2008-5-15
+1, drivers/media/radio/radio-rda5800.c:75:2: error: #endif without #if
+多了一个"#endif"
+2, 错误：drivers/media/radio/radio-rda5800.c:126: error: request for member 'writeData8' in something not a structure or union
+drivers/media/radio/radio-rda5800.c:127: error: variable 'client' has initializer but incomplete typ
+修改：
+	UINT8 writeData8 = dev->hw_device.writeData8;
+	struct i2c_client client = dev->hw_device.i2c_client;
+改为；
+	UINT8 *writeData8 = dev->hw_device.writeData8;
+	struct i2c_client *client = dev->hw_device.i2c_client;
+
+3, 错误：
+drivers/media/radio/radio-rda5800.c:126: error: request for member 'writeData8
+' in something not a structure or union
+drivers/media/radio/radio-rda5800.c:127: error: variable 'client' has 
+initializer but incomplete typ
+修改：
+	UINT8 *writeData8 = dev->hw_device.writeData8;
+	struct i2c_client *client = dev->hw_device.i2c_client;
+改为：
+	UINT8 *writeData8 = dev->hw_device->writeData8;
+	struct i2c_client *client = dev->hw_device->i2c_client;
+原因：
+忘了struct rda5800_radio_device的"rda5800_i2c_device hw_device"已经改为"rda5800_i2c_device hw_device";
+
+4, (21:18 2008-5-15)
+错误：类型错误。
+rda5800_device.hw_device = rda5800_hw_device;
+改为
+rda5800_device.hw_device = &rda5800_hw_device;
+
+5, warning，rda5800_hw_device未定义。但已经链接出结果。
+完整make一下就没有这个错误了。
+
+21:14 2008-5-19
+嵌入式，Linux，ylp2440，声卡驱动位置：
+从.config"CONFIG_SOUND_S3C2410=y"可以看出有2410音频，结合ylp2440_2.6.12\sound\oss\Kconfig和ylp2440_2.6.12\sound\oss\Makefile，文件是"ylp2440_2.6.12\sound\oss\s3c2410-oss.c"。
+
+ylp2440_2.6.12\sound\oss\Kconfig:
+config SOUND_S3C2410
+	tristate "S3C2410 audio support try s3c2440"
+	depends on SOUND_PRIME && ARCH_S3C2410
+
+ylp2440_2.6.12\sound\oss\Makefile：
+obj-$(CONFIG_SOUND_S3C2410)     += s3c2410-oss.o
+
+10:06 2008-5-20
+嵌入式，Linux，驱动，优龙ylp2440开发板，待做：
+在Linux&ARM驱动之家回复freeubuntu@hotmail.com问题：
+freeubuntu@hotmail.com (08:07:09) 说: 
+  to 竹林漂泊（张健）
+你看下这些驱动，s3c2440mci,usbfor2440,
+freeubuntu@hotmail.com (08:08:39) 说: 
+  还有我gpio.h的头文件也是找不到的，
+
+10:28 2008-5-20
+待做：看中华"日志_2.txt"，了解LEON FPGA配置下载过程。
+
+14:52 2008-5-20
+调试修改过的FM驱动（radio_rda5800.c）
+1, v4l2_queryctrl中多了半个括号；
+提示：
+drivers/media/radio/radio-rda5800.c:87: error: expected identifier or '(' before '{' token
+原因：加入新内容时笔误：
+	},{
+		.id			   = 0,
+		.name		   = NULL,
+	}
+2, 
+提示：
+drivers/media/radio/radio-rda5800.c:97: warning: missing braces around initializer
+drivers/media/radio/radio-rda5800.c:97: warning: (near initialization for 'radio_qctrl[3].name')
+drivers/media/radio/radio-rda5800.c:97: warning: initialization makes integer from pointer without a cast
+把：
+	},{
+		.id			   = 0,
+		.name		   = NULL,
+	}
+改为：
+	},{
+		.id			   = 0,
+		.name		   = "",
+	}
+把
+	for ( i = 0; ctrl_array[i].id != 0 || ctrl_array[i].name != "" ; i++ ) {
+改为
+	for ( i = 0; ctrl_array[i].id != 0 || ctrl_array[i].name != "" ; i++ ) {
+原因：待做：查为什么用NULL不行。
+3, 提示：
+drivers/media/radio/radio-rda5800.c:122: warning: comparison of distinct pointer types lacks a cast
+修改：
+	for ( i = 0; ctrl_array[i].id != 0 || ctrl_array[i].name != "" ; i++ ) {
+改为
+	for ( i = 0; ctrl_array[i].id != 0 || ctrl_array[i].name != (UINT8*)"" ; i++ ) {
+
+4, 提示：
+drivers/media/radio/radio-rda5800.c:124: error: request for member 'id' in something not a structure or union
+修改：
+	if ( ctrl_array[i].id == ctrl.id ) {
+改为
+	if ( ctrl_array[i].id == ctrl->id ) {
+行469，525, 532，与此错误相同。
+原因：马虎。
+5, 提示： 
+drivers/media/radio/radio-rda5800.c:220: warning: suggest parentheses around comparison in operand of &
+修改：
+	}while(writeData8[0]&0x40==0);
+改为
+	}while((writeData8[0]&0x40)==0);
+6, 366行。提示：
+drivers/media/radio/radio-rda5800.c:366: error: expected ';' before ':' token
+修改
+		goto exit:
+改为
+		goto exit;
+7, 提示：
+drivers/media/radio/radio-rda5800.c:378: warning: initialization from incompatible pointer type
+修改：
+	write_t read = dev->hw_device->read;
+改为：
+	read_t read = dev->hw_device->read;
+原因：笔误
+
+8, 行404。提示：drivers/media/radio/radio-rda5800.c:404: warning: return makes integer from pointer without a cast
+修改：
+	return readData8;
+改为
+	return readData8[2];
+
+9, 提示；
+drivers/media/radio/radio-rda5800.c:478: error: duplicate case value
+drivers/media/radio/radio-rda5800.c:474: error: previously used here
+修改：
+		case V4L2_CID_GAIN:
+改为
+		case V4L2_CID_AUDIO_VOLUME:
+原因：增加代码时复制原有代码，没有修改完全。
+
+10:48 2008-5-21
+嵌入式，LEON，发实验室研一同学，李洋洋
+今天看LEON sparc邮件列表，看到"Minimum configuration for booting linux"，网址："http://tech.groups.yahoo.com/group/leon_sparc/message/13379"。是个初学者的提问；关于如何配置LEON3启动Linux所需的硬件最小配置。文中提到启动Linux需要定时器和中断。大家可以关注一下这个帖子，为下一步我们自己配置LEON硬件（不用默认配置）积累经验。
+23:23 2008-05-21
+嵌入式，GUI，编译sparc(LEON3)平台的QT
+1，复制tmake/lib/qws/linux-arm-g++到tmake/lib/qws/linux-sparc-g++
+把所有arm替换为sparc
+2, qt/configs/linux-arm-g++-shared-debug -> linux-sparc-g++-shared-debug 
+把所有arm替换为sparc
+3, 修改qt/configs/linux-sparc-g++-shared
+#bamvor. copied from linux-sparc-g++-shared-debug
+#2008-5-21. replace:
+#SYSCONF_CXXFLAGS      = -pipe -DQWS -fno-exceptions -fno-rtti -g -Wall -W
+#SYSCONF_CFLAGS                = -pipe -g -Wall -W
+# to 
+#SYSCONF_CXXFLAGS      = -pipe -DQWS -fno-exceptions -fno-rtti -O2 -Wall -W -DNO_DEBUG
+#SYSCONF_CFLAGS                = -pipe -O2 -Wall -W
+4, 关于qconfig-local.h：
+文件中定义了
+QT_QWS_IPAQ
+qt目录有部分依赖QT_QWS_IPAQ的代码，经查与arm处理器没有关系。
+5, 第一次编译，失败，加入"-fpermissive"。详见"log_make"
+
+00:19 2008-05-22
+6, 修改后再次编译，提示is_xxxx未定义（日志见log_make_-fpermissive），开始怀疑是this指针问题，后来认为可能是没有make clean，日志见log_make_-fpermissive2。
+make clean后错误相同，很多变量需要加this指针，最后报buffer变量找不到时，加"this."也不管用。困惑中。
+
+20:59 2008-5-22
+待做：
+1, LEON QT用新编译器试试；用x86 gcc3.4.6和arm gcc 3.4.1编译。先google，qt论坛发贴子。
+2, 备份日志；
+3, 给大家发我CC2420日志；
+4, 论文：
+1), 小改，重新校对一遍；周五给小段；
+(1), 改吴郁老师指出问题的部分；
+(2), 加参考文献的引用。例如minigui的介绍，qt的图，minigui和qt比较；
+(3), minigui部分能否用自己的语言？
+2), 写中英文大摘要，小摘要。周一前给小段。
+
+23:03 2008-5-22
+网站，Qt下载网站
+http://www.qtopia.org.cn/ftp/mirror/ftp.trolltech.com/qt/source/
+01:02 2007-05-23
+/media/NEW/log/Linux on LEON/RFID Demo/Snapgear_2.6_p36/grsim_2355_successful
+
+01:24 2008-05-23
+hello所需库文件：
+[root@localhost lib]# sparc-linux-readelf  -a ../usr/lib/libqte.so.3.3.8 | grep 共享
+  Type:                              DYN (共享目标文件)
+ 0x00000001 (NEEDED)                     共享库：[libdl.so.2]
+ 0x00000001 (NEEDED)                     共享库：[libstdc++.so.6]
+ 0x00000001 (NEEDED)                     共享库：[libm.so.6]
+ 0x00000001 (NEEDED)                     共享库：[libgcc_s.so.1]
+ 0x00000001 (NEEDED)                     共享库：[libc.so.6]
+[root@localhost lib]# sparc-linux-readelf  -a ../usr/bin/hello | grep 共享
+ 0x00000001 (NEEDED)                     共享库：[libqte.so.3]
+ 0x00000001 (NEEDED)                     共享库：[libdl.so.2]
+ 0x00000001 (NEEDED)                     共享库：[libstdc++.so.6]
+ 0x00000001 (NEEDED)                     共享库：[libm.so.6]
+ 0x00000001 (NEEDED)                     共享库：[libgcc_s.so.1]
+ 0x00000001 (NEEDED)                     共享库：[libc.so.6]
+
+现有日志：Linux on LEON/RFID Demo/Snapgear_2.6_p36/QT/05230120。
+从提示看是超出了romfs正常范围。
+待做：
+1，编译为share不用debug;
+2, 编译为静态库。
+
+
+
+(9:53 2008-5-23)
+早晨编译hello，还是动态链接的，难道需要驱动LD_LIBRARY_PATH或动态库本身？
+晚上下班再试。如果不行暂定，先完成论文。
+
+10:10 2008-5-23
+无线传感器网络，Imote2，Linux2.6.25
+imote2邮件列表：
+[intel-mote2-community] Re: how to attch webcam driver to the kernel ?
+提到成功移植了Linux2.6.25内核。已转发给佳露。待做：关注。
+
+16:48 2008-5-23
+身份证，核查，查询
+http://www.nciic.com.cn/index.htm
+公安部。全国公民身份证号码查询服务中心
+从上面网站得到下面两个可以查身份证的网站：
+http://www.id5.cn/wireless/wireless.html。无线精品。用过，可以看到低分辨率的照片。
+http://www.cncard.com/zm/idcard/。云网身份信息核查
+
+23:02 2008-05-24
+Leon, Linux, Qt, Snapgear Linux
+可能romfs不能超过2M，这样的话Qt几乎不可能存入。
+去掉mng, jpeg, qng三个图像格式后，静态库大小从13429910变为12680372。相应的strip后的hello库大小从5633664变为5189116。看来很难放入grsim。
+明天用minigui实验。
+(23:16 2008-06-09)
+Qt配置：
+"./configure -embedded arm -shared -debug"
+编译结果位于，"Documents/bamvor张健的文档/micro微电子与计算机/Embeded嵌入式系统/消费电子产品/display显示器件和GUI软件/GUI/QT/源码/编译结果_未测试/"。
+
+23:24 2008-05-24
+Leon, Linux, MiniGUI, Snapgear Linux
+1，编译库文件。参考build/hh2410修改。
+2，编译helloword，使用configure配置有问题，见log_configure_sparc，直接编译：
+sudo sparc-linux-gcc helloworld.c -o helloworld.sparc -Wall -O2 -I/usr/src/src2/EmbeddedGUI/MiniGUI/sparc-linux/include /usr/src/src2/EmbeddedGUI/MiniGUI/sparc-linux/lib/libminigui.a -lpthread
+3，现有文件系统中没有libpthread.so库从编译器/lib目录复制，libpthread.so.0和libpthread-2.5.so
+4，运行，仍然出现了挂载错误：
+RAMDISK: Compressed image found at block 0
+RAMDISK: incomplete write (-28 != 32768) 4194304
+//......
+VFS: Mounted root (romfs filesystem) readonly.
+/usr/bin> ./helloworld.sparc.strip
+attempt to access beyond end of device
+ram0: rw=0, want=8372, limit=8192
+pid 29: failed 10
+/usr/bin> 
+5，去掉busybox中无用部分。
+image.dsu: 3956419，
+rdimage.o 1591481 
+romfs.img.gz 1590875
+6，再次运行：
+/> cd /usr/bin
+/usr/bin> ./helloworld.sparc.strip
+GAL fbcon engine: Error when opening /dev/fb0: No such device or address. Please check kernel config.
+GAL: Init GAL engine failure: fbcon.
+GDI: Can not initialize graphics engine!
+pid 28: failed 256
+7，测试framebuffer，加入mknod和ls命令。
+framebuffertest也无法运行，提示没有/dev/fb0这个文件，返回：
+pid 33: failed 256
+怀疑是内核中没有配置fb设备。查看内核配置果然如此，重新编译内核。。
+8，提示：
+/usr/bin> ./helloworld.sparc.strip
+GAL fbcon engine: Error when mmaping /dev/fb0: Invalid argument
+GAL: Init GAL engine failure: fbcon.
+GDI: Can not initialize graphics engine!
+pid 31: failed 256
+framebuffertest提示无法打开/dev/fb/0，看来还需要加入ln命令。
+从helloworld出错信息看，可能是vfb参数有问题。
+现有映像和配置："Linux\ on\ LEON/RFID\ Demo/Snapgear_2.6_p36/image.minigui.1.tar.gz
+待做：继续。
+
+15:25 2008-5-27
+LEON，编程，阅读工具
+Source Insight已经支持VHDL语言，可以用户看grlib代码。
+让研一同学使用。
+可以让贺明他们寻找有无支持verilog语言的补丁，或试试自己参考c语言模板支持verilog语言。
+
+17:30 2008-5-27
+c语言，编程
+何勇。
+如果不加<stdlib.h>使用atof函数把字符串转为浮点数时会出问题：
+bamvor@winson-desktop:/home/bamvor/dev/misc$ ./input_float_test2 1.2 1 2a=1.072903e+09,b=1.072693e+09,c=1.073742e+09
+如果加上该文件：
+bamvor@winson-desktop:/home/bamvor/dev/misc$ ./input_float_test2 1.2 1 2a=1.200000e+00,b=1.000000e+00,c=2.000000e+00
+这次还有个原因就是没有加"-Wall"，所以没有看到implicit decleration的提示。
+
+19:27 2008-5-27
+待做：学习Linux文件恢复
+经过今天刘成误删除事件，认识到确实这个事情很重要。
+先用剩余时间把Linux下恢复文件软件做出demo板。
+这之前先去实验室把arm qt 3试一下。
+
+15:46 2008-5-28
+嵌入式，Linux，驱动，待做
+如果wake_up_interruptable执行后，等待队列上没有任务会有什么结果？
+贺明完成按键驱动后整理文档，例会上给大家讲讲。
+同时介绍sourceinsight的c语言，VHDL和verilog的使用。
+
+18:23 2008-5-29
+如果前面的结构体结尾没有加分号，会有下面错误：
+rda5800_test.c:77: error: two or more data types in declaration specifiers
+
+10:04 2008-5-30
+上午：
+邮箱（完成）
+yu项目详谈时间（完成）阅读spec。
+报销进展，84元完成。80元审批中。
+周报
+下午：app和driver
+
+10:19 2008-5-30
+个人发展，待做，继续关注，摘要加入博客
+我的工程师之路（一）：一个毕业三年的电子人员的总结
+自：国际电子商情
+http://forum.esmchina.com/FORUM_POST_1000010035_1200379975_0.HTM?click_from=1000019021,8737665360,20080530,ESMCOL,FORUM_ALERT
+发帖人： jerrymiao1984 发送消息 等级： 初入江湖 积分： 145分
+
+11:03 2008-5-30
+未来技术的商业智慧，待做，摘要加入博客
+自：http://business.sohu.com/20080529/n257155145.shtml
+2008年05月29日11:03
+来源：《商务周刊》
+从云计算、虚拟化、到随时随地上网等，未来技术不再仅仅是工程师驾驭的产物，而是创新精神与商业智慧的巧妙结合
+
+16:14 2008-5-30
+文档标准，待做，摘要加入博客，关注现有应用软件
+倪光南：中国应像支持TD一样力推UOF
+自：科技资讯网
+http://www.cnetnews.com.cn/2008/0414/809792.shtml
+
+16:54 2008-5-30
+Linux，驱动
+poll和poll_wait，wake_up_xxx和wait_event_xxx的关系。
+1, poll和poll_wait
+1), poll有三个
+一个是API poll。我们平时用的read，write函数都是API。这个poll用标志位查询有无数据可读/写，可以设定一个超时时间。返回值：poll成功（有数据可读/写，通过标志位判断），超时（超时时间内没有数据可读/写），poll失败（根据errno判断错误类型）。例如，下面的代码是查询有误数据可读，default分支用于处理有数据可读的情况：
+    struct pollfd pfd;
+    int timeout;//set value by user
+    printf("open in NON-blocking mode\n");
+    pfd.fd = open(TOSMAC_DEVICE,O_RDWR|O_NONBLOCK);
+    if ( pfd.fd < 0)
+    {
+        fprintf(stderr, "Open %s error.\n", TOSMAC_DEVICE);
+        exit(1);
+    }
+    pfd.events = POLLIN | POLLRDNORM;
+    while(1) {
+        switch ( poll (&pfd, 1, timeout) ) {
+            case 0:
+                printf ("timeout\n");
+                break;
+            case -1:
+                printf ("poll error \n");
+                exit (1);
+            default:
+                if (pfd.revents & ( POLLIN | POLLRDNORM )) {
+                    read(pfd.fd, buf, len);
+                } else {
+                     printf("poll event is <%02x>.\n", pfd.revents);
+                }                                                         
+                break;
+        }
+    }
+二是，系统调用poll，上面的poll最终会调用系统调用的poll，完成内核所需完成的工作。系统调用poll对我们来说基本是透明的。
+三，驱动程序中注册到file_operation结构体的poll函数。这个函数一般是借助poll_wait函数判断读/写是否就绪，并且返回可读/写的标志位。例如下面代码的tosmac_poll和CC2420_poll共同实现了poll函数：
+
+static struct file_operations tosmac_fops = {
+//...
+	.poll		tosmac_poll,
+//...
+};
+static unsigned int tosmac_poll (struct file *filp, struct poll_table_struct *wait)
+{
+    struct tosmac_device *dev = filp->private_data;
+    unsigned int mask;
+    
+    mask = CC2420_poll(filp, wait);
+    
+    return mask;
+}
+unsigned int CC2420_poll(struct file *filp, struct poll_table_struct *wait)
+{
+    unsigned int mask = 0;
+    poll_wait(filp, &inq, wait);
+    if(ok_to_read) {
+        mask |= POLLIN | POLLRDNORM;
+        printk(KERN_DEBUG "poll: data ready\n");
+    }// else
+//        printk(KERN_INFO "poll: data not ready\n");
+   return mask;
+}
+其中ok_to_read是由中断处理程序的下半部分设置的，通过wake_up_interruptible唤醒CC2420_poll中的poll_wait：
+ok_to_read = TRUE;
+wake_up_interruptible(&inq);
+注：在API中还有一个select函数，和API poll功能一致。二者只是由不同组织实现，功能基本相同。
+2), poll_wait是Linux内核中的一个函数。作用简单说和wait_event_xxx类似。
+
+2, wake_up_xxx和wait_event_xxx
+这两组函数都是Linux内核中的函数。wait_event_xxx函数会等待事件并进入睡眠，当wait_event_xxx函数所等待的事件发生时wake_up_xxx函数唤醒wait_event_xxx函数。
+
+3, 比较而言。poll和poll_wait是应用程序和内核异步通信的一种方法。而wake_up_xxx和wait_event_xxx是Linux内核内部异步通信的一种方法。
+
+18:17 2008-5-30
+调试FM测试程序
+1, 提示：rda5800_test.c:74: error: field '__errno_location' declared as a function
+把
+struct rda5800
+{
+	int 				argc;
+	//argument, can be set to value. usually from main function argv
+	char**				argv;
+	INT32				ret;			//ioctl return value
+	UINT32				errno;			//ioctl errno
+改为：
+struct rda5800
+{
+	int 				argc;
+	//argument, can be set to value. usually from main function argv
+	char**				argv;
+	INT32				ret;			//ioctl return value
+	UINT32				error_num;			//ioctl errno
+解决。待做：思原因。

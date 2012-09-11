@@ -1,0 +1,703 @@
+﻿14:46 2008-7-1
+京睿，期权
+Employee Number	 Dept.	
+Name	 stock option
+(Original)	  Index 	  Final Total Number
+(from Ker etc.) 	  New Options from Stock Split 	  Options to be issued in Year 2007 Plan 	
+
+			
+9271	 Phone R&D-Reference Design-Smart Phone-Software-Driver	 Bamvor Zhang	 　	             1 	               10800	                -   	                 10800	
+
+14:54 2008-7-1
+Olympia项目，OSSP文档
+SW High Level Design：2008-7-4	每个driver module的系统设计文档	   
+SW Detail Design：2008-7-11	每个driver module的详细设计文档	   
+SW Unit Test Report：2008-6-30	每个driver module的测试报告	   
+SW Integration Config: 2008-7-4	每个driver module的Kconfig和Makefile文件	   
+本周需要上交单元测试报告和系统设计文档。
+
+15:03 2008-7-1
+FM
+1, 读写寄存器；
+2, 低功耗功能；
+3, 修改自动搜台模式：自动搜台只设定方向，阈值单独设置。
+4, (16:05 2008-7-7)qinghua tong要求可以调整自动搜台阈值(背景信号强度+n)。
+
+18:29 2008-7-1
+ETS和代码都编译成功，但是freq ETS测试未通过，似乎是单位有问题。
+(11:05 2008-7-3)
+f.frequency = *(UINT32 *)(packet);
+改为
+f.frequency = *(UINT32 *)(packet+2);
+因为前两个字节是id。
+(14:07 2008-7-3)
+修改后，tuner工作正常，set frequency有问题。原因是ets_handler的调用者ets_main_thread调用ets_handler时使用了自旋锁，而使用自旋锁时不能睡眠。但是设置频率时需要tune，这必须等待。这里有矛盾，只能让ets_handler先返回，是把tune工作延时完成。错误提示如下：
+BUG: scheduling while atomic: kernel-ets/0x00000001/748
+[<c002c6a0>] (dump_stack+0x0/0x14) from [<c02d6564>] (schedule+0x64/0x678)
+[<c02d6500>] (schedule+0x0/0x678) from [<c02d78fc>] (schedule_timeout+0x9c/0xd0)
+[<c02d7860>] (schedule_timeout+0x0/0xd0) from [<c02d7954>] (schedule_timeout_uninterruptible+0x24/0x28)
+ r7 = 00000000  r6 = C2922000  r5 = C2A55900  r4 = C295CA20
+[<c02d7930>] (schedule_timeout_uninterruptible+0x0/0x28) from [<c004e7e4>] (msleep+0x1c/0x2c)
+[<c004e7c8>] (msleep+0x0/0x2c) from [<bf02f210>] (rda5800_wait4tune+0x28/0xa4 [radio_rda5800])
+[<bf02f1e8>] (rda5800_wait4tune+0x0/0xa4 [radio_rda5800]) from [<bf02fa48>] (rda5800_setfreq+0x170/0x2bc [radio_rda5800])
+ r8 = BF033624  r7 = 00000000  r6 = C2A55900  r5 = C295CA20
+ r4 = 00000000 
+[<bf02f8d8>] (rda5800_setfreq+0x0/0x2bc [radio_rda5800]) from [<bf02fc08>] (__vidioc_s_frequency+0x74/0x8c [radio_rda5800])
+[<bf02fb94>] (__vidioc_s_frequency+0x0/0x8c [radio_rda5800]) from [<bf03052c>] (ets_handler+0x12c/0x204 [radio_rda5800])
+ r5 = C3B13BA4  r4 = 00000006 
+[<bf030400>] (ets_handler+0x0/0x204 [radio_rda5800]) from [<c020f5dc>] (ets_main_thread+0x210/0x384)
+ r5 = 0000000B  r4 = 00000049 
+[<c020f3cc>] (ets_main_thread+0x0/0x384) from [<c005ada8>] (kthread+0xe8/0x128)
+[<c005acc0>] (kthread+0x0/0x128) from [<c0047694>] (do_exit+0x0/0x8f8)
+ r7 = 00000000  r6 = 00000000  r5 = 00000000  r4 = 00000000
+(15:03 2008-7-3)
+继续查找发现除了wait4tune，还有clearSTC，rda5800_setvol，rda5800_setDSPvol，rda5800_setsigstr
+, platx_rda5800_resume，platx_rda5800_suspend使用了msleep。如果加入定时器，需要修改的函数较多，可能需要加锁，这样就太复杂了，看看有什么其它方法。
+1, msleep替换为mdelay。这样会影响系统性能。
+2, 工作队列，相对于tasklet，感觉工作队列最大的好处就是可以睡眠。
+(15:25 2008-7-3)
+感觉使用V4L2架构写FM有点鸡肋，整个驱动和V4L2结合的很紧密，这时插进来一个ETS，局面变成FM驱动有V4L2和ETS两个爸爸，这和原有有很大冲突。比如设置声音：声音范围检测和设置声音耦合度高，但是声音取值范围是V4L2的结构体定义的。再加上声音控制属于V4L2 ctrl功能的子功能，这样ETS使用设置功能时感觉很别扭。
+(15:57 2008-7-3)
+工作队列能不能传数据，要是不能传数据就比较麻烦。
+只能是自己在rda5800_radio_device再加上一个void *V4L2_data，所有需要工作队列处理的数据，在调用工作队列前把V4L2数据地址赋给V4L2_data。
+今天要完成。
+(10:32 2008-7-15)
+注：上面的报错自："asmlinkage void __sched schedule(void)"
+但这个并没有打开"Spinlock debugging: sleep-inside-spinlock checking"。
+待做：查这个选项在何处起作用。
+
+13:56 2008-7-3
+Linux内核，调试，backtrace
+Linux内核中backstrace代码位于arch\arm\lib\backtrace.s
+
+18:46 2008-7-3
+明天用上面方法把ETS改完，然后写文档。
+
+15:25 2008-7-4
+周报（6.30-7.4）
+===============
+0, 工作日2，16小时。上周周报"9:39 2008-6-27"。
+1, FM ETS 11
+2, FM文档 5
+
+Key Activities of the week:
+1 Implement FM ETS interface 11
+2 write FM OSSP document 5
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 Improve FM code
+2 read Linux kernel code
+3 write FM document
+
+16:35 2008-7-7
+用工作队列解决ETS处理中不能睡眠的问题，待做
+1, rda5800_radio_device加入新值结构体：（完成）
+struct new {
+	INT32	command;	//ioctrl
+	INT32	DACvol;
+	INT32	DSPvol;
+//...
+}
+2, 开启设备时，用create_singlethread_workqueue建立工作队列；（完成）
+3, 关闭设备时，flush_workqueue, destroy_workqueue.（完成）
+4, queue_work。用统一的工作队列，根据command进行相应操作。（完成）
+5, INIT_WORK()。（完成）
+把work_struct做为rda5800_radio_device的成员，这样就可以在queue_work中得到rda5800_radio_device结构体，进而得到需要设置的信息。这样就不需要单独传递数据了。
+代码修改完成，编译通过。待做：测试
+
+16:39 2008-7-7
+同事信息，vito huang，找vito更正了我outlook中错误的电话号码。
+
+11:15 2008-7-8
+#define INIT_rda5800_func(ctrl_name,func_name, usage) \
+		.type		= READABLE|WRITABLE,	\
+		.name		= #ctrl_name,	\
+		.usage		= usage,	\
+出错：
+rda5800_test_new.c:635: error: expected identifier before '(' token
+rda5800_test_new.c:635: error: expected '}' before '.' token
+rda5800_test_new.c:637: warning: braces around scalar initializer
+rda5800_test_new.c:637: warning: (near initialization for 'func_list[0].set')
+rda5800_test_new.c:648: error: field name not in record or union initializer
+rda5800_test_new.c:648: error: (near initialization for 'func_list[0].set')
+rda5800_test_new.c:648: warning: initialization makes pointer from integer without a cast
+rda5800_test_new.c:648: error: field name not in record or union initializer
+rda5800_test_new.c:648: error: (near initialization for 'func_list[0].set')
+rda5800_test_new.c:648: warning: excess elements in scalar initializer
+rda5800_test_new.c:648: warning: (near initialization for 'func_list[0].set')
+rda5800_test_new.c:648: error: expected identifier before '(' token
+rda5800_test_new.c:648: warning: excess elements in scalar initializer
+rda5800_test_new.c:648: warning: (near initialization for 'func_list[0].set')
+rda5800_test_new.c:648: error: expected '}' before '.' token
+改为：
+#define INIT_rda5800_func(ctrl_name,func_name, usage_string) \
+		.type		= READABLE|WRITABLE,	\
+		.name		= #ctrl_name,	\
+		.usage		= usage_string,	\
+和原来一样，宏会替换全部相同的字符串。
+
+12:38 2008-7-8
+修改完成，用setfreq和autoseek各一次，比较是否一致。如果一致给qinghua tong
+
+13:55 2008-7-8
+test code用法
+[root@Linux /]#./init.sh
+[root@Linux /]#cd /mnt/app/FM/0708/
+[root@Linux 0708]#../rda5800_insmod.sh 
+#帮助
+[root@Linux 0708]#./rda5800_test -h
+#设置频率
+[root@Linux 0708]#./rda5800_test 0 set 8750
+#获得87.1, 87.2, 87.3信号强度的平均值
+[root@Linux 0708]#./rda5800_test 7 get
+#从当前频率开始自动搜台，阈值9，方向向上
+[root@Linux 0708]#./rda5800_test 5 set 9 1
+
+15:40 2008-7-8
+D:\work\Olympia\FM\antenna\0708qinghuatong
+现有程序和0526程序信号不同，需要查代码并比较运行结果。
+(17:03 2008-7-8)原因可能是把哪个睡眠时间删除了。
+
+13:21 2008-7-9
+更换串口工具，登录服务器用putty，串口操作用SecureCRT。
+
+16:08 2008-7-9
+ETS使用
+1，串口
+insmod g_serial.ko use_acm=1
+mknod /dev/ttyGS0 c 127 0
+2，PC端安装驱动。usb_driver.rar
+
+17:49 2008-7-9
+ETS，错误信息
+Invalid Format. Unable to create Message
+Definition: ETS
+	Filename: d:\ETS\msg_id.txt; LineNumber: 20
+
+Field: [Message] (Parms: union,  enum=Id)
+	Filename: d:\ETS\msg_id.txt; Line Number: 22
+
+ERROR: Trace command message definition not found: ETS Cmd
+后来发现是CR写成了CT。
+    FM Mute,			25006, CR, Olympia/FM/FM Ctrl, lite
+改为：
+    FM Mute,			25006, CT, Olympia/FM/FM Ctrl, lite
+
+17:56 2008-7-9
+待做：
+完成ETS写控制。下一步是ETS FM读状态（mute, 声音等等）
+(9:46 2008-7-10)
+trace也得改。
+(11:54 2008-7-10)
+修改了range convert
+
+14:11 2008-7-10
+姓名：张健(Bamvor zhang)
+部门：Smart Phone-Software-Driver
+自我介绍或祝福：很高兴加入威盛，做自己喜欢的嵌入式Linux驱动开发。
+照片：F:\照片\2008\04\婚纱照\IMG_8779（单人，007系列）
+
+15:05 2008-7-10
+按照v4l2_ctrl一般情况，rda5800_autoseekOneStation之前应该做数据转换。
+
+18:03 2008-7-10
+代码有点改乱了。
+1, 到底是否把所有传入数据都放到rda5800_radio_device中。如果这样似乎驱动本身效率降低。
+2, 如果说set_freq这些函数已经和V4L2无关，那么调用他们之前是否是否应该做完范围转换。
+目前ets输入的数据没有采用v4l2标准。
+(9:57 2008-7-11)
+3, rda5800_setforcemono是否修改？
+
+11:08 2008-7-11
+写了一个加载usb gadget和ets的脚本
+DRIVER_PATH变量指明g_ether.ko和g_serial.ko两个驱动模块的路径。
+使用方法见"usage"函数。
+#!/bin/sh
+DRIVER_PATH=/home/bamvor/driver
+usage()
+{
+	echo Usage:
+	echo \"$0 command on/off\"
+	echo command is net or ets
+	echo Or \"$0 off\" -- turn off net and ets
+}
+
+net_off()
+{
+	G_ETHER=`cat /proc/modules  | grep g_ether`
+	#echo G_ETHER $G_ETHER
+	if [ "$G_ETHER" != "" ]; then
+		rmmod g_ether
+	fi
+}
+
+net_on()
+{
+	insmod g_ether.ko
+	sleep 1
+	ifconfig usb0 192.168.1.101
+#	ping -c 1 192.168.1.100 && echo net on successful || net on fail
+}
+
+net_restart()
+{
+	net_off
+	net_on
+}
+
+ets_off()
+{
+	G_SERIAL=`cat /proc/modules  | grep g_serial`
+	#echo G_SERIAL $G_SERIAL
+	if [ "$G_SERIAL" != "" ]; then
+		killall cat
+		rmmod g_serial
+	fi
+}
+
+ets_on()
+{
+	ETS_SERIAL=/dev/ttyGS0
+	insmod g_serial.ko use_acm=1
+	sleep 1
+	if [ -c $ETS_SERIAL ]; then
+		echo 
+	else
+		rm $ETS_SERIAL
+		mknod $ETS_SERIAL c 127 0
+	fi
+	cat $ETS_SERIAL &
+}
+
+ets_restart()
+{
+	ets_off
+	ets_on
+}
+
+cd ${DRIVER_PATH}
+if [ "$1" = "" ]; then
+	usage
+elif [ "$1" = "off" ]; then
+	net_off
+	ets_off
+else
+	$1_$2
+fi
+cd ${OLDPWD}
+
+11:33 2008-7-11
+用自己的板子实验这几天修改的代码。如果正确。加入ets读。然后改善信号。然后写文档。
+(14:38 2008-7-14)
+进入/退出低功耗模式，full reg更新时间不对。
+
+11:35 2008-7-11
+FM，修改
+1, 91MHz是噪声，一般是12，13，91MHz小于16都扔掉。
+2, 搜台阈值：
+一般台在16以上。
+8730(2~3) + 10 = 12~13.
+3, 测试用自动搜台算法：改为自动搜索整个频段87.5-108。设置阈值是10，但认为12以上是台。
+
+15:34 2008-7-11
+调试
+1, 貌似freq, mute, DACvol, DSPvol都能工作。但是rsp没有加系统时间，所以回馈的rsp显示不正常。
+加入：Sys Time,    uint32
+现有freq rsp：
+Begin Message, ETS FM Frequency Rsp
+    Ack Type,  uint8, base=enum:Ack/Nack
+;bamvor.add.2008-7-10
+    Sys Time,    uint32
+    Successful, int32, base=enum:Successful/Fail
+    rssi,	int32
+;bamvor.add.2008-7-10.end
+End
+
+17:08 2008-7-11
+Linux, 脚本（bash），返回值（exit status）
+bash中，返回值是0表示成功，1-127表示出错；返回128+n，表示被信号n终止。
+127表示无此命令，126表示不是一个可执行的命令。bash shell内置命令返回2表示错误用法。bash用最后一个命令的返回值做为脚本的返回值。
+
+14:49 2008-7-14
+改一个bug
+rda5800_getstereo函数上报的spy应该是读出的寄存器，错误上报为写入的寄存器。
+
+15:22 2008-7-14
+bug
+更新reg05低位有错。DSP和DAC相互覆盖。
+(10:24 2008-7-18)
+	buf[7]=(buf[WRITE8_REG_OFFSET+7]&(~VOLUME_DAC_MASK))
+			| (volume<<VOLUME_DAC_OFFSET);
+改为
+	buf[7]=(buf[7]&(~VOLUME_DAC_MASK))
+			| (volume<<VOLUME_DAC_OFFSET);
+(10:49 2008-7-18)
+vol和DSPvol中也有睡眠。移到工作队列。（完成）
+(11:52 2008-7-18)
+最后发现是从reg_cache到buf的复制时没有复制buf[7]，for循环只是复制了0-6。
+
+11:13 2008-7-16
+(16:52 2008-7-16)
+下一步工作：
+工作计划：7-17~8-4。
+0, FM。修改代码+文档，7-17～7-24。
+1．Separate the LCD Driver IC control driver from pxafb.c.
+1.1 避免TCS和LCD控制之间的竞争冲突（SPI）。7.29-7.30。
+1.2 abstract data type of the LCD Driver IC.  Refer to generic.c
+LCD ADT包括pxafb_mach_info和lcd driver id两部分。
+1.3 LCD Driver IC可以做独立的电源管理。pxafb.c中set_ctrlr_state中包含了fb电源管理。
+1.2+1.3=3天。
+2. pxafb.c ets。
+已经实现，可能需要修改。
+3. ADS7846 ets. 7.25, 7.28
+3.1 SPI分层，原理
+3.1.1 ads7846
+3.1.2 spi
+3.1.3 pxa2xx_spi
+
+11:32 2008-7-18
+Olympia，脚本
+修改了rda5800_insmod.sh和rda5800_rmmod.sh两个脚本，加入check_status函数，判断操作是否成功，若失败退出：
+check_status()
+{
+	task_name=$1
+	ret=$2
+	if [ "${ret}" != 0 ]; then
+		echo run ${task_name} fail with error ${ret}, exit
+		exit 1
+	fi
+
+}
+insmod ${PWD}/rda5800.ko
+check_status "insert FM i2c moduel" $?
+
+12:05 2008-7-18
+freq, vol, DSPvol写完成。下午解决其它写问题，mute工作正常但没查寄存器是否正确。然后按"11:33 2008-7-11"计划做。
+
+15:01 2008-7-18
+待做：
+1, 修电话
+2, (15:20 2008-7-18)
+填表，看blake所有邮件。
+
+15:24 2008-7-18
+周报（7.14-7.18）
+===============
+0, 工作日5，40小时。上周周报，无（未记入工作日志）。
+1, 改进FM驱动 25，修了2个bug
+2, 了解Gavin新分配的LCD和触摸屏工作，读相关文档，订出工作计划 7
+3, 改经原有FM相关脚本 8
+
+Key Activities of the week:
+1 Improve FM driver 25
+2 read Gavin LCD and touchscreen documantion, work out a plan for improving LCD and TCS code 7
+3 improve FM development script 8
+
+Major Progress:
+1 fix 2 bugs in FM driver
+
+Issues:
+ 
+TODO
+1 Improve FM code
+2 read Linux kernel code
+3 write FM document
+4 study spi implementation in ads7846.c (touchscreen)
+
+15:56 2008-7-18
+Olympia，FM，进展，待做
+1, new_status.rssi没有及时更新。（完成）
+2, rda5800_setfreq，rda5800_setvol，rda5800_setDSPvol，rda5800_setforcemono不再比较是否与原值相同。
+set_freq或其它地方是否需要比较？待做。
+3, 加入cur_status，现在只有autoseek和rssi使用。其余不使用。待做：改为都使用。
+4, (17:20 2008-7-18)rda5800_getstereo和rda5800_getsigstr使用了READ_REG_OFFSET而不是READ8_REG_OFFSET。所以ets spy有问题。
+5, (17:43 2008-7-18)
+测试代码如果没有输入正确方向，且后面还有其它参数会报错。查。
+[root@Linux 0718]#./rda5800_test 5 10 1
+Error: no correct direction.
+free argument
+*** glibc detected *** ./rda5800_test: free(): invalid next size (fast): 0x00014020 ***
+Aborted
+[root@Linux 0718]#./rda5800_test 5 2222
+Error: no correct direction.
+free argument
+free name
+[root@Linux 0718]#./rda5800_test 5 2222trace
+spy 
+[root@Linux 0718]#./rda5800_test 5 222 set
+Error: no correct direction.
+free argument
+*** glibc detected *** ./rda5800_test: free(): invalid next size (fast): 0x00014020 ***
+Aborted
+[root@Linux 0718]#trace
+
+10:03 2008-7-21
+同事信息，电话保修
+Jane Yin。
+开始以为是电话有问题，情况“电话听筒有时无声音，多按几次挂机按键（不是闪断）可以暂时解决。”
+后来重新插拔工位下面的电话线后，问题解决。
+(15:17 2008-7-22)
+今天电话死活没声了，再次给Jane Yin发邮件。3937 kevin lai，来帮忙解决，更换了话机和线，态度很好:）
+
+11:27 2008-7-21
+Olmypia，FM，autoseek，改进
+1, autoseek ETS返回当前频率及其信号强度
+Begin Message, ETS FM Autoseek Rsp
+    Ack Type,  uint8, base=enum:Ack/Nack
+;bamvor.add.2008-7-10
+    Sys Time,	uint32
+    Freq,	uint32
+    Rssi,	int32
+    Status, int32, base=enum:Successful/Fail
+    errno,	int32
+;bamvor.add.2008-7-10.end
+End
+2, 如果搜索超过一圈，返回搜索失败，并tune到起点频率；（取消，硬件实现）
+3, ETS autoseek增加搜索一次和搜索一圈选项。该功能在ETS函数内实现。最终用户如果需要自动搜台，仍然在用户空间实现。如果实际FM在驱动实现，可能会造成自动搜台时一直处于内核态无法响应用户。
+待做：改进：
+1), FM驱动初始化时自动确定当前的8730等频点信号强度，如果自动搜台阈值远远大于rssi(8730)+rssi_add，自动搜台时应该适当降低阈值，多给用户空间返回几次不满足要求的信号强度，避免“死机”。
+2), 自动搜台时搜到的阈值远大于rssi(8730)+rssi_add，应该及时更新rssi(8730)。
+
+14:25 2008-7-21
+Oympia，ETS
+Phenix把ETS中ets_main_thread函数的自旋锁改为信号量，这样ETS处理中间就可以睡眠了。
+待做：看改进后的ETS代码。
+
+15:17 2008-7-21
+装机
+在http://downloadcenter.intel.com/filter_results.aspx?strTypes=all&ProductID=2377&OSFullName=Windows*+XP+Professional&lang=eng&strOSs=44&submit=Go%21下载intel DG965RY驱动和文档。
+
+17:29 2008-7-21
+待做：
+1, "11:27 2008-7-21"，1,3编码，编译完成，未测试。
+2, 装机。驱动，office。完成FM后做。
+3, (20:53 2008-7-25)
+在驱动中对所有radio-rda5800-device当前值设备正确初始值，并在ETS中设置相应初始值为默认值。
+4, (18:52 2008-7-28)使用getRssi函数完成GetBackgroundRssi功能。
+5，启动ets full reg后，应该立刻更新ets。
+6，需不需要加入一个停止当前操作的ets命令？
+
+17:30 2008-7-21
+会议，PM，2.5小时，待做：记入周报。
+
+19:45 2008-7-24
+Olympia\FM\Linux driver\0724\07241927.txt
+是测试了几个版本的驱动。其中0618版本的驱动是包括ets的，但是ets_systime是自己实现的。因为当时得到那个Linux内核不是最新，还没有加入这个函数。
+0623版本是已经在rda5800.ko和radio-rda5800.ko两个文件中都加入了ets。
+
+21:29 2008-7-24
+david遇到需要设置ld的-rpath-link参数的情况，这个参数用于链接时使用的库又依赖于其他库（Kname）的情况，把所依赖的Kname路径用-rpath-link传给ld。
+待做：问杨济如何解决的这个问题。学习-rpath和-rpath-link
+
+19:30 2008-7-25
+待做：
+如果周一IP地址仍然不正确，找IT。
+刚刚才发现本机IP地址有错：10.2.144.67。怪不得没有收到jack的邮件。
+
+20:50 2008-7-25
+Olympia，ETS学习
+base，指定类型，例如"base=10"，十进制；enum:unmute/mute，枚举类型，两个允许值分别是"unmute"和"mute"。
+default：指定默认值，必须符合设定的类型。例如，default=mute。
+完整例子：
+Begin Message, ETS FM Mute Cmd
+    Mute Status,  uint32, base=enum:unmute/mute, default=mute
+End
+
+21:31 2008-7-25
+调试ETS自动搜台。
+ETS中方向设置为up和down都是向下搜索。现在驱动里面的向下搜索有问题。
+(19:09 2008-7-28)
+1，ETS自动搜台方向错误的原因是ets_handler中从packet获得数据时地址不正确——取完32位数据后，packet（unsigned char*类型）只增加了2。现在是加入了cur_packet指针，指示下一个待取数据的位置。
+2，自动搜台向下一直停留在10780的原因是：
+		newfreq = dev->curfreq - 10;
+		if ( newfreq < FREQ_LO ) 
+			newfreq = FREQ_HI - 10;
+写成了；
+		newfreq = dev->curfreq - 10;
+		if ( newfreq < FREQ_HI ) 
+			newfreq = FREQ_HI - 10;
+3，(22:02 2008-7-28)
+没有考虑向上自动搜台时，起点接近FREQ_HI的情况。日志见"07282153_2"，代码见"0728"。
+待做：完成向下自动搜台的如此修改，并继续"18:46 2008-7-28"
+
+22:29 2008-7-26
+CVS服务器，参考文章
+1, http://fanqiang.chinaunix.net/app/cvs/2005-08-24/3523.shtml
+里面有很多相关文档
+2, http://server.zdnet.com.cn/server/2008/0623/942477.shtml
+如何在linux环境下轻松搭建CVS服务器。
+bamvor: 文章一般，只是步骤，没有解释原因。
+
+22:58 2008-7-26
+CVS服务器，讲稿
+1, CVS(Concurrent Version Control System)，并行。
+2, 我们要注意所有开发人员的协调，千万不要乱删东西，大不了用
+#if　　　　0　
+#endif　
+宏定义对括起来．实在要删东西，那最好先标记一个版本，在自己的分之修改。
+3, Emacs对CVS支持很好，推荐大家学习。
+呵呵，自己还不会。
+
+10:32 2008-07-27
+CVS，使用学习
+http://www.linux.ie/articles/tutorials/cvs.php
+Getting Started with CVS
+cvs init
+可以用cvs --help-command查看cvs命令帮助：
+init         Create a CVS repository if it doesn't exist
+
+
+
+
+9:49 2008-7-28
+周报（7.21-7.25）
+===============
+0, 工作日5，40小时。上周周报"15:24 2008-7-18"。
+1, 会议，电源管理，2.5小时
+2, 组内会议，3.5小时。
+3, 改进FM ETS。27
+4, 和david一起编译gstreamer库。8
+
+Key Activities of the week:
+1 Meeting for Power Management(driver and hardware team). 2.5
+2 Driver team meeting. 3.5
+3 Improve FM ETS. 27
+4 compile gstreamer library with david. 8
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 build version control server for our team.
+2 study spi implementation in ads7846.c (touchscreen)
+
+11:06 2008-7-28
+subversion，学习
+http://news.csdn.net/n/20070523/104445.html
+http://news.csdn.net/n/20070523/104446.html
+http://news.csdn.net/n/20070523/104447.html
+Subversion与CVS的对比——功能性对比（一）（二）（三）
+1，全局性的版本编号
+一个新的版本，并得到一个自增量的版本号N+1，该版本号并不针对某个特定的文件，而是全局性的、针对整个版本库的。所以两个不同版本的同一文件可能是相同的。
+2，目录的版本控制
+3, 原子性提交。本次提交完全完成后，其他用户才能看到。
+4，双向的差异化－压缩网络传输
+对任何文件（文本，二进制文件等）都使用二进制比较算法。无论C2S还是S2C都仅仅更新不同部分。
+5，更好的冲突标识与处理
+
+不能更新有冲突的版本。
+6，更多的本地/离线操作
+Subversion 的以下命令可以进行离线操作：
+svn status － 显示工作拷贝上的本地修改概况；
+svn diff －显示工作拷贝上的本地修改细节，比较修改前后的内容；
+svn revert － 撤销工作拷贝上的本地修改；
+7， 对符号链接进行版本管理
+8，元数据管理
+与CVS 相比，Subversion 增加了元数据（metadata）管理机制。即可以对版本库中的文件或目录附加任意的“属性”（property），并记录属性的变化历史，也就是对元数据进行版本管理。
+
+11:23 2008-7-28
+subversion参考资料
+subversion中BDB和FSFS两种存储方式的比较
+http://www.svn8.com/svnpz/20080305/224.html
+
+13:02 2008-7-28
+版本控制，svn，待做，加入文档阅读内容。
+1,目录结构
+kernel
+testcode
+2,是否需要最新版？
+
+13:37 2008-7-28
+subversion，学习
+1，工作文件总是处于下面四种状态中的一种。（补充完整）
+2，问题。如果我修改了某个文件，但是没有commit，进行了update，我对该文件的修改是否会被覆盖？
+3，
+1),不能提交一个不是完全最新的文件和目录；
+2),如果一个目录已经不是最新的，你不能提交一个目录的元数据的修改。
+4， http://subversion.tigris.org/，官方网站
+
+13:49 2008-7-28
+qinghua tong周四要5802的测试程序，问题
+1, 编程手册P7：“初始化芯片内部寄存器，由RDA提供”。RDA是否提供了参考代码？
+2, 再给我一个rda5802板子，便于对比实验。
+
+14:12 2008-7-28
+Olympia，FM，更换芯片，rda5802，datesheet
+与rda5800对比：
+条目		5800		5802
+频率范围	76-108		65-108
+CHAN寄存器	8位		10位
+RDS/RBDS处理器	无		有
+I2C选择		SEN高		MODE低
+（未完，待做）看P4，3.8节。
+
+注：RDS是"无线数据广播系统"(Radio Data System)，详见"http://sebbs.it168.com/thread-1022317-1-1.html"。国内仅有实验性RDS电台。RBDS没有查到简单介绍资料。
+
+18:46 2008-7-28
+待做：
+1，调完自动搜台；
+(19:47 2008-7-28)
+1), 调自动搜台开始正常，后来开发trace log再关闭后，板子串口不停显示大量信息。原因未知。日志见07281935.txt。
+2), 一次搜台正常。搜索整个band出错。
+set_freq() 1106: frequency 54 of rda5800 frequency range(unit 0.1MHz): 8750 -- 10800.
+原因是没有加单位转换：
+rda5800p->new_status.freq = start_freq;
+改为：
+rda5800p->new_status.freq = freq_toV4L2(start_freq);
+(21:03 2008-7-28)
+==写成了=
+(17:20 2008-7-29)
+完成"21:31 2008-7-25"
+1-2：工作队列需要完善功能：可以杀死工作队列（destroy_workqueue）；卸载驱动前完成所有工作队列（destroy_workqueue）。二者都需要通知ets。待做。
+2，改进rda5800信号，要求和最初扫描结果一致。低噪声，高阈值。
+3，写rda5802驱动。
+4，完成"17:29 2008-7-21"。
+
+14:55 2008-7-29
+待做；
+1, 合同，三证给blake；（完成）
+2, 确定参考代码是否够用，找qinghua tong拿板子；
+
+15:31 2008-7-29
+工号：0170，密码不变；
+实习工：9271。
+
+10:54 2008-7-31
+考勤异常解决，给Tracy Li发信，回复：
+Dear  Bamvor,
+      系统目前没有您工号和门襟卡号对应的数据，所以系统无法抓到您的考勤记录。
+      请您联系前台Yuki Guo将您的信息对应。
+      您可联系HR Claire将您的考勤转为正常。
+      如有问题，请再告知，谢谢！
+Best Regards，
+Tracy Li
+
+Yuki Guo，电话：3001。
+Claire：Claire Zhu
+
+11:02 2008-7-31
+写rda5802驱动：
+1, 改函数名：凡是rda5800和rda5802通用函数都改为：rda58xx。
+2, 修改对寄存器的操作。
+
+16:10 2008-7-31
+改写rda5802驱动，进展
+rda5802的0x02reg[7]是SKMODE,不再是XTALEN。
+(17:30 2008-7-31)
+rda58xx中暂时去掉ETS功能。
+
+17:51 2008-7-31
+读rda5802的id，在108读到，说明rda5802有3e个寄存器？！
+
+18:13 2008-7-31
+读id正确，日志见07311753。但是如果id不正确，仍然会注册成功，这时再卸载会有问题。下周解决这个问题。待做。
+
+18:14 2008-7-31
+待做完成：
+1, 备份0731代码，日志；（完成）
+2, 解决公积金错信。（完成）

@@ -1,0 +1,715 @@
+﻿14:52 2008-2-21
+待做：
+1，发工资卡信息（完成）
+2，查考勤；
+电子表格-考勤单
+目前没有任何考勤。李哲也没有。
+(18:47 2008-2-22)
+现在有考勤记录，但都是未刷卡记录。李哲说问过，原因是信息没有录入进去，下周应该就可以了。"18:47 2008-2-22"end
+3，复印机打印机使用。邻近的是5200，远处是9040（可双面打印）。
+(13:04 2008-5-19)3-11层所有打印机都可以在"\\bjps02"找到，IP：10.2.254.129。"13:04 2008-5-19"结束
+(17:38 2008-8-14)打印机改为："\\bjps01"，IP：10.2.254.194。"17:38 2008-8-14"结束
+4, 本周在个人信息系统填写个人信息。
+5，安装必要软件：拼音加加。
+
+16:00 2008-2-21
+待做完成，下一步
+看文档。学习ClearCase。初步看完文档后，看ClearCase下的代码。
+具体如下：
+1) clearcase
+有个training document.
+安装该软件。该软件位于\\Clearcase目录下。那里边有安装说明。
+spec:
+element * CHECKEDOUT
+element * .../base_gc_base/LATEST
+element * /main/LATEST
+ 
+load \Ref_vob\sw
+load \Ref_vob\Release
+load \Ref_vob\CoreTeamRelease
+load \Ref_vob\Project\V10\Management\Schedule
+load \Ref_vob\Project\V10\Engineering
+load \Ref_vob\Project\V10\Index
+load \Ref_vob\Project\V10\Intg
+load \Ref_vob\Project\V10\Release
+
+2）附件中还有三个关于Driver 方面的文档。
+3）两份Nucleus OS的文档。
+
+16:55 2008-2-21
+ClearCase，版本控制工具，建立分支
+自：XiaWu邮件
+参考这个spec创建自己的branch
+
+红色的名字(xw)可以自己定义，要小写。将文件checkout后，在自己的brach上修改验证。 
+
+element * CHECKEDOUT
+
+element * ...\v3360_xw_debug1\LATEST 
+
+element * ...\ref_driver_main\LATEST -mkbranch v3360_xw_debug1
+
+element * REF_DRIVER_BASE -mkbranch  ref_driver_main
+
+element * \main\LATEST -mkbranch ref_driver_main
+
+#element * \main\LATEST 
+
+ 
+
+load \Ref_vob\sw\Driver
+
+load \Ref_vob\Release
+
+load \Ref_vob\CoreTeamRelease
+
+load \Ref_vob\sw\Dsp
+
+load \Ref_vob\sw\FileSystem
+
+load \Ref_vob\sw\Protocol
+
+load \Ref_vob\sw\Build
+
+10:14 2008-2-22
+ClearCase学习
+昨天我无法check in。后来发现原因是李哲没有check in，但是没有check in那个分支在旧电脑上。后来李哲上网搜索到的删除服务器上对应view的方法：
+check in错误。
+cleartool> lsview -l $tag
+查询uuid
+使用下面三条指令删除view
+
+cleartool rmtag -view $tag; 
+cleartool rmview -force -all -uuid $uuid; 
+cleartool unregist -view -uuid $uuid; 
+(10:36 2008-2-22)
+分别是check in错误的抓图。"ViaComm\ClearCase"。
+情况和昨天类似。
+
+11:05 2008-2-22
+ClearCase学习，cleartool
+1，帮助命令：
+简单帮助：
+help 命令名
+详细帮助（打开帮助网页）：
+man 命令名
+
+2，lsview：查看视图。
+lsview -l '正则表达式'
+支持[],*,?等，不支持+等。
+
+3，rmtag，rmview，unregist等类似。
+
+11:47 2008-2-22
+ClearCase学习，如何建立分支。
+对"\test_vob"建立"bamvor_test_branch"分支：
+element * CHECKEDOUT
+element * ...\bamvor_test_branch\LATEST 
+element * /main/LATEST -mkbranch bamvor_test_branch
+load \test_vob
+建立分支后，需要至少有一次check out，才能在version tree中看到建立的分支。
+
+13:07 2008-2-22
+自：Z0A_DRV_002_Software Building Guide，p2
+The system software of Via Communications mobile phone is consisted of three parts: Man-Machine Interface (MMI), Device Driver, and Protocol Stack (PS).
+待做：看Driver Reference Design.学习驱动详细结构等。
+
+13:38 2008-2-22
+如何进入bootloader
+According to previous description, whether to run bootloader or application is determined by GPIO’s status. Currently in sysinit.s the program will check the status of GPIO3 and GPIO4, if GPIO3’s level equal to 0 and GPIO4’s level equal to 1, the program will enter into bootloader. According to the schematic of V300, when USB cable plug in before the mobile power up, the mobile will run into bootloader.
+
+Fr: Ref_vod/sw/Driver/VT3360/Driver/Startup
+根据0xe0060000是GPIO数据寄存器和注释，下面代码应该是文档中说的如果插入USB线会进入bootloader，这里这段代码都被注释了，是否因为这个release版本，不需要进入bootloader？
+待做：查。
+    @LDR   a1, =0xE0060000
+    @LDRH  a2, [a1]
+    @AND   a2, a2, #0x8  
+    @CMP   a2, #0x8     @a USB Cable Plug in
+    @LDR R0,=0@ No code error when call bootldr.
+    @BLEQ  ScatterLdr     @
+
+14:26 2008-2-22
+初始化
+和文档"Z0A_DRV_002_Software Building Guide"描述的不完全一样。
+文档中的链接文件指出entry是"sysentry"，没有找到实际的链接文件。根据"Sctld.txt"，从sysboot.o开始运行。
+sysboot.s：
+sysentry:
+@*********************************
+@ 8 reset vectors + 5 boot reserve map
+@*********************************
+                 LDR pc,Sys_Reset_Addr
+                 LDR pc,VECT_2APP4
+                 LDR pc,VECT_2APP8
+                 LDR pc,VECT_2APPC
+                 LDR pc,VECT_2APP10
+                 LDR pc,VECT_2APP14
+                 LDR pc,VECT_2APP18
+                 LDR pc,VECT_2APP1C
+@ The below is normal code area.  for compatiable of decode.  Never insert any code in below. Never change their order.
+Sys_Reset_Addr:
+           .word sysboot                 @VECT_APP20
+这里除了复位外，没有使用通常的未定义指令等异常跳转。
+待做：查".word sysboot"作用，跳转？
+如果是跳转：
+
+@ ***********************************
+@  Reset vector
+@ ***********************************
+sysboot:
+    MRS     a1,CPSR                        @ Pickup current CPSR
+    BIC     a1,a1,#MODE_MASK               @  Clear the mode bits
+    ORR     a1,a1,#SUP_MODE                @ Set the supervisor mode bits
+    ORR     a1,a1,#LOCKOUT                 @ Insure IRQ/FIQ interrupts are
+                                           @  locked out
+    MSR     CPSR_cxsf,a1                   @  Setup the new CPSR
+
+    B init_app
+注：
+hwdef.s
+      .EQU    LOCKOUT,  				 0xC0                 @ Interrupt lockout value
+待做：查，LOCKOUT。根据"http://www.icdew.com/archiver/?tid-23.html"打造你的44B BSP - 配置篇(页1)应该是从datesheet中查出的。查2410板子是不是这么写的。
+此后会跳转到sysinit.s的"init_app"：
+其中包括存储器初始化和片内硬件初始化。
+
+16:37 2008-2-22
+Driver Achitechture
+HI task handles with input devices, such as keypad, and etc. HO task handle with output device, such as USB cable plug in, SD card plug in.
+
+17:12 2008-2-22
+计划，待做：
+重点学习keypad和LCD部分。方法：与s3c2410 Linux对比。
+
+17:18 2008-2-22
+nucleus，移植相关文件
+nucleus.h
+
+17:43 2008-2-22
+看Android
+自：ClearCase: "Ref_vob\Vendor\Google"。现位于"ViaComm\Android"
+参考文档，待做，看：
+Please read the article:Google Calling: Inside Android, the gPhone SDK(http://www.onlamp.com/pub/a/onlamp/2007/11/12/google-calling-inside-the-gphone-sdk.html)，机器上有。
+And visit:http://code.google.com/android/index.html
+待做：先了解VIA Comm nucleus发展计划，再了解其Linux计划。
+
+18:45 2008-2-22
+进度，
+PLUS_Internals.pdf，p38: Thread Control Component(TC)
+
+10:09 2008-2-25
+待做：
+上周总结（完成）。
+整理笔记本上的日志。
+查字典实现。
+看GSM软件组成员（完成）
+完成"#VIA Telecom(BJ)-GSM Chips-GSM-Driver"组和Reference Design SW组。
+查同行情况（展讯等，是否用Linux）。
+(13:52 2008-2-25)
+待做：
+每天看VIA电子报（每月中国信息产业资讯）；
+定期看业内杂志，暂定电子工程专辑（想办法订阅，本周申请，订阅前看RSS同样本周完成）和程序员（搬呼家楼后订阅）。
+
+10:18 2008-2-25
+上周总结：
+看文档，学习ClearCase，看相关项目代码。
+文档：重点看了3363与原来了解芯片（主要是s3c2410）不同的部分：CPU DSP I/F，EBIF，Graphic Accelator。
+项目相关代码：阅读部分启动部分的汇编代码。
+
+10:43 2008-2-25
+Nuleus学习，驱动
+相关结构体："Ref_vod/sw/Driver/VT3360/Driver/DriverSystem/DriverOS/Nucleus/nucleus.h"
+
+typedef struct NU_DRIVER_REQUEST_STRUCT
+{
+    INT         nu_function;                /* I/O request function     */
+    UNSIGNED    nu_timeout;                 /* Timeout on request       */
+    STATUS      nu_status;                  /* Status of request        */
+    UNSIGNED    nu_supplemental;            /* Supplemental information */
+    VOID       *nu_supplemental_ptr;        /* Supplemental info pointer*/
+    
+    /* Define a union of all the different types of request structures. */
+    union NU_REQUEST_INFO_UNION
+    {
+        struct NU_INITIALIZE_STRUCT     nu_initialize;
+        struct NU_ASSIGN_STRUCT         nu_assign;
+        struct NU_RELEASE_STRUCT        nu_release;
+        struct NU_INPUT_STRUCT          nu_input;
+        struct NU_OUTPUT_STRUCT         nu_output;
+        struct NU_STATUS_STRUCT         nu_status;
+        struct NU_TERMINATE_STRUCT      nu_terminate;
+    } nu_request_info;
+    
+} NU_DRIVER_REQUEST;
+
+typedef struct NU_DRIVER_STRUCT
+{
+    UNSIGNED       words[NU_DRIVER_SIZE];      /* CS_NODE_STRUCT */
+    CHAR           nu_driver_name[NU_MAX_NAME];
+    VOID          *nu_info_ptr;
+    UNSIGNED       nu_driver_id;
+    VOID           (*nu_driver_entry)(struct NU_DRIVER_STRUCT *,
+                                                NU_DRIVER_REQUEST *);
+} NU_DRIVER;
+
+10:47 2008-2-25
+Nucleus学习，PLUS_Internals.pdf
+->发现应该先学PLUS_Reference.pdf。:(
+Service Call Mapping ---- Error Checking, No Error Checking，根据是否定义NU_NO_ERROR_CHECKING决定是否不使用错误检查。如果不使用错误检查可以改进Nucleus PLUS service性能。
+
+11:09 2008-2-25
+Nulceus学习，PLUS_Reference.pdf，Getting Started
+Debugging software on the target system usually involves an In-Circuit Emulator (ICE) tool or a Target-Resident Monitor (TRM).
+TRM设置断点需要使用中断***。 
+nuclues.h（出处同"10:43 2008-2-25"）。
+VOID            Application_Initialize(VOID *first_available_memory);
+
+11:44 2008-2-25
+Nucleus学习，系统初始化
+INT_INITIALIZE->INC_INITIALIZE
+INT_INITIALIZE：底层初始化，
+INC_INITIALIZE：高层初始化，包括：
+	Nucleus PLUS component 初始化
+	Application_Initialize：初始化应用程序的初始环境，包括application tasks, mailboxes, queues, pipes, semaphores, event groups, memory pools, and other Nucleus PLUS objects are defined in this routine. p20页有例子。
+	task scheduling初始化
+
+14:33 2008-2-25
+Nucleus学习，Memory Usage
+p22
+I/O drivers属于System objects。System Object所需memory在其建立时分配。这样就可以为不同的System Object提供不同的memory，例如高优先级程序获得高速内存。
+Memory申请的三种方法：
+global C data structures：最简单的方法。另外，"Local C data structure allocation"也同样合法。
+从dynamic memory pool or a partition memory pool动态分配。函数：NU_Allocate_Memory。例子："PLUS_References.pdf"p23。
+从绝对memory地址分配。函数：用NU_Create_Memory_Pool建立memory pool，分配时直接把地址赋给指针。例子：p24。
+
+15:12 2008-2-25
+Nucleus学习，Execution Threads 
+8种线程：
+Initialization，System Error，Scheduling Loop，Task，Signal Handler，User ISR，LISR，HISR。
+Nucleus的中断处理也分为LISR(Low-Level Interrupt Service Routines)和HISR(High-Level Interrupt Service Routines)。
+线程需要知道入口点和可以使用的Nucleus PLUS services。
+待做：看此文档深入学习线程。
+
+15:16 2008-2-25
+Nucleus学习，I/O驱动，键盘驱动
+以键盘驱动为线索，键盘驱动涉及文件。待做：补充完整。
+根目录："Ref_vob\sw\Driver\VT3360\Driver"
+"HD\VIAIC\Kepad\HDKPD.c"
+"HI\hi.c"：
+"Driver_Inc\hdif.h": HD_KPDInit(), HD_KPDRead()声明。
+HI_TaskMain()->HD_KPDInit()：
+HI_TaskMain()->HI_ProcKeypadOnEvent->HD_KPDRead()->KPDReadKey()
+
+17:08 2008-2-25
+LCD驱动，GA(Graphic Accelerator, gfx)
+dispcontroller.c的BitBlt565Base_GA函数：实现了bitLBLT的四种操作。
+
+17:51 2008-2-25
+Nucleus学习，keypad，文档
+1， 硬件
+每隔16ms扫描一列。如果有键按下，做4-64ms的去抖动后，把行列值写入kpd_key寄存器，发送键按下中断（电平）给CPU，CPU读行列值后，清除行列值，发送键释放中断（上升沿）。
+2，软件
+1), Driver_API_Interface_Spec.pdf
+KEYPAD API INTERFACES
+
+17:55 2008-2-25
+待做：查HI，HO作用；查LISR，HISR代码位置。不在当前代码树中？
+
+17:58 2008-2-25
+Nucleus学习，keypad，HDKPD.c函数分析
+1，HD_KPDInit()：
+1), 设置去抖动时间为8ms，读回设置，如果正确说明硬件工作正常。
+2), 清除kpd_key寄存器。
+
+2，HD_KPDRead()
+UINT16 HD_KPDRead (HDKPDInfo_t *ReadData)
+KeyInReg = LISRKeyCode;//待做，查LISRKeyCode。
+/////////待做：下面代码明日再分析/////////
+    if ((KeyInReg & 0x0400) == 0x0000)//VK_POWER is 1'st priority
+    {
+        *KeyCode = VK_POWER;
+        *KeyStatus = 1;
+        MMI_PutString("KeyCode is VK_POWER!");
+        return (HD_SUCCESS);
+    }
+	
+    KeyInReg &= 0x03FF;
+    if (KeyInReg == 0x03FF)
+    {
+        return (HD_HW_ERROR);
+    }
+
+    if (KeyInReg == 0x00)
+    {
+        return (HD_HW_ERROR);
+    }
+//////////////////
+按位比较kpd_key寄存器得到按键的行列值（效率低），根据行列值从KeyCodeArray得到HDKPD.h中的键值。如果是"VK_RESERVED"，返回"HD_HW_ERROR"。
+
+3, HI_TaskMain()：
+初始化后，进入while (1)循环进行事件处理：
+1), 通过"OS_DRIVER_GetEventOR"得到事件。位置"DriverSystem\DriverOS\Nucleus\driverosif.c"
+2), 通过APIMISC_ObtainDSleepSemaphore得到信号量。未查到此函数，（深睡眠信号量？尚未解决，见6）。
+其中处理键盘事件的代码包括按键按下和释放两部分：
+		if (GroupFlag & PERIPH_KEYON_EVTBIT)
+		{
+			if (KeyStatus)/*a key-off event is losted*/
+			{
+				APIMISC_ReleaseDSleepSemaphore();
+				MMI_PutString("Keyofflost_ReleaseDSleepSemaphore\r\n");
+			}
+			KeyStatus=1;
+			MMI_PutString("Keypad Pressed !\r\n");
+			APIMISC_ObtainDSleepSemaphore();
+			//MMI_PutString("KeyPad_ObtainDSleepSemaphore\r\n");
+			HI_ProcKeypadOnEvent ();
+		}
+		
+		if (GroupFlag & PERIPH_KEYOFF_EVTBIT)
+		{
+			if (!KeyStatus) /*a key-on event is losted*/
+			{
+				APIMISC_ObtainDSleepSemaphore();
+				MMI_PutString("Keyonlost_ObtainDSleepSemaphore\r\n");
+			}
+			KeyStatus=0;
+			MMI_PutString("Keypad released !\r\n");
+			HI_ProcKeypadOffEvent ();
+			APIMISC_ReleaseDSleepSemaphore();
+			//MMI_PutString("KeyPad_ReleaseDSleepSemaphore\r\n");
+		}
+程序会判断是否丢失了上一状态：即键按下事件之前有没有键释放事件，反之亦然。其后调用HI_ProcKeypadOnEvent/HI_ProcKeypadOffEvent。
+
+4，HI_ProcKeypadOnEvent()：
+作用：Get key code and send key down message to the AL.
+1), 设置数据类型是键盘"ReadData.Type = KEY;"；
+2), 读按键"HD_KPDRead"；
+3)，错误检查：这里和"HD_KPDRead"有重合，二者都检查了"VK_RESERVED"。此外这里检查大于"VK_RECORD"，只有"KEYPAD_IS_VER3"键盘中定义了"VK_RECORD"。不太明太检查“VK_RECORD”的作用。待做，查。
+4)，判断电源按键是否按下；
+5), 把按键信息封装为HIMMIKeyInd_t结构体发送给MMI。
+a, 为KeyInd分配空间：OS_DRIVER_Malloc
+b, 封包。HIMMIKeyInd_t。包括发送者(HI Task), primitive(Key)，键值。
+c, 发送："MMI_SendMessage(KeyInd);"。待做，查此函数。
+d, SavedKeyCode = ReadData.KeyCode
+
+5，HI_ProcKeypadOffEvent()，待做，补充
+
+6,  查APIMISC_ObtainDSleepSemaphore()作用。涉及到汇编。没有理解。待做：补充。
+mmidebug\Swi_hapi_pro.c
+UINT16 APIMISC_ObtainDSleepSemaphore (void)
+{
+   return __OS_SYS_CALL(SYS_NR_APIMISC_ObtainDSleepSemaphore, NULL);
+}
+
+driver_inc\Swi_sys_nr.h
+#define SYS_NR_APIMISC_ObtainDSleepSemaphore 0x3091
+
+startup\Zac_swi_4mmi.s
+@ EXPORT	__OS_SYS_CALL
+__ASMOS_SYS_CALL:
+	STMDB sp!,{lr}   @; r0, r1 is input
+     swi 0x9801
+	LDMFD sp!, {lr}
+	BX    lr
+
+
+18:40 2008-2-25
+Nucleus学习，keypad，相关数据结构
+1，HDKPDInfo_t："hdkeyif.h"，位置"Driver_Inc"。
+// Structure
+typedef struct
+{
+    UINT8   Type;			// Operation type
+    UINT8   Press;			// Key status, 0: Release 1: Press
+    UINT8   KeyCode;		// Key code
+} HDKPDInfo_t;
+
+2，HIMMIKeyInd_t
+drivermmiif.c，位置"Driver_Inc"，该文件定义了HI和MMI之间的接口：
+/* --- Inter Task Communication --- */
+/* --- structure types of HI - MMI ITC --- */
+typedef struct
+{
+    ITCMsgHead_t Head;
+    UINT8 Press;		// 0: Release, 1: Press
+    UINT8 KeyCode;		// Virtual key code for the key event
+    UINT8 Unused [2];	// don't use it. Maybe memory allocated for this
+} HIMMIKeyInd_t;
+#define SIZEOF_HIMMI_KEY_IND(UD) (sizeof(*(UD))- sizeof((UD)->Unused))
+
+3, (10:18 2008-2-26)程序返回值，用于硬件部分，包括：HD_SUCCESS, HD_INVALID_PARAM, HD_HW_ERROR, HD_SUSPEND, HD_FAILURE。hdif.c，位置"Driver_Inc"
+
+4, MS_PWRKEY_ST_BIT。电源按键状态：0按下，1释放。
+hdpmuif.h，位置"Driver_Inc"。
+
+5，
+#define DEBUG_INFO_MEM_GUARD_SIZE		16
+#define DEBUG_MEM_LEAK_HEAD_SIZE		12
+#define DEBUG_INFO_MEM_GUARD_BYTE	0xfd
+位置：" Driver_Inc\driverosif.h "
+
+6, ITCMsgHead_t, /* --- Inter Task Communication --- */
+typedef struct
+{
+    UINT8 Sender;		// Task ID of the sender
+    UINT8 Prim;			// Primitive
+    UINT16 TotalLen;	// Length whole message including the head
+} ITCMsgHead_t;
+#define SIZEOF_ITC_HEAD (sizeof (ITCMsgHead_t))
+
+7，HI_TASK_ID，" Driver_Inc\driversys.h  "
+#define HI_TASK_ID				0x01
+
+8，HIMMI_KEY_IND，" Driver_Inc\driverprim.h "
+#define HIMMI_KEY_IND					0x01
+待做：查primitive起什么作用，与非primitive的区别。
+
+18:52 2008-2-25
+Nucleus学习，keypad，键盘软硬件总结，待做，补充完整
+1，软硬件划分；
+2，软件分层：不同开发板键值在头文件定义，按键驱动分为两部分：得到行列值和得到键值。
+
+10:03 2008-2-26
+待做，查"HI_EXCEPTION()"
+
+13:12 2008-2-26
+Nucleus学习，keypad，键盘驱动学习思路，待做：补充
+0, 了解Nucleus，了解I/O 驱动部分。
+1，看资料：
+1), keypad硬件datesheet，了解硬件。
+2), " Driver Software Architecture Design.pdf ", 看驱动结构；
+3), " Driver_API_Interface_Spec.pdf ", 看API INTERFACES，这时了解了键盘基本数据结构。
+4), " Driver_Reference_Design.pdf "，参考。可以了解软硬件接口部分是如何设计的。
+2，根据Nucleus驱动流程看代码
+
+13:29 2008-2-26
+Nucleus学习，keypad，相关函数出处，待做：补充，学习下列函数（Nucleus文档，看代码）
+目录起始位置："Ref_vob\sw\Driver\VT3360\Driver"
+1, OS_DRIVER_NUError: DriverSystem\DriverOS\Nucleus\driverosif.c
+Process the system error of Nucleus Plus. This function is a wrapper of the system call.
+2, " NU_Allocate_Memory()"：文档：" PLUS_References.pdf ", p54；代码位置未知。待做，查。
+3, " OS_DRIVER_Malloc() "：位置"DriverSystem\DriverOS\Nucleus\driverosif.c"。
+4, " NU_Current_Task_Pointer() "：文档：" PLUS_References.pdf ", p38；代码位置未知。待做，查。
+
+13:56 2008-2-26
+Nucleus学习，驱动相关函数，OS_DRIVER_Malloc，OS_DRIVER_MallocDebug()分析，内存溢出调试方法
+OS_DRIVER_Malloc是一个Wrapper函数，封装了" NU_Allocate_Memory()"。
+另有一个debug版本" OS_DRIVER_MallocDebug() "增加了File, Line两个变量。这样如果空间申请错误，通过" OS_DRIVER_NUError() "可以得到" OS_DRIVER_MallocDebug() "调用者的文件名和行号。否则只能得到OS_DRIVER_Malloc函数所在的文件名和行号。当定义DEBUG_MEMORY_LEAK时只有OS_DRIVER_MallocDebug没有OS_DRIVER_Malloc，反之亦然。
+1, 计算Memory地址，获得调试内存泄露所需变量
+2，申请Memory(NU_Allocate_Memory())。
+3，把调试信息填入新申请的Memory中。
+4, 返回Memory：
+如果定义DEBUG_MEMORY_LEAK返回Memory=Memory+DEBUG_MEM_LEAK_HEAD_SIZE;，否则返回Memory。
+
+申请到的Memory分析：
+0    DEBUG_MEM_LEAK_HEAD_SIZE-1,DEBUG_MEM_LEAK_HEAD_SIZE    GuardSize-1,GuardSize    totalsize
+---------------a---------------,----------------------b----------------,-----------c----------
+a, 头信息：包括申请空间的大小，FILTER(0xAAaa)，当前任务指针，调用此函数位置（行号）。大小：12字节。；
+b, 实际的数据内存区域。大小：Size字节；
+c, Guard区域：填充0xfd。大小：4字节。
+关系：
+GuardSize=Size+DEBUG_MEM_LEAK_HEAD_SIZE;
+totalsize=Size+DEBUG_INFO_MEM_GUARD_SIZE;
+DEBUG_MEM_LEAK_HEAD_SIZE: 12
+DEBUG_INFO_MEM_GUARD_SIZE: 16
+注：GuardSize其实称为GuardStart或GuardPosition更合适。
+
+16:57 2008-2-26
+安装工具，帮助文档：
+D:\ZDE\Readme.htm
+
+15:08 2008-2-27
+Nucleus，代码学习，DMCE_Allocate_Memory，DMC_Allocate_Memory
+位置"dmce.c"，"dmc.c"。
+DMCE_Allocate_Memory会进行错误检查，包括检查是否有足够空间分配(size > (pool -> dm_pool_size - (2 * DM_OVERHEAD)))。为什么这里是两倍的DM_OVERHEAD？DM_OVERHEAD是DM_HEADER对UNSIGNED向上取整后的大小。每次DMC_Allocate_Memory分配的空间是Size+DM_OVERHEAD。待做，查。
+
+DMC_Allocate_Memory:
+1, 查找足够大小的block；
+2, 决定是否拆分（如果大于所需大小+DM_OVERHEAD+最小申请大小，则拆分）；
+3, 考虑suspend，没看明白，待做，看。
+
+注：
+1, DM_memory使用双链表：
+把new_ptr加入到memory_ptr后面双向链表节点，很长时间没复习数据结构了。
+new_ptr -> dm_previous_memory =  memory_ptr;
+new_ptr -> dm_next_memory =      memory_ptr -> dm_next_memory;
+(new_ptr -> dm_next_memory) -> dm_previous_memory =  new_ptr;
+memory_ptr -> dm_next_memory =   new_ptr;
+2, 众多调用函数没有看。细看。TCT_Check_Stack函数未找到代码(Nucleus和
+sw\VT3360内都没有）。待做，查
+
+18:24 2008-2-27
+"9:53 2008-2-27"
+待做，计划
+总体思想：对比VT3406和S3C2410软硬件区别，和VT3360软硬件区别。理解软件设计上如何适应多个开发板。
+0, XiaWu（完成）:
+1), 找VT3360/3, VT3406和LCD相关datesheet。无电子版
+1, 27, 28完成LCD了解：看bootloader部分lcd控制。29和3.3, 3,4看Nucleus部分，并最终完成Nucleus LCD驱动文档。
+2, 整理前面的键盘文档；
+3, 效率低时把本子上的日志加入此文件；
+4, 学习如何用ZAC，编译整个系统。
+
+18:28 2008-2-27
+Nucleus学习，LCD
+LCD背光采用PWM。
+
+11:41 2008-2-28
+V3406学习，LCD，Graphic Accelator(gfx)
+1, gfx
+比3360多了一些效果：图像处理（黑白，褐色，负片，曝光）和图像旋转；
+2, LCD：
+1), EBIF LCD接口（兼容68系列CPU）。待做：看和3360的区别；
+2), LCD I/F, LCD Brige。待做，细看。
+
+13:21 2008-2-28
+VT3406学习，bootloader，V10配置
+1, 板级配置：
+#if ((DRIVER_BUILD) == (DRIVER_BUILD_V3406_V10))
+#define GPIO_TYPE              (GPIO_IS_VIAIC_VER13)
+#define IIC_TYPE               (IIC_IS_VIAIC)
+#define UART_TYPE              (UART_IS_VIAIC)
+#define KEYPAD_TYPE            (KEYPAD_IS_VER3) 
+#define DISPLAY_TYPE           (DISPLAY_IS_SPFD5408A_240320) //(DISPLAY_IS_S6D0133_128160)
+#define PMU_TYPE               (PMU_IS_G5810)
+#define RTC_TYPE               (RTC_IS_AMI8563)
+#define PWM_TYPE               (PWM_IS_VIAIC)
+#define FSC_TYPE               (FSC_IS_VER2)
+#define RFC_TYPE               (RFC_TRANSCEIVER_IS_CX74017)
+#define FLASH_TYPE	       (FLASH_IS_SPANSION_S71GL128T)  //(FLASH_IS_SAMSUNG_K5L2731CAM)  //(FLASH_IS_SPANSION_S71GL128T)      //SPANSION flash
+#define FLASH_START_ADDR       (0x0)//(0X20000000)
+//#define ASIC_VERSION		VT3360
+#define ASIC_VERSION           VT3406
+#define USB_VERSION		(USB_IS_VT3360)
+#define V3406_SUBSYSTEM 1
+#define SD_VERSION		(SD_IS_VER2)
+#define TARGET_BOARD		TARGET_BOARD_V315
+#define PMU_ALLOCATE            PMU_V315_NORMAL
+#define LCM_TYPE		TRULY_LCM
+#define AMBACLK                  (AMBACLK_IS_39M)
+#define CARD_DET_VERSION	CARD_NO_DET 
+#define MEM_CARD_TYPE		SD_CARD
+#define CAMERA_TYPE		(CAMERA_IS_MP811)
+#define DISPLAY_SIZE		(DISPLAY_IS_240320)  //(DISPLAY_IS_128160) //
+#define VERSION_NAME              "V10-V1"
+#define TS_CTRL_TYPE              (TS_IS_AK4183)
+#define TS_PANEL_TYPE       PANEL_IS_C
+#define UDISK_MODE			UDISK_APP
+#define LCD_BKLT_TYPE		LCD_BKLT_0_CTROL //need modify
+#define LCD_BKLT_MODE		LCD_BKLT_COANODE_CTROL //// LCD_BKLT_COCATHODE_CTROL
+#define PLL_CLOCK			PLL_IS_78M
+#define BAT_NTC                     NTC_IN_BAT
+#define DUAL_SENSOR             IS_DUAL_SENSOR
+#define CHARGER_DETECT        CHARGE_IS_DETECT 
+#define SRAM_SIZE			SRAM_SIZE_IS_4M
+#define PROTOCOL_TYPE		PROTOCOL_TYPE_IS_GSM
+#define TEST_V10_IN_V9MMI     1
+#define V10_BOARD_VERSION    BOARD_P0 ////BOARD_P1  //0=P0; 1=P1
+
+#endif
+2, 显示部分：LCD_Sct.h
+#elif (defined (DISPLAY_TYPE)) && ((DISPLAY_TYPE) == (DISPLAY_IS_SPFD5408A_240320))
+#define     LCD_COMMAND_REG              0x80000000
+#define     LCD_DATA_REG                 0x80000100
+#define	    LCD_IRSR_REG		LCD_COMMAND_REG
+
+//#define LCD_RAM_ADDRESS     0X21   //FOR S6D0133 RAM Address Register
+//#define LCD_HORRAM_ADDRESS  0x44   //FOR S6D0133 Horizantal Star_End RAM Address Register
+//#define LCD_VERRAM_ADDRESS  0x45   //FOR S6D0133 Vertical Star_End RAM Address Register
+//#define LCD_WRDATA_ADDRESS  0x22   //FOR S6D0133 W/R Data
+
+#define LCD_VALIDSIZE_IS_128160          1
+#define LCD_VALIDSIZE_IS_320240          2
+
+#define LCD_VALIDSIZEDEF     LCD_VALIDSIZE_IS_320240//LCD_VALIDSIZE_IS_320240// LCD_VALIDSIZE_IS_128160
+
+#define LCD_HEIGHT 220
+#define LCD_WIDTH  176
+#endif
+待做：查LCD_IRSR_REG作用。
+
+14:09 2008-2-28
+VT3406学习，GPIO，软件向下兼容
+GPIO：32个。其中低16位可以设置中断，唤醒。VT3363 GPIO只有16个GPIO，都可设置中断，低4位可以用于唤醒。3363和3406的GPIO是异步的，要求GPIO的输入长于2个CPU时钟周期。此外3406有寄存器可以配置允许唤醒。
+为了保持软件兼容，3406 GPIO每个寄存器仍是16位，高16位所需的data reg和direction reg都位于新地址。如果软件需要对高16位操作，需要修改GPIO操作函数。在bootloader中实现如下：
+#define GPIO_IS_MSB_16       0x80000000  
+#define GPIO_GPDRHI_ADDR          0xE0060010  // GPIO Interrupt Enable Register
+void  Bldr_GPIO32Read (UINT32 GpioSel,UINT32 *ReadData)
+{
+    UINT16 gpio_data ;
+    if(GpioSel&GPIO_IS_MSB_16) /*Low 16 bit GPIO*/
+      gpio_data= READ_REG(GPIO_GPDRHI_ADDR);
+   else	
+    gpio_data = READ_REG (GPIO_GPDR_ADDR);
+
+    *ReadData = gpio_data & 0xFFFF;
+
+    return ;
+}
+
+18:27 2008-2-28
+VT3406学习，LCD
+GA采用DMA discriptor方式，所以下面的寄存器和函数并没有使用。GA在VIAIC/dma/dma.c中使用。
+1, HDRegdef.h中GA寄存器的定义和3363相同，并不是3406的寄存器。3406datasheet上没有找到对应的寄存器（翻书不好找）。当然有一致的寄存器也很好理解——软件需要向下兼容。
+2, Dispcontroller.c的BitBlt565Base_GA没有查到在何处使用，应该是MMI层调用的吧，在"Ref_vob\sw\GenesisMmi"中没有找到。硬件2D加速不会没有使用吧......
+
+11:38 2008-2-29
+VT3406学习，LCD，bootloader+Driver，待做：与Driver部分相互对照
+1, Lcd_Init_Sct()，液晶初始化。
+Entry Mode (R03h): 0X1080  // set GRAM write direction and BGR=1. 
+设置为65536颜色。颜色顺序是BGR（通常是RGB）。
+为什么没有用262k颜色？待做：查driver。
+设置行列都是递减。图片的起始位置是右下角。Driver中把行列都改为递增的，图片的起始位置在左上角。
+2, (14:34 2008-2-29)
+Bootloader: Lcd_DisplayPic_Sct()显示一个图片。位置大小：(x,y,dx,dy)。
+3, Driver
+设置GRAM数据：
+	WRITE_REG(LCD_IRSR_REG,0X0050);
+	WRITE_REG(LCD_DATA_REG,0X0000);          // Horizontal GRAM Start Address
+
+	WRITE_REG(LCD_IRSR_REG,0X0051);
+	WRITE_REG(LCD_DATA_REG,0X00ef);          // Horizontal GRAM End Address
+
+	WRITE_REG(LCD_IRSR_REG,0X0052);
+	WRITE_REG(LCD_DATA_REG,0X0000);           // Vertical GRAM Start Address
+
+	WRITE_REG(LCD_IRSR_REG,0X0053);
+	WRITE_REG(LCD_DATA_REG,0X013f);           // Vertical GRAM Start Address
+这样就把全部GRAM(17'h00000到17'h13fef)都设为显示区域。
+Driver中把bootloader的" Lcd_DisplayPic_Sct() "函数的设置x, y, dx, dy和设置写GRAM寄存器的命令封装为" Lcd_SetXYPoint() "。
+
+14:15 2008-2-29
+VT3406学习，LCD，液晶配置；
+1, 硬件连接；没看懂。似乎和datasheet不一致。待做：查。
+2, 软件配置，如何读写寄存器：
+写：写寄存器index(RS=1)，写寄存器数据(RS=0)。
+读：写寄存器index(RS=1)，读寄存器数据(RS=0)。
+结合前面" LCD_IRSR_REG ”和“ LCD_DATA_REG ”的定义地址bit8位连接的正是RS位。见"v10_gsm_mb_v08a.pdf"p6 U201F。
+读写所需其他信号(RD, WR, CS等）应该是由LCD I/F提供的，待做，看LCD I/F初始化。
+
+16:02 2008-2-29
+VT3406学习，DMA
+1, 硬件
+3406的DMA是8通道，其中1,3,4,5通道通过仲裁器连接到物理通道1，2,6,7,8通过仲裁器连接到物理通道2。两组物理通过分别通过Master1/2的I/F连接到AHB总线。GA通过Master1/2连接到AHB总线。此外，通道1,2对应register通道1,2，通道3-8对应descriptor通道1-6。因此实际上最多同时存在6个DMA通道（？，参3406datasheet P132: "The DMA Controller(DMAC) supports two physical channels and six virtual channels"）
+和3360区别：3360只有两个DMA通道。GA只能通过Master2连接到AHB。GA功能也比3406少，见"11:41 2008-2-28"。
+软件向下兼容：通道1, 2寄存器（除debug寄存器）都相同。3406 GA寄存器地址从3360的0xc0030100移到了0xc0030400。
+注：3406DMA支持amba2.0规范（除了SPLIT transfers），对amba不太了解，简单了解，待做。
+2, "18:10 2008-2-29"软件：
+1), 小毛病：
+"DMA_ISR & DMA_IER"位定义在dma.h，分为3406和3363两个版本。但HDRegdef_vt3406.h定义了部分。但没有GA_ERR_BIT。感觉3406代码结构虽然经过整理，但是部分代码写的很匆忙。有的注释没有相应调整。和Nucleus内核代码相比确实差距很大，后面要多学Nucleus的结构，最终要透彻理解。为以后继续做Linux打下基础。待做：重要。
+2), 函数分析，ProcessingDMAInterrupt()：
+查看DMA中断，如果某位中断存在且中断使能，清楚之。
+具体实现：
+a, 得到中断使能和中断状态，二者相与得到实际悬挂的中断；
+b, 禁止DMA中断（包括GA）
+c, 查看DMA中断，如果某位中断存在清楚之。
+d, 恢复原有中断使能。
+3), 函数分析，ProgramDMAChannel()：
+大致看是对通道1的操作，需要结合DMA datasheet细看DMA如何使用。
+
+17:56 2008-2-29
+道听途说
+memory copy不能处理重叠区域，memory move可以。
+
+17:59 2008-2-29
+本周总结：
+1, 完成学习了3360键盘驱动，对Nucleus及其驱动有了初步的了解；
+2, 看LCD驱动和gfx部分。完成3406 bootloader lcd程序部分。VIAIC/LCD目录内容。正在阅读dma/dma.c的dma代码（进展：dmc.c ProgramDMAChannel()）。完成后，看gfx实际如何使用。
+下周计划：完成LCD和gfx代码阅读。和李哲讨论bootloader和Nucleus启动流程。

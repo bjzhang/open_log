@@ -1,0 +1,511 @@
+
+9:48 2008-9-27
+公司运营管理建议和思考，超级不爽
+感觉从我到公司以来，主要是负面的信息：部门撤销，合并，刚刚觉得工作明确了，组里又有三个人离职，三个人离职时间之后不长时间，公司又出台新制度从严要求员工，但福利没有变化。公司每天连吃个饭都要刷卡，但保安时管时不管。我加班的时候怎么没有人给我加班费啊。就盯着白天出去那会儿了。
+虽然我对嵌入式开发，尤其是嵌入式Linux的开发有着浓厚的兴趣，但是我很难对公司有多高的认可，因为基本没有见到正面的信息，除了前天签的期权，即使是期权，大家闲聊时也觉得最快4年后才能100%行权。如果公司的氛围还是越来越不好的话，基本上能等到行权的人都是混日子的人了。
+为了今后系统的向管理层反应问题，今天暂时将自己的想法简单记录，日后需要整理思路，严谨表述。
+
+15:41 2008-10-6
+FM，文档底稿，rda5800_test_new.c
+宏INIT_rda5800_func和INIT_rda5800_func_ro用于生成struct rda5800_func func_list[]中每个rda5800_func结构体。
+其定义如下：
+#define INIT_rda5800_func(ctrl_name,func_name, usage_string) \
+		.type		= READABLE|WRITABLE,	\
+		.name		= #ctrl_name,	\
+		.usage		= usage_string,	\
+		.get		= get_##func_name, \
+		.set		= set_##func_name, \
+		.print		= print_##func_name,	\
+		.isvalid	= isvalid_##func_name, \
+		.value		= &cur_##func_name,	\
+		.defaultVal = &default_##func_name
+
+#define INIT_rda5800_func_ro(ctrl_name,func_name, usage_string) \
+		.type		= READABLE,	\
+		.name		= #ctrl_name,	\
+		.usage		= usage_string,	\
+		.get		= get_##func_name, \
+		.set		= NULL, \
+		.print		= print_##func_name,	\
+		.isvalid	= isvalid_##func_name, \
+		.value		= &cur_##func_name,	\
+		.defaultVal = &default_##func_name
+作用：
+INIT_rda5800_func(Frequency,freq,NULL)定义：
+.type		= READABLE|WRITABLE,
+.name		= "Frequency",
+.get		= get_freq,
+.set 		= set_freq,
+.print		= print_freq,
+.isvalid	= isvalid_freq,
+.value		= &cur_freq,
+.defaultVal	= &default_freq,
+
+17:53 2008-10-7
+运行今天的程序出现段错误。
+查看内核转储文件。
+
+9:29 2008-10-8
+为david编译gdb，以便于调试gstreamer
+gcc -c -DHAVE_CONFIG_H arm-linux-   -I. -I.././readline -DRL_LIBRARY_VERSION='"5.1"' -g -O2 readline.c
+发现是readline的Makefile的DEFS有问题：
+DEFS = -DHAVE_CONFIG_H arm-linux-
+后来编译gdb-6.8时发现DEFS是：
+DEFS = -DHAVE_CONFIG_H
+不知道为什么这次配置gdb-6.6出错。
+
+13:46 2008-10-8
+几个串口开发文档：
+http://www.ibm.com/developerworks/cn/linux/l-serials/
+Linux 下串口编程入门
+http://www.comptechdoc.org/os/linux/programming/c/linux_pgcserial.html
+A Linux serial port test program
+http://www.easysw.com/~mike/serial/index.html
+Serial Programming Guide for POSIX Operating Systems
+
+17:58 2008-10-8
+Linux, sysfs，DEVICE_ATTR
+DEVICE_ATTR定义在"linux/device.h"：
+/* interface for exporting device attributes */
+struct device_attribute {
+	struct attribute	attr;
+	ssize_t (*show)(struct device *dev, struct device_attribute *attr,
+			char *buf);
+	ssize_t (*store)(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count);
+};
+#define DEVICE_ATTR(_name,_mode,_show,_store) \
+struct device_attribute dev_attr_##_name = __ATTR(_name,_mode,_show,_store)
+
+__ATTR在linux\sysfs.h中定义：
+/**
+ * Use these macros to make defining attributes easier. See include/linux/device.h
+ * for examples..
+ */
+#define __ATTR(_name,_mode,_show,_store) { \
+	.attr = {.name = __stringify(_name), .mode = _mode, .owner = THIS_MODULE },	\
+	.show	= _show,					\
+	.store	= _store,					\
+}
+
+THIS_MODULE定义在linux\modules.h：
+#ifdef MODULE
+#define THIS_MODULE (&__this_module)
+#else  /* !MODULE */
+#define THIS_MODULE ((struct module *)0)
+#endif
+<TODO>“this_module”作用不是很理解，查</TODO>
+
+注：小技巧，查照变量定义，正则表达式：
+查找诸如"__ATTR"这种常用的变量定义的方法：
+1, 利用SourceInsight的Lookup reference功能查找所有"__ATTR"；
+2, 在搜索结果利用正则表达式"define\w+__ATTR"查找定义，例如查找"__ATTR"的结果：
+Sysfs.h (include\linux):#define __ATTR(_name,_mode,_show,_store) { \
+
+应用举例：
+static int s3c2410fb_debug_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%s\n", debug ? "on" : "off");
+}
+static int s3c2410fb_debug_store(struct device *dev, struct device_attribute *attr,
+					   const char *buf, size_t len)
+{
+	if (mach_info == NULL)
+		return -EINVAL;
+
+	if (len < 1)
+		return -EINVAL;
+
+	if (strnicmp(buf, "on", 2) == 0 ||
+	    strnicmp(buf, "1", 1) == 0) {
+		debug = 1;
+		printk(KERN_DEBUG "s3c2410fb: Debug On");
+	} else if (strnicmp(buf, "off", 3) == 0 ||
+		   strnicmp(buf, "0", 1) == 0) {
+		debug = 0;
+		printk(KERN_DEBUG "s3c2410fb: Debug Off");
+	} else {
+		return -EINVAL;
+	}
+
+	return len;
+}
+
+
+static DEVICE_ATTR(debug, 0666,
+		   s3c2410fb_debug_show,
+		   s3c2410fb_debug_store);
+
+static int __init s3c2410fb_probe(struct platform_device *pdev)
+{
+//...
+	device_create_file(&pdev->dev, &dev_attr_debug);
+//...
+}
+
+9:39 2008-10-9
+读书，深入理解Linux内核（ULK3），第二十章
+1, 命令行提示符探索，续"14:48 2007-08-03"
+今天阅读了“深入理解Linux内核”，发现的确如此（p806文字，p807图20-1)。书中提到“命令行参数和环境串都存放在用户堆栈中，正好位于返回地址之前（参见第十章的'参数传递'节）”，需要进一步了解用户态堆栈。下一步是看第十章的系统调用。
+2, 脚本的执行
+fs/binfmt_*文件解释一系列可执行文件的执行方法，例如“binfmt_script.c”复制执行脚本文件。
+首先阅读这个文件，然后了解Linux如何执行可执行文件。
+3, Linux允许用户注册自己的可执行格式，在“/proc/sys/fs/binfmt_misc”中描述。
+1), ULK3中提到是写入binfmt_misc文件中。
+2), 组Ubuntu服务器上是binfmt_misc目录下每个文件描述一种格式：
+bamvor@winson-desktop:/home/bamvor/dev/linux$ cat /proc/sys/fs/binfmt_misc/wine     enabled
+interpreter /usr/share/binfmt-support/run-detectors
+flags:
+offset 0
+magic 4d5a
+3), Olympia板子上没有binfmt_misc这个文件或目录。
+
+13:52 2008-10-9
+嵌入式，图书，网址
+现代嵌入式系统开发专案实务——菜鸟成长日志与专案经理的私房菜
+这是一本在台湾热销的嵌入式书籍，没有找到电子书。但是查到该书作者的博客：
+http://tw.myblog.yahoo.com/embedded_system_book/
+待做：看博客。
+
+99:99 2008-10-9
+待做：
+1, ULK3 Chapter 10
+
+10:56 2008-10-13
+gdb调试，内核转储，共享库调试，待做
+试验，借鉴内核BUG宏，在应用层打出trace。如果可以，进一步试验能否调试共享库中的函数（利用自己建立的共享库）。
+参考"17:44 2008-6-18"，里面有调试共享库的方法。
+
+10:36 2008-10-15
+我的培训经历：
+1, 2008年4月18日：新员工入职培训；
+2, 2008年4月22日——2008年4月25日：CMMI培训；
+3, 2008年6月22日：ClearCase使用培训；
+4, 2008.8?：Qtopia培训；
+
+14:23 2008-10-15
+清华同方技术manager要求Gavin学习内容：
+1, USB OTG*
+2, SDIO*
+3, Wifi
+4, Bluetooth
+5, RS232
+
+16:43 2008-10-17
+Wu Xia, Camera代码学习
+1, 链表，list_for_each
+driver/media/video/pxa3xx/pxa_camera_zl.c
+static struct buf_node *camera_get_buffer_from_id(int buf_id)
+{
+	struct list_head *pos;
+	struct buf_node *buf_node;
+	PRINTFUNC;
+
+	list_for_each(pos, g_camdrv_status.p_buf_head) {
+		buf_node = list_entry(pos, struct buf_node, buf_head);
+		if (buf_node->buf_id == buf_id)
+			goto found;
+	}
+	return NULL;
+
+found:
+	return buf_node;
+}
+
+1), list_for_each分析，list_for_each用于链表迭代：
+================================================
+include\linux\list.h:
+#include <linux/prefetch.h>
+//...
+/**
+ * list_entry - get the struct for this entry
+ * @ptr:	the &struct list_head pointer.
+ * @type:	the type of the struct this is embedded in.
+ * @member:	the name of the list_struct within the struct.
+ */
+#define list_entry(ptr, type, member) \
+	container_of(ptr, type, member)
+
+/**
+ * list_for_each	-	iterate over a list
+ * @pos:	the &struct list_head to use as a loop cursor.
+ * @head:	the head for your list.
+ */
+#define list_for_each(pos, head) \
+	for (pos = (head)->next; prefetch(pos->next), pos != (head); \
+        	pos = pos->next)
+
+(11:18 2008-10-20)
+prefetch是用于预取的内联函数。如果"prefetch.h"包含的<asm/processor.h>没有定义，则"prefetch.h"中定义一个空的内联函数。
+include\linux\prefetch.h:
+#include <asm/processor.h>
+//...
+#ifndef ARCH_HAS_PREFETCH
+static inline void prefetch(const void *x) {;}
+#endif
+
+具体定义位于，仅当是arm v5体系结构时才支持此指令。但"ARM Instruction Set Quick Reference Card"中写的是arm v5e才支持pld/plt指令。这个地方二者描述不一致，查证，待做。
+include\asm-arm\processor.h
+/*
+ * Prefetching support - only ARMv5.
+ */
+#if __LINUX_ARM_ARCH__ >= 5
+
+#define ARCH_HAS_PREFETCH
+static inline void prefetch(const void *ptr)
+{
+	__asm__ __volatile__(
+		"pld\t%0"
+		:
+		: "o" (*(char *)ptr)
+		: "cc");
+}
+
+"pld"是preload date, pli是preload instruction. 这里是预取数据。
+这个指令分为Immediate offset, Register offset, PC-relative三种情况。这里应是Register offset。
+"o"的作用，见gcc手册，gcc-html/gcc/Simple-Constraints.html#Simple-Constraints：
+当地址是offsettable时允许memory操作。
+`o'
+A memory operand is allowed, but only if the address is offsettable. This means that adding a small integer (actually, the width in bytes of the operand, as determined by its machine mode) may be added to the address and the result is also a valid memory address. 
+For example, an address which is constant is offsettable; so is an address that is the sum of a register and a constant (as long as a slightly larger constant is also within the range of address-offsets supported by the machine); but an autoincrement or autodecrement address is not offsettable. More complicated indirect/indexed addresses may or may not be offsettable depending on the other addressing modes that the machine supports. 
+
+Note that in an output operand which can be matched by another operand, the constraint letter `o' is valid only when accompanied by both `<' (if the target machine has predecrement addressing) and `>' (if the target machine has preincrement addressing). 
+
+2), "container_of"分析
+======================
+续"15:02 2007-04-20"7
+container_of定义在linux/kernel.h：
+/**
+ * container_of - cast a member of a structure out to the containing structure
+ *
+ * @ptr:        the pointer to the member.
+ * @type:       the type of the container struct this is embedded in.
+ * @member:     the name of the member within the struct.
+ *
+ */
+#define container_of(ptr, type, member) ({                      \
+        const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+        (type *)( (char *)__mptr - offsetof(type,member) );})
+container_of返回ptr所属结构体type的指针。ptr在结构体type中的名称由member给出。
+
+container_of含义：
+----------------
+a, ((type *)0)->member：
+把0指针转为type类型，取type的member成员。
+b, const typeof() *__mptr ，声明类型为member的指针变量__mptr，其指针是const类型，所以指针指向的变量不可修改。
+c, xxx *__mptr = (ptr);
+把ptr地址赋给__mptr。
+d, ( (char *)__mptr - offsetof(type,member) )
+强制转换__mptr为char*指针类型，这样就与offsetof返回值的单位相同了（都是1个字节）。
+减的结果是type的起始地址。
+e, (type *)()
+把步骤4)中地址转为type类型。
+f, 最后用"{}"表示这个宏有返回值，步骤e的结果是宏最后一个表达式，所以就是宏的返回值。
+g, 附录：
+a), typeof: gcc-html/gcc/Typeof.html#Typeof
+typeof返回类型。可以用返回的类型定义变量
+编程，调试技巧，GDB调试：
+gdb中whatis可以显示变量类型。待做：查gdb是如何实现的，看代码；看gdb文档中对应部分。
+b), offsetof: 
+offsetof是返回member相对于此类型的偏移量（字节为单位）。
+include\linux\stddef.h:
+#include <linux/compiler.h>
+//...
+#ifdef __KERNEL__
+//...
+#undef offsetof
+#ifdef __compiler_offsetof
+#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#else
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+#endif /* __KERNEL__ */
+
+如果编译器没有定义offsetof，Linux会自行定义。
+gcc4中支持__builtin_offsetof，所以Gcc4情况下__compiler_offsetof宏通过compiler.h头文件在compiler-gcc4.h中定义：
+include/linux/compiler.h
+#ifdef __KERNEL__
+
+#if __GNUC__ > 4
+#error no compiler-gcc.h file for this gcc version
+#elif __GNUC__ == 4
+# include <linux/compiler-gcc4.h>
+#elif __GNUC__ == 3 && __GNUC_MINOR__ >= 2
+include\linux\stddef.h# include <linux/compiler-gcc3.h>
+#else
+# error Sorry, your compiler is too old/not recognized.
+#endif
+注：从中可以看到Linux目前支持gcc2-4，而不支持其它版本。
+
+include/linux/compiler-gcc4.h
+#define __compiler_offsetof(a,b) __builtin_offsetof(a,b)
+
+__builtin_offsetof见gcc手册：gcc-html/gcc/Offsetof.html#Offsetof。
+
+c), 宏返回值。如果宏用"{}"包围，则最后一个表达式的值是宏返回值。
+参见：macro_reture_value.c
+位置：micro微电子与计算机\Embeded嵌入式系统\软件设计\语言\c语言\c_study
+
+//test macro reture value
+#include <stdio.h>
+#define test(a,b)	({\
+	a+=b;	\
+	a++;	\
+	a;})
+
+int main()
+{
+	int test1,test2;
+	test1 = 3;
+	test2 = 4;
+	printf("%d\n",test(test1,test2));
+	return 0;
+}
+
+17:30 2008-10-20
+代码阅读，Linux源文件分析，2.6.21，include\linux\stddef.h
+stddef.h定义了NULL。内核专用的：bool变量（false,true），offsetof。代码如下；
+#ifndef _LINUX_STDDEF_H
+#define _LINUX_STDDEF_H
+
+#include <linux/compiler.h>
+
+#undef NULL
+#if defined(__cplusplus)
+#define NULL 0
+#else
+#define NULL ((void *)0)
+#endif
+
+#ifdef __KERNEL__
+
+enum {
+	false	= 0,
+	true	= 1
+};
+
+#undef offsetof
+#ifdef __compiler_offsetof
+#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#else
+#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#endif
+#endif /* __KERNEL__ */
+
+#endif
+
+16:58 2008-10-22
+Olympia项目
+PXA3xx片内固化代码把flash中obm搬到sram，obm初始化ddr并把flash中blob搬到ddr。
+flash中0块保存坏块。
+三星S3C2410处理器类似，只是没有obm这个模块。当OM[1:0]=00时，是2410芯片硬件把flash中前4k搬移到sram中。bootloader运行时，初始化sdram后，自己把自己从flash搬移到sdram。
+
+17:56 2008-10-28
+s3c2410_gpio_setpin(S3C2410_GPB0, 1);
+
+void s3c2410_gpio_setpin(unsigned int pin, unsigned int to)
+{
+	void __iomem *base = S3C24XX_GPIO_BASE(pin);
+	unsigned long offs = S3C2410_GPIO_OFFSET(pin);
+	unsigned long flags;
+	unsigned long dat;
+
+	local_irq_save(flags);
+
+	dat = __raw_readl(base + 0x04);
+	dat &= ~(1 << offs);
+	dat |= to << offs;
+	__raw_writel(dat, base + 0x04);
+
+	local_irq_restore(flags);
+}
+
+#define S3C2410_GPIONO(bank,offset) ((bank) + (offset))
+
+#define S3C2410_GPIO_BANKB   (32*1)
+
+#define S3C2410_GPB0         S3C2410_GPIONO(S3C2410_GPIO_BANKB, 0)
+0x0010 0000 + 1 = 0x0010 0001
+
+
+#ifdef CONFIG_CPU_S3C2400
+#define S3C24XX_GPIO_BASE(x)  S3C2400_GPIO_BASE(x)
+#define S3C24XX_MISCCR        S3C2400_MISCCR
+#else
+#define S3C24XX_GPIO_BASE(x)  S3C2410_GPIO_BASE(x)
+#define S3C24XX_MISCCR	      S3C24XX_GPIOREG2(0x80)
+#endif /* CONFIG_CPU_S3C2400 */
+
+
+/* S3C2400 doesn't have a 1:1 mapping to S3C2410 gpio base pins */
+
+#define S3C2400_BANKNUM(pin)     (((pin) & ~31) / 32)
+#define S3C2400_BASEA2B(pin)     ((((pin) & ~31) >> 2))
+#define S3C2400_BASEC2H(pin)     ((S3C2400_BANKNUM(pin) * 10) + \
+                                 (2 * (S3C2400_BANKNUM(pin)-2)))
+
+#define S3C2400_GPIO_BASE(pin)   (pin < S3C2410_GPIO_BANKC ? \
+                                 S3C2400_BASEA2B(pin)+S3C24XX_VA_GPIO : \
+                                 S3C2400_BASEC2H(pin)+S3C24XX_VA_GPIO)
+
+
+#define S3C2410_GPIO_BASE(pin)   ((((pin) & ~31) >> 1) + S3C24XX_VA_GPIO)
+#define S3C2410_GPIO_OFFSET(pin) ((pin) & 31)
+
+map.h:
+#define S3C24XX_VA_GPIO	   ((S3C2410_PA_GPIO - S3C24XX_PA_UART) + S3C24XX_VA_UART)
+0x5600 0000
+
+((( S3C2410_GPB0 & ~31) >> 1) + S3C24XX_VA_GPIO)
+0x0008 0000 + 0x5600 0000 = 0x5608 0000
+结果应该是0x5600 0024才对。困环，待做。
+
+15:49 2008-10-29
+Linux，驱动，framebuffer，参数计算
+1, 如何使framebuffer支持新液晶屏，相关文档：
+1), Documentation\framebuffer.txt，framebuffer最基础的文档。
+2), S3C2410下LCD驱动程序的移植及GUI程序编写=+，详细介绍了如何使fb支持新液晶屏。
+位置：micro微电子与计算机\Embeded嵌入式系统\软件设计\OS操作系统\linux\驱动\LCD和framebuffer
+3), fb代码的注释，例如drivers\pxafb.c。
+2, pixclock的单位是皮秒(ps)，见：
+Documentation\framebuffer.txt
+ The frame buffer device uses the following fields:
+  - pixclock: pixel clock in ps (pico seconds)
+  - left_margin: time from sync to picture
+  - right_margin: time from picture to sync
+  - upper_margin: time from sync to picture
+  - lower_margin: time from picture to sync
+  - hsync_len: length of horizontal sync
+  - vsync_len: length of vertical sync
+
+drivers\pxafb.c: 
+/*
+ * Calculate the PCD value from the clock rate (in picoseconds).
+ * We take account of the PPCR clock setting.
+ * From PXA Developer's Manual:
+ *
+ *   PixelClock =      LCLK
+ *                -------------
+ *                2 ( PCD + 1 )
+ *
+ *   PCD =      LCLK
+ *         ------------- - 1
+ *         2(PixelClock)
+ *
+ * Where:
+ *   LCLK = LCD/Memory Clock
+ *   PCD = LCCR3[7:0]
+ *
+ * PixelClock here is in Hz while the pixclock argument given is the
+ * period in picoseconds. Hence PixelClock = 1 / ( pixclock * 10^-12 )
+ *
+ * The function get_lclk_frequency_10khz returns LCLK in units of
+ * 10khz. Calling the result of this function lclk gives us the
+ * following
+ *
+ *    PCD = (lclk * 10^4 ) * ( pixclock * 10^-12 )
+ *          -------------------------------------- - 1
+ *                          2
+ *
+ * Factoring the 10^4 and 10^-12 out gives 10^-8 == 1 / 100000000 as used below.
+

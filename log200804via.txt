@@ -1,0 +1,1334 @@
+﻿9:54 2008-4-1
+Olympia项目，Olympia Linux开发包学习
+1, bootloader
+blob，最初为Strong ARM SA-1100设计，虽然2003年已经停止更新，但是intel的arm CPU一般都用这个bootloader。
+http://sourceforge.net/projects/blob/
+maillist：https://lists.sourceforge.net/lists/listinfo/blob-cvs-commit
+仅提供cvs更新信息。
+2, PXA3xx 按键驱动
+pxalinux\package\preview-kit-7.2.2.2\linux-gpl\linux-2.6.21\drivers\input\keyboard\pxa3xx_keypad.c
+input设备，使用platform方式。
+
+14:21 2008-4-1
+嵌入式，Linux驱动，学习相关文章，待做，看
+http://blog.chinaunix.net/u2/62910/article_79674.html
+LDD3学习笔记_网络收集，这个博客不错，有空看看。待做。
+http://www.91linux.com/html/article/kernel/20071204/8805.html
+全面的framebuffer详解
+http://blog.chinaunix.net/u1/49924/showart_495463.html
+Linux-2.6.20的LCD驱动分析（一），这个博客不错，有空看看。待做。
+http://blog.chinaunix.net/u1/49924/showart_508490.html
+嵌入式操作系统内核实现（写在前面的话）
+http://blog.chinaunix.net/u1/49924/showart_506320.html
+framebuffer驱动全篇（一）（转载）。
+http://www.eetop.cn/blog/html/45/11145-676.html
+[原创] 读linux2.6驱动的一点收获。分析platform。
+
+11:03 2008-4-2
+Linux设备驱动学习笔记，第十四章 Linux设备模型
+kset和kobject
+子系统：
+子系统是对整个内核中一些高级部分的表述。一个子系统其实就是对kset和一个信号量的封装。
+struct subsystem {
+	struct kset kset;
+	struct rw_semaphore rwsem;
+};
+每一个kset都必须属于一个子系统。
+底层sysfs操作：
+kobject是隐藏在sysfs虚拟文件系统后的机制，对于sysfs中的每个目录，内核中都会存在一个对应的kobject。
+
+11:40 2008-4-2
+Linux内核版本
+目前最新的Linux内核版本是2008年3月4日发布的2.6.24.4。
+见"http://www.kernel.org/pub/linux/kernel/v2.6/"
+日志中涉及到的Linux内核如果没有特殊说明是Linux2.6.21
+
+13:26 2008-4-2
+嵌入式，一些不确定的问题，待做完成：
+关于中午讨论的几个问题：
+1, 关于通用的bootloader：
+u-boot是一个比较通用的大型bootloader，发展自armboot和PPCboot项目，其支持的体系结构和操作系统可以在tools\mkimage.c中的arch_name和os_name数组看到：
+ARM，MIPS，MIPS 64 Bit，Blackfin，Alpha，Intel x86，IA64，MC68000，MicroBlaze，NIOS，NIOS II，PowerPC，IBM S390，SuperH，SPARC，SPARC 64Bit，AVR32；
+Linux，VxWorks，RTEMS，RTOS，4_4BSD，Dell，Esix，FreeBSD，Irix，LynxOS，NCR，NetBSD，OpenBSD，pSOS，QNX，SCO，Solaris，SVR4，U-Boot。
+u-boot 官网：http://www.denx.de/wiki/UBoot
+u-boot maillsit: http://lists.sourceforge.net/lists/listinfo/u-boot-users/
+2, marvell中obm和blob的关系；
+MHLV_NTOBM.bin：PXA3xx OEM 启动模块用于把用户的可启动模块从NAND传到memory。
+3, Linux内核是否是自解压的。是
+从代码中可以看到解压缩内核是使用的putc函数是SOC芯片相关的，在s3c2410中，putc指定使用第一个串口。而在内核启动时使用的串口可以由Linux启动命令行指定。二者使用的串口可以是不同的。
+这就解释了，当时做YF2410板级移植时，如果Linux启动命令行指定的串口不正确，超级终端的信息会停在"starting kernel"的原因。arm linux 2.6使用的串口是ttySAC0。
+待做：分析arm linux启动流程。
+
+17:54 2008-4-2
+Olympia项目，任务
+velsen shen负责硬件设计
+FM有源码；GPS AGPS，了解原理。
+
+18:31 2008-4-2
+Olympia项目，FM学习
+RDA5800系列芯片应用问题解答.doc
+7、RDA5800（C）调节音量的时候为什么有噪声？
+   RDA5800（C）芯片在写完03H频率寄存器后，会自动做tuning；而音量寄存器位于05H。因此，在两线模式下，当仅改变音量时也会把当前频点重新tuning一下。
+   解决方法很简单，在调音量的时候，请将02H bit<4>置为“1”。这个寄存器是频率改变判断寄存器。它会判断当前写入寄存器的频点是否和前一值不同。如果相同则不再做tuning。
+
+9、RDA5800（C）搜台灵敏度怎么设置？
+   只需要改动05H寄存器的bit<13:8>就可以。请将该位的2进制数换算成十进制，对应的就是搜台RSSI阈值。
+   阈值设低后就可以搜更多的台，但是会把效果差的台也搜进来。这个尺度客户可以参考我们提供的初始值自己把握。
+
+10、RDA5800（C）关于搜台、连续显示频率、100K（或50K）步进以及实时停止搜台的相关使用问题
+   请参考文档《rda5800_seek_3_7》，有非常详细、清楚的说明。
+
+14、芯片有问题该怎么查？
+    分为以下五个步骤：
+    （1）检查芯片是否能够工作。可以简单的写02H寄存器，给芯片上电，看是否有声音输出。如果这一步不对，请检查芯片接的电源、时钟是否正确。常见的错误是对I2C和SPI三线没有理解清楚，或者 脚接错电位。请参考相应芯片的使用文文件。
+    （2）检查芯片焊接有没有问题。如果这两步完成后仍然没有听到声音，请和我们的工程师联系。
+    （3）检查芯片寄存器的初始值是否正确。
+    （4）检查主控芯片对RDA5800（C）芯片的读写速度是否合理。RDA5800（C）有自动判断功能，它会自己检测控制线是否有读或写命令。如果有，RDA5800（C）芯片将停止目前的工作而等待主控命令。因此，主控读写速度太快，将会进入死循环。建议主控的连续读或写命令时间间隔大于50ms。
+     （5）如果完成上述检查，芯片仍不能正常工作，请先换颗芯片再试。如果问题仍然存在，请和我们的工程师联系。
+
+11:49 2008-4-3
+待做
+1, 看intro fb；
+2, 读platform
+
+10:52 2008-4-7
+本周总结：
+4.4放假
+1, 分析Linux2.6内核platform总线，如何使用platform总线编写字符设备驱动。3天
+2, 阅读FM芯片datasheet，参考代码。1day
+下周计划：
+1,编写FM驱动：分析使用platform总线的LinuxI2C驱动，学习如果使用I2C驱动；
+Weekly status
+4.4 is Qingming.
+1, study platform bus in Linux 2.6 kernel, how to write character device driver using platform bus. 3days;
+2, read FM radio chip datasheet and reference code. 1day.
+TODO
+1, write FM radio driver; study Linux I2C driver.
+
+18:52 2008-4-7
+(17:09 2008-4-8)
+Olympia项目，服务器
+bamvor: 建议大家用xmanager，这样可以用gedit，firefox等GUI软件。
+用ssh2 连接 ，用户名bamvor david phoenix xia, 初始密码123456。
+地址：10.2.160.66；execution command选择xterm。
+arm Linux内核位置：/home/ftp/Marvell/pxalinux/installed，工具链在/home/ftp/Marvell/pxalinux/toolchain
+已经启动了ftp服务。
+编译littletonlv开发板内核成功，见"17:06 2008-4-8"
+为了使用方便修改了/home/bamvor/.bashrc：
+# some more ls aliases
+alias ll='ls -l'	#bamvor.uncomment.2008-4-8
+#alias la='ls -A'
+#alias l='ls -CF'
+
+#bamvor.add.2008-4-8
+PATH=$PATH:/home/ftp/Marvell/pxalinux/toolchain/arm-linux-4.1.1/bin/
+
+10:06 2008-4-8
+待做取消：
+1, 问willy GPS厂商会做到什么程度。
+2, 看liang的文档，得出GPS应用程序接口需求。
+梁贞 Livia Liang，VIA Telecom(BJ)-GSM Chips-Multimedia-Advance(SW)
+3, 请假（批准中）。
+4, 多任务，还是单任务？在high-level中实现，还是在host application中实现？
+
+17:06 2008-4-8
+编译littleton开发板Linux内核
+过程：
+make distclean
+export ARCH=arm
+export CROSS_COMPILE=arm-linux-
+make littletonlv_defconfnig	//设定ARCH后，make会到arch\$ARCH\configs寻找指定的defconfig。待做：分析Makefile。
+make zImage
+make modules
+make日志见：“log\ViaTelcom\Olympia\log\make_littletonlv_log.tar.gz”。
+
+17:46 2008-4-8
+(14:29 2008-4-9)
+Olympia项目，Linux 2.6.21，内核驱动学习
+Linux下I2C驱动分析，待做：补充。
+位置：drivers\i2c
+1, busses目录是CPU端I2C驱动，例如i2c-pxa.c是pxa系列CPU的I2C驱动，在2.6.21中使用platform总线方式管理I2C设备。
+2, chips目录是I2C设备驱动，例如eepron.c是eeprom的驱动，使用include\linux\i2c.h定义的函数与eeprom设备通信。Olmpia项目的FM驱动可以参考eeprom的代码。
+3, 待做：分析：algos目录，i2c-core.c，i2c-dev.c。
+
+19:46 2008-4-8
+Olympia项目，编译音频驱动，WM8991，编译通过，待做完成：测试，基本功能测试见"13:45 2008-4-28"和"17:24 2008-4-30"
+原始音频代码位置："Olympia\audio codec\wm8991 demo board\code for marvell zylonite\"
+Linux代码：$littleton_linux-2.6.21
+由于没有文档也不是patch文件，只能根据代码目录名称和Linux目录结构给代码找个合适的位置。
+1, 复制代码
+复制sound-soc-pxa目录文件到sound\soc\pxa目录
+复制soc.h, soc-dapm.h到sound\arm\codec目录
+复制sound-arm-codec目录其它文件(wm8991.*)到sound\soc\codecs目录。
+复制soc-core.c到sound目录。
+
+2, 修改Kconfig和Makefile
+具体语法见"linux-2.6.21\Documentation\kbuild"目录。
+
+修改sound/soc/codecs/Kconfig，这样SND_SOC使能时，SND_SOC_WM8991会有效。疑问：下面的select WM8991和这里的SND_SOC_WM8991不对应。待做：查相关Kconfig
+#bamvor.add.2008-4-8
+config SND_SOC_WM8991
+        tristate
+        depends on SND_SOC
+#bamvor.add.2008-4-8.end
+
+修改sound/soc/codecs/Makefile，SND_SOC_WM8991有效时编译wm8991.c得到snd-soc-wm8991.o。
+#bamvor.add.2008-4.8
+snd-soc-wm8991-objs := wm8991.o
+#bamvor.add.2008-4.8
+obj-$(CONFIG_SND_SOC_WM8991)    += snd-soc-wm8991.o
+
+修改sound/soc/pxa/Kconfig文件，WM8991驱动本来是为ZYLONITE开发板开发的，改为LITTLETON开发板，关键是depends on里面的MACH_ZYLONITE改为MACH_LITTLETON，这样配置LITTLETON开发板时才能看到SND_PXA3XX_SOC_WM8991_LITTLETON这个选项。
+#bamvor.modified.2008-4-8.change ZYLONITE to LITTLETON
+config SND_PXA3XX_SOC_WM8991_LITTLETON
+        bool "WM8991 Audio support for Littleton"
+        depends on SND_PXA3XX_SOC && MACH_LITTLETON
+        select SND_PXA3XX_SOC_SSP
+        select WM8991
+        help
+          Say Y if you want to add support for SoC audio on Littleton
+
+注：按代码原意sound-arm-codec目录文件都应放在到sound\arm\codec目录，但是wm8991.c和sound\soc\codecs\的wm系列芯片作用类似，所以放到这个目录。
+
+10:24 2008-4-9
+待做完成：
+1, 写GPStest case，中午前给willy；
+2, 完善昨天“Olympia项目，编译音频驱动”文档，着重说明原因。
+3, 打印Kconfig
+4, 复制Olympia_V1 0 HW Testing Item V02*到移动硬盘。
+
+12:39 2008-4-9
+Olympia项目，GPS学习
+1,  基于ARM的车载GPS智能导航系统
+http://blog.mcuol.com/User/findmyway/Article/1961_1.htm
+待做：保存网页
+2, GPS入门文章
+http://bulo.mcuol.com/gpsdev/list.htm?id=2
+3, GPS入门基础知识收集综合贴
+自：http://bbs.100gps.com/thread-211-1-1.html
+Gps应用基础知识
+http://bbs.100gps.com/thread-2-1-1.html
+GPS核心芯片介绍，选GPS还要看芯片！！这可相当于电脑的CPU呀
+http://bbs.100gps.com/thread-97-1-1.html
+GPS的种类介绍，让我们了解GPS
+http://bbs.100gps.com/thread-96-1-1.html
+购买GPS时需要了解的GPS的性能指标
+http://bbs.100gps.com/thread-3-1-2.html
+06年人们用什么导航系统GPS？GPS技术格局前瞻
+http://bbs.100gps.com/thread-225-1-1.html
+400元就可以让24颗美国卫星为您服务。GPS离我们越来越近！！
+http://bbs.100gps.com/thread-95-1-2.html
+GPS常见问题指南
+http://bbs.100gps.com/thread-15-1-2.html
+GPS入门术语大全
+http://bbs.100gps.com/thread-4-1-2.html
+GPS:早晚有一天像手机一样普及
+http://bbs.100gps.com/thread-154-1-2.html
+关于GPS“三代芯片”（转贴）
+http://bbs.100gps.com/thread-143-1-2.html
+常见GPS接收器采用的GPS芯片种类
+http://bbs.100gps.com/thread-188-1-1.html
+新手必读 GPS购买和应用问题汇总 http://bbs.100gps.com/thread-104-1-1.html
+gps的冷启动、温启动、热启动  http://bbs.100gps.com/thread-1312-1-1.html
+
+13:31 2008-4-9
+公司，IT，office2003，安装文件
+\\bjna02\SWPOOL\OA Software\Microsoft\Office 2003
+我机器装的是英文版。
+
+18:27 2008-4-9
+Olmypia项目，嵌入式，Linux，音频，ALSA，WM8991，待做：补充完整
+1, i2c-id.h中加入8991的ID
+2，WM8991改为SND_SOC_WM8891
+3, 把下面两个文件归纳在一个目录。
+Sound\arm\codecs或Sound\soc\codec
+#include "soc.h"         //zqb
+#include "soc-dapm.h"       //zqb
+
+15:43 2008-4-10
+Olmypia项目，嵌入式，Linux，音频，ALSA，整理wm8991和alsa相关结构，待做：补充完整
+1, snd_pcm_ops->trigger通过控制DMA控制音频播放的开始，停止，暂停。参考alsa官网
+思路：
+Documentation\sound\alsa\soc\overview.txt -> codec.txt：
+4 - Codec Audio Operations
+Writing an ALSA Driver Chapter 5. PCM Interface
+http://www.alsa-project.org/~tiwai/writing-an-alsa-driver/c436.htm
+Operators：trigger callback部分，感觉是这部分控制音频输入输出。
+David看书看到s3c2410 音频驱动时看到DMA方式，深入看后得到上面结论。
+
+2, wm8991.c实现I2C设备底层操作函数。wm8991-zylonite.c实现alsa接口；加入wm8991设备，这样通过I2C系统结构的函数控制wm8991。
+
+13:22 2008-4-12
+待做取消：
+1, 解决jiang xin的GPS问题。周二前确定。
+
+12:20 2008-4-14
+Olympia项目，进展
+一, 进展
+自：willy邮件，4.11 10:03
+Progress Status:
+1. We finished DDR, NAND, USB, UART, LCM, Touch Panel function, PMIC validation using our Lab test code in Olympia P0 board now.
+2. We can load Linux Kernel into DDR and then boot from DDR successfully now.
+3. There are NAND, UART driver in the Linux Kernel now.
+Next Step:
+1. Add LCM、Touch Panel、USB, Audio codec, Camera driver into kernel
+2. We need make image package according Marvell’s format using Marvell’s WTPTP tools.
+
+二，xin jiang负责Olympia项目第一阶段，硬件验证和驱动。
+自：andy邮件，4.11 10:04
+
+12:30 2008-4-14
+待做完成：
+1, 处理所有未处理邮件。（完成）
+2, 联系willy和xin了解我最近一个月的任务，是否不做GPS。前提是我先完成上周xin需要我确定的东西。
+willy：GPS不急。第一版软件不会包括GPS。
+3, 确定是否参加新员工培训。
+4, 完成上周四xin需要确定的东西。bamvor & jack
+Got good understanding on software implementation, power state transition and chip work flow. And define command interface between ETS and Driver
+
+13:54 2008-4-14
+Olympia项目，JTAG工具，Intel XDB
+\\10.2.160.8\Marvell\tools\
+
+16:08 2008-4-14
+Olympia项目，GPS
+用GN_GPS_Parse_PGNV应该可以得到很多GPS BB的信息，包括启动状态等。这样应该可以满足测试需要。
+
+15:41 2008-4-15
+待做完成：
+1, 安装ftp软件，把工作日志上传到网上，看ubuntu的中文默认编码，实验能否使用原有日志工具。
+2, 周五培训完成后或下周一，安装intel XDB工具实验lab code，如果willy们尚未解决XDB c代码调试的问题，解决之。
+
+17:12 2008-4-15
+今日总结（4.14-4.15）
+4.14（缺5.5小时）
+1, 下午Olympia项目驱动任务分配和计划，30分钟。我和李哲互换工作，我负责FM部分。
+2, 阅读已有GPS文档，解决Xin jiang等人的GPS测试问题。2小时；
+4.15：
+1, 上午GPS测试会议。1小时。
+
+19:40 2008-4-18
+本周总结：4.07-4.11
+Key Activities of the week:	Hours
+1 study Olympia Linux Server	4
+2 try to compile audio driver and discuss with David yi, wirte a draft doc for that progress	6
+3, study Linux audio archtitecture	2
+4 read GPS Doc and write GPS test case	4
+5, study Linux platform driver archtecture and read Linux I2C and framebuffer driver to understand it.	16
+	
+Major Progress:	
+1 achieve a raw knowledge for Linux platform driver development	
+	
+Major Data Points(Optional):	
+Data Table Here	
+	
+Issues:	Open Date
+	
+Key Action Items for Next Week:	
+1  solve Xin jiang's problem	
+2 study FM device and driver	
+	
+Advice to  your lead:	Open Date
+Could we build the more convenience debug environment for Olympia project. 	
+1, debug  c code using JTAG cable	
+2, using usbnet instead of Marvell usb mass storage device. Usbnet is more popular ways to connect embedded device and PC. I use it in the wireless sensor project when I am a intern in France Telecom.	
+3, open proper sudo config to give proper root authority for own developer. E.g. we can run mknod unless we are root.	
+
+
+20:02 2008-4-18
+本周总结：4.14-4.18
+Key Activities of the week
+1, discuss my task of Olympia project. 0.5 hour
+2, read GPS documentation to solve Xin jiang's problem. 3 hours
+3, GPS test meeting. 1 hour
+4, read RDA5800(FM chip) programming guide and relative doc. 4 hours
+5, compare RDA5800 reference code with RDA5800 Nucleus driver. 3 hours
+6, study Linux device driver. 4.5 hours
+
+Major Progress
+1, exchange task with Phoenix Li
+
+Issues:
+write FM test code and driver. 2008-4-25
+
+Key Action Items for Next Week:
+1, write RDA5800(FM chip) test code and driver
+2, continue to study Linux device driver.
+
+12:45 2008-4-21
+Olympia项目，调试，usbnet
+1, 配置usbnet的详细方法：
+http://embedded.seattle.intel-research.net/wiki/index.php?title=Setting_up_USBnet#Intel_Mote2.2FStargate2_to_Linux_Host
+这是我法电实习时配置usbnet的资料。包括嵌入式Linux的usbnet配置（但是没说需要加载哪个模块），PC端windows和Linux配置资料。
+2, 手机usbnet连接的一些资料（ZF）
+http://linux.chinaunix.net/bbs/thread-912243-1-1.html
+根据这个文档，只要加载了usbnet模块，再按照文档1配置usbnet即可。
+3, The GNU/Linux "usbnet" Driver Framework
+http://www.linux-usb.org/usbnet/
+4, http://blog.csdn.net/scz123/archive/2007/03/21/1536847.aspx
+http://blog.csdn.net/scz123/archive/2007/03/21/1536847.aspx
+提到MTU值对samba的影响。MTU是最大数据帧大小。参考“bamvor张健的文档\micro微电子与计算机\Embeded嵌入式系统\软件设计\OS操作系统\linux\网络pmtudcase.pdf”文档。
+
+14:50 2008-4-21
+Olympia项目，无操作系统usb下载，wtptp
+命令
+NTWTPTP.exe -P USB -t MH_LV_DKBNTIM.bin -f MHLV_NTDKB_h.bin
+NTWTPTP.exe -P USB -t boot_nontrust.bin -f MHLV_NTOBM_h.bin -f blob_h.bin -f zImage_h.bin -f rootfs_h.bin
+所需文件位于：D:\work\Olympia\BBU\wtptp所需文件.rar
+问题：传输过程中会出现NACK情况，最多一次从51064传到20000左右。
+
+16:17 2008-4-21
+Olympia向，使用JTAG调试，Intel XDB，用时4小时（学习，写文档）
+起始目录：D:\work\Olympia。
+1, 安装软硬件
+-------------
+1), tools\Intel XDB的w_XDB_u_3.2.004（debugger）和w_xisdt_u_2.1.004（SDT）。
+后者还包括一个GPL调试Linux内核的软件一起装上。（待做：实验怎么用）
+2), 硬件，注意手机的JTAG线要接到J1。否则使用debugger有问题。
+
+2, 编译lab code
+---------------
+双击“BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\MAE_Labcode.NWP”文件打开SDT。rebuild工程。
+会在“BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\debug”生成编译结果。
+MAE_Labcode.bin是编译结果。MAE_Labcode.bd是符号表。
+3, 启动exTreme debugger
+-----------------------
+XDB Configuration->JTAG debugger->JTAG_PXA300_heldhand启动debugger，启动信息：
+Marvell(R) XDB JTAG Debugger - Version 3.2.0
+Copyright(C) 2006-2007 Marvell International Ltd.. All rights reserved. Copyright(C) 2004-2006 Intel Corporation. All rights reserved
+Using working directory "C:\Program Files\Marvell\XDB3.2\xdb"
+Connecting to target via "lpt1:1" ...
+INFO: Detected target cpu is 'PXA310' (selected board 'PXA3XX')
+take autosavefile:  "C:\Program Files\Marvell\XDB3.2\xdb\configurations\ocd\PXA300_handheld_autosave.xdb"
+
+take startupfile:  "C:\Program Files\Marvell\XDB3.2\xdb\startup.xdb"
+take initial batchfile:  "PXA300_handheld.xdb"
+Disable MonaLisa Watchdog
+Watchdog disabled
+PXA3xx memory setup
+*(unsigned long*)0x4A00000C [ at address 0x4A00000C ] : 0x7FF07FF8 [(*(unsigned long *)0x4A00000C)]
+*(unsigned long*)0x4A00000C [ at address 0x4A00000C ] : 0x7FF07FF8 [(*(unsigned long *)0x4A00000C)]
+*(unsigned long*)0x40E10288 [ at address 0x40E10288 ] : 0x1401 [(*(unsigned long *)0x40E10288)]
+task "GEN-TI" recapture ...
+new control time:  200 ms
+xdb>
+待做：理解memory配置，学习启动脚本。
+
+4, 执行batch file，待做：分析batch file
+--------------------------------------
+“File->Batch”：“BBU/Olympia_Labcode_new/MHL_AE_Littleton_Labcode/debugger/复件 Load.xdb”，内容如下（省略了开头的注释）：
+!! LOAD BINARY FILE
+ load/bin/address =0x5c020000 of "D:\work\Olympia\BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\debug\MAE_Labcode.bin"
+ Set reg PC =0x5c020000
+需要修改MAE_Labcode.bin文件为上面编译结果——“D:\work\Olympia\BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\debug\MAE_Labcode.bin”
+debugger日志：
+xdb> BATCH "D:/work/Olympia/BBU/Olympia_Labcode_new/MHL_AE_Littleton_Labcode/debugger/复件 Load.xdb"
+start DOWNLOAD of "D:\work\Olympia\BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\debug\MAE_Labcode.bin"
+完成代码的下载（到ram中）。
+
+5, 加入符号表
+------------
+File->load：选择Symbols and Data。Symbol file：
+D:/work/Olympia/BBU/Olympia_Labcode_new/MHL_AE_Littleton_Labcode/debug/MAE_Labcode.bd
+debugger日志：
+xdb> LOAD /SEGMENT /DEBUG=0/NOLOAD /GLOBAL OF "D:/work/Olympia/BBU/Olympia_Labcode_new/MHL_AE_Littleton_Labcode/debug/MAE_Labcode.bd" 
+LOAD  : "D:\work\Olympia\BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\debug\MAE_Labcode.bd" as DEBUGID= 0
+
+6, 设置断点
+-----------
+Debug->Set Breakpoint
+例如Location选择“\\LCDPowerOn”。这样就可以设置断点了。
+debugger日志：
+set evaluation : ID = 0 WINDOW = 0
+WARNING: hardware breakpoint used!
+BREAKPOINT 0 AT \\LCDPowerOn (addr=0x0000A1A8) : enabled  (S=0,CS=0,HW=0)
+W-L-B-BPU   : breakpoint already on this location ID=0
+遇到断点时的提示：
+program stopped: BREAKPOINT ID=0 at "lcd_c\LCDPowerOn\@LINE 830" [task=GEN-TI (0)]
+
+17:16 2008-4-21
+(12:37 2008-4-21)
+待做完成：
+1, willy：开发板，JTAG。得到开发板——31号。JTAG从吴瑕那里借的。
+2, willy：问调试手段。（取消）。现在已经可以为c语言设置断点了。
+3, 实验I2C。
+4, 看邮件。
+5, 申请/查看加班餐。（完成）
+6, 找Denis ZHAO 把FM天线加上。分机2867。（完成）
+Denis ZHAO负责焊接。
+7, 了解debugger各个脚本（完成）。可以用SDT启动debugger。
+8, 了解lab code启动基本流程。
+
+17:19 2008-4-21
+Olympia项目，学习XDB debugger各个脚本
+1, PXA300_handheld.xsf
+启动PXA300_handheld.xsf的命令：
+C:\Program Files\Marvell\XDB3.2\xdb\xdb.exe" -xsf "C:\Program Files\Marvell\XDB3.2\xdb\configurations\ocd\PXA300_handheld.xsf"
+含义：
+-XSF filename  Sets the settings file filename. This settings file will be used for the startup process. This option must not be used together with -TGTTYPE. 
+-XSF表示使用后面的脚本文件做为启动脚本。
+
+*.xsf文件是XDB debugger启动时setting中的内容，不再详细解释。里面的Monitor at不明白。待做：查。
+
+C:\Program Files\Marvell\XDB3.2\xdb\PXA300_handheld.xdb（C:\Program Files\Marvell\SDT2.1\xdb下也有此文件，但是已经设定了启动目录是“C:\Program Files\Marvell\XDB3.2\xdb”。另外，二个PXA300_handheld.xdb文件内容相同。
+!!Turn off watchdog
+batch PXA300_handheld_disable_watchdog.xdb
+batch PXA3xx_init_ddr.xdb
+
+define button /overwrite RESTART "restart;batch PXA300_handheld_disable_watchdog.xdb;batch PXA3xx_init_ddr.xdb\n"
+
+包括关看门狗和初始化ddr内存两部分内容。
+
+20:37 2008-4-21
+Olympia项目，使SDT和XDB debugger一同使用
+根据XDB debugger脚本，需要修改SDT中config_jtag.xsf的内容和"XDB3.2\xdb\configurations\ocd\PXA300_handheld.xsf"内容一致。这样SDT下启动XDB debugger就没有问题了。
+待做：尝试。
+
+20:44 2008-4-21
+Olympia项目，用JTAG调试Linux内核，待做：实验
+D:\work\Olympia\BBU\Olympia_Labcode_new\MHL_AE_Littleton_Labcode\debugger\load_linux可能是调试Linux内核用的。
+
+20:53 2008-4-21
+Olympia项目，了解labcode
+labcode的起点是start.s，初始化完成后进入source_c.c文件的Source_c函数。
+I2C代码定义在I2C.c/h。其中I2C.h文件已经通过all.h被包含在了source_c.c文件中。
+
+10:40 2008-4-23
+待做：
+1, 看邮件；（完成）
+2, 完成公司邮件内容，中午回复willy邮件jtag，李哲代码，programming guide；（完成willy）
+3, 查ioremap作用。
+4, 看非标准platform_driver_register流程。vfb应该就可以。
+5, 体检。11层财务小框。普通报销。（取消）
+(13:24 2008-5-28)
+财务：从11层出电梯后走东北那条路，沿路标，在最里面一个单独的办公室。京睿科技有个单独的报销小框。
+
+11:37 2008-4-24
+Olympia项目，Olympia平台image的生成和烧写
+Jack Wu，2008年4月14日 10:28
+1. 将MHLV_NTOBM.bin、blob、zImage、rootfs.jffs2和描述文件LVNAND.txt放在同一目录下。
+2. 用以下命令生成boot_nontrust.bin：
+ntbb.exe -m 1 -r LVNAND.txt
+3. 将boot_nontrust.bin、MHLV_NTOBM.bin、blob、zImage、rootfs.jffs2分别烧写到0x0,0x20000,0x40000,0x60000,0x260000.(可以用jtag或者usb)。如果用jtag烧写，需要在xdb中替换flash的小写算法为附件中的BGP_PXA320_NAND.BD。
+前两个附件分别是描述文件和所生成的image（没有包含rootfs.jffs2）.后两个附件为flash烧写算法。
+(19:57 2008-4-24)
+实践。如果板子中没有（boot_nontrust.bin？），是无法认出usb设备的。
+C:\Program Files\Marvell\XDB3.2\plugin\marvellpxa\flash\burnalg
+BGP_PXA320_NAND.bin改为BGP_PXA320_NAND.bin.bak。
+BGP_PXA320_NAND.bd改为BGP_PXA320_NAND.bd.bak。
+
+13:30 2008-4-24
+待做取消：焊上的USB接口有问题。调试FM labcode有解决。
+
+17:40 2008-4-24
+Olmypia项目，编译嵌入式Linux
+1, 
+bamvor@winson-desktop:~/linux-2.6.21$ make clean
+make: *** /home/bamvor/linux-2.6.21/arch/arm: Is a directory.  Stop.
+从网上查到的资料是ARCH变量设置有问题，现有写法：
+ARCH            ?= $(SUBARCH)
+CROSS_COMPILE   ?=
+
+ARCH          = arm
+CROSS_COMPILE = /usr/local/marvell/arm-linux-4.1.1/bin/arm-linux-
+我现在的改法是注释这两句，在shell定义两个环境变量。
+改为"ARCH?=arm"也可以。
+
+2, 
+/usr/bin/ld: crt1.o: No such file: No such file or directory
+crt1.o与main有关。一般重装libc或相关库即可。但是我在服务器上没有权限安装......
+3, 另外.config和olympia_config_def配置不一致。不过没有和SOC相关的。
+
+18:57 2008-4-24
+编译blob方法
+1, 在blob上一级目录建立一个指向实际LInux内核的符号链接。
+2, 复制到config.sh到blob目录
+3, 用config.sh编译，内容如下。后面中文注释是笔者所加。
+#!/bin/bash
+echo "Compiling BLOB"
+date
+make distclean		#清除所有发行版无法内容
+make -f Makefile.cvs	#指定Makefile.cvs编译，文件内容见下文。
+if [ -z $LINUX ];then	#指定Linux路径使用了上面建立的符号链接。
+	LINUX="`pwd`/../linux"
+fi
+
+CC=arm-linux-gcc		#指定gcc, objdump和ld工具。objdump用于显示目标文件信息，
+OBJDUMP=arm-linux-objdump	#详见《Skyeye》书P27页。
+LD=arm-linux-ld
+# usage:
+# ./config.sh [ MonahansP | MonahansPL | MonahansL | MonahansLV ]
+#./configure --host=arm-linux --with-board=$MONAHANS_PLATFORM --with-linux-prefix=$LINUX --with-network=$NETWORK --enable-xllp --enable-xlli --enable-nand --with-cpu-product-id=$MONAHANS
+#####download through USB 1.1 port: --with-network=usbdnet   #####
+#####download through USB 2.0 port: --with-network=usbdnet2  #####
+#配置blob，指定hostPC，开发板，linux代码位置，开启了usbnet....
+./configure --host=arm-linux --with-board=littleton --with-linux-prefix=$LINUX --with-network=usbdnet --enable-xllp --enable-xlli --enable-nand --with-cpu-product-id=MonahansLV
+make CC=arm-linux-gcc		#编译blob，编译结果是"src\blob\blob"。
+echo "Compiling BLOB done!"
+date
+
+4, Makefile.cvs用于配置自动配置工具。内容：
+all:
+        aclocal			#automatically generate aclocal.m4 from configure.in
+        autoheader		#Create a template header for configure
+        autoconf		#Generate configuration scripts
+        automake --add-missing	#Generate Makefile.in for configure from Makefile.am
+				#-add-missing: add missing standard files to package
+
+22:00 2008-4-24
+FM调试。
+86个数据。没有找到id。
+82
+e5
+1
+0
+0
+0
+0
+0
+70
+e5
+1
+0
+ff
+ff
+ff
+7f
+bc
+4f
+4
+0
+1
+0
+0
+0
+be
+4f
+4
+0
+dc
+82
+0
+0
+1
+0
+0
+0
+bc
+4f
+4
+0
+20
+0
+0
+0
+68
+0
+0
+0
+5
+ee
+c7
+36
+8c
+84
+0
+0
+20
+1
+0
+0
+70
+e5
+1
+0
+d4
+4f
+4
+0
+0
+0
+0
+0
+ed
+3
+f7
+23
+84
+cc
+0
+0
+0
+3
+f7
+23
+5
+ee
+第二次读与此相同。
+如果接收100个。从12到89是和82开始的对应数字相同的。
+待做完成：
+1, 查如何显示数字。利用液晶代码。（完成）
+2, I2C时钟不正确？与时钟无关
+
+11:15 2008-4-25
+待做转移，本周内容
+以下是本周待做内容：
+"20:37 2008-4-21"
+"20:44 2008-4-21"
+"10:40 2008-4-23"
+
+11:53 2008-4-25
+本周总结：
+Note: Apr. 22, Apr.23 and Apr.25 and Apr. 24 afternoon is Training	16
+Key Activities of the week:	Hours
+1 Try usb net on Olympia board with Phoenix Li	1
+2 Try to download image using usb. Failed because of usb bug from mine and Phoenix Li's computer.	2
+3 Study how to use SDT, XDB and JTAG for lab code coding and testing. Finally write a documentation.	5
+4 Study skeleton of labcode	0.5
+5 Compile Olympia blob successful and study config.sh (shell script for building blob)	1
+6 Compile Olympia Linux kernel while encounter some problem at Makefile and Linux Server	5
+7 Write and debug FM lab code. Not success until Apr.25 morning.	4
+	
+Major Progress:	
+1  knowledge of code development environment.	
+	
+Major Data Points(Optional):	
+Data Table Here	
+	
+Issues:	Open Date
+1 write FM test code.	2008-4-25
+	
+Key Action Items for Next Week:	
+1 write RDA5800(FM chip) test code and driver.	
+	
+Advice to  your lead:	Open Date
+There are still some problem in Linux server and Linux Makefile	
+1 Makefile: "ARCH=arn" should delete or change to "ARCH?=arm"	
+2 lack several frequently used commands: e.g. locate, gedit….	
+3 time problem: display date of Linux server file is different from  Linux and windows view, there is a 8 hours time difference. Reason: the method of Linux and windows treat time zone is different. Set Linux Greenwich time to Beijing time can fix this problem	
+4 no color in vim. Not very convenient	
+
+12:35 2008-4-25
+Olympia项目，Linux服务器建议，待做，看willy邮件后更新
+见"11:53 2008-4-25"本周总结的"Advice to  your lead"
+
+14:29 2008-4-25
+Olmypia项目，调试FM，I2C lab code
+昨天FM读寄存器有问题，以为是I2C多数据读写实现的问题，于是看310 I2C datasheet。今天吴瑕说I2C现有寄存器地址是PMIC的I2C，用其它设备的I2C需要替换一下寄存器地址。
+当时看之前，应该先整理一下思路。
+
+14:41 2008-4-25
+同事信息
+1, Blake Yang（10层L59）。HR
+4-25那天下午5点，我找Blake换门卡，签合同。
+2, Sonia Rong，荣慧芳
+硬件（PCB）部门。Acess数据库。Ext. 3271
+北京交通大学，通信。
+3, (10:51 2008-4-29)
+童清化(Qinghua Tong)，Ext. 3637
+负责FM
+
+14:45 2008-4-25
+Olympia项目，USB问题
+如果nwtptp下载时出现无法识别的USB设备可能说明下载时USB供电不足。
+
+15:27 2008-4-25
+Olympia项目，Linux，Linux下开发板与PC机通信方法（待做：记入Weekly Report）
+1, 串口
+busybox\busybox-1.01\miscutils\rx.c，原名：xmoderm.c。是实现xmoderm协议的代码，用于用串口传数据。
+经李哲实验下载成功。上传失败。待做取消（usbnet已经可用(2008-5-8)）：如果没有更好办法改进。
+工作时间：4小时。内容：实验rx.c，学习XDT flash擦写。
+2, usb garbge：
+usbnet，usb-storage, usb-serial等。
+
+15:33 2008-4-25
+Olympia项目，XDB擦写flash，待做：整理SDT和XDB文档时整理。
+1, 替换算法，使用300_310板子，但是算法用willy邮件中的320 bd那个算法。
+2, erase all
+3, 初始化flash。
+
+19:30 2008-4-25
+待做完成：
+FM思路：
+完全对照向宾代码写5800I2C接口代码：
+1, 额外加启动晶振命令；
+2, 去掉不属于5800的代码；
+
+11:18 2008-4-28
+Linux内核
+编译指定目录模块的方法：
+make modules M=dir/to/module
+旧用法是：
+make modules SUBDIRS=dir/to/module
+现在二者都支持，最好用新的方法。
+相关Makefile：
+# Use make M=dir to specify directory of external module to build
+# Old syntax make ... SUBDIRS=$PWD is still supported
+# Setting the environment variable KBUILD_EXTMOD take precedence
+ifdef SUBDIRS
+  KBUILD_EXTMOD ?= $(SUBDIRS)
+endif
+ifdef M
+  ifeq ("$(origin M)", "command line")
+    KBUILD_EXTMOD := $(M)
+  endif
+endif
+待做完成：阅读linux makefile 学习，并理解Linux模块编译机制。改原来log中对应内容。
+(11:02 2008-8-15)此部分Makefile的详细解释见"10:29 2008-8-14"6。
+
+11:21 2008-4-28
+MoveFr"14:40 2008-4-25"
+待做：
+1, willy回信
+2, 看能否报销昨天的车费。下周一再看。
+3, 看邮件。告诉刘成论文已打印。
+4, 看驱动开发网：
+http://bbs.driverdevelop.com/和www.driverdevelop.com/
+
+13:45 2008-4-28
+Olympia项目，工作时间2小时
+和David一起编译wwm8991音频驱动。
+有个.o总是没有编译进去，后来发现是Kconfig脚本名字不一致。编译模块时其实提示了select ... 未定义，但是没有注意。
+需要增加一个I2C id，现在是临时用的8731的ID。
+(17:00 2008-4-28)
+如果低一级.o是编译入内核还是编译为模块除了会受对应Kconfig配置决定，还会受高一级模块的影响。
+
+14:48 2008-4-28
+Olympia项目，FM lab code
+1, GPIO寄存器没加volatile
+2, 现在读寄存器都是0xff。奇怪？！
+加入LCD初始化后读寄存器数值就正确，难道是复位时间长？
+3, (17:04 2008-4-28)
+I2C需要设为fast mode。
+4, (20:08 2008-4-28)
+复位：0->1写成了1->0。
+(20:48)复位还是没有反应...，明天问willy。
+5, (10:14 2008-4-29)
+问了李哲，发现pin function没有设置。的确需要设置这个...（后来确认，默认设置正确）
+PXA 31x GPIO地址位于Volume I P112。
+6, (11:46 2008-4-29)
+GPIO时钟可能没开？也打开了。
+7, (13:04 2008-4-29)现在复位是正确的。但是复位引脚初始情况是高电平，这似乎不符合datasheet要求。
+8, (13:39 2008-4-29)
+直接调用audio_test函数：wm8991_DAI2SPK_open中的wm8991_I2C_writesingle_regdata工作正常。
+9, (14:18 2008-4-29)
+在rda5800中使用david的AP_I2C_init和wm8991_I2C_writesingle_regdata。出错，向两个设备写都出错：
+	wm8991_I2C_writesingle_regdata(RDA5800_ADDR, 0xd8, 0x8100);
+	wm8991_I2C_writesingle_regdata(WM8991_ADDR, 0, 0x8990);
+发现david的audio_test中有：
+	(*(volatile unsigned long *)(0x41350000)	) |=  0x00000800;//0x000008E5;
+加入后，仍然不行。
+10, (16:30 2008-4-29)
+上面这个应该和我无关。Qinghua Tong测量：没开2v8。
+11, (17:43 2008-4-29)
+wm8991_AP_VIO2V8_On()可以对开2v8，但是仍然没有通信成功。
+(18:03)现在的代码"FM lab cod 2008-4-28 1806"与wm8991通信正常，但是与rda5800仍然不行。怀疑是芯片有问题。
+12, (2008-4-30)怀疑是硬件问题，换david板子也是不行。
+13, 再比较向宾代码发现向宾的fm中地址是0x20。想一想的确如此，因为D0要留着保存r/w信号，所以应该写入0010_000x才对，所以定义地址是0x20。
+(15:24 2008-4-30)
+读到ID是58。说明I2C正确。今天下午要完成FM lab code。读出的58个寄存器如下：（写入的数据是RDA5800参考代码的数据）
+0x5800
+0xc00
+0x882
+0x0
+0x400
+0x18f8
+0x0
+0xcd
+0x96
+0x7ff
+0x0
+0x7
+0x5800
+0x5800
+0x5800
+0x5800
+0x5007
+0x20a2
+0x2
+0x8
+0x820
+0xecc0
+0x200
+0x0
+0x9580
+0xe848
+0x500
+0xa4
+0xc09b
+0xd84
+0x4e04
+0xc832
+0x2041
+0x660
+0x4010
+0x6002
+0x1808
+0x4010
+0x487f
+0x192
+0xc040
+0xc020
+0x24
+0x400
+0x118
+0x13b1
+0x281e
+0xa29b
+0x592
+0xd1f
+0x5
+0x612
+0xb9c
+0x10a6
+0x0
+0x0
+0x5555
+0x50af
+0x7e51
+
+10:37 2008-4-29
+示波器，LeCrop 434
+单击对应通道口可以打开设置菜单
+1, 如果不需要观察，不选择“显示轨迹”单选即可；
+2, 选择DC 50欧耦合测量。
+3, 测量菜单中可以测量周期，频率等。
+
+16:32 2008-4-29
+Olmypia项目
+服务器打开samba功能后，把服务器的目录映射为本地硬盘，就可以用sourceinsight直接看服务器上的代码了。
+
+10:12 2008-4-30
+Olmypia项目，Linux
+1, 吴瑕。自己编写了Makefile，编译驱动模块时提示"/usr/arm.../bin/arm-linux-gcc"命令找不到。这时的CROSS_COMPILE环境变量已经正确设置。后来发现是Linux内核Makfile中的"CROSS_COMPILE"等于上面提示找不到的哪个编译器。注释Linux内核Makfile中的"CROSS_COMPILE"后解决问题。
+2, David。wm8991的3v电源未开，造成Linux I2C通信失败。
+
+10:50 2008-4-30
+Linux，编译多个模块
+驱动程序如果是分层的，可以考虑编译为多个模块。利用PXA3xx和MICCO说明：
+littletonLinux代码：linux-2.6.21\sound\soc
+待做：补充完整
+
+15:00 2008-4-30
+Olympia项目，打开XDB自动下载代码和符号表
+在PXA3xx_init_ddr.xdb中加入：
+BATCH "D:/work/Olympia/BBU/Olympia_Labcode_new/MHL_AE_Littleton_Labcode/debugger/Load.xdb"
+LOAD /SEGMENT /DEBUG=0/NOLOAD /GLOBAL OF "D:/work/Olympia/BBU/Olympia_Labcode_new/MHL_AE_Littleton_Labcode/debug/MAE_Labcode.bd" 
+这样就不用每次都手工load image和符号表了。
+
+17:10 2008-4-30
+Olympia项目，FM，整理RDA5800调试思路。待做：完成
+RDA5800调试之一：读ID。
+1, 看RDA5800文档，感觉基本了解，开始写代码。但I2C通信不成功。这段时间曾经以为I2C没问题，因为read后数据每次都一样，后来发现是read数组读前没有清空。清空该数组后，可以看到并没有读到任何东西。而且单步调试也发现第一次发数据就没有成功；
+2, 怀疑I2C有问题。于是看PXA 3xx I2C文档。仍无结果。
+3, 找硬件同事帮忙。测出没有给电源。同时看硬件原理图发现和David也用I2C，2V8电源David也用。于是看David代码。用我的板子可以正常与WM8991的I2C通信，但是不能与RDA5800通信，奇怪，怀疑是硬件问题。
+4, 换别人板子仍然不行，回到软件上找原因。再看向宾代码发现地址写的不对。
+经验：
+1, 看芯片文档，根据文档“RDA5800系列芯片应用问题解答”的问题14调试。
+2, 电源，时钟。I2C的地址。如果是7位要注意地址如何赋给对应寄存器，如果是地址|1（地址&0）的情况，应该是末尾加0后做为地址。
+3, 看文档要深入。这次可能是很久不调试硬件了，思路不连续。以后还是要把思路写清楚。
+
+17:24 2008-4-30
+Olympia项目，音频进展
+wm8991 init函数log：
+ befor snd_soc_new_pcms: socdev address=0xbf00d204, socdev->machine=0xbf00d2a4,socdev->machine->num_links 2
+ sound/soc/soc-core.c snd_soc_new_pcms  machine->num_links=0xbf00d2d0, socdev addr=0xbf00d204,socdev->machine=0xbf00d2a4,socdev->machine->num_links=0xbf00d2d0
+yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+发现socdev->machine->num_links前后不一致，从2变成0xbf00d2d0。查看soc-core.c，发现包含的头文件有错，应该更新为wm8991驱动包中对应的头文件（soc.h, soc-dapm.h）。
+更新后，cat对应pcm文件有结果
+/dev/snd # cat /bin/busybox > pcmC0D0p 
+ sound/soc/pxa/pxa3xx-ssp.c pxa3xx_ssp_startup
+ <0> sound/soc/pxa/wm8991-littleton.c littleton_wm8991_hifi_startup
+/dev/snd # cat /bin/busybox > pcmC0D1p  
+<0> sound/soc/pxa/pxa3xx-ssp.c pxa3xx_ssp_startup
+
+WM8991全部初始化log：
+===================
+<6>wm8991: WM8991 Audio Codec 0.01
+<0> yhy@Codec3V on
+<0> socdev address=bf00d204,socdev->machine->num_links 2
+<0>yhy@add i2c driver--<0> wm8991_codec_probe addr is 0x1b, socdev->machine->num_links 2,setup->i2c_address=1b
+<4>
+<4>
+<4>
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x1
+<3>yhy@i2c lower read--i2c_pxa_do_read msg->addr=0x1b,len=0x2
+<0>11111111111wm8991(read reg0x:0x9089) detected.
+<0> wm8991_codec_probe ret=0
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<0> befor snd_soc_new_pcms: socdev address=0xbf00d204, socdev->machine=0xbf00d2a4,socdev->machine->num_links 2
+<0> sound/soc/soc-core.c snd_soc_new_pcms  machine->num_links=0x2, socdev addr=0xbf00d204,socdev->machine=0xbf00d2a4,socdev->machine->num_links=0x2
+<0> sound/soc/pxa/pxa3xx-pcm.c pxa3xx_pcm_new dai->playback.channels_min=1, dai->capture.channels_min=1
+<0> sound/soc/pxa/pxa3xx-pcm.c pxa3xx_pcm_preallocate_dma_buffer dev.type=2, dev->area=ff8ae000
+<0> sound/soc/pxa/pxa3xx-pcm.c pxa3xx_pcm_preallocate_dma_buffer dev.type=2, dev->area=ff8ce000
+<6>asoc: WM8991 ADC/DAC Primary <-> pxa3xx-ssp3 mapping ok
+<0> sound/soc/pxa/pxa3xx-pcm.c pxa3xx_pcm_new dai->playback.channels_min=1, dai->capture.channels_min=1
+<0> sound/soc/pxa/pxa3xx-pcm.c pxa3xx_pcm_preallocate_dma_buffer dev.type=2, dev->area=ff8ee000
+<0> sound/soc/pxa/pxa3xx-pcm.c pxa3xx_pcm_preallocate_dma_buffer dev.type=2, dev->area=ff90e000
+<6>asoc: WM8991 ADC/DAC Primary <-> pxa3xx-ssp2 mapping ok
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<3>yhy@i2c lower write--i2c_pxa_do_write msg->addr=0x1b,len=0x3
+<0> wm8991_init end
+可以看到其中的“machine->num_links”都是2。
+
+查看设备的proc和sys两个文件系统：
+===============================
+proc文件系统
+-----------
+/proc/asound/card0 # ls 
+id         oss_mixer  pcm0c      pcm0p      pcm1c      pcm1p
+/proc/asound/card0 # cat id 
+littleton
+/proc/asound/card0 # cd pcm0p/
+/proc/asound/card0/pcm0p # ls
+info  oss   sub0
+//可以看到这是个播放设备（PLATBACK）。
+/proc/asound/card0/pcm0p # cat info 
+card: 0
+device: 0
+subdevice: 0
+stream: PLAYBACK
+id: I2S HiFi WM8991 ADC/DAC Primary-PCM-0
+name: 
+subname: subdevice #0
+class: 0
+subclass: 0
+subdevices_count: 1
+subdevices_avail: 1
+/proc/asound/card0/pcm0p # cat ../info 
+../id          ../pcm0c/      ../pcm1c/
+../oss_mixer   ../pcm0p/      ../pcm1p/
+/proc/asound/card0/pcm0p # cat ../pcm0c/info 
+card: 0
+device: 0
+subdevice: 0
+stream: CAPTURE
+id: I2S HiFi WM8991 ADC/DAC Primary-PCM-0
+name: 
+subname: subdevice #0
+class: 0
+subclass: 0
+subdevices_count: 1
+subdevices_avail: 1
+/proc/asound/card0/pcm0p # cat ../pcm1p/info 
+card: 0
+device: 1
+subdevice: 0
+stream: PLAYBACK
+id: PCM Voice WM8991 ADC/DAC Primary-PCM-1
+name: 
+subname: subdevice #0
+class: 0
+subclass: 0
+subdevices_count: 1
+subdevices_avail: 1
+/proc/asound/card0/pcm0p # cat ../pcm1c/info 
+card: 0
+device: 1
+subdevice: 0
+stream: CAPTURE
+id: PCM Voice WM8991 ADC/DAC Primary-PCM-1
+name: 
+subname: subdevice #0
+class: 0
+subclass: 0
+subdevices_count: 1
+subdevices_avail: 1
+/proc/asound/card0/pcm0p # cd ..
+/proc/asound/card0 # ls
+id         oss_mixer  pcm0c      pcm0p      pcm1c      pcm1p
+/proc/asound/card0 # cd .
+/proc/asound/card0 # cd pcm0c/
+/proc/asound/card0/pcm0c # ls
+info  oss   sub0
+/proc/asound/card0/pcm0c # cat oss 
+/proc/asound/card0/pcm0c # cd sub0/
+/proc/asound/card0/pcm0c/sub0 # ls
+hw_params  info       status     sw_params
+/proc/asound/card0/pcm0c/sub0 # cat hw_params 
+closed
+/proc/asound/card0/pcm0c/sub0 # cat info 
+card: 0
+device: 0
+subdevice: 0
+stream: CAPTURE
+id: I2S HiFi WM8991 ADC/DAC Primary-PCM-0
+name: 
+subname: subdevice #0
+class: 0
+subclass: 0
+subdevices_count: 1
+subdevices_avail: 1
+/proc/asound/card0/pcm0c/sub0 # cd ..
+/proc/asound/card0/pcm0c # cd ../pcm0p/
+/proc/asound/card0/pcm0p # ls
+info  oss   sub0
+/proc/asound/card0/pcm0p # cd sub0/
+/proc/asound/card0/pcm0p/sub0 #   
+/proc/asound/card0/pcm0p/sub0 # ls
+hw_params  info       status     sw_params
+/proc/asound/card0/pcm0p/sub0 # cat hw_params 
+closed
+/proc/asound/card0/pcm0p/sub0 # cat info 
+card: 0
+device: 0
+subdevice: 0
+stream: PLAYBACK
+id: I2S HiFi WM8991 ADC/DAC Primary-PCM-0
+name: 
+subname: subdevice #0
+class: 0
+subclass: 0
+subdevices_count: 1
+subdevices_avail: 1
+/proc/asound/card0/pcm0p/sub0 # ls
+hw_params  info       status     sw_params
+/proc/asound/card0/pcm0p/sub0 # cat 
+hw_params   info        status      sw_params 
+/proc/asound/card0/pcm0p/sub0 # cat status 
+closed
+/proc/asound/card0/pcm0p/sub0 # cat sw_params 
+closed
+
+sysfs文件系统
+-------------
+//查看当前系统注册的全部platform总线设备
+/sys/bus/platform/devices # ls
+1-wire-mp.0       pxa-rtc           pxa2xx-uart.0     pxa3xx_fv
+bluetooth         pxa2xx-ac97       pxa2xx-uart.1     pxa3xx_keypad
+lt_charger        pxa2xx-fb         pxa2xx-uart.2     pxa3xx_pmic
+lt_micco_codec    pxa2xx-i2c.0      pxa3xx-camera     soc-audio
+m2d               pxa2xx-ir         pxa3xx-nand
+mmc_controller.0  pxa2xx-spi.1      pxa3xx-ohci
+mmc_controller.1  pxa2xx-touch      pxa3xx-u2d
+/sys/bus/platform/devices # cd soc-audio/
+//比刚才增加了sound:pcmC0D0c,sound:pcmC0D0p,sound:pcmC0D1c和 sound:pcmC0D1p。
+//sound:adsp，sound:dsp好像也是新加的。
+/sys/devices/platform/soc-audio # ls
+bus              power            sound:mixer      subsystem
+codec_reg        sound:adsp       sound:pcmC0D0c   uevent
+dapm_widget      sound:audio      sound:pcmC0D0p
+driver           sound:controlC0  sound:pcmC0D1c
+modalias         sound:dsp        sound:pcmC0D1p
+/sys/devices/platform/soc-audio # cat modalias 
+soc-audio
+/sys/devices/platform/soc-audio # cd sound\:pcmC0D0
+sound\:pcmC0D0c/  sound\:pcmC0D0p/
+/sys/devices/platform/soc-audio # cd sound\:pcmC0D0p/
+/sys/class/sound/pcmC0D0p # ls
+dev        device     pcm_class  power      subsystem  uevent
+//可以看到pcmC0D0p的设备号是116:16
+/sys/class/sound/pcmC0D0p # cat dev
+116:16
+//查看实际的设备看是否如此：
+/sys/class/sound/pcmC0D0p # ls -l /dev/snd
+crw-r-----    1 root     root     116,   0 Oct 24  2006 controlC0
+crw-r-----    1 root     root     116,  32 Oct 24  2006 controlC1
+//...
+crw-r-----    1 root     root     116, 224 Oct 24  2006 controlC7
+crw-r-----    1 root     root     116,   4 Oct 24  2006 hwC0D0
+crw-r-----    1 root     root     116,   5 Oct 24  2006 hwC0D1
+//...
+crw-r-----    1 root     root     116, 231 Oct 24  2006 hwC7D3
+crw-r-----    1 root     root     116,   8 Oct 24  2006 midiC0D0
+crw-r-----    1 root     root     116,   9 Oct 24  2006 midiC0D1
+crw-r-----    1 root     root     116,  10 Oct 24  2006 midiC0D2
+//...
+crw-r-----    1 root     root     116,  15 Oct 24  2006 midiC0D7
+crw-r-----    1 root     root     116,  40 Oct 24  2006 midiC1D0
+crw-r-----    1 root     root     116,  41 Oct 24  2006 midiC1D1
+//...
+crw-r-----    1 root     root     116, 238 Oct 24  2006 midiC7D6
+crw-r-----    1 root     root     116, 239 Oct 24  2006 midiC7D7
+crw-r-----    1 root     root     116,  24 Oct 24  2006 pcmC0D0c
+crw-r-----    1 root     root     116,  16 Oct 24  2006 pcmC0D0p
+crw-r-----    1 root     root     116,  25 Oct 24  2006 pcmC0D1c
+crw-r-----    1 root     root     116,  17 Oct 24  2006 pcmC0D1p
+crw-r-----    1 root     root     116,  26 Oct 24  2006 pcmC0D2c
+crw-r-----    1 root     root     116,  18 Oct 24  2006 pcmC0D2p
+//...
+crw-r-----    1 root     root     116, 247 Oct 24  2006 pcmC7D7p
+crw-r-----    1 root     root     116,   1 Oct 24  2006 seq
+crw-r-----    1 root     root     116,  33 Oct 24  2006 timer
+/sys/class/sound/pcmC0D0p # ls
+dev        device     pcm_class  power      subsystem  uevent
+/sys/class/sound/pcmC0D0p # pwd
+/sys/bus/platform/devices/soc-audio/sound:pcmC0D0p
+/sys/class/sound/pcmC0D0p # cat pcm_class 
+generic
+/sys/class/sound/pcmC0D0p # cat uevent 
+cat: uevent: Permission denied
+
+19:10 2008-4-30
+Olympia项目，FM lab code
+待做：目前5800复制向宾的代码，调试通过后参考参考代码改为更灵活的代码。
+状态：现在搜台不会停止。RSSI过低一般都是1。设定的停止条件是0xe。
+搜到的电台如下，回家查这些台是否有节目：
+8750, 8970, 9220, 9470, 9730, 9990， 10250， 10500
+(00:43 2008-05-01)经测试有些频点没有台，4号改完代码后找硬件同事一起解决信号问题。"00:43 2008-05-01"end
+现有代码："FM lab cod 2008-4-30 1955.rar"
+有可能是软件使用有问题，也有可能是有干扰。
+待做完成（见13:20 2008-5-6）：4号首先把代码都移植过来。保证初始化代码也与向宾相同。
+log如下：
+--serial port initialized--
+
+ BacklightOn() finished
+
+Configuring Littleton LCD controller
+LCD power on
+SSP CMD 0x7000e5 DATA 0xe5
+SSP CMD 0x728000 DATA 0x8000
+SSP CMD 0x700000 DATA 0x0
+SSP CMD 0x720001 DATA 0x1
+SSP CMD 0x700001 DATA 0x1
+SSP CMD 0x720100 DATA 0x100
+SSP CMD 0x700002 DATA 0x2
+SSP CMD 0x720700 DATA 0x700
+SSP CMD 0x700003 DATA 0x3
+SSP CMD 0x721030 DATA 0x1030
+SSP CMD 0x700004 DATA 0x4
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700008 DATA 0x8
+SSP CMD 0x720402 DATA 0x402
+SSP CMD 0x700009 DATA 0x9
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x70000a DATA 0xa
+SSP CMD 0x720008 DATA 0x8
+SSP CMD 0x70000c DATA 0xc
+SSP CMD 0x720110 DATA 0x110
+SSP CMD 0x70000f DATA 0xf
+SSP CMD 0x720003 DATA 0x3
+SSP CMD 0x700010 DATA 0x10
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700011 DATA 0x11
+SSP CMD 0x720007 DATA 0x7
+SSP CMD 0x700012 DATA 0x12
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700013 DATA 0x13
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700010 DATA 0x10
+SSP CMD 0x7216b0 DATA 0x16b0
+SSP CMD 0x700011 DATA 0x11
+SSP CMD 0x720137 DATA 0x137
+SSP CMD 0x700012 DATA 0x12
+SSP CMD 0x72013c DATA 0x13c
+SSP CMD 0x700013 DATA 0x13
+SSP CMD 0x721400 DATA 0x1400
+SSP CMD 0x700029 DATA 0x29
+SSP CMD 0x720015 DATA 0x15
+SSP CMD 0x70002b DATA 0x2b
+SSP CMD 0x720020 DATA 0x20
+SSP CMD 0x700030 DATA 0x30
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700031 DATA 0x31
+SSP CMD 0x720507 DATA 0x507
+SSP CMD 0x700032 DATA 0x32
+SSP CMD 0x720303 DATA 0x303
+SSP CMD 0x700035 DATA 0x35
+SSP CMD 0x720103 DATA 0x103
+SSP CMD 0x700036 DATA 0x36
+SSP CMD 0x721400 DATA 0x1400
+SSP CMD 0x700037 DATA 0x37
+SSP CMD 0x720105 DATA 0x105
+SSP CMD 0x700038 DATA 0x38
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700039 DATA 0x39
+SSP CMD 0x720707 DATA 0x707
+SSP CMD 0x70003c DATA 0x3c
+SSP CMD 0x720301 DATA 0x301
+SSP CMD 0x70003d DATA 0x3d
+SSP CMD 0x72020a DATA 0x20a
+SSP CMD 0x700050 DATA 0x50
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700051 DATA 0x51
+SSP CMD 0x7200ef DATA 0xef
+SSP CMD 0x700052 DATA 0x52
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700053 DATA 0x53
+SSP CMD 0x72013f DATA 0x13f
+SSP CMD 0x700060 DATA 0x60
+SSP CMD 0x722700 DATA 0x2700
+SSP CMD 0x700061 DATA 0x61
+SSP CMD 0x720001 DATA 0x1
+SSP CMD 0x70006a DATA 0x6a
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700080 DATA 0x80
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700081 DATA 0x81
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700082 DATA 0x82
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700083 DATA 0x83
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700084 DATA 0x84
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700085 DATA 0x85
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700090 DATA 0x90
+SSP CMD 0x720010 DATA 0x10
+SSP CMD 0x700092 DATA 0x92
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700093 DATA 0x93
+SSP CMD 0x720003 DATA 0x3
+SSP CMD 0x700095 DATA 0x95
+SSP CMD 0x720110 DATA 0x110
+SSP CMD 0x700097 DATA 0x97
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700098 DATA 0x98
+SSP CMD 0x720000 DATA 0x0
+SSP CMD 0x700007 DATA 0x7
+SSP CMD 0x720173 DATA 0x173
+
+--LCD initialized--
+Source_C LCD initialized--
+Nand initialized--
+Processor: Monahans LV ??
+Core: Turbo mode 624(312x2)MHz
+DDR: 260MHz, SRAM: 312MHz
+HSIO: 208MHz, SMC: 208 MHz
+EMPI SCLK: 52 MHz, DF SCLK: 52 MHz
+SDTV1(0x2A)=0x5
+ MDTV1(0x32)=0xc
+ L2VCR(0x39)=0xf
+ L34VCR(3A)=0x0
+ wm8991_CODEC_A3V_On--
+wm8991_AP_VIO2V8_On--
+MH_D0CKENB is 0xfffff7ff.
+GPIO15's MFPR is 0x40.
+I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--I2CWrite-^--Read RDA5800 register.
+I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--Succesful!
+0x0 0x0 0x0 0x3 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0xc 0x0 0x10 0x60 0x0 0x18 0x8 0x64 0x58 0x78 0x7f 0x1 0x0 0xc0 0x40 0xc0 0x7 0xff 0x0 0x0 0x0 0x3 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0xc 0x0 0x10 0x60 0x0 0x18 0x8 0x64 0x58 0x78 0x7f 0x1 0x0 0xc0 0x40 0xc0 0x7 0xff 0x0 0x0 0x0 0x3 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0xc 0x0 0x10 0x60 0x0 0x18 0x8 0x64 0x58 0x78 0x7f 0x1 0x0 0xc0 0x40 0xc0 0x7 0xff 0x0 0x0 0x0 0x3 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0x58 0x0 0xc 0x0 0x10 0x60 0x0 0x18 0x8 0x64 
+0x3 0x5800 0x5800 0x5800 0x5800 0x5800 0xc00 0x1060 0x18 0x864 0x0 0x3 0x5800 0x5800 0x5800 0x5800 0x5800 0xc00 0x1060 0x18 0x864 0x5878 0x7f01 0xc0 0x40c0 0x7ff 0x0 0x3 0x5800 0x5800 0x5800 0x5800 0x5800 0xc00 0x1060 0x18 0x864 0x5878 0x7f01 0xc0 0x40c0 0x7ff 0x0 0x3 0x5800 0x5800 0x5800 0x5800 0x5800 0xc00 0x1060 0x18 0x864 0x5878 0x7f01 0xc0 0x40c0 0x7ff 0x0 
+I2C_bamvor_TEST end.
+I2CRead-^--I2CRead-^--freq=8750
+current frequency is 8750.
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=8970
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=9220
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=9470
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=9730
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=9990
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=10250
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=10500
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=8750
+I2CWrite-^--I2CWrite-^--back 
+I2CWrite-^--I2CWrite-^--I2CRead-^--I2CRead-^--I2CRead-^--I2CRead-^--seek rssi=1,freq=8970
+I2CWrite-^--I2CWrite-^--back 

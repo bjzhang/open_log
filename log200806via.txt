@@ -1,0 +1,1204 @@
+﻿11:50 2008-6-2
+项目，待做
+1), ETS（等李松会议）
+2), FM app and driver
+3), sonbin（完成）
+a, 尽量都放在启动脚本中
+b, 在节点上处理扫描结果，并用串口打出。让用户直接保存超级终端信息即可。
+c, 驱动，测试代码需要加上版本号。
+4), 被借到mmi，学AT命令，可能有用。
+5), 今天下午或明天李松可能会开会。
+
+14:57 2008-6-2
+Olympia项目，FM，天线测试（为Sonbin提供测试软件）
+工作时间：3小时，待做：记入日志。
+〇，需要四个文件：rda5800.ko, radio-rda5800.ko, rda5800_test, freq_scanning.sh
+一，保存启动日志：
+0, 超级终端的设置：波特率：38400，数据位：8位，停止位：1位，没有流控制，没有奇偶校验。
+1, 选择超级终端"Transfer"菜单的"Capture Text"选项，设置文件名为"freq_scanning.txt"，单击"Start"。
+2, 板子上电，会自动扫描从87.5到108M每隔0.1M扫描一次；
+3, 屏幕没有新信息出现时，停止Capture Text。
+二，绘图
+0, 文本文件名必须是"freq_scanning.txt"，设置宏安全性为中级，打开macro4FM.xls，启用宏。
+1, 打开"freq_scanning.txt"，excel会自动运行文本导入向导，分隔符选择：TAB, 分号，逗号，空格，等号。单击完成。
+2, 运行"parse_frequency"宏，会当前打开的表格中绘制出freq-rssi图。
+3, 把当前打开的excel表格——"freq_scanning.txt"，另存为excel工作簿。
+(10:32 2008-6-4)
+(13:32 2008-6-4)由于使用的qinghua tong的板子，需要加入建立脚本的过程。
+Antenna test doc for Sonbin:
+0, pre-configuration ( only for first configuration)
+1), configuration HyperTerminal:
+(1), open: Start menu -> program -> accessory -> HyperTerminal.
+(2), input a name and press enter;
+(3), Connection using COM1;
+(4), set the following configuration and press enter: 38400bps, 8 data bits, no even-odd 2), 2), update Linux script
+(1), power up the board: connect USB cable to PC, connect RS232 to PC COM1, plug mini usb cable to board. then the board will boot and print log at Hyperterminal.
+(2), after boot. select HyperTerminal Transter menu -> send Text file, select command.txt and click open. after the log in HyperTerminal is stopped. power down the board.
+1, saving board log:
+check, 1 stop bit, no flow contrl.
+1), Capture board log: select Transter menu -> Capture Text, set filename "freq_scanning.txt"(must) and press start;
+2), power up the board, after booting, the board will scann from 87.5MHz to 108MHz with step 0.1Mhz automatically. 
+3), after 3 minutes, the scanning will finish. then power down the board. select Transter menu -> Capture Text -> stop.
+4), close Hyperterminal ( click save ), you will find the link at Start menu -> program -> accessory -> HyperTerminal.
+2, frequency -- rssi figure
+1), set macro security to medium. open macro4FM.xls and enable macro.
+2), open "freq_scanning.txt", parse the text file to excel table using the following seperator: TAB, ";" "," "=" " "
+3), run parse_frequency macro to draw the freq-rssi figure.
+4), save "freq_scanning.txt" excel file as excel file type.
+
+21:19 2008-6-2
+Olympia项目，FM
+1, 修改上周定义的宏定义：
+#define rda_op(dev,op)	((dev)->func[(dev)->func_sel].op((dev)))
+#define rda_print(dev)	(rda_op(dev,print))
+这样：
+		rda.func[rda.func_sel].print(&rda);
+改为：
+		rda_print(&rda);
+2, (22:08 2008-6-2)
+rda5800_test.c:252: warning: initialization discards qualifiers from pointer target type
+原因是默认值是const类型，
+static const struct v4l2_frequency default_freq = 
+但"rda5800_func.defaultVal"不是，加上const即可。
+struct rda5800_func
+{
+//...
+	const void		*defaultVal;
+}
+
+22:34 2008-6-2
+Olympia项目，FM，进展，待做
+已经加入了get/set freq，mute，明天可以很快把g/s_ctrl的内容都加上了。尽量简化代码。
+
+11:18 2008-6-3
+Olympia项目，FM，ETS
+等更新完CC后详细分析ETS现有代码，并规划。周四下班之前得完事。
+现在考虑spy用sysfs显示。
+
+15:46 2008-6-3
+Olympia项目，FM，待做取消
+把radio_qctrl做为共用部分，需要在驱动的radio-rda5800.c修改。
+(15:54 2008-6-3)
+既然已经提供了queryctrl方法，就尽量用这个方法得到范围。
+
+17:18 2008-6-3
+Olympia项目，FM，待做
+加入自动搜台算法。查有尖峰的频点周围频点找到一个信号最强的点做为自动搜台结果。
+
+17:56 2008-6-3
+Olympia项目，FM，宏定义，调试
+用预处理文件调试宏定义，##的用法
+只要V4L2_ctrl宏加上
+	static const struct v4l2_control default_##name = 	\
+	{	\
+		.id		= id,	\
+		.value	= defaultVal,	\
+	}
+就会报错：
+rda5800_test_new.c:398: error: expected identifier before '(' token
+rda5800_test_new.c:398: error: expected '}' before '.' toke
+当时的宏的定义：
+#define V4L2_ctrl(name,id,min,max,defaultVal) \
+	static inline INT32 get_##name(struct rda5800 *rdap)	\
+	{	\
+		return get_ctrl(rdap, id, name##_V4L22User);	\
+	}	\
+	static inline INT32 set_##name(struct rda5800 *rdap)	\
+	{	\
+		return set_ctrl(rdap, id, name##_User2V4L2);	\
+	}	\
+	static inline void print_##name(struct rda5800 *rdap)	\
+	{	\
+		print_ctrl(rdap, id);	\
+	}	\
+	static inline INT32 isvalid_##name(struct rda5800 *rdap)	\
+	{	\
+		return isvalid_ctrl(rdap, min, max);	\
+	}	\
+	static struct v4l2_control cur_##name; \
+	static const struct v4l2_control default_##name = 	\
+	{	\
+		.id		= id,	\
+		.value	= defaultVal,	\
+	}
+使用：
+V4L2_ctrl(mute,V4L2_CID_AUDIO_MUTE,0,1,1);
+百思不得其解，后来分析预处理结果(arm-linux-gcc -E rda5800_test_new.c -o rda5800_test_new.E)：
+static inline INT32 get_mute(struct rda5800 *rdap) { return get_ctrl(rdap, (0x00980900 +9), mute_V4L22User); } static inline INT32 set_mute(struct rda5800 *rdap) { return set_ctrl(rdap, (0x00980900 +9), mute_User2V4L2); } static inline void print_mute(struct rda5800 *rdap) { print_ctrl(rdap, (0x00980900 +9)); } static inline INT32 isvalid_mute(struct rda5800 *rdap) { return isvalid_ctrl(rdap, 0, 1); } static struct v4l2_control cur_mute; static const struct v4l2_control default_mute = { .(0x00980900 +9) = (0x00980900 +9), .value = 1, };
+发现".id		= id,"被替换为" .(0x00980900 +9) = (0x00980900 +9),"。
+于是把宏V4L2_ctrl的参数id改为ctrl_id，问题解决：）
+再例如：
+#define rda5800_func_ctrl(name) \
+		.type		= READABLE|WRITABLE,	\
+		.name		= #name,	\
+		.get		= get_##name##, \
+会报：
+rda5800_test_new.c:425: error: unknown field 'mute' specified in initializer
+
+另外在使用##连接符号时，不要和",", " "等分隔符连用，和这些分隔符连接没有意义。
+例如对于
+#define rda5800_func_ctrl(name) \
+		.get		= get_##name##, \
+会报下面的错误：
+rda5800_test_new.c:425:1: error: pasting "get_mute" and "," does not give a valid preprocessing token
+
+18:27 2008-6-3
+刚才有个问题看了半天才发现是把"{"写成了"("，造成编译出错：
+rda5800_test_new.c:402: error: expected expression before '.' token
+rda5800_test_new.c:402: warning: left-hand operand of comma expression has no effect
+...结构体没有成员赋值都是这个warnning
+bamvor: 突然想到其实这个测试代码用c++可能结构清晰一些。
+待做：把通用部分放到独立的.c文件中。
+
+18:33 2008-6-3
+Olympia项目，FM，版本
+版本：0.2.0
+测试代码：rda5800_test_new.c，与"Olympia\FM\antenna\05301514"驱动配合使用。
+位置：Olympia\FM\Linux driver\0603\version0.2.0
+0.2比0.1结构改善很多。0.2.0完成了频率，静音，DAC音频，DSP音量的get/set。
+
+19:01 2008-6-3
+待做：
+晚上把测试代码原有功能都加入。然后开始改驱动，驱动改到什么程度都忘了，查日志。
+
+21:58 2008-6-3
+Olympia项目，FM，进展，待做
+1, rda5800_test 4 get有段错误。问题在get_chipID调用get_ctrl时。原因未知。
+(11:44 2008-6-4)问题解决，c编程，const，忽略warnning引起的错误
+在PC机上调试，加入：
+#ifndef PC_SIMULATE
+#define RADIO_DEV "/dev/radio0"
+#else
+#define RADIO_DEV "radio0"
+#endif
+只要当前目录有radio0普通文件即可。
+使用内核转储文件发现是如下语句出的错：
+190		ctrl->id = id;
+进一步分析发现由于给value赋值为default_chipID，所以get_ctrl函数中ctrl指针不可写，加上value指针本身不是不可写的，所以出现了段错误。
+改为：
+		.value		= &cur_chipID,
+		.defaultVal = &default_chipID,
+即可。
+当时其实有warnning:
+rda5800_test_new.c:540: warning: initialization discards qualifiers from pointer target type
+以后一定要更注意warnning
+"11:44 2008-6-4"结束
+2, 还有下列功能没有实现：
+VIDIOC_QUERYCAP
+VIDIOC_G_TUNER，VIDIOC_S_TUNER
+VIDIOC_QUERYCTRL
+
+11:53 2008-6-4
+Olympia项目，FM，进展，待做
+先做ETS demo，剩余工作稍后做。
+
+12:52 2008-6-4
+Olympia项目，FM，待做完成
+需确定是否是qinghua tong(3637)的板子给了客户。（完成，是）
+
+12:55 2008-6-4
+Olympia项目，ETS
+更新CC，eric-ETS-branch，自David
+(18:02 2008-6-4)
+element * CHECKEDOUT
+element * ...\eric-ETS-branch\LATEST
+element * ...\Olympia_Linux_driver_main_branch\LATEST  -mkbranch   eric-ETS-branch
+element * Olympia_Linux_driver_main_label -mkbranch Olympia_Linux_driver_main_branch
+element * \main\LATEST -mkbranch Olympia_Linux_driver_main_branch
+load \Ref_vob\Project\Olympia\Engineering\SW\Driver\Src
+(18:12 2008-6-4)
+本机用的spec，关键是第二句：
+element * CHECKEDOUT
+element * .../eric-ETS-branch/LATEST
+element * /main/LATEST
+load \Ref_vob\Project\Olympia\Engineering\SW\Driver
+
+18:39 2008-6-4
+Olympia项目，FM，进展
+驱动修改完成，但是有bug。明天首先需要把驱动调好，这样trace就可以用了。
+(10:15 2008-6-5)
+昨天的问题是rda5800.ko的本报和radio-rda5800.ko不匹配。都使用最新版本后无此问题。现在开始修新驱动的bug。
+1, set freq时无论是否静音结果都是静音。
+原因是set mute后没有更新reg_cache
+改autoseekstep seek enbale
+2, get freq的rssi一直是0。
+3, setvol实际成功但驱动返回失败。原因是设置是MASK和OFFSET用成了DSP的。
+4, 
+dprintk("%d, %d\n", *buf++, *buf++);
+有提示：
+drivers/i2c/chips/rda5800.c:311: warning: operation on 'buf' may be undefined
+改为：
+dprintk("%d, %d\n", buf[i], buf[i+1]);
+无此问题。待做：思。
+5, 自动搜台有问题。
+(13:09 2008-6-5)
+在I2C读写函数加入显示reg信息的dprintk后，发现是buf[0]赋值错误：
+把
+	buf[0]=(reg_cache[WRITE8_REG_OFFSET+0]&(~SEEKUP_MASK)&(~ENABLE_MASK))
+			| ((dir&SEEKUP_MASK)<<SEEKUP_OFFSET)
+			| ((1&ENABLE_MASK)<<ENABLE_OFFSET);
+改为；
+	buf[0]=(reg_cache[WRITE8_REG_OFFSET+0]&(~SEEKUP_MASK)&(~ENABLE_MASK)）
+			| (((dir)<<SEEKUP_OFFSET)&SEEKUP_MASK)
+			| (((1)<<ENABLE_OFFSET)&ENABLE_MASK);
+
+13:59 2008-6-5
+Olympia项目，FM，进展，待做
+1, 驱动改写工作阶段性完成，目前还有测试程序的，自动搜台，VIDIOC_QUERYCAP，VIDIOC_G_TUNER，VIDIOC_S_TUNER，VIDIOC_QUERYCTRL没有做。待做：稍后完成
+2, 开始做ETS。
+
+14:56 2008-6-5
+Olympia项目，FM，ETS
+1, 安装，Eric邮件
+ETS 安装程序在 10.2.160.80的ETS目录下
+装好ETS以后，将ETS/ViaHub_zhenzhou目录下的ViaHub.exe覆盖ETS安装目录下的同一文件。
+2, 加载usb虚拟串口g_serial.ko，需亚是李松分支的内核编译得到的模块（李松有修改）。
+insmod g_serial.ko use_acm=1，需要usb driver，提示信息如下"log_rda5800_200806051507.txt"：
+[root@Linux gadget]#insmod g_serial.ko use_acm=1
+Using g_serial.ko
+clk set enable vlaue is 1line 3833<6>gs_bind: Gadget Serial v2.2 bound
+line 3925
+u2d enable
+line 3763
+gs_module_init: Gadget Serial v2.2 loaded
+line 2629
+line 2650
+gs_set_config: Gadget Serial configured, full speed CDC-ACM config
+3, 把marvell.rar的全部内容替换到ETS按照目录。
+4, 启动ETS
+(19:14 2008-6-5)
+选择串口Debug-Comm-Serial，选择串口3。
+
+14:56 2008-6-5
+Olympia项目，FM，ETS，加入FM
+etsmsg中include FM_msg.txt
+msg_id中include FM_msg_id.txt
+etsmsg是总文件，include xxx_type.txt，type=msg, spy, trace
+FM_msg_id负责FM分支下的全部菜单。
+
+19:24 2008-6-5
+Olympia项目，FM，ETS，加入FM
+drivers/etc/etc.c
+static struct ets_kmodule module[ETS_MODULE_NUM]=
+{
+  {"ets_demo", -1, -1, 0},      // 0
+  {"LCD", -1, -1, 0},         // 1
+  {"CAM", -1, -1, 0},         // 2
+  {"FM", -1, -1, 0},         // 3
+  {"SND", -1, -1, 0},         // 4
+  {"", -1, -1, 0},         // 5
+//...
+}
+使用ets注册，注销函数需要在ets_kmodule中找对应的name才能成功。
+
+etc对外函数
+void ets_hw_register(int (*send)(unsigned char *buf, int len));
+void ets_hw_unregister(void);
+int ets_register(char *_name, int min, int max, int (*handler)(const char *packet, const int len);
+int ets_unregister(char *name);
+void wakeup_etc(void);
+void ets_copy_data(unsigned char *buf, int len);
+long ets_systime(void);
+
+22:03 2008-6-5
+(15:41 2008-6-10)
+(13:09 2008-6-26)
+Olympia项目，FM，ETS
+ETS依赖与DEBUG开关，如果DEBUG关，ETS有效时，应在编译时报错提示。
+一，spy。三个级别，显示信息从少到多依次是：
+1, 当前修改的寄存器。"18:46 2008-6-10"完成。
+功能：当前V4L2操作导致的rda5800寄存器修改的寄存器值，修改成功后更新寄存器。
+位置：radio-rda5800.c的设置寄存器的函数：rda5800_setfreq，rda5800_setmute，rda5800_setvol，rda5800_setDSPvol，rda5800_setforcemono，rda5800_getstereo，rda5800_getsigstr和rda5800_setsigstr。
+格式：寄存器起始编号，寄存器值。RDA5800寄存器是16位寄存器，寄存器值：第一个寄存器高8位，第一个寄存器低8位，第二个寄存器高8位，第二个寄存器低8位...
+2, 读写的全部寄存器；
+功能：每次I2C设备读写时，写前，或读后所读写的全部寄存器。rda5800每个寄存器没有单独地址，读写分别从0x0a和0x02固定地址起始读写，所以读写的寄存器多于等于改变的寄存器。
+位置：rda5800.c，rda5800_read和rda5800_write。
+待做：为了让初始化过程中写读全部寄存器的过程也可以调试，需要修改rda5800_probe代码，probe函数内也使用rda5800_read和rda5800_write，读写寄存器。
+格式：寄存器起始编号，寄存器值。RDA5800寄存器是16位寄存器，寄存器值：第一个寄存器高8位，第一个寄存器低8位，第二个寄存器高8位，第二个寄存器低8位...
+3, rda5800全部寄存器（0x00-0x0f，不包括labmode下可见普通模式不可见的寄存器）。
+功能：每次I2C写前和读后的当前全部寄存器的值。
+位置：radio-rda5800.c的的设置寄存器的函数：rda5800_setfreq，rda5800_setmute，rda5800_setvol，rda5800_setDSPvol，rda5800_setforcemono，rda5800_getstereo，rda5800_getsigstr和rda5800_setsigstr。
+格式：寄存器起始编号，寄存器值。RDA5800寄存器是16位寄存器，寄存器值：第一个寄存器高8位，第一个寄存器低8位，第二个寄存器高8位，第二个寄存器低8位...
+注：这种方法每次都显示全部寄存器，会影响系统效率，如果没有必要，不建议使用。
+
+二，trace：
+什么信息用trace？
+暂定把全部信息都显示为trace，分debug, info, err三级，直接对应现有printk这三个级别。
+需要把ETS trace和printk，以及ETS其它信息输出函数统一dprintk函数。
+
+三，Msg：
+1, 控制
+包括test code中rda5800全部功能（包括不实际控制硬件但验证V4L2驱动的querycap等）。
+1), 具体实现。
+实现下列v4l2函数提供的功能：vidioc_querycap,vidioc_queryctrl,vidioc_g_ctrl,vidioc_s_ctrl,vidioc_g_tuner,vidioc_s_tuner,
+vidioc_g_frequency,vidioc_s_frequency. 
+由于这些函数调用时需要file和priv：(struct file *file, void *priv, v4l2_struct)。这些ETS无法提供。所以在这些函数内部加一个wrapper。
+v4l2_func -> v4l2_set -> 底层函数
+v4l2_set(struct rda5800_radio_device *, unsigned int cmd, void *v4l2_value)全部v4l2函数(switch-case)，然后调用底层函数（例如：rda5800_setmute）。get暂时不需要。
+ets_handler中对应控制功能都交给v4l2_set处理。
+get暂时不需要统一，考虑用spy实现，ets_handler调用v4l2_set确认修改成功后，在ets_handler中更新。上位机设置参考"DSPV->Spy->DSPV audio status"。
+
+09:43 2008-6-6
+周报（6.2-6.5）
+===============
+0，工作日四天，>32小时。上周周报"11:05 2008-5-30"。
+1, "14:57 2008-6-2", "10:32 2008-6-4", "13:32 2008-6-4"
+为Sonbin准备天线测试的Olympia开发板FM使用文档。5小时；
+2，（未计入日志）6-3，ETS会议。1小时；
+3, （未计入日志）6-4，ClearCase使用培训。2小时。
+4, 6-2, 6-3, 6-4, 6-5。
+继续改进FM驱动，并测试。5+5+5+2=17小时。
+5, 6-5。FM ETS接口。8小时。
+
+Key Activities of the week:
+1 Prepare FM Manual for Sonbin. 5
+2 ETS meeting. 1
+3 Trainning for ClearCase. 2
+4 Continue to improve FM driver and test. 17
+5 Implement FM ETS interface including 1 message(set/unset mute), 1 trace, 1 spy. 8
+
+Major Progress:
+Implement FM ETS interface 
+Issues:
+NULL
+TODO
+1 Finish FM ETS interface
+
+17:57 2008-6-10
+待做完成，重要
+21,22的公司活动是否必须参加。参加
+
+10:30 2008-6-12
+Olympia项目，板子，脚本
+[root@Linux /]#cat init.sh 
+mount -t jffs2 /dev/mtdblock3 /mnt/app
+/mnt/app/drivers/snd/snd_ins.sh
+echo 8 > /proc/sys/kernel/printk
+amixer cset numid=108 on
+amixer cset numid=110 on
+
+16:28 2008-6-12
+Olympia项目，FM
+运行新编译的rda5800.ko，初始化写43个寄存器时死：
+[  125.200000] RDA5800_I2C: rda5800_probe() 196: writing initial 43 register.
+[  125.200000] i2c_adapter i2c-0: master_xfer[0] W, addr=0x10, len=86
+[  125.210000] i2c_adapter i2c-0: setting to bus master
+
+10:53 2008-6-13
+周报（6.9-6.13）
+===============
+0，工作日四天，32小时。9号端午放假。上周周报"09:43 2008-6-6"。
+1, 学习ETS_demo. 10
+2，FM ETS 22
+
+Key Activities of the week:
+1 Study ETS_demo.c and relative code. 10
+2 Implement FM ETS interface 22
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 Finish FM ETS interface
+
+10:54 2008-6-13
+待做
+1, 周报；（完成）
+2, rda5800.ko i2c死。试验别人的板子。（取消）不加载音频驱动就没问题。估计板子还是有问题，下周再说。开amixer cset到FM通道后，卸载FM再insert会死。
+3, 继续分析ETS_demo相关代码。
+4, (15:06 2008-6-13)
+看李松ETS资料。从李松得到的全部ETS资料位于“Olympia\FM\ETS”
+
+15:30 2008-6-13
+正则表达式
+bamvor@winson-desktop:/home/bamvor/dev/download$ arm-linux-nm radio-rda5800.ko | grep ets | grep \ [tT]\ 
+00000c64 T ets_handler
+0000073c T ets_systime
+00000760 t rda5800_getstereo
+bamvor@winson-desktop:/home/bamvor/dev/download$ arm-linux-nm radio-rda5800.ko | grep ets | egrep "\<(t|T)\>"
+00000c64 T ets_handler
+0000073c T ets_systime
+00000760 t rda5800_getstereo
+
+15:35 2008-6-13
+1, 忘了李松的内核的ets没有加入FM。
+2, 为了使用现有david驱动，没有把已有的音频驱动编译入内核中。
+3, 枚举类型从0开始编号，所以把enum:mute/normal改为enum:normal/mute，这样和代码对应。
+Begin Message, ETS FM Mute Cmd
+    Msg Type,  uint8, base=enum:normal/mute
+End
+
+18:58 2008-6-13
+论坛，智能手机，待做，看，重要
+http://blog.csdn.net/absurd，李先静论坛，很多智能手机资料。
+http://www.broncho.cn/features.html，李先静所在的深圳鼎智公司开发Linux手机平台——broncho。
+http://blog.csdn.net/rstevens，也是一个关注Linux手机的博客
+http://blog.csdn.net/absurd/archive/2008/05/06/2404510.aspx，谈谈国内开发的Linux手机软件平台Broncho，兼谈Android、Openmoko等
+
+17:58 2008-6-18
+Olympia项目，FM ETS需求，自Olympia HW ETS Requirement V01-0605.xls
+1	Read Chip ID	Read Chip ID register
+2	Register Read 	Provide a general UI window to read FM Chip register
+3	Register Write	Provide a general UI window to write FM Chip register
+4	Channel Manual Set	set the channel manually
+5	Auto Seek	auto seek the channel from 87.5-108MHz and print FM Channel on the software panel
+6	Volume DSP	adjust from 0 to 15, add a slide on the software panel
+7	Volume DAC	adjust volume from 0 to 15, add a slide on the software panel
+8	Seek Threshold	from 0 to 63,add a slide on the software panel
+9	RSSI Scan	"Test the RSSI when scanning the band from 87.5-108MHz,and draw the curve with RSSI&Channel 
+save the RSSI list in EXCEL file                                                                 RSSI List Format:
+|Test Phone No.|Channel register value|Channel frequency (MHz)|RSSI value(HEX)| 
+Excel file name:
+TestPhoneNo._Date_VersionNo.xls"
+bamvor: 我自己加一个mute。
+
+18:20 2008-6-18
+Olympia项目，FM，ETS
+待做：完成：
+//modified register
+#define M_REG	1
+//read/write relative register
+#define R_REG	2
+//full register ( non-labmode )
+#define F_REG	3
+
+20:07 2008-6-18
+Olympia项目，FM，ETS，进展
+radio-rda5800.c的
+extern int (*demo_trace[10])(const char *fmt, ...);
+extern int (*demo_spy[10])(const char *fmt, ...);
+有下列warnning:
+drivers/media/radio/radio-rda5800.c:40: warning: function declaration isn't a prototype
+drivers/media/radio/radio-rda5800.c:41: warning: function declaration isn't a prototype
+drivers/media/radio/radio-rda5800.c: In function 'ets_handler':
+drivers/media/radio/radio-rda5800.c:179: warning: assignment from incompatible pointer type
+drivers/media/radio/radio-rda5800.c:195: warning: assignment from incompatible pointer type
+改为
+extern int (*demo_trace[10])(const char *fmt, ...);
+extern int (*demo_spy[10])(const char *fmt, ...);
+问题解决。
+明天完成"18:20 2008-6-18"和"22:03 2008-6-5"。
+
+20:12 2008-6-18
+由于把ETS共用部分移到radio-rda5800_public.c，需要编译两个.c文件，所以修改Makefile：
+obj-$(CONFIG_RDA5800_RADIO) += radio-rda5800.o
+为
+radio-rda5800_m-objs := radio-rda5800.o radio-rda5800_public.o
+obj-$(CONFIG_RDA5800_RADIO) += radio-rda5800_m.o
+如果写为：
+radio-rda5800-objs := radio-rda5800.o radio-rda5800_public.o
+obj-$(CONFIG_RDA5800_RADIO) += radio-rda5800.o
+会提示：
+make[1]: Circular drivers/media/radio/radio-rda5800.o <- drivers/media/radio/radio-rda5800.o dependency dropped.
+
+17:45 2008-6-19
+Olympia项目，Qtopia，键盘(keypad)
+Qtopia代码位于CC的：
+Ref_vob\Project\Olympia\Engineering\SW\Application\src\qtopia-opensource-4.3.0
+Qtopia4.3的键盘处理程序位于：
+qtopiacore\qt\src\gui\embedded
+开始按照原有qt2.3.7位置找，在kernel没有找到。扩大搜索范围在上面位置找到相关代码。
+另外：用cat 键盘文件的方法不一定能得到按键信息，但是如果编写测试程序open，read可以读到按键信息。
+
+17:45 2008-6-19
+(11:48 2008-6-20)
+Linux内核和应用程序调试
+1, 待做：实验arm-linux-gdb，arm-linux-insight能否读内核转储文件。
+2, Linux内核设计与实现（2中），p247提到内核oops中函数右侧显示的偏移地址是导致问题的语句。
+待做：测试，加入一个模块测试：在init时出错。
+3, 另外书中提到现在oops时看到的丰富信息是Linux2.5时引入的kallsyms特性，它通过定义CONFIG_KALLSYMS配置选项启用。在没有这个特性之前只能在用户空间用ksymoops结合System.map和oops信息进行解码。
+待做：查现在是否打开了CONFIG_KALLSYMS。应该是打开了。
+4, 继续阅读Linux内核设计与实现258页后调试部分。
+
+19:15 2008-6-19
+Olympia项目，Linux，代码阅读，ctype
+ctype.h中定义了判断该ascii码是否是数字，字母等类别的宏，其实现方式是在ctype.c中实现unsigned char _ctype[]，依次描述对255个ascii字符的类别。包括大写字母，小写字母，数字，控制字符，标点符号，空白，十六进制数字，空格等（定义于ctype.h）。
+include\linux\ctype.h
+#ifndef _LINUX_CTYPE_H
+#define _LINUX_CTYPE_H
+
+/*
+ * NOTE! This ctype does not handle EOF like the standard C
+ * library is required to.
+ */
+
+#define _U	0x01	/* upper */
+#define _L	0x02	/* lower */
+#define _D	0x04	/* digit */
+#define _C	0x08	/* cntrl */
+#define _P	0x10	/* punct */
+#define _S	0x20	/* white space (space/lf/tab) */
+#define _X	0x40	/* hex digit */
+#define _SP	0x80	/* hard space (0x20) */
+
+extern unsigned char _ctype[];
+
+#define __ismask(x) (_ctype[(int)(unsigned char)(x)])
+
+#define isalnum(c)	((__ismask(c)&(_U|_L|_D)) != 0)
+#define isalpha(c)	((__ismask(c)&(_U|_L)) != 0)
+#define iscntrl(c)	((__ismask(c)&(_C)) != 0)
+#define isdigit(c)	((__ismask(c)&(_D)) != 0)
+#define isgraph(c)	((__ismask(c)&(_P|_U|_L|_D)) != 0)
+#define islower(c)	((__ismask(c)&(_L)) != 0)
+#define isprint(c)	((__ismask(c)&(_P|_U|_L|_D|_SP)) != 0)
+#define ispunct(c)	((__ismask(c)&(_P)) != 0)
+#define isspace(c)	((__ismask(c)&(_S)) != 0)
+#define isupper(c)	((__ismask(c)&(_U)) != 0)
+#define isxdigit(c)	((__ismask(c)&(_D|_X)) != 0)
+
+#define isascii(c) (((unsigned char)(c))<=0x7f)
+#define toascii(c) (((unsigned char)(c))&0x7f)
+
+static inline unsigned char __tolower(unsigned char c)
+{
+	if (isupper(c))
+		c -= 'A'-'a';
+	return c;
+}
+
+static inline unsigned char __toupper(unsigned char c)
+{
+	if (islower(c))
+		c -= 'a'-'A';
+	return c;
+}
+
+#define tolower(c) __tolower(c)
+#define toupper(c) __toupper(c)
+
+#endif
+
+
+lib/ctype.c
+/*
+ *  linux/lib/ctype.c
+ *
+ *  Copyright (C) 1991, 1992  Linus Torvalds
+ */
+
+#include <linux/ctype.h>
+#include <linux/module.h>
+
+unsigned char _ctype[] = {
+_C,_C,_C,_C,_C,_C,_C,_C,			/* 0-7 */
+//...
+_S|_SP,_P,_P,_P,_P,_P,_P,_P,			/* 32-39 */
+//...
+_D,_D,_D,_D,_D,_D,_D,_D,			/* 48-55 */
+_D,_D,_P,_P,_P,_P,_P,_P,			/* 56-63 */
+_P,_U|_X,_U|_X,_U|_X,_U|_X,_U|_X,_U|_X,_U,	/* 64-71 */
+_U,_U,_U,_U,_U,_U,_U,_U,			/* 72-79 */
+//...
+_L,_L,_L,_L,_L,_L,_L,_P,_L,_L,_L,_L,_L,_L,_L,_L};      /* 240-255 */
+
+EXPORT_SYMBOL(_ctype);
+
+注：ascii码表：http://www.blabla.cn/ref/ascii.html
+十进制	十六进制	字符
+9	9	TAB(制表符)
+10	A	换行
+13	D	回车
+32	20	空格
+33	21	!
+34	22	"
+35	23	#
+36	24	$
+37	25	%
+38	26	&
+39	27	'
+40	28	(
+41	29	)
+42	2A	*
+43	2B	+
+44	2C	,
+45	2D	-
+46	2E	.
+47	2F	/
+48	30	0
+49	31	1
+50	32	2
+51	33	3
+52	34	4
+53	35	5
+54	36	6
+55	37	7
+56	38	8
+57	39	9
+58	3A	:
+59	3B	;
+60	3C	<
+61	3D	=
+62	3E	>
+63	3F	?
+64	40	@
+65	41	A
+66	42	B
+67	43	C
+68	44	D
+69	45	E
+70	46	F
+71	47	G
+72	48	H
+73	49	I
+74	4A	J
+75	4B	K
+76	4C	L
+77	4D	M
+78	4E	N
+79	4F	O
+80	50	P
+81	51	Q
+82	52	R
+83	53	S
+84	54	T
+85	55	U
+86	56	V
+87	57	W
+88	58	X
+89	59	Y
+90	5A	Z
+91	5B	[
+92	5C	\
+93	5D	]
+94	5E	^
+95	5F	_
+96	60	`
+97	61	a
+98	62	b
+99	63	c
+100	64	d
+101	65	e
+102	66	f
+103	67	g
+104	68	h
+105	69	i
+106	6A	j
+107	6B	k
+108	6C	l
+109	6D	m
+110	6E	n
+111	6F	o
+112	70	p
+113	71	q
+114	72	r
+115	73	s
+116	74	t
+117	75	u
+118	76	v
+119	77	w
+120	78	x
+121	79	y
+122	7A	z
+123	7B	{
+124	7C	|
+125	7D	}
+126	7E	~
+
+(13:01 2010-2-12)
+http://baike.baidu.com/view/15482.htm
+标准ASCII表：
+Bin Dec Hex 缩写/字符 解释 
+00000000 0 00  NUL(null) 空字符  
+00000001 1 01 SOH(start of handling) 标题开始 
+00000010 2 02 STX (start of text) 正文开始 
+00000011 3 03 ETX (end of text) 正文结束 
+00000100 4 04 EOT (end of transm-ission) 传输结束 
+00000101 5 05 ENQ (enquiry) 请求 
+00000110 6 06 ACK (acknow-ledge) 收到通知 
+00000111 7 07 BEL (bell) 响铃 
+00001000 8 08 BS (backsp-ace) 退格 
+00001001 9  09 HT (horizon-tal tab) 水平制表符 
+00001010 10  0A  LF (NL line feed, new line) 换行键 
+00001011 11  0B  VT (vertical tab) 垂直制表符  
+00001100 12  0C  FF (NP form feed, new page) 换页键 
+00001101 13 0D  CR (carriage return)  回车键 
+00001110 14 0E  SO (shift out) 不用切换 
+00001111 15 0F  SI (shift in) 启用切换 
+00010000 16  10 DLE (data link escape)  数据链路转义 
+00010001 17 11  DC1 (device control 1)  设备控制1 
+00010010 18 12  DC2 (device control 2) 设备控制2 
+00010011 19  13 DC3 (device control 3)  设备控制3 
+00010100 20 14  DC4 (device control 4) 设备控制4  
+00010101 21 15  NAK (negati-ve acknowl-edge)  拒绝接收  
+00010110 22 16  SYN (synchr-onous idle)  同步空闲 
+00010111 23  17 ETB (end of trans. block) 传输块结束  
+00011000 24  18 CAN (cancel)  取消  
+00011001 25  19 EM (end of medium) 介质中断  
+00011010 26  1A SUB (substit-ute) 替补 
+00011011 27  1B ESC (escape)  溢出 
+00011100 28  1C FS (file separat-or)  文件分割符 
+00011101 29  1D GS (group separat-or)  分组符 
+00011110 30  1E  RS (record separat-or)  记录分离符 
+00011111 31  1F US (unit separat-or) 单元分隔符 
+00100000 32  20   空格  
+00100001 33  21  !   
+00100010 34 22  "   
+00100011 35  23 #   
+00100100 36  24 $   
+00100101 37  25 %   
+00100110 38  26 &   
+00100111 39  27  '   
+00101000 40  28 (   
+00101001 41 29 )   
+00101010 42  2A *   
+00101011 43 2B +   
+00101100 44  2C  ,   
+00101101 45  2D -   
+00101110 46  2E  .   
+00101111 47  2F /    
+00110000 48  30 0   
+
+续表
+00110001 49  31 1   
+00110010 50  32  2   
+00110011 51  33 3    
+00110100 52  34  4   
+00110101 53  35 5    
+00110110 54 36 6   
+00110111 55  37  7    
+00111000 56  38 8    
+00111001 57  39  9   
+00111010 58  3A :    
+00111011 59 3B ;   
+00111100 60  3C <    
+00111101 61 3D =   
+00111110 62  3E >    
+00111111 63  3F  ?   
+01000000 64  40 @    
+01000001 65 41 A   
+01000010 66  42  B    
+01000011 67 43 C   
+01000100 68  44  D    
+01000101 69 45 E   
+01000110 70 46  F   
+01000111 71 47 G   
+01001000 72  48 H    
+01001001 73 49 I   
+01001010 74  4A J    
+01001011 75 4B K   
+01001100 76  4C  L    
+01001101 77 4D M   
+01001110 78  4E N    
+01001111 79 4F O   
+01010000 80  50 P    
+01010001 81 51 Q   
+01010010 82 52  R   
+01010011 83 53 S   
+01010100 84  54 T    
+01010101 85  55  U   
+01010110 86  56 V    
+01010111 87  57 W   
+01011000 88  58 X    
+01011001 89 59  Y   
+01011010 90  5A Z    
+01011011 91  5B [    
+01011100 92 5C \   
+01011101 93  5D ]    
+01011110 94 5E  ^   
+01011111 95  5F _   
+01100000 96  60 `    
+01100001 97 61  a   
+01100010 98  62 b    
+
+续表
+01100011 99  63 c    
+01100100 100 64 d   
+01100101 101  65 e    
+01100110 102  66 f   
+01100111 103  67 g    
+01101000 104  68  h   
+01101001 105  69 i    
+01101010 106 6A j   
+01101011 107  6B k    
+01101100 108  6C  l   
+01101101 109  6D  m   
+01101110 110 6E n   
+01101111 111  6F o    
+01110000 112  70  p   
+01110001 113  71 q    
+01110010 114  72  r   
+01110011 115  73 s    
+01110100 116  74  t   
+01110101 117  75  u   
+01110110 118  76 v   
+01110111 119  77 w    
+01111000 120  78 x   
+01111001 121  79 y    
+01111010 122  7A  z   
+01111011 123  7B {   
+01111100 124  7C |   
+01111101 125  7D }   
+01111110 126  7E  ~   
+01111111 127  7F  DEL (delete) 删除 
+
+11:09 2008-6-20
+周报（6.16-6.20）
+===============
+0, 工作日三天，24小时。16,17号请假。上周周报"10:53 2008-6-13"。
+1, FM ETS 8
+2, 改进FM代码 8
+3, 阅读ETS demo相关内核代码 4
+4, 和david一起测试david耳机按键（Linux input设备） 2
+
+Key Activities of the week:
+1 Implement FM ETS interface 8
+2 Improve FM code 8
+3 read ETS demo relative code 4
+4 test david ear plug ( Linux input device )  with david 2
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 Improve FM code
+2 read Linux kernel code
+
+11:27 2008-6-20
+(11:04 2008-12-16)
+代码阅读，Linux，信号，Olympia ETS mode代码延伸阅读, 内嵌汇编
+1, Linux中信号定义在
+include\asm-arch\signal.h
+2, 分析ETS demo中调用的send_sig_info函数（kernel\signal.c）：
+send_sig_info -> specific_send_sig_info -> irqs_disabled
+
+#define irqs_disabled()						\
+({								\
+	unsigned long flags;					\
+								\
+	raw_local_save_flags(flags);				\
+	raw_irqs_disabled_flags(flags);				\
+})
+
+	raw_irqs_disabled_flags(flags);				\
+1), raw_local_save_flags
+-------------------------
+include\asm-arm\irqflags.h
+/*
+ * Save the current interrupt enable state.
+ */
+#define raw_local_save_flags(x)					\
+	({							\
+	__asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ local_save_flags"	\
+	: "=r" (x) : : "memory", "cc");				\
+	})
+汇编语句本身的含义是保存当前状态寄存器到x变量。
+冒号用于分割不同类型的操作数，依次是汇编语言，输出操作数，输入操作数，所执行的汇编语言影响的寄存器。如果没有输出操作数，用两个连续的冒号分割汇编语言和输入操作数。逗号用于分割同组的不同操作数。
+上面的raw_local_irq_restore宏中，
+汇编语言是"mrs	%0, cpsr		@ local_save_flags"，
+输出操作数是："=r" (x)
+输入操作数有零个：
+影响的寄存器："memory", "cc"。
+"memory"和"cc"都是伪寄存器名，二者用途在gcc手册有清楚说明（当时搜索了半天，就是没有认真看gcc手册）：
+If your assembler instruction can alter the condition code register, add `cc' to the list of clobbered registers. GCC on some machines represents the condition codes as a specific hardware register; `cc' serves to name this register. On other machines, the condition code is handled differently, and specifying `cc' has no effect. But it is valid no matter what the machine.
+If your assembler instructions access memory in an unpredictable fashion, add `memory' to the list of clobbered registers. This will cause GCC to not keep memory values cached in registers across the assembler instruction and not optimize stores or loads to that memory. You will also want to add the volatile keyword if the memory affected is not listed in the inputs or outputs of the asm, as the `memory' clobber does not count as a side-effect of the asm. If you know how large the accessed memory is, you can add it as input or output but if this is not known, you should add `memory'. 
+另外一篇文章说的更清楚：
+自：http://www.ethernut.de/en/documents/arm-inline-asm.html
+Clobbers
+If you are using registers, which had not been passed as operands, you need to inform the compiler about this. The following code will adjust a value to a multiple of four. It uses r3 as a scratch register and lets the compiler know about this by specifying r3 in the clobber list. Furthermore the CPU status flags are modified by the ands instruction. Adding the pseudo register cc to the clobber list will keep the compiler informed about this modification as well.
+asm volatile("ands    r3, %1, #3"    "\n\t"
+            "eor    %0, %0, r3"    "\n\t"
+            "addne  %0, #4"       
+            : "=r" (len)         
+            : "0" (len)           
+            : "cc", "r3"
+            );
+Our previous example, which stored a value in a table
+asm volatile("ldr    %0, [%1]"        "\n\t"
+            "str    %2, [%1, #4]"    "\n\t"
+            : "=&r" (rdv)
+            : "r" (&table), "r" (wdv)
+            : "memory"
+            );
+uses another so called pseudo register named "memory"in the clobber list. This special clobber informs the compiler that the assembler code may modify any memory location. It forces the compiler to update all variables for which the contents are currently held in a register before executing the assembler code. And of course, everything has to be reloaded again after this code.
+我的理解：
+最后一个冒号前面是所执行的汇编语言影响的寄存器。如果汇编语句中会影响某个其他寄存器，应该写在此处。如果影响的不是某个特定的寄存器：
+1), 如果影响状态寄存器(condition code, cpu status)，使用"cc"伪寄存器；
+2), 如果汇编代码可能会修改其他memory区域，使用"memory"伪寄存器，这样gcc会在执行asm汇编语句前更新所有寄存器，避免有cached register造成执行结果错误。待做：实验。
+
+1), raw_irqs_disabled_flags(flags)
+----------------------------------
+待做：继续分析。
+
+13:35 2008-6-23
+怀疑新加入的%n有问题。调试。
+
+18:33 2008-6-23
+Olympia项目，FM，ETS
+demo_output中
+		readd = (unsigned short) va_arg(args, int);
+改为
+		readd = (unsigned int) va_arg(args, int);
+否则是丢掉了32位整数的高四位。
+
+18:42 2008-6-23
+Olympia项目，FM，ETS
+完成R_REG, M_REG, F_REG。目前R_REG是针对每次逻辑上寄存器的改变（例如改变音量，频率），而后两个是针对实际I2C读写操作——只要I2C设备存在读写，就会更新。因为逻辑上寄存器的改变可能有多次操作。如果想细看，可以选中spy的print选项，这样会把数据同时写到main log窗口。
+明天做trace和msg，msg要加上控制。
+
+11:00 2008-6-25
+待做完成：
+1, 周报中说明对GPIO，文档的进展。（完成）
+2, 30日需要完成单元测试文档。（转移）
+3, 今天要完成ETS。（转移）
+4, 明天请假(eform and willy)并找文档模板。（完成）
+
+13:13 2008-6-25
+Linux内核学习，fork
+fork调用过程：
+vector_swi -> sys_fork_wrapper -> sys_fork ( -> do_dork )
+
+查找do_fork，可以看到sys_fork：
+=============================
+arch\arm\kernel\sys_arm.c
+asmlinkage int sys_fork(struct pt_regs *regs)
+{
+#ifdef CONFIG_MMU
+	return do_fork(SIGCHLD, regs->ARM_sp, regs, 0, NULL, NULL);
+#else
+	/* can not support in nommu mode */
+	return(-EINVAL);
+#endif
+}
+此外sys_clone和sys_vfork也都调用了do_fork，只是参数不同，例如sys_vfork的参数是"CLONE_VFORK | CLONE_VM | SIGCHLD"：
+asmlinkage int sys_vfork(struct pt_regs *regs)
+{
+	return do_fork(CLONE_VFORK | CLONE_VM | SIGCHLD, regs->ARM_sp, regs, 0, NULL, NULL);
+}
+另外"kernel_thread"函数也调用了do_fork：
+/*
+ * Create a kernel thread.
+ */
+pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+{
+	struct pt_regs regs;
+
+	memset(&regs, 0, sizeof(regs));
+
+	regs.ARM_r1 = (unsigned long)arg;
+	regs.ARM_r2 = (unsigned long)fn;
+	regs.ARM_r3 = (unsigned long)do_exit;
+	regs.ARM_pc = (unsigned long)kernel_thread_helper;
+	regs.ARM_cpsr = SVC_MODE;
+
+	return do_fork(flags|CLONE_VM|CLONE_UNTRACED, 0, &regs, 0, NULL, NULL);
+}
+EXPORT_SYMBOL(kernel_thread);
+
+sys_fork_wrapper: 
+=================
+arch\arm\kernel\entry-command.S:
+sys_fork_wrapper:
+		add	r0, sp, #S_OFF
+		b	sys_fork
+
+S_OFF定义在，arch\arm\kernel\entry-header.S:
+@
+@ Most of the stack format comes from struct pt_regs, but with
+@ the addition of 8 bytes for storing syscall args 5 and 6.
+@ This _must_ remain a multiple of 8 for EABI.
+@
+#define S_OFF		8
+不明白。待做，继续分析。
+
+sys_fork_wrapper由谁调用？
+=========================
+arch\arm\kernel\calls.S
+/* 0 */		CALL(sys_restart_syscall)
+		CALL(sys_exit)
+		CALL(sys_fork_wrapper)
+		CALL(sys_read)
+//...
+/* 345 */	CALL(sys_getcpu)
+		CALL(sys_ni_syscall)		/* eventually epoll_pwait */
+		CALL(sys_kexec_load)
+#ifndef syscalls_counted
+.equ syscalls_padding, ((NR_syscalls + 3) & ~3) - NR_syscalls
+#define syscalls_counted
+#endif
+.rept syscalls_padding
+		CALL(sys_ni_syscall)
+.endr
+结合下面的定义，可以看出上面的CALL宏是定义了系统到底有多少个系统调用，当前是348个，NR_syscalls=349。
+arch\arm\kernel\entry-command.S:
+	.equ NR_syscalls,0
+#define CALL(x) .equ NR_syscalls,NR_syscalls+1
+#include "calls.S"
+#undef CALL
+#define CALL(x) .long x
+".equ a,b"的含义是"a=b"
+//...
+	.type	sys_call_table, #object
+ENTRY(sys_call_table)
+#include "calls.S"
+#undef ABI
+#undef OBSOLETE
+在sys_call_table中，CALL(x)是".long x"，也就是按顺序给出了全部系统调用的跳转地址。
+但是".long x"和"b x"，是如何联系到一起的？.long x是否定义了一个地址，如果是，那么这和此函数的实际地址是什么关系？
+
+待做：问李哲。
+
+查今天看的"vivi boot loader的实现"，ENTRY在linkage.h中定义。的确如此:) ENTRY在"	include\linux\linkage.h"定义：
+#ifndef ENTRY
+#define ENTRY(name) \
+  .globl name; \
+  ALIGN; \
+  name:
+#endif
+
+include\asm-arm\unistd.h中有fork编号：
+#define __NR_OABI_SYSCALL_BASE	0x900000
+
+#if defined(__thumb__) || defined(__ARM_EABI__)
+#define __NR_SYSCALL_BASE	0
+#else
+#define __NR_SYSCALL_BASE	__NR_OABI_SYSCALL_BASE
+#endif
+
+//...
+#define __NR_OABI_SYSCALL_BASE	0x900000
+
+#if defined(__thumb__) || defined(__ARM_EABI__)
+#define __NR_SYSCALL_BASE	0
+#else
+#define __NR_SYSCALL_BASE	__NR_OABI_SYSCALL_BASE
+#endif
+
+//...
+#define __NR_fork			(__NR_SYSCALL_BASE+  2)
+//...
+
+后面还有arm专有的系统调用：
+/*
+ * The following SWIs are ARM private.
+ */
+#define __ARM_NR_BASE			(__NR_SYSCALL_BASE+0x0f0000)
+#define __ARM_NR_breakpoint		(__ARM_NR_BASE+1)
+#define __ARM_NR_cacheflush		(__ARM_NR_BASE+2)
+#define __ARM_NR_usr26			(__ARM_NR_BASE+3)
+#define __ARM_NR_usr32			(__ARM_NR_BASE+4)
+#define __ARM_NR_set_tls		(__ARM_NR_BASE+5)
+这些arm专有的系统调用在arch\arm\kernel\traps.c中arm_syscall处理。
+
+arch\arm\kernel\entry-common.S：
+sys_syscall感觉是所有系统调用的入口，但是没有找到谁会调用这个函数：
+/*============================================================================
+ * Special system call wrappers
+ */
+@ r0 = syscall number
+@ r8 = syscall table
+		.type	sys_syscall, #function
+sys_syscall:
+		bic	scno, r0, #__NR_OABI_SYSCALL_BASE
+		cmp	scno, #__NR_syscall - __NR_SYSCALL_BASE
+		cmpne	scno, #NR_syscalls	@ check range
+		stmloia	sp, {r5, r6}		@ shuffle args
+		movlo	r0, r1
+		movlo	r1, r2
+		movlo	r2, r3
+		movlo	r3, r4
+		ldrlo	pc, [tbl, scno, lsl #2]
+		b	sys_ni_syscall
+
+tbl和scno定义位于同一文件：
+/*
+ * These are the registers used in the syscall handler, and allow us to
+ * have in theory up to 7 arguments to a function - r0 to r6.
+ *
+ * r7 is reserved for the system call number for thumb mode.
+ *
+ * Note that tbl == why is intentional.
+ *
+ * We must set at least "tsk" and "why" when calling ret_with_reschedule.
+ */
+scno	.req	r7		@ syscall number
+tbl	.req	r8		@ syscall table pointer
+why	.req	r8		@ Linux syscall (!= 0)
+tsk	.req	r9		@ current thread_info
+"name .req register_name"是把name做为register_name的别名。
+
+sys_ni_syscall是没有完成的系统调用，定义在kernel\sys_ni.c
+/*
+ * Non-implemented system calls get redirected here.
+ */
+asmlinkage long sys_ni_syscall(void)
+{
+	return -ENOSYS;
+}
+
+感觉进了死胡同，回想起sys_call_table，既然tbl是syscall table pointer所以肯定有地方给tbl赋值，在哪里呢？
+	adr	tbl, sys_call_table		@ load syscall table pointer
+它位于同一个文件的vector_swi：
+	.align	5
+ENTRY(vector_swi)
+vector_swi恐怕就是swi中断的处理程序了，至于谁调用了vector_swi，暂且不管，以后解决，待做。
+注：总能看到OABI这个东西，不知道起啥作用，待做：查。
+
+ldrcc	pc, [tbl, scno, lsl #2]		@ call sys_* routine
+左移4位的原因是sys_call_table中每个数都是32位的（long类型）
+
+而arm_syscall与Linux标准调用一样，都是在vector_swi中处理的：
+arch\arm\kernel\entry-common.S：
+2:	mov	why, #0				@ no longer a real syscall
+	cmp	scno, #(__ARM_NR_BASE - __NR_SYSCALL_BASE)
+	eor	r0, scno, #__NR_SYSCALL_BASE	@ put OS number back
+	bcs	arm_syscall	
+	b	sys_ni_syscall			@ not private func
+如果也不在arm专有调用范围，则调用sys_ni_syscall返回-ENOSYS错误，提示无此系统调用。
+
+分析完成：）下次吧这次涉及到的几个文件都读一读。
+
+21:26 2008-6-26
+待做：
+1, 把FM_CTRL_MSG下面的sub_id，改为主id。测试msg；
+2, 菜单上建立FM Ctrl；
+3, ETS程序和ETS脚本的菜单，变量应用脚本生成。
+
+9:39 2008-6-27
+周报（6.23-6.27）
+===============
+0, 工作日五，40小时。上周周报"11:09 2008-6-20"。
+1, FM ETS 10
+2, 改进FM代码 6
+3, 阅读ETS demo相关内核代码——fork，signal 12
+4, GPIO配置文档 0.5
+5, FM文档 6
+6, 配合硬件组测试FM 6
+
+Key Activities of the week:
+1 Implement FM ETS interface 10
+2 Improve FM code 6
+3 read ETS demo relative code, fork, signal 12
+4 check GPIO Configuration Document. 0.5
+5 write FM document 6
+6 test FM with hardware group 6
+
+Major Progress:
+
+Issues:
+ 
+TODO
+1 Improve FM code
+2 read Linux kernel code
+3 write FM document
+
+11:11 2008-6-27
+待做：
+1, ETS代码有bug，显示reg_cache，应该在上层更新reg后，现在是在上层更新reg前。full reg spy需要放到radio_rda5800.c中。
+2, 只有下列频点不是立体声？
+0x23：9100
+0x55：9600
+0x56：9610
+0x6c：9830
+0x96：10250
+0xa5：10400
+
+16:09 2008-6-27
+杨济在并行编译qtopia4时遇到问题，再查原因。据mmi组同事说qtopia4不能直接在代码里面编译，会有问题，文档中建议在build下用build工具编译。
+杨济用过qt2。
+
+18:00 2008-6-27
+修改FM_msg.txt
