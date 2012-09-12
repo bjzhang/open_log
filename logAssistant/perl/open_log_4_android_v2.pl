@@ -54,7 +54,7 @@ if ( $#filelist >= 0 ) {
     }
     if ( $filename eq "" ) {
         $filename = $path."/log".$year.$file_extension.".txt"; 
-    }
+    } 
 } elsif ( $#filelist == -1 ) {
     $droid->makeToast("no such file.");
     exit;
@@ -69,7 +69,7 @@ $droid->view("file://".$filename,"text/plain");
 sub selection{
     my $title = 'Alert';
     $droid->dialogCreateAlert($title);
-    $droid->dialogSetItems( [ qw /vimicro think dog  other/ ] );
+    $droid->dialogSetItems( [ qw /vimicro think dog  novell piano other/ ] );
     $droid->dialogShow();
     my $response = $droid->dialogGetResponse()->{'result'};
     my $item = $response->{'item'};
@@ -81,6 +81,10 @@ sub selection{
         $result = "thinking";
     } elsif ( $item eq "2" ) {
         $result = "HappyDog";
+    } elsif ( $item eq "3" ) {
+        $result = "novell";
+    } elsif ( $item eq "4" ) {
+        $result = "piano";
     } else {
         $result = "";
     }
