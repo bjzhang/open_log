@@ -1,0 +1,42 @@
+handleShutdownWatch
+->
+refreshShutdown
+->
+_maybeRestart
+->
+destroy
+        xc.domain_pause(self.domid)
+        do_FLR(self.domid, self.info.is_hvm())
+        xc.domain_destroy(self.domid)
+        XendDomain.instance().remove_domain(self)
+        self.cleanupDomain()
+        self._cleanup_phantom_devs(paths)
+        self._cleanupVm()
+
+cleanupDomain()
+->
+_releaseDevices: 
+->
+self.image.destroyDeviceModel():
+	os.kill(self.pid, signal.SIGHUP)   qemu-dm pid是self.pid的子进程
+	os.kill(self.pid, signal.SIGKILL)
+	xstransact.Remove("/local/domain/0/device-model/%i"
+                                  % self.vm.getDomid())
+	os.unlink('/var/run/tap/qemu-read-%d' % self.vm.getDomid())
+      os.unlink('/var/run/tap/qemu-write-%d' % self.vm.getDomid())
+
+	del sentinel_fifos_inuse[self.sentinel_path_fifo]
+      os.unlink(self.sentinel_path_fifo)
+
+destroyDevice:
+	
+	if(dev_type-="tap2"):
+		thread.start_new_thread(self.getDeviceController(deviceClass).finishDeviceCleanup, (backpath, path))
+		发sysfs signal，close out tap disks.
+
+	self.getDeviceController(deviceClass).destroyDevice(devid, force)
+	把device信息从xenstore中remove掉
+
+
+
+

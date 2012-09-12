@@ -1,0 +1,153 @@
+From cac1d77be373e4e797f1df2a779559ff19f97ea6 Mon Sep 17 00:00:00 2001
+From: bamvor jian zhang <bamvor@linux-vm5.(none)>
+Date: Mon, 10 Sep 2012 14:51:08 +0800
+Subject: [PATCH 13/17] upupdate for virsh save debug: why virsh list cannot
+ be executed while virsh save
+
+---
+ src/conf/domain_conf.c   | 12 +++++++++-
+ src/libxl/libxl_driver.c | 57 ++++++++++++++++++++++++++++++++----------------
+ 2 files changed, 49 insertions(+), 20 deletions(-)
+
+diff --git a/src/conf/domain_conf.c b/src/conf/domain_conf.c
+index c34a0a8..63316cd 100644
+--- a/src/conf/domain_conf.c
++++ b/src/conf/domain_conf.c
+@@ -14136,7 +14136,17 @@ cleanup:
+ 
+ void virDomainObjLock(virDomainObjPtr obj)
+ {
+-    virMutexLock(&obj->lock);
++    int ret;
++    virMutex *lock = &obj->lock;
++    ret = pthread_mutex_trylock(&lock->lock);
++    if  ( ret < 0 ) {
++        VIR_INFO("try domain obj lock error: %d: %s", errno, strerror(errno));
++        virReportError(VIR_ERR_INTERNAL_ERROR,
++                        "%s", _("cannot acquire driver lock"));
++        virMutexLock(lock);
++    } else {
++        VIR_DEBUG("get driver lock successful");
++    }
+ }
+ 
+ void virDomainObjUnlock(virDomainObjPtr obj)
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 37882bc..cbc9ded 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -91,7 +91,17 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ static void
+ libxlDriverLock(libxlDriverPrivatePtr driver)
+ {
+-    virMutexLock(&driver->lock);
++    int ret;
++    virMutex *lock = &driver->lock;
++    ret = pthread_mutex_trylock(&lock->lock);
++    if  ( ret < 0 ) {
++        VIR_INFO("try driver lock error: %d: %s", errno, strerror(errno));
++        virReportError(VIR_ERR_INTERNAL_ERROR,
++                        "%s", _("cannot acquire driver lock"));
++        virMutexLock(lock);
++    } else {
++        VIR_DEBUG("get driver lock successful");
++    }
+ }
+ 
+ static void
+@@ -231,16 +241,16 @@ libxlDomainObjBeginJobInternal(libxlDriverPrivatePtr driver,
+ retry:
+     while (!libxlDomainNestedJobAllowed(priv, job)) {
+         VIR_INFO("Wait async job condition for starting job: %s (async=%s)",
+-                   libxlDomainJobTypeToString(job),
+-                   libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
++                  libxlDomainJobTypeToString(job),
++                  libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+         if (virCondWaitUntil(&priv->job.asyncCond, &obj->lock, then) < 0)
+             goto error;
+     }
+ 
+     while (priv->job.active) {
+         VIR_INFO("Wait normal job condition for starting job: %s (async=%s)",
+-                   libxlDomainJobTypeToString(job),
+-                   libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
++                  libxlDomainJobTypeToString(job),
++                  libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
+         if (virCondWaitUntil(&priv->job.cond, &obj->lock, then) < 0)
+             goto error;
+     }
+@@ -1522,9 +1532,13 @@ libxlListDomains(virConnectPtr conn, int *ids, int nids)
+     libxlDriverPrivatePtr driver = conn->privateData;
+     int n;
+ 
++    VIR_INFO("before driver lock");
+     libxlDriverLock(driver);
++    VIR_INFO("after driver lock");
+     n = virDomainObjListGetActiveIDs(&driver->domains, ids, nids);
++    VIR_INFO("before driver unlock");
+     libxlDriverUnlock(driver);
++    VIR_INFO("after driver unlock");
+ 
+     return n;
+ }
+@@ -4407,9 +4421,13 @@ libxlListAllDomains(virConnectPtr conn,
+ 
+     virCheckFlags(VIR_CONNECT_LIST_DOMAINS_FILTERS_ALL, -1);
+ 
++    VIR_INFO("before driver lock");
+     libxlDriverLock(driver);
++    VIR_INFO("after driver lock");
+     ret = virDomainList(conn, driver->domains.objs, domains, flags);
++    VIR_INFO("before driver unlock");
+     libxlDriverUnlock(driver);
++    VIR_INFO("after driver unlock");
+ 
+     return ret;
+ }
+@@ -4633,28 +4651,29 @@ static int doMigrateSend(libxlDriverPrivatePtr driver, virDomainObjPtr vm, unsig
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+                     _("Failed to save domain '%d' with libxenlight"),
+                     vm->def->id);
+-        goto cleanup;
++        goto cleanup_resume;
+     }
+ 
+     /* read fixed message from dest (receive completed) */
+     if (libxlCheckMessageBanner(sockfd, migrate_receiver_ready,
+                               sizeof(migrate_receiver_ready))) {
+-        /* Src side should be resumed, but for ret < 0, virsh won't call Src side
+-         * Confirm3, handle it here.
+-         */
+-        if (libxl_domain_resume(&priv->ctx, vm->def->id) != 0) {
+-            VIR_DEBUG("Failed to resume domain '%d' with libxenlight",
+-                      vm->def->id);
+-            virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_MIGRATION);
+-            event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_SUSPENDED,
+-                                             VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED);
+-            if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
+-                goto cleanup;
+-        }
+-        goto cleanup;
++        goto cleanup_resume;
+     }
+     ret = 0;
+ 
++cleanup_resume:
++    /* Src side should be resumed, but for ret < 0, virsh won't call Src side
++     * Confirm3, handle it here.
++     */
++    if (libxl_domain_resume(&priv->ctx, vm->def->id) != 0) {
++        VIR_DEBUG("Failed to resume domain '%d' with libxenlight",
++                  vm->def->id);
++        virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_MIGRATION);
++        event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_SUSPENDED,
++                                         VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED);
++        if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
++            goto cleanup;
++    }
+ cleanup:
+     if (event)
+         libxlDomainEventQueue(driver, event);
+-- 
+1.7.12
+

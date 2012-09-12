@@ -1,0 +1,431 @@
+Xen 学习笔记
+
+参考文档：
+Intel VT-x, VT-i规范
+Xen.org文档
+Xen的几个manual
+
+xen整体架构：
+domain0	domainU
+	xen
+    hardware
+xen: 也是一个Linux Kernel，cpu shedule, memory management等
+       没有硬件的driver，没有文件系统x
+	所有硬件的driver在domain0中实现
+	这样xen可以不用去管硬件驱动的事情。
+domain0 domainU通信
+（1） event channel/ IO-ring/ grant-table 方式
+	类似于share memory
+	比如：xen把物理内存中的512M给domain0，再把另一个512M给domainU
+	此外，还会把物理内存的另外一部分（grant-table)插入到每个domain的页表中，供所有domain share
+	当guest OS write data:
+	front driver －> write 到grant-table(shared memory)
+	xen打中断到domain0,domain0的backend driver从shared memory把数据读出来，再调用真正的硬件driver把数据写到真正的地方。
+	back end <-> front end起一个通信的功能，不是硬件driver.
+（2）xen-bus方式
+
+全虚拟 vs 半虚拟：
+全虚拟需要cpu支持VT，qemu-dm为其模拟出BIOS和硬件，安装的时候要选hvm-loader
+半虚拟不需要cpu支持VT,不模拟硬件，通过front-back end的方式跟domain0通信，lspci是空的，performance更高，但是要修改guest OS的kernel.
+
+xen源代码： 
+xen-4.0.0-testing:
+目录结构：
+1. Xen:
+	hypervisor的代码
+	arch/x86/domainbuild.c
+		construct_domain0 (给domain0分配内存，vcpu)
+		vcpu其实就是一个进程，占用一定的真正的cpu的资源，它再把这个进程占用的cpu资源给domain用。
+	x86/boot:
+	x86/hvm: svm(AMD), vmx(intel)
+		   intercept.c : 拦截mmio, io等
+	common/schedule.c：schedule()函数
+		    
+2. tools:  
+	blktap/blktap2: 虚拟磁盘
+	console
+	firmware: HVM时模拟firmware
+		hvmloader: 模拟bootloader
+		rombios: 模拟bios
+		vgabios: 模拟VGA bios
+		etherboot
+	ioemu-remote: qemu 
+		qemu的作用：为HVM模拟firmware,初始化back/front end通信等等
+		入口函数：vl.c/main()
+		看一下main()函数的流程：
+			首先分析配置文件传过来的参数，收集这些参数信息
+			根据参数初始化machine
+			初始化timer，memory...
+			xc_handler (hypercall被封装成一个库，可以通过这个handler去调用hypercall函数）
+			main_loop()
+				--> 调用的不是vl.c里面的main_loop,而是i386-dm/helper2.c里面的main_loop
+				等待，当有machine suspend/shutdown等事件时，处理之。
+			
+			－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+			eg. shutdown
+			xm shutdown <domain>
+				--> xend 设这个domain的state
+			xmstore-ls /local/machine/domain/<domainID> 
+				可以看到state的变化
+			根据这个state,设flag
+			main_loop根据这个flag可以判断有shutdown的事件
+			调用shutdown hypercall处理
+			－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－
+			shutdown: 通知流程：blktap -> qemu -> domain0 (把/dev/下面的虚拟设备节点清理掉）	
+			
+	libxc: 封装hypercall. xc_handler的实现
+		 对于每一个具体的hypercall接口，发domctl给xen，xen里面有类似ioctl的东西，接受这些命令，处理之
+		 （domctrl: Guest OS -> 发ioctl给domain0 -> domain0 通过traps调到xen)
+	
+	python:
+		脚本语言写的工具：xend, xm ...
+		入口：xm/main.py
+		
+	xenstore: 控制xen-bus用的
+		xmstore-ls /local/domains/0
+
+	hotplug:
+		脚本
+		比如build虚拟的disk, network, domainU status change时，通知domain0
+		domain0处理完之后会写uevent
+		udev.d读uevent信息 udevd->rules.d,调用这些脚本函数去处理
+
+三种虚拟类型：
+Type1:
+Guest1 Guest2
+VM	（要自己实现硬件驱动）
+Hardware
+（VMWare的EXX就是这种）
+
+Type2:
+Guest1 Guest2
+VM (contain a Host) （要自己实现硬件驱动）
+Hardware
+
+Hyper:
+Guest Domain0
+VM (Xen) （不用自己实现硬件驱动）
+Hardware	
+
+
+Create流程：
+tools/python/xen/xm/main.py:
+commands[c]：
+-> xm_importedcommand
+	-> import xen.xm.create
+	-> xen.xm.create.main()
+
+tools/python/xen/xm/create.py
+	main()
+		-> parseCommandLine,得到opts, config
+		-> 根据opts里面的参数处理，如：对console_autoconnect,do_console()
+		-> make_domain(opts,config)
+		-> 根据opts里面的vncconsole, do: domain_name_to_domid(), console.runVncViewer()
+
+	make_domain():
+		dominfo=server.xend.domain.create(config)
+		dom=sxp.child_value(dominfo,'name')
+		server.xend.domain.waitForDevices(dom)
+		server.xend.domain.unpause(dom)
+		上面的create,waitForDevices,unpause等函数都在tools/python/xen/xend/xendDomaininfo.py里面
+
+tools/python/xen/xend/xendDomaininfo.py:
+	create():
+		domconfig=XendConfig.XendConfig(config)
+		vm=XendDomainInfo(domconfig)	
+		vm.start
+		XendDomainInfo Class:
+			(构造函数__init__,初始化dominfo的一些参数）
+			start():
+				-> _constructDomain
+				-> _initDomain
+				-> _storeVmDetails
+				-> _registerWatches
+				-> refreshShutdown
+				xendomains = XendDomain.instance()
+				
+	waitForDevices():
+
+	unpause():
+
+
+///////// Sub Step1:  
+	_constructDomain():
+		if HVM, xc.xeninfo中的信息判断xen_caps
+		判断security, S3_integrity合法性
+		xc.domain_create() --> tools/python/xen/Lowlevel/Xc/Xc.c/pyxc_domain_create()
+		_recreateDom()
+		set一些parameters,比如：HPET enable, vpt align, max vcpu, timer-mode等
+		test cpu_caps/weight validity
+		test pci devices (pv/hvm both)
+		register the domain in XendDomain List.
+			-> XendDomain.instance.add_domain(self)
+
+		xc.domain_create() -> pyxc_domain_create(): (tools/python/xen/Lowlevel/Xc/Xc.c)
+			-> xc_domain_create() 
+				-> tools/libxc/Xc_linux.c/xc_domain_create()
+					-> 填充 domctl
+					-> do_domctl() --> tools/libxc/Xc_private.h
+						-> 填充hypercall, do_xen_hypercall() --> tools/libxc/Xc_linux.c
+						 	-> do_privcmd() --> tools/libxc/Xc_linux.c
+								-> ioctl(xc_handle,IOCTL_PRIVCMD_HYPERCALL, hypercall);
+-------------------------------------------------------------------------------------------------------------------------
+		pyxc_init():
+					self->xc_handle = xc_interface_open
+								-> fd = open("/proc/xen/privcmd");
+-------------------------------------------------------------------------------------------------------------------------	
+		xenKernel: drivers/xen/privcmd/Privcmd.c:
+		/proc/xen/privcmd 在/proc fs下create一个dir entry, 设dir entry的proc_fops = privcmd_ops （file_operations)，其中.unlock_ioctl = privcmd_ioctl,
+		privcmd_ioctl():汇编代码，发指令。
+		
+		Xen: 
+		-> do_domctl
+			-> domain_create: 初始化vcpu, timer, rtc,等等这些信息，与内存里面		
+		
+		Hypercall的调用流程：
+		1. 首先应用程序（例如：Xend）创建hypercall的命令及其参数，用pricmd_hypercall_t结构进行创建，然后	ioctl操作privcmd驱动设备。
+		例如domain的创建hypercall：
+		    privcmd_hypercall_t hypercall = { 0 };
+		    hypercall.op     = __HYPERVISOR_dom0_op;
+		    hypercall.arg[0] = (unsigned long)op;
+		2. Dom0内核层中提供了privcmd命令接口，privcmd通过获取ioctl操作命令，使用inline assemble将hypercall命令数据传递给Hypervisor.
+		3. 在Hypervisor中hypercall的调用被映射到hypercall_table表，查找到相应的hypercall entry，执行对应的hypercall函数完成操作.的内容没什么关系的东西.
+		
+		http://blog.csdn.net/sploving/archive/2009/10/10/4651260.aspx
+
+-------------------------------------------------------------------------------------------------------------------------
+
+///////// Sub Step2: 	_initDomain():
+		_configureBootloader
+			bootloader() //run the bootloader exe on the given disk and return a config image.
+		
+		image.create()   tools/python/xen/xend/image.py
+			FindImageHandleClass (根据x86/x86_64?, HVM/PV?返回不同的handler)
+			ImageHandler(vm, config) 
+				image.py ImageHandler class: __init__ 函数 -> config()函数
+		
+		xc.eventchannel_alloc_unbound()
+	
+		image.createImage():
+			-> image.createDomain -> image.buildDomain -> (PV) xc.linuxbuild () 
+					    					 -> (hvm) xc.hvm_build()
+
+			(PV) xc.linuxbuild (): 
+				-> xc_linux_build //tools/libxc/xc_dom_compat_linux.c
+					-> xc_linux_build_internal 
+						->  xc_dom_boot_xen_init
+						->  xx_parse_image
+						->  xx_mem_init
+						->  xx_boot_mem_init
+						->  xx_build_image
+						->  xx_boot_image
+							-> launch_vm
+
+			(hvm) xc.hvm_build
+				-> xc_hvm_build
+					-> xc_hvm_build_target_mem   //tools/libxc/xc_hvm_build.c
+						-> xc_hvm_build_internal
+							-> setup_guest
+								-> 分配内存 (mem, pages)
+								loadeflimage (xc_hvm_build.c)
+									|-> elf_load_binary (libelf_loader.c)
+										->	memcpy image
+										->	elf_load_bsdsyms
+								hvm_info_page
+								shared_info_page
+								allocate special_pages
+								xc_set_hvm_params (SPECIAL_XENSTORE, ...)
+								在address 0x0, insert JMP (rel32) instruction to reach entry point.
+
+///////// Sub Step3: 	_introduceDomain
+		-> xen.xend.xenstore.xsutil.py: introduceDomain()
+			-> xs.xs.c: xspy_introduce_domain()	: tell xenstore about a domain so that it can talk to it.	
+       
+///////// Sub Step Rest:       
+	_setTarget:
+	_freeDMATarget: if we are PV and have PCI devices, the guest will turn on a SWIOTLB. 
+				SWIOTLB must be located at DMA zone (under 4GB), need to ballon down 
+				Dom 0 to make sure there is 64MB under 4GB.
+	_createDevices:
+		根据config里面的device, 调用不同controller的createDevice创建	(xend/server/DevController.py)	
+		mkdir (frontpath, backpath, devpath) 
+		createDeviceModel(): 调用qemu-dm
+		qemu-dm args (args: Image.py parseDomainArgs)
+			：参数解析 对于block device, drive_add
+			:xenstore_parse_domain_config, 从xenstore里面读vbd信息，初始化成block device, 所作的事情类似于 drive_init.
+			: 根据drive_add的信息，do drive_init
+			machine->init
+				给BIOS分配内存
+				模拟PCI controller + block 设备
+				。。。
+			usb device init
+			... 
+				
+      image.cleanupTmpImages()
+	setState(RUNNING).	
+
+
+DomU <-> Xen <-> QEMU 交互：
+以ioread/iowrite为例：
+
+1. io读写，DomU的driver往io registers read/write value.
+2. enter Xen shadow page default 函数：
+sh_page_fault (xen/arch/x86/mm/shadow/Multi.c : called from pagefault handler in Xen, and from HVM trap handlers for pagefaults. )
+-> handle_mmio_with_translation
+    -> handle_mmio
+        -> vm_emulate_one
+                -> xf86_emulate
+			 -> hvm_emulate_ops
+				-> hvmemul_rep_ins, 
+				hvmemul-erp-outs, 
+				hvmemul_read_io, 
+				hvmemul_write_io 
+				    -> 
+				   hvmemul_do_pio
+				   hvmemul_do_mmio
+					->
+					hvmemul_do_io
+					-> hvm_mmio_intercept
+					-> hvm_portio_intercept
+					-> hvm_send_assist_req to QEMU
+						-> p=get_ioreq(v);
+						-> p->state = STATE_IOREQ_READY;
+						-> notify_via_xen_event_channel();
+对于不能处理的命令，通过event channbel通知QEMU去处理。
+3. QEMU:
+--------------------------------------------------------------------------------------------------------------------
+python: createDeviceModel
+-> QEMU main 函数 (Vl.c)
+main流程：
+	register machines (pc_machine, isa_machine)
+	解析args
+	current machine
+	统计Block Drive的info，存入hd_table：
+		BlDrv_add
+		BlDrv_init
+	console init
+	machine_init:
+		模拟BIOS （分配内存，copy BIOS data到内存）
+		模拟硬件设备（pci bus, Block devices):
+		fill in 初始信息，比如config space，hd的一些信息
+		ide_init
+		ide_init_port: 
+			-> register_ioport_write, register_ioport_read
+				注册ioread, iowrite的函数，存到ioport_write_table, ioport_read_table表中
+	usb devices init
+	terminal init
+	vm_start
+然后进入mainloop ...	
+--------------------------------------------------------------------------------------------------------------------
+mainloop() (helper2.c)
+-> qemu_set_fd_handler(evtchn_fd, cpu_handle_ioreq, NULL)
+	-> cpu_handler_ioreq
+		-> __handle_ioreq
+			-> cpu_ioreq_pio
+				-> do_outp, do_inp
+					-> cpu_outw, cpu_inw
+						-> ioport_read, ioport_write
+							-> 查ioport_write_table, ioport_read_table表，找到register的函数.
+
+
+
+Frontend & Backend:
+
+以usb为例：
+VM上接到I/O request，如何发到真实的物理设备上。。。
+BackEnd: 
+usbback/xenbus.c
+.otherend_changed = frontend_changed
+-> start_xenbusd
+   -> kthread_run(usbbk_schedule, usbif, name)
+	-> 
+	wait_event-interruptible(usbif->wq, ***)
+	等待...
+	重新回来的时候继续做下面的事情：
+	usbbk_start_submit_urb
+	usbbk_free_urbs
+
+.otherend_changed = frontend_changed
+-> connect_rings
+  -> usbif_map
+     -> bind_interdomain_evtchn_to_irqhandler
+        -> 
+	   bind interdomain //HYPERVISOR_event_channel_op, 类似于socket里面的connect
+	   local port <==> irq对应起来
+	   request_irq, irqhandler 函数为：
+		usbbk_be_init
+			->
+			usbbk_notify_work
+			-> wake_up(usbif->wq)
+
+	接着作上面被interrupt的事情：
+			-> usbbk_start_submit_urb (真正往物理设备发送urb)
+			    -> RING_GET_REQUEST (得到req)
+				 -> dispatch_request_to_pending_reqs  (参数：req, pending_req, usbif)
+					-> usbbk_alloc_urb
+					-> usbbk_init_urb  (urb->transfer_buff = pending_req->buffer)
+					-> usbbk_gnttab_map （********  HYPERVISOR_grant_table_op)
+					-> usbbk_pipeout (把share memory里面的data copy到pending_req->buffer)
+					-> usb_submit_urb (driver/usb/core/urb.c)
+					发送urb到真正的物理设备
+
+
+FrontEnd:
+.urb_request = xenhcd_submit_urb
+-> xenhcd_do_request
+   -> RING_GET_REQUEST
+	map_urb_for_request (urb转成req)
+		-> gnttab_alloc_grant_references (grant_ref_head)
+		   xenhcd_gnttab_map (urb->transfer_buffer里面的值放到 grant_ref_head)
+		   req.seg[0].ref ＝ grant_ref_head
+	usbfront_info.req = req
+	usbfront_info.urb = urb
+	RING_PUSH_REQUEST_AND_CHECK_NOTIFY（info->urb_ring, *)  发到I/O ring
+	notify_remote_via_irq
+	->
+        notify_remote_via_evtchn(notify.port)
+            HYPERVISOR_event_channel_op(EVTCHNOP_send, &send)
+                #define HYPERVISOR_event_channel_op xencomm_hypercall_event_channel_op
+                    xencommize_event_channel_op
+                        xencomm_arch_hypercall_event_channel_op
+                            _hypercall2
+                                __hypercall
+                                    ...
+                                    hypercall
+                                        do_event_channel_op
+                                            evtchn_send
+								backend收到中断，进入backend的中断处理函数部分。					
+								
+补充：
+usbfront_init
+-> xenbus_register_frontend
+  -> xenbus_register_driver_common:
+	注册一个device_driver
+	probe 函数： xenbus_dev_probe
+		match_device
+		talk_to_otherend (free otherend watch,引起watch状态变化）
+		watch_otherend
+		 -> otherend_changed函数
+
+
+HVM
+需要Shadow Page.
+什么是Shadow Page, 为什么HVM 需要，PV 不需要？
+
+宿主机就是真实的物理机器，Xen的监控程序就运行在宿主机上。客户机是指在宿主机上执行的硬件虚拟机，也被称为虚拟域。
+
+HVM：
+
+客户机认为它所拥有的内存地址空间总是从0开始，但它在宿主机上执行时不可能总是拥有从0开始的地址所在的物理内存。也就是说客户机的物理地址并不等于宿主机上的机器物理地址。。
+
+监控程序必须把客户机线性地址到客户机物理地址的转换修正为客户机线性地址到宿主机物理地址的转换。这样的转换显然不是客户机的页表所能支持的，客户机的页表只知道客户机的物理地址，而监控程序为了实现对各个客户机的隔离与保护，也不会让客户机了解宿主机的物理地址。对于完全虚拟化的客户机，监控程序甚至不能够修改客户机的页表。但是，客户机的线性地址到宿主机物理地址的转换是保证客户机在宿主机上访问内存运行正确的核心环节，这样，为了支持和保存这种转换或映射， 并能根据客户机修改页表的需要及时更新，Xen就启用了另外一张页表，这就是影子页表。
+
+影子页表是监控程序真正使用和维护的页表。在Xen中，客户机维护着客户机自己的页表，而监控程序维护着影子页表。客户机实际上是通过影子页表在访问真实的机器物理地址，影子页表以客户机页表为蓝本建立起来，并且会随着客户机页表的更新而更新，就像客户机页表的影子。这就是称它为影子页表的原因。	
+
+PV：
+I/O都是通过frontend, backend的方式去做的，这种方法可以直接去修改真实的物理地址，所以不需要影子页表。
+
+
+
+
+

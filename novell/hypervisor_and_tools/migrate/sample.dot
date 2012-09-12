@@ -1,0 +1,75 @@
+digraph G {
+//define the node
+Application[shape=plaintext];
+Framework[shape=plaintext];
+HAL[shape=plaintext];
+KernelInf[label = "Kernel", shape = plaintext];
+Kernel[label = "", shape = plaintext];
+DeviceDriver[label = "", shape = plaintext];
+Hardware[shape = plaintext];
+
+PowerManager[label = "PowerManager\nAndroid.os.PowerManager"];
+PowerManagerService[label = "PowerManagerService\nAndroid.os.PowerManagerService"];
+EventHub[label = "EventHub"];
+Power[label = "Power\nlibhardware_lagecy/power"];
+KPowerMain[label = "Kernel Power Main\nkernel/power/main.c"];
+KPowerWL[label = "Kernel Power Wakelock\nkernel/power/xxxwakelock.c"];
+KPowerErSus[label = "Kernel Power Core\nkernel/power/xxx.c"];
+KSuspendOps[label = "SOC suspend ops\narch/arm/plat-xxx/pm.c"];
+KDeviceModel[label = "Kernel Device Model\ndriver/xxx"];
+KInputDevice[label = "Kernel Input Device\ndriver/input/xxx"];
+HWpowerkey[label = "Power Key"];
+
+//define the rank
+{ rank = same; "Application"; "ApplicationA"; "ApplicationB"; "ApplicationC"; KInputDeviceFmt_A}
+{ rank = same; "Framework"; "PowerManager"; "PowerManagerService"; EventHub; KInputDeviceFmt_F}
+{ rank = same; "HAL"; "Power"; KInputDeviceFmt_H}
+{ rank = same; "KernelInf"; KPowerMain; KPowerWL; KInputDeviceFmt_K}
+{ rank = same; "Kernel"; KPowerErSus; }
+{ rank = same; "DeviceDriver"; KDeviceModel; KInputDevice; KSuspendOps; }
+{ rank = same; "Hardware"; HWpowerkey; KInputDeviceFmt_HW}
+
+//formant. no meaning. 
+KInputDeviceFmt_A[label = "", style = invis];
+KInputDeviceFmt_F[label = "", style = invis];
+KInputDeviceFmt_H[label = "", style = invis];
+KInputDeviceFmt_K[label = "", style = invis];
+KInputDeviceFmt_HW[label = "", style = invis];
+
+Application -> KInputDeviceFmt_A[style = invis];
+Framework -> KInputDeviceFmt_F[style = invis];
+HAL -> KInputDeviceFmt_H[style = invis];
+KernelInf -> KInputDeviceFmt_K[style = invis];
+Hardware -> KInputDeviceFmt_HW[style = invis];
+KInputDeviceFmt_A -> KInputDeviceFmt_F -> KInputDeviceFmt_H -> KInputDeviceFmt_K -> KInputDevice -> KInputDeviceFmt_HW[style = invis];
+//formant. no meaning. end
+
+//draw the hierarchy
+Application -> Framework;
+Framework -> HAL;
+HAL -> KernelInf;
+KernelInf -> Hardware;
+KernelInf -> Kernel[style = invis, dir = none];
+Kernel -> DeviceDriver[style = invis, dir = none];
+DeviceDriver -> Hardware[style = invis, dir = none];
+
+//draw the class, function relationship
+node [shape=egg];
+ApplicationA -> PowerManager[label = "Wl = newWakeLock(...);\nWl.acquire();\n//works\nWl.release();"];
+ApplicationB -> PowerManager;
+ApplicationC -> PowerManager;
+PowerManager -> PowerManagerService[label = binder];
+PowerManagerService -> Power[label = jni];
+Power -> KPowerMain[label = sysfs];
+Power -> KPowerWL[label = sysfs];
+KPowerMain -> KPowerErSus;
+KPowerErSus -> KSuspendOps;
+KPowerErSus -> KDeviceModel;
+HWpowerkey -> KInputDevice[label = "Screen Off"];
+HWpowerkey -> KSuspendOps[label = "Wake up", color = green, style = bold];
+KSuspendOps -> KPowerErSus[color = green, style = bold];
+KPowerErSus -> KDeviceModel[color = green, style = bold];
+KDeviceModel -> KInputDevice[color = green, style = bold];
+KInputDevice -> EventHub[style = dashed, color = green, style = bold];
+EventHub -> PowerManager[style = dashed, color = green, style = bold];
+}

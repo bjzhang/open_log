@@ -1,0 +1,1199 @@
+diff -up libvirt-0.9.12.orig/src/libxl/libxl_conf.c libvirt-0.9.12/src/libxl/libxl_conf.c
+--- libvirt-0.9.12.orig/src/libxl/libxl_conf.c	2012-02-06 10:50:50.000000000 +0800
++++ libvirt-0.9.12/src/libxl/libxl_conf.c	2012-05-29 17:24:11.000000000 +0800
+@@ -61,21 +61,19 @@ struct guest_arch {
+ static const char *xen_cap_re = "(xen|hvm)-[[:digit:]]+\\.[[:digit:]]+-(x86_32|x86_64|ia64|powerpc64)(p|be)?";
+ static regex_t xen_cap_rec;
+ 
+-
+-static int
+-libxlNextFreeVncPort(libxlDriverPrivatePtr driver, int startPort)
++int
++libxlNextFreePort(virBitmapPtr bitmap, int startPort, int numPorts)
+ {
+     int i;
+ 
+-    for (i = startPort ; i < LIBXL_VNC_PORT_MAX; i++) {
++    for (i = startPort ; i < startPort + numPorts; i++) {
+         int fd;
+         int reuse = 1;
+         struct sockaddr_in addr;
+         bool used = false;
+ 
+-        if (virBitmapGetBit(driver->reservedVNCPorts,
+-                            i - LIBXL_VNC_PORT_MIN, &used) < 0)
+-            VIR_DEBUG("virBitmapGetBit failed on bit %d", i - LIBXL_VNC_PORT_MIN);
++        if (virBitmapGetBit(bitmap, i - startPort, &used) < 0)
++            VIR_DEBUG("virBitmapGetBit failed on bit %d", i - startPort);
+ 
+         if (used)
+             continue;
+@@ -96,10 +94,8 @@ libxlNextFreeVncPort(libxlDriverPrivateP
+             /* Not in use, lets grab it */
+             VIR_FORCE_CLOSE(fd);
+             /* Add port to bitmap of reserved ports */
+-            if (virBitmapSetBit(driver->reservedVNCPorts,
+-                                i - LIBXL_VNC_PORT_MIN) < 0) {
+-                VIR_DEBUG("virBitmapSetBit failed on bit %d",
+-                          i - LIBXL_VNC_PORT_MIN);
++            if (virBitmapSetBit(bitmap, i - startPort) < 0) {
++                VIR_DEBUG("virBitmapSetBit failed on bit %d", i - startPort);
+             }
+             return i;
+         }
+@@ -115,7 +111,6 @@ libxlNextFreeVncPort(libxlDriverPrivateP
+     return -1;
+ }
+ 
+-
+ static int libxlDefaultConsoleType(const char *ostype)
+ {
+     if (STREQ(ostype, "hvm"))
+@@ -695,7 +690,8 @@ libxlMakeVfb(libxlDriverPrivatePtr drive
+             /* driver handles selection of free port */
+             x_vfb->vncunused = 0;
+             if (l_vfb->data.vnc.autoport) {
+-                port = libxlNextFreeVncPort(driver, LIBXL_VNC_PORT_MIN);
++                port = libxlNextFreePort(driver->reservedVNCPorts, LIBXL_VNC_PORT_MIN,
++                                         LIBXL_VNC_PORT_MAX - LIBXL_VNC_PORT_MIN);
+                 if (port < 0) {
+                     libxlError(VIR_ERR_INTERNAL_ERROR,
+                                 "%s", _("Unable to find an unused VNC port"));
+diff -up libvirt-0.9.12.orig/src/libxl/libxl_conf.h libvirt-0.9.12/src/libxl/libxl_conf.h
+--- libvirt-0.9.12.orig/src/libxl/libxl_conf.h	2011-06-10 14:50:14.000000000 +0800
++++ libvirt-0.9.12/src/libxl/libxl_conf.h	2012-06-27 18:05:11.000000000 +0800
+@@ -52,6 +52,7 @@ typedef struct _libxlDriverPrivate libxl
+ typedef libxlDriverPrivate *libxlDriverPrivatePtr;
+ struct _libxlDriverPrivate {
+     virMutex lock;
++    int max_queued;
+     virCapsPtr caps;
+     unsigned int version;
+ 
+@@ -61,6 +62,7 @@ struct _libxlDriverPrivate {
+     libxl_ctx ctx;
+ 
+     virBitmapPtr reservedVNCPorts;
++    virBitmapPtr reservedMigPorts; /* reserved migration ports */
+     virDomainObjList domains;
+ 
+     virDomainEventStatePtr domainEventState;
+@@ -73,6 +75,66 @@ struct _libxlDriverPrivate {
+     char *saveDir;
+ };
+ 
++# define JOB_MASK(job)                  (1 << (job - 1))
++# define DEFAULT_JOB_MASK               \
++    (JOB_MASK(LIBXL_JOB_QUERY) |         \
++     JOB_MASK(LIBXL_JOB_DESTROY) |       \
++     JOB_MASK(LIBXL_JOB_ABORT))
++
++/* Jobs which have to be tracked in domain state XML. */
++# define LIBXL_DOMAIN_TRACK_JOBS         \
++    (JOB_MASK(LIBXL_JOB_DESTROY) |       \
++     JOB_MASK(LIBXL_JOB_ASYNC))
++
++/* Only 1 job is allowed at any time
++ * A job includes *all* libxl.so api, even those just querying
++ * information, not merely actions */
++enum libxlDomainJob {
++    LIBXL_JOB_NONE = 0,  /* Always set to 0 for easy if (jobActive) conditions */
++    LIBXL_JOB_QUERY,         /* Doesn't change any state */
++    LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
++    LIBXL_JOB_SUSPEND,       /* Suspends (stops vCPUs) the domain */
++    LIBXL_JOB_MODIFY,        /* May change state */
++    LIBXL_JOB_ABORT,         /* Abort current async job */
++    LIBXL_JOB_MIGRATION_OP,  /* Operation influencing outgoing migration */
++
++    /* The following two items must always be the last items before JOB_LAST */
++    LIBXL_JOB_ASYNC,         /* Asynchronous job */
++    LIBXL_JOB_ASYNC_NESTED,  /* Normal job within an async job */
++
++    LIBXL_JOB_LAST
++};
++VIR_ENUM_DECL(libxlDomainJob)
++
++/* Async job consists of a series of jobs that may change state. Independent
++ * jobs that do not change state (and possibly others if explicitly allowed by
++ * current async job) are allowed to be run even if async job is active.
++ */
++enum libxlDomainAsyncJob {
++    LIBXL_ASYNC_JOB_NONE = 0,
++    LIBXL_ASYNC_JOB_MIGRATION_OUT,
++    LIBXL_ASYNC_JOB_MIGRATION_IN,
++    LIBXL_ASYNC_JOB_SAVE,
++    LIBXL_ASYNC_JOB_DUMP,
++
++    LIBXL_ASYNC_JOB_LAST
++};
++VIR_ENUM_DECL(libxlDomainAsyncJob)
++
++struct libxlDomainJobObj {
++    virCond cond;                       /* Use to coordinate jobs */
++    enum libxlDomainJob active;          /* Currently running job */
++    int owner;                          /* Thread which set current job */
++
++    virCond asyncCond;                  /* Use to coordinate with async jobs */
++    enum libxlDomainAsyncJob asyncJob;   /* Currently active async job */
++    int asyncOwner;                     /* Thread which set current async job */
++    int phase;                          /* Job phase (mainly for migrations) */
++    unsigned long long mask;            /* Jobs allowed during async job */
++    unsigned long long start;           /* When the async job started */
++    virDomainJobInfo info;              /* Async job progress data */
++};
++
+ typedef struct _libxlDomainObjPrivate libxlDomainObjPrivate;
+ typedef libxlDomainObjPrivate *libxlDomainObjPrivatePtr;
+ struct _libxlDomainObjPrivate {
+@@ -81,6 +143,9 @@ struct _libxlDomainObjPrivate {
+     libxl_waiter *dWaiter;
+     int waiterFD;
+     int eventHdl;
++
++    struct libxlDomainJobObj job;   //qemuDomainJobObj
++    int jobs_queued; //\TODO it looks like not implicitly init. 
+ };
+ 
+ # define LIBXL_SAVE_MAGIC "libvirt-xml\n \0 \r"
+@@ -116,5 +181,7 @@ libxlMakeVfb(libxlDriverPrivatePtr drive
+ int
+ libxlBuildDomainConfig(libxlDriverPrivatePtr driver,
+                        virDomainDefPtr def, libxl_domain_config *d_config);
++int
++libxlNextFreePort(virBitmapPtr bitmap, int startPort, int numPorts);
+ 
+ #endif /* LIBXL_CONF_H */
+diff -up libvirt-0.9.12.orig/src/libxl/libxl_driver.c libvirt-0.9.12/src/libxl/libxl_driver.c
+--- libvirt-0.9.12.orig/src/libxl/libxl_driver.c	2012-03-31 18:22:02.000000000 +0800
++++ libvirt-0.9.12/src/libxl/libxl_driver.c	2012-06-27 18:45:29.000000000 +0800
+@@ -30,6 +30,12 @@
+ #include <math.h>
+ #include <libxl.h>
+ #include <fcntl.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <arpa/inet.h>
++#include <netdb.h>
+ 
+ #include "internal.h"
+ #include "logging.h"
+@@ -45,6 +51,8 @@
+ #include "xen_xm.h"
+ #include "virtypedparam.h"
+ #include "viruri.h"
++#include "virtime.h"
++#include "rpc/virnetsocket.h"
+ 
+ #define VIR_FROM_THIS VIR_FROM_LIBXL
+ 
+@@ -61,6 +69,12 @@
+ 
+ static libxlDriverPrivatePtr libxl_driver = NULL;
+ 
++typedef struct migrate_receive_args {
++    virConnectPtr conn;
++    virDomainObjPtr vm;
++    int sockfd;
++} migrate_receive_args;
++
+ /* Function declarations */
+ static int
+ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+@@ -79,6 +93,275 @@ libxlDriverUnlock(libxlDriverPrivatePtr
+     virMutexUnlock(&driver->lock);
+ }
+ 
++/* job */
++VIR_ENUM_IMPL(libxlDomainJob, LIBXL_JOB_LAST,
++              "none",
++              "query",
++              "destroy",
++              "suspend",
++              "modify",
++              "abort",
++              "migration operation",
++              "none",   /* async job is never stored in job.active */
++              "async nested",
++);
++
++VIR_ENUM_IMPL(libxlDomainAsyncJob, LIBXL_ASYNC_JOB_LAST,
++              "none",
++              "migration out",
++              "migration in",
++              "save",
++              "dump",
++);
++
++static int
++libxlDomainObjInitJob(libxlDomainObjPrivatePtr priv)
++{
++    memset(&priv->job, 0, sizeof(priv->job));
++
++    if (virCondInit(&priv->job.cond) < 0)
++        return -1;
++
++    if (virCondInit(&priv->job.asyncCond) < 0) {
++        ignore_value(virCondDestroy(&priv->job.cond));
++        return -1;
++    }
++
++    return 0;
++}
++
++static void
++libxlDomainObjResetJob(libxlDomainObjPrivatePtr priv)
++{
++    struct libxlDomainJobObj *job = &priv->job;
++
++    job->active = LIBXL_JOB_NONE;
++    job->owner = 0;
++}
++
++static void
++libxlDomainObjResetAsyncJob(libxlDomainObjPrivatePtr priv)
++{
++    struct libxlDomainJobObj *job = &priv->job;
++
++    job->asyncJob = LIBXL_ASYNC_JOB_NONE;
++    job->asyncOwner = 0;
++    job->phase = 0;
++    job->mask = DEFAULT_JOB_MASK;
++    job->start = 0;
++    memset(&job->info, 0, sizeof(job->info));
++}
++
++static void
++libxlDomainObjFreeJob(libxlDomainObjPrivatePtr priv)
++{
++    ignore_value(virCondDestroy(&priv->job.cond));
++    ignore_value(virCondDestroy(&priv->job.asyncCond));
++}
++
++static bool
++libxlDomainTrackJob(enum libxlDomainJob job)
++{
++    return (LIBXL_DOMAIN_TRACK_JOBS & JOB_MASK(job)) != 0;
++}
++
++static void
++libxlDomainObjSaveJob(libxlDriverPrivatePtr driver, virDomainObjPtr obj)
++{
++    if (!virDomainObjIsActive(obj)) {
++        /* don't write the state file yet, it will be written once the domain
++         * gets activated */
++        return;
++    }
++
++    if (virDomainSaveStatus(driver->caps, driver->stateDir, obj) < 0)
++        VIR_WARN("Failed to save status on vm %s", obj->def->name);
++}
++
++static bool
++libxlDomainNestedJobAllowed(libxlDomainObjPrivatePtr priv, enum libxlDomainJob job)
++{
++    return !priv->job.asyncJob || (priv->job.mask & JOB_MASK(job)) != 0;
++}
++
++static void
++libxlDomainObjSetAsyncJobMask(virDomainObjPtr obj,
++                             unsigned long long allowedJobs)
++{
++    libxlDomainObjPrivatePtr priv = obj->privateData;
++
++    if (!priv->job.asyncJob)
++        return;
++
++    priv->job.mask = allowedJobs | JOB_MASK(LIBXL_JOB_DESTROY);
++}
++
++/* Give up waiting for mutex after 30 seconds */
++#define LIBXL_JOB_WAIT_TIME (1000ull * 30)
++
++/*
++ * obj must be locked before calling; driver_locked says if libxlDriverPrivatePtr 
++ * is locked or not.
++ */
++static int ATTRIBUTE_NONNULL(1)
++libxlDomainObjBeginJobInternal(libxlDriverPrivatePtr driver,
++                              bool driver_locked,
++                              virDomainObjPtr obj,
++                              enum libxlDomainJob job,
++                              enum libxlDomainAsyncJob asyncJob)
++{
++    libxlDomainObjPrivatePtr priv = obj->privateData;
++    unsigned long long now;
++    unsigned long long then;
++    bool nested = job == LIBXL_JOB_ASYNC_NESTED;
++
++    priv->jobs_queued++;
++
++    if (virTimeMillisNow(&now) < 0)
++        return -1;
++    then = now + LIBXL_JOB_WAIT_TIME;
++
++    virDomainObjRef(obj);
++    if (driver_locked)
++        libxlDriverUnlock(driver);
++
++retry:
++    if (driver->max_queued &&
++        priv->jobs_queued > driver->max_queued) {
++        goto error;
++    }
++
++    while (!nested && !libxlDomainNestedJobAllowed(priv, job)) {
++        if (virCondWaitUntil(&priv->job.asyncCond, &obj->lock, then) < 0)
++            goto error;
++    }
++
++    while (priv->job.active) {
++        if (virCondWaitUntil(&priv->job.cond, &obj->lock, then) < 0)
++            goto error;
++    }
++
++    /* No job is active but a new async job could have been started while obj
++     * was unlocked, so we need to recheck it. */
++    if (!nested && !libxlDomainNestedJobAllowed(priv, job))
++        goto retry;
++
++    libxlDomainObjResetJob(priv);
++
++    if (job != LIBXL_JOB_ASYNC) {
++        VIR_DEBUG("Starting job: %s (async=%s)",
++                   libxlDomainJobTypeToString(job),
++                   libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
++        priv->job.active = job;
++        priv->job.owner = virThreadSelfID();
++    } else {
++        VIR_DEBUG("Starting async job: %s",
++                  libxlDomainAsyncJobTypeToString(asyncJob));
++        libxlDomainObjResetAsyncJob(priv);
++        priv->job.asyncJob = asyncJob;
++        priv->job.asyncOwner = virThreadSelfID();
++        priv->job.start = now;
++    }
++
++    if (driver_locked) {
++        virDomainObjUnlock(obj);
++        libxlDriverLock(driver);
++        virDomainObjLock(obj);
++    }
++
++    if (libxlDomainTrackJob(job))
++        libxlDomainObjSaveJob(driver, obj);
++
++    return 0;
++
++error:
++    VIR_WARN("Cannot start job (%s, %s) for domain %s;"
++             " current job is (%s, %s) owned by (%d, %d)",
++             libxlDomainJobTypeToString(job),
++             libxlDomainAsyncJobTypeToString(asyncJob),
++             obj->def->name,
++             libxlDomainJobTypeToString(priv->job.active),
++             libxlDomainAsyncJobTypeToString(priv->job.asyncJob),
++             priv->job.owner, priv->job.asyncOwner);
++
++    if (errno == ETIMEDOUT)
++        libxlError(VIR_ERR_OPERATION_TIMEOUT,
++                        "%s", _("cannot acquire state change lock"));
++    else if (driver->max_queued &&
++             priv->jobs_queued > driver->max_queued)
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                        "%s", _("cannot acquire state change lock "
++                                "due to max_queued limit"));
++    else
++        virReportSystemError(errno,
++                             "%s", _("cannot acquire job mutex"));
++    priv->jobs_queued--;
++    if (driver_locked) {
++        virDomainObjUnlock(obj);
++        libxlDriverLock(driver);
++        virDomainObjLock(obj);
++    }
++    /* Safe to ignore value since ref count was incremented above */
++    ignore_value(virDomainObjUnref(obj));
++    return -1;
++}
++
++static int
++libxlDomainObjBeginAsyncJobWithDriver(libxlDriverPrivatePtr driver,
++                                         virDomainObjPtr obj,
++                                         enum libxlDomainAsyncJob asyncJob)
++{
++    return libxlDomainObjBeginJobInternal(driver, true, obj, LIBXL_JOB_ASYNC,
++                                         asyncJob);
++}
++
++static int
++libxlDomainObjEndAsyncJob(libxlDriverPrivatePtr driver, virDomainObjPtr obj)
++{
++    libxlDomainObjPrivatePtr priv = obj->privateData;
++
++    priv->jobs_queued--;
++
++    VIR_DEBUG("Stopping async job: %s",
++              libxlDomainAsyncJobTypeToString(priv->job.asyncJob));
++
++    libxlDomainObjResetAsyncJob(priv);
++    libxlDomainObjSaveJob(driver, obj);
++    virCondBroadcast(&priv->job.asyncCond);
++
++    return virDomainObjUnref(obj);
++}
++
++static int
++libxlMigrationJobStart(libxlDriverPrivatePtr driver,
++                      virDomainObjPtr vm,
++                      enum libxlDomainAsyncJob job)
++{
++    libxlDomainObjPrivatePtr priv = vm->privateData;
++
++    if (libxlDomainObjBeginAsyncJobWithDriver(driver, vm, job) < 0)
++        return -1;
++
++    if (job == LIBXL_ASYNC_JOB_MIGRATION_IN) {
++        libxlDomainObjSetAsyncJobMask(vm, LIBXL_JOB_NONE);
++    } else {
++        libxlDomainObjSetAsyncJobMask(vm, DEFAULT_JOB_MASK |
++                                     JOB_MASK(LIBXL_JOB_SUSPEND) |
++                                     JOB_MASK(LIBXL_JOB_MIGRATION_OP));
++    }
++
++    priv->job.info.type = VIR_DOMAIN_JOB_UNBOUNDED;
++
++    return 0;
++}
++
++static int
++libxlMigrationJobFinish(libxlDriverPrivatePtr driver, virDomainObjPtr vm)
++{
++    return libxlDomainObjEndAsyncJob(driver, vm);
++}
++/* job function finish */
++
+ static void *
+ libxlDomainObjPrivateAlloc(void)
+ {
+@@ -87,11 +370,18 @@ libxlDomainObjPrivateAlloc(void)
+     if (VIR_ALLOC(priv) < 0)
+         return NULL;
+ 
++    if (libxlDomainObjInitJob(priv) < 0)
++        goto error;
++
+     libxl_ctx_init(&priv->ctx, LIBXL_VERSION, libxl_driver->logger);
+     priv->waiterFD = -1;
+     priv->eventHdl = -1;
+ 
+     return priv;
++
++error:
++    VIR_FREE(priv);
++    return NULL;
+ }
+ 
+ static void
+@@ -109,6 +399,7 @@ libxlDomainObjPrivateFree(void *data)
+     }
+ 
+     libxl_ctx_free(&priv->ctx);
++    libxlDomainObjFreeJob(priv);
+     VIR_FREE(priv);
+ }
+ 
+@@ -810,6 +1101,7 @@ libxlShutdown(void)
+         VIR_FORCE_FCLOSE(libxl_driver->logger_file);
+ 
+     virBitmapFree(libxl_driver->reservedVNCPorts);
++    virBitmapFree(libxl_driver->reservedMigPorts);
+ 
+     VIR_FREE(libxl_driver->configDir);
+     VIR_FREE(libxl_driver->autostartDir);
+@@ -866,6 +1158,10 @@ libxlStartup(int privileged) {
+          virBitmapAlloc(LIBXL_VNC_PORT_MAX - LIBXL_VNC_PORT_MIN)) == NULL)
+         goto out_of_memory;
+ 
++    if ((libxl_driver->reservedMigPorts =
++         virBitmapAlloc(LIBXL_MIGRATION_MAX_PORT - LIBXL_MIGRATION_MIN_PORT)) == NULL)
++        goto out_of_memory;
++
+     if (virDomainObjListInit(&libxl_driver->domains) < 0)
+         goto out_of_memory;
+ 
+@@ -983,6 +1279,8 @@ libxlStartup(int privileged) {
+     virHashForEach(libxl_driver->domains.objs, libxlAutostartDomain,
+                    libxl_driver);
+ 
++    libxl_driver->max_queued = 0;
++
+     libxlDriverUnlock(libxl_driver);
+ 
+     return 0;
+@@ -1089,6 +1387,17 @@ libxlClose(virConnectPtr conn ATTRIBUTE_
+     return 0;
+ }
+ 
++static int
++libxlSupportsFeature(virConnectPtr conn ATTRIBUTE_UNUSED, int feature)
++{
++    switch (feature) {
++    case VIR_DRV_FEATURE_MIGRATION_V3:
++        return 1;
++    default:
++        return 0;
++    }
++}
++
+ static const char *
+ libxlGetType(virConnectPtr conn ATTRIBUTE_UNUSED)
+ {
+@@ -3837,12 +4146,607 @@ libxlIsAlive(virConnectPtr conn ATTRIBUT
+     return 1;
+ }
+ 
++static int libxlCheckMessageBanner(int fd, const char *banner, int banner_sz)
++{
++    char buf[banner_sz];
++    int ret = 0;
++
++    do { 
++        ret = saferead(fd, buf, banner_sz);
++    } while ( -1 == ret && EAGAIN == errno );
++
++    if ( ret != banner_sz || memcmp(buf, banner, banner_sz) ) 
++        return -1;
++
++    return 0;
++}
++
++static int doParseURI(const char *uri, char **p_hostname, int *p_port)
++{
++    char *p, *hostname;
++    int port_nr = 0;
++
++    if (uri == NULL)
++        return -1;
++
++    /* URI passed is a string "hostname[:port]" */
++    if ((p = strrchr(uri, ':')) != NULL) { /* "hostname:port" */
++        int n;
++
++        if (virStrToLong_i(p+1, NULL, 10, &port_nr) < 0) {
++            libxlError(VIR_ERR_INVALID_ARG,
++                        _("Invalid port number"));
++            return -1;
++        }
++
++        /* Get the hostname. */
++        n = p - uri; /* n = Length of hostname in bytes. */
++        if (n <= 0) {
++            libxlError(VIR_ERR_INVALID_ARG,
++                       _("Hostname must be specified in the URI"));
++            return -1;
++        }
++
++        if (virAsprintf(&hostname, "%s", uri) < 0) {
++            virReportOOMError();
++            return -1;
++        }
++
++        hostname[n] = '\0';
++    }
++    else {/* "hostname" (or IP address) */
++        if (virAsprintf(&hostname, "%s", uri) < 0) {
++            virReportOOMError();
++            return -1;
++        }
++    }
++    *p_hostname = hostname;
++    *p_port = port_nr;
++    return 0;
++}
++
++static char *
++libxlDomainMigrateBegin3(virDomainPtr domain,
++                          const char *xmlin,
++                          char **cookieout ATTRIBUTE_UNUSED,
++                          int *cookieoutlen ATTRIBUTE_UNUSED,
++                          unsigned long flags,
++                          const char *dname ATTRIBUTE_UNUSED,
++                          unsigned long resource ATTRIBUTE_UNUSED)
++{
++    libxlDriverPrivatePtr driver = domain->conn->privateData;
++    virDomainObjPtr vm;
++    virDomainDefPtr def = NULL;
++    char *xml = NULL;
++
++    virCheckFlags(LIBXL_MIGRATION_FLAGS, NULL);
++
++    libxlDriverLock(driver);
++    vm = virDomainFindByUUID(&driver->domains, domain->uuid);
++    if (!vm) {
++        char uuidstr[VIR_UUID_STRING_BUFLEN];
++        virUUIDFormat(domain->uuid, uuidstr);
++        libxlError(VIR_ERR_OPERATION_INVALID,
++                   _("no domain with matching uuid '%s'"), uuidstr);
++        goto cleanup;
++    }
++
++    if (!virDomainObjIsActive(vm)) {
++        libxlError(VIR_ERR_OPERATION_INVALID,
++                         _("domain is not running"));
++        goto cleanup;
++    }
++
++    if (xmlin) {
++        if (!(def = virDomainDefParseString(driver->caps, xmlin,
++                         1 << VIR_DOMAIN_VIRT_XEN,
++                         VIR_DOMAIN_XML_INACTIVE)))
++            goto cleanup;
++
++        xml = virDomainDefFormat(def, VIR_DOMAIN_XML_SECURE);
++    } else {
++        xml = virDomainDefFormat(vm->def, VIR_DOMAIN_XML_SECURE);
++    }
++
++cleanup:
++    if (vm)
++        virDomainObjUnlock(vm);
++    libxlDriverUnlock(driver);
++    return xml;
++}
++
++static void doMigrateReceive(void *opaque)
++{
++    migrate_receive_args *data = opaque;
++    virConnectPtr conn = data->conn;
++    int sockfd = data->sockfd;
++    virDomainObjPtr vm = data->vm;
++    libxlDriverPrivatePtr driver = conn->privateData;
++    int recv_fd;
++    struct sockaddr_in new_addr;
++    socklen_t socklen = sizeof(new_addr);
++    int len;
++
++    do {
++        recv_fd = accept(sockfd, (struct sockaddr *)&new_addr, &socklen);
++    } while(recv_fd < 0 && errno == EINTR);
++
++    if (recv_fd < 0) {
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                   _("Could not accept migration connection"));
++        goto cleanup;
++    }
++    VIR_DEBUG("Accepted migration\n");
++
++    len = sizeof(migrate_receiver_banner);
++    if (safewrite(recv_fd, migrate_receiver_banner, len) != len) {
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                         _("Failed to write migrate_receiver_banner"));
++        goto cleanup;
++    }
++
++    if (libxlVmStart(driver, vm, false, recv_fd) < 0) {
++        libxlError(VIR_ERR_INTERNAL_ERROR,
++                    _("Failed to restore domain with libxenlight"));
++        if (!vm->persistent) {
++            virDomainRemoveInactive(&driver->domains, vm);
++            vm = NULL;
++        }
++        goto cleanup;
++    }
++
++    len = sizeof(migrate_receiver_ready);
++    if (safewrite(recv_fd, migrate_receiver_ready, len) != len) {
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                         _("Failed to write migrate_receiver_ready"));
++    }
++
++cleanup:
++    if (VIR_CLOSE(recv_fd) < 0)
++        virReportSystemError(errno, "%s", _("cannot close recv_fd"));
++    if (VIR_CLOSE(sockfd) < 0)
++        virReportSystemError(errno, "%s", _("cannot close sockfd"));
++    if (vm)
++        virDomainObjUnlock(vm);
++    VIR_FREE(opaque);
++    return;
++}
++
++static int doMigrateSend(virDomainPtr dom, unsigned long flags, int sockfd)
++{
++    libxlDriverPrivatePtr driver = dom->conn->privateData;
++    virDomainObjPtr vm;
++    libxlDomainObjPrivatePtr priv;
++    libxl_domain_suspend_info suspinfo;
++    virDomainEventPtr event = NULL;
++    int live = 0;
++    int ret = -1;
++
++    if (flags & VIR_MIGRATE_LIVE)
++        live = 1;
++
++    vm = virDomainFindByUUID(&driver->domains, dom->uuid);
++    if (!vm) {
++        char uuidstr[VIR_UUID_STRING_BUFLEN];
++        virUUIDFormat(dom->uuid, uuidstr);
++        libxlError(VIR_ERR_OPERATION_INVALID,
++                         _("no domain with matching uuid '%s'"), uuidstr);
++        goto cleanup;
++    }
++
++    priv = vm->privateData;
++
++    /* read fixed message from dest (ready to receive) */
++    if (libxlCheckMessageBanner(sockfd, migrate_receiver_banner,
++                              sizeof(migrate_receiver_banner))) {
++        goto cleanup;
++    }
++
++    /* send suspend data */
++    memset(&suspinfo, 0, sizeof(suspinfo));
++    if (live == 1)
++        suspinfo.flags |= XL_SUSPEND_LIVE;
++    if (libxl_domain_suspend(&priv->ctx, &suspinfo, vm->def->id, sockfd) != 0) {
++        libxlError(VIR_ERR_INTERNAL_ERROR,
++                    _("Failed to save domain '%d' with libxenlight"),
++                    vm->def->id);
++        goto cleanup;
++    }
++
++    /* read fixed message from dest (receive completed) */
++    if (libxlCheckMessageBanner(sockfd, migrate_receiver_ready,
++                              sizeof(migrate_receiver_ready))) {
++        /* Src side should be resumed, but for ret < 0, virsh won't call Src side
++         * Confirm3, handle it here.
++         */
++        if (libxl_domain_resume(&priv->ctx, vm->def->id) != 0) {
++            VIR_DEBUG("Failed to resume domain '%d' with libxenlight",
++                      vm->def->id);
++            virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_MIGRATION);
++            event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_SUSPENDED,
++                                             VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED);
++            if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
++                goto cleanup;
++        }
++        goto cleanup;
++    }
++
++    ret = 0;
++
++cleanup:
++    if (vm)
++        virDomainObjUnlock(vm);
++    if (event)
++        libxlDomainEventQueue(driver, event);
++    return ret;
++}
++
++static int
++libxlDomainMigratePrepare3(virConnectPtr dconn,
++                            const char *cookiein ATTRIBUTE_UNUSED,
++                            int cookieinlen ATTRIBUTE_UNUSED,
++                            char **cookieout ATTRIBUTE_UNUSED,
++                            int *cookieoutlen ATTRIBUTE_UNUSED,
++                            const char *uri_in,
++                            char **uri_out,
++                            unsigned long flags,
++                            const char *dname,
++                            unsigned long resource ATTRIBUTE_UNUSED,
++                            const char *dom_xml)
++{
++    libxlDriverPrivatePtr driver = dconn->privateData;
++    virDomainDefPtr def = NULL;
++    virDomainObjPtr vm = NULL;
++    char *hostname = NULL;
++    int port = 0;
++    int sockfd = -1;
++    struct sockaddr_in addr;
++    virThread migrate_receive_thread;
++    migrate_receive_args *args;
++    int ret = -1;
++
++    virCheckFlags(LIBXL_MIGRATION_FLAGS, -1);
++
++    libxlDriverLock(driver);
++    if (!dom_xml) {
++        libxlError(VIR_ERR_OPERATION_INVALID,
++                         _("no domain XML passed"));
++        goto cleanup;
++    }
++
++    def = virDomainDefParseString(driver->caps, dom_xml,
++                                 1 << VIR_DOMAIN_VIRT_XEN,
++                                 VIR_DOMAIN_XML_INACTIVE);
++
++    /* Target domain name, maybe renamed. */
++    if (dname) {
++        def->name = strdup(dname);
++        if (def->name == NULL)
++            goto cleanup;
++    }
++
++    if (virDomainObjIsDuplicate(&driver->domains, def, 1) < 0)
++        goto cleanup;
++
++    if (!(vm = virDomainAssignDef(driver->caps, &driver->domains, def, true)))
++        goto cleanup;
++
++    def = NULL;
++
++    /* Create socket connection to receive migration data */
++    if (!uri_in) {
++        hostname = virGetHostname(dconn);
++        if (hostname == NULL)
++            goto cleanup;
++
++        port = libxlNextFreePort(driver->reservedMigPorts, LIBXL_MIGRATION_MIN_PORT,
++                                 LIBXL_MIGRATION_NUM_PORTS);
++        if (port < 0) {
++            libxlError(VIR_ERR_INTERNAL_ERROR,
++                       "%s", _("Unable to find an unused migration port"));
++            goto cleanup;
++        }
++
++        if (virAsprintf(uri_out, "%s:%d", hostname, port) < 0) {
++            virReportOOMError();
++            goto cleanup;
++        }
++    } else {
++        if (doParseURI(uri_in, &hostname, &port))
++            goto cleanup;
++
++        if (port <= 0) {
++            port = libxlNextFreePort(driver->reservedMigPorts, LIBXL_MIGRATION_MIN_PORT,
++                                     LIBXL_MIGRATION_NUM_PORTS);
++            if (port < 0) {
++                libxlError(VIR_ERR_INTERNAL_ERROR,
++                           "%s", _("Unable to find an unused migration port"));
++                goto cleanup;
++            }
++
++            if (virAsprintf(uri_out, "%s:%d", hostname, port) < 0) {
++                virReportOOMError();
++                goto cleanup;
++            }
++        }
++    }
++
++    sockfd = socket(AF_INET, SOCK_STREAM, 0);
++    if (sockfd == -1) {
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                   _("Failed to create socket for incoming migration"));
++        goto cleanup;
++    }
++
++    memset(&addr, 0, sizeof(addr));
++    addr.sin_family = AF_INET;
++    addr.sin_port = htons(port);
++    addr.sin_addr.s_addr = htonl(INADDR_ANY);
++
++    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                   _("Fail to bind port for incoming migration"));
++        goto cleanup;
++    }
++
++    if (listen(sockfd, MAXCONN_NUM) < 0){
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                   _("Fail to listen to incoming migration"));
++        goto cleanup;
++    }
++
++    if (VIR_ALLOC(args) < 0) {
++        virReportOOMError();
++        goto cleanup;
++    }
++
++    args->conn = dconn;
++    args->vm = vm;
++    args->sockfd = sockfd;
++    if (virThreadCreate(&migrate_receive_thread,
++                        true,
++                        doMigrateReceive, args) < 0 ) {
++        virReportSystemError(errno, "%s",
++                             _("Unable to create migration thread"));
++        VIR_FREE(args);
++        goto cleanup;
++    }
++
++    ret = 0;
++    goto end;
++
++cleanup:
++    if (VIR_CLOSE(sockfd) < 0)
++        virReportSystemError(errno, "%s", _("cannot close sockfd"));
++    if (vm)
++        virDomainObjUnlock(vm);
++
++end:
++    VIR_FREE(hostname);
++    libxlDriverUnlock(driver);
++    return ret;
++}
++
++static int
++libxlDomainMigratePerform3(virDomainPtr dom,
++                            const char *xmlin ATTRIBUTE_UNUSED,
++                            const char *cookiein ATTRIBUTE_UNUSED,
++                            int cookieinlen ATTRIBUTE_UNUSED,
++                            char **cookieout ATTRIBUTE_UNUSED,
++                            int *cookieoutlen ATTRIBUTE_UNUSED,
++                            const char *dconnuri ATTRIBUTE_UNUSED,
++                            const char *uri,
++                            unsigned long flags,
++                            const char *dname ATTRIBUTE_UNUSED,
++                            unsigned long resource ATTRIBUTE_UNUSED)
++{
++    libxlDriverPrivatePtr driver = dom->conn->privateData;
++    char *hostname = NULL;
++    int port = 0;
++    char *servname = NULL;
++    virNetSocketPtr sock;
++    int sockfd = -1;
++    int ret = -1;
++    virDomainObjPtr vm;
++    vm = virDomainFindByUUID(&driver->domains, dom->uuid);
++
++    virCheckFlags(LIBXL_MIGRATION_FLAGS, -1);
++
++    libxlDriverLock(driver);
++
++    if (doParseURI(uri, &hostname, &port))
++        goto cleanup;
++
++    VIR_DEBUG("hostname = %s, port = %d", hostname, port);
++
++    if (port <= 0)
++        goto cleanup;
++
++    if (virAsprintf(&servname, "%d", port) < 0) {
++        virReportOOMError();
++        goto cleanup;
++    }
++
++    if (virNetSocketNewConnectTCP(hostname, servname, &sock) < 0 ){
++        libxlError(VIR_ERR_OPERATION_FAILED,
++                   _("Failed to create socket"));
++        goto cleanup;
++    }
++
++    sockfd = virNetSocketGetFD(sock);
++    libxlMigrationJobStart(driver, vm, LIBXL_ASYNC_JOB_MIGRATION_OUT);
++    ret = doMigrateSend(dom, flags, sockfd);
++    libxlMigrationJobFinish(driver, vm);
++
++cleanup:
++    virNetSocketFree(sock);
++    VIR_FREE(hostname);
++    VIR_FREE(servname);
++    if (vm)
++        virDomainObjUnlock(vm);
++    libxlDriverUnlock(driver);
++    return ret;
++}
++
++static virDomainPtr
++libxlDomainMigrateFinish3(virConnectPtr dconn,
++                           const char *dname,
++                           const char *cookiein ATTRIBUTE_UNUSED,
++                           int cookieinlen ATTRIBUTE_UNUSED,
++                           char **cookieout ATTRIBUTE_UNUSED,
++                           int *cookieoutlen ATTRIBUTE_UNUSED,
++                           const char *dconnuri ATTRIBUTE_UNUSED,
++                           const char *uri,
++                           unsigned long flags,
++                           int cancelled)
++{
++    libxlDriverPrivatePtr driver = dconn->privateData;
++    char *hostname = NULL;
++    int port = 0;
++    virDomainObjPtr vm = NULL;
++    virDomainPtr dom = NULL;
++    libxlDomainObjPrivatePtr priv;
++    virDomainEventPtr event = NULL;
++    int rc;
++
++    virCheckFlags(LIBXL_MIGRATION_FLAGS, NULL);
++
++    libxlDriverLock(driver);
++
++    if (doParseURI(uri, &hostname, &port))
++        VIR_DEBUG("Fail to parse port from URI");
++
++    if (LIBXL_MIGRATION_MIN_PORT <= port && port < LIBXL_MIGRATION_MAX_PORT) {
++        if (virBitmapClearBit(driver->reservedMigPorts,
++                              port - LIBXL_MIGRATION_MIN_PORT) < 0)
++            VIR_DEBUG("Could not mark port %d as unused", port);
++    }
++
++    vm = virDomainFindByName(&driver->domains, dname);
++    if (!vm)
++        goto cleanup;
++
++    if (!cancelled) {
++        if (!(flags & VIR_MIGRATE_PAUSED)) {
++            priv = vm->privateData;
++            rc = libxl_domain_unpause(&priv->ctx, vm->def->id);
++            if (rc) {
++                libxlError(VIR_ERR_OPERATION_FAILED,
++                           _("Failed to unpause domain"));
++                goto error;
++            }
++
++            virDomainObjSetState(vm, VIR_DOMAIN_RUNNING, VIR_DOMAIN_RUNNING_BOOTED);
++            if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
++                goto error;
++        }
++
++        dom = virGetDomain(dconn, vm->def->name, vm->def->uuid);
++        goto cleanup;
++    }
++
++error:
++    if (libxlVmReap(driver, vm, 1, VIR_DOMAIN_SHUTOFF_SAVED)) {
++        libxlError(VIR_ERR_INTERNAL_ERROR,
++                   _("Failed to destroy domain '%d'"), vm->def->id);
++        goto cleanup;
++    }
++    event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
++                                     VIR_DOMAIN_EVENT_STOPPED_SAVED);
++    if (!vm->persistent) {
++        virDomainRemoveInactive(&driver->domains, vm);
++        vm = NULL;
++    }
++
++cleanup:
++    VIR_FREE(hostname);
++    if (vm)
++        virDomainObjUnlock(vm);
++    if (event)
++        libxlDomainEventQueue(driver, event);
++    libxlDriverUnlock(driver);
++    return dom;
++}
++
++static int
++libxlDomainMigrateConfirm3(virDomainPtr domain,
++                            const char *cookiein ATTRIBUTE_UNUSED,
++                            int cookieinlen ATTRIBUTE_UNUSED,
++                            unsigned long flags,
++                            int cancelled)
++{
++    libxlDriverPrivatePtr driver = domain->conn->privateData;
++    virDomainObjPtr vm;
++    libxlDomainObjPrivatePtr priv;
++    virDomainEventPtr event = NULL;
++    int ret = -1;
++
++    virCheckFlags(LIBXL_MIGRATION_FLAGS, -1);
++
++    libxlDriverLock(driver);
++    vm = virDomainFindByUUID(&driver->domains, domain->uuid);
++    if (!vm) {
++        char uuidstr[VIR_UUID_STRING_BUFLEN];
++        virUUIDFormat(domain->uuid, uuidstr);
++        libxlError(VIR_ERR_NO_DOMAIN,
++                   _("no domain with matching uuid '%s'"), uuidstr);
++        goto cleanup;
++    }
++
++    if (cancelled) {
++        priv = vm->privateData;
++        libxlError(VIR_ERR_INTERNAL_ERROR,
++                   _("migration failed, try to resume on our end"));
++        if (!libxl_domain_resume(&priv->ctx, vm->def->id)) {
++            ret = 0;
++        } else {
++            VIR_DEBUG("Failed to resume domain '%d' with libxenlight",
++                      vm->def->id);
++            virDomainObjSetState(vm, VIR_DOMAIN_PAUSED, VIR_DOMAIN_PAUSED_MIGRATION);
++            event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_SUSPENDED,
++                                             VIR_DOMAIN_EVENT_SUSPENDED_MIGRATED);
++            if (virDomainSaveStatus(driver->caps, driver->stateDir, vm) < 0)
++                goto cleanup;
++        }
++
++        goto cleanup;
++    }
++
++    if (libxlVmReap(driver, vm, 1, VIR_DOMAIN_SHUTOFF_SAVED)) {
++        libxlError(VIR_ERR_INTERNAL_ERROR,
++                   _("Failed to destroy domain '%d'"), vm->def->id);
++        goto cleanup;
++    }
++
++    event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
++                                     VIR_DOMAIN_EVENT_STOPPED_SAVED);
++
++    if (flags & VIR_MIGRATE_UNDEFINE_SOURCE)
++        virDomainDeleteConfig(driver->configDir, driver->autostartDir, vm);
++
++    if (!vm->persistent || (flags & VIR_MIGRATE_UNDEFINE_SOURCE)) {
++        virDomainRemoveInactive(&driver->domains, vm);
++        vm = NULL;
++    }
++
++    VIR_DEBUG("Migration successful.\n");
++    ret = 0;
++
++cleanup:
++    if (vm)
++        virDomainObjUnlock(vm);
++    if (event)
++        libxlDomainEventQueue(driver, event);
++    libxlDriverUnlock(driver);
++    return ret;
++}
+ 
+ static virDriver libxlDriver = {
+     .no = VIR_DRV_LIBXL,
+     .name = "xenlight",
+     .open = libxlOpen, /* 0.9.0 */
+     .close = libxlClose, /* 0.9.0 */
++    .supports_feature = libxlSupportsFeature, /* 0.9.11 */
+     .type = libxlGetType, /* 0.9.0 */
+     .version = libxlGetVersion, /* 0.9.0 */
+     .getHostname = virGetHostname, /* 0.9.0 */
+@@ -3901,6 +4805,11 @@ static virDriver libxlDriver = {
+     .domainGetSchedulerParametersFlags = libxlDomainGetSchedulerParametersFlags, /* 0.9.2 */
+     .domainSetSchedulerParameters = libxlDomainSetSchedulerParameters, /* 0.9.0 */
+     .domainSetSchedulerParametersFlags = libxlDomainSetSchedulerParametersFlags, /* 0.9.2 */
++    .domainMigrateBegin3 = libxlDomainMigrateBegin3, /* 0.9.11 */
++    .domainMigratePrepare3 = libxlDomainMigratePrepare3, /* 0.9.11 */
++    .domainMigratePerform3 = libxlDomainMigratePerform3, /* 0.9.11 */
++    .domainMigrateFinish3 = libxlDomainMigrateFinish3, /* 0.9.11 */
++    .domainMigrateConfirm3 = libxlDomainMigrateConfirm3, /* 0.9.11 */
+     .nodeGetFreeMemory = libxlNodeGetFreeMemory, /* 0.9.0 */
+     .domainEventRegister = libxlDomainEventRegister, /* 0.9.0 */
+     .domainEventDeregister = libxlDomainEventDeregister, /* 0.9.0 */
+Only in libvirt-0.9.12/src/libxl: libxl_driver.c.orig
+diff -up libvirt-0.9.12.orig/src/libxl/libxl_driver.h libvirt-0.9.12/src/libxl/libxl_driver.h
+--- libvirt-0.9.12.orig/src/libxl/libxl_driver.h	2011-06-10 14:50:14.000000000 +0800
++++ libvirt-0.9.12/src/libxl/libxl_driver.h	2012-05-29 17:24:11.000000000 +0800
+@@ -25,6 +25,22 @@
+ 
+ # include <config.h>
+ 
++# define LIBXL_MIGRATION_FLAGS                   \
++    (VIR_MIGRATE_LIVE |                         \
++     VIR_MIGRATE_UNDEFINE_SOURCE |              \
++     VIR_MIGRATE_PAUSED)
++
++# define MAXCONN_NUM 10
++# define LIBXL_MIGRATION_MIN_PORT 49512
++# define LIBXL_MIGRATION_NUM_PORTS 64
++# define LIBXL_MIGRATION_MAX_PORT                \
++    (LIBXL_MIGRATION_MIN_PORT + LIBXL_MIGRATION_NUM_PORTS)
++
++static const char migrate_receiver_banner[]=
++    "xl migration receiver ready, send binary domain data";
++static const char migrate_receiver_ready[]=
++    "domain received, ready to unpause";
++
+ int libxlRegister(void);
+ 
+ #endif /* LIBXL_DRIVER_H */

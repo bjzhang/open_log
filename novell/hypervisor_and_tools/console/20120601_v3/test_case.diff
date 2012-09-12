@@ -1,0 +1,93 @@
+diff -r d7318231cfe3 tools/libxl/xl.h
+--- a/tools/libxl/xl.h	Thu May 31 10:18:52 2012 +0200
++++ b/tools/libxl/xl.h	Fri Jun 01 14:57:05 2012 +0800
+@@ -36,6 +36,7 @@ int main_sharing(int argc, char **argv);
+ int main_cd_eject(int argc, char **argv);
+ int main_cd_insert(int argc, char **argv);
+ int main_console(int argc, char **argv);
++int main_console_get_tty(int argc, char **argv);
+ int main_vncviewer(int argc, char **argv);
+ int main_pcilist(int argc, char **argv);
+ int main_pcidetach(int argc, char **argv);
+diff -r d7318231cfe3 tools/libxl/xl_cmdimpl.c
+--- a/tools/libxl/xl_cmdimpl.c	Thu May 31 10:18:52 2012 +0200
++++ b/tools/libxl/xl_cmdimpl.c	Fri Jun 01 14:57:05 2012 +0800
+@@ -141,8 +141,6 @@ struct domain_create {
+     int incr_generationid;
+ };
+ 
+-
+-
+ static int qualifier_to_id(const char *p, uint32_t *id_r)
+ {
+     int i, alldigit;
+@@ -2263,6 +2261,52 @@ int main_console(int argc, char **argv)
+     return 1;
+ }
+ 
++int main_console_get_tty(int argc, char **argv)
++{
++    int opt = 0, num = 0;
++    libxl_console_type type = 0;
++    char *path;
++    int rc;
++
++    while ((opt = def_getopt(argc, argv, "n:t:", "console_get_tty", 1)) != -1) {
++        switch (opt) {
++        case 0: case 2:
++            return opt;
++        case 't':
++            if (!strcmp(optarg, "pv"))
++                type = LIBXL_CONSOLE_TYPE_PV;
++            else if (!strcmp(optarg, "serial"))
++                type = LIBXL_CONSOLE_TYPE_SERIAL;
++            else {
++                fprintf(stderr, "console type supported are: pv, serial\n");
++                return 2;
++            }
++            break;
++        case 'n':
++            num = atoi(optarg);
++            break;
++        }
++    }
++
++    find_domain(argv[optind]);
++    if (!type)
++        rc = libxl_primary_console_get_tty(ctx, domid, &path);
++    else
++        rc = libxl_console_get_tty(ctx, domid, num, type, &path);
++    if ( rc ) 
++        fprintf(stderr, "err %d: get domain %d console %d type %s tty failed\n",
++                rc, domid, num, type==LIBXL_CONSOLE_TYPE_PV?"pv":"serial");
++    else {
++        if (!type ) 
++            printf("domain %d console %d path %s.\n", domid, num, path);
++        else
++            printf("domain %d console %d type %s path %s.\n", domid, num, 
++                    type==LIBXL_CONSOLE_TYPE_PV?"pv":"serial", path);
++        free(path);
++    }
++    return 0;
++}
++
+ int main_vncviewer(int argc, char **argv)
+ {
+     static const struct option long_options[] = {
+diff -r d7318231cfe3 tools/libxl/xl_cmdtable.c
+--- a/tools/libxl/xl_cmdtable.c	Thu May 31 10:18:52 2012 +0200
++++ b/tools/libxl/xl_cmdtable.c	Fri Jun 01 14:57:05 2012 +0800
+@@ -125,6 +125,13 @@ struct cmd_spec cmd_table[] = {
+       "-t <type>       console type, pv or serial\n"
+       "-n <number>     console number"
+     },
++    { "console_get_tty",
++      &main_console_get_tty, 0, 0,
++      "Retrieve domain's console path",
++      "[options] <Domain>\n"
++      "-t <type>       console type, pv or serial\n"
++      "-n <number>     console number"
++    },
+     { "vncviewer",
+       &main_vncviewer, 0, 0,
+       "Attach to domain's VNC server.",

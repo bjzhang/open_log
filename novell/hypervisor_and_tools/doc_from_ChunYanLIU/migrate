@@ -1,0 +1,213 @@
+Source 端： 
+xend/XendDomain.py
+domain_migrate:
+	test migrate dom, migrate device, migrate memory
+	_domain_migrate()
+	   -> create socket, and connect to dest <host>
+	   -> send "receive"
+	   -> XendCheckpoint.save(socketfd,...)
+	   -> close socket.
+
+XendCheckpoint.save(socketfd, ... )
+所有的write都写向socketfd(简写为fd).
+-> write SIGNATURE
+-> migrateDevices (没做什么）
+-> write config length
+-> write config
+-> generate xc_save命令
+-> forkHelper(cmd, fd, saveInputHandler, False)
+xPopens3,开一个pipe线程，执行xc_save命令，xc_save的屏幕输出 ==> saveInputHandler的参数。
+xc_save命令:把内存，cpuctxt,vmctxt等信息write到fd
+xc_save会printf "suspend", saveInputHandler收到"suspend"，调用dominfo.shutdown. 某些信息需要vm shutdown之后,才能收集。（比如cpu的context)
+forkHelper等待child pipe结束（xc_save命令完成），才会结束退出。
+	重要（下面详述）： －－－－－－－主要的工作－－－－－－－－
+
+-> 查看"/var/lib/xen/qemu-save.%domid"是否存在，如果存在，要把里面的内容write到fd
+-> 先write QEMU_SIGNATURE
+-> 读/var/lib/xen/qemu-save.%domid，把读出来的内容write到fd.
+-> 删除/var/lib/xen/qemu-save.%domid文件
+-> dominfo.destroy()
+
+xc_save cmd: ( tools/xcutils/xc_save.c)
+	main():
+	xc_interface_open()
+	set callbacks.suspend 
+	调用xc_domain_save(si.xc_fd, io_fd, ... , &callbacks, ...).
+	xc_interface_close(si.xc_fd).
+
+xc_domain_save: (tools/libxc/xc_domain_save.c)
+xc_domain_save():
+(1)	如果是live migration, Enable log-dirty mode.
+	设SHADOW_OP_ENABLE_LOGDIRTY,记录从此刻起内存内容发生的变化
+	如果不是live的，直接call callbacks->suspend －> xc_save.c suspend() －> print out "suspend", saveInputHandler收到后,shutdown domain.
+
+(2)	如过不是HVM，map_and_save_p2m_table：
+	write p2m_size
+	p2m_fl_zero: signature
+	total_bytes
+	chunk_signature ('vcpu')
+	chunk1_size
+	chunk1_data
+	chunk_signature ('extv')
+	chunk2_size
+	chunk2_data
+	p2m_frame_list (长度：P2M_FL_ENTRIES * sizeof(xen_pfn_t)）
+
+(3) write tmem, tsc
+
+(4) copy pages:  
+last_iter (对于live migrate, last_iter初始为0，非live方式，始终为1）
+当sent_this-iter > sendt-last_iter时，设last_iter=1,
+这时才会call callbacks->suspend, 
+且xc_shadow_control(SHADOW_OP_CLEAN, ...) ，return bitmap并clean internal copy
+
+to_send, to_fix, to_skip
+
+对于live:
+每一次iter:
+	xc_shadow_control(SHADOW_OP_PEEK, ...) return bitmap但不改变internal 		copy. 有变化的部分，标记to_skip,在这一次迭代中不保存。
+	generate pfn_batch, pfn_type:
+		判断to_skip,即dirty bit,
+		如果在to_skip里，则此次不写入，最后一次iter时，SHADOW_OP_CLEAN, 
+		不会再skip, 那一次再flush所有dirty的page。
+        每一次iter，pfn_type[]的若干元素被fill.
+	根据pfn_type, 
+		高8bit ==> type,
+		低24bit ==> pfn (physical frame number)
+			对于非HVM，pfn = pfn_to_mfn(n).
+			对于HVM, pfn = n.
+	mmap映射后，才可以访问page，取出page的内容。
+        最后：
+	write batch_size, pfn_type, pages.	
+转入下一次iter. 
+
+(5) write vcpu info. (max_vcpu_id, vcpumap等）
+（6）对于HVM， 
+	HVM_PARAM_IDENT_PT
+	HVM_PARAM_VM86_TSS
+	[Save magic-page locations]
+	HVM_PARAM_IOREQ_PFN
+	HVM_PARAM_BUFIOREQ_PFN
+	...
+完毕。
+（7)对于PV,
+	保存close时没有map的page。
+	xc_vcpu_getcontext
+	保存vcpu_context, ext_vcpucontext.
+	保存share_memory.
+(8) clean一些tmp data structure.
+	成功，return 0.
+
+
+Dest 端：
+xend/server/SrvDaemon.py:
+run():
+-> relocate.listenRelocation() (xend/server/relocate.py)
+-> tcp.TCPListener(RelocationProtocol, port, interface = interface,
+                        hosts_allow = hosts_allow)
+-> TCPListener (xen/web/tcp.py)
+	-> connection.SocketListener.__init__(self, protocol_class)
+
+xen/web/connection.py:
+Class SocketListener:
+	__init__():   (createSocket()
+	main(): 
+		sock.listen
+		sock.accept
+		acceptConnection()
+		-> TCPListener的acceptConnection()
+			-> connection.SocketServerConnection(sock, self.protocol_class)
+
+Class SocketServerConnection
+	main()
+		-> data = sock.recv(BUFF_SIZE)
+		-> protocol.dataReceivced(data)
+		  	-> RelocationProtocol的dataReceived()
+				-> xend/server/relocate.py
+				dataReceived():
+					self.parser.get_val()
+					self.diaptach(val)
+					->取出name, 调用op_"name"函数
+				首先，收到的是"receive"，因而会调用op_receive() (xend/server/relocate.py)
+
+op_receive():
+-> XendDomain.instance().domain_restore_fd(
+                    self.transport.sock.fileno(), relocating=True)
+
+-> xend/XendDomain.py:
+domain_restore_fd:
+->XendCheckpoint.restore(self, fd, paused=paused, relocating=relocating)
+-> xend/XendCheckpoint.py:
+restore(xd, fd, ...):
+	read SIGNATURE
+	read config length
+	read config data
+	domconfig = XendConfig(sxp_obj = vmconfig)
+	dominfo = xd.restore_(vmconfig)
+	-> dominfo = XendDomainInfo.restore(config)
+	   -> vm = XendDomainInfo(XendConfig.XendConfig(sxp_obj = config), resume = True)
+	   -> vm.resume()
+	   	->  self._constructDomain() (domain_create hypercall)
+	    	->  self._setSchedParams()
+                self._storeVmDetails()
+                self._createChannels()
+                self._createDevices()
+                self._storeDomDetails()
+                self._endRestore()
+	初始化dominfo的其他信息（比如：getStorePort, getConsolePort)
+      handler = RestoreInputHandler()
+      forkHelper(cmd, fd, handler.handler, True)
+		执行xc_restore命令，restore内存，cpucontext,qemu-save等等。输出信息＝＝》
+		RestoreInputHandler() => set store_mfn, console_mfn
+	设置fd的flag,do not pass to any other children.
+	dominfo.completeRestore():
+		-> self._introduceDomain()
+		-> self.image = image.create(self, self.info
+        	-> self.image.createDeviceModel(True)
+        	-> self._storeDomDetails()
+        	-> self._registerWatches()
+        	-> self.refreshShutdown()
+	dominfo.waitForDevices():
+	dominfo.uppause().
+
+xc_restore cmd: (tools/xcutils/xc_restore.c)
+main()
+ -> xc_domain_restore(xc_fd, io_fd, domid, ...)  (/tools/libxc/xc_domain_restore.c)
+	-> 与xc_domain_save相反的方向，解析信息，并且设置相应的部分。
+	其中loadpages部分，
+		for循环：
+			batch_size, pfn_type, pagebuf.
+			apply_batch：map pages, 用pagebuf的data写这些pages。
+		//received all pages
+		completed=1
+		io_fd设为NONBLOCK mode.
+		下面这个部分判断source socket有没有关闭，没有关闭，跳回loadpages。
+		如果已经关闭，会跳到finish.
+		------------------------------------------------------------------------------
+		    // DPRINTF("Buffered checkpoint\n");
+
+		    if ( pagebuf_get(&pagebuf, io_fd, xc_handle, d
+			ERROR("error when buffering batch, finishi
+			goto finish;
+		    }
+		    memset(&tmptail, 0, sizeof(tmptail));
+		    tmptail.ishvm = hvm;
+		    if ( buffer_tail(ctx, &tmptail, io_fd, max_vcp
+				     ext_vcpucontext) < 0 ) {
+			ERROR ("error buffering image tail, finish
+			goto finish;
+		    }
+		    tailbuf_free(&tailbuf);
+		    memcpy(&tailbuf, &tmptail, sizeof(tailbuf));
+		------------------------------------------------------------------------
+		pagebuf_get 和 buffer_tail的return value:要不＝＝0，要不< 0，
+		socket出现问题时，才会返回 < 0
+		通过这个可以判断source端是否已经断开socket。
+	
+	     Note： 如果source端，socket没有close，会一直做loadpages,而不能退出。
+ 
+
+		
+	
+
+

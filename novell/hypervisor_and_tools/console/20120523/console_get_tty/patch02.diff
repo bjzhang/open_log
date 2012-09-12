@@ -1,0 +1,166 @@
+# HG changeset patch
+# Parent ab86fc0e2b452d30a223bb789c23c5321c45713f
+[v2] libxl: Add API to retrieve domain console tty
+
+This api retrieve domain console from xenstore. With this new api, it is easy to implement "virsh console" command in libvirt libxl driver.
+
+Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+
+Changes since v1:
+ * Replace function libxl__sprintf with macro GSPRINTF
+ * check return value and handle error for libxl__xs_read and libxl__domain_type
+ * merge common code for libxl_primary_console_get_tty and 
+   libxl_primary_console_exec as libxl__primary_console_find
+ * Reformat code to be less than 80 characters.
+
+diff -r ab86fc0e2b45 tools/libxl/libxl.c
+--- a/tools/libxl/libxl.c	Tue May 22 11:55:02 2012 +0100
++++ b/tools/libxl/libxl.c	Wed May 23 14:27:56 2012 +0800
+@@ -1188,7 +1188,8 @@ out:
+     return rc;
+ }
+ 
+-int libxl_console_exec(libxl_ctx *ctx, uint32_t domid, int cons_num, libxl_console_type type)
++int libxl_console_exec(libxl_ctx *ctx, uint32_t domid, int cons_num,
++                       libxl_console_type type)
+ {
+     GC_INIT(ctx);
+     char *p = libxl__sprintf(gc, "%s/xenconsole", libxl__private_bindir_path());
+@@ -1214,24 +1215,74 @@ out:
+     return ERROR_FAIL;
+ }
+ 
+-int libxl_primary_console_exec(libxl_ctx *ctx, uint32_t domid_vm)
++int libxl_console_get_tty(libxl_ctx *ctx, uint32_t domid, int cons_num, 
++                          libxl_console_type type, char **path)
++{
++    GC_INIT(ctx);
++    char *dom_path = 0;
++    char *tty_path = 0;
++    char *tty = 0;
++    int rc = 0;
++
++    dom_path = libxl__xs_get_dompath(gc, domid);
++    if (!dom_path) {
++        rc = ERROR_FAIL;
++        goto out;
++    }
++
++    switch (type) {
++    case LIBXL_CONSOLE_TYPE_SERIAL:
++        tty_path = GCSPRINTF("%s/serial/0/tty", dom_path);
++        break;
++    case LIBXL_CONSOLE_TYPE_PV:
++        if (cons_num == 0)
++            tty_path = GCSPRINTF("%s/console/tty", dom_path);
++        else
++            tty_path = GCSPRINTF("%s/device/console/%d/tty", dom_path, 
++                                cons_num);
++        break;
++    default:
++        rc = ERROR_FAIL;
++        goto out;
++    }
++
++    tty = libxl__xs_read(gc, XBT_NULL, tty_path);
++    if (tty) 
++        *path = strdup(tty);
++    else
++        rc = ERROR_FAIL;
++
++out:
++    GC_FREE;
++    return rc;
++}
++
++static int libxl__primary_console_find(libxl_ctx *ctx, uint32_t domid_vm, 
++                                       uint32_t *domid_out, int *cons_num_out, 
++                                       libxl_console_type *type_out)
+ {
+     GC_INIT(ctx);
+     uint32_t stubdomid = libxl_get_stubdom_id(ctx, domid_vm);
+-    int rc;
+-    if (stubdomid)
+-        rc = libxl_console_exec(ctx, stubdomid,
+-                                STUBDOM_CONSOLE_SERIAL, LIBXL_CONSOLE_TYPE_PV);
+-    else {
++    int rc = 0;
++
++    if (stubdomid) {
++        *domid_out = stubdomid;
++        *cons_num_out = STUBDOM_CONSOLE_SERIAL;
++        *type_out = LIBXL_CONSOLE_TYPE_PV;
++    } else {
+         switch (libxl__domain_type(gc, domid_vm)) {
+         case LIBXL_DOMAIN_TYPE_HVM:
+-            rc = libxl_console_exec(ctx, domid_vm, 0, LIBXL_CONSOLE_TYPE_SERIAL);
++            *domid_out = domid_vm;
++            *cons_num_out = 0;
++            *type_out = LIBXL_CONSOLE_TYPE_SERIAL;
+             break;
+         case LIBXL_DOMAIN_TYPE_PV:
+-            rc = libxl_console_exec(ctx, domid_vm, 0, LIBXL_CONSOLE_TYPE_PV);
++            *domid_out = domid_vm;
++            *cons_num_out = 0;
++            *type_out = LIBXL_CONSOLE_TYPE_PV;
+             break;
+         case -1:
+-            LOG(ERROR,"unable to get domain type for domid=%"PRIu32,domid_vm);
++            LOG(ERROR,"unable to get domain type for domid=%"PRIu32, domid_vm);
+             rc = ERROR_FAIL;
+             break;
+         default:
+@@ -1242,6 +1293,33 @@ int libxl_primary_console_exec(libxl_ctx
+     return rc;
+ }
+ 
++int libxl_primary_console_exec(libxl_ctx *ctx, uint32_t domid_vm)
++{
++    uint32_t domid_out;
++    int cons_num_out;
++    libxl_console_type type_out;
++    int rc;
++
++    rc = libxl__primary_console_find(ctx, domid_vm, &domid_out, &cons_num_out, 
++                                     &type_out);
++    if ( rc ) return rc;
++    return libxl_console_exec(ctx, domid_out, cons_num_out, type_out);
++}
++
++int libxl_primary_console_get_tty(libxl_ctx *ctx, uint32_t domid_vm,
++                                  char **path)
++{
++    uint32_t domid_out;
++    int cons_num_out;
++    libxl_console_type type_out;
++    int rc;
++
++    rc = libxl__primary_console_find(ctx, domid_vm, &domid_out, &cons_num_out, 
++                                     &type_out);
++    if ( rc ) return rc;
++    return libxl_console_get_tty(ctx, domid_out, cons_num_out, type_out, path);
++}
++
+ int libxl_vncviewer_exec(libxl_ctx *ctx, uint32_t domid, int autopass)
+ {
+     GC_INIT(ctx);
+diff -r ab86fc0e2b45 tools/libxl/libxl.h
+--- a/tools/libxl/libxl.h	Tue May 22 11:55:02 2012 +0100
++++ b/tools/libxl/libxl.h	Wed May 23 14:27:56 2012 +0800
+@@ -601,6 +601,16 @@ int libxl_console_exec(libxl_ctx *ctx, u
+  * case of HVM guests, and before libxl_run_bootloader in case of PV
+  * guests using pygrub. */
+ int libxl_primary_console_exec(libxl_ctx *ctx, uint32_t domid_vm);
++/* libxl_console_get_tty retrieves the specified domain's console tty path
++ * and stores it in path. Caller is responsible for freeing the memory.
++ */
++int libxl_console_get_tty(libxl_ctx *ctx, uint32_t domid, int cons_num, 
++                          libxl_console_type type, char **path);
++/* libxl_primary_console_get_tty retrieves the specified domain's primary 
++ * console tty path and stores it in path. Caller is responsible for freeing
++ * the memory.
++ */
++int libxl_primary_console_get_tty(libxl_ctx *ctx, uint32_t domid_vm, char **path);
+ 
+ /* May be called with info_r == NULL to check for domain's existance */
+ int libxl_domain_info(libxl_ctx*, libxl_dominfo *info_r,
