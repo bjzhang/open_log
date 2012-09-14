@@ -967,9 +967,70 @@ GTD
 1.5h lunch and rest 
 2), opensuse arm 12.2 repo: http://download.opensuse.org/repositories/openSUSE:/12.2:/ARM/standard
 
+10:28 2012-09-13
+virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont22, send patch to Jim, cont2
+1, plan
+1), add migration patch. confirm it work or not. 
+2), send Chunyan and Jim with my test status. 
+
+2, add commit message for lock usage.
+
+3, migration fail
+1), 2012-09-13 05:06:22.511+0000: 23221: error : libxlDomainMigrateConfirm3:5033 : internal error migration failed, try to resume on our end
+(1), this is failed because of finish exit with dom==0. which means libvirt could not get domain xml from xenlight. 
+
+4, send patch to Chunyan and Jim: cover letter
+From 1ee1d281cd786bfb7fdfbb0b698bfddd294e27f6 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Thu, 13 Sep 2012 14:21:35 +0800
+Subject: [PATCH 0/3] Implement the lock and migration of libxl driver
+
+In these series patches, there are two types of job, one is normal job, the other is async job.
+1), The asynchronization job is the long-running job.
+(1), it includes migration, save, restore and dump in libxl. save and migration call the same api(ref my notes at the end of this mail).
+(2), I add restore as async job compare with qemu driver because the restore is also a long-running job compare with create, list and other operation.
+(3), The nested async job on the same domain is not allowed in my patch.
+(4), in order to tracking the async job. I assign async job type for each async job.
+     LIBXL_ASYNC_JOB_MIGRATION_OUT,
+     LIBXL_ASYNC_JOB_MIGRATION_IN,
+     LIBXL_ASYNC_JOB_SAVE,
+     LIBXL_ASYNC_JOB_DUMP,
+
+2), The normal job is very quick compare with async job. I add such type for allowing the normal while the async job is in process.
+(1), whether the normal job is allowed or not while async job is doing depend on the normal job type.
+usually, only destroy, abort and query is allowed. but for migration async job, migration is not allowed too(nested migration is not allowed).
+
+     LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
+     LIBXL_JOB_MODIFY,        /* May change state */
+     LIBXL_JOB_ABORT,         /* Abort current async job */
+     LIBXL_JOB_MIGRATION_OP,  /* Operation influencing outgoing migration */
+     LIBXL_JOB_ASYNC,         /* Asynchronous job */
+
+3), the abort job is created for async job. mainly for migration.
+it will block the user interrupt(Ctrl+c) while the migration, save and dump job is running. But it could not abort job actually. Because I could not find out the api could cancel the migration or core dump.
+
+5, git send-email
+git send-email --cover-letter --no-chain-reply-to --annotate --to cyliu@suse.com --cc jfehlig@suse.com 000*.patch
+
+16:16 2012-09-14
+company, colleague, Bobbi Wu
+"Alan Gao"_email_"New Event Manager"
+Bobbi Wu join marketing team from this week as Senior event manager base at Beijing. Before she join us, Bobbi work at ACROSSCHINA as Account Manager and serviced Oracle and Microsoft marketing events. 
+She in charge of all of sales events from now, and will focus on our SUSECon China 2012 conference at Xiamen from Nov. 8 - 10th. Please join me to welcome Bobbi and give your great help and support. Thanks so much. 
+Bobbi Wu
+Event Manager
+bwu@novell.com
+(86) 186-1848-6996
+ 
+16:17 2012-09-14
+GTD
+0, 16:00-19:31 20:17-21:57
+
+1, today
+1), 18:00-20:30 debug libxl migration. see"18:24 2012-09-14"
+
 2, next
 2), create git hub account. clone xen-arm to it. start to coding. ref"10:45 2012-07-13"
-3), debug libxl migration. 
 
 2, next
 1), update find_keyword. do not display the full patch in find_keyword. or do not display the filename and line number while slient mode enable. add logAssistant to git. 
@@ -1019,48 +1080,115 @@ test pattern: "build.*service|osc"
 (2), android python script for work log search.
 (3), omap3530 pv port or other work. 
 
-10:28 2012-09-13
-virtualization, libvirt, migration, libxl(xenlight), lock, cont19, prepare send patch to upstream, debug, cont22, send patch to Jim, cont2
-1, plan
-1), add migration patch. confirm it work or not. 
-2), send Chunyan and Jim with my test status. 
+18:24 2012-09-14
+virtualization, libvirt, migration, libxl(xenlight), lock, cont20, debug migration
+1, I found one error message, maybe it is the reason? 
+2012-09-14 10:20:43.480+0000: 14021: error : virNetSocketReadWire:1184 : End of file while reading data: Input/output error
+1), add debug info in migration function. 
 
-2, add commit message for lock usage.
+2, 看xl list, 能看到挂之前, memory没有增加, 难道是因为memory不够造成的???
+1), log
+Fri Sep 14 19:21:26 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     114.3 
+sles11_hvm_15                                3     3     1     --p---       0.0 
+Fri Sep 14 19:21:27 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     115.5 
+sles11_hvm_15                                3   127     1     --p---       0.0 
+Fri Sep 14 19:21:28 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     116.8 
+sles11_hvm_15                                3   259     1     --p---       0.0 
+Fri Sep 14 19:21:29 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     118.2 
+sles11_hvm_15                                3   391     1     --p---       0.0 
+Fri Sep 14 19:21:31 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     119.6 
+sles11_hvm_15                                3   519     1     --p---       0.0 
+Fri Sep 14 19:21:32 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     121.1 
+sles11_hvm_15                                3   651     1     --p---       0.0 
+Fri Sep 14 19:21:33 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     122.5 
+sles11_hvm_15                                3   771     1     --p---       0.0 
+Fri Sep 14 19:21:35 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     123.9 
+sles11_hvm_15                                3   901     1     --p---       0.0 
+Fri Sep 14 19:21:36 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     124.9 
+sles11_hvm_15                                3   994     1     --p---       0.0 
+Fri Sep 14 19:21:37 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     125.0 
+sles11_hvm_15                                3   994     1     --p---       0.0 
+Fri Sep 14 19:21:38 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     125.2 
+sles11_hvm_15                                3   994     1     --p---       0.0 
+Fri Sep 14 19:21:39 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     126.1
+2), 把memory改为786M. 还是快完成时挂了, 看xl migrate
+ri Sep 14 19:30:13 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     135.1 
+sles11_hvm_15                                4    11     1     --p---       0.0 
+Fri Sep 14 19:30:15 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     136.6 
+sles11_hvm_15                                4   131     1     --p---       0.0 
+Fri Sep 14 19:30:16 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     137.9 
+sles11_hvm_15                                4   287     1     --p---       0.0 
+Fri Sep 14 19:30:17 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     139.1 
+sles11_hvm_15                                4   423     1     --p---       0.0 
+Fri Sep 14 19:30:18 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     140.4 
+sles11_hvm_15                                4   567     1     --p---       0.0 
+Fri Sep 14 19:30:20 CST 2012                                                    
+Name                                        ID   Mem VCPUs      State   Time(s) 
+Domain-0                                     0  1805     4     r-----     141.6 
+sles11_hvm_15                                4   703     1     --p---       0.0 
+Fri Sep 14 19:30:21 CST 2012
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0  1805     4     r-----     142.0
+sles11_hvm_15                                4   747     1     --p---       0.0
+Fri Sep 14 19:30:22 CST 2012
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0  1805     4     r-----     142.2
+sles11_hvm_15                                4   747     1     --p---       0.0
+Fri Sep 14 19:30:23 CST 2012
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0  1805     4     r-----     142.3
+sles11_hvm_15                                4   747     1     --p---       0.0
 
-3, migration fail
-1), 2012-09-13 05:06:22.511+0000: 23221: error : libxlDomainMigrateConfirm3:5033 : internal error migration failed, try to resume on our end
-(1), this is failed because of finish exit with dom==0. which means libvirt could not get domain xml from xenlight. 
+log in libvirtd.log
+2012-09-14 11:30:18.369+0000: 9806: info : doMigrateSend:4642 : Enter           
+2012-09-14 11:30:18.369+0000: 9804: info : libxlEventHandler:780 : Unhandled shutdown_reason 2                                                                  
+2012-09-14 11:30:28.999+0000: 9806: info : doMigrateSend:4693 : Exit with ret: 0
 
-4, send patch to Chunyan and Jim: cover letter
-From 1ee1d281cd786bfb7fdfbb0b698bfddd294e27f6 Mon Sep 17 00:00:00 2001
-From: Bamvor Jian Zhang <bjzhang@suse.com>
-Date: Thu, 13 Sep 2012 14:21:35 +0800
-Subject: [PATCH 0/3] Implement the lock and migration of libxl driver
+3, try Chunyan patch on upstream libvirt.
+1), \TODO not try. try it next week. 
 
-In these series patches, there are two types of job, one is normal job, the other is async job.
-1), The asynchronization job is the long-running job.
-(1), it includes migration, save, restore and dump in libxl. save and migration call the same api(ref my notes at the end of this mail).
-(2), I add restore as async job compare with qemu driver because the restore is also a long-running job compare with create, list and other operation.
-(3), The nested async job on the same domain is not allowed in my patch.
-(4), in order to tracking the async job. I assign async job type for each async job.
-     LIBXL_ASYNC_JOB_MIGRATION_OUT,
-     LIBXL_ASYNC_JOB_MIGRATION_IN,
-     LIBXL_ASYNC_JOB_SAVE,
-     LIBXL_ASYNC_JOB_DUMP,
+4, \TODO
+1), fix error: xl认为虚拟机挂了, 但是libvirt不知道.
+e.g. my git 20b1a74049bbf010bd2805159376aca546ec1483 
 
-2), The normal job is very quick compare with async job. I add such type for allowing the normal while the async job is in process.
-(1), whether the normal job is allowed or not while async job is doing depend on the normal job type.
-usually, only destroy, abort and query is allowed. but for migration async job, migration is not allowed too(nested migration is not allowed).
-
-     LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
-     LIBXL_JOB_MODIFY,        /* May change state */
-     LIBXL_JOB_ABORT,         /* Abort current async job */
-     LIBXL_JOB_MIGRATION_OP,  /* Operation influencing outgoing migration */
-     LIBXL_JOB_ASYNC,         /* Asynchronous job */
-
-3), the abort job is created for async job. mainly for migration.
-it will block the user interrupt(Ctrl+c) while the migration, save and dump job is running. But it could not abort job actually. Because I could not find out the api could cancel the migration or core dump.
-
-5, git send-email
-git send-email --cover-letter --no-chain-reply-to --annotate --to cyliu@suse.com --cc jfehlig@suse.com 000*.patch
+18:45 2012-09-14
+build 3.4 kernel for Allwinner A10
+1, build error
+  CC [M]  drivers/net/wireless/rtl8192cu/os_dep/osdep_service.o
+drivers/net/wireless/rtl8192cu/os_dep/osdep_service.c: In function 'rtw_suspend_lock_uninit':
+disable CONFIG_HAS_WAKELOCK, CONFIG_WAKELOCK in kernel/power/Kconfig
 
