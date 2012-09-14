@@ -1,0 +1,29 @@
+From 1ee1d281cd786bfb7fdfbb0b698bfddd294e27f6 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Thu, 13 Sep 2012 14:21:35 +0800
+Subject: [PATCH 0/3] Implement the lock and migration of libxl driver
+
+In these series patches, there are two types of job, one is normal job, the other is async job.
+1), The asynchronization job is the long-running job.
+(1), it includes migration, save, restore and dump in libxl. save and migration call the same api(ref my notes at the end of this mail).
+(2), I add restore as async job compare with qemu driver because the restore is also a long-running job compare with create, list and other operation.
+(3), The nested async job on the same domain is not allowed in my patch.
+(4), in order to tracking the async job. I assign async job type for each async job.
+     LIBXL_ASYNC_JOB_MIGRATION_OUT,
+     LIBXL_ASYNC_JOB_MIGRATION_IN,
+     LIBXL_ASYNC_JOB_SAVE,
+     LIBXL_ASYNC_JOB_DUMP,
+
+2), The normal job is very quick compare with async job. I add such type for allowing the normal while the async job is in process.
+(1), whether the normal job is allowed or not while async job is doing depend on the normal job type.
+usually, only destroy, abort and query is allowed. but for migration async job, migration is not allowed too(nested migration is not allowed).
+
+     LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
+     LIBXL_JOB_MODIFY,        /* May change state */
+     LIBXL_JOB_ABORT,         /* Abort current async job */
+     LIBXL_JOB_MIGRATION_OP,  /* Operation influencing outgoing migration */
+     LIBXL_JOB_ASYNC,         /* Asynchronous job */
+
+3), the abort job is created for async job. mainly for migration.
+it will block the user interrupt(Ctrl+c) while the migration, save and dump job is running. But it could not abort job actually. Because I could not find out the api could cancel the migration or core dump.
+
