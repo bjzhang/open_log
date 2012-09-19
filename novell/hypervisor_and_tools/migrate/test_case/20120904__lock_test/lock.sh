@@ -62,27 +62,27 @@ echo "test libxlDomainCreateWithFlags: start"
 virsh define $domain_xml
 virsh start $domain_name
 virsh list | grep $domain_name -w 
-test_ret $1
+test_ret $?
 
 virsh destroy $domain_name
 sleep 1
 
 echo "test libxlDomainCreateXML: create"
-virsh create /etc/xen/vm/sles11_hvm_10.xml
+virsh create $domain_xml
 virsh list | grep $domain_name -w
-test_ret $1
+test_ret $?
 sleep 1
 
 echo "test libxlDomainSuspend: suspend"
 virsh suspend $domain_name
 virsh list | grep $domain_name -w | grep paused -w
-test_ret $1
+test_ret $?
 sleep 1
 
 echo "test libxlDomainResume: resume"
 virsh resume $domain_name
 virsh list | grep $domain_name -w | grep running -w
-test_ret $1
+test_ret $?
 sleep 1
 
 echo "test libxlDomainReboot: reboot"
@@ -90,8 +90,8 @@ reboot_or_shutdown reboot
 
 echo "test libxlShutdownFlags: shutdown"
 reboot_or_shutdown shutdown
-irsh create $domain_xml
-leep 1
+virsh create $domain_xml
+sleep 1
 
 echo "test libxlDoDomainSave: save"
 virsh save $domain_name ${domain_name}.save
@@ -131,5 +131,8 @@ virsh setvcpus $domain_name 4 --live
 test_ret $?
 virsh vcpucount $domain_name
 
-echo "test libxlDomainModifyDeviceFlags: detach-device, detach-disk, detach-interface, detach-device, detach-disk, detach-interface, update-device, domif-setlink, change-media"
+echo "end test"
+virsh destroy $domain_name
+
+echo "test libxlDomainModifyDeviceFlags: attach-device, attach-disk, attach-interface, detach-device, detach-disk, detach-interface, update-device, domif-setlink, change-media"
 
