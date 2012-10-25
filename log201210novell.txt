@@ -749,7 +749,7 @@ added in a patch set implementing migration.
 > +    LIBXL_ASYNC_JOB_DUMP,
 >   
 
-IMO, LIBXL_ASYNC_JOB_RESTORE should be added to this list.  I see It is
+imo, libxl_async_job_restore should be added to this list.  i see it is
 omitted in the qemu driver as well, so perhaps there is a good reason
 for it?
 
@@ -2029,4 +2029,440 @@ Jim
 >      virDomainDefFree(vmdef);
 >      virDomainDeviceDefFree(dev);
 >   
+
+3, "Daniel P. Berrange" <berrange@redhat.com>""_email_20121023_2347
+On Mon, Oct 22, 2012 at 04:22:53PM -0600, Jim Fehlig wrote:
+> Bamvor Jian Zhang wrote:
+> > This patch introduce a lock for protecting the long-running
+> > api (save, dump, migration and so on) from the other api
+> > which may update the status of the virtual machine.
+> >   
+> 
+> Hi Bamvor,
+> 
+> Thanks for the patches and sorry for the delayed response.  I've been
+> traveling quite a bit lately and just got around to reviewing and
+> testing your work.
+> 
+> Testing so far looks good.  I can save and dump vm's while at the same
+> time list and retrieve info.
+> 
+> See my comments inline, but did want to raise a more general comment
+> first.  There is a quite a bit of code here borrowed from the qemu
+> driver, which in general is fine since the libxl driver does not need
+> the same locking features as the qemu one.  I'd like to hear the opinion
+> of other libvirt maintainers wrt the duplicated code.
+
+I was actually quite pleased to see that the libxl driver was following
+the model used in the QEMU driver, even though there was code copying.
+I don't think it is worth trying to eliminate the code duplication in
+this case.
+
+
+Daniel
+-- 
+|: http://berrange.com      -o-    http://www.flickr.com/photos/dberrange/ :|
+|: http://libvirt.org              -o-             http://virt-manager.org :|
+|: http://autobuild.org       -o-         http://search.cpan.org/~danberr/ :|
+|: http://entangle-photo.org       -o-       http://live.gnome.org/gtk-vnc :|
+
+
+4, "Eric Blake <eblake@redhat.com>"_email_20121024_1206
+On 10/22/2012 05:10 PM, Jim Fehlig wrote:
+> Bamvor Jian Zhang wrote:
+>> Add long-running jobs for save, dump. Add normal job for the
+>> api maybe modify the domain.
+>>
+>> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+
+>> +
+>> +    if (libxlDomainObjBeginJob(driver, vm, LIBXL_JOB_MODIFY) < 0)
+>> +        goto cleanup;
+>> +
+>>      if (!virDomainObjIsActive(vm)) {
+>>          virReportError(VIR_ERR_OPERATION_INVALID, "%s", _("Domain is not running"));
+>> -        goto cleanup;
+>> +        goto endjob;
+>>      }
+>>   
+> 
+> IMO, we should check if the domain is active before calling
+> libxlDomainObjBeginJob().
+
+That's a possible optimization to avoid contending for the lock, but the
+point remains that libxlDomainObjBeginJob() temporarily drops locks, and
+while locks are down, the domain can stop.  Therefore, you must ALWAYS
+check if the domain is active after obtaining the job, even if you
+already checked prior to requesting the job.  This particular section of
+code looks correct to me as-is.
+
+-- 
+Eric Blake   eblake@redhat.com    +1-919-301-3266
+Libvirt virtualization library http://libvirt.org
+
+5, Jim
+>> IMO, we should check if the domain is active before calling
+>> libxlDomainObjBeginJob().
+>>     
+>
+> That's a possible optimization to avoid contending for the lock, but the
+> point remains that libxlDomainObjBeginJob() temporarily drops locks, and
+> while locks are down, the domain can stop.
+Oh, right.  Thanks for catching that.
+
+>   Therefore, you must ALWAYS
+> check if the domain is active after obtaining the job, even if you
+> already checked prior to requesting the job.  This particular section of
+> code looks correct to me as-is.
+>   
+Agreed.  Bamvor, ignore my comments about changing this pattern
+throughout the patch.
+
+6, general
+1), Jim
+See my comments inline, but did want to raise a more general comment
+first.  There is a quite a bit of code here borrowed from the qemu
+driver, which in general is fine since the libxl driver does not need
+the same locking features as the qemu one.  I'd like to hear the opinion
+of other libvirt maintainers wrt the duplicated code.
+2), Daniel 
+I was actually quite pleased to see that the libxl driver was following
+the model used in the QEMU driver, even though there was code copying.
+I don't think it is worth trying to eliminate the code duplication in
+this case.
+
+7, analysis the reply of Patch01
+1), 
+> +    /* The following two items must always be the last items before JOB_LAST */
+> +    LIBXL_JOB_ASYNC,         /* Asynchronous job */
+>   
+
+There is only one item, so the comment needs updated.
+
+2), remove migration relative patch.
+The libxl driver doesn't currently support migration.  These could be
+added in a patch set implementing migration.
+(1), 
+> +    LIBXL_ASYNC_JOB_MIGRATION_OUT,
+> +    LIBXL_ASYNC_JOB_MIGRATION_IN,
+>   
+(2), 
+> +static int ATTRIBUTE_UNUSED
+> +libxlMigrationJobStart(libxlDriverPrivatePtr driver,
+> +                       virDomainObjPtr vm,
+> +                       enum libxlDomainAsyncJob job)
+>
+
+3), about restore job
+(1), 
+imo, libxl_async_job_restore should be added to this list.  i see it is
+omitted in the qemu driver as well, so perhaps there is a good reason
+for it?
+Bamvor: libxlVmStart不好处理。好像还有其他原因?
+(2),From my testing, this prevents listing domains, getting domain info,
+etc. while restoring the domain.  As mentioned in patch 1, we could use
+LIBXL_ASYNC_JOB_RESTORE here.
+
+4), 
+> +/*
+> + * obj must be locked before calling. If libxlDriverPrivatePtr is passed, it
+> + * MUST be locked; otherwise it MUST NOT be locked.
+>   
+
+IMO, libxlDriverPrivatePtr should always be passed, in which case it
+MUST be locked.
+
+5), libxlAbortJob
+This function will always fail with the above logic.  ret is initialized
+to -1 and is never changed.
+
+Is it even possible to safely abort a libxl operation?  If not, this
+function should probably remain unimplemented.  Maybe it will be useful
+when the libxl driver supports migration.
+
+Bamvor: missing ret because libxl could not cancel migration at this momnent. 
+
+8, analysis the reply of Patch02
+1), CreateXML
+IMO, we should check if the domain is active before calling
+libxlDomainObjBeginJob().
+Bamvor: How can i know whether domain is active or not before this domain is not create?
+2), about virDomainRemoveInactive
+> +        if (libxlDomainObjEndAsyncJob(driver, vm))
+> +            virDomainRemoveInactive(&driver->domains, vm);
+>   
+
+Shouldn't we call virDomainRemoveInactive() even if
+libxlDomainObjEndAsyncJob() fails?
+Bamvor: i do not know the reason actual. 
+
+
+
+14:57 2012-10-25
+GTD
+0, 10:40
+
+1, today
+
+16:54 2012-10-25
+virtualization, libvirt, xenlight support
+"Jim Fehlig <jfehlig@suse.com>"_email_"Re: [Xen-devel] libxl drivers for libvirt?"_20121025_0211
+George Dunlap wrote:
+> Hey Jim,
+>
+> I was wondering if you or someone on your team could give me an idea
+> what the status of libxl support is in libvirt, particularly wrt
+> various releases?
+>
+> I'm asking because I'm going to UDS next week to talk about the 13.04
+> release, and it would be good to get Xen 4.2 in; but that in part
+> depends on whether there will be libvirt support for 4.2 in whatever
+> version of libvirt they ship as well.  I know Dario has been facing
+> the same kind of questions for Fedora 18.
+>
+> It appears that libvirt 0.10.2 has limited support for the 4.1 libxl
+> driver; but:
+> * This doesn't include some core features, like live migration
+
+Right.  Chunyan has some patches to implement migration against 4.1
+libxl, but IIRC she is still investigating a bug.  Chunyan, can you give
+George an update on your libvirt libxl migration patches?
+
+> * It won't compile against 4.2's libxl
+
+Right again.  Ondrej has been looking into this.  Ondrej, do you have
+any status to report?  Any questions for the Xen folks wrt 4.1 vs 4.2 libxl?
+
+> Is that right?
+>
+> So I guess it would be nice to know:
+> * What kind of Xen support is available in the most recent release
+> (0.10.2, I believe), both xend and libxl
+
+I've provided a table below that lists all of the libvirt hypervisor
+driver functions and their implementation status for qemu/kvm, legacy
+xen, and libxl drivers.
+
+> * What kind of Xen support for libxl is in the libvirt development
+> branch, and do you have an idea when full support for 4.2 (at least,
+> including migration, suspend/resume, &c) might be available?
+
+Nothing has changed in git master over what is available in 0.10.2, but
+we are now starting to pick up this work.  Our priorities are to first
+get the libxl driver compiling against 4.2 and all of the existing
+functionality that works with 4.1 working with 4.2, followed by closing
+the feature gap with the legacy xen driver, and finally closing the
+feature gap with the qemu driver where it makes sense.  This is
+obviously quite a bit of work and any help would be appreciated :).
+
+BTW, we don't have any motivation to add features to the 4.1 version of
+the libvirt libxl driver.  Bamvor recently sent a patchset to add
+finer-grained locking to the libxl driver, but this code is independent
+of underlying libxl version IMO
+
+https://www.redhat.com/archives/libvir-list/2012-October/msg00503.html
+
+
+> * Whether it would be easy for distros to backport 4.2 libxl support
+> to whatever their release is?
+
+Until we have patches to make the driver work with 4.2 libxl, I can't
+speculate on the effort to backport to previous libvirt releases.
+
+Regards,
+Jim
+
+> That would help us better advise distros whether to:
+> * Stick with Xen 4.1 for the next release
+> * Go with Xen 4.2 but suggest continuing to use xend if libvirt
+> support is wanted
+> * Go with Xen 4.2 and backport patches to make libvirt work with libxl
+> * Go with Xen 4.2 and expect that libxl support will show up without
+> too much effort
+>
+> Obviously change is the only constant, so you can't predict with
+> perfect certainty; but if we have an idea what's most likely, we can
+> plan on that and then adjust based on what actually happens.
+>
+> Thanks!
+>  -George
+>
+
+libvirt hypervisor driver funcs         qemu  xend  libxl
+-----------------------------------------------------------------
+virDrvOpen                             |  x  |  x  |  x  |
+virDrvClose                            |  x  |  x  |  x  |
+virDrvDrvSupportsFeature               |  x  |  x  |     |
+virDrvGetType                          |  x  |  x  |  x  |
+virDrvGetVersion                       |  x  |  x  |  x  |
+virDrvGetLibVersion                    |  x  |  x  |  x  |
+virDrvGetHostname                      |  x  |  x  |  x  |
+virDrvGetSysinfo                       |  x  |     |     |
+virDrvGetMaxVcpus                      |  x  |  x  |  x  |
+virDrvNodeGetInfo                      |  x  |  x  |  x  |
+virDrvGetCapabilities                  |  x  |  x  |  x  |
+virDrvListDomains                      |  x  |  x  |  x  |
+virDrvNumOfDomains                     |  x  |  x  |  x  |
+virDrvListAllDomains                   |  x  |     |  x  |
+virDrvDomainCreateXML                  |  x  |  x  |  x  |
+virDrvDomainLookupByID                 |  x  |  x  |  x  |
+virDrvDomainLookupByUUID               |  x  |  x  |  x  |
+virDrvDomainLookupByName               |  x  |  x  |  x  |
+virDrvDomainSuspend                    |  x  |  x  |  x  |
+virDrvDomainResume                     |  x  |  x  |  x  |
+virDrvDomainPMSuspendForDuration       |  x  |     |     |
+virDrvDomainPMWakeup                   |  x  |     |     |
+virDrvDomainShutdown                   |  x  |  x  |  x  |
+virDrvDomainShutdownFlags              |  x  |  x  |  x  |
+virDrvDomainReboot                     |  x  |  x  |  x  |
+virDrvDomainReset                      |  x  |     |     |
+virDrvDomainDestroy                    |  x  |  x  |  x  |
+virDrvDomainDestroyFlags               |  x  |  x  |  x  |
+virDrvDomainGetOSType                  |  x  |  x  |  x  |
+virDrvDomainGetHostname                |     |     |     |
+virDrvDomainGetMaxMemory               |  x  |  x  |  x  |
+virDrvDomainSetMaxMemory               |  x  |  x  |  x  |
+virDrvDomainSetMemory                  |  x  |  x  |  x  |
+virDrvDomainSetMemoryFlags             |  x  |     |  x  |
+virDrvDomainSetMemoryParameters        |  x  |     |     |
+virDrvDomainGetMemoryParameters        |  x  |     |     |
+virDrvDomainSetNumaParameters          |  x  |     |     |
+virDrvDomainGetNumaParameters          |  x  |     |     |
+virDrvDomainSetBlkioParameters         |  x  |     |     |
+virDrvDomainGetBlkioParameters         |  x  |     |     |
+virDrvDomainGetInfo                    |  x  |  x  |  x  |
+virDrvDomainGetState                   |  x  |  x  |  x  |
+virDrvDomainGetControlInfo             |  x  |     |     |
+virDrvDomainSave                       |  x  |  x  |  x  |
+virDrvDomainSaveFlags                  |  x  |  x  |  x  |
+virDrvDomainRestore                    |  x  |  x  |  x  |
+virDrvDomainRestoreFlags               |  x  |  x  |  x  |
+virDrvDomainSaveImageGetXMLDesc        |  x  |     |     |
+virDrvDomainSaveImageDefineXML         |  x  |     |     |
+virDrvDomainCoreDump                   |  x  |  x  |  x  |
+virDrvDomainScreenshot                 |  x  |     |     |
+virDrvDomainSetVcpus                   |  x  |  x  |  x  |
+virDrvDomainSetVcpusFlags              |  x  |  x  |  x  |
+virDrvDomainGetVcpusFlags              |  x  |  x  |  x  |
+virDrvDomainPinVcpu                    |  x  |  x  |  x  |
+virDrvDomainPinVcpuFlags               |  x  |     |     |
+virDrvDomainGetVcpuPinInfo             |  x  |     |     |
+virDrvDomainPinEmulator                |  x  |     |     |
+virDrvDomainGetEmulatorPinInfo         |  x  |     |     |
+virDrvDomainGetVcpus                   |  x  |  x  |  x  |
+virDrvDomainGetMaxVcpus                |  x  |  x  |     |
+virDrvDomainGetSecurityLabel           |  x  |     |     |
+virDrvDomainGetSecurityLabelList       |  x  |     |     |
+virDrvNodeGetSecurityModel             |  x  |     |     |
+virDrvDomainGetXMLDesc                 |  x  |  x  |  x  |
+virDrvConnectDomainXMLFromNative       |  x  |  x  |  x  |
+virDrvConnectDomainXMLToNative         |  x  |  x  |  x  |
+virDrvListDefinedDomains               |  x  |  x  |  x  |
+virDrvNumOfDefinedDomains              |  x  |  x  |  x  |
+virDrvDomainCreate                     |  x  |  x  |  x  |
+virDrvDomainCreateWithFlags            |  x  |  x  |  x  |
+virDrvDomainDefineXML                  |  x  |  x  |  x  |
+virDrvDomainUndefine                   |  x  |  x  |  x  |
+virDrvDomainUndefineFlags              |  x  |  x  |  x  |
+virDrvDomainAttachDevice               |  x  |  x  |  x  |
+virDrvDomainAttachDeviceFlags          |  x  |  x  |  x  |
+virDrvDomainDetachDevice               |  x  |  x  |  x  |
+virDrvDomainDetachDeviceFlags          |  x  |  x  |  x  |
+virDrvDomainUpdateDeviceFlags          |  x  |  x  |  x  |
+virDrvDomainGetAutostart               |  x  |  x  |  x  |
+virDrvDomainSetAutostart               |  x  |  x  |  x  | 
+virDrvDomainGetSchedulerType           |  x  |  x  |  x  |
+virDrvDomainGetSchedulerParameters     |  x  |  x  |  x  |
+virDrvDomainGetSchedulerParametersFlags|  x  |  x  |  x  |
+virDrvDomainSetSchedulerParameters     |  x  |  x  |  x  |
+virDrvDomainSetSchedulerParametersFlags|  x  |  x  |  x  |
+virDrvDomainMigratePrepare             |     |  x  |     |
+virDrvDomainMigratePerform             |  x  |  x  |     |
+virDrvDomainMigrateFinish              |     |  x  |     |
+virDrvDomainBlockResize                |  x  |     |     |
+virDrvDomainBlockStats                 |  x  |     |     |
+virDrvDomainBlockStatsFlags            |  x  |     |     |
+virDrvDomainInterfaceStats             |  x  |  x  |     |
+virDrvDomainSetInterfaceParameters     |  x  |     |     |
+virDrvDomainGetInterfaceParameters     |  x  |     |     |
+virDrvDomainMemoryStats                |  x  |     |     |
+virDrvDomainBlockPeek                  |  x  |  x  |     |
+virDrvDomainMemoryPeek                 |  x  |     |     |
+virDrvDomainGetBlockInfo               |  x  |     |     |
+virDrvNodeGetCPUStats                  |  x  |     |     |
+virDrvNodeGetMemoryStats               |  x  |     |     |
+virDrvNodeGetCellsFreeMemory           |  x  |  x  |     |
+virDrvNodeGetFreeMemory                |  x  |  x  |  x  |
+virDrvDomainEventRegister              |  x  |  x  |  x  |
+virDrvDomainEventDeregister            |  x  |  x  |  x  |
+virDrvDomainMigratePrepare2            |  x  |     |     |
+virDrvDomainMigrateFinish2             |  x  |     |     |
+virDrvNodeDeviceDettach                |  x  |  x  |     |
+virDrvNodeDeviceReAttach               |  x  |  x  |     |
+virDrvNodeDeviceReset                  |  x  |  x  |     |
+virDrvDomainMigratePrepareTunnel       |  x  |     |     |
+virDrvConnectIsEncrypted               |  x  |  x  |     |
+virDrvConnectIsSecure                  |  x  |  x  |     |
+virDrvDomainIsActive                   |  x  |  x  |  x  |
+virDrvDomainIsPersistent               |  x  |  x  |  x  |
+virDrvDomainIsUpdated                  |  x  |  x  |  x  |
+virDrvCompareCPU                       |  x  |     |     |
+virDrvBaselineCPU                      |  x  |     |     |
+virDrvDomainGetJobInfo                 |  x  |     |     |
+virDrvDomainAbortJob                   |  x  |     |     |
+virDrvDomainMigrateSetMaxDowntime      |  x  |     |     |
+virDrvDomainMigrateGetMaxSpeed         |  x  |     |     |
+virDrvDomainMigrateSetMaxSpeed         |  x  |     |     |
+virDrvDomainEventRegisterAny           |  x  |     |  x  |
+virDrvDomainEventDeregisterAny         |  x  |     |  x  |
+virDrvDomainManagedSave                |  x  |     |  x  |
+virDrvDomainHasManagedSaveImage        |  x  |     |  x  |
+virDrvDomainManagedSaveRemove          |  x  |     |  x  |
+virDrvDomainSnapshotCreateXML          |  x  |     |     |
+virDrvDomainSnapshotGetXMLDesc         |  x  |     |     |
+virDrvDomainSnapshotNum                |  x  |     |     |
+virDrvDomainSnapshotListNames          |  x  |     |     |
+virDrvDomainListAllSnapshots           |  x  |     |     |
+virDrvDomainSnapshotNumChildren        |  x  |     |     |
+virDrvDomainSnapshotListChildrenNames  |  x  |     |     |
+virDrvDomainSnapshotListAllChildren    |  x  |     |     |
+virDrvDomainSnapshotLookupByName       |  x  |     |     |
+virDrvDomainHasCurrentSnapshot         |  x  |     |     |
+virDrvDomainSnapshotGetParent          |  x  |     |     |
+virDrvDomainSnapshotCurrent            |  x  |     |     |
+virDrvDomainSnapshotIsCurrent          |  x  |     |     |
+virDrvDomainSnapshotHasMetadata        |  x  |     |     |
+virDrvDomainRevertToSnapshot           |  x  |     |     |
+virDrvDomainSnapshotDelete             |  x  |     |     |
+virDrvDomainQemuMonitorCommand         |  x  |     |     |
+virDrvDomainQemuAttach                 |  x  |     |     |
+virDrvDomainQemuAgentCommand           |  x  |     |     |
+virDrvDomainOpenConsole                |  x  |  x  |     |
+virDrvDomainOpenGraphics               |  x  |     |     |
+virDrvDomainInjectNMI                  |  x  |     |     |
+virDrvDomainMigrateBegin3              |  x  |     |     |
+virDrvDomainMigratePrepare3            |  x  |     |     |
+virDrvDomainMigratePrepareTunnel3      |  x  |     |     |
+virDrvDomainMigratePerform3            |  x  |     |     |
+virDrvDomainMigrateFinish3             |  x  |     |     |
+virDrvDomainMigrateConfirm3            |  x  |     |     |
+virDrvDomainSendKey                    |  x  |     |     |
+virDrvDomainBlockJobAbort              |  x  |     |     |
+virDrvDomainGetBlockJobInfo            |  x  |     |     |
+virDrvDomainBlockJobSetSpeed           |  x  |     |     |
+virDrvDomainBlockPull                  |  x  |     |     |
+virDrvDomainBlockRebase                |  x  |     |     |
+virDrvDomainBlockCommit                |  x  |     |     |
+virDrvSetKeepAlive                     |     |     |     |
+virDrvConnectIsAlive                   |  x  |     |     |
+virDrvNodeSuspendForDuration           |  x  |  x  |     |
+virDrvDomainSetBlockIoTune             |  x  |     |     |
+virDrvDomainGetBlockIoTune             |  x  |     |     |
+virDrvDomainGetCPUStats                |  x  |     |     |
+virDrvDomainGetDiskErrors              |  x  |     |     |
+virDrvDomainSetMetadata                |  x  |     |     |
+virDrvDomainGetMetadata                |  x  |     |     |
+virDrvNodeGetMemoryParameters          |  x  |  x  |     |
+virDrvNodeSetMemoryParameters          |  x  |  x  |     |
+
 
