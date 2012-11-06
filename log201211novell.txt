@@ -82,17 +82,6 @@ GTD
 2), 10' 14:25-17:00 add api in libvirt libxl driver. see"11:17 2012-11-05"
 3), 20' work report. "17:36 2012-11-05"
 
-2, next
-1), discuss with Chunyan about her api status. about BlockPeek. 
-2), continue to work on lock patch. restore job and job phase. 
-3), test attach-disk command. see"10:41 2012-10-30"2
-
-3, after 1116
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code. 
-
 11:17 2012-11-05
 virtualization, libvirt, xenlight, add libxl api, cont2, domainBlockStats
 1, do some investigation for domainBlockStats in last weekend. the qdisk is created by qemu through xenstore. So, if i could find how to get statics from qemu(if it is possible). i could implement the domainBlockStats api. It looks better than domainInterfaceStats, because vif statics in host "/proc/net/dev" is always zero while using xenlight. 
@@ -152,4 +141,52 @@ work for libvirt libxl driver:
 1), send lock patch version 1 and version2 to libvirt upstream after upstream response. 
 2), continue to try to add domainBlockStats for libxl driver. 
 I found that xenlight use qemu as disk backend while disk type is qdisk for both pv and hvm guest. I could get block statics from qemu through monitor command, but it seems that there is no such machanism in xenlight for this. while in the xen 4.3, a new vm type PVH type will be used which will not use the qemu daemon in xenlight. So, maybe it is not worth to add block statics in current xenlight drivers? 
+
+16:16 2012-11-06
+GTD
+0, 16:00-18:50 20:35
+
+1, today
+1), Chunyan her api status. about BlockPeek: from her work report, her finish all the api except for interface and block stats. 
+2), 1h read migration(domain suspend) in xen upstream. see"16:52 2012-11-06"
+
+3), 20' Jiaju talk to me, about performance.
+4), 20:35- search one api which i could finish this week. 
+
+2, next
+3), test attach-disk command. see"10:41 2012-10-30"2
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code. 
+
+16:52 2012-11-06
+virtualization, libvirt, xen, libxl, read migration(domain suspend) in xen upstream
+1, 现在的关键就是到底xenlight 4.2里面migration能不能打断，如果能打断，我现在就能干活了。如果不能，还得找其他事情。
+简单看了看，原来migration里面的核心代码"xc_domain_save"放到了tools/libxl/libxl_save_helper.c
+2, 从下面的分析看，目前suspend(to disk or to remote socket)都是建立的一个子进程做xc_domain_save的工作。但是没有看到任何异步打断的机制，看起来只是为了便于上层调用，允许同时调下来多个命令？如果是这样的话，qemu的monitor lock似乎xenlight也需要。
+1), \TODO: discuss with Jim and Chunyan for xenlight event lock(similar to qemu monitor lock), 在适当的时候.
+2), 具体分析
+
+libxl__domain_suspend -> set dss->shs.callbacks: suspend, postcopy, checkpoint
+                         set toolstack_save as libxl__toolstack_save
+                         libxl__xc_domain_save
+                         domain_suspend_done
+libxl__xc_domain_save -> run_helper
+                         libxl__xc_domain_save_done
+
+libxl__toolstack_save: get phy status?
+
+run_helper -> fork
+              exec suspend in child
+              libxl__ev_fd_register: register event for monitoring suspend 
+                                     process? 
+
+xc_domain_save -> suspend_and_state -> suspend
+suspend is set by libxl__domain_suspend as remus or common suspend. 
 
