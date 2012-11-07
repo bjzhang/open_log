@@ -180,13 +180,27 @@ suspend is set by libxl__domain_suspend as remus or common suspend.
 
 12:52 2012-11-07
 GTD
-0, 10:00
+0, 10:00 20:03-22:30
 
 1, today
 1), 15:03 search one api which i could finish this week. see"15:16 2012-11-07"
+2), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"
 
 2, next
-3), test attach-disk command. see"10:41 2012-10-30"2
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
 
 3, for Jim
 1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
@@ -278,6 +292,7 @@ novell
 domainMemoryPeek: not support in xenlight
 
 18:17 2012-11-07
+virtualization, libvirt, xenlight, attach-disk, detach-disk
 1, 
 linux-vm4:/etc/xen/vm # virsh attach-disk sles11_hvm_10 /dev/sdb1 sda
 Disk attached successfully
@@ -291,4 +306,72 @@ error: Failed to reconnect to the hypervisor
 2, xm support scsi-attach, scsi-detach, scsi-list
 
 3, 原来的libxl是否支持ide，或者任何image或设备或lvm？
+xen默认就是用俄ide硬盘，所以至少ide要支持吧. 如果SCSI的热插拔没法做的话.
+
+4, attach-disk
+1), command successful, but will valid after reboot. 
+2), compare xenstore: the state is different. 
+(1), hda
+((1)) frontend
+linux-vm4:/etc/xen/vm # xenstore-ls /local/domain/2/device/vbd/768
+backend = "/local/domain/0/backend/qdisk/2/768"
+backend-id = "0"
+state = "4"
+virtual-device = "768"
+device-type = "disk"
+ring-ref = "8"
+event-channel = "8"
+protocol = "x86_64-abi"
+((2)), backend
+linux-vm4:/etc/xen/vm # xenstore-ls /local/domain/0/backend/qdisk/2        
+768 = ""                                                                   
+ frontend = "/local/domain/2/device/vbd/768"                               
+ params = "aio:/var/lib/xen/images_2/sles11_hvm_10/disk0.raw"              
+ frontend-id = "2"                                                         
+ online = "1"                                                              
+ removable = "1"                                                           
+ bootable = "1"                                                            
+ state = "4"
+ dev = "hda"
+ type = "tap"
+ mode = "w"
+ feature-barrier = "1"
+ info = "0"
+ sector-size = "512"
+ sectors = "8388608"
+ hotplug-status = "connected"
+(2), sda
+((1)), frontend
+linux-vm4:/etc/xen/vm # xenstore-ls /local/domain/2/device/vbd/2048
+backend = "/local/domain/133/backend/qdisk/2/2048"
+backend-id = "133"
+state = "3"
+virtual-device = "2048"
+device-type = "disk"
+ring-ref = "896"
+event-channel = "10"
+protocol = "x86_64-abi"
+((2)), backend
+linux-vm4:/etc/xen/vm # xenstore-ls /local/domain/133/backend/qdisk/2
+2048 = ""
+ frontend = "/local/domain/2/device/vbd/2048"
+ params = "aio:/dev/sdb"
+ frontend-id = "2"
+ online = "1"
+ removable = "1"
+ bootable = "1"
+ state = "1"
+ dev = "sda"
+ type = "tap"
+ mode = "w"
+3), libxl_device_disk_add force set state as 1. what does "1" mean?
+4), 其实xenlight本来也支持attach-disk, 效果和我加不加scsi是一样的, 只是虚拟机看到的设备类型不同. 
+
+4, detach-disk fail(scsi and xen are same)
+2012-11-07 12:02:29.089+0000: 26374: error : virNetSocketReadWire:1293 : End of file while reading data: Input/output error
+看起来是因为xen不允许热插拔???
+但是xend是支持scsi attach detach的, 如果我能把xend scsi干的活在xenlight上面实现, 就好了. 
+
+\TODO: 明天看看能否解决这个问题, 如果能避免出这个问题, 这周也算有个交代.
+
 
