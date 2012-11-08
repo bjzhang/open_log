@@ -565,3 +565,18 @@ virtualization, libvirt, xen, xenlight, libxl
 那个是否如果照着人家的patch接着改, 估计怎么也改完了. 
 这事儿我还误导jiaju了.
 
+23:50 2012-11-8
+http://blog.xen.org/index.php/2012/10/31/the-paravirtualization-spectrum-part-2-from-poles-to-a-spectrum/
+The pagetable protections protect both the guest kernel and Xen from userspace; the segmentation limits protect Xen from the guest kernel.
+
+Unfortunately, at the time that Xen team was developing clever new uses for this little-used feature, AMD was designing their 64-bit extensions to the x86 architecture. Any unused processor feature makes hardware much more complicated to design, reason about, and verify. Since basically no operating systems use segmentation limits, AMD decided to get rid of them.
+
+In 64-bit HVM mode, the problem doesn’t occur. The HVM extensions make it easy to have three different protection levels without needing to play clever tricks with little-used processor features. So making system calls in 64-bit HVM mode is just as fast as on real hardware. For this reason, a lot of people began running 64-bit Linux in fully virtualized mode.
+
+But fully virtualized mode, even with PV drivers, has a number of things that are unnecessarily inefficient. One example is the interrupt controllers: fully virtualized mode provides the guest kernel with emulated interrupt controllers (APICs and IOAPICs). Each instruction that interacts with the APIC requires a trip up into Xen and a software instruction decode; and each interrupt delivered requires several of these emulations.
+
+So Stefano Stabellini wrote some patches for the Linux kernel that allowed Linux, when it detects that it’s running in HVM mode under Xen, to switch from using the emulated interrupt controllers and timers to the paravirtualized interrupts and timers. This mode he called PVHVM mode, because although it runs in HVM mode, it uses the PV interfaces extensively.
+
+(“PVHVM” mode should not be confused with “PV-on-HVM” mode, which is a term sometimes used in the past for “fully virtualized with PV drivers”.)
+
+With the introduction of PVHVM mode, we can start to see paravirtualization not as binary on or off, but as a spectrum. In PVHVM mode, the disk and network are paravirtualized, as are interrupts and timers. But the guest still boots with an emulated motherboard, PCI bus, and so on. It also goes through a legacy boot, starting with a BIOS and then booting into 16-bit mode. Privileged instructions are virtualized using the HVM extensions, and pagetables are fully virtualized, using either shadow pagetables, or the hardware assisted paging (HAP) available on more recent AMD and Intel processors.
