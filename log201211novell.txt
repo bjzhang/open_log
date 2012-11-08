@@ -149,7 +149,6 @@ GTD
 1, today
 1), Chunyan her api status. about BlockPeek: from her work report, her finish all the api except for interface and block stats. 
 2), 1h read migration(domain suspend) in xen upstream. see"16:52 2012-11-06"
-
 3), 20' Jiaju talk to me, about my performance.
 4), 20:35- search one api which i could finish this week. 
 
@@ -185,31 +184,6 @@ GTD
 1, today
 1), 15:03 search one api which i could finish this week. see"15:16 2012-11-07"
 2), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"
-
-2, next
-1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
-2), test attach-disk command. see"10:41 2012-10-30"2
-3), maybe libxl and qemu could communicate with qemu through xenstore?
-
-libxl_dm.c: 
-        /* Find uuid and the write the vnc password to xenstore for qemu. */
-        t = xs_transaction_start(ctx->xsh);
-        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
-        if (vm_path) {
-            /* Now write the vncpassword into it. */
-            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
-            pass_stuff[0] = "vncpasswd";
-            pass_stuff[1] = info->vncpasswd;
-            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
-
-3, for Jim
-1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
-
-4, next month
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code. 
 
 13:01 2012-11-07
 virtualization, libvirt, 1.0.0 release; localization
@@ -293,6 +267,7 @@ domainMemoryPeek: not support in xenlight
 
 18:17 2012-11-07
 virtualization, libvirt, xenlight, attach-disk, detach-disk
+0, git branch libxl_attach_detach_disk
 1, 
 linux-vm4:/etc/xen/vm # virsh attach-disk sles11_hvm_10 /dev/sdb1 sda
 Disk attached successfully
@@ -374,4 +349,238 @@ linux-vm4:/etc/xen/vm # xenstore-ls /local/domain/133/backend/qdisk/2
 
 \TODO: 明天看看能否解决这个问题, 如果能避免出这个问题, 这周也算有个交代.
 
+10:24 2012-11-08
+GTD
+0, 10:24-18:40
+
+1, today
+1), 10:33-11:25 13:19- libxl lock: check Jim reply, see"10:24 2012-11-08"
+2), reply to Jim both libvirt list and jim work email
+
+2), 具体看看xenlight patch和pci passthrough, 看看有没有可能做两个里面的一个.
+
+3), Summary: 这周工作主要是"强迫"自己工作, 从目前情况看, 现在一天已经能工作4-5个小时. 如果从下周开始, 每周出了正常工作的40小时, 再多加上8小时. 5个月就相当于工作其他同时工作6个月. 只要从现在开始抓紧时间, 估计到春节时, 应该会有点起色.
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code. 
+
+10:24 2012-11-08
+virtualization, libvirt, xen, patch, lock, cont1, upstream reply to v2
+1, Jim_email_20121108_0654
+Bamvor Jian Zhang wrote:
+>>> +static int 
+>>> +libxlDomainAbortJob(virDomainPtr dom) 
+>>  
+>> This function will always fail with the above logic.  ret is initialized 
+>> to -1 and is never changed. 
+>>  
+>> Is it even possible to safely abort a libxl operation?  If not, this 
+>> function should probably remain unimplemented.  Maybe it will be useful 
+>> when the libxl driver supports migration. 
+>>     
+> return error because of the there is no cancelation opeartion in libvirt libxl
+> driver with xen 4.1. according to xen4.2 release document, maybe the
+> cancelation of long-running jobs is supported.
+
+I finally got some time to take a closer look at Xen 4.2 libxl and
+notice that the "long running" operations (create, save, dump, restore,
+etc.) now support a 'libxl_asyncop_how *ao_how' parameter to control
+their concurrency.  If ao_how->callback is NULL, a libxl_event is
+generated when the operation completes.  We'll just need to handle these
+events in the existing libxlEventHandler.  Some of the async operations
+support reporting intermediate progress (e.g. for
+libxlDomainGetJobInfo), but at this time none of them support
+cancellation AFAICT.
+
+With the new asynchronous support in Xen 4.2 libxl, IMO we should delay
+this patchset until converting the driver to support 4.2.  I didn't
+think this patch would be affected by Xen 4.1 vs 4.2 libxl, but it is
+and I don't see any reason to add code that further complicates the
+conversion.
+
+BTW, Ondrej was working on a patch to convert the driver to 4.2.  Now
+that I have some free time, I'll pick up some of this work too.
+
+> but it is still useful for save, dump and migration(in future), because libvirt
+> should block the user abort operation othervise xenlight might crash
+>   
+
+If it is left unimplemented, libvirt would block the operation anyhow,
+failing with "not supported"
+
+Regards,
+Jim
+
+2, test and try to reply
+1), 之前我记得测试过如果没有AbortJob, 用户Ctrl+c时会直接打断异步job. 但是今天从代码看, 似乎不是这样, 确认一下. 
+加不加abort只是出错信息有区别, 所以Abort还真的可以不加. 
+
+3, reply
+run_helper: save, migrate, restore.
+restore could be a async job at this point.
+需要看看xen的release文档, 看看对于异步工作具体是怎么说的. 忘了自己记到哪里了. 
+
+> I finally got some time to take a closer look at Xen 4.2 libxl and
+> notice that the "long running" operations (create, save, dump, restore,
+> etc.) now support a 'libxl_asyncop_how *ao_how' parameter to control
+> their concurrency.  If ao_how->callback is NULL, a libxl_event is
+> generated when the operation completes.  We'll just need to handle these
+> events in the existing libxlEventHandler.  Some of the async operations
+> support reporting intermediate progress (e.g. for
+> libxlDomainGetJobInfo), but at this time none of them support
+> cancellation AFAICT.
+
+> With the new asynchronous support in Xen 4.2 libxl, IMO we should delay
+> this patchset until converting the driver to support 4.2.  I didn't
+> think this patch would be affected by Xen 4.1 vs 4.2 libxl, but it is
+> and I don't see any reason to add code that further complicates the
+> conversion.
+I agree. 
+xc_domain_save is running in the individual process for xenlight save and migrate operation. But it is still not allowed interrupt AFAIK. IMO, it is good for libvirtd that libvirtd will actual block the SIGINT and cancel the migration if we handle these event in libxl driver. 
+we send the cancel event to xenlight library which make libvirtd clearly. 
+
+dump is not. 
+> BTW, Ondrej was working on a patch to convert the driver to 4.2.  Now
+> that I have some free time, I'll pick up some of this work too.
+
+
+10:40 2012-11-08
+software, skill, text editor, vim, moving around, buffer
+1, list all buffer
+:files[!]
+:buffers[!]
+:ls[!]
+		When the [!] is included the list will show unlisted buffers
+		(the term "unlisted" is a bit confusing then...).
+		Each buffer has a unique number.  That number will not change,
+		so you can always go to a specific buffer with ":buffer N" or
+		"N CTRL-^", where N is the buffer number.
+
+2, jump
+buffer N
+N CTRL-^
+
+15:59 2012-11-08
+virtualization
+Jim_email_"Work items for next week"_20121108_1405
+Hi Bamvor and Chunyan,
+
+Just a reminder about the libvirt tasks I want to discuss and work on
+while in the Beijing office next week.
+
+1. Bamvor's lock patchset for libxl driver.
+   Thanks Bamvor for posting a v2 of your patches upstream.  After more
+   review and testing today, it seems the patches are not completely
+   independent of libxl versions, thus we should rework the patches after
+   converting the driver to Xen 4.2 libxl.  I replied upstream with a
+   similar comment.  Do you agree that we should convert the driver to
+   Xen 4.2 libxl before merging the lock patches upstream?
+
+2. Convert libxl driver to Xen 4.2 libxl.
+   This will be our primary task.  It is essential to support Xen 4.2
+   libxl since it is now the primary toolstack in Xen 4.2.  Upstream
+   libvirt has agreed to drop libxl support for Xen 4.1, allowing us to
+   convert the driver to Xen 4.2 libxl and ignore Xen 4.1 libxl.  Ondrej
+   has started some work on the conversion and I will pick up his patches
+   tomorrow and continue with the effort.  Feel free to take a look and
+   become familiar with his initial work in
+
+https://build.suse.de/package/show?package=libvirt&project=home%3Aoholecek%3Abranches%3ADevel%3AVirt%3ASLE-11-SP3
+
+   The patches of interest are libxl_to_xen_42.patch and
+   libxl_compat.patch.
+
+3. Migration patch for Xen 4.2 libxl.
+   No need to continue with the migration patch for Xen 4.1.  We need to
+   make this patch work with the converted Xen 4.2 libxl driver.
+
+4. Feature parity with legacy Xen driver.
+   At a minimum, we will need to have the libxl driver support all
+   functions currently implemented in the legacy Xen driver.
+
+5. Support for PCI passthrough in legacy xen driver
+   We will still be using the xm/xend toolstack in SLES11 SP3, but
+   mandatory fate #313570 requests that libvirt support PCI passthrough
+   for Xen as it does for KVM.  Unfortunately, this is a feature we'll
+   have to implement twice for Xen; first in the legacy driver to satisfy
+   fate#313570, second in the Xen 4.2-compatible libxl driver.
+
+I know that both of you have already been working on some of these tasks
+or are otherwise familiar with them, but please be prepared to start
+digging in on Monday when I show up in the office.
+
+Thanks and see you next week!
+Jim
+
+17:42 2012-11-08
+build service, how to add package to in build service
+1, "Marcus Schäfer<ms@suse.de>"_email_"Re: [opensuse-arm] ARM images fail"_20121108_1624
+> Should "vgs" be installed elsewhere?
+ah ok now I understand. the buildservice should install lvm2 as part of
+the buildsystem. I think that can be achieved if you change your prjconf
+   osc meta -e prjconf
+and add something like
+   requires lvm2
+I'm not 100% shure but Adrian knows it definitly :)
+CC'ed him
+2, bamvor: Adrian Schroeter
+
+17:52 2012-11-08
+virtualization, xen, arm server
+1, xen arm website
+http://xen.org/products/xen_arm.html
+2, Xen ARMv7 with Virtualization Extensions
+http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions
+FAQ: http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/DevFAQ
+1), ARM Fast Model
+Either the v7-A ARM Envelope Model (AEM) or the Cortex A15/A7 models (single CPU only). 
+2), Device Tree
+A device tree in the flat device tree format (.dtb). The device tree source for the AEM is here: git://xenbits.xen.org/people/dvrabel/device-trees.git. 
+3), Xen
+While xen-unstable is frozen for the 4.2 release ARM patches are being collected in the arm-for-4.3 branch of this git tree. This tree is based upon Anthony Perards conversion to git. 
+4), Linux kernel for dom0
+3.5-rc7-arm-2 branch of git://xenbits.xen.org/people/sstabellini/linux-pvhvm.git
+5), Cross compile
+http://www.kernel.org/pub/tools/crosstool/files/bin/x86_64/4.6.0/x86_64-gcc-4.6.0-nolibc_arm-unknown-linux-gnueabi.tar.bz2
+4, Xen ARM in Linux! 
+http://blog.xen.org/index.php/2012/10/08/xen-arm-in-linux/
+5, XenSummit Sessions: New PVH virtualisation mode for ARM Cortex A15/ARM Servers and x86
+http://blog.xen.org/index.php/2012/09/21/xensummit-sessions-new-pvh-virtualisation-mode-for-arm-cortex-a15arm-servers-and-x86/
+6,Xen hypervisor ported to ARM chips 
+Twice, in fact, and KVM in the works, too 
+http://www.theregister.co.uk/2011/11/30/xen_kvm_hypervisor_for_arm_chips/
+
+18:24 2012-11-08
+http://wiki.xen.org/wiki/Choice_of_Toolstacks
+libxl Design Principles
+
+    Implement mechanisms, not policies
+    Stateless
+    Hide xenstore, libxenctrl, and libxenguest from higher levels
+    Be as simple as possible 
+
+18:27 2012-11-08
+http://blog.xen.org/index.php/2012/09/17/xen-4-2-0-released/
 
