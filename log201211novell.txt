@@ -356,35 +356,7 @@ GTD
 1, today
 1), 10:33-11:25 13:19- libxl lock: check Jim reply, see"10:24 2012-11-08"
 2), reply to Jim both libvirt list and jim work email
-
-2), 具体看看xenlight patch和pci passthrough, 看看有没有可能做两个里面的一个.
-
 3), Summary: 这周工作主要是"强迫"自己工作, 从目前情况看, 现在一天已经能工作4-5个小时. 如果从下周开始, 每周出了正常工作的40小时, 再多加上8小时. 5个月就相当于工作其他同时工作6个月. 只要从现在开始抓紧时间, 估计到春节时, 应该会有点起色.
-
-2, next
-1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
-2), test attach-disk command. see"10:41 2012-10-30"2
-3), maybe libxl and qemu could communicate with qemu through xenstore?
-
-libxl_dm.c: 
-        /* Find uuid and the write the vnc password to xenstore for qemu. */
-        t = xs_transaction_start(ctx->xsh);
-        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
-        if (vm_path) {
-            /* Now write the vncpassword into it. */
-            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
-            pass_stuff[0] = "vncpasswd";
-            pass_stuff[1] = info->vncpasswd;
-            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
-
-3, for Jim
-1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
-
-4, next month
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code. 
 
 10:24 2012-11-08
 virtualization, libvirt, xen, patch, lock, cont1, upstream reply to v2
@@ -597,6 +569,9 @@ virtualization, libvirt, xen, xenlight, libxl
 这事儿我还误导jiaju了.
 
 23:50 2012-11-8
+(09:25 2012-11-12)
+virtualization, libvirt, xen, compare different virtualization mode, PV, HVM, PVHVM, PVH
+http://blog.xen.org/index.php/2012/10/23/the-paravirtualization-spectrum-part-1-the-ends-of-the-spectrum/
 http://blog.xen.org/index.php/2012/10/31/the-paravirtualization-spectrum-part-2-from-poles-to-a-spectrum/
 The pagetable protections protect both the guest kernel and Xen from userspace; the segmentation limits protect Xen from the guest kernel.
 
@@ -612,6 +587,35 @@ So Stefano Stabellini wrote some patches for the Linux kernel that allowed Linux
 
 With the introduction of PVHVM mode, we can start to see paravirtualization not as binary on or off, but as a spectrum. In PVHVM mode, the disk and network are paravirtualized, as are interrupts and timers. But the guest still boots with an emulated motherboard, PCI bus, and so on. It also goes through a legacy boot, starting with a BIOS and then booting into 16-bit mode. Privileged instructions are virtualized using the HVM extensions, and pagetables are fully virtualized, using either shadow pagetables, or the hardware assisted paging (HAP) available on more recent AMD and Intel processors.
 
+Almost fully PV: PVH mode
+
+A lot of the choices Xen made when designing a PV interface were made before HVM extensions were available. Nearly all hardware now has HVM extensions available, and nearly all also include hardware-assisted pagetable virtualization. What if we could run a fully PV guest — one that had no emulated motherboard, BIOS, or anything like that — but used the HVM extensions to make the PV MMU unnecessary, as well as to speed up system calls in 64-bit mode?
+
+This is exactly what Mukesh’s PVH mode is. It’s a fully PV kernel mode, running with paravirtualized disk and network, paravirtualized interrupts and timers, no emulated devices of any kind (and thus no qemu), no BIOS or legacy boot — but instead of requiring PV MMU, it uses the HVM hardware extensions to virtualize the pagetables, as well as system calls and other privileged operations.
+
+Once PVH is well-established (perhaps five years or so after it’s introduced), we will probably consider removing non-PVH support from the Linux kernel, making maintenance of Xen support for Linux much simpler. 
+
+What about KVM?
+
+KVM supports both “legacy boot”, starting in 16-bit mode with a BIOS (or EFI) to load the kernel bootloader, and booting directly into a kernel passed on the qemu command-line. It also provides an emulated motherboard, PCI bus, and so on. It can provide both emulated disk and network cards; and thus it is capable of supporting guests running in fully virtualized mode.
+
+KVM also provides virtio devices, which can be considered paravirtualized, as well as a PV clock, for operating systems that can be modified to support them. KVM’s typical method of paravirtualization is somewhat different than Xen’s. Virtio devices expose a normal device interface, with MMIO control paths and so on, and could in theory be implemented by real hardware. Xen’s PV interfaces are based on shared memory and lockless synchronization. The kinds of actions that need an MMIO context switch for virtio devices probably correspond pretty closely to actions that need hypercalls for Xen PV devices; but in Xen no instruction emulation needs to be done.
+
+KVM does not have a paravirtualized interface for timers or interrupts; instead (if I understand correctly) it uses an emulated local APIC. Handling a full interrupt cycle for an emulated local APIC typically requires several MMIO accesses, each of which requires a context switch and an instruction emulation. The Xen PV interrupt interface is based on memory shared with the hypervisor, supplemented by hypercalls when necessary; so most operations can be done without context switches, and those that do require only a single context switch (and no instruction emulation). This was one of the major reasons for introducing PVHVM mode for Xen guests.
+
+So KVM has paravirtualized devices and a paravirtualized clock, but not paravirtualized interrupts; placing KVM on the spectrum, it would be one step more paravirtualized than “FV with PV drivers”, but not as paravirtualized as PVHVM.
+
+The paravirtualization spectrum
+
+So to summarize: There are a number of things that can be either virtualized or paravirtualized when creating a VM; these include:
+
+    Disk and network devices
+    Interrupts and timers
+    Emulated platform: motherboard, device buses, BIOS, legacy boot
+    Privileged instructions and pagetables (memory access)
+
+picture: work/documents/virtualization/xen
+
 10:39 2012-11-09
 GTD
 0, 10:20-18:07
@@ -620,9 +624,6 @@ GTD
 1), 30' 14:36-18:07 work in compile libvirt with xen4.2 support. see"14:36 2012-11-09"
 1), 1h lunch and learning. gstreamer by lance. see"12:01 2012-11-09"
 2), 1h discuss with Tacey Ren <renjiaying2009@gmail.com> about mobile and opensuse arm. 
-
-2), continue to read xen PVH blog.
-3), notes about Huawei from eet-china.
 
 12:01 2012-11-09
 lunch and learning; multimedia, gstreamer; lance
@@ -1463,14 +1464,167 @@ Program received signal SIGABRT, Aborted.
                      libxl_defbool_val(info->u.hvm.hpet));
 
 (5), test pv also abort
-#0  0x00007fdc4228a812 in __strlen_sse2 () from /lib64/libc.so.6
-#1  0x00007fdc4228a516 in strdup () from /lib64/libc.so.6
-#2  0x00000000004ff869 in libxlMakeDomBuildInfo (d_config=<optimized out>,
-    def=<optimized out>) at libxl/libxl_conf.c:496
-#3  libxlBuildDomainConfig (driver=0x879ea0, def=0x8aea40,
-    d_config=0x7fdc3fa4d6d0) at libxl/libxl_conf.c:979
-#4  0x00000000004f6352 in libxlVmStart (driver=0x879ea0, vm=0x8a19b0,
-    start_paused=false, restore_fd=-1) at libxl/libxl_driver.c:724
+[Switching to Thread 0x7fdc3fa4e700 (LWP 7982)]                                 
+libxlVmStart                                                                    
+libxl_domain_config_init                                                        
+libxlBuildDomainConfig                                                          
 
+Program received signal SIGSEGV, Segmentation fault.
+0x00007fdc4228a812 in __strlen_sse2 () from /lib64/libc.so.6
+(gdb) where
+#0  0x00007fdc4228a812 in __strlen_sse2 () from /lib64/libc.so.6
+#1  0x00007fdc4228a516 in strdup () from /lib64/libc.so.6       
+#2  0x00000000004ff869 in libxlMakeDomBuildInfo (d_config=<optimized out>, 
+    def=<optimized out>) at libxl/libxl_conf.c:496                         
+#3  libxlBuildDomainConfig (driver=0x879ea0, def=0x8aea40,                 
+    d_config=0x7fdc3fa4d6d0) at libxl/libxl_conf.c:979                     
+#4  0x00000000004f6352 in libxlVmStart (driver=0x879ea0, vm=0x8a19b0,      
+    start_paused=false, restore_fd=-1) at libxl/libxl_driver.c:724
 is that mean it is a Vmware vm bug? 
+
+09:44 2012-11-12
+GTD
+0, 9:20
+
+1, today
+1), finish reading PVH mode. see"23:50 2012-11-8"
+2), work report. see"09:50 2012-11-12"
+
+3), notes about Huawei from eet-china.
+2), 具体看看xenlight patch和pci passthrough, 看看有没有可能做两个里面的一个.
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code. 
+
+09:50 2012-11-12
+work report - week 45
+1, [devel-server] work report - week 45
+1), work on libvirt libxl driver xen 4.2
+(1), branch from Ondrej and make it compile pass.
+(2), virsh create fail while xl successful. i will continue to debug it. 
+2), discuss with Jim about my libxl lock in libvirt. I will improve this patch after xen 4.2 work libvirt. 
+3), read doc about xen 4.3 features and new virtualization mode(PVH: PV guest on HVM container) in xen 4.3. 
+
+12:12 2012-11-12
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont1
+1, full log while "virsh create" fail.
+[Switching to Thread 0x7f2cd7b45700 (LWP 2149)]
+libxlVmStart
+libxl_domain_config_init
+libxlBuildDomainConfig
+libxl_domain_need_memory
+libxl_get_free_memory
+libxl_domain_create_new
+libxl_domain_need_memory
+xc_hvm_build_target_mem
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_map_foreign_range
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f71c in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f734 in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f74c in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f764 in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f77c in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f794 in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f7ac in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_map_foreign_range
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdeb3f81c in setup_guest () from /usr/lib64/libxenguest.so.4.2
+xc_map_foreign_range
+xc_map_foreign_range
+xc_get_hvm_param
+xc_get_hvm_param
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdf1a1fa9 in libxl__build_hvm () from /usr/lib64/libxenlight.so.2.0
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdf1a1fc8 in libxl__build_hvm () from /usr/lib64/libxenlight.so.2.0
+xc_set_hvm_param
+#0  0x00007f2cded53ef4 in xc_set_hvm_param () from /usr/lib64/libxenctrl.so.4.2
+#1  0x00007f2cdf1a1fe7 in libxl__build_hvm () from /usr/lib64/libxenlight.so.2.0
+
+Program received signal SIGABRT, Aborted.
+0x00007f2cda334b55 in raise () from /lib64/libc.so.6
+(gdb) where
+#0  0x00007f2cda334b55 in raise () from /lib64/libc.so.6
+#1  0x00007f2cda336131 in abort () from /lib64/libc.so.6
+#2  0x00007f2cda32da10 in __assert_fail () from /lib64/libc.so.6
+#3  0x00007f2cdf1a218d in libxl__build_hvm ()
+   from /usr/lib64/libxenlight.so.2.0
+#4  0x00007f2cdf19795a in libxl__domain_build ()
+   from /usr/lib64/libxenlight.so.2.0
+#5  0x00007f2cdf197bda in domcreate_bootloader_done ()
+   from /usr/lib64/libxenlight.so.2.0
+#6  0x00007f2cdf1b5154 in bootloader_local_detached_cb ()
+   from /usr/lib64/libxenlight.so.2.0
+#7  0x00007f2cdf18d284 in local_device_detach_cb ()
+   from /usr/lib64/libxenlight.so.2.0
+#8  0x00007f2cdf18f0f5 in libxl__device_disk_local_initiate_detach ()
+   from /usr/lib64/libxenlight.so.2.0
+#9  0x00007f2cdf1b5300 in bootloader_callback ()
+   from /usr/lib64/libxenlight.so.2.0
+#10 0x00007f2cdf1b6689 in libxl__bootloader_run ()
+   from /usr/lib64/libxenlight.so.2.0
+#11 0x00007f2cdf198818 in do_domain_create ()
+   from /usr/lib64/libxenlight.so.2.0
+#12 0x00007f2cdf198854 in libxl_domain_create_new ()
+   from /usr/lib64/libxenlight.so.2.0
+#13 0x00000000004f6735 in libxlVmStart (driver=0x800c00, vm=0x89b1c0,
+    start_paused=false, restore_fd=-1) at libxl/libxl_driver.c:737
+#14 0x00000000004fb982 in libxlDomainCreateXML (conn=0x8bba10,
+    xml=<optimized out>, flags=0) at libxl/libxl_driver.c:1261
+#15 0x00007f2cdf4c014f in virDomainCreateXML (conn=0x8bba10,
+    xmlDesc=0x7f2ccc002040 "<domain type='xen'>\n  <name>sles11_hvm_10</name>\n  <description>None</description>\n  <uuid>a3e56d96-c285-90af-4bf8-136fe551292f</uuid>\n  <memory>524288</memory>\n  <currentMemory>524288</currentMemory>"...,
+    flags=0) at libvirt.c:1965
+#16 0x0000000000447352 in remoteDispatchDomainCreateXML (ret=<optimized out>,
+    args=<optimized out>, rerr=<optimized out>, msg=<optimized out>,
+    client=<optimized out>, server=<optimized out>) at remote_dispatch.h:1172
+2, after add breakpoint in ioctl, it seems that fail is after ioctl. 
+add libc debug info and debug source. I finally fount that the abort signal is sent after the last xc_set_hvm_param.
+
+
 
