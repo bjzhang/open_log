@@ -1484,14 +1484,18 @@ is that mean it is a Vmware vm bug?
 
 09:44 2012-11-12
 GTD
-0, 9:20
+0, 9:20-18:52 19:37
 
 1, today
 1), finish reading PVH mode. see"23:50 2012-11-8"
 2), work report. see"09:50 2012-11-12"
+3), debug libxl xen 4.2 with Jim. see"12:12 2012-11-12"
 
+2, next
+1), try to fix osc build fail. see"19:45 2012-11-12".
+
+3, next next
 3), notes about Huawei from eet-china.
-2), 具体看看xenlight patch和pci passthrough, 看看有没有可能做两个里面的一个.
 
 2, next
 1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
@@ -1625,6 +1629,107 @@ Program received signal SIGABRT, Aborted.
     client=<optimized out>, server=<optimized out>) at remote_dispatch.h:1172
 2, after add breakpoint in ioctl, it seems that fail is after ioctl. 
 add libc debug info and debug source. I finally fount that the abort signal is sent after the last xc_set_hvm_param.
+i still not know why it fails.
 
+3, debug together with Jim. I see that Jim got timeout and assertion fail while virsh create pv vm. which is different from my test result. 
+So, i re-test it on linux-vm4 from Jim laptop. and I got timeout and assertion fail after virsh create successful, fail at virsh list. 
+1), here is my test on linux-vm4, 1st 
+[Switching to Thread 0x7f44b5784700 (LWP 5738)]
+libxlVmStart
+libxl_domain_config_init
+libxlBuildDomainConfig
+libxl_domain_need_memory
+libxl_get_free_memory
+libxl_domain_create_new
+Detaching after fork from child process 5848.
+[New Thread 0x7f44be802700 (LWP 5849)]
+Detaching after fork from child process 5850.
+libxl_domain_need_memory
+Detaching after fork from child process 5854.
+Detaching after fork from child process 5874.
+Detaching after fork from child process 5879.
+Detaching after fork from child process 5929.
+Detaching after fork from child process 5942.
+[Thread 0x7f44be802700 (LWP 5849) exited]
 
+Program received signal SIGABRT, Aborted.
+[Switching to Thread 0x7f44be7ba840 (LWP 5734)]
+0x00007f44b8f75b55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+64        return INLINE_SYSCALL (tgkill, 3, pid, selftid, sig);
+(gdb) where
+#0  0x00007f44b8f75b55 in *__GI_raise (sig=<optimized out>)
+    at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+#1  0x00007f44b8f77131 in *__GI_abort () at abort.c:92
+#2  0x00007f44b8f6ea10 in *__GI___assert_fail (assertion=0x7f44bddfeb63 "!r",
+    file=0x7f44bddfeb52 "libxl_internal.h", line=2652,
+    function=0x7f44bde07380 "libxl__ctx_lock") at assert.c:81
+#3  0x00007f44bddf3f9c in libxl_osevent_occurred_timeout ()
+   from /usr/lib64/libxenlight.so.2.0
+#4  0x00007f44be067b6a in virEventPollDispatchTimeouts ()
+    at util/event_poll.c:435
+#5  virEventPollRunOnce () at util/event_poll.c:628
+#6  0x00007f44be066ba6 in virEventRunDefaultImpl () at util/event.c:247
+#7  0x00007f44be153d4d in virNetServerRun (srv=0x7d5d40)
+    at rpc/virnetserver.c:1004
+#8  0x00000000004293b4 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1354
+2), 2nd.
+Program received signal SIGABRT, Aborted.
+[Switching to Thread 0x7f5fbb16e840 (LWP 6026)]
+0x00007f5fb5929b55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+64        return INLINE_SYSCALL (tgkill, 3, pid, selftid, sig);
+(gdb) where
+#0  0x00007f5fb5929b55 in *__GI_raise (sig=<optimized out>)
+    at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+#1  0x00007f5fb592b131 in *__GI_abort () at abort.c:92
+#2  0x00007f5fb5922a10 in *__GI___assert_fail (
+    assertion=0x7f5fba7bac25 "fd == ev->fd",
+    file=0x7f5fba7baa21 "libxl_event.c", line=1020,
+    function=0x7f5fba7bb5b0 "libxl_osevent_occurred_fd") at assert.c:81
+#3  0x00007f5fba7a8133 in libxl_osevent_occurred_fd ()
+   from /usr/lib64/libxenlight.so.2.0
+#4  0x00007f5fbaa1bda6 in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/event_poll.c:485
+#5  virEventPollRunOnce () at util/event_poll.c:631
+#6  0x00007f5fbaa1aba6 in virEventRunDefaultImpl () at util/event.c:247
+#7  0x00007f5fbab07d4d in virNetServerRun (srv=0x7d5d40)
+    at rpc/virnetserver.c:1004
+#8  0x00000000004293b4 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1354
+
+3), (19:52 2012-11-12)
+re-test on physical machine, got the same fault after virsh create is successful. i do not do anything, and libvirt deamon is fail. So, it must be the timeout fail at the first time??
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000000000 in ?? ()
+(gdb) where
+#0  0x0000000000000000 in ?? ()
+#1  0x00007f01a9c38f47 in libxl_osevent_occurred_timeout ()
+   from /usr/lib64/libxenlight.so.2.0
+#2  0x00007f01a9eacb6a in virEventPollDispatchTimeouts ()
+    at util/event_poll.c:435
+#3  virEventPollRunOnce () at util/event_poll.c:628
+#4  0x00007f01a9eabba6 in virEventRunDefaultImpl () at util/event.c:247
+#5  0x00007f01a9f98d4d in virNetServerRun (srv=0x7d5d50)
+    at rpc/virnetserver.c:1004
+#6  0x00000000004293b4 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1354
+
+(1), trace libxl_osevent_occurred_timeout
+
+3), read libxl_event.c/h code.
+
+19:45 2012-11-12
+suse, build service, osc build fail
+# osc build SLE_11_SP2 x86_64
+Building libvirt.spec for SLE_11_SP2/x86_64
+Getting buildinfo from server and store to /home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/build_service/home:bjzhang:branches:home:oholecek:branches:Devel:Virt:SLE-11-SP3/libvirt/.osc/_buildinfo-SLE_11_SP2-x86_64.xml
+Getting buildconfig from server and store to /home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/build_service/home:bjzhang:branches:home:oholecek:branches:Devel:Virt:SLE-11-SP3/libvirt/.osc/_buildconfig-SLE_11_SP2-x86_64
+Updating cache of required packages
+0.0% cache miss. 215/215 dependencies cached.
+
+Verifying integrity of cached packages
+using keys from SUSE
+warning: rpmts_HdrFromFdno: Header V3 DSA signature: NOKEY, key ID 8a7c64f9
+/var/tmp/osbuild-packagecache/Devel:Virt:SLE-11-SP3/SLE_11_SP2/x86_64/xen-devel-4.2.0_03-5.1.x86_64.rpm : public key not available
+/var/tmp/osbuild-packagecache/Devel:Virt:SLE-11-SP3/SLE_11_SP2/x86_64/xen-libs-4.2.0_03-5.1.x86_64.rpm : public key not available
 
