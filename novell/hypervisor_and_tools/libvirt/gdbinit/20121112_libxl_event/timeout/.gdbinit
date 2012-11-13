@@ -55,23 +55,8 @@ end
 #cont
 #end
 #
-
-break libxl__ev_fd_register
-commands
-silent
-printf "libxl__ev_fd_register\n"
-where 3
 cont
-end
 
-break libxl__ev_fd_deregister
-commands
-silent
-printf "libxl__ev_fd_deregister\n"
-where 3
-cont
-end
-
-
-cont
+#frame 3
+#p *(libxl__ev_fd*)for_libxl
 
