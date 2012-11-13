@@ -1491,37 +1491,6 @@ GTD
 2), work report. see"09:50 2012-11-12"
 3), debug libxl xen 4.2 with Jim. see"12:12 2012-11-12"
 
-2, next
-1), try to fix osc build fail. see"19:45 2012-11-12".
-
-3, next next
-3), notes about Huawei from eet-china.
-
-2, next
-1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
-2), test attach-disk command. see"10:41 2012-10-30"2
-3), maybe libxl and qemu could communicate with qemu through xenstore?
-
-libxl_dm.c: 
-        /* Find uuid and the write the vnc password to xenstore for qemu. */
-        t = xs_transaction_start(ctx->xsh);
-        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
-        if (vm_path) {
-            /* Now write the vncpassword into it. */
-            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
-            pass_stuff[0] = "vncpasswd";
-            pass_stuff[1] = info->vncpasswd;
-            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
-
-3, for Jim
-1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
-
-4, next month
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code. 
-
 09:50 2012-11-12
 work report - week 45
 1, [devel-server] work report - week 45
@@ -1717,6 +1686,7 @@ Program received signal SIGSEGV, Segmentation fault.
 (1), trace libxl_osevent_occurred_timeout
 (2), enable print in libxl_event.c
 #define DEBUG 1
+print log will be written to libxl.log while using libvirt"
 
 4), read libxl_event.c/h code.
 
@@ -1778,4 +1748,318 @@ bamvor@linux-bjrd:log> git status
 #       patch
 #       temp.txt
 #       temp1524.txt
+
+09:37 2012-11-13
+GTD
+0, 9:25 19:48-
+
+1, today
+1), build service commands. see"09:50 2012-11-13"
+2), 11:23- 14:38- 19:49- debug libxl xen 4.2 with Jim. see"11:23 2012-11-13".
+3), libxl xen 4.2 patch, bug list, see"20:41 2012-11-13"
+
+2, next
+1), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
+seems came from bridge-utils
+1), try to fix osc build fail. see"19:45 2012-11-12".
+
+3, next next
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425 
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code. 
+
+09:50 2012-11-13
+(20:09 2012-11-13)
+build service, obs/ibs, local build, chroot
+1, local build
+1), clean build, will delete all files in /var/tmp/build-root/
+osc build --clean
+2), continue to build. maybe compile fail last time. or adding new patch since last build.
+osc build --no-init
+2, local build log
+osc lbl
+3, change to build root
+ref: http://en.opensuse.org/openSUSE:Build_Service_Tutorial
+osc chroot openSUSE_12.1 x86_64
+build directory: /usr/src/packages/BUILD/
+build result: /usr/src/packages/RPMS/
+
+11:23 2012-11-13
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont2
+1, about event fd. 
+it will fail when assertion fd==ev->fd fail. but after several times test, it maybe fail even if my gdb log said that fd==ev->fd. it abnormal i guess. So, i reboot computer. 
+2, after reboot computer. timeout assertion appear again. 
+try to print who register the timer, i guess it is fail because the libxl library internal. 
+
+3, read create code in both libvirt and xl cmd.
+1), libxlCreateDomEvents->libxl_event_register_callbacks
+libxl_event_register_callbacks is called only in the libxl driver, why?.
+2), libxl_evenable_disk_eject is not called by libxl driver. 
+3), about ao
+ao is used by external event handling system. while libxl_event_wait is used by libxl itself. 
+4), try to debug about infinite, the comment: 
+    int infinite; /* not registered in list or with app if infinite */
+So, maybe the error is lead by the unregistered item? 
+
+4, event fd
+Breakpoint 8, virEventPollAddHandle (fd=21, events=1, cb=0x7fced54cb610 <virNetSocketEventHandle>, opaque=0x7fcec00010b0, ff=0x7fced54cba00 <virNetSocketEventFree>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+Detaching after fork from child process 5556.
+Detaching after fork from child process 5557.
+[Switching to Thread 0x7fcecdaf1700 (LWP 5489)]
+
+Breakpoint 8, virEventPollAddHandle (fd=37, events=5, cb=0x4f7bc0 <cb_fd_event>, opaque=0x88ba30, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+[New Thread 0x7fced5b6e700 (LWP 5558)]
+
+Breakpoint 8, virEventPollAddHandle (fd=42, events=5, cb=0x4f7bc0 <cb_fd_event>, opaque=0x88bac0, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+[Switching to Thread 0x7fced5b21840 (LWP 5487)]
+libxl_osevent_occurred_fd: fd<37>, ev->fd<37>
+(gdb) cont
+Continuing.
+[Switching to Thread 0x7fcecdaf1700 (LWP 5489)]
+
+Breakpoint 8, virEventPollAddHandle (fd=38, events=6, cb=0x4f7bc0 <cb_fd_event>, opaque=0x88bb70, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+
+Breakpoint 8, virEventPollAddHandle (fd=38, events=5, cb=0x4f7bc0 <cb_fd_event>, opaque=0x88bb30, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+
+Breakpoint 8, virEventPollAddHandle (fd=42, events=6, cb=0x4f7bc0 <cb_fd_event>, opaque=0x88bbe0, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+Detaching after fork from child process 5559.
+[Switching to Thread 0x7fced5b21840 (LWP 5487)]
+libxl_osevent_occurred_fd: fd<38>, ev->fd<38>
+(gdb) cont
+Continuing.
+libxl_osevent_occurred_fd: fd<42>, ev->fd<42>
+(gdb) cont
+Continuing.
+[Switching to Thread 0x7fcecdaf1700 (LWP 5489)]
+
+Breakpoint 8, virEventPollAddHandle (fd=42, events=6, cb=0x4f7bc0 <cb_fd_event>, opaque=0x883b30, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+[Switching to Thread 0x7fced5b21840 (LWP 5487)]
+libxl_osevent_occurred_fd: fd<38>, ev->fd<38>
+(gdb) cont
+Continuing.
+[Switching to Thread 0x7fcecdaf1700 (LWP 5489)]
+
+Breakpoint 8, virEventPollAddHandle (fd=42, events=6, cb=0x4f7bc0 <cb_fd_event>, opaque=0x883b30, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+[Switching to Thread 0x7fced5b21840 (LWP 5487)]
+libxl_osevent_occurred_fd: fd<42>, ev->fd<42>
+(gdb) cont
+Continuing.
+[Switching to Thread 0x7fcecdaf1700 (LWP 5489)]
+
+Breakpoint 8, virEventPollAddHandle (fd=42, events=6, cb=0x4f7bc0 <cb_fd_event>, opaque=0x88a840, ff=0x4f5cc0 <free_fdinfo>) at util/event_poll.c:106
+106                               virFreeCallback ff) {
+Detaching after fork from child process 5562.
+libxl__ev_time_register_rel: ev_time=0x88c320 register ms=10000
+time_register_finite
+libxl__ev_time_register_rel: ev_time=0x88c358 register ms=10000
+time_register_finite
+Detaching after fork from child process 5568.
+
+Program received signal SIGABRT, Aborted.
+[Switching to Thread 0x7fced5b21840 (LWP 5487)]
+0x00007fced02e0b55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+64        return INLINE_SYSCALL (tgkill, 3, pid, selftid, sig);
+(gdb) where
+#0  0x00007fced02e0b55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+#1  0x00007fced02e2131 in *__GI_abort () at abort.c:92
+#2  0x00007fced02d9a10 in *__GI___assert_fail (assertion=0x7fced5172229 "fd == ev->fd", file=0x7fced5171fa1 "libxl_event.c", line=1020,
+    function=0x7fced5172cf0 "libxl_osevent_occurred_fd") at assert.c:81
+#3  0x00007fced515fd33 in libxl_osevent_occurred_fd (ctx=<optimized out>, for_libxl=0x882ec8, fd=42, events=<optimized out>, revents=4) at libxl_event.c:1020
+#4  0x00007fced53d3da6 in virEventPollDispatchHandles (fds=<optimized out>, nfds=<optimized out>) at util/event_poll.c:485
+#5  virEventPollRunOnce () at util/event_poll.c:631
+#6  0x00007fced53d2ba6 in virEventRunDefaultImpl () at util/event.c:247
+#7  0x00007fced54bfd4d in virNetServerRun (srv=0x7d5d50) at rpc/virnetserver.c:1004
+#8  0x00000000004293b4 in main (argc=<optimized out>, argv=<optimized out>) at libvirtd.c:1354
+1), the fd is really -1 in abort frame
+(gdb) where
+#0  0x00007f86829a7b55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+#1  0x00007f86829a9131 in *__GI_abort () at abort.c:92
+#2  0x00007f86829a0a10 in *__GI___assert_fail (assertion=0x7f8687839229 "fd == ev->fd", file=0x7f8687838fa1 "libxl_event.c", line=1020,
+    function=0x7f8687839cf0 "libxl_osevent_occurred_fd") at assert.c:81
+#3  0x00007f8687826d33 in libxl_osevent_occurred_fd (ctx=<optimized out>, for_libxl=0x7df588, fd=38, events=<optimized out>, revents=4) at libxl_event.c:1020
+#4  0x00007f8687a9ada6 in virEventPollDispatchHandles (fds=<optimized out>, nfds=<optimized out>) at util/event_poll.c:485
+#5  virEventPollRunOnce () at util/event_poll.c:631
+#6  0x00007f8687a99ba6 in virEventRunDefaultImpl () at util/event.c:247
+#7  0x00007f8687b86d4d in virNetServerRun (srv=0x7d5d50) at rpc/virnetserver.c:1004
+#8  0x00000000004293b4 in main (argc=<optimized out>, argv=<optimized out>) at libvirtd.c:1354
+(gdb) frame 3
+#3  0x00007f8687826d33 in libxl_osevent_occurred_fd (ctx=<optimized out>, for_libxl=0x7df588, fd=38, events=<optimized out>, revents=4) at libxl_event.c:1020
+1020        assert(fd == ev->fd);
+(gdb) p fd
+$1 = 38
+(gdb) p *(libxl__ev_fd*)for_libxl
+$2 = {fd = -1, events = 4, func = 0x7f868781f170 <datacopier_writable>, entry = {le_next = 0x7df560, le_prev = 0x7df620}, for_app_reg = 0x7e1f10}
+(gdb)
+
+2), it looks like the function is failed after it is callled. because the next and prev is same. 
+Detaching after fork from child process 6611.
+[Switching to Thread 0x7fa5589cb840 (LWP 6533)]
+libxl_osevent_occurred_fd: fd<38>, ev->fd<38>
+$2 = {fd = 38, events = 4, func = 0x7fa558002170 <datacopier_writable>, entry = {le_next = 0x7fa544003270, le_prev = 0x7fa544003330}, for_app_reg = 0x7fa544005620}
+
+Program received signal SIGABRT, Aborted.
+0x00007fa55318ab55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+64        return INLINE_SYSCALL (tgkill, 3, pid, selftid, sig);
+(gdb) where
+#0  0x00007fa55318ab55 in *__GI_raise (sig=<optimized out>) at ../nptl/sysdeps/unix/sysv/linux/raise.c:64
+#1  0x00007fa55318c131 in *__GI_abort () at abort.c:92
+#2  0x00007fa553183a10 in *__GI___assert_fail (assertion=0x7fa55801c229 "fd == ev->fd", file=0x7fa55801bfa1 "libxl_event.c", line=1020,
+    function=0x7fa55801ccf0 "libxl_osevent_occurred_fd") at assert.c:81
+#3  0x00007fa558009d33 in libxl_osevent_occurred_fd (ctx=<optimized out>, for_libxl=0x7fa544003298, fd=38, events=<optimized out>, revents=4) at libxl_event.c:1020
+#4  0x00007fa55827dda6 in virEventPollDispatchHandles (fds=<optimized out>, nfds=<optimized out>) at util/event_poll.c:485
+#5  virEventPollRunOnce () at util/event_poll.c:631
+#6  0x00007fa55827cba6 in virEventRunDefaultImpl () at util/event.c:247
+#7  0x00007fa558369d4d in virNetServerRun (srv=0x7d5d50) at rpc/virnetserver.c:1004
+#8  0x00000000004293b4 in main (argc=<optimized out>, argv=<optimized out>) at libvirtd.c:1354
+(gdb) frame 4
+#4  0x00007fa55827dda6 in virEventPollDispatchHandles (fds=<optimized out>, nfds=<optimized out>) at util/event_poll.c:485
+485                 (cb)(watch, fds[n].fd, hEvents, opaque);
+(gdb) frame 3
+#3  0x00007fa558009d33 in libxl_osevent_occurred_fd (ctx=<optimized out>, for_libxl=0x7fa544003298, fd=38, events=<optimized out>, revents=4) at libxl_event.c:1020
+1020        assert(fd == ev->fd);
+(gdb) p fd
+$3 = 38
+(gdb) p *(libxl__ev_fd*)for_libxl
+$4 = {fd = -1, events = 4, func = 0x7fa558002170 <datacopier_writable>, entry = {le_next = 0x7fa544003270, le_prev = 0x7fa544003330}, for_app_reg = 0x7fa544005620}
+(gdb)
+3), libxl__ev_time timeout get the similar things. just once. 
+
+5, read the fd handling relative code in order to know why fd is -1.
+1), the only function set fd as -1 is libxl__ev_fd_deregister.
+2), the comments, maybe useful?
+datacopier_check_state()
+...
+    /* nothing buffered, but still reading */
+    libxl__ev_fd_deregister();
+3), from gdb debug, i can see that libxl_osevent_occurred_fd is called after fd deregistered. why?
+the question is while fd deregister, does the read/write really done?
+if so, it should be deregister issue. if not, it mean some flag is set wrong. 
+it is ok if i force ignore this abort sig while access done, otherwise, libvirt or libxl will fail after i ignore this abort sig.
+after i ignore this, virsh create successful 6 times. the first twice test with gdb, the other test without gdb. 
+
+4), work around timeout with the same way. 
+(1), 
+void libxl_osevent_occurred_timeout(libxl_ctx *ctx, void *for_libxl)
+{
+    libxl__ev_time *ev = for_libxl;
+
+    EGC_INIT(ctx);
+    CTX_LOCK;
+    DBG("infinite=%d", ev->infinite);
+    assert(!CTX->osevent_in_hook);
+
+    if ( 1 == ev->infinite  ) ev->infinite = 0;
+    assert(!ev->infinite);
+    LIBXL_TAILQ_REMOVE(&CTX->etimes, ev, entry);
+    if ( ev->func ) 
+        ev->func(egc, ev, &ev->abs);
+
+    CTX_UNLOCK;
+    EGC_FREE;
+}
+
+(2), it is not work. try another way
+void libxl_osevent_occurred_timeout(libxl_ctx *ctx, void *for_libxl)
+{
+    libxl__ev_time *ev = for_libxl;
+
+    EGC_INIT(ctx);
+    CTX_LOCK;
+    DBG("infinite=%d", ev->infinite);
+    assert(!CTX->osevent_in_hook);
+
+    if ( ev->infinite && !ev->func ) goto out;
+    assert(!ev->infinite);
+    LIBXL_TAILQ_REMOVE(&CTX->etimes, ev, entry);
+    ev->func(egc, ev, &ev->abs);
+
+out:
+    CTX_UNLOCK;
+    EGC_FREE;
+}
+(3), it seems work.
+
+6, next
+i need to check each abort or fault. 调用它的函数是否是应该调用的，如果是应该调用的，为什么xl里面正常，但是libvirt里面有问题? 难道又是socket问题?
+
+19:50 2012-11-13
+software skill, suse, sles11 sp2, start x11 fail, no screen found
+1, remove "acpi=off" from kernel command line. it will be ok. 
+thanks to Joey Zheng. 
+
+20:03 2012-11-13
+suse, sle11 sp3, stage, milestone, alpha 1 deadline
+"Stefan Behlert <behlert@suse.de>"_email_"[devel] REMINDER: SLE 11 SP3 Alpha 1 deadline"_20121113_1552
+Hi,
+
+this is a reminder for the upcoming SLE 11 SP3 Alpha 1 deadline. The deadline is
+
+for base/core packages or packages with a huge dependency list:
+        Friday 16th, 15:00 CET
+
+for leaf packages:
+	Monday 19th, 17:00 CET
+
+
+o Milestone: Make sure that Autobuild setup is in place and working
+o Internal snapshot only, not released outside of SUSE/Novell
+
+
+Currently pre-Alpha image building looks good, so we encourage everyone to
+submit his/her packages early to verify that no build failure occurs.
+
+If you have a new package that has not been on a SP2 media but should be on the
+SP3 media send an email with the package name (and a reference to
+FATE/Bugzilla!) to the ReleaseManager of the affected product(s):
+
+  SLES   - Thorsten Kukuk <kukuk@suse.com>
+  SLED   - Stefan Behlert <behlert@suse.com>
+  SLE HA - Anja Stock <ast@suse.com>
+  SDK    - Matthias Frühauf <mfrueh@suse.com>
+
+
+Be also so kind to mark the feature as done in FATE after you have submitted
+your work.
+
+	thanks,
+	  Your Enterprise Release Team
+
+20:41 2012-11-13
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont3, bug list
+1, hvm create fail
+2, pv fail after create successful
+3, pv fail after vm poweroff. 
+
 
