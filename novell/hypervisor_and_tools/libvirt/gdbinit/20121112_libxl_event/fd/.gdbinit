@@ -2,6 +2,24 @@ set breakpoint pending on
 
 set logging on
 
+#function in libvirt
+break evhook_fd_register
+commands
+silent
+printf "evhook_fd_register\n"
+where 3
+cont
+end
+
+break evhook_fd_deregister
+commands
+silent
+printf "evhook_fd_deregister\n"
+where 3
+cont
+end
+
+#function in xenlight 
 break libxl_osevent_occurred_timeout
 commands
 silent
@@ -58,7 +76,7 @@ end
 
 break libxl__ev_fd_register
 commands
-silent
+#silent
 printf "libxl__ev_fd_register\n"
 where 3
 cont
@@ -66,8 +84,8 @@ end
 
 break libxl__ev_fd_deregister
 commands
-silent
-printf "libxl__ev_fd_deregister\n"
+#silent
+printf "libxl__ev_fd_deregister: fd<%d>\n", ev->fd
 where 3
 cont
 end
