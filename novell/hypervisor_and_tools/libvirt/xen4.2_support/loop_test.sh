@@ -10,10 +10,8 @@ test_ret()
     fi
 }
 
-reboot_or_shutdown()
+wait_started()
 {
-    action=$1
-
     domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
     echo domain id is $domain_id 
     echo "waiting domain started"
@@ -30,6 +28,14 @@ reboot_or_shutdown()
         last_cpu_time=$cpu_time
         sleep 2
     done
+}
+
+reboot_or_shutdown()
+{
+    action=$1
+
+    domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
+    wait_started
     echo "$action $domain_name"
     virsh $action $domain_name
     echo -n "wait for $domain_name $domain_id ${action}ing"
@@ -58,22 +64,31 @@ domain_xml=$1
 domain_name=`cat $domain_xml | grep "<name>" | sed "s/<name>\(.*\)<\/name>/\1/" | sed "s/^\ *//"`
 echo "domain_xml is $domain_xml; domain_name is $domain_name"
 
-#rclibvirtd restart
+echo "restarting libvirtd before test"
+rclibvirtd restart
 for i in `seq 10000`; do
     echo "test $i times"
     echo "test libxlDomainCreateXML: create"
     virsh create $domain_xml
     virsh list | grep $domain_name -w
     test_ret $?
-    sleep 1
+    wait_started
 
     echo "sleep 20 second"
-    for t in `seq 20`; do date; virsh list; sleep 1;done
-    virsh destroy $domain_name
-    sleep 1
+    for t in `seq 20`; do
+        date
+        virsh list
+        test_ret $?
+        ping -c 1 192.168.122.59
+        test_ret $?
+        sleep 1
+    done
 
-#    echo "reboot libvirtd"
-#    rclibvirtd restart
+    echo "test libxlDomainReboot: reboot"
+    reboot_or_shutdown reboot
+
+    echo "test libxlShutdownFlags: shutdown"
+    reboot_or_shutdown shutdown
     sleep 1
 done
 
