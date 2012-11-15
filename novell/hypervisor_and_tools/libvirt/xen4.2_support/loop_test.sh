@@ -58,7 +58,7 @@ domain_xml=$1
 domain_name=`cat $domain_xml | grep "<name>" | sed "s/<name>\(.*\)<\/name>/\1/" | sed "s/^\ *//"`
 echo "domain_xml is $domain_xml; domain_name is $domain_name"
 
-rclibvirtd restart
+#rclibvirtd restart
 for i in `seq 10000`; do
     echo "test $i times"
     echo "test libxlDomainCreateXML: create"
@@ -72,8 +72,8 @@ for i in `seq 10000`; do
     virsh destroy $domain_name
     sleep 1
 
-    echo "reboot libvirtd"
-    rclibvirtd restart
+#    echo "reboot libvirtd"
+#    rclibvirtd restart
     sleep 1
 done
 
