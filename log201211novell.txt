@@ -2030,12 +2030,43 @@ virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont3, bug list
 
 10:23 2012-11-14
 GTD
-0, 9:40 12:58-14:52
+0, 9:40 12:58-14:52-18:20
 
 1, today
 1), 40' Talk with Jim. Jim introduce virtualization features in sle11 sp3. 
-2), 10:44-11:40 14:54- debug libxl xen 4.2 patch. see"10:44 2012-11-14". 
+2), 10:44-11:40 14:54-18:20 debug libxl xen 4.2 patch. see"10:44 2012-11-14". 
 3), 12:58-14:52 nap
+
+10:44 2012-11-14
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont4
+1, read the code in xenlight library and libvirt. 
+libvirt will assgin different event hanles even if user register with the same fd. is that same as xenlight? 
+2, libvirtd event loop
+main -> virNetServerRun -> virEventRunDefaultImpl -> virEventPollDispatchHandles 
+virNetServerRun will quit while loop until srv->quit true. 
+"rclibvirtd restart" call /etc/init.d/libvirtd which send SIGTERM to libvirtd. such signal will be handled by daemonShutdownHandler which will srv->quilt as 1.
+3, when i test with Jim. seems that fd issue show up less than i test on my seat.
+4, Jim found that libxl remove the wrong timer which is not registered by libxl. the timer id is zero or negative. 
+--- xen-4.2.0-testing.origin/tools/libxl/libxl_event.c	2012-11-14 17:54:31.000000000 +0800
++++ xen-4.2.0-testing/tools/libxl/libxl_event.c	2012-11-14 17:55:08.000000000 +0800
+@@ -184,7 +184,7 @@ static int time_register_finite(libxl__g
+ static void time_deregister(libxl__gc *gc, libxl__ev_time *ev)
+ {
+     if (!ev->infinite) {
+-        OSEVENT_HOOK_VOID(timeout_deregister, &ev->for_app_reg);
++        OSEVENT_HOOK_VOID(timeout_deregister, ev->for_app_reg);
+         LIBXL_TAILQ_REMOVE(&CTX->etimes, ev, entry);
+     }
+ }
+
+5, fd is called after fd deregister, unless it is called before the cleanup function. but it is only works while the dispatch function do not notice that the fd handler is marked as delete. 
+
+10:12 2012-11-15
+GTD
+0, 10:00-12:30 14:20
+
+1, today
+1), 10:19- debug libxl xen 4.2 patch. see"10:18 2012-11-15". 
 
 2, next
 1), ask jim to invite me to xen irc. 
@@ -2072,16 +2103,30 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
 2), try armv8 emulator and read armv8 kernel code. 
 
-10:44 2012-11-14
-virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont4
-1, read the code in xenlight library and libvirt. 
-libvirt will assgin different event hanles even if user register with the same fd. is that same as xenlight? 
-2, libvirtd event loop
-main -> virNetServerRun -> virEventRunDefaultImpl -> virEventPollDispatchHandles 
-virNetServerRun will quit while loop until srv->quit true. 
-"rclibvirtd restart" call /etc/init.d/libvirtd which send SIGTERM to libvirtd. such signal will be handled by daemonShutdownHandler which will srv->quilt as 1.
-3, when i test with Jim. seems that fd issue show up less than i test on my seat.
-4, Jim found that libxl remove the wrong timer which is not registered by libxl. the timer id is zero or negative. 
-5, fd is called after fd deregister, unless it is called before the cleanup function. but it is only works while the dispatch function do not notice that the fd handler is marked as delete. 
+10:18 2012-11-15
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont5
+1, 
+2, repeat totally 842times
+2012-11-15 03:01:03.903+0000: 4309: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
 
+full log: 
+
+2012-11-15 03:00:53.748+0000: 4312: info : libvirt version: 1.0.0
+2012-11-15 03:00:53.748+0000: 4312: error : virCommandWait:2287 : internal error Child process (/usr/sbin/iptables --table mangle --delete POSTROUTING --out-interface virbr0 --protocol udp --destination-port 68 --jump CHECKSUM --checksum-fill) unexpected exit status 2: iptables v1.4.6: unknown option `--checksum-fill'
+Try `iptables -h' or 'iptables --help' for more information.
+
+2012-11-15 03:00:53.765+0000: 4312: error : virCommandWait:2287 : internal error Child process (/usr/sbin/iptables --table mangle --insert POSTROUTING --out-interface virbr0 --protocol udp --destination-port 68 --jump CHECKSUM --checksum-fill) unexpected exit status 2: iptables v1.4.6: unknown option `--checksum-fill'
+Try `iptables -h' or 'iptables --help' for more information.
+
+2012-11-15 03:00:53.765+0000: 4312: warning : networkAddGeneralIptablesRules:1632 : Could not add rule to fixup DHCP response checksums on network 'default'.
+2012-11-15 03:00:53.765+0000: 4312: warning : networkAddGeneralIptablesRules:1633 : May need to update iptables package & kernel to support CHECKSUM rule.
+2012-11-15 03:00:54.141+0000: 4312: warning : virSecurityManagerNew:148 : Configured security driver "none" disables default policy to create confined guests
+2012-11-15 03:00:54.142+0000: 4312: error : virNodeParseNode:290 : internal error CPU socket topology has changed
+2012-11-15 03:00:54.142+0000: 4312: warning : qemuCapsInit:847 : Failed to get host CPU
+2012-11-15 03:01:03.903+0000: 4309: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+2012-11-15 03:01:05.121+0000: 4304: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+...
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+2012-11-15 04:02:47.517+0000: 4304: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+2012-11-15 04:03:04.903+0000: 4304: error : libxlVmStart:747 : internal error libxenlight failed to create new domain 'sles11_sp2_pv'
 
