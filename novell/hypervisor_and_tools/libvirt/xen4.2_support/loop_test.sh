@@ -90,5 +90,14 @@ for i in `seq 10000`; do
     echo "test libxlShutdownFlags: shutdown"
     reboot_or_shutdown shutdown
     sleep 1
+
+    echo "sleep 10 second"
+    for t in `seq 20`; do
+        date
+        virsh list
+        test_ret $?
+        sleep 1
+    done
+
 done
 
