@@ -65,7 +65,7 @@ domain_name=`cat $domain_xml | grep "<name>" | sed "s/<name>\(.*\)<\/name>/\1/" 
 echo "domain_xml is $domain_xml; domain_name is $domain_name"
 
 echo "restarting libvirtd before test"
-rclibvirtd restart
+#rclibvirtd restart
 for i in `seq 10000`; do
     echo "test $i times"
     echo "test libxlDomainCreateXML: create"
@@ -79,7 +79,7 @@ for i in `seq 10000`; do
         date
         virsh list
         test_ret $?
-        ping -c 1 192.168.122.59
+        ping -c 4 192.168.122.59
         test_ret $?
         sleep 1
     done

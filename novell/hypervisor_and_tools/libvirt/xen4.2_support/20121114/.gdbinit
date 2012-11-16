@@ -19,41 +19,41 @@ set logging on
 #cont
 #end
 
-break util/event_poll.c:121
-commands
-silent
-printf "virEventPollAddHandle: watch<%d>, fd<%d>, cb<%p>, ff<%p>, opaque<%p>\n", watch, fd, cb, ff, opaque
-cont
-end
-
-break util/event_poll.c:188
-commands
-silent
-printf "virEventPollRemoveHandle: watch<%d>\n", watch
-cont
-end
-
-break virEventPollCleanupHandles
-commands
-silent
-printf "virEventPollCleanupHandles"
-cont
-end
-
-break util/event_poll.c:471
-commands
-silent
-printf "virEventPollDispatchHandles: skip the delete watch\n"
-cont
-end
-
-break util/event_poll.c:485
-commands
-silent
-printf "virEventPollDispatchHandles: call cb\n"
-cont
-end
-
+#break util/event_poll.c:121
+#commands
+#silent
+#printf "virEventPollAddHandle: watch<%d>, fd<%d>, cb<%p>, ff<%p>, opaque<%p>\n", watch, fd, cb, ff, opaque
+#cont
+#end
+#
+#break util/event_poll.c:188
+#commands
+#silent
+#printf "virEventPollRemoveHandle: watch<%d>\n", watch
+#cont
+#end
+#
+#break virEventPollCleanupHandles
+#commands
+#silent
+#printf "virEventPollCleanupHandles"
+#cont
+#end
+#
+#break util/event_poll.c:471
+#commands
+#silent
+#printf "virEventPollDispatchHandles: skip the delete watch\n"
+#cont
+#end
+#
+#break util/event_poll.c:485
+#commands
+#silent
+#printf "virEventPollDispatchHandles: call cb\n"
+#cont
+#end
+#
 #function in xenlight 
 break libxl_osevent_occurred_timeout
 commands
@@ -127,7 +127,7 @@ end
 break libxl_osevent_occurred_fd
 commands
 silent
-printf "libxl_osevent_occurred_fd: fd<%d>, ev->fd<%d>\n", fd, ((libxl__ev_fd*)for_libxl)->fd
+printf "libxl_osevent_occurred_fd: fd<%d>, ev->fd<%d>, revents<%d>, ev->events<%d>\n", fd, ((libxl__ev_fd*)for_libxl)->fd, revents, ((libxl__ev_fd*)for_libxl)->events
 cont
 end
 
