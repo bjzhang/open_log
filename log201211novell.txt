@@ -44,7 +44,8 @@ gvimdiff --nofork $2 $5
 17:43 2012-11-02
 GTD
 1, today
-1), summary: 当初遇到migration fail, 我如果想到追到xenlight library里面, 也许问题早就解决了. 
+1), US/China Sync meeing. see"8:02 2012-11-02"
+2), summary: 当初遇到migration fail, 我如果想到追到xenlight library里面, 也许问题早就解决了. 
 
 10:03 2012-11-05
 arm, armv8, Cortex-A50, Cortex-A53, Cortex-A57
@@ -2046,9 +2047,16 @@ main -> virNetServerRun -> virEventRunDefaultImpl -> virEventPollDispatchHandles
 virNetServerRun will quit while loop until srv->quit true. 
 "rclibvirtd restart" call /etc/init.d/libvirtd which send SIGTERM to libvirtd. such signal will be handled by daemonShutdownHandler which will srv->quilt as 1.
 3, when i test with Jim. seems that fd issue show up less than i test on my seat.
-4, Jim found that libxl remove the wrong timer which is not registered by libxl. the timer id is zero or negative. 
---- xen-4.2.0-testing.origin/tools/libxl/libxl_event.c	2012-11-14 17:54:31.000000000 +0800
-+++ xen-4.2.0-testing/tools/libxl/libxl_event.c	2012-11-14 17:55:08.000000000 +0800
+4, Jim found that libxl remove the wrong timer which is not registered by libxl. the timer id is zero or negative. here is the full patch: 
+> hg log -p -r 26155
+changeset:   26155:babb84d9a82e
+user:        Jim Fehlig <jfehlig@suse.com>
+date:        Thu Nov 15 10:25:25 2012 +0000
+summary:     libxl: Fix passing of application data to timeout_deregister hook
+
+diff -r b9b4456e12d1 -r babb84d9a82e tools/libxl/libxl_event.c
+--- a/tools/libxl/libxl_event.c Thu Nov 15 09:54:38 2012 +0000
++++ b/tools/libxl/libxl_event.c Thu Nov 15 10:25:25 2012 +0000
 @@ -184,7 +184,7 @@ static int time_register_finite(libxl__g
  static void time_deregister(libxl__gc *gc, libxl__ev_time *ev)
  {
@@ -2063,16 +2071,102 @@ virNetServerRun will quit while loop until srv->quit true.
 
 10:12 2012-11-15
 GTD
-0, 10:00-12:30 14:20
+0, 10:00-12:30 14:20-18:40
 
 1, today
 1), 10:19- debug libxl xen 4.2 patch. see"10:18 2012-11-15". 
+2), 20' join the kernel debug discuss with Bin Li, FAN yadan, ZHAO guangliang.
+
+10:18 2012-11-15
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont5
+1, finally, i got the fix. it fix all bugs list in "20:41 2012-11-13". 
+1), patch
+--- xen-4.2.0-testing.origin/tools/libxl/libxl_event.c	2012-11-15 10:31:20.000000000 +0800
++++ xen-4.2.0-testing/tools/libxl/libxl_event.c	2012-11-15 10:30:16.000000000 +0800
+@@ -1017,11 +1017,15 @@ void libxl_osevent_occurred_fd(libxl_ctx
+     CTX_LOCK;
+     assert(!CTX->osevent_in_hook);
+ 
++    if (!libxl__ev_fd_isregistered(ev)) {
++        DBG("ev_fd=%p deregister unregistered",ev);
++        goto out;
++    }
+     assert(fd == ev->fd);
+     revents &= ev->events;
+     if (revents)
+         ev->func(egc, ev, fd, ev->events, revents);
+-
++out:
+     CTX_UNLOCK;
+     EGC_FREE;
+ }
+2), test script
+/home/bamvor/log/novell/hypervisor_and_tools/libvirt/xen4.2_support/loop_test.sh
+
+2, repeat totally 842times
+2012-11-15 03:01:03.903+0000: 4309: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+
+full log: 
+
+2012-11-15 03:00:53.748+0000: 4312: info : libvirt version: 1.0.0
+2012-11-15 03:00:53.748+0000: 4312: error : virCommandWait:2287 : internal error Child process (/usr/sbin/iptables --table mangle --delete POSTROUTING --out-interface virbr0 --protocol udp --destination-port 68 --jump CHECKSUM --checksum-fill) unexpected exit status 2: iptables v1.4.6: unknown option `--checksum-fill'
+Try `iptables -h' or 'iptables --help' for more information.
+
+2012-11-15 03:00:53.765+0000: 4312: error : virCommandWait:2287 : internal error Child process (/usr/sbin/iptables --table mangle --insert POSTROUTING --out-interface virbr0 --protocol udp --destination-port 68 --jump CHECKSUM --checksum-fill) unexpected exit status 2: iptables v1.4.6: unknown option `--checksum-fill'
+Try `iptables -h' or 'iptables --help' for more information.
+
+2012-11-15 03:00:53.765+0000: 4312: warning : networkAddGeneralIptablesRules:1632 : Could not add rule to fixup DHCP response checksums on network 'default'.
+2012-11-15 03:00:53.765+0000: 4312: warning : networkAddGeneralIptablesRules:1633 : May need to update iptables package & kernel to support CHECKSUM rule.
+2012-11-15 03:00:54.141+0000: 4312: warning : virSecurityManagerNew:148 : Configured security driver "none" disables default policy to create confined guests
+2012-11-15 03:00:54.142+0000: 4312: error : virNodeParseNode:290 : internal error CPU socket topology has changed
+2012-11-15 03:00:54.142+0000: 4312: warning : qemuCapsInit:847 : Failed to get host CPU
+2012-11-15 03:01:03.903+0000: 4309: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+2012-11-15 03:01:05.121+0000: 4304: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+...
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+2012-11-15 04:02:47.517+0000: 4304: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+2012-11-15 04:03:04.903+0000: 4304: error : libxlVmStart:747 : internal error libxenlight failed to create new domain 'sles11_sp2_pv'
+
+9:03 2012-11-16
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting
+1, bruce:
+iscsi. kernel backport?
+qemu 1.3
+2, Bo yang
+1), macvtype
+2), bug: not virtualization work.
+3, Lin ma
+1), kvm, libvirt auto test.
+CI on ibs sp3. how to trigger after ibs build successful.
+4, Chunyan liu
+1), add new api in libxl.
+2), fate: send patch to upstream for review.
+3), pci pass through. talk with Jim.
+5, bamvor
+1), libvirt libxl xen4.2. found one bug in xenlight library and prepare to write patch to xen community.
+2), dicuss with jim about lock patch.
+6, jim
+prepare libvirt package for sp3 alpha 1.
+
+11:10 2012-11-16
+GTD
+0, 8:50-22:30
+
+1, today
+1), 9:00-9:40 US/China Sync meeing. see"8:03 2012-11-16".
+2), talk with Jim. see"11:13 2012-11-16"
+3), lunch and learning, Jim, openstack. see"12:07 2012-11-16"
+4), write patch for xenlight library. see"14:55 2012-11-16"
+5), test xen on kvm. see"22:03 2012-11-16"
 
 2, next
-1), ask jim to invite me to xen irc. 
-1), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
+1), check the feature request from Jim. see"11:13 2012-11-16"2
+2), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+3), ask jim to invite me to xen irc. 
+4), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
 seems came from bridge-utils
-2), try to fix osc build fail. see"19:45 2012-11-12".
+5), try to fix osc build fail. see"19:45 2012-11-12".
 
 3, next next
 1), notes about Huawei from eet-china.
@@ -2101,58 +2195,217 @@ libxl_dm.c:
 1), opensuse on MK802
 (1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code. 
+2), try armv8 emulator and read armv8 kernel code.  
 
-10:18 2012-11-15
-virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont5
-1, 
-2, repeat totally 842times
-2012-11-15 03:01:03.903+0000: 4309: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-
-full log: 
-
-2012-11-15 03:00:53.748+0000: 4312: info : libvirt version: 1.0.0
-2012-11-15 03:00:53.748+0000: 4312: error : virCommandWait:2287 : internal error Child process (/usr/sbin/iptables --table mangle --delete POSTROUTING --out-interface virbr0 --protocol udp --destination-port 68 --jump CHECKSUM --checksum-fill) unexpected exit status 2: iptables v1.4.6: unknown option `--checksum-fill'
-Try `iptables -h' or 'iptables --help' for more information.
-
-2012-11-15 03:00:53.765+0000: 4312: error : virCommandWait:2287 : internal error Child process (/usr/sbin/iptables --table mangle --insert POSTROUTING --out-interface virbr0 --protocol udp --destination-port 68 --jump CHECKSUM --checksum-fill) unexpected exit status 2: iptables v1.4.6: unknown option `--checksum-fill'
-Try `iptables -h' or 'iptables --help' for more information.
-
-2012-11-15 03:00:53.765+0000: 4312: warning : networkAddGeneralIptablesRules:1632 : Could not add rule to fixup DHCP response checksums on network 'default'.
-2012-11-15 03:00:53.765+0000: 4312: warning : networkAddGeneralIptablesRules:1633 : May need to update iptables package & kernel to support CHECKSUM rule.
-2012-11-15 03:00:54.141+0000: 4312: warning : virSecurityManagerNew:148 : Configured security driver "none" disables default policy to create confined guests
-2012-11-15 03:00:54.142+0000: 4312: error : virNodeParseNode:290 : internal error CPU socket topology has changed
-2012-11-15 03:00:54.142+0000: 4312: warning : qemuCapsInit:847 : Failed to get host CPU
-2012-11-15 03:01:03.903+0000: 4309: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-2012-11-15 03:01:05.121+0000: 4304: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-...
-2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-2012-11-15 04:02:47.517+0000: 4304: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-2012-11-15 04:03:04.903+0000: 4304: error : libxlVmStart:747 : internal error libxenlight failed to create new domain 'sles11_sp2_pv'
-
-9:03 2012-11-16
-sync, meeting
-1, bruce:
-iscsi. kernel backport?
-qemu 1.3
-2, Bo yang
-1), macvtype
-2), bug: not virtualization work.
-3, Lin ma
-1), kvm, libvirt auto test.
-CI on ibs sp3. how to trigger after ibs build successful.
-4, Chunyan liu
-1), add new api in libxl.
-2), fate: send patch to upstream for review.
-3), pci pass through. talk with Jim.
-5, bamvor
-1), libvirt libxl xen4.2. found one bug in xenlight library and prepare to write patch to xen community.
-2), dicuss with jim about lock patch.
-6, jim
-prepare libvirt package for sp3 alpha 1.
+11:13 2012-11-16
+virtualization, Jim, talk
+1, why choose libvirt 1.0.2 and qemu 1.3?
+balancing between patch and update risk. the maintainer need to check each commit between the sp2 and sp3 version and ensure backport important bugfix from newer than sp3 packages.
+If libvirt 1.0.2 release before 15, Jun(sle11 sp3 beta, which mean features freeze). 
+2, if i have time, i could check the openstack request which need add managed save code in libvirt xen legacy driver. 
+the managed save means that caller does not give save location for libvirt. libvirt should decided itself. than tell to the hypervisor which location should save. 
+3, Jim want to talk with me through im serveral days once. 
+He said sorry that he was so busy that he do not have time to communicate with me. 
 
 12:07 2012-11-16
 cloud, openstack, Jim
 1, nova
 support kvm, qemu, libxl, lxc through libvirt, support xenserver, hyper-v and other non open souce through seperate drivers. 
 2, image metadata
+
+14:55 2012-11-16
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont6, write the patch for xen upstream
+1, comment
+fix race condition between libvirt deamon fd event handling and xenlight library fd deregister
+xenlight will remove fd handle just after the transfer is done according to the buffer pointer. this action will first mark fd handle as delete in libvirtd then remove fd handler from list in xenlight library. 
+
+there are seperate locks for libvirt deamon and xenlight library. 
+
+
+libvirt event dispatch                  xenlight transfer done
+       |                              enter libxl__ev_fd_deregister
+       |                                     CTX_LOCK
+       |                                         |
+       |                                         |
+       |                              enter osevent_fd_deregister
+       |                                         |
+       |                              enter virEventRemoveHandle
+       |                                waiting virMutexLock
+check handler delete flag                        |
+virMutexUnlock                                   |
+       |                                    virMutexLock
+enter libxl_osevent_occurred_fd                  |
+waiting CTX_LOCK                          mark delete flag
+       |                                   virMutexUnlock
+       |                                         |
+       |                                exit virEventRemoveHandle
+       |                                exit osevent_fd_deregister
+       |                                         |
+       |                                remove fd handler from list
+       |                                   set ev->fd as -1
+       |                                     CTX_UNLOCK
+   CTX_LOCK
+assert(fd==ev->fd) //lead to crash
+call back in libxl
+   CTX_UnlOCK
+exit libxl_osevent_occurred_fd
+
+--- xen-4.2.0-testing.origin/tools/libxl/libxl_event.c	2012-11-15 10:31:20.000000000 +0800
++++ xen-4.2.0-testing/tools/libxl/libxl_event.c	2012-11-15 10:30:16.000000000 +0800
+@@ -1017,11 +1017,15 @@ void libxl_osevent_occurred_fd(libxl_ctx
+     CTX_LOCK;
+     assert(!CTX->osevent_in_hook);
+ 
++    if (!libxl__ev_fd_isregistered(ev)) {
++        DBG("ev_fd=%p deregister unregistered",ev);
++        goto out;
++    }
+     assert(fd == ev->fd);
+     revents &= ev->events;
+     if (revents)
+         ev->func(egc, ev, fd, ev->events, revents);
+-
++out:
+     CTX_UNLOCK;
+     EGC_FREE;
+ }
+
+2, thinking:
+1), Q: if transfer is done. why there still new event will be dispatched?
+A: maybe this event is just a timeout poll event. 
+2), try to improve it: check the libxl.log and pull timeout value. 
+Sadly, it is POLLOUT not timeout: 
+39:libxl_osevent_occurred_fd: fd<43>, ev->fd<-1>, revents<4>, ev->events<4>
+55:libxl_osevent_occurred_fd: fd<43>, ev->fd<-1>, revents<4>, ev->events<4>
+63:libxl_osevent_occurred_fd: fd<43>, ev->fd<-1>, revents<4>, ev->events<4>
+92:libxl_osevent_occurred_fd: fd<38>, ev->fd<-1>, revents<4>, ev->events<4>
+96:libxl_osevent_occurred_fd: fd<43>, ev->fd<-1>, revents<4>, ev->events<4>
+3), So, what does libvirt want to write after xenlight library think it transfer is over? \TODO
+
+21:51 2012-11-16
+software skill, linux, storage, build disk image, mount disk image; dd; kpartx
+linux-iwgo:dd if=/dev/zero of=disk0.raw bs=1024k count=0 seek=2048
+linux-iwgo:/var/lib/kvm/images/disk1 # fdisk disk0.raw
+Welcome to fdisk (util-linux 2.21.2).
+
+Changes will remain in memory only, until you decide to write them.
+Be careful before using the write command.
+
+Device does not contain a recognized partition table
+Building a new DOS disklabel with disk identifier 0x25f16ceb.
+
+Command (m for help): p
+
+Disk disk0.raw: 2147 MB, 2147483648 bytes
+255 heads, 63 sectors/track, 261 cylinders, total 4194304 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x25f16ceb
+
+    Device Boot      Start         End      Blocks   Id  System
+
+Command (m for help): c
+DOS Compatibility flag is set (DEPRECATED!)
+
+Command (m for help): c
+DOS Compatibility flag is not set
+
+Command (m for help): n
+Partition type:
+   p   primary (0 primary, 0 extended, 4 free)
+   e   extended
+Select (default p): p
+Partition number (1-4, default 1): 1
+First sector (2048-4194303, default 2048):
+Using default value 2048
+Last sector, +sectors or +size{K,M,G} (2048-4194303, default 4194303):
+Using default value 4194303
+Partition 1 of type Linux and of size 2 GiB is set
+
+Command (m for help): p
+
+Disk disk0.raw: 2147 MB, 2147483648 bytes
+255 heads, 63 sectors/track, 261 cylinders, total 4194304 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x25f16ceb
+
+    Device Boot      Start         End      Blocks   Id  System
+disk0.raw1            2048     4194303     2096128   83  Linux
+
+Command (m for help): w
+The partition table has been altered!
+
+Syncing disks.
+linux-iwgo:/var/lib/kvm/images/disk1 # kpartx -av disk0.raw
+add map loop1p1 (253:0): 0 4192256 linear /dev/loop1 2048
+linux-iwgo:/var/lib/kvm/images/disk1 # mount /dev/mapper/loop0p1 disk
+mount: unknown filesystem type '(null)'
+linux-iwgo:/var/lib/kvm/images/disk1 # mke2fs /dev/mapper/loop0p1
+mke2fs 1.42.4 (12-June-2012)
+Discarding device blocks: done
+Filesystem label=
+OS type: Linux
+Block size=4096 (log=2)
+Fragment size=4096 (log=2)
+Stride=0 blocks, Stripe width=0 blocks
+131072 inodes, 524032 blocks
+26201 blocks (5.00%) reserved for the super user
+First data block=0
+Maximum filesystem blocks=536870912
+16 block groups
+32768 blocks per group, 32768 fragments per group
+8192 inodes per group
+Superblock backups stored on blocks:
+        32768, 98304, 163840, 229376, 294912
+
+Allocating group tables: done
+Writing inode tables: done
+Writing superblocks and filesystem accounting information: done
+
+linux-iwgo:/var/lib/kvm/images/disk1 # mount /dev/mapper/loop0p1 disk
+linux-iwgo:/var/lib/kvm/images/disk1 # df -h
+Filesystem           Size  Used Avail Use% Mounted on
+rootfs                18G  9.1G  8.0G  54% /
+devtmpfs             1.5G   92K  1.5G   1% /dev
+tmpfs                1.5G  380K  1.5G   1% /dev/shm
+tmpfs                1.5G  848K  1.5G   1% /run
+/dev/sda2             18G  9.1G  8.0G  54% /
+tmpfs                1.5G     0  1.5G   0% /sys/fs/cgroup
+tmpfs                1.5G  848K  1.5G   1% /var/run
+tmpfs                1.5G  848K  1.5G   1% /var/lock
+tmpfs                1.5G     0  1.5G   0% /media
+/dev/mapper/loop0p1  2.0G   24K  1.9G   1% /var/lib/kvm/images/disk1/disk
+linux-iwgo:/var/lib/kvm/images/disk1 # mke2fs /dev/mapper/loop0p1 ^C
+
+22:03 2012-11-16
+virtualization, kvm, xen, xen on kvm
+1, nested kvm
+1), reference
+Nested Virtualization with KVM Intel
+http://kashyapc.wordpress.com/2012/01/14/nested-virtualization-with-kvm-intel/
+Nested kvm guests
+http://s3hh.wordpress.com/2012/01/19/nested-kvm-guests/
+KVM-ON-KVM：Nested Virtualization
+http://www.liangsuilong.info/?p=851
+2), qemu-kvm configuration
+using host-model for enable vmx
+host-model
+http://libvirt.org/formatdomain.html#elementsCPUTuning
+The host-model mode is essentially a shortcut to copying host CPU definition from capabilities XML into domain XML. Since the CPU definition is copied just before starting a domain, exactly the same XML can be used on different hosts while still providing the best guest CPU each host supports. Neither match attribute nor any feature elements can be used in this mode. Specifying CPU model is not supported either, but model's fallback attribute may still be used. Libvirt does not model every aspect of each CPU so the guest CPU will not match the host CPU exactly. On the other hand, the ABI provided to the guest is reproducible. During migration, complete CPU model definition is transferred to the destination host so the migrated guest will see exactly the same CPU model even if the destination host contains more capable CPUs for the running instance of the guest; but shutting down and restarting the guest may present different hardware to the guest according to the capabilities of the new host.
+
+linux-iwgo:/etc/kvm/vm # diff -urp sles11.xml.origin sles11.xml
+--- sles11.xml.origin   2012-11-16 22:05:12.778853822 +0800
++++ sles11.xml  2012-11-16 21:39:08.726723088 +0800
+@@ -3,6 +3,8 @@
+   <uuid>1c53d314-c929-3f33-81c7-50d9be804c89</uuid>
+   <memory>524288</memory>
+   <currentMemory>524288</currentMemory>
++  <cpu mode='host-model'>
++  </cpu>
+   <vcpu>2</vcpu>
+   <os>
+     <type arch='x86_64' machine='pc'>hvm</type>
+
