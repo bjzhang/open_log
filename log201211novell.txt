@@ -2159,43 +2159,6 @@ GTD
 4), write patch for xenlight library. see"14:55 2012-11-16"
 5), test xen on kvm. see"22:03 2012-11-16"
 
-2, next
-1), check the feature request from Jim. see"11:13 2012-11-16"2
-2), check the error from "10:18 2012-11-15"2
-2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-3), ask jim to invite me to xen irc. 
-4), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
-seems came from bridge-utils
-5), try to fix osc build fail. see"19:45 2012-11-12".
-
-3, next next
-1), notes about Huawei from eet-china.
-2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425 
-
-2, next
-1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
-2), test attach-disk command. see"10:41 2012-10-30"2
-3), maybe libxl and qemu could communicate with qemu through xenstore?
-
-libxl_dm.c: 
-        /* Find uuid and the write the vnc password to xenstore for qemu. */
-        t = xs_transaction_start(ctx->xsh);
-        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
-        if (vm_path) {
-            /* Now write the vncpassword into it. */
-            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
-            pass_stuff[0] = "vncpasswd";
-            pass_stuff[1] = info->vncpasswd;
-            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
-
-3, for Jim
-1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
-
-4, next month
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code.  
 
 11:13 2012-11-16
 virtualization, Jim, talk
@@ -2214,14 +2177,27 @@ support kvm, qemu, libxl, lxc through libvirt, support xenserver, hyper-v and ot
 2, image metadata
 
 14:55 2012-11-16
+(10:02 2012-11-19)
 virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont6, write the patch for xen upstream
 1, comment
-fix race condition between libvirt deamon fd event handling and xenlight library fd deregister
-xenlight will remove fd handle just after the transfer is done according to the buffer pointer. this action will first mark fd handle as delete in libvirtd then remove fd handler from list in xenlight library. 
+fix race condition between libvirtd event handling and libxl fd deregister
 
-there are seperate locks for libvirt deamon and xenlight library. 
+the race condition may be encounted at the following senaro: 
+(1), xenlight will remove fd handle just after the transfer is done according to
+the buffer pointer. this action will first mark fd handle delete in libvirtd
+then remove fd handler from list in libxl. the action mark as delete depend on
+libvirt mutex(virMutexLock). 
+(2), meanwhile in the libvirt event dispatch process libvirt will check the
+delete flag in libvirt mutex, at this time, "(1)" may be blocked before mark
+delete flag. then libvirt release its mutex temperary for callback running.
+but this callback need xenlight lock(CTX_LCOK) which is got by xenlight fd
+deregister functin. So, libvirtd will continue to run this callback after fd
+register exit which means xenlight has been marked delete flag, removed this fd
+handler and set ev->fd as -1. after libxl__ev_fd_deregister exit, it is time for
+callback running. but unfortunately, this callback has been removed as I
+mentioned above. 
 
-
+reference the following graph: 
 libvirt event dispatch                  xenlight transfer done
        |                              enter libxl__ev_fd_deregister
        |                                     CTX_LOCK
@@ -2247,8 +2223,10 @@ waiting CTX_LOCK                          mark delete flag
    CTX_LOCK
 assert(fd==ev->fd) //lead to crash
 call back in libxl
-   CTX_UnlOCK
+   CTX_UNLOCK
 exit libxl_osevent_occurred_fd
+
+at the same time, i found the times of file handler register is less than the times of file handler deregister. is that right? seems that it will be better if the register and deregister is paired. 
 
 --- xen-4.2.0-testing.origin/tools/libxl/libxl_event.c	2012-11-15 10:31:20.000000000 +0800
 +++ xen-4.2.0-testing/tools/libxl/libxl_event.c	2012-11-15 10:30:16.000000000 +0800
@@ -2281,6 +2259,13 @@ Sadly, it is POLLOUT not timeout:
 92:libxl_osevent_occurred_fd: fd<38>, ev->fd<-1>, revents<4>, ev->events<4>
 96:libxl_osevent_occurred_fd: fd<43>, ev->fd<-1>, revents<4>, ev->events<4>
 3), So, what does libvirt want to write after xenlight library think it transfer is over? \TODO
+
+3, rest meterial
+meanwhile in the libvirt event dispatch process libvirt will check the delete flag in libvirt mutex, then release its mutex temperary for callback running. maybe this callback will call the function registered in the xenlight library list which I mentioned above. 
+the race condition between "(1)" and "(2)" will be encountered at the following condition: the delete flag is marked after libvirtd delete flag check. at this time, libvirtd will be blocked by xenlight library lock(CTX_LOCK) after invoking callback function. So, xenlight library will remove fd handler event from list. after fd handler removing is done, xenlight library will release CTX_LOCK. At this time, libvirtd finally got the CTX_LOCK then execute the assertion and actual callback function which has been removed by the xenlight library. 
+
+4, send as patch
+ref: "11:24 2012-04-28"
 
 21:51 2012-11-16
 software skill, linux, storage, build disk image, mount disk image; dd; kpartx
@@ -2413,3 +2398,129 @@ linux-iwgo:/etc/kvm/vm # diff -urp sles11.xml.origin sles11.xml
 gsoc
 run opensuse on android through chroot.
 it is useful for suse users. lots of command could be used in Android device without headache Android application.
+
+09:57 2012-11-19
+GTD
+0, 9:40-11:44 17:45
+
+1, today
+1), 10:03-11:14 write patch for xenlight library. see"14:55 2012-11-16"
+2), 11:24-11:44 12:50-13:38 work report. see"11:24 2012-11-19"
+3), check the feature request from Jim. see"13:21 2012-11-19". 
+4), work on libvirt manage save for xen legacy. see"13:37 2012-11-19"
+5), 20' talk with Jiaju. about the work in last week. 
+6), 30' discuss with GuanJun about arm Cortex-A15 server. 
+
+2, next
+2), work on libvirt upstream for manage save of xen legacy. ref"13:37 2012-11-19"
+1), gsoc: "22:23 2012-11-17"
+2), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+3), ask jim to invite me to xen irc. 
+4), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
+seems came from bridge-utils
+5), try to fix osc build fail. see"19:45 2012-11-12".
+
+3, next next
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425 
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code.  
+
+11:24 2012-11-19
+work report - week 46
+1, [devel-server] work report - week 46
+1), work on libvirt xen4.2 support with Jim.
+afte debuging, i find a race conditon in xenlight library which lead to PV guest create fail in my test. after fix this bug with the other Jim's fix, vm create, reboot, shutdown is ok during 117 times test(Once test means vm create, reboot, shutdown and vm is alive after create or reboot). 
+Jim think it is a reasonable fix but complex to understanding. So, he will help me review my patch which i had sent today. 
+2), talk with Jim. Jim introduce the features and status of virtuazalition in sle11 sp3. it is great for me to know more in virtualization special in libvirt. 
+3), lunch and learning about Openstack and SUSE Cloud from Jim.
+
+13:21 2012-11-19
+virtualization, libvirt, xen, xend, support management save, bugzilla
+https://bugzilla.novell.com/show_bug.cgi?id=782311
+1, Tilman Beitter 2012-09-26 14:18:51 UTC
+Created an attachment (id=507203) [details]
+log snippet from compute.log
+
+User-Agent:       Mozilla/5.0 (X11; Ubuntu; Linux i686; rv:15.0) Gecko/20100101
+Firefox/15.0.1
+
+With Xen as HV it is not possible to create snapshots of Cloud Guests.
+The snapshot get's status "queued" within the Openstack Dashboard and is
+then stuck there.
+
+Checking Nova's compute.log I found this error:
+
+"libvirtError: this function is not supported by the connection driver:
+virDomainManagedSave" (full log attached)
+
+I testet the whole environment with the same configurations and options,
+but with KVM as HV, and both things work.
+
+Reproducible: Always
+
+Steps to Reproduce:
+1. setup SUSE Cloud with Xen as HV (nova proposal)
+2. launch any instance
+3. take a snapshot of any instance
+4. check status of the snapshot
+5. check nova Log on compute node
+Actual Results:  
+snapshots get queued and nova compute.log reports errors.
+
+Expected Results:  
+snapshot should be done.
+
+2, Jim
+IMO, it would be better to see if we can implement the domainManagedSave,
+domainHasManagedSaveImage, and domainManagedSaveRemove functions in the legacy
+libvirt xen driver instead of introducing xen-specific hacks in the nova
+libvirt driver.
+
+Adding Chunyan and Bamvor as one of them may be able to help with this work.
+
+13:37 2012-11-19
+virtualization, libvirt, xen, xend, support management save, bugzilla, cont1
+1, read libxl code
+domainManagedSave, domainHasManagedSaveImage, and domainManagedSaveRemove.
+1), libxlDomainManagedSavePath called by libxlVmStart, libxlDomainUndefineFlags
+2), domainManagedSaveLoad: call libxlDomainMangedSavePath and virFileExists. 
+3), domainHasManagedSaveImage: return vm->hasManagedSave
+4), domainManagedSaveLoad: ?
+5), domainManagedSaveRemove: libxlDomainMangedSavePath and unlink.
+6), alloc and set saveDir in libxlStartUp. and free it in libxlShutDown. 
+7), restore managed save in libxlVmCreate
+8). define LIBXL_SAVE_DIR
+2, it looks like it is not difficult to implement. try to finish code today. 
+3, add code in xen/xen_driver.c
+1), no xen driver lock? 
+2), do i need to set vm->hasManagedSave during domainManagedSave? qemu does, but libxl does not. 
+3), there is not Startup and ShutDown State function in xen. 
+check xm_internal.c and xen_inotify.c, it seems that should add into xm_internal.c
+check xenXMConfigCacheRefresh, xenXMOpen, xenXMLDomainDefineXML
+after reading some code, i decided to add these in initialize and cleanup function in xen state_driver. hope it work. 
+
