@@ -2485,12 +2485,16 @@ check xenXMConfigCacheRefresh, xenXMOpen, xenXMLDomainDefineXML
 after reading some code, i decided to add these in initialize and cleanup function in xen state_driver. hope it work. 
 
 22:33 2012-11-19
+(14:54 2012-11-22)
 GTD
 1, work plan
 1), work on xen arm HVM. 
 (1), learn build service and kiwi, build allwinner A10 image.
-(2), read xen arm code. running xen arm on arm cortex-a15 simulator.
-(3), port xen to allwinner cortex-a7.
+maybe i should compare respberry pi and opensuse upstream kernel. 
+(2), learn device tree. it is needed by xen arm.
+ref: vexpress-v2p-ca15-tc1.dts and vexpress-v2p-ca15_a7.dts in arch/arm/boot/dts
+(3), read xen arm code. running xen arm on arm cortex-a15 simulator.
+(4), port xen to allwinner cortex-a7.
 
 10:12 2012-11-20
 GTD
@@ -2653,6 +2657,7 @@ F:  xen/arch/arm/
 F:  xen/include/asm-arm/
 
 16:22 2012-11-20
+(12:50 2012-11-21)
 virtualization, libvirt, xen, xend, support management save, bugzilla, cont2
 1, 没有driver lock, 这样调东西很危险阿. 
 No. i am wrong.
@@ -2662,13 +2667,15 @@ from xenUnifiedDomainSaveFlags, it is not necessary.
 So, I will add code in xenUnifiedOpen and Close.
 
 2, plan: there is a restore in libxlVmStart/qemuDomainObjStart for restoring vm from managed save in domainCreateWithFlags process.
-So, add restore save in create
-1), there are two functions maybe called while create. xenDaemonDomainCreate, xenXMDomainCreate. 
-the former function seems a "start", the latter one seems a "create".
-how about call xenDaemonDomainRestore at first? 
-I still not sure about how to do manage save in xenUnifiedDomainCreateWithFlags.\TODO 
+1), So, maybe i could add restore save in create?
+there are two functions maybe called while create(xenUnifiedDomainCreateWithFlags). xenDaemonDomainCreate, xenXMDomainCreate. 
+these function are called in "virsh start". xenDaemonCreateXML is called in "virsh create"
+after more reading, i realize that the restore of managed save will only used in the "virsh start". ref"11:24 2012-11-21"3.
+2), So, i should add this in xenUnifiedDomainCreateWithFlags
+3), how about call xenDaemonDomainRestore at first? 
+it is ok if i check and get the managed save path to it. 
 
-2, \TODO
+3, \TODO
 1), in xenUnifiedOpen
 lots of code in this function mention about the "fall back to the remote driver". i suppose that it will actually called even if i called from remote driver. So, such thing will not affect to me. but I need to verify it. 
 2), it is hard to call SaveLoad from Open. because there is no vm provided during Open. 
@@ -2683,53 +2690,6 @@ GTD
 1), 1h mailing list, libvirt; xen. see"10:31 2012-11-21"
 2), 20' 13:49-16:50 work on libvirt manage save for xen legacy. see"11:24 2012-11-21". 
 3), 20' finance study. 
-
-2, daily work
-1), tracking xen-arm update. 
-2), read libvirt and xen-devel quickly, should less that 30minutes. 
-
-3, next
-1), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
-seems came from bridge-utils
-2), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个. 
-
-3, next week
-1), next week?: review and test Jim xen4.2 patch. 
-2), after "1)" finish. try xen on kvm. 
-4), check the error from "10:18 2012-11-15"2
-2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-5), ask jim to invite me to xen irc. 
-6), try to fix osc build fail. see"19:45 2012-11-12".
-
-3, next next
-1), gsoc: "22:23 2012-11-17"
-1), notes about Huawei from eet-china.
-2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425 
-
-2, next
-1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
-2), test attach-disk command. see"10:41 2012-10-30"2
-3), maybe libxl and qemu could communicate with qemu through xenstore?
-
-libxl_dm.c: 
-        /* Find uuid and the write the vnc password to xenstore for qemu. */
-        t = xs_transaction_start(ctx->xsh);
-        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
-        if (vm_path) {
-            /* Now write the vncpassword into it. */
-            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
-            pass_stuff[0] = "vncpasswd";
-            pass_stuff[1] = info->vncpasswd;
-            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
-
-3, for Jim
-1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
-
-4, next month
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
-2), try armv8 emulator and read armv8 kernel code.  
 
 10:31 2012-11-21
 mailing list, virtualization, xen, arm, fluash cache
@@ -2796,7 +2756,7 @@ Will do.  Again, probably Thursday before I can get to it.
 too loog for me, not reading low-level code. 
 
 11:24 2012-11-21
-virtualization, libvirt, xen, xend, support management save, bugzilla, cont3
+virtualization, libvirt, xen, xend, support management save, bugzilla, cont3, compile and test pass
 1, plan
 1), make it compile pass.
 2), fix TODO. in "16:22 2012-11-20"2.
@@ -2826,4 +2786,206 @@ conference, osc12, opensuse arm
 15:35 2012-11-21
 review jim patch
 1, why remove libxlMakeChrdevStr and libxlMakeDeviceModelInfo
+
+11:12 2012-11-22
+GTD
+0, 10:30-11:40 12:50-18:23
+
+1, today
+1), -11:12 personal stuff.
+2), 11:29-11:50 13:30-16:19 mailing list. see"11:29 2012-11-22", "15:13 2012-11-22"
+3), 16:57- work on libvirt manage save for xen legacy. see"16:58 2012-11-22"
+
+2, daily work
+1), tracking xen-arm update. 
+2), read libvirt and xen-devel quickly, should less that 30minutes. 
+
+3, next
+1), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
+seems came from bridge-utils
+2), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个. 
+
+3, next week
+1), next week?: review and test Jim xen4.2 patch. 
+2), after "1)" finish. try xen on kvm. 
+3), work on xen on ARM. ref"22:33 2012-11-19"
+4), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+5), ask jim to invite me to xen irc. 
+6), try to fix osc build fail. see"19:45 2012-11-12".
+
+3, next next
+1), gsoc: "22:23 2012-11-17"
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425 
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code.  
+
+11:29 2012-11-22
+mailing list, virtualization, xen
+1, [Xen-devel] [PATCH] libxl: Fix bug in libxl_cdrom_insert, make more robust against bad xenstore data
+http://lists.xen.org/archives/html/xen-devel/2012-11/msg01200.html
+2, memory allocation improvement
+"Mats Petersson"_email_"[Xen-devel] [PATCH V3] xen/privcmd: improve performance of mapping of guest memory to dom0"_20121121
+http://lists.xen.org/archives/html/xen-devel/2012-11/msg01199.html
+1), about the performance improvements
+Using a small test program to map Guest memory into Dom0 (repeatedly
+for "Iterations" mapping the same first "Num Pages")
+Iterations    Num Pages    Time 3.7rc4  Time With this patch
+5000          4096         76.107       37.027
+10000         2048         75.703       37.177
+20000         1024         75.893       37.247
+So a little better than twice as fast.
+Using this patch in migration, using "time" to measure the overall
+time it take to migrate a guest (Debian Squeeze 6.0, 1024MB guest
+memory, one network card, one disk, guest at login prompt):
+Time 3.7rc5             Time With this patch
+6.697                   5.667
+Since migration involves a whole lot of other things, it's only about
+15% faster - but still a good improvement. Similar measurement with a
+guest that is running code to "dirty" memory shows about 23%
+improvement, as it spends more time copying dirtied memory.
+2), read this code. maybe it is useful while i port xen arm to allwinner chip. 
+3, xen PVH mode
+"Mukesh Rathor"_email_"[Xen-devel] PVH: domain creations..."_20121120
+http://lists.xen.org/archives/html/xen-devel/2012-11/msg01137.html
+4, guys working in libxl
+1), Roger Pau Monne
+> I am wondering if there's libxl expert who can help me make some PVH
+> related changes to libxl, pref in the US time zone. I could consult on
+> irc or the phone.
+I wouldn't consider myself a libxl expert, but I've been working with it
+for some time (specially in the devices section) so if you need help I
+would like to give you a hand, (I'm in the EU timezone, GMT+1).
+
+13:08 2012-11-22
+software skill, X11, kde, shortcut
+u can got Standard Keybaord Shortcuts and Global Keyboard Shortcuts  from "Configure Desktop -> Keyboard & Mouse".
+set desktop shortcut in Kwin from Global Keyboard Shortcuts.
+
+13:38 2012-11-22
+mailing list, opensuse-project, board election
+1, 20121115__Raymond_Wooni__Standing_for_the_Board
+1), git log
+commit cd9f0c26e5370217bda6790463b5791bd6e63a8a
+Author: bjzhang@suse.com <bjzhang@suse.com>
+Date:   Thu Nov 22 13:43:30 2012 +0800
+
+    adding email named Standing_for_the_Board from Raymond
+2), it is good reference for how to write this kind of email.
+
+14:57 2012-11-22
+kernel, arm, read code in arm kernel for Cortex-A7 and Cortex-A15
+1, grep a15 in arch/arm, got the following relative file.
+1), kernel/perf_event_v7.c: define Cortex-A8, A9, A5, A15 and A7 for specific event types. which init in kernel/perf_event.c
+2), kernel/topology.c: something only for a7 and a15.
+3), mm/proc-v7.S
+LPAE: Large Physical Address Extension
+#ifdef CONFIG_ARM_LPAE
+#include "proc-v7-3level.S"
+#else
+#include "proc-v7-2level.S"
+#endif
+
+15:13 2012-11-22
+mailing list, virtualization, libvirt
+1, "hongming<honzhang@redhat.com>"_email_"[libvirt] [test-API][PATCH] Add managedsave test cases"_20121122
+https://www.redhat.com/archives/libvir-list/2012-November/msg00951.html
+1), only check qemuxxx.save, is that right?
+def check_savefile_remove(*args):
+    """Check guest managed save file"""
+    (guestname) = args
+    cmds = "ls /var/lib/libvirt/qemu/save/%s" % guestname + ".save -lh"
+    logger.info("Execute cmd  %s" % cmds) 
+    (status, output) = utils.exec_cmd(cmds, shell=True)
+    if status != 0:
+        logger.info("No managed save file")
+        return True
+    else :
+        logger.error("managed save file exists")
+        return False
+2), how to get ip address from guest?
+    mac = utils.get_dom_mac_addr(domname)
+    ip = utils.mac_to_ip(mac, 180)
+(1), get domain mac addr from "virsh dumpxml"
+# virsh list
+ Id    Name                           State
+----------------------------------------------------
+ 255   sles11_sp2_pv                  running
+
+# virsh dumpxml 255 | grep -w mac
+      <mac address='00:16:3e:38:02:39'/>
+
+(2), convert mac to ip through ip and nmap
+((1)), ip route |grep virbr0 |sed -n 1p|awk {'print $1'}
+# ip route
+default via 147.2.207.254 dev br0
+127.0.0.0/8 dev lo  scope link
+147.2.207.0/24 dev br0  proto kernel  scope link  src 147.2.207.77
+192.168.122.0/24 dev virbr0  proto kernel  scope link  src 192.168.122.1
+# ip route |grep virbr0 |sed -n 1p|awk {'print $1'}
+192.168.122.0/24
+((2)), get mac address: output=$(nmap -sP -n $ipaddr|grep -i -B 2 $mac)
+# nmap -sP -n $ipaddr
+Starting Nmap 4.75 ( http://nmap.org ) at 2012-11-22 16:08 CST
+Host 192.168.122.1 appears to be up.
+Host 192.168.122.59 appears to be up.
+MAC Address: 00:16:3E:38:02:39 (Xensource)
+Nmap done: 256 IP addresses (2 hosts up) scanned in 1.94 seconds
+
+# nmap -sP -n $ipaddr|grep -i -B 2 $mac
+Host 192.168.122.1 appears to be up.
+Host 192.168.122.59 appears to be up.
+MAC Address: 00:16:3E:38:02:39 (Xensource)
+((3)), get host ip
+hostip=$(echo $output | sed -e 's/.* \([0-9]*\.[0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
+3), bamvor: these file locate in http://libvirt.org/git/?p=libvirt-test-API.git , "git clone git://libvirt.org/libvirt-test-API.git"
+2, "liguang<lig fnst cn fujitsu com>"_email_"[libvirt] [PATCH v15] support offline migration"_20121121
+add offline migration in libvirt qemu driver. 
+
+16:58 2012-11-22
+virtualization, libvirt, xen, xend, support management save, bugzilla, cont4, improve
+1, plan: TODO. in "16:22 2012-11-20"2.
+2, define marco for save path
+1), yestoday, i though maybe i should define the path macro and relative functin in xm?
+2), found a definition for xen save, "tools/hotplug/Linux/init.d/sysconfig.xendomains":
+## Type: string
+## Default: /var/lib/xen/save
+#
+# Directory to save running domains to when the system (dom0) is
+# shut down. Will also be used to restore domains from if # XENDOMAINS_RESTORE
+# is set (see below). Leave empty to disable domain saving on shutdown
+# (e.g. because you rather shut domains down).
+# If domain saving does succeed, SHUTDOWN will not be executed.
+#
+XENDOMAINS_SAVE=/var/lib/xen/save
+it will install at /etc/sysconfig/xendomains, called by /etc/init.d/xendomains
+but i could not get it. So, just define it in the xen_driver.c: 
+#define XEN_DOMAINS_DIR "/var/lib/xen/save"
+3, do i need to set hasManagedSave in xenUnifiedOpen which means doing the same thing in the libxlOpen? 
+the xenUnifiedPrivatePtr is alloc during xenUnifiedOpen. xenUnifiedDomainManagedSaveLoad only need saveDir from xenUnifiedPrivatePtr and need domain name from virDomainPtr.
+virDomainPtr is valid after "virsh define" or "virsh create", but what if the domain is created before libvirtd start or restart? \TODO test. whether i could get the domain name after virsh start or restart. 
 
