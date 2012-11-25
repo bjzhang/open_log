@@ -57,14 +57,14 @@ reboot_or_shutdown()
 
 managed_save()
 {
-    echo -n "managed save..."
+    echo "managed save..."
     virsh managedsave $domain_name
     test_ret $?
-    echo -n "check managedsave result from libvirt..."
+    echo "check managedsave result from libvirt..."
     virsh list --with-managed-save --all | grep sles11_hvm_10_vm5
     test_ret $?
-    echo -n "check managedsave image..."
-    ll /var/lib/xen/save/$domain_name.save
+    echo "check managedsave image..."
+    ls -lh /var/lib/xen/save/$domain_name.save
     test_ret $?
 }
 
@@ -85,23 +85,23 @@ echo "start testing..."
 for i in `seq 100`; do
     echo "define domain as $domain_name from $domain_xml"
     virsh define $domain_xml
-    echo -n "define result..."
+    echo "define result..."
     virsh list --all --state-shutoff | grep $domain_name
     test_ret $?
-    echo -n "start vm..."
+    echo "start vm..."
     virsh start $domain_name
     wait_started
-    echo -n "check domain status..."
+    echo "check domain status..."
     virsh list | grep sles11_hvm_10_vm5
     test_ret $?
     managed_save
-    echo -n "start vm from managed save image..."
+    echo "start vm from managed save image..."
     virsh start $domain_name
-    echo -n "check domain status..."
+    echo "check domain status..."
     virsh list | grep sles11_hvm_10_vm5
     test_ret $?
     managed_save
-    echo -n "remove managed save image..."
+    echo "remove managed save image..."
     virsh managedsave-remove $domain_name
     test_ret $?
 done
