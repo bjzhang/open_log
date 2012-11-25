@@ -55,6 +55,19 @@ reboot_or_shutdown()
     fi
 }
 
+managed_save()
+{
+    echo -n "managed save..."
+    virsh managedsave $domain_name
+    test_ret $?
+    echo -n "check managedsave result from libvirt..."
+    virsh list --with-managed-save --all | grep sles11_hvm_10_vm5
+    test_ret $?
+    echo -n "check managedsave image..."
+    ll /var/lib/xen/save/$domain_name.save
+    test_ret $?
+}
+
 if [ -z $1 ]; then
     echo "Error: demain xml missing, exit". 
     exit 1
@@ -64,53 +77,32 @@ domain_xml=$1
 domain_name=`cat $domain_xml | grep "<name>" | sed "s/<name>\(.*\)<\/name>/\1/" | sed "s/^\ *//"`
 echo "domain_xml is $domain_xml; domain_name is $domain_name"
 
-echo "define domain as $domain_name from $domain_xml"
-virsh define $domain_xml
-echo -n "define result..."
-virsh list --all --state-shutoff | grep $domain_name
-test_ret $?
-echo -n "start vm..."
-virsh start $domain_name
-wait_started
-echo -n "managed save..."
-virsh managedsave $domain_name
-test_ret $?
+echo "destroy managedsave domain if exits"
+virsh list --with-managed-save --all | grep sles11_hvm_10_vm5 && virsh destroy $domain_name
 
+echo "start testing..."
 
-#echo "restarting libvirtd before test"
-##rclibvirtd restart
-#for i in `seq 10000`; do
-#    echo "test $i times"
-#    echo "test libxlDomainCreateXML: create"
-#    virsh create $domain_xml
-#    virsh list | grep $domain_name -w
-#    test_ret $?
-#    wait_started
-#
-#    echo "sleep 20 second"
-#    for t in `seq 20`; do
-#        date
-#        virsh list
-#        test_ret $?
-#        ping -c 4 192.168.122.59
-#        test_ret $?
-#        sleep 1
-#    done
-#
-#    echo "test libxlDomainReboot: reboot"
-#    reboot_or_shutdown reboot
-#
-#    echo "test libxlShutdownFlags: shutdown"
-#    reboot_or_shutdown shutdown
-#    sleep 1
-#
-#    echo "sleep 10 second"
-#    for t in `seq 20`; do
-#        date
-#        virsh list
-#        test_ret $?
-#        sleep 1
-#    done
-#
-#done
+for i in `seq 100`; do
+    echo "define domain as $domain_name from $domain_xml"
+    virsh define $domain_xml
+    echo -n "define result..."
+    virsh list --all --state-shutoff | grep $domain_name
+    test_ret $?
+    echo -n "start vm..."
+    virsh start $domain_name
+    wait_started
+    echo -n "check domain status..."
+    virsh list | grep sles11_hvm_10_vm5
+    test_ret $?
+    managed_save
+    echo -n "start vm from managed save image..."
+    virsh start $domain_name
+    echo -n "check domain status..."
+    virsh list | grep sles11_hvm_10_vm5
+    test_ret $?
+    managed_save
+    echo -n "remove managed save image..."
+    virsh managedsave-remove $domain_name
+    test_ret $?
+done
 
