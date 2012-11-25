@@ -83,6 +83,7 @@ virsh list --with-managed-save --all | grep sles11_hvm_10_vm5 && virsh destroy $
 echo "start testing..."
 
 for i in `seq 100`; do
+    echo "test $i times"
     echo "define domain as $domain_name from $domain_xml"
     virsh define $domain_xml
     echo "define result..."
@@ -103,6 +104,29 @@ for i in `seq 100`; do
     managed_save
     echo "remove managed save image..."
     virsh managedsave-remove $domain_name
+    test_ret $?
+    echo "start vm..."
+    virsh start $domain_name
+    wait_started
+    echo "check domain status..."
+    virsh list | grep sles11_hvm_10_vm5
+    test_ret $?
+    managed_save
+    echo "start vm with --force-boot, it will remove managed save image..."
+    virsh start --force-boot $domain_name
+    echo "check domain status..."
+    virsh list | grep sles11_hvm_10_vm5
+    test_ret $?
+    echo "destroy domain $domain_name"
+    virsh destroy $domain_name
+    test_ret $?
+    echo "start vm with --force-boot, it should be ok even if there is no managed save image..."
+    virsh start --force-boot $domain_name
+    wait_started
+    managed_save
+    echo "undefine domain if domain should not be removed if the managedsave image exist without \"--managedsave\""
+    virsh undefine sles11_hvm_10_vm5 && exit 1
+    virsh undefine --managed-save sles11_hvm_10_vm5
     test_ret $?
 done
 
