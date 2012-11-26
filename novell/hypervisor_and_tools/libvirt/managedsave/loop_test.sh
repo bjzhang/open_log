@@ -30,31 +30,6 @@ wait_started()
     done
 }
 
-reboot_or_shutdown()
-{
-    action=$1
-
-    domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
-    wait_started
-    echo "$action $domain_name"
-    virsh $action $domain_name
-    echo -n "wait for $domain_name $domain_id ${action}ing"
-    while true; do 
-        virsh list | grep $domain_name | grep $domain_id 2>&1 > /dev/null || break
-        echo -n "."
-        sleep 2
-    done
-    ret=$?
-    echo 
-    echo "$domain_name $domain_id ${action}ed"
-    if [ $action == "reboot" ]; then
-        virsh list | grep $domain_name 
-        test_ret $ret
-    elif [ $action == "shutdown" ]; then
-        test_ret $ret
-    fi
-}
-
 managed_save()
 {
     echo "managed save..."

@@ -3119,14 +3119,70 @@ GTD
 
 1, today
 1), 5' xenlight bug upstream reply. see"10:31 2012-11-25"
-1), 10:47-15:05 work on libvirt manage save for xen legacy: send patch to Jim. see"11:06 2012-11-23".
+1), 10:47-15:05 work on libvirt manage save for xen legacy: send patch to Jim. see"10:48 2012-11-25". 
+
+10:31 2012-11-25
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont8, upstream reply
+1, "Ian Campbell <Ian.Campbell@citrix.com>"_email_20121123_1743
+This all seems pretty plausible to me, but I'd like to have an Ack from
+Ian J before I commit.
+> at the same time, i found the times of file handler register is less
+> than the times of file handler deregister. is that right? seems that
+> it will be better if the register and deregister is paired.
+How many extra file handles are we talking about?
+Presumably some long lived file handles will stay around until you call
+libxl_ctx_free for the ctx. Or are you doing this and saying you are
+seeing leaked fd's?
+
+10:48 2012-11-25
+virtualization, libvirt, xen, xend, support management save, bugzilla, cont6, fix bug in domainHasManagedSaveImage
+1, plan, try to fix bug: libvirt could not get the proper managedsave image status. 
+2, research on xenUnifiedOpen, maybe it is because open is not called? 
+no, i am wrong. VIR_DRV_OPEN_DECLINED means libvirt will continue trying other hypervior. 
+src/driver.h
+/* Status codes returned from driver open call. */
+typedef enum {
+    /* Opened successfully. */
+    VIR_DRV_OPEN_SUCCESS = 0,
+
+    /* 'name' is not for us. */
+    VIR_DRV_OPEN_DECLINED = -1,
+
+    /* 'name' is for us, but there was some error.  virConnectOpen will
+     * return an error rather than continue probing the other drivers.
+     */
+    VIR_DRV_OPEN_ERROR = -2,
+} virDrvOpenStatus;
+3, add debug info in Open and Close api:
+1), the log while issue the "virsh list --state-shutoff --all --with-managed-save"
+2012-11-25 03:27:34.255+0000: 21691: info : xenUnifiedOpen:331 : xen xenUnifiedPrivatePtr(driver ptr) is 0x711ca0
+2012-11-25 03:27:34.270+0000: 21688: error : virConnectListAllDomains:8274 : this function is not supported by the connection driver: virConnectListAllDomains
+2012-11-25 03:27:34.293+0000: 21683: info : xenUnifiedDomainHasManagedSaveImage:1151 : xen xenUnifiedPrivatePtr(driver ptr) is 0x711ca0
+2012-11-25 03:27:34.435+0000: 21682: info : xenUnifiedClose:457 : finish
+2), So, hasManagedImage is not set. How about checking the image every time? 
+4, test 2 times pass.
+pass: make check && make syntax-check
+5, next:
+1), check the libvirt current version and modify comment in xen_driver.c
+3), write comment for this patch to Jim.
+6, question: how could hypervior know where is the save file, there is no api to do it. maybe i should reply in the managed save test-api email? 
+
+10:15 2012-11-26
+GTD
+0, 10:00-11:59 13:23-
+
+1, today
+1), 10' search about arm synposia 2012.
+2), 10:17-11:59 work on libvirt manage save for xen legacy: send patch to Jim. see"10:17 2012-11-26".
+3), 10' software skill, hg: using "--flag" for adding V2 in [PATCH]. see"11:24 2012-04-28"5.
+4), work report. 
 
 2, daily work
 1), tracking xen-arm update. 
 2), read libvirt and xen-devel quickly, should less that 30minutes. 
 
 3, next
-1), work on libvirt manage save for xen legacy: send patch to Jim. ref"11:06 2012-11-23"5.
+1), 10:47-15:05 work on libvirt manage save for xen legacy: send patch to Jim. see"10:48 2012-11-25". 
 1), search and answer the question from Ian C, maybe i should create a new thread?. ref"10:31 2012-11-25"
 1), fix bug: https://bugzilla.novell.com/show_bug.cgi?id=789275
 seems came from bridge-utils
@@ -3174,49 +3230,28 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
 2), try armv8 emulator and read armv8 kernel code.  
 
-10:31 2012-11-25
-virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont8, upstream reply
-1, "Ian Campbell <Ian.Campbell@citrix.com>"_email_20121123_1743
-This all seems pretty plausible to me, but I'd like to have an Ack from
-Ian J before I commit.
-> at the same time, i found the times of file handler register is less
-> than the times of file handler deregister. is that right? seems that
-> it will be better if the register and deregister is paired.
-How many extra file handles are we talking about?
-Presumably some long lived file handles will stay around until you call
-libxl_ctx_free for the ctx. Or are you doing this and saying you are
-seeing leaked fd's?
+10:17 2012-11-26
+virtualization, libvirt, xen, xend, support management save, bugzilla, cont7, send patch to Jim
+1, write comment
+fix bnc 782311: Snapshots stuck "queued" with Xen as HV
+Implement the domainManagedSave, domainHasManagedSaveImage, and domainManagedSaveRemove functions in the legacy libvirt xen driver. 
 
-10:48 2012-11-25
-virtualization, libvirt, xen, xend, support management save, bugzilla, cont6, fix bug in domainHasManagedSaveImage
-1, plan, try to fix bug: libvirt could not get the proper managedsave image status. 
-2, research on xenUnifiedOpen, maybe it is because open is not called? 
-no, i am wrong. VIR_DRV_OPEN_DECLINED means libvirt will continue trying other hypervior. 
-src/driver.h
-/* Status codes returned from driver open call. */
-typedef enum {
-    /* Opened successfully. */
-    VIR_DRV_OPEN_SUCCESS = 0,
+2, write email to Jim
+Hi, Jim
 
-    /* 'name' is not for us. */
-    VIR_DRV_OPEN_DECLINED = -1,
-
-    /* 'name' is for us, but there was some error.  virConnectOpen will
-     * return an error rather than continue probing the other drivers.
-     */
-    VIR_DRV_OPEN_ERROR = -2,
-} virDrvOpenStatus;
-3, add debug info in Open and Close api:
-1), the log while issue the "virsh list --state-shutoff --all --with-managed-save"
-2012-11-25 03:27:34.255+0000: 21691: info : xenUnifiedOpen:331 : xen xenUnifiedPrivatePtr(driver ptr) is 0x711ca0
-2012-11-25 03:27:34.270+0000: 21688: error : virConnectListAllDomains:8274 : this function is not supported by the connection driver: virConnectListAllDomains
-2012-11-25 03:27:34.293+0000: 21683: info : xenUnifiedDomainHasManagedSaveImage:1151 : xen xenUnifiedPrivatePtr(driver ptr) is 0x711ca0
-2012-11-25 03:27:34.435+0000: 21682: info : xenUnifiedClose:457 : finish
-2), So, hasManagedImage is not set. How about checking the image every time? 
-4, test 2 times pass.
-pass: make check && make syntax-check
-5, next:
-1), check the libvirt current version and modify comment in xen_driver.c
-3), write comment for this patch to Jim.
-6, question: how could hypervior know where is the save file, there is no api to do it. maybe i should reply in the managed save test-api email? 
+I have send the patch to you in the previous email. 
+Here is some information, i am not sure should be added in the patch comment. 
+1), i check the managedsave image from filesystem everytime if domainHasManagedSaveImage called. this is differerent from qemu and libxl driver. 
+in qemu or libxl driver, there is a hasManagesSave flags in virDomainObjPtr. but virDomainObjPtr is not used in xen lagecy driver. if i add this flag to xen driver ptr, it will not work. because this driver ptr will be release at the end of every libvirt api calls. 
+meanwhile, AFAIK, xen store all the flags in xen not in libvirt xen driver. I guess there is no need to add this flags in xen. 
+2), i have test the following case for my patch: 
+1), "virsh managedsave": save domain to /var/lib/xen/save/domain_name.save. call xenUnifiedDomainManagedSave. 
+notes: it is not necessary to test all the flags in this command, because these flags would be handled by xenDaemonDomainSave which is called by save and managedsave commands.
+2), "virsh start": if managedsave image is exist, it should be boot from managed save image. call xenUnifiedDomainHasManagedSaveImage
+3), "virsh start --force-boot": fresh boot, delete the managed save image if exists. call xenUnifiedDomainHasManagedSaveImage, xenUnifiedDomainManagedSaveRemove. 
+4), "virsh managedsave-remove": remove managed save image. call xenUnifiedDomainManagedSaveRemove
+5), "virsh undefine": undefine the domain, it will fail if mananed save image exist. call xenUnifiedDomainHasManagedSaveImage. 
+6), "virsh undefine --managed-save": undefine the domain, and remove mananed save image. call xenUnifiedDomainHasManagedSaveImage and xenUnifiedDomainManagedSaveRemove. 
+7), "virsh list --all --with-managed-save". list domain if managed save image exist. got nothing if non-exists. call xenUnifiedDomainHasManagedSaveImage. 
+8), "virsh list --all --without-managed-save". do not list the domain if managed save image exist. call xenUnifiedDomainHasManagedSaveImage. 
 
