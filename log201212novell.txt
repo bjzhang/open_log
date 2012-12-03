@@ -1,0 +1,502 @@
+.LOG
+09:43 2012-12-03
+virtualization, libvirt, xen, xend, support management save, bugzilla, cont10, deal with Jim reply
+1, Jim_email_20121201
+Bamvor Jian Zhang wrote:
+> Implement the domainManagedSave, domainHasManagedSaveImage, and
+> domainManagedSaveRemove functions in the libvirt legacy xen driver.
+>   
+
+Cool, thanks for the patch!
+
+In case others are interested, one motivation for adding this
+functionality in the legacy xen driver is to avoid xen-only hacks in the
+nova libvirt driver.
+
+> domainHasManagedSaveImage check the managedsave image from filesystem
+> everytime. This is different from qemu and libxl driver. In qemu or
+> libxl driver, there is a hasManagesSave flags in virDomainObjPtr which
+> is not used in xen legacy driver. This flag could not add into xen
+> driver ptr either, because the driver ptr will be release at the end of
+> every libvirt api calls. Meanwhile, AFAIK, xen store all the flags in
+> xen not in libvirt xen driver. There is no need to add this flags in xen.
+>   
+
+I think checking the filesystem is the only way to go since xend doesn't
+have the notion of managedsave.  Do others see any issues with this
+approach?
+
+> ---
+> i have test the following case for this patch:
+> 1), "virsh managedsave" save domain to /var/lib/xen/save/domain_name.save.
+> call xenUnifiedDomainManagedSave.
+> 2), "virsh start": if managedsave image is exist, it should be boot from
+> managed save image.
+> call xenUnifiedDomainHasManagedSaveImage.
+> 3), "virsh start --force-boot": fresh boot, delete the managed save image
+> if exists.
+> call xenUnifiedDomainHasManagedSaveImage,
+> xenUnifiedDomainManagedSaveRemove.
+> 4), "virsh managedsave-remove": remove managed save image.
+> call xenUnifiedDomainManagedSaveRemove
+> 5), "virsh undefine": undefine the domain, it will fail if mananed save
+> image exist.
+> call xenUnifiedDomainHasManagedSaveImage.
+> 6), "virsh undefine --managed-save": undefine the domain, and remove
+> mananed save image.
+> call xenUnifiedDomainHasManagedSaveImage and
+> xenUnifiedDomainManagedSaveRemove.
+> 7), "virsh list --all --with-managed-save". list domain if managed save
+> image exist. got nothing if non-exists.
+> call xenUnifiedDomainHasManagedSaveImage.
+> 8), "virsh list --all --without-managed-save". do not list the domain if
+> managed save image exist.
+> call xenUnifiedDomainHasManagedSaveImage.
+>   
+
+Thanks for including your test cases.  I've tried these on your patch as
+well and looks good!
+
+>  src/xen/xen_driver.c | 109 ++++++++++++++++++++++++++++++++++++++++++++++++++-
+>  src/xen/xen_driver.h |   2 +
+>  2 files changed, 110 insertions(+), 1 deletion(-)
+>
+> diff --git a/src/xen/xen_driver.c b/src/xen/xen_driver.c
+> index 5a40757..0b2418d 100644
+> --- a/src/xen/xen_driver.c
+> +++ b/src/xen/xen_driver.c
+> @@ -67,6 +67,7 @@
+>  #include "nodeinfo.h"
+>  
+>  #define VIR_FROM_THIS VIR_FROM_XEN
+> +#define XEN_SAVE_DIR LOCALSTATEDIR "/lib/libvirt/xen/save"
+>   
+
+#include "configmake.h" is needed for LOCALSTATEDIR
+
+>  
+>  static int
+>  xenUnifiedNodeGetInfo(virConnectPtr conn, virNodeInfoPtr info);
+> @@ -267,6 +268,7 @@ xenUnifiedOpen(virConnectPtr conn, virConnectAuthPtr auth, unsigned int flags)
+>  {
+>      int i, ret = VIR_DRV_OPEN_DECLINED;
+>      xenUnifiedPrivatePtr priv;
+> +    char ebuf[1024];
+>  
+>  #ifdef __sun
+>      /*
+> @@ -406,6 +408,17 @@ xenUnifiedOpen(virConnectPtr conn, virConnectAuthPtr auth, unsigned int flags)
+>      }
+>  #endif
+>  
+> +    if (virAsprintf(&priv->saveDir, "%s", XEN_SAVE_DIR) == -1) {
+> +        virReportOOMError();
+> +        goto fail;
+> +    }
+> +
+> +    if (virFileMakePath(priv->saveDir) < 0) {
+> +        VIR_ERROR(_("Failed to create save dir '%s': %s"), priv->saveDir,
+> +                  virStrerror(errno, ebuf, sizeof(ebuf)));
+> +        goto fail;
+> +    }
+> +
+>      return VIR_DRV_OPEN_SUCCESS;
+>  
+>  fail:
+> @@ -437,6 +450,7 @@ xenUnifiedClose(virConnectPtr conn)
+>          if (priv->opened[i])
+>              drivers[i]->xenClose(conn);
+>  
+> +    VIR_FREE(priv->saveDir);
+>      virMutexDestroy(&priv->lock);
+>      VIR_FREE(conn->privateData);
+>  
+> @@ -1080,6 +1094,79 @@ xenUnifiedDomainSave(virDomainPtr dom, const char *to)
+>      return xenUnifiedDomainSaveFlags(dom, to, NULL, 0);
+>  }
+>  
+> +static char *
+> +xenUnifiedDomainManagedSavePath(xenUnifiedPrivatePtr priv, virDomainPtr dom)
+> +{
+> +    char *ret;
+> +
+> +    if (virAsprintf(&ret, "%s/%s.save", priv->saveDir, dom->name) < 0) {
+> +        virReportOOMError();
+> +        return NULL;
+> +    }
+> +
+> +    VIR_DEBUG("managed save image: %s", ret);
+> +    return ret;
+> +}
+> +
+> +static int
+> +xenUnifiedDomainManagedSave(virDomainPtr dom, unsigned int flags)
+> +{
+> +    GET_PRIVATE(dom->conn);
+> +    char *name;
+> +    int ret = -1;
+> +
+> +    virCheckFlags(0, -1);
+> +
+> +    name = xenUnifiedDomainManagedSavePath(priv, dom);
+> +    if (!name)
+> +        goto cleanup;
+> +
+> +    if (priv->opened[XEN_UNIFIED_XEND_OFFSET])
+> +        ret = xenDaemonDomainSave(dom, name);
+> +
+> +cleanup:
+> +    VIR_FREE(name);
+> +    return ret;
+> +}
+> +
+> +static int
+> +xenUnifiedDomainHasManagedSaveImage(virDomainPtr dom, unsigned int flags)
+> +{
+> +    GET_PRIVATE(dom->conn);
+> +    char *name;
+> +    int ret = -1;
+> +
+> +    virCheckFlags(0, -1);
+> +
+> +    name = xenUnifiedDomainManagedSavePath(priv, dom);
+> +    if (!name)
+> +        return ret;
+> +
+> +    ret = virFileExists(name);
+> +    VIR_FREE(name);
+> +    return ret;
+> +}
+> +
+> +static int
+> +xenUnifiedDomainManagedSaveRemove(virDomainPtr dom, unsigned int flags)
+> +{
+> +    GET_PRIVATE(dom->conn);
+> +    char *name;
+> +    int ret = -1;
+> +
+> +    virCheckFlags(0, -1);
+> +
+> +    name = xenUnifiedDomainManagedSavePath(priv, dom);
+> +    if (!name)
+> +        goto cleanup;
+>   
+
+I think we can do away with the cleanup label and simply return ret here.
+
+> +
+> +    ret = unlink(name);
+> +    VIR_FREE(name);
+> +
+> +cleanup:
+> +    return ret;
+> +}
+> +
+>  static int
+>  xenUnifiedDomainRestoreFlags(virConnectPtr conn, const char *from,
+>                               const char *dxml, unsigned int flags)
+> @@ -1504,16 +1591,33 @@ static int
+>  xenUnifiedDomainCreateWithFlags(virDomainPtr dom, unsigned int flags)
+>  {
+>      GET_PRIVATE(dom->conn);
+> +    char *name;
+>      int i;
+> +    int ret = -1;
+>  
+>      virCheckFlags(0, -1);
+>  
+> +    name = xenUnifiedDomainManagedSavePath(priv, dom);
+> +    if (!name)
+> +        goto cleanup;
+> +
+> +    if (virFileExists(name)) {
+> +        if (priv->opened[XEN_UNIFIED_XEND_OFFSET]) {
+> +            ret = xenDaemonDomainRestore(dom->conn, name);
+> +            if (ret == 0)
+> +                unlink(name);
+> +        }
+> +        VIR_FREE(name);
+> +        goto cleanup;
+> +    }
+>   
+
+name is leaked here if virFileExists() fails.  You can initialize name
+to NULL and then unconditionally free it in cleanup.
+
+> +
+>      for (i = 0; i < XEN_UNIFIED_NR_DRIVERS; ++i)
+>          if (priv->opened[i] && drivers[i]->xenDomainCreate &&
+>              drivers[i]->xenDomainCreate(dom) == 0)
+>              return 0;
+>  
+> -    return -1;
+> +cleanup:
+> +    return ret;
+>  }
+>  
+>  static int
+> @@ -2218,6 +2322,9 @@ static virDriver xenUnifiedDriver = {
+>      .domainGetState = xenUnifiedDomainGetState, /* 0.9.2 */
+>      .domainSave = xenUnifiedDomainSave, /* 0.0.3 */
+>      .domainSaveFlags = xenUnifiedDomainSaveFlags, /* 0.9.4 */
+> +    .domainManagedSave = xenUnifiedDomainManagedSave, /* 1.0.1 */
+> +    .domainHasManagedSaveImage = xenUnifiedDomainHasManagedSaveImage, /* 1.0.1 */
+> +    .domainManagedSaveRemove = xenUnifiedDomainManagedSaveRemove, /* 1.0.1 */
+>      .domainRestore = xenUnifiedDomainRestore, /* 0.0.3 */
+>      .domainRestoreFlags = xenUnifiedDomainRestoreFlags, /* 0.9.4 */
+>      .domainCoreDump = xenUnifiedDomainCoreDump, /* 0.1.9 */
+> diff --git a/src/xen/xen_driver.h b/src/xen/xen_driver.h
+> index b3fbcff..078980e 100644
+> --- a/src/xen/xen_driver.h
+> +++ b/src/xen/xen_driver.h
+> @@ -200,6 +200,8 @@ struct _xenUnifiedPrivate {
+>      /* Location of config files, either /etc
+>       * or /var/lib/xen */
+>      const char *configDir;
+> +    /* Location of managed save dir, default /var/lib/libvirt/xen/save */
+> +    char *saveDir;
+>  
+>  # if WITH_XEN_INOTIFY
+>      /* The inotify fd */
+>   
+
+With exception of the few nits, looks good!  I would like to hear what
+others think about checking existence of the managed save image on each
+invocation of domainHasManagedSaveImage().
+
+Thanks,
+Jim
+
+09:48 2012-12-03
+GTD
+0, 9:30-11:59 13:40-14:33 -17:40
+
+1, today
+1), 10' work on libvirt manage save for xen legacy: update patch and reply to Jim. see"09:43 2012-12-03".
+2), 40' fix bug in bridge-utils: https://bugzilla.novell.com/show_bug.cgi?id=789275. sr id 22942. how to using quilt, see"10:29 2012-12-03"
+3), mailing list. devel-server. see"13:54 2012-12-03"
+4), 10' work report. see"17:25 2012-12-03"
+
+2, daily work
+1), tracking xen-arm update. 
+2), read libvirt and xen-devel quickly, should less that 30minutes. 
+
+3, next
+1), review and test Jim xen4.2 patch. see"16:12 2012-11-26"
+2), reply upstream Ian Jackson comments.
+3), CANCEL? search and answer the question from Ian C, maybe i should create a new thread?. ref"10:31 2012-11-25"
+4), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个. 
+
+3, next week
+1), got arm technical symposia pdf. 
+2), read kernel doc: "10:36 2012-11-23"
+1), read code for patch. see"10:25 2012-11-23"2-2)-(2). 
+2), after "1)" finish. try xen on kvm. 
+3), read the mail on "Andrew Wafaa <awafaa@opensuse.org>"_email_"[opensuse-arm] Fwd: [fedora-arm] ARMv8 Bootstrap Project"_20121122
+3), work on xen on ARM. ref"22:33 2012-11-19"
+4), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+5), ask jim to invite me to xen irc. 
+
+3, next next
+1), gsoc: "22:23 2012-11-17"
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425 
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c: 
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1). 
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run. 
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
+2), try armv8 emulator and read armv8 kernel code.  
+
+10:29 2012-12-03
+osc, build service, obs/ibs, patch, try quilt commands
+doc: http://147.2.207.240/~dmzhang/osc-quilt.markdown
+1, bamvor@linux-bjrd:bridge-utils-1.4> quilt new bridge-utils-1.4-show-selected-bridge.patch
+Patch patches/bridge-utils-1.4-show-selected-bridge.patch is now on top
+2, bamvor@linux-bjrd:bridge-utils-1.4> quilt edit brctl/brctl_cmd.c 
+File brctl/brctl_cmd.c added to patch patches/bridge-utils-1.4-show-selected-bridge.patch
+using gvim
+bamvor@linux-bjrd:bridge-utils-1.4> EDITOR=gvim quilt edit brctl/brctl_cmd.c
+File brctl/brctl_cmd.c is already in patch patches/bridge-utils-1.4-show-selected-bridge.patch
+3, bamvor@linux-bjrd:bridge-utils-1.4> quilt diff
+Index: bridge-utils-1.4/brctl/brctl_cmd.c     
+===================================================================
+--- bridge-utils-1.4.orig/brctl/brctl_cmd.c                        
++++ bridge-utils-1.4/brctl/brctl_cmd.c                             
+...//show the patch file
+bamvor@linux-bjrd:bridge-utils-1.4> quilt refresh
+Refreshed patch patches/bridge-utils-1.4-show-selected-bridge.patch
+now xxx.patch is actually created in the patches directory(the parent directory). 
+
+13:54 2012-12-03
+mailing list, devel-server, CI(Continous Integration), jenkin; obs, notification
+1, Lin Ma
+1), -CI server.
+Contacted Bernhard M. Wiedemann to get some useful information about 
+the jenkins scripts in SUSE-Cloud automation project.
+
+Created a local jenkins instance for kvm autotest. defined my own trigger 
+policy by creating two scripts:
+One script monitors SLE 11 sp3 repo on ibs, if it detects any updates, it will 
+analyzes the update info to determine if there is a new qemu-kvm package. 
+If so, the another one will get the new qemu-kvm package name, remove
+the old package and install the new package. Later,The test jobs will be 
+triggered to perform one by one and send out real notification through email.
+
+I've deployed 40% kvm autotests scripts in this jenkins instance. Based on 
+aboved trigger policy, they works well. But the rest of kvm autotests scripts 
+don't work well, some of them need certain utility packages in guest image, 
+some of them need special configuration. I'm working on them to add/fix 
+these dependency.
+2), olaf kirch and Vincent Untz reply to Lin Ma
+> Cool, this looks extremely useful!
+> 
+> This makes me wonder whether there's a mechanism to receive notifications
+> for specific package updates from IBS without polling. Maybe you could ask
+> Adrian Schröter if there are such notifications available somewhere in the
+> dark depths of IBS...
+
+You can configure hermes (https://mercurius.suse.de/ for IBS) to send
+you a notification when there's a commit (by mail, rss feed, xmpp
+message).
+
+In hermes for OBS, the notifications can also be sent through a raw HTTP
+GET query (which would probably be the simplest option for cases like
+this, I guess).
+
+Vincent
+
+14:31 2012-12-03
+mailing list, kernel, crash
+1, "Mike Galbraith <mgalbraith@suse.de>"_answer_"Michal Kubecek <mkubecek@suse.cz>"_email_"[kernel] question: worker thread named [kworker/0:1] on every CPU"_20121130_2235
+On Fri, 2012-11-30 at 15:35 +0100, Michal Kubecek wrote:
+> Hello,
+> 
+> in crash dumps for bnc#790939 I found something I don't understand. On
+> every CPU, there is a process named "[kworker/0:1]" in RU state. I
+> always thought the first number after the slash should be the CPU the
+> thread is running on (or 'u' for unbound). But here I have threads with
+> '0' on all CPU's.
+
+Check pid, the name is a lie.
+ 
+> Another strange thing is that except NMI or normal interrupt stack, all
+> of them have only cpu_idle on stack (and possibly an Intel specific
+> implementation).
+
+Because they're really swapper.
+ 
+> Are these threads result of normal operation or sign of a problem?
+
+It's normal.
+ 
+crash: vmlinux: no .gnu_debuglink section
+GNU gdb (GDB) 7.0
+Copyright (C) 2009 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "x86_64-unknown-linux-gnu"...
+
+      KERNEL: vmlinux
+    DUMPFILE: /proc/kcore
+        CPUS: 64
+        DATE: Fri Nov 30 18:21:23 2012
+      UPTIME: 00:57:39
+LOAD AVERAGE: 0.12, 0.08, 0.11
+       TASKS: 533
+    NODENAME: vogelweide
+     RELEASE: 3.0.38-0.5-default
+     VERSION: #1 SMP Fri Aug 3 09:02:17 UTC 2012 (358029e)
+     MACHINE: x86_64  (2261 Mhz)
+      MEMORY: 8 GB
+         PID: 6764
+     COMMAND: "crash"
+        TASK: ffff88026d2c4040  [THREAD_INFO: ffff88026c156000]
+         CPU: 16
+       STATE: TASK_RUNNING (ACTIVE)
+
+crash> ps|less
+   PID    PPID  CPU       TASK        ST  %MEM     VSZ    RSS  COMM
+>     0      0   0  ffffffff81a0b020  RU   0.0       0      0  [swapper]
+>     0      2   1  ffff8802714aa300  RU   0.0       0      0  [kworker/0:0]
+>     0      2   2  ffff8802714c6440  RU   0.0       0      0  [kworker/0:1]
+>     0      2   3  ffff880271502580  RU   0.0       0      0  [kworker/0:1]
+...
+
+crash> task_struct ffff8802714aa300|grep cfs_rq
+    cfs_rq = 0xffff88027e6311f0, 
+crash> struct cfs_rq 0xffff88027e6311f0|grep rq
+struct cfs_rq {
+  rq = 0xffff88027e631180, 
+  leaf_cfs_rq_list = {
+crash> struct rq 0xffff88027e631180|grep idle
+  idle = 0xffff8802714aa300,
+
+Newer kernels are honest.
+
+crash: vmlinux: no .gnu_debuglink section
+GNU gdb (GDB) 7.0
+Copyright (C) 2009 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "x86_64-unknown-linux-gnu"...
+
+      KERNEL: vmlinux
+    DUMPFILE: /proc/kcore
+        CPUS: 64
+        DATE: Fri Nov 30 18:51:18 2012
+      UPTIME: 00:19:12
+LOAD AVERAGE: 1.30, 1.35, 1.12
+       TASKS: 1192
+    NODENAME: vogelweide
+     RELEASE: 3.0.50-rt74-0-rt
+     VERSION: #1 SMP PREEMPT RT Fri Nov 9 13:48:16 UTC 2012 (c6efdc8)
+     MACHINE: x86_64  (2260 Mhz)
+      MEMORY: 8 GB
+         PID: 7076
+     COMMAND: "crash"
+        TASK: ffff88026f21c400  [THREAD_INFO: ffff8802754a2000]
+         CPU: 0
+       STATE: TASK_RUNNING (ACTIVE)
+
+crash> ps|less
+   PID    PPID  CPU       TASK        ST  %MEM     VSZ    RSS  COMM
+      0      0   0  ffffffff81a11020  RU   0.0       0      0  [swapper/0]
+>     0      2   1  ffff880275818b30  RU   0.0       0      0  [swapper/1]
+>     0      2   2  ffff880275870c70  RU   0.0       0      0  [swapper/2]
+>     0      2   3  ffff8802758aadb0  RU   0.0       0      0  [swapper/3]
+...
+
+
+17:25 2012-12-03
+work report - week 48
+1, [devel-server] work report - week 48
+1), working on bnc 782311: Snapshots stuck "queued" with Xen as HV. 
+discuss with Jim about my patch in private and then send it to upstream.
+2), help Yadan Fan(Beijing L3 team) work on bnc#790928. 
+3), fix bug in bridge-utils. bnc#789275.
+
