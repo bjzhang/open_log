@@ -39,7 +39,7 @@ managed_save()
     virsh list --with-managed-save --all | grep sles11_hvm_10_vm5
     test_ret $?
     echo "check managedsave image..."
-    ls -lh /var/lib/xen/save/$domain_name.save
+    ls -lh /var/lib/libvirt/xen/save/$domain_name.save
     test_ret $?
 }
 
