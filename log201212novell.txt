@@ -1146,11 +1146,31 @@ GTD
 2), 30' 16:32-17:58 test Jim xen4.2 patch. see"10:32 2012-12-07".
 nap'
 
+11:32 2012-12-10
+software skill, shell, find, search file by size then output
+1, using "-printf" format the output
+suse@linux-work:~/work/download> find . -type f -size +50M -printf "%p %s\\n"
+suse@linux-work:~/work/download> find . -type f -size +50M -printf "%p %s\\n"./kernel/linux-3.3.7.tar.bz2 78958012
+./virtualization/VMware-Player-4.0.2-591240.x86_64.rar 129695725
+2, using "-exec" to call external command
+suse@linux-work:~/work/download> find . -type f -size +50M -exec ls -lh '{}' \;
+suse@linux-work:~/work/download> find . -type f -size +50M -exec ls -lh '{}' \;
+-rw-r--r-- 1 suse users 76M May 22  2012 ./kernel/linux-3.3.7.tar.bz2
+-rw-r--r-- 1 suse users 124M May  8  2012 ./virtualization/VMware-Player-4.0.2-591240.x86_64.rar
+
+10:40 2012-12-11
+GTD
+0, 9:40-11:52 13:48-
+
+1, today
+1), 11:10-11:52 13:48- upstream reply about my reporting bug to xenlight. see"11:16 2012-12-11"
+
 2, daily work
 1), tracking xen-arm update. 
 2), read libvirt and xen-devel quickly, should less that 30minutes. 
 
 3, next
+2), 30' 16:32-17:58 test Jim xen4.2 patch. see"10:32 2012-12-07".
 2), test Jim xen4.2 patch. see"10:32 2012-12-07"
 3), send console patch. 
 4), try xen on kvm. 
@@ -1201,15 +1221,109 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
 2), try armv8 emulator and read armv8 kernel code.  
 
-11:32 2012-12-10
-software skill, shell, find, search file by size then output
-1, using "-printf" format the output
-suse@linux-work:~/work/download> find . -type f -size +50M -printf "%p %s\\n"
-suse@linux-work:~/work/download> find . -type f -size +50M -printf "%p %s\\n"./kernel/linux-3.3.7.tar.bz2 78958012
-./virtualization/VMware-Player-4.0.2-591240.x86_64.rar 129695725
-2, using "-exec" to call external command
-suse@linux-work:~/work/download> find . -type f -size +50M -exec ls -lh '{}' \;
-suse@linux-work:~/work/download> find . -type f -size +50M -exec ls -lh '{}' \;
--rw-r--r-- 1 suse users 76M May 22  2012 ./kernel/linux-3.3.7.tar.bz2
--rw-r--r-- 1 suse users 124M May  8  2012 ./virtualization/VMware-Player-4.0.2-591240.x86_64.rar
+11:16 2012-12-11
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont11, deal with xen upstream reply
+1, upstream reply. continue from "17:51 2012-11-30"
+1), Ian J_20121207
+Ian Campbell writes ("Re: [PATCH] fix race condition between libvirtd event 
+handling and libxl fd deregister"):
+> Can we provide, or (more likely) require the application to provide, a
+> lock (perhaps per-event or, again more likely, per-event-loop) which
+> must be held while processing callbacks and also while events are being
+> registered/unregistered with the application's event handling subsystem?
+> With such a lock in place the application would be able to guarantee
+> that having returned from the deregister hook any further events would
+> be seen as spurious events by its own event processing loop.
+
+I think this might be difficult to get right without deadlocks.
+
+...
+> Last half brained idea would be to split the deregistration into two.
+> libxl calls up to the app saying "please deregister" and the app calls
+> back to libxl to say "I am no longer watching for this event and
+> guarantee that I won't deliver it any more". (Presumably this would be
+> implemented by the application via some combination of the above). This
+> could be done in a somewhat compatible way by allowing the deregister
+> hook to return "PENDING".
+
+This is in fact straightforward and is a subset of the existing API.
+If we have libxl always call timeout_modify with abs={0,0}, it will
+get timeout_occurred when the application's event loop has dealt with
+it.  We can simply never call timeout_deregister.
+
+I have implemented this in the 2-patch RFD series I'm about to send.
+NB this series has been complied but not (as yet) executed by me...
+
+Ian.
+2), Ian C_20121210
+> I think this might be difficult to get right without deadlocks.
+
+I took Bamvor's most recent response to mean that a per-event lock was
+already in place in libvirt and inferred that this was the reason why
+the originally proposed one line fix worked for them. Perhaps I
+misunderstood?
+3), Ian J reply to Ian_C
+Yes, I think that's what Bamvor meant but I don't think it's correct
+that such a lock eliminates the race.  libvirt has to release that
+lock before making the callback (to follow the libxl locking rules
+which are necessary to avoid deadlock).
+
+I'm not surprised that the original patch makes Bamvor's symptoms go
+away.  Bamvor had one of the possible races (the fd-related one) but
+not the other.
+4), Ian_J reply Ian_C
+Ian Jackson writes ("Re: [PATCH] fix race condition between libvirtd event 
+handling and libxl fd deregister"):
+> I'm not surprised that the original patch makes Bamvor's symptoms go
+> away.  Bamvor had one of the possible races (the fd-related one) but
+> not the other.
+
+Here (followups to this message, shortly) is v3 of my two-patch series
+which after conversation with Ian C I think fully fixes the race, and
+which I have tested now.
+
+Bamvor, can you test this and let us know hwether it fixes your problem?
+5), Jim reply Ian_J
+> Yes, I think that's what Bamvor meant but I don't think it's correct
+> that such a lock eliminates the race.  libvirt has to release that
+> lock before making the callback (to follow the libxl locking rules
+> which are necessary to avoid deadlock).
+>   
+And it does.  The event loop lock is released just before invoking the
+callback, and re-acquired just after the callback returns.
+2, plan
+1), test with Ian J v3 patch to make sure whether it will fix my bugs or not.
+and whether it will fix the bug i encounter yestoday.
+reply the email at the end of today.
+
+3, reply
+Ok. i am working on it.  will send the test result to u.
+BTW, without your patches, i encounter the time race condition during libvirt save vm sometimes.
+
+4, compile
+the patch is upstream patch, try to build through build service local build.
+notes: do not save from web browser, it is malformed. save from email client(my groupwise) is right.
+1), fail when I compile for sle11 sp2
+bamvor@linux-bjrd:xen> osc build --clean SLE_11_SP2 x86_64
+Building xen.spec for SLE_11_SP2/x86_64
+Getting buildinfo from server and store to /home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/build_service/home:bjzhang:branches:Devel:Virt:SLE-11-SP3/xen/.osc/_buildinfo-SLE_11_SP2-x86_64.xml
+Getting buildconfig from server and store to /home/bamvor/sda3/home/novell/work/source/virtualization/libvirt/build_service/home:bjzhang:branches:Devel:Virt:SLE-11-SP3/xen/.osc/_buildconfig-SLE_11_SP2-x86_64
+buildinfo is broken... it says:
+unresolvable: conflict for provider of libgcc43, (provider libgcc43 is conflicted by installed libgcc46), conflict for provider of libgomp1 >= 4.6.1_20110701-0.13.9 needed by gcc46, (provider libgomp46 conflicts with installed libgomp43)
+2), build with sles11 sp2 update test.
+lots of fails. currently fail at
+ERROR: link target doesn't exist (neither in build root nor in installed system):
+  /etc/xen/scripts/set-lock -> /etc/xen/scripts/vm-monitor
+
+
+15:23 2012-12-11
+virtualization, libvirt, xen, libxl, block stats; qemu, QMP
+1, QMP(QEMU Monitor protocol)
+http://wiki.qemu.org/QMP
+The QEMU Monitor Protocol (QMP) is a JSON-based protocol which allows applications to communicate with a QEMU instance.
+Bamvor: it seems a new way for send monitor command to qemu.
+2, calling
+libxl_cdrom_insert -> libxl__qmp_insert_cdrom -> qpm_run_command
+libxl__qmp_xxx and qpm_xxx is implemented in libxl_qmp.c
+3, it should be useful for me to implement the block stats in libvirt. i could add this commands in libxl and xl then add it to libvirt.
 
