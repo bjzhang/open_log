@@ -1,0 +1,93 @@
+From: 	Jim Fehlig <jfehlig@suse.com>
+To:	Ian Jackson <Ian.Jackson@eu.citrix.com>
+CC:	Bamvor Jian Zhang <bjzhang@suse.com>, Ian Campbell <Ian.Campbell@citrix.com>, "xen-devel@lists.xen.org" <xen-devel@lists.xen.org>
+Date: 	12/13/2012 1:26 AM
+Subject: 	Re: [Xen-devel] [PATCH 2/2] libxl: fix stale timeout event callback race
+
+Ian Jackson wrote:
+> Jim Fehlig writes ("Re: [Xen-devel] [PATCH 2/2] libxl: fix stale timeout event callback race"):
+>   
+>> Ian Jackson wrote:
+>>     
+>>> This is a forwards-compatible change for applications using the libxl
+>>> API, and will hopefully eliminate these races in callback-supplying
+>>> applications (such as libvirt) without the need for corresponding
+>>> changes to the application.
+>>>       
+>
+> When I wrote this of course I forgot to mention that previously libxl
+> would never call libxl_osevent_hooks->timeout_modify and now it never
+> calls ->timeout_deregister.
+>
+> So this change can expose bugs in the application's implementation of
+> ->timeout_modify.
+>
+>   
+>> I'm not sure how to avoid changing the application (libvirt). Currently,
+>> the libvirt libxl driver removes the timeout from the libvirt event loop
+>> in the timeout_deregister() function. This function is never called now
+>> and hence the timeout is never removed. I had to make the following
+>> change in the libxl driver to use your patches
+>>     
+>
+> I think this is because of a bug of the kind I describe above.
+>
+>   
+>> - gettimeofday(&now, NULL);
+>> - timeout = (abs_t.tv_usec - now.tv_usec) / 1000;
+>> - timeout += (abs_t.tv_sec - now.tv_sec) * 1000;
+>>     
+>
+> Specifically, this code has an integer arithmetic overflow.
+>   
+
+Well, this patch is removing that buggy code :).  After again reading
+libxl_event.h, I'm considering the below patch in the libvirt libxl
+driver.  The change is primarily inspired by this comment for
+libxl_osevent_occurred_timeout:
+
+/* Implicitly, on entry to this function the timeout has been
+ * deregistered.  If _occurred_timeout is called, libxl will not
+ * call timeout_deregister; if it wants to requeue the timeout it
+ * will call timeout_register again.
+ */
+
+Regards,
+Jim
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 302f81c..d4055be 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -184,6 +184,8 @@ static void libxlTimerCallback(int timer
+ATTRIBUTE_UNUSED, void *timer_v)
+ {
+     struct libxlOSEventHookTimerInfo *timer_info = timer_v;
+ 
++    virEventRemoveTimeout(timer_info->id);
++    timer_info->id = -1;
+     libxl_osevent_occurred_timeout(timer_info->priv->ctx,
+timer_info->xl_priv);
+ }
+ 
+@@ -225,16 +227,12 @@ static int libxlTimeoutRegisterEventHook(void *priv,
+ 
+ static int libxlTimeoutModifyEventHook(void *priv ATTRIBUTE_UNUSED,
+                                        void **hndp,
+-                                       struct timeval abs_t)
++                                       struct timeval abs_t
+ATTRIBUTE_UNUSED)
+ {
+-    struct timeval now;
+-    int timeout;
+     struct libxlOSEventHookTimerInfo *timer_info = *hndp;
+ 
+-    gettimeofday(&now, NULL);
+-    timeout = (abs_t.tv_usec - now.tv_usec) / 1000;
+-    timeout += (abs_t.tv_sec - now.tv_sec) * 1000;
+-    virEventUpdateTimeout(timer_info->id, timeout);
++    if (timer_info->id > 0)
++        virEventUpdateTimeout(timer_info->id, 0);
+     return 0;
+ }
+ 
