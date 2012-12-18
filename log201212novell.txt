@@ -1979,6 +1979,15 @@ Detaching after fork from child process 8440.
 Jim: those go away if you make the &ev->nexus->for_app_re change to Ian's patch.
 Jim already mention it in http://lists.xen.org/archives/html/xen-devel/2012-12/msg00937.html
 after this save still hang(it is what we expect). 
+6, (10:27 2012-12-18)
+the reason of assertion/segfaults, from 20121217 conversation with Jim:
+Jim Fehlig: Hey, just wanted to let you know that I found the source of the libxl assertions/segfaults
+Jim Fehlig: when destroying or shutting down a domain, there is a race between destroying the libxlDomainObjPrivate object (which frees libxl_ctx) and processing the timer callbacks
+Jim Fehlig: so the libxlDomainObjPrivate object gets freed before calling libxl_osevent_occurred_timeout
+Jim Fehlig: and we assert or bomb in libxl
+Jim Fehlig: I'll spend some time tomorrow hacking up a patch to fix this
+Jim Fehlig: will have to figure out how to restructure the libxlDomainObjPrivate object so that we can use virObject
+Jim Fehlig: then ref/unref to ensure the object isn't cleaned up until all references are dropped
 
 12:26 2012-12-14
 GTD
@@ -2001,6 +2010,89 @@ GTD
 2), 11:10-11:48 20:15-21:40 fix xen install issue. see"11:09 2012-12-17"
 3), Summary: 又到周一, 感觉上周没啥实质性进展阿. work report写啥呢?
 今天下午又基本没干什么, 总是这样明日复明日. 
+
+10:44 2012-12-17
+work report - week 49, 50
+1, [devel-server] work report - week 49, 50
+1), working on bnc 782311: Snapshots stuck "queued" with Xen as HV. 
+send v2 patch to upstream. upstream accept it.
+2), working on libxl xen4.2 support with Jim.
+test and debug the lastest patch from xen and libvirt. some failure is fix with the lastest patch from xen mailing list. So, continue to debug the others.
+
+3), send tty console patch to libvirt upstream.
+4), send patch for xen install issue. 
+
+11:09 2012-12-17
+virtualization, xen, build error, libxl-save-helper not found
+1, my question is why libxl-save-helper is installed in /usr/lib64/xen/bin. but run_helper search it in the /usr/lib/xen/bin. 
+1), config/StdGNU.mk:
+LIBEXEC = $(PREFIX)/lib/xen/bin 
+2), 
+in tools/libxl/Makefile:
+$(INSTALL_PROG) libxl-save-helper $(DESTDIR)$(PRIVATE_BINDIR)
+
+where PRIVATE_BINDIR = $(PRIVATE_PREFIX)/bin in config/StdGNU.mk
+and PRIVATE_PREFIX = $(LIBDIR)/xen
+
+#define LIBDIR "/usr/lib64" in tools/libxl/_paths.h
+but #define LIBEXEC "/usr/lib/xen/bin"
+
+run_helper should look in the same dir
+
+2, libxl-save-helper should be installed in /usr/lib/xen/bin?
+http://lists.xen.org/archives/html/xen-devel/2012-06/msg01573.html
+ * A new helper program libxl-save-helper (which does both save and
+   restore).  It will be installed in /usr/lib/xen/bin.
+
+4, 怎么看还是不明白, 只好直接local build一下看看.
+1), create individul xen upstream project. see"21:01 2012-12-17"
+next. compare xen4.2 and xen-unstable in local build. 
+
+16:00 2012-12-17
+arm, server, Quad Cortex-A9 with 4M L2 cache
+http://www.calxeda.com/technology/products/processors/ecx-1000-techspecs/
+
+16:15 2012-12-17
+arm, allwinner, A10, bsp
+1, git clone git://github.com/linux-sunxi/sunxi-bsp.git
+2, ./confinure
+Usage: ./configure <board>
+
+supported boards:
+        * a13_mid a13_mid-android
+        * a13_olinuxino a13_olinuxino-android
+        * cubieboard cubieboard-android
+        * cubieboard_512 cubieboard_512-android
+        * gooseberry_a721 gooseberry_a721-android
+        * hackberry hackberry-android
+        * hyundai_a7hd hyundai_a7hd-android
+        * mele_a1000 mele_a1000-android
+        * mini-x mini-x-android
+        * mk802 mk802-android
+        * zatab zatab-android
+3, ./configure mk802
+3, suse@linux-bjrd:sunxi-bsp> ls
+allwinner-tools  configure    mali-libs  scripts       u-boot-sunxi
+cedarx-libs      linux-sunxi  README.md  sunxi-boards
+chosen_board.mk  Makefile     rootfs     sunxi-tools
+
+21:01 2012-12-17
+build service, ibs, create own package
+1, bamvor@linux-bjrd:obs> osc co home:bjzhang
+A    home:bjzhang
+2, osc meta pkg -e home:bjzhang xen_4.3
+这是最优化的创建「包」的方式，因为它会略过学姐也懒得写的 title 和 description ，直接在你的车库下创建一个名字是 application_name 的子文件夹。
+upload this package: osc ci
+3, adding files. and "osc add xxx", then "osc commit -m xxx".
+
+10:25 2012-12-18
+GTD
+0, 10:10-12:00 13:10-
+
+1, today
+1), 10:30-12:00 15:39- fix xen install issue. see"10:41 2012-12-18"
+
+1), 10:44-11:09 work report. see"10:44 2012-12-17"
 
 2), send tty console patch for libvirt upstream. 
 3), re-read all the patch about libxl xen4.2.
@@ -2063,80 +2155,41 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand. 
 2), try armv8 emulator and read armv8 kernel code.  
 
-10:44 2012-12-17
-work report - week 49, 50
-1, [devel-server] work report - week 49, 50
-1), working on bnc 782311: Snapshots stuck "queued" with Xen as HV. 
-send v2 patch to upstream. upstream accept it.
-2), working on libxl xen4.2 support with Jim.
-test and debug the lastest patch from xen and libvirt. some failure is fix with the lastest patch from xen mailing list. So, continue to debug the others.
+10:41 2012-12-18
+virtualization, xen, build error, libxl-save-helper not found, cont1
+1, xl save in xl, xen4.2:
+linux-work:/var/lib/xen/images_2/bjz_04_sles11_sp2 # xl save 2 2.save
+Saving to 2.save new xl format (info 0x0/0x0/511)
+libxl: cannot execute /usr/lib/xen/bin/libxl-save-helper: No such file or directory
+libxl: error: libxl_utils.c:363:libxl_read_exactly: file/stream truncated reading ipc msg header from domain 2 save/restore helper stdout pipe
+libxl: error: libxl_exec.c:118:libxl_report_child_exitstatus: domain 2 save/restore helper [4553] exited with error status 255
+xl: fatal error: xl_cmdimpl.c:2995, rc=-3: libxl_domain_suspend(ctx, domid, fd, 0, NULL)
+2, discuss with Chunyan, check other cmd in /usr/lib64/xen/bin
+1), xenconsole
+libxl_console_exec: get xenconsole from libxl__private_binddir_path().
+2), pygrub.
+get from LIBEXEC, but it worked. 
+3, look into how pygrub invoked.
+1), log system
+(1), LOG -> LIBXL__LOG -> libxl__log -> libxl__logv -> xtl_log -> xtl_logv -> stdiostream_vmessage
+min_level is set by xtl_createlogger_stdiostream and xtl_stdiostream_set_minlevel. 
+the default minmsglevel passed by main(xl.c) is XTL_PROCESS. 
+xentoollog.h: 
+typedef enum xentoollog_level {
+    XTL_NONE, /* sentinel etc, never used for logging */
+    XTL_DEBUG,
+    XTL_VERBOSE,
+    XTL_DETAIL,
+    XTL_PROGRESS, /* also used for "progress" messages */
+    XTL_INFO,
+    XTL_NOTICE,
+    XTL_WARN,
+    XTL_ERROR,
+    XTL_CRITICAL,
+    XTL_NUM_LEVELS
+} xentoollog_level;
 
-3), send tty console patch to libvirt upstream.
-4), send patch for xen install issue. 
 
-11:09 2012-12-17
-virtualization, xen, build error
-1, my question is why libxl_save_helper is installed in /usr/lib64/xen/bin. but run_helper search it in the /usr/lib/xen/bin. 
-1), config/StdGNU.mk:
-LIBEXEC = $(PREFIX)/lib/xen/bin 
-2), 
-in tools/libxl/Makefile:
-$(INSTALL_PROG) libxl-save-helper $(DESTDIR)$(PRIVATE_BINDIR)
-
-where PRIVATE_BINDIR = $(PRIVATE_PREFIX)/bin in config/StdGNU.mk
-and PRIVATE_PREFIX = $(LIBDIR)/xen
-
-#define LIBDIR "/usr/lib64" in tools/libxl/_paths.h
-but #define LIBEXEC "/usr/lib/xen/bin"
-
-run_helper should look in the same dir
-
-2, \TODO: check whether xen upstream has been fix it or in process.
-
-3, libxl-save-helper should be installed in /usr/lib/xen/bin?
-http://lists.xen.org/archives/html/xen-devel/2012-06/msg01573.html
- * A new helper program libxl-save-helper (which does both save and
-   restore).  It will be installed in /usr/lib/xen/bin.
-
-4, 怎么看还是不明白, 只好直接local build一下看看.
-1), create individul xen upstream project. see"21:01 2012-12-17"
-\TODO. compare xen4.2 and xen-unstable in local build. 
-
-16:00 2012-12-17
-arm, server, Quad Cortex-A9 with 4M L2 cache
-http://www.calxeda.com/technology/products/processors/ecx-1000-techspecs/
-
-16:15 2012-12-17
-arm, allwinner, A10, bsp
-1, git clone git://github.com/linux-sunxi/sunxi-bsp.git
-2, ./confinure
-Usage: ./configure <board>
-
-supported boards:
-        * a13_mid a13_mid-android
-        * a13_olinuxino a13_olinuxino-android
-        * cubieboard cubieboard-android
-        * cubieboard_512 cubieboard_512-android
-        * gooseberry_a721 gooseberry_a721-android
-        * hackberry hackberry-android
-        * hyundai_a7hd hyundai_a7hd-android
-        * mele_a1000 mele_a1000-android
-        * mini-x mini-x-android
-        * mk802 mk802-android
-        * zatab zatab-android
-3, ./configure mk802
-3, suse@linux-bjrd:sunxi-bsp> ls
-allwinner-tools  configure    mali-libs  scripts       u-boot-sunxi
-cedarx-libs      linux-sunxi  README.md  sunxi-boards
-chosen_board.mk  Makefile     rootfs     sunxi-tools
-
-21:01 2012-12-17
-build service, ibs, create own package
-1, bamvor@linux-bjrd:obs> osc co home:bjzhang
-A    home:bjzhang
-2, osc meta pkg -e home:bjzhang xen_4.3
-这是最优化的创建「包」的方式，因为它会略过学姐也懒得写的 title 和 description ，直接在你的车库下创建一个名字是 application_name 的子文件夹。
-upload this package: osc ci
-3, adding files. and "osc add xxx", then "osc commit -m xxx".
+3, \TODO: check whether xen upstream has been fix it or in process.
 
 
