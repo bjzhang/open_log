@@ -1,0 +1,79 @@
+Conversation initiator: Bamvor Jian Zhang
+Participants:Bamvor Jian Zhang, Jim Fehlig
+
+Conversation started (Dec 19, 2012 11:02:20 PM)
+
+Bamvor Jian Zhang (Dec 19, 2012 11:02:20 PM)
+hi
+
+Bamvor Jian Zhang (Dec 19, 2012 11:05:10 PM)
+there is a pair virObjectRef and virObjectUnref  in libxlXxxCallback. but it will lead to de register twice. it will be ok if i remove the virObjectUnref in these function. 
+
+Bamvor Jian Zhang (Dec 19, 2012 11:05:33 PM)
+i do not understand why. seem the reference count is wrong for some reason. 
+
+Jim Fehlig (Dec 19, 2012 11:06:34 PM)
+hmm, ok
+
+Bamvor Jian Zhang (Dec 19, 2012 11:06:53 PM)
+secondly, i found that sometimes libxlRemoveEventFDRegistrationInfo will lead to seqfault, seems that the pointer libxlOSEventHookInfoPtr is wrong, but i do not find the point when reading the code. 
+
+Jim Fehlig (Dec 19, 2012 11:07:59 PM)
+as mentioned, I only compile tested the patch so there are probably some bugs
+
+Jim Fehlig (Dec 19, 2012 11:08:39 PM)
+I'll work on it today, with your findings in mind, and hopefully have a useful patch by the end of the day :)
+
+Jim Fehlig (Dec 19, 2012 11:09:00 PM)
+did you make any other changes to the patch?
+
+Bamvor Jian Zhang (Dec 19, 2012 11:09:17 PM)
+nope.
+
+Jim Fehlig (Dec 19, 2012 11:10:50 PM)
+ok, thanks
+
+Bamvor Jian Zhang (Dec 19, 2012 11:15:34 PM)
+meanwhile, i thought i do not got your point about list of regsitered timeot and fds. could u please explain for me? 
+i guess if we want the prevent the free libx_ctx, why don't we just using the ref/unref in u patch? 
+
+Jim Fehlig (Dec 19, 2012 11:16:57 PM)
+libxl removes some of the fd registrations in libxl_ctx_free
+
+Jim Fehlig (Dec 19, 2012 11:18:16 PM)
+when that happens, the fd will become 'readable' in the libvirt event loop, which invokes the fd callback
+
+Jim Fehlig (Dec 19, 2012 11:19:10 PM)
+the callback wants to call libxl_osevent_occurred_fd(), but we are in the process of free the libxl_ctx
+
+Jim Fehlig (Dec 19, 2012 11:19:46 PM)
+so we have to remove all of these registrations from the libvirt event loop before calling libxl_ctx_free
+
+Jim Fehlig (Dec 19, 2012 11:20:06 PM)
+does that make sense?
+
+Jim Fehlig (Dec 19, 2012 11:21:03 PM)
+on my first attempt at this patch, I just did a refcount on the libxlDomainObjPrivate object when libxl registered an fd or timeout
+
+Jim Fehlig (Dec 19, 2012 11:21:38 PM)
+but since libxl only deregisters some fd's when the libxl_ctx is freed, that approach didn't work
+
+Bamvor Jian Zhang (Dec 19, 2012 11:22:59 PM)
+yeah. got it. 
+
+Bamvor Jian Zhang (Dec 19, 2012 11:23:49 PM)
+thanks. i am going to leave. 
+
+Bamvor Jian Zhang (Dec 19, 2012 11:24:26 PM)
+and if u have lastest patch today. i'd like to read and test it. 
+
+Jim Fehlig (Dec 19, 2012 11:24:39 PM)
+ok, have a good night
+
+Jim Fehlig (Dec 19, 2012 11:24:55 PM)
+I'll send you the patch later, so you will have it in the morning
+
+Bamvor Jian Zhang (Dec 19, 2012 11:25:08 PM)
+ok. 88
+
+Conversation ended: (Dec 19, 2012 11:28:22 PM)
