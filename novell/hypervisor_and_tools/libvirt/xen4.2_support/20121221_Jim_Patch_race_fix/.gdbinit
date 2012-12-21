@@ -158,14 +158,14 @@ end
 break libxl_driver.c:233
 commands
 silent
-printf "libxlFDDeregisterEventHook: virMutexLock<%p> @ priv<%p>\n", &(((libxlEventHookInfoPtr)hnd)->priv->regLock), ((libxlEventHookInfoPtr)hnd)->priv
+printf "libxlFDDeregisterEventHook: virMutexLock<%p> @ priv<%p>\n", &(info->priv->regLock), info->priv
 cont
 end
 
 break libxl_driver.c:235
 commands
 silent
-printf "libxlFDDeregisterEventHook: virMutexUnlock<%p> @ priv<%p>\n", &(((libxlEventHookInfoPtr)hnd)->priv->regLock), ((libxlEventHookInfoPtr)hnd)->priv
+printf "libxlFDDeregisterEventHook: virMutexUnlock<%p> @ priv<%p>\n", &(info->priv->regLock), info->priv
 cont
 end
 
@@ -200,14 +200,14 @@ end
 break libxl_driver.c:322
 commands
 silent
-printf "libxlTimeoutDeregisterEventHook: virMutexLock<%p> @ priv<%p>\n", &(((libxlEventHookInfoPtr)hnd)->priv->regLock), ((libxlEventHookInfoPtr)hnd)->priv
+printf "libxlTimeoutDeregisterEventHook: virMutexLock<%p> @ priv<%p>\n", &(info->priv->regLock), info->priv
 cont
 end
 
 break libxl_driver.c:324
 commands
 silent
-printf "libxlTimeoutDeregisterEventHook: virMutexUnlock<%p> @ priv<%p>\n", &(((libxlEventHookInfoPtr)hnd)->priv->regLock), ((libxlEventHookInfoPtr)hnd)->priv
+printf "libxlTimeoutDeregisterEventHook: virMutexUnlock<%p> @ priv<%p>\n", &(info->priv->regLock), info->priv
 cont
 end
 
