@@ -58,11 +58,11 @@ domain_xml=$1
 domain_name=`cat $domain_xml | grep "<name>" | sed "s/<name>\(.*\)<\/name>/\1/" | sed "s/^\ *//"`
 echo "domain_xml is $domain_xml; domain_name is $domain_name"
 
-#echo "test libxlDomainCreateWithFlags: start"
-#virsh define $domain_xml
-#virsh start $domain_name
-#virsh list | grep $domain_name -w 
-#test_ret $?
+echo "test libxlDomainCreateWithFlags: start"
+virsh define $domain_xml
+virsh start $domain_name
+virsh list | grep $domain_name -w 
+test_ret $?
 
 for i in `seq 100`; do
     echo "test $i times"
