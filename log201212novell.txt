@@ -2381,7 +2381,8 @@ GTD
 0, 10:30
 
 1, today
-1), 11:00 test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
+1), 11:00-12:05 13:54- test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
+2), 12:10-13:05 Celen Chen share her exchange trip in EMEA.
 
 1), 15:31 fix xen install issue. see"15:21 2012-12-19".
 1), send tty console patch for libvirt upstream.
@@ -2452,5 +2453,92 @@ libxl_dm.c:
 
 11:00 2012-12-21
 virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont16, debug and test with Jim lastest patch, cont1
+1, continue from "11:28 2012-12-20"
+2, the priv pointer is different, why? it should be the same one.
+bamvor@linux-work:20121220_Jim_Patch_race_fix> grep virMutex gdb.txt
+libxlFDRegisterEventHook: virMutexLock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexUnlock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexLock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexUnlock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexLock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexUnlock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexLock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexUnlock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexLock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDRegisterEventHook: virMutexUnlock<0x70ccc0> @ priv<0x70ccb0>
+libxlFDDeregisterEventHook: virMutexLock<0x1cafe0028> @ priv<0x1cafe0018>
+1), the function pointer is differnet in fd_register and fd_deregister. so as to, so change it:
+Index: xen-unstable.hg/tools/libxl/libxl_event.h
+===================================================================
+--- xen-unstable.hg.orig/tools/libxl/libxl_event.h
++++ xen-unstable.hg/tools/libxl/libxl_event.h
+@@ -283,13 +283,13 @@ typedef struct libxl_osevent_hooks {
+                      short events, void *for_libxl);
+   int (*fd_modify)(void *user, int fd, void **for_app_registration_update,
+                    short events);
+-  void (*fd_deregister)(void *user, int fd, void *for_app_registration);
++  void (*fd_deregister)(void *user, int fd, void **for_app_registration);
+   int (*timeout_register)(void *user, void **for_app_registration_out,
+                           struct timeval abs, void *for_libxl);
+   int (*timeout_modify)(void *user, void **for_app_registration_update,
+                          struct timeval abs)
+       /* only ever called with abs={0,0}, meaning ASAP */;
+-  void (*timeout_deregister)(void *user, void *for_app_registration)
++  void (*timeout_deregister)(void *user, void **for_app_registration)
+       /* will never be called */;
+ } libxl_osevent_hooks;
+2), after fix this, pv start pass. I guess Jim already mentioned this in xen mailing list. i just missing, how foolish am i.
+if virsh reboot just after virsh start/create, it will fail. i thought it is acceptable:  the user could not reboot the machine just after it power on. 
+3, hvm save/restore
+1), 1st pass, 2nd save hang.
+2), test again, fail 1st:
+Program received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7f7a9808e7e0 (LWP 4531)]
+0x00007f7a8a9d44e2 in libxlFDEventCallback (watch=<optimized out>, fd=45, vir_events=0, fd_info=0x7f7a80001480) at libxl/libxl_driver.c:161
+161         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007f7a8a9d44e2 in libxlFDEventCallback (watch=<optimized out>, fd=45,
+    vir_events=0, fd_info=0x7f7a80001480) at libxl/libxl_driver.c:161
+#1  0x00007f7a977ca66e in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/event_poll.c:500
+#2  virEventPollRunOnce () at util/event_poll.c:646
 
+(gdb) p fd_info
+$1 = (void *) 0x7fffdc0020c0
+(gdb) p (libxlEventHookInfoPtr*)fd_info
+$2 = (libxlEventHookInfoPtr *) 0x7fffdc0020c0
+(gdb) p ((libxlEventHookInfoPtr*)fd_info)->priv
+Cannot access memory at address 0x2cafe0021
+3), test it again, hand at 3rd save.
+
+4, email to Jim
+Hi, Jim
+
+here is the update for testing u patch.
+1, the reason of the failure i report yestoday is because the fd/timer degister info pointer.
+if i update the followings in xen and modify "void *hnd" to "void **hdnp" in libxlXXDeregisterEventHook in libvirt libxl driver. the pv start is ok. 
+Index: xen-unstable.hg/tools/libxl/libxl_event.h
+===================================================================
+--- xen-unstable.hg.orig/tools/libxl/libxl_event.h
++++ xen-unstable.hg/tools/libxl/libxl_event.h
+@@ -283,13 +283,13 @@ typedef struct libxl_osevent_hooks {
+                      short events, void *for_libxl);
+   int (*fd_modify)(void *user, int fd, void **for_app_registration_update,
+                    short events);
+-  void (*fd_deregister)(void *user, int fd, void *for_app_registration);
++  void (*fd_deregister)(void *user, int fd, void **for_app_registration);
+   int (*timeout_register)(void *user, void **for_app_registration_out,
+                           struct timeval abs, void *for_libxl);
+   int (*timeout_modify)(void *user, void **for_app_registration_update,
+                          struct timeval abs)
+       /* only ever called with abs={0,0}, meaning ASAP */;
+-  void (*timeout_deregister)(void *user, void *for_app_registration)
++  void (*timeout_deregister)(void *user, void **for_app_registration)
+       /* will never be called */;
+ } libxl_osevent_hooks;
+
+2, after this modify, hvm vm save maybe hang or seqfault at libxl_osevent_occurred_fd because of wrong fd_info.
+
+best wishes
+Bamvor
 
