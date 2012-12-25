@@ -2501,6 +2501,42 @@ GTD
 3), 20:37-21:02 send tty console patch for libvirt upstream. see"21:00 2012-12-24"
 4), summary: 今天又是下午才开始工作的, 如果总是这样, 怎么可能达到自己一边工作一边做xen arm的计划呢?
 
+16:00 2012-12-24
+virtualization, xen, build error, libxl-save-helper not found, cont2
+1, plan:
+write a patch for save and pygrub.
+2, patch is ok. write patch for xen-unstable.
+
+17:48 2012-12-24
+virtualization, xen, arm, read xen code, cont1
+1, there is a arm32 dir in xen/arch/arm: 
+changeset:   26317:b094ba4bf985
+user:        Ian Campbell <ian.campbell@citrix.com>
+date:        Wed Dec 19 14:16:30 2012 +0000
+summary:     xen: arm: introduce arm32 as a subarch of arm.
+
+2, all the assemble in the arm32 directory:
+arm32 > ls
+asm-offsets.c  entry.S  head.S  lib  Makefile  mode_switch.S  proc-ca15.S
+
+21:00 2012-12-24
+virtualization, libvirt, xen, libxlDomainOpenConsole, current status and next
+1, status
+1), the patch is missing. So, it had better try git hub tomorrow. after i send xen patch.
+2), there is a API virConsoleOpen for handling console opening and locking. I chould use this API.
+
+11:10 2012-12-25
+GTD
+0, 11:00-18:12
+
+1, today
+1), 1h try OMAP3530: output to ttyS1. see"13:28 2012-12-25"
+2), 14:22-15:28 fix xen install issue. see"14:30 2012-12-25".
+nap 20'
+3), 30' work report. see"15:28 2012-12-25"
+4), 
+3), send tty console patch for libvirt upstream. ref"21:00 2012-12-24"
+
 2, daily work
 1), tracking xen-arm update.
 2), read libvirt and xen-devel quickly, should less that 30minutes.
@@ -2509,13 +2545,12 @@ http://www.linux.com/
 http://www.phoronix.com/scan.php?page=home
 
 3, week plan
+1), send xen libexec patch.
 2), send console patch to upstream.
 3), test Jim lastest Patch.
 
 4, next
 1), send xen libexec patch.
-2), work report.
-3), send tty console patch for libvirt upstream. ref"21:00 2012-12-24"
 1), test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
 3), re-read all the patch about libxl xen4.2.
 1), got arm technical symposia pdf.
@@ -2567,27 +2602,120 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-16:00 2012-12-24
-virtualization, xen, build error, libxl-save-helper not found, cont2
-1, plan:
-write a patch for save and pygrub.
-2, patch is ok. write patch for xen-unstable.
+14:30 2012-12-25
+virtualization, xen, build error, libxl-save-helper not found, cont3, write upstream patch
+1, patch is 
+# HG changeset patch
+# Parent c4114a042410d3bdec3a77c30b2e85366d7fbe1d
+change libexec to private binder dir for pygrub bootloader and libxl-save-helper
 
-17:48 2012-12-24
-virtualization, xen, arm, read xen code, cont1
-1, there is a arm32 dir in xen/arch/arm: 
-changeset:   26317:b094ba4bf985
-user:        Ian Campbell <ian.campbell@citrix.com>
-date:        Wed Dec 19 14:16:30 2012 +0000
-summary:     xen: arm: introduce arm32 as a subarch of arm.
+in current xen, libexec is /usr/lib/xen/bin, while the private binder is /usr/lib64/xen/bin. but some command in private binder dir is called from libexec which lead to the following error:
+1, for pygrub bootloader:
+libxl: debug: libxl_bootloader.c:429:bootloader_disk_attached_cb: /usr/lib/xen/bin/pygrub doesn't exist, falling back to config path
+2, for save:
+libxl: cannot execute /usr/lib/xen/bin/libxl-save-helper: No such file or directory
+libxl: error: libxl_utils.c:363:libxl_read_exactly: file/stream truncated reading ipc msg header from domain 3 save/restore helper stdout pipe
+libxl: error: libxl_exec.c:118:libxl_report_child_exitstatus: domain 3 save/restore helper [10222] exited with error status 255
 
-2, all the assemble in the arm32 directory:
-arm32 > ls
-asm-offsets.c  entry.S  head.S  lib  Makefile  mode_switch.S  proc-ca15.S
+there are two ways to fix above error. the first one is make such command store in the /usr/lib/xen/bin and /usr/lib64/xen/bin(symbol link to previous on), e.g. qemu-dm. The second way is using private binder dir instead of libexec dir. e.g. xenconsole.
+For me, the latter one is suitable for pygrub and libxl-save-helper.
 
-21:00 2012-12-24
-virtualization, libvirt, xen, libxlDomainOpenConsole, current status and next
-1, status
-1), the patch is missing. So, it had better try git hub tomorrow. after i send xen patch.
-2), there is a API virConsoleOpen for handling console opening and locking. I chould use this API.
+diff -r c4114a042410 tools/libxl/libxl_bootloader.c
+--- a/tools/libxl/libxl_bootloader.c	Fri Dec 21 17:05:38 2012 +0000
++++ b/tools/libxl/libxl_bootloader.c	Tue Dec 25 15:14:41 2012 +0800
+@@ -419,7 +419,7 @@ static void bootloader_disk_attached_cb(
+         const char *bltmp;
+         struct stat st;
+ 
+-        bltmp = libxl__abs_path(gc, bootloader, libxl__libexec_path());
++        bltmp = libxl__abs_path(gc, bootloader, libxl__private_bindir_path());
+         /* Check to see if the file exists in this location; if not,
+          * fall back to checking the path */
+         LOG(DEBUG, "Checking for bootloader in libexec path: %s", bltmp);
+diff -r c4114a042410 tools/libxl/libxl_save_callout.c
+--- a/tools/libxl/libxl_save_callout.c	Fri Dec 21 17:05:38 2012 +0000
++++ b/tools/libxl/libxl_save_callout.c	Tue Dec 25 15:14:41 2012 +0800
+@@ -172,7 +172,7 @@ static void run_helper(libxl__egc *egc, 
+     shs->stdout_what = GCSPRINTF("domain %"PRIu32" save/restore helper"
+                                  " stdout pipe", domid);
+ 
+-    *arg++ = getenv("LIBXL_SAVE_HELPER") ?: LIBEXEC "/" "libxl-save-helper";
++    *arg++ = getenv("LIBXL_SAVE_HELPER") ?: PRIVATE_BINDIR "/" "libxl-save-helper";
+     *arg++ = mode_arg;
+     const char **stream_fd_arg = arg++;
+     for (i=0; i<num_argnums; i++)
+
+15:28 2012-12-25
+work report - week 51
+1, [devel-server] work report - week 51
+1), write a patch for fixing the wrong path in libxl.
+2), working on libxl xen4.2 support with Jim.
+test the lastest patch from Jim. more error has been fixed.
+
+15:32 2012-12-25
+company, suse, olaf kirch, Merry Christmas
+"Olaf Kirch <okir@suse.com>"_email_"[devel-server] Merry Christmas, SLE Team!"_20121221_1252
+Dear all,
+
+The year is coming to an end - it hasn't quite ended yet, but I guess many
+of you are either on vacation already, or are close to wrapping things
+up for the Christmas break.
+
+Time to look back!
+
+To begin with, many thanks to all of you for your work during this year,
+for your dedication and your commitment to our team and our products. We
+certainly saw a lot of changes happening this year. After having been acquired
+by Attachmate, the whole organization went through a phase of unvertainty,
+and coming to terms with the changes. But I think it is fair to say at the
+end of this year, that we have come out of this phase, and that we are
+stronger than we were going into it.
+
+SUSE is a business unit of its own now, and we are performing really well.
+The SLE products are at the root of this success, and it is thanks to
+you and your work that this is so. Earlier this year, we have delivered
+SLE 11 SP2 - on schedule (erm, _revised_ schedule :), and in great quality.
+And customers love it, and the field loves it - including our new 3.0 kernel.
+
+We have also started to work on SLE 12, by forming virtual teams and
+looking into what we want to do for our next major release (ETA: some time
+in 2014). Early next year, we will start putting stakes in the ground and
+begin to address individual aspects of SLE 12 ahead of time.
+
+We welcomed the SLE Desktop into our department, making us the largest
+department in SUSE R&D with close to 70 people. I'm learning new things about
+the desktop all the time... We also welcomed a number of new people joining
+us from other SUSE departments, or from outside the company. I feel it's great
+to have you here, ladies and gentlemen - and I hope you feel welcome and
+at home here.
+
+If SLE is the root, then we also saw a new sapling grow from it -
+SUSE Cloud. For those involved in the project, this was (and continues
+to be) quite a ride. In a way, we are embarking on a new adventure - new
+technology, a large body of code, decidedly un-SLE-ish development model,
+funny schedules :-)
+
+But at the same time, IaaS is an evolutionary step forward when you're
+building operating systems. I am looking forward to see us steer the
+product towards sane schedules, a sane scope, and to see this sapling
+grow into a strong, fresh plantyielding plenty of fruit!
+
+In looking back, it has been an eventful year, but despite some interesting
+challenges, I think it has also been a very successful year. I want to thank
+all of you again for being part of this, and for driving it. Hats off to a
+fantastic team!
+
+So in closing, I wish you and your families a happy Christmas time, and
+a happy new year!
+
+Looking forward to see/hear/read from you next year -
+
+Sincerely,
+Olaf
+-- 
+Neo didn't bring down the Matrix. SOA did. (soafacts.com)
+--------------------------------------------
+Olaf Kirch - Director SUSE Linux Enterprise; R&D (okir@suse.com)
+SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, Germany
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg) 
 
