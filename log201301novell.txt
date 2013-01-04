@@ -4,3 +4,169 @@ opensuse, arm, build sun4i image, cont1, build u-boot
 1, ref u-boot build doc on git hub
 https://github.com/linux-sunxi/u-boot-sunxi/wiki
 
+10:59 2013-01-04
+GTD
+0, 10:45
+
+1, today
+1), 10:59- mail.
+2), 
+
+
+11:00 2013-01-04
+1, Jim
+Jim Fehlig wrote:
+> Bamvor Jian Zhang wrote:
+>   
+>> i patch u two patches to libvirt upstream code. and test hvm start, shutdown, save and pv start.
+>> hvm shutdown, hvm save and pv start fail. hvm shutdown and pv start both fail at seqfault in the pthread_mutex_lock in which lock is 0. and called from libxlFDDeregisterEventHook.
+>>   
+>>     
+>
+> That is interesting.  I haven't seen this problem, but I'm back to
+> testing on our Xen 4.2 packages (which include backports of Ian's
+> patches).  I'll have to remove our Xen packages and try xen-untable again.
+>   
+>   
+>> at first, i thought the failure in pv start is because libxlDomainObjPrivateFree is called before libxlFDDeregisterEventHook, but it is not happened from code or from gdb log.
+>> So, what if libxlFDDeregisterEventHook is failed at the first time? it is in the pv start. and it will be failed while libxlFDDeregisterEventHook is called before libxlDomainObjPrivateAlloc. test it in gdb, gdb log approve it.
+>> from gdb log, the priv is 0x712d60 same in fd register and deregister. the but virMutex is different:
+>> in fd register: 0x717d60
+>> in fd deregister: 0x712d70
+>>   
+>>     
+>
+> I'm testing another version of my libvirt patch that seems to work with
+> Xen 4.2.  I'll try it with xen-unstable and if all goes well, I'll send
+> you the updated patch for testing on your side.
+>   
+
+Ok, I've tested the attached patches on xen-unstable and do not see the
+races.  I don't see any problem with hvm guests, but there is a problem
+with the console on pv guests.  When viewing the guest's vnc console, I
+see "serial0 console" and nothing else.  Seems like the guest is waiting
+for the console to initialize before continuing booting.  The vfb setup
+in xenstore is quite strange too.  xenstore-ls shows a backend vfb path
+of '/local/domain/0/backend/vfb/11/-1' with the following contents
+
+       frontend = "/local/domain/11/device/vfb/-1"
+       frontend-id = "11"
+       online = "1"
+       state = "4"
+       domain = "sles11sp2-pv"
+       vnc = "1"
+       vnclisten = "127.0.0.1"
+       vncdisplay = "0"
+       vncunused = "0"
+       sdl = "0"
+       opengl = "0"
+       feature-resize = "1"
+       hotplug-status = "connected"
+       request-update = "1"
+
+The '-1' is odd.  I haven't looked into this problem yet, but don't
+think it is related to these patches.  IMO this problem is related to
+some console initialization bug.
+
+Can you review and test these patches?  I'd like to get the race issues
+resolved and patches committed upstream soon.
+
+Thanks!
+Jim
+2, 
+Jim Fehlig wrote:
+> Jim Fehlig wrote:
+>   
+>> Bamvor Jian Zhang wrote:
+>>   
+>>     
+>>> i patch u two patches to libvirt upstream code. and test hvm start, shutdown, save and pv start.
+>>> hvm shutdown, hvm save and pv start fail. hvm shutdown and pv start both fail at seqfault in the pthread_mutex_lock in which lock is 0. and called from libxlFDDeregisterEventHook.
+>>>   
+>>>     
+>>>       
+>> That is interesting.  I haven't seen this problem, but I'm back to
+>> testing on our Xen 4.2 packages (which include backports of Ian's
+>> patches).  I'll have to remove our Xen packages and try xen-untable again.
+>>   
+>>   
+>>     
+>>> at first, i thought the failure in pv start is because libxlDomainObjPrivateFree is called before libxlFDDeregisterEventHook, but it is not happened from code or from gdb log.
+>>> So, what if libxlFDDeregisterEventHook is failed at the first time? it is in the pv start. and it will be failed while libxlFDDeregisterEventHook is called before libxlDomainObjPrivateAlloc. test it in gdb, gdb log approve it.
+>>> from gdb log, the priv is 0x712d60 same in fd register and deregister. the but virMutex is different:
+>>> in fd register: 0x717d60
+>>> in fd deregister: 0x712d70
+>>>   
+>>>     
+>>>       
+>> I'm testing another version of my libvirt patch that seems to work with
+>> Xen 4.2.  I'll try it with xen-unstable and if all goes well, I'll send
+>> you the updated patch for testing on your side.
+>>   
+>>     
+>
+> Ok, I've tested the attached patches on xen-unstable and do not see the
+> races.
+
+Hmm, spoke too soon.  When doing save/restore in a loop, I eventually
+hit a race between libxlEventHandler() and domain cleanup in
+libxlDoDomainSave().
+
+>   I don't see any problem with hvm guests, but there is a problem
+> with the console on pv guests.  When viewing the guest's vnc console, I
+> see "serial0 console" and nothing else.  Seems like the guest is waiting
+> for the console to initialize before continuing booting.  The vfb setup
+> in xenstore is quite strange too.  xenstore-ls shows a backend vfb path
+> of '/local/domain/0/backend/vfb/11/-1' with the following contents
+>
+>        frontend = "/local/domain/11/device/vfb/-1"
+>        frontend-id = "11"
+>        online = "1"
+>        state = "4"
+>        domain = "sles11sp2-pv"
+>        vnc = "1"
+>        vnclisten = "127.0.0.1"
+>        vncdisplay = "0"
+>        vncunused = "0"
+>        sdl = "0"
+>        opengl = "0"
+>        feature-resize = "1"
+>        hotplug-status = "connected"
+>        request-update = "1"
+>
+> The '-1' is odd.  I haven't looked into this problem yet, but don't
+> think it is related to these patches.  IMO this problem is related to
+> some console initialization bug.
+>   
+
+I sent a patch to xen-devel to fix this issue
+
+http://lists.xen.org/archives/html/xen-devel/2013-01/msg00137.html
+
+The devid field of vfb and vkb could also have been initialized in the
+libxl driver, similar to how we set it in libxlMakeNicList().  But libxl
+already sets devid for other devices, so seems the right place to do it
+for vfb and vkb devices too.
+
+> Can you review and test these patches?  I'd like to get the race issues
+> resolved and patches committed upstream soon.
+>   
+
+No need to test the patches.  Maybe we need to rethink this whole
+problem and see if there isn't a more elegant solution...
+
+Jim
+
+11:01 2013-01-04
+company, colleague, QA, Yoonsuk Cho, report to Sebastian Vollath
+"Sebastian Vollath <svollath@suse.de>"_email
+it's my pleasure to announce a new team member.
+Yoonsuk Cho joined the QA-EMEA team in Nuremberg today. Yoonsuk - also called
+Brian - has a strong background in IBM's System Z/s390, where he will focus on
+within QA.
+Please join me in giving him a warm welcome and support him in getting used to
+SUSE and QA.
+
+Thanks,
+  Sebastian
+
