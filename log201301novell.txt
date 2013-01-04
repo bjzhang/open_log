@@ -6,14 +6,15 @@ https://github.com/linux-sunxi/u-boot-sunxi/wiki
 
 10:59 2013-01-04
 GTD
-0, 10:45
+0, 10:45-19:55
 
 1, today
-1), 10:59- mail.
-2), 
-
+1), 10:59-11:40 mail.
+2), Jim email. "11:00 2013-01-04"
+3), debug libvirt libxl console. see"16:50 2013-01-04"
 
 11:00 2013-01-04
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont17, Jim's email
 1, Jim
 Jim Fehlig wrote:
 > Bamvor Jian Zhang wrote:
@@ -169,4 +170,32 @@ SUSE and QA.
 
 Thanks,
   Sebastian
+
+16:50 2013-01-04
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.2, cont1, debug
+1, seqfault
+#0  0x00007f16f80e9c80 in __errno_location@plt () from /usr/lib64/libvirt.so.0
+#1  0x00007f16f8217410 in virNetServerFatalSignal (sig=11,
+    siginfo=0x7f16f03be570, context=0x7f16f03be440) at rpc/virnetserver.c:337
+#2  <signal handler called>
+#3  __pthread_mutex_lock (mutex=0x0) at pthread_mutex_lock.c:50
+#4  0x00007f16f817eaec in virConsoleOpen (cons=0x0, pty=0x706b40 "/dev/pts/4",
+    st=0x705900, force=false) at conf/virconsole.c:345
+
+and the mutex is empty:
+(gdb) frame 3
+#3  __pthread_mutex_lock (mutex=0x0) at pthread_mutex_lock.c:50
+(gdb) p mutex
+$7 = (pthread_mutex_t *) 0x0
+1), this is because of missing alloc and free in private alloc and free.
+add virConsoleAlloc and VirConsoleFree to libxlDomainObjPrivateAlloc and libxlDomainObjPrivateFree.
+2), successful in pv. add console and test it in hvm.
+
+2, even xl and xenconsole could not got it
+# xl console 5
+xenconsole: Could not read tty from store: No such file or directory
+1), test it on xen4.1.2
+linux-work:~ # xenstore-read /local/domain/1/serial/0/tty
+/dev/pts/1
+2), it is not exist in xen4.2
 
