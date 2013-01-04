@@ -1,0 +1,79 @@
+//"dpm_suspend_start"->"dpm_prepare"
+//"dpm_suspend_start"->"dpm_suspend"
+digraph G {
+//drivers/input/vc088x_sensor_mma7660.c
+sensor_early_suspend[label = "sensor early suspend"];
+//drivers/input/touchscreen/vc088x_ts_it7260.c
+ts_early_suspend[label = "touch panel early suspend"];
+//drivers/leds/leds-vc088x.c
+leds_early_suspend[label = "leds early suspend"];
+//drivers/video/vc088x/vc088x_fb.c
+framebuffer_hw_early_suspend[label = "framebuffer hw early suspend"];
+//kernel/power/fbearlysuspend.c
+framebuffer_sw_early_suspend[label = "framebuffer sw early suspend"];
+//backlight not early suspend
+backlight_early_suspend[label = "backlight early suspend"];
+
+Syncing_filesystems[label = Syncing filesystems"];
+cpufreq_notifier__switch_to_800[label = "cpufreq: switch to 800MHz for suspend and rom boot wakeup"];
+cpufreq_notifier__switch_back[label = "cpufreq: switch back to system cpu freq before suspend"];
+
+//soc_suspend_begin[label = "soc suspend begin(none for 882)"];
+//soc_suspend_end[label = "soc suspend end(none for 882)"];
+
+//drivers/i2c/busses/i2c-vc0882.c
+i2c_no_irq_suspend;
+
+request_suspend_state -> early_suspend;
+request_suspend_state -> late_resume;
+early_suspend -> sensor_early_suspend;
+early_suspend -> ts_early_suspend;
+early_suspend -> leds_early_suspend;
+early_suspend -> framebuffer_hw_early_suspend;
+early_suspend -> framebuffer_sw_early_suspend;
+early_suspend -> backlight_early_suspend[label = x, style = dotted];
+
+expire_wake_locks -> suspend -> pm_suspend -> enter_state;
+
+enter_state -> Syncing_filesystems;
+enter_state -> suspend_prepare;
+enter_state -> suspend_test;
+enter_state -> suspend_devices_and_enter;
+enter_state -> suspend_finish;
+
+suspend_prepare -> pm_notifier_prepare;
+pm_notifier_prepare -> cpufreq_notifier__switch_to_800;
+suspend_finish -> pm_notifier_post;
+pm_notifier_post -> cpufreq_notifier__switch_back;
+
+//suspend_devices_and_enter -> soc_suspend_begin;
+"suspend_devices_and_enter"->"suspend_console";
+dpm_suspend_start[label = "device driver suspend with watch dog check", style = bold];
+"suspend_devices_and_enter"->"dpm_suspend_start";
+suspend_devices_and_enter -> suspend_enter;
+dpm_resume_end[label = "device driver resume", style = bold];
+"suspend_devices_and_enter"->"dpm_resume_end";
+"suspend_devices_and_enter"->"resume_console";
+//suspend_devices_and_enter -> soc_suspend_end;
+
+//"dpm_suspend"->"device_suspend"->"__device_suspend"
+
+
+soc_suspend_prepare[label = "soc suspend prepare: mask 1st level irq", style = bold];
+suspend_enter -> soc_suspend_prepare;
+suspend_enter -> dpm_suspend_noirq;
+//suspend_enter -> soc_suspend_prepare_late;
+suspend_enter -> suspend_test__TEST_PLATFORM;
+suspend_enter -> arch_suspend_disable_irqs;
+suspend_enter -> sysdev_suspend;
+soc_suspend_enter[label = "soc suspend enter", style = bold];
+suspend_enter -> soc_suspend_enter;
+suspend_enter -> sysdev_resume;
+suspend_enter -> arch_suspend_enable_irqs;
+//suspend_enter -> soc_suspend_wake;
+suspend_enter -> dpm_resume_noirq;
+soc_suspend_finish[label = "soc suspend finish: unmask 1st level irq", style = bold];
+suspend_enter -> soc_suspend_finish;
+
+dpm_suspend_noirq->i2c_no_irq_suspend;
+}
