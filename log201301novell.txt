@@ -757,7 +757,234 @@ GTD
 1, today
 1), 10:17-10:31 10:36-11:40 personal stuff. 
 2), 13:03-14:50 16:17-17:51 test Jim patch for libxl xen4.2 bug. see"10:36 2013-01-16".
-2), 
+
+10:36 2013-01-16
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont16, debug and test with Jim lastest patch, cont2
+1, test Jim lastest patch on 15, Jan.
+2, patch the patch
+1), 不知道我上次说的deregister时指针问题Jim有没有改, 先假设不改, 一边编译一边看看.
+2), patch after 26234:bc624b00d6d6 to 35a0556a7f76.
+3,
+1), libvirt libxl: 测试HVM和PV, 都是malloc出错.
+2), xl fail too:
+linux-work:/var/lib/xen/images_2/bjz_04_sles11_sp2 # xl create bjz_04_sles11_sp2.orig
+Parsing config from bjz_04_sles11_sp2.orig
+WARNING: ignoring "kernel" directive for HVM guest. Use "firmware_override" instead if you really want a non-default firmware
+WARNING: ignoring device_model directive.
+WARNING: Use "device_model_override" instead if you really want a non-default device_model
+libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+
+libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+
+libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+
+failed to free memory for the domain
+linux-work:/var/lib/xen/images_2/bjz_04_sles11_sp2 # cd ../sles11_sp2_pv
+linux-work:/var/lib/xen/images_2/sles11_sp2_pv # ls
+disk0.raw      sles11_sp2_pv.xml   sles11_sp2_pv.xml.bak.chunyan
+sles11_sp2_pv  sles11_sp2_pv.xml~
+linux-work:/var/lib/xen/images_2/sles11_sp2_pv # xl create sles11_sp2_pv
+Parsing config from sles11_sp2_pv
+libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+
+libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+
+libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+
+failed to free memory for the domain
+
+15:06 2013-01-16
+opensuse, factroy, 12.3, roadmap, installation, DVD
+1, opensuse portal factory
+http://en.opensuse.org/Portal:Factory
+2, opensuse 12.3 factory milestone 2 download:
+http://software.opensuse.org/developer/en
+3, openSUSE:Factory_installation 
+http://en.opensuse.org/openSUSE:Factory_installation
+4, openSUSE:Roadmap
+http://en.opensuse.org/openSUSE:Roadmap
+
+11:37 2013-1-17
+hi
+
+yestoday, i test your patch with upstream libvirt and xen. but i got no enough memory 
+
+14:41 2013-01-17
+GTD
+0, 14:40-18:13
+
+1, today
+1), 14:42-16:00 17:30-18:13 test Jim patch for libxl xen4.2 bug. see"14:42 2013-01-17"
+2), 25' mailing list xen. see"15:05 2013-01-17"
+3), 90' 排练节目. 
+
+14:42 2013-01-17
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont16, debug and test with Jim lastest patch, cont3
+1, Jim_email_"[libvirt] RFC: libxl race fixes"_20130116
+I've been investigating some races in the libxl driver and would like to
+get comments on some potential solutions.
+
+The first race is in the fd/timeout event handling code, which maps
+libxl's osevent interface to libvirt's event loop interface.  This
+mapping opens the possibility for libvirt's event loop to invoke
+event callbacks after libxl has already deregistered the event,
+potentially accessing an event object that has already been freed.
+
+One solution to this race I've found successful is reference counting the
+objects associated with the events.  When libxl registers an event, an
+object encapsulating the event is created and it's reference count is set
+to 1.  When the event is injected into libvirt's event loop, another
+reference is taken on the object.  When libxl deregisters the event, it's
+reference count is decremented.  Once the event is removed from libvirt's
+event loop, the final reference is decremented and the object is disposed.
+This approach ensures the object is not disposed until it is removed
+from libvirt's event loop *and* libxl had explicitly deregistered the event.
+The notion of an event being 'disabled' found in libvirt's event loop impl
+also had to be added to the libxl event object, to ensure the driver doesn't
+call into libxl for a previously deregistered event.
+
+The second race is between destroying a vm (i.e., calling
+privateDataFreeFunc, which frees the libxl ctx) and deregistration/cleanup
+of all events that have been registered by libxl.
+
+One solution for this race is to convert libxlDomainObjPrivate to a
+virObject and increment its reference for each fd and timeout registration.
+Only when all fds and timeouts are deregistered and destroyed will the
+libxlDomainObjPrivate be destroyed.  One downside to this approach is that
+an API to "cleanup" the libxl ctx is needed.  Without such an API, some
+fds are not deregistered until calling libxl_ctx_free.  But since the fd
+events have references on the libxlDomainObjPrivate, libxl_ctx_free is
+never called.  (BTW I have a patch adding libxl_ctx_quiesce() to libxl,
+which upstream xen folks seem receptive to, including backporting to
+Xen 4.2 branch, but I don't think this is ideal.)
+
+An alternate solution that can be used to address both of these races
+is to maintain a list of the fd/timeout registrations in the
+libxlDomainObjPrivate object, and take a more brute force approach to
+managing the registrations
+
+Other solutions that I might be overlooking are certainly appreciated :).
+
+Regards,
+Jim
+
+2, remove upstream patch and test again. see whether the no memory error encounter again.
+1), install the 10.1 version in my local zypper cache. it does not include xen upstream patch and jim patch.
+可能是因为我没有换xen hypervisor造成昨天的错误.
+10.1 xl create test pass for both pv and hvm.
+11.1 xl create test pass for both pv and hvm.
+notes: 10.1 without patch_bc624b00d6d6_35a0556a7f76 and Jim's patch. while 11.1 include it. which mean the latter one is the upstream code(libvirt and xen) with Jim patch.
+
+3, 11.1 virsh create fail: libvirtd crash.
+1), libvirt crash log
+Program received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7f01a7427700 (LWP 16255)]    
+__pthread_mutex_lock (mutex=0x2cafe0044) at pthread_mutex_lock.c:50
+50        unsigned int type = PTHREAD_MUTEX_TYPE (mutex);          
+(gdb) where 
+#0  __pthread_mutex_lock (mutex=0x2cafe0044) at pthread_mutex_lock.c:50
+#1  0x00007f01a0d0144f in libxlTimeoutModifyEventHook (priv=<optimized out>,
+    hndp=0x7f0198001b90, abs_t=...) at libxl/libxl_driver.c:370
+#2  0x00007f01a0ad02f0 in time_deregister (ev=<optimized out>,
+    gc=<optimized out>) at libxl_event.c:294
+#3  libxl__ev_time_deregister (gc=0x7f01a7426420, ev=0x70f860)
+    at libxl_event.c:375
+#4  0x00007f01a0ad0cec in libxl__ev_devstate_cancel (ds=<optimized out>,
+    gc=<optimized out>) at libxl_internal.h:1006
+#5  devstate_watch_callback (egc=0x7f01a7426420, watch=0x70f848,
+    watch_path=<optimized out>, event_path=<optimized out>)
+    at libxl_event.c:651
+#6  0x00007f01a0acf9cb in watchfd_callback (egc=0x7f01a7426420,
+    ev=<optimized out>, fd=<optimized out>, events=<optimized out>,
+    revents=<optimized out>) at libxl_event.c:504
+#7  0x00007f01a0aceffd in afterpoll_internal (egc=0x7f01a7426420,
+    poller=0x71c690, nfds=2, fds=0x7f0198000de0, now=...) at libxl_event.c:995
+#8  0x00007f01a0acfbc7 in eventloop_iteration (egc=0x7f01a7426420,
+    poller=0x71c690) at libxl_event.c:1440
+#9  0x00007f01a0ad00ea in libxl__ao_inprogress (ao=0x70d190,
+    file=<optimized out>, line=<optimized out>, func=<optimized out>)
+    at libxl_event.c:1685
+#10 0x00007f01a0ab62f7 in do_domain_create (ctx=<optimized out>,
+    d_config=<optimized out>, domid=0x7f01a742662c, restore_fd=1,
+    ao_how=<optimized out>, aop_console_how=0x0) at libxl_create.c:1209
+#11 0x00007f01a0ab66a4 in libxl_domain_create_new (ctx=0x2cafe0044,
+    d_config=0x7f0198001b90, domid=0x0, ao_how=<optimized out>,
+    aop_console_how=<optimized out>) at libxl_create.c:1230
+2), mutex is invalid:
+(gdb) p *mutex
+Cannot access memory at address 0x2cafe0044
+3), 但是xenlight里面的代码对应不上. 装的有问题???
+重新build一下libvirt. 
+Program received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7fe6500b6700 (LWP 15508)]    
+__pthread_mutex_lock (mutex=0x2cafe0044) at pthread_mutex_lock.c:50
+50        unsigned int type = PTHREAD_MUTEX_TYPE (mutex);          
+(gdb) where                                                        
+#0  __pthread_mutex_lock (mutex=0x2cafe0044) at pthread_mutex_lock.c:50
+#1  0x00007fe64999044f in libxlTimeoutModifyEventHook (priv=<optimized out>,
+    hndp=0x7fe640003ca0, abs_t=...) at libxl/libxl_driver.c:370
+#2  0x00007fe64975f2f0 in time_deregister (ev=<optimized out>,
+    gc=<optimized out>) at libxl_event.c:294
+#3  libxl__ev_time_deregister (gc=0x7fe6500b5420, ev=0x7fe640002c70)
+    at libxl_event.c:375
+#4  0x00007fe64975fcec in libxl__ev_devstate_cancel (ds=<optimized out>,
+    gc=<optimized out>) at libxl_internal.h:1006
+#5  devstate_watch_callback (egc=0x7fe6500b5420, watch=0x7fe640002c58,
+    watch_path=<optimized out>, event_path=<optimized out>)
+    at libxl_event.c:651
+#6  0x00007fe64975e9cb in watchfd_callback (egc=0x7fe6500b5420,
+    ev=<optimized out>, fd=<optimized out>, events=<optimized out>,
+    revents=<optimized out>) at libxl_event.c:504
+#7  0x00007fe64975dffd in afterpoll_internal (egc=0x7fe6500b5420,
+    poller=0x7fe640001030, nfds=2, fds=0x7fe640004250, now=...)
+    at libxl_event.c:995
+#8  0x00007fe64975ebc7 in eventloop_iteration (egc=0x7fe6500b5420,
+    poller=0x7fe640001030) at libxl_event.c:1440
+#9  0x00007fe64975f0ea in libxl__ao_inprogress (ao=0x7fe6400012a0,
+    file=<optimized out>, line=<optimized out>, func=<optimized out>)
+    at libxl_event.c:1685
+#10 0x00007fe6497452f7 in do_domain_create (ctx=<optimized out>,
+    d_config=<optimized out>, domid=0x7fe6500b562c, restore_fd=1,
+    ao_how=<optimized out>, aop_console_how=0x0) at libxl_create.c:1209
+#11 0x00007fe6497456a4 in libxl_domain_create_new (ctx=0x2cafe0044,
+    d_config=0x7fe640003ca0, domid=0x0, ao_how=<optimized out>,
+    aop_console_how=<optimized out>) at libxl_create.c:1230
+#12 0x00007fe64998f0d1 in libxlVmStart (driver=0x6ea4d0, vm=0x717f20,
+    start_paused=false, restore_fd=-1) at libxl/libxl_driver.c:936
+搞了半天是代码没有切过来. 我编译的代码并不是Jim最新的patch. 
+晚上细看. 
+
+15:05 2013-01-17
+mailing list, virtualization, xen, enable xl command on arm; cpufreq on AMD cpu
+1, enable xl(create) on arm.
+"Stefano Stabellini"_email_"[Xen-devel] [PATCH 0/4] xen/arm: compile and run xl"_20130114
+http://lists.xen.org/archives/html/xen-devel/2013-01/msg00869.html
+
+2, about the cpufreq on AMD cpu
+1), "Matt Wilson"_email_"Re: [Xen-devel] kernel 3.7+ cpufreq regression on AMD system running as dom0"_20130115
+The correct values should be returned already via rdmsr if
+"cpureq=dom0-kernel" is specified on the Xen command line. Looking at
+the LP report, it doesn't seem that this option was used.
+
+Likely you will also need to use "dom0_vcpu_pin=1" if you want dom0 to
+be the cpufreq controller on AMD.
+
+3, xen meeting minutes
+Xen Maintainer, Committer and Developer Meeting/January 2013 Minutes
+http://wiki.xen.org/wiki/Xen_Maintainer,_Committer_and_Developer_Meeting/January_2013_Minutes
+
+4, GSOC 2013
+Xen Development Projects
+This page lists various Xen related development projects that can be picked up by anyone! If you're interesting in hacking Xen this is the place to start! Ready for the challenge? 
+http://wiki.xen.org/wiki/Xen_Development_Projects
+
+10:47 2013-01-18
+GTD
+0, 10:40-11:54 13:45-18:45
+
+1, today
+1), 10:51-11:50 13:45- test Jim patch for libxl xen4.2 bug. see"10:51 2013-01-18".
+4), there is another version of patch in libvirt upstream. check it later.
 
 2, daily work
 1), tracking xen-arm update.
@@ -826,53 +1053,20 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-10:36 2013-01-16
-virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont16, debug and test with Jim lastest patch, cont2
-1, test Jim lastest patch on 15, Jan.
-2, patch the patch
-1), 不知道我上次说的deregister时指针问题Jim有没有改, 先假设不改, 一边编译一边看看.
-2), patch after 26234:bc624b00d6d6 to 35a0556a7f76.
-3,
-1), libvirt libxl: 测试HVM和PV, 都是malloc出错.
-2), xl fail too:
-linux-work:/var/lib/xen/images_2/bjz_04_sles11_sp2 # xl create bjz_04_sles11_sp2.orig
-Parsing config from bjz_04_sles11_sp2.orig
-WARNING: ignoring "kernel" directive for HVM guest. Use "firmware_override" instead if you really want a non-default firmware
-WARNING: ignoring device_model directive.
-WARNING: Use "device_model_override" instead if you really want a non-default device_model
-libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
+10:51 2013-01-18
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont16, debug and test with Jim lastest patch, cont4
+1, plan
+1), 不更新libvirt和xen的upstream, 看看有无问题. 如果有问题就是upstream update问题, 暂时忽略.
+2), 昨天的问题应该是我阅读的代码没有加入Ian和Jim的第一版patch. 加入后分析.
+2, 和Chunyan讨论这个问题. 其实chunyan说的没错阿, 为什么会多一次传输呢? 应该是有原因的, 有空问问jim.
+3, 阅读Jim的patch
+1), reference count是不是让libxl自己维护比较好, 为什么libvirt要帮忙做这个事情呢.
+4, talk with Jim:
+Today I've been testing on libvirt master
+The tip of my xen tree is commit e7c5674950f0496523dbb5cc46e9c53d199c79ee
+commit e7c5674950f0496523dbb5cc46e9c53d199c79ee
+Author: Dongxiao Xu <dongxiao.xu@intel.com>
+Date:   Wed Dec 12 10:47:18 2012 +0100
+5, so, try to test it on this version.
+the changeset of Jim is 26275:74d4a6cc5392.
 
-libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
-
-libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
-
-failed to free memory for the domain
-linux-work:/var/lib/xen/images_2/bjz_04_sles11_sp2 # cd ../sles11_sp2_pv
-linux-work:/var/lib/xen/images_2/sles11_sp2_pv # ls
-disk0.raw      sles11_sp2_pv.xml   sles11_sp2_pv.xml.bak.chunyan
-sles11_sp2_pv  sles11_sp2_pv.xml~
-linux-work:/var/lib/xen/images_2/sles11_sp2_pv # xl create sles11_sp2_pv
-Parsing config from sles11_sp2_pv
-libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
-
-libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
-
-libxl: error: libxl.c:3657:libxl_set_memory_target: new target 0 for dom0 is below the minimum threshold
-
-failed to free memory for the domain
-
-15:06 2013-01-16
-opensuse, factroy, 12.3, roadmap, installation
-1, opensuse portal factory
-http://en.opensuse.org/Portal:Factory
-2, opensuse 12.3 factory milestone 2 download:
-http://software.opensuse.org/developer/en
-3, openSUSE:Factory_installation 
-http://en.opensuse.org/openSUSE:Factory_installation
-4, openSUSE:Roadmap
-http://en.opensuse.org/openSUSE:Roadmap
-
-11:37 2013-1-17
-hi
-
-yestoday, i test your patch with upstream libvirt and xen. but i got no enough memory 
