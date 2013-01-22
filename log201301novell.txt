@@ -1109,3 +1109,105 @@ virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont17, debug vir
 1, figure out why virsh got event after libxl think its done. 
 2, read all the mail for this bug.
 
+13:31 2013-01-22
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont18, Jim lastest comment
+1, Jim_email_20130122
+Ian Campbell wrote:
+> On Mon, 2012-12-10 at 16:56 +0000, Ian Jackson wrote:
+>   
+>> Ian Jackson writes ("Re: [PATCH] fix race condition between libvirtd event handling and libxl fd deregister"):
+>>     
+>>> I'm not surprised that the original patch makes Bamvor's symptoms go
+>>> away.  Bamvor had one of the possible races (the fd-related one) but
+>>> not the other.
+>>>       
+>> Here (followups to this message, shortly) is v3 of my two-patch series
+>> which after conversation with Ian C I think fully fixes the race, and
+>> which I have tested now.
+>>     
+>
+> Is this version now tested and ready to be applied?
+>   
+
+I have done quite a bit of successful testing with this version and a
+libvirt patch series [1] that fixes several races and bugs in the libxl
+driver.  So from my perspective, ACK to these patches, assuming my last
+comment on patch 2 [2] is addressed.
+
+[1] https://www.redhat.com/archives/libvir-list/2013-January/msg01463.html
+[2] http://lists.xen.org/archives/html/xen-devel/2012-12/msg00937.html
+
+Thanks for all the help with resolving these races!
+
+16:19 2013-01-22
+how to build rpm package in local directory
+1, Lance Wang(by study how quilt works)
+--define="_sourcedir $PWD" --define="_specdir $PWD" --define="_builddir $PWD"
+e.g.
+rpmbuild --define="_sourcedir $PWD" --define="_specdir $PWD" -bb libvirt.spec
+bamvor: 这里用--define的方式定义rpm build使用的宏.
+2, Dongmao Zhang
+http://147.2.207.240/~dmzhang/tips.html
+localbuild的脚本
+
+rpmbuild要求spec文件，src文件在/usr/src下，比较麻烦，下面的脚本做一个软链接，在任何源文件下都可以做rpmbuild了
+
+用法:
+
+localbuild -bb file.spec
+
+代码:
+
+#!/bin/bash
+#check local build system
+check_build_fs()
+{
+    #exclude SOURCES
+    for dir in ~/rpmbuild/{BUILD,RPMS,SPECS,SRPMS}
+    do
+        if [[ ! -d $dir ]]
+        then
+            echo "$dir not exsit"
+            echo "mkdir -p $dir"
+            mkdir -p $dir
+        fi
+    done
+}
+
+check_rpm_macro()
+{
+    echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
+}
+
+mount_current_diretory()
+{
+    src=~/rpmbuild/SOURCES
+    if test -d $src -a -h $src
+    then
+        echo "delete previous link"
+        rm $src
+    elif test -f $src
+    then
+        echo "delete previous file"
+        rm $src
+    elif test -d $src
+    then
+        echo "$src is not a symlink,quit.."
+        exit
+    fi
+
+    echo "create link $src"
+    ln -s `pwd` $src
+}
+
+check_build_fs
+check_rpm_macro
+mount_current_diretory
+args=$*
+rpmbuild $args
+1), bamvor亮点
+(1), 在~/.rpmmacros定义macro, 供rpmbuild使用.
+    echo '%_topdir %(echo $HOME)/rpmbuild' > ~/.rpmmacros
+(2), 用软链接link包到/usr/src目录.
+    ln -s `pwd` $src
+
