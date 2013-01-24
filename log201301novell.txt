@@ -1144,7 +1144,7 @@ rpmbuild $args
     ln -s `pwd` $src
 
 11:28 2013-01-23
-test with Jim version of xen. libvirt
+test with Jim version patch, but apply to xen-unstable. libvirt upstream
 1, pv
 Program received signal SIGSEGV, Segmentation fault.
 [Switching to Thread 0x7f09a5980700 (LWP 9173)]     
@@ -1285,6 +1285,28 @@ GTD
 1, today
 1), 15:53- for libxl xen4.2 bug, figure out why virsh got event after libxl think its done. see"12:50 2013-01-23".
 2), 17:07- write code for libxl qmp. see"17:15 2013-01-23"
+3), Summary: 今天仅仅工作了两个小时. 我现在完全是通过把自己搞的状态不好, 然后"被动的"降低了工作效率. 
+
+17:15 2013-01-23
+(11:05 2013-01-24)
+virtualization, libvirt, xenlight, add libxl api, cont3, domainBlockStats, cont3, qemu, QMP, add qmp in libxl, cont2
+1, how to add a command to xl?
+1), def_getopt: call getopt
+2, block stats需要加device名称, 通过libxl_block_stats.devname传递.
+3, finish coding(only alpha version). compile on linux-vm4
+build.sh ./configure --enable-xenapi --prefix=/usr --exec_prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --libdir=/usr/lib64 --datadir=/usr/share
+4, compile pass but encounter error(it is what i expert):
+linux-vm4:/var/lib/xen/images_2/bjz_04_sles11_sp2 # xl block-info 1 xvda
+libxl: error: libxl_qmp.c:780:libxl__qmp_initialize: Connection error: No such file or directory
+xvda  139765835149736 60       4290491  0        316823510656 6441104  6445104  140735538628000
+
+10:29 2013-01-24
+GTD
+0, 10:20-13:00 13:53-18:21
+
+1, today
+1), 10:30 for libxl xen4.2 bug, figure out why virsh got event after libxl think its done. see"10:41 2013-01-24".
+2), write code for libxl qmp. see"17:15 2013-01-23"
 
 2, daily work
 1), tracking xen-arm update.
@@ -1353,8 +1375,95 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-17:15 2013-01-23
-1, how to add a command to xl?
-1), def_getopt: call getopt
-2, block stats需要加device名称, 通过libxl_block_stats.devname传递.
+10:41 2013-01-24
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont19, test with Jim instruction
+1, read mail about Ian Jackson and Jim. the patch in libxl has been acked.
+2, 感觉搞不清到底这些patch都是怎么搞的, 试一试, 如果不行我还是接着写自己的qmp了.
+3, test with xen4.2.1 and libvirt upstream. virsh start, destroy, shutdown successful.
+4, talk with Jim, Jim explain to me why it is indeed a race:
+novell/im/NM20130124_Jim_Fehlig__discuss_about_libxl_xen4.2_race_condition.txt
+
+15:42 2013-01-24
+virtualization, xen, pci passthrough
+1, http://wiki.xen.org/wiki/Xen_PCI_Passthrough
+Xen PCI Passthrough
+
+PCI passthrough allows you to give control of physical devices to guests: that is, you can use PCI passthrough to assign a PCI device (NIC, disk controller, HBA, USB controller, firewire controller, soundcard, etc) to a virtual machine guest, giving it full and direct access to the PCI device.
+
+This has several potential uses, including the following:
+
+    One of the major overheads of virtual networking is the unavoidable overhead of copying; passing through a network card directly completely avoids this overhead.
+    Passing through graphics cards to guests allows them full access to the 3D acceleration capabilities. This can be useful not only for desktops, but also to enable Virtual Desktops for high-end CAD users, for example.
+    You can set up a Driver Domain, which can increase both security and reliability of your system. 
+2, 
+http://wiki.xen.org/wiki/Driver_Domain
+Xen Driver Domain
+
+A driver domain is unprivileged Xen domain that has been given responsibility for a particular piece of hardware. It runs a minimal kernel with only that hardware driver and the backend driver for that device class. Thus, if the hardware driver fails, the other domains (including Dom0) will survive and, when the driver domain is restarted, will be able to use the hardware again. 
+
+Setup
+
+Software requirements of the driver domain:
+
+    The passthroughed hardware driver.
+    The backend driver.
+    The hotplug scripts. 
+
+To start using the driver domain as block device backend:
+# xm block-attach <Domain> file:/disks/disk1.img xvdc w <DriverDomain>
+
+The xenstore entries looks like:
+
+...
+/local/domain/3/backend/vbd/4/51744=""
+/local/domain/3/backend/vbd/4/51744/domain="OVM_EL5U3_X86_PVM_4GB"
+/local/domain/3/backend/vbd/4/51744/frontend="/local/domain/4/device/vbd/51744"
+/local/domain/3/backend/vbd/4/51744/uuid="1c955e9d-c6a8-dcee-dfb2-fcbe1e836479"
+/local/domain/3/backend/vbd/4/51744/bootable="0"
+/local/domain/3/backend/vbd/4/51744/dev="xvdc"
+/local/domain/3/backend/vbd/4/51744/state="1"
+/local/domain/3/backend/vbd/4/51744/params="/share/vm/disks/disk18.img"
+/local/domain/3/backend/vbd/4/51744/mode="w"
+/local/domain/3/backend/vbd/4/51744/online="1"
+/local/domain/3/backend/vbd/4/51744/frontend-id="4"
+/local/domain/3/backend/vbd/4/51744/type="file"
+/local/domain/3/backend/vbd/4/51744/node="/dev/loop0"
+/local/domain/3/backend/vbd/4/51744/physical-device="7:0"
+/local/domain/3/backend/vbd/4/51744/hotplug-status="connected
+...
+/local/domain/4/device/vbd/51744=""
+/local/domain/4/device/vbd/51744/virtual-device="51744"
+/local/domain/4/device/vbd/51744/device-type="disk"
+/local/domain/4/device/vbd/51744/protocol="x86_32-abi"
+/local/domain/4/device/vbd/51744/backend-id="3"
+/local/domain/4/device/vbd/51744/state="3"
+/local/domain/4/device/vbd/51744/backend="/local/domain/3/backend/vbd/4/51744"
+/local/domain/4/device/vbd/51744/ring-ref="836"
+/local/domain/4/device/vbd/51744/event-channel="11"
+
+16:25 2013-01-24
+virtualization, cloud, redhat, Emerging Technologies
+http://et.redhat.com/
+An assortment of projects developing new open source technology related to virtualization and the cloud.
+1, Virtualization Technologies: KVM, libvirt, virt-manager.
+libguestfs
+    libguestfs is a set of tools for accessing and modifying virtual machine (VM) disk images. You can use this for viewing and editing files inside guests, scripting changes to VMs, monitoring disk used/free statistics, P2V, V2V, performing partial backups, cloning VMs, and much else besides.
+Spice
+    The Spice project aims to provide a complete open source solution for interaction with virtualized desktop devices. The main project focus is to provide high-quality remote access for KVM hosted virtual machines. Seeking to help break down the barriers to virtualization adoption by overcoming traditional desktop virtualization challenges, emphasizing user experience.
+Matahari
+    Matahari provides an extensible QPid QMF agent framework, along with a set of schemas for managing physical or virtual hosts
+oVirt
+    A community project for virtualization infrastructure & management providing a small node through to a fully featured vitualization management platform
+
+2, Cloud Technologies 
+Deltacloud
+    an API that abstracts the differences between clouds. Deltacloud protects your apps from cloud API changes and incompatibilities, so you can concentrate on managing cloud instances the way you want. 
+Katello
+    Katello helps take control of your software and your systems in an easy-to-use and scalable manner. Offering a modern web user interface and API, Katello can pull content from remote repositories into isolated environments, make subscriptions management easier and provide provisioning at scale.
+
+3, Other Technologies
+Augeas
+    Augeas is a configuration editing tool. It parses configuration files in their native formats and transforms them into a tree. Configuration changes are made by manipulating this tree and saving it back into native config files.
+FreeIPA
+    FreeIPA is an integrated security information management solution combining Linux (Fedora), 389 (formerly known as Fedora Directory Server), MIT Kerberos, NTP, DNS. It consists of a web interface and command-line administration tools.
 
