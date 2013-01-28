@@ -1299,6 +1299,46 @@ build.sh ./configure --enable-xenapi --prefix=/usr --exec_prefix=/usr --bindir=/
 linux-vm4:/var/lib/xen/images_2/bjz_04_sles11_sp2 # xl block-info 1 xvda
 libxl: error: libxl_qmp.c:780:libxl__qmp_initialize: Connection error: No such file or directory
 xvda  139765835149736 60       4290491  0        316823510656 6441104  6445104  140735538628000
+5, (16:39 2013-01-28)
+it is timeout at connect. the libxl__qmu_handler is 
+(gdb) p *(libxl__qmp_handler *) 0x625990
+$4 = {addr = {sun_family = 1,
+    sun_path = "/var/run/xen/qmp-libxl-2", '\000' <repeats 83 times>},
+  qmp_fd = 12, connected = false, timeout = 5, wait_for_id = 0,
+  buffer = '\000' <repeats 4095 times>, yajl_ctx = 0x0, ctx = 0x625050,
+  domid = 2, last_id_used = 0, callback_list = {stqh_first = 0x0,
+    stqh_last = 0x626a30}}
+but the sun_path "/var/run/xen/qmp-libxl-2" does not exist. i need to find out where it come from.
+
+6, in xl create a hvm vm, libxl__qmp_initializations is not called. it is exist while pv create.
+linux-vm4:/var/run/xen # file qmp-libxl-4
+qmp-libxl-4: socket
+1), some qmp value in qmp_next, still do not know the meaning in buffer.
+(gdb) p *qmp
+$2 = {addr = {sun_family = 1,
+    sun_path = "/var/run/xen/qmp-libxl-5", '\000' <repeats 83 times>},
+  qmp_fd = 12, connected = true, timeout = 5, wait_for_id = 2,
+  buffer = "{\"return\": {}, \"id\": 1}\r\nu\": {\"micro\": 0, \"minor\": 3, \"m
+ajor\": 1}, \"package\": \"\"}, \"capabilities\": []}}\r\n", '\000' <repeats 399
+0 times>, yajl_ctx = 0x0, ctx = 0x625050, domid = 5, last_id_used = 2,
+  callback_list = {stqh_first = 0x625930, stqh_last = 0x625950}}
+
+(gdb) p *qmp
+$5 = {addr = {sun_family = 1,
+    sun_path = "/var/run/xen/qmp-libxl-5", '\000' <repeats 83 times>},
+  qmp_fd = 12, connected = true, timeout = 5, wait_for_id = 2,
+  buffer = "{\"return\": [{\"device\": \"ide1-cd0\", \"stats\": {\"flush_total_t
+ime_ns\": 0, \"wr_highest_offset\": 0, \"wr_total_time_ns\": 0, \"wr_bytes\": 0,
+ \"rd_total_time_ns\": 0, \"flush_operations\": 0, \"wr_operations\": 0, \""...,
+ yajl_ctx = 0x0, ctx = 0x625050, domid = 5, last_id_used = 2, callback_list = {
+    stqh_first = 0x625930, stqh_last = 0x625950}}
+2), i could get qmp response in qmp->buffer in qmp_next.
+3), the device name is not match. maybe there is a look-up table for device name translation?
+ide1-cd0
+floppy0
+sd0
+if i direct pass the name above, i could get the integer, but the number seems wrong.
+
 
 10:29 2013-01-24
 GTD
@@ -1307,73 +1347,6 @@ GTD
 1, today
 1), 10:30 for libxl xen4.2 bug, figure out why virsh got event after libxl think its done. see"10:41 2013-01-24".
 2), write code for libxl qmp. see"17:15 2013-01-23"
-
-2, daily work
-1), tracking xen-arm update.
-2), read libvirt and xen-devel quickly, should less that 30minutes.
-3), read linux news
-http://www.linux.com/
-http://www.phoronix.com/scan.php?page=home
-
-3, week plan
-1), test Jim lastest Patch.
-2), send console patch to upstream.
-3), finish libxl block status and relative functions.
-
-4, next
-4), read jim patch on libvirt and xen.
-3), debug libvirt libxl console. see"16:50 2013-01-04"
-1), send xen libexec patch.
-1), test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
-3), re-read all the patch about libxl xen4.2.
-1), got arm technical symposia pdf.
-2), libvirt blkstats:
-(1), add block stats in libxl_qmp.c, add cmd in xl.
-(2), add patch in libvirt, send it to Jim. if the former patch only accept by xen-unstable not xen4.2-testing. i could not send patch to libvirt upstream.
-3), try xen on kvm.
-4), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个.
-
-3, next week
-1), work on lock patch.
-2), try to build MK802 kernel on obs. speed up. i want it work on opensuse12.3
-2), read kernel doc: "10:36 2012-11-23"
-1), read code for patch. see"10:25 2012-11-23"2-2)-(2).
-2), after "1)" finish. try xen on kvm.
-3), read the mail on "Andrew Wafaa <awafaa@opensuse.org>"_email_"[opensuse-arm] Fwd: [fedora-arm] ARMv8 Bootstrap Project"_20121122
-3), work on xen on ARM. ref"22:33 2012-11-19"
-4), check the error from "10:18 2012-11-15"2
-2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
-5), ask jim to invite me to xen irc.
-
-3, next next
-1), gsoc: "22:23 2012-11-17"
-1), notes about Huawei from eet-china.
-2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425
-
-2, next
-1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
-2), test attach-disk command. see"10:41 2012-10-30"2
-3), maybe libxl and qemu could communicate with qemu through xenstore?
-
-libxl_dm.c:
-        /* Find uuid and the write the vnc password to xenstore for qemu. */
-        t = xs_transaction_start(ctx->xsh);
-        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
-        if (vm_path) {
-            /* Now write the vncpassword into it. */
-            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
-            pass_stuff[0] = "vncpasswd";
-            pass_stuff[1] = info->vncpasswd;
-            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
-
-3, for Jim
-1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1).
-
-4, next month
-1), opensuse on MK802
-(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run.
-(2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
-2), try armv8 emulator and read armv8 kernel code.
 
 10:41 2013-01-24
 virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont19, test with Jim instruction
@@ -1488,4 +1461,92 @@ GTD
 
 1, today
 1), 9:00-9:40 US/China Sync meeing. see"9:00 2013-1-25"
+
+11:17 2013-01-28
+GTD
+0, 11:0-11:40 13:00-18:22
+
+1, today
+1), 30' reconsider my work and others.
+2), 14:40-15:00 work report. see"14:40 2013-01-28"
+3), 15:20-16:30 test Jim patch for libxl xen4.2 bug. see"15:37 2013-01-28".
+4), 1h write code for libxl qmp. see"17:15 2013-01-23"5.
+
+2, daily work
+1), tracking xen-arm update.
+2), read libvirt and xen-devel quickly, should less that 30minutes.
+3), read linux news
+http://www.linux.com/
+http://www.phoronix.com/scan.php?page=home
+
+3, week plan
+1), test Jim lastest Patch.
+2), send console patch to upstream.
+3), finish libxl block status and relative functions.
+
+4, next
+1), for libxl xen4.2 bug, figure out why virsh got event after libxl think its done. see"10:41 2013-01-24".
+2), write code for libxl qmp. see"17:15 2013-01-23"
+4), read jim patch on libvirt and xen.
+3), debug libvirt libxl console. see"16:50 2013-01-04"
+1), send xen libexec patch.
+1), test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
+3), re-read all the patch about libxl xen4.2.
+1), got arm technical symposia pdf.
+2), libvirt blkstats:
+(1), add block stats in libxl_qmp.c, add cmd in xl.
+(2), add patch in libvirt, send it to Jim. if the former patch only accept by xen-unstable not xen4.2-testing. i could not send patch to libvirt upstream.
+3), try xen on kvm.
+4), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个.
+
+3, next week
+1), work on lock patch.
+2), try to build MK802 kernel on obs. speed up. i want it work on opensuse12.3
+2), read kernel doc: "10:36 2012-11-23"
+1), read code for patch. see"10:25 2012-11-23"2-2)-(2).
+2), after "1)" finish. try xen on kvm.
+3), read the mail on "Andrew Wafaa <awafaa@opensuse.org>"_email_"[opensuse-arm] Fwd: [fedora-arm] ARMv8 Bootstrap Project"_20121122
+3), work on xen on ARM. ref"22:33 2012-11-19"
+4), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+5), ask jim to invite me to xen irc.
+
+3, next next
+1), gsoc: "22:23 2012-11-17"
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c:
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1).
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run.
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
+2), try armv8 emulator and read armv8 kernel code.
+
+14:40 2013-01-28
+work report - week 03, 04
+1, [devel-server] work report - week 03, 04
+1), working on libxl xen4.2 support with Jim.
+Jim release his lastest patch, i finally got successful in xen4.2.1 and libvirt upstream. will test it on xen-unstable with lastest patch Jim sent last Friday.
+2), write code for block status qmp command in xenlight.
+
+15:37 2013-01-28
 
