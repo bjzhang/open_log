@@ -1,0 +1,64 @@
+From 889ce7460c706a8528bce444827261b288280490 Mon Sep 17 00:00:00 2001
+From: Jim Fehlig <jfehlig@suse.com>
+Date: Mon, 21 Jan 2013 10:22:07 -0700
+Subject: [PATCH 3/6] libxl: Fix race between destruction of objects
+
+It is possible to destroy and cleanup a VM, resulting in freeing the
+libxlDomainObjPrivate object and associated libxl ctx, before all fds and
+timeouts have been deregistered and destroyed.
+
+Fix this race by incrementing the reference count on libxlDomainObjPrivate
+for each fd and timeout registration.  Only when all fds and timeouts are
+deregistered and destroyed will the libxlDomainObjPrivate be destroyed.
+---
+ src/libxl/libxl_driver.c | 20 +++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index a34be51..b4cbddd 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -111,7 +111,11 @@ libxlDriverUnlock(libxlDriverPrivatePtr driver)
+ static void
+ libxlEventHookInfoFree(void *obj)
+ {
+-    VIR_FREE(obj);
++    libxlEventHookInfoPtr info = obj;
++
++    /* Drop reference on libxlDomainObjPrivate */
++    virObjectUnref(info->priv);
++    VIR_FREE(info);
+ }
+ 
+ static void
+@@ -161,6 +165,13 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+     }
+ 
+     info->priv = priv;
++    /*
++     * Take a reference on the domain object.  Reference is dropped in
++     * libxlEventHookInfoFree, ensuring the domain object outlives the fd
++     * event objects.
++     */
++    virObjectRef(info->priv);
++
+     info->xl_priv = xl_priv;
+     *hndp = info;
+ 
+@@ -257,6 +268,13 @@ libxlTimeoutRegisterEventHook(void *priv,
+     }
+ 
+     info->priv = priv;
++    /*
++     * Also take a reference on the domain object.  Reference is dropped in
++     * libxlEventHookInfoFree, ensuring the domain object outlives the timeout
++     * event objects.
++     */
++    virObjectRef(info->priv);
++
+     info->xl_priv = xl_priv;
+     *hndp = info;
+ 
+-- 
+1.7.12
+

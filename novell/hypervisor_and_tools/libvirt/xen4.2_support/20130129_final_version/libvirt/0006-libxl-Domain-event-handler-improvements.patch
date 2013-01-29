@@ -1,0 +1,77 @@
+From 702911496fd7be9b90988828807e72573d0e9c22 Mon Sep 17 00:00:00 2001
+From: Jim Fehlig <jfehlig@suse.com>
+Date: Mon, 21 Jan 2013 10:36:03 -0700
+Subject: [PATCH 6/6] libxl: Domain event handler improvements
+
+Since libxl provides the domain ID in the event handler callback,
+find the domain object based on the ID.  This approach prevents
+processing the callback on a domain that has already been reaped.
+
+Also, similar to the xl implementation, ignore the SUSPEND shutdown
+reason.  By calling libxl_domain_suspend(), we know a shutdown
+event with SUSPEND reason will be generated, but it can be safely
+ignored since any subsequent cleanup will be done by the callers.
+---
+ src/libxl/libxl_driver.c | 28 ++++++++++++++++++----------
+ 1 file changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 95f90ef..c898753 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -666,26 +666,34 @@ libxlVmReap(libxlDriverPrivatePtr driver,
+  * Handle previously registered event notification from libxenlight
+  */
+ static void
+-libxlEventHandler(void *data, const libxl_event *event)
++libxlEventHandler(void *data ATTRIBUTE_UNUSED, const libxl_event *event)
+ {
+     libxlDriverPrivatePtr driver = libxl_driver;
+-    virDomainObjPtr vm = data;
++    virDomainObjPtr vm = NULL;
+     virDomainEventPtr dom_event = NULL;
+-
+-    libxlDriverLock(driver);
+-    virObjectLock(vm);
+-    libxlDriverUnlock(driver);
++    libxl_shutdown_reason xl_reason = event->u.domain_shutdown.shutdown_reason;
+ 
+     if (event->type == LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN) {
+         virDomainShutoffReason reason;
+ 
+-        if (event->domid != vm->def->id)
++        /*
++         * Similar to the xl implementation, ignore SUSPEND.  Any actions needed
++         * after calling libxl_domain_suspend() are handled by it's callers.
++         */
++        if (xl_reason == LIBXL_SHUTDOWN_REASON_SUSPEND)
++            goto cleanup;
++
++        libxlDriverLock(driver);
++        vm = virDomainFindByID(&driver->domains, event->domid);
++        libxlDriverUnlock(driver);
++
++        if (!vm)
+             goto cleanup;
+ 
+-        switch (event->u.domain_shutdown.shutdown_reason) {
++        switch (xl_reason) {
+             case LIBXL_SHUTDOWN_REASON_POWEROFF:
+             case LIBXL_SHUTDOWN_REASON_CRASH:
+-                if (event->u.domain_shutdown.shutdown_reason == LIBXL_SHUTDOWN_REASON_CRASH) {
++                if (xl_reason == LIBXL_SHUTDOWN_REASON_CRASH) {
+                     dom_event = virDomainEventNewFromObj(vm,
+                                               VIR_DOMAIN_EVENT_STOPPED,
+                                               VIR_DOMAIN_EVENT_STOPPED_CRASHED);
+@@ -704,7 +712,7 @@ libxlEventHandler(void *data, const libxl_event *event)
+                 libxlVmStart(driver, vm, 0, -1);
+                 break;
+             default:
+-                VIR_INFO("Unhandled shutdown_reason %d", event->u.domain_shutdown.shutdown_reason);
++                VIR_INFO("Unhandled shutdown_reason %d", xl_reason);
+                 break;
+         }
+     }
+-- 
+1.7.12
+
