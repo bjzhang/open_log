@@ -72,12 +72,14 @@ echo "domain_xml is $domain_xml; domain_name is $domain_name"
 #test_ret $?
 
 for i in `seq 100`; do
+    date
     echo "test $i times"
     echo "test libxlDoDomainSave: save"
     virsh save $domain_name ${domain_name}.save
     test_ret $?
     sleep 1
 
+    date
     echo "test libxlDomainRestoreFlags: restore"
     virsh restore ${domain_name}.save 
     test_ret $?
