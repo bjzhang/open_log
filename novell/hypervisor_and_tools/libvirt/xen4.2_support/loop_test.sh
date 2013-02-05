@@ -40,7 +40,7 @@ reboot_or_shutdown()
     virsh $action $domain_name
     echo -n "wait for $domain_name $domain_id ${action}ing"
     while true; do 
-        virsh list | grep $domain_name | grep $domain_id 2>&1 > /dev/null || break
+        virsh list | grep $domain_name | grep "^\ *$domain_id" 2>&1 > /dev/null || break
         echo -n "."
         sleep 2
     done

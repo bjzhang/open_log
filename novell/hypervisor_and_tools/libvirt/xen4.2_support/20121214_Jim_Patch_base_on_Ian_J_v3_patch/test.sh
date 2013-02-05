@@ -10,10 +10,8 @@ test_ret()
     fi
 }
 
-reboot_or_shutdown()
+wait_started()
 {
-    action=$1
-
     domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
     echo domain id is $domain_id 
     echo "waiting domain started"
@@ -30,6 +28,14 @@ reboot_or_shutdown()
         last_cpu_time=$cpu_time
         sleep 2
     done
+}
+
+reboot_or_shutdown()
+{
+    action=$1
+
+    domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
+    wait_started
     echo "$action $domain_name"
     virsh $action $domain_name
     echo -n "wait for $domain_name $domain_id ${action}ing"
