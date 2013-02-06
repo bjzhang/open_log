@@ -16,7 +16,7 @@ wait_started()
     echo domain id is $domain_id 
     echo "waiting domain started"
     last_cpu_time=`virsh dominfo $domain_name | grep "CPU time" | cut -d : -f 2 | sed s/^\ *//`
-    sleep 1
+    sleep 2
     echo -n "cpu time is "
     while true; do
         cpu_time=`virsh dominfo $domain_name | grep "CPU time" | cut -d : -f 2 | sed s/^\ *//`
@@ -26,7 +26,7 @@ wait_started()
             break 
         fi
         last_cpu_time=$cpu_time
-        sleep 2
+        sleep 4
     done
 }
 
@@ -64,79 +64,86 @@ domain_xml=$1
 domain_name=`cat $domain_xml | grep "<name>" | sed "s/<name>\(.*\)<\/name>/\1/" | sed "s/^\ *//"`
 echo "domain_xml is $domain_xml; domain_name is $domain_name"
 
-echo "test libxlDomainCreateWithFlags: start"
-virsh define $domain_xml
-virsh start $domain_name
-virsh list | grep $domain_name -w 
-test_ret $?
+for i in `seq 100`; do
+    date
+    echo "test $i times"
+    echo "test libxlDomainCreateWithFlags: start"
+    virsh define $domain_xml
+    virsh start $domain_name
+    virsh list | grep $domain_name -w 
+    test_ret $?
 
-virsh destroy $domain_name
-sleep 1
+    virsh destroy $domain_name
+    sleep 1
 
-echo "test libxlDomainCreateXML: create"
-virsh create $domain_xml
-virsh list | grep $domain_name -w
-test_ret $?
-sleep 1
+    echo "test libxlDomainCreateXML: create"
+    virsh create $domain_xml
+    virsh list | grep $domain_name -w
+    test_ret $?
+    sleep 1
 
-echo "test libxlDomainSuspend: suspend"
-virsh suspend $domain_name
-virsh list | grep $domain_name -w | grep paused -w
-test_ret $?
-sleep 1
+    echo "test libxlDomainSuspend: suspend"
+    virsh suspend $domain_name
+    virsh list | grep $domain_name -w | grep paused -w
+    test_ret $?
+    sleep 1
 
-echo "test libxlDomainResume: resume"
-virsh resume $domain_name
-virsh list | grep $domain_name -w | grep running -w
-test_ret $?
-sleep 1
+    echo "test libxlDomainResume: resume"
+    virsh resume $domain_name
+    virsh list | grep $domain_name -w | grep running -w
+    test_ret $?
+    sleep 1
 
-echo "test libxlDomainReboot: reboot"
-reboot_or_shutdown reboot
+    echo "test libxlDomainReboot: reboot"
+    reboot_or_shutdown reboot
 
-echo "test libxlShutdownFlags: shutdown"
-reboot_or_shutdown shutdown
-virsh create $domain_xml
-sleep 1
+    echo "test libxlShutdownFlags: shutdown"
+    reboot_or_shutdown shutdown
+    virsh create $domain_xml
+    sleep 1
+    wait_started
 
-echo "test libxlDoDomainSave: save"
-virsh save $domain_name ${domain_name}.save
-test_ret $?
+    echo "test libxlDoDomainSave: save"
+    virsh save $domain_name ${domain_name}.save
+    test_ret $?
 
-echo "test libxlDomainRestoreFlags: restore"
-virsh restore ${domain_name}.save 
-test_ret $?
+    echo "test libxlDomainRestoreFlags: restore"
+    virsh restore ${domain_name}.save 
+    test_ret $?
 
-echo "test libxlDomainCoreDump: dump"
-virsh dump $domain_name ${domain_name}.dump
-test_ret $?
+    echo "test libxlDomainCoreDump: dump"
+    virsh dump $domain_name ${domain_name}.dump
+    test_ret $?
 
-echo "test libxlDomainDestroyFlags: destroy"
-virsh destroy $domain_name
-test_ret $?
-virsh create $domain_xml
-sleep 1
+    echo "test libxlDomainDestroyFlags: destroy"
+    virsh destroy $domain_name
+    test_ret $?
+    virsh create $domain_xml
+    sleep 1
 
-echo "test libxlDomainSetMemoryFlags: setmem"
-echo "set memory to 256M"
-virsh setmem $domain_name 262144 --live
-test_ret $?
-virsh dominfo $domain_name | grep memory
-echo "set memory to 512M"
-virsh setmem $domain_name 524288 --live
-test_ret $?
-virsh dominfo $domain_name | grep memory 
+    echo "test libxlDomainSetMemoryFlags: setmem"
+    echo "set memory to 256M"
+    virsh setmem $domain_name 262144 --live
+    test_ret $?
+    virsh dominfo $domain_name | grep memory
+    echo "set memory to 512M"
+    virsh setmem $domain_name 524288 --live
+    test_ret $?
+    virsh dominfo $domain_name | grep memory 
 
-echo "test libxlDomainSetVcpusFlags: setvpus"
-echo "set virtual cpu to 1"
-virsh setvcpus $domain_name 1 --live
-test_ret $?
-virsh vcpucount $domain_name
-echo "set virtual cpu to 2"
-virsh setvcpus $domain_name 2 --live
-test_ret $?
-virsh vcpucount $domain_name
+    echo "test libxlDomainSetVcpusFlags: setvpus"
+    echo "set virtual cpu to 1"
+    virsh setvcpus $domain_name 1 --live
+    test_ret $?
+    virsh vcpucount $domain_name
+    echo "set virtual cpu to 2"
+    virsh setvcpus $domain_name 2 --live
+    test_ret $?
+    virsh vcpucount $domain_name
 
-echo "end test"
-virsh destroy $domain_name
+    echo "end test"
+    virsh destroy $domain_name
+    echo "sleep 10 second"
+    sleep 10
+done
 
