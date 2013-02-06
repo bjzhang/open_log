@@ -26,7 +26,7 @@ wait_started()
             break 
         fi
         last_cpu_time=$cpu_time
-        sleep 4
+        sleep 3
     done
 }
 
