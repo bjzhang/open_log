@@ -633,3 +633,112 @@ kernel, porting, analysis, allwinner a10, cubieboard
 另外还引入了irqdomain, 真是值得认真看看. 
 如果现在能看这个该多好, 可惜不行...
 
+11:07 2013-2-16
+Hi, Jim
+
+Sorry for the late crash message. here is my crash log:
+1, hvm save and restore.
+save began during boot:
+Program received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7ffff7fa97e0 (LWP 4427)]
+0x00007fffea6bb690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007fffea6bb690 in libxlFDEventCallback (watch=<optimized out>,
+    fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+    at libxl/libxl_driver.c:170
+#1  0x00007ffff74d71be in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/vireventpoll.c:500
+#2  virEventPollRunOnce () at util/vireventpoll.c:646
+#3  0x00007ffff74d5c0b in virEventRunDefaultImpl () at util/virevent.c:247
+#4  0x00007ffff75f09f5 in virNetServerRun (srv=0x6b2c90)
+    at rpc/virnetserver.c:1108
+#5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1481
+
+2, pv create fail
+Program received signal SIGSEGV, Segmentation fault.
+0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>,
+    fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+    at libxl/libxl_driver.c:170
+#1  0x00007fc18bd451be in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/vireventpoll.c:500
+#2  virEventPollRunOnce () at util/vireventpoll.c:646
+#3  0x00007fc18bd43c0b in virEventRunDefaultImpl () at util/virevent.c:247
+#4  0x00007fc18be5e9f5 in virNetServerRun (srv=0x6b2c20)
+    at rpc/virnetserver.c:1108
+#5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1481
+(gdb) p *((libxlEventHookInfoPtr)0x7fc170000e80)
+$19 = {next = 0x0, priv = 0x71e2a0, xl_priv = 0x7fc178007a50, id = 1338}
+(gdb) p ((libxlEventHookInfoPtr)0x7fc170000e80)->xl_priv
+$15 = (void *) 0x7fc178007a50
+(gdb) p *(((libxlEventHookInfoPtr)0x7fc170000e80)->priv)
+$16 = {parent = {parent = {magic = 3405643790, refs = 5, klass = 0x726c30},
+    lock = {lock = {__data = {__lock = 0, __count = 0, __owner = 0,
+          __nusers = 0, __kind = 0, __spins = 0, __list = {__prev = 0x0,
+            __next = 0x0}}, __size = '\000' <repeats 39 times>,
+        __align = 0}}}, ctx = 0x71e650, deathW = 0x0, timerRegistrations = 0x0}
+(gdb) p (((libxlEventHookInfoPtr)0x7fc170000e80)->priv)->ctx
+$17 = (libxl_ctx *) 0x71e650
+
+3, pv crash at destroy:
+(gdb) where
+#0  libxl_osevent_occurred_timeout (ctx=<optimized out>,
+    for_libxl=0x7f8670002f20) at libxl_event.c:1105
+#1  0x00007f868217834a in libxlRegisteredTimeoutsCleanup (priv=<optimized out>)
+    at libxl/libxl_driver.c:378
+#2  libxlVmCleanup (driver=0x7f8678023870, vm=0x7f867805a860,
+    reason=<optimized out>) at libxl/libxl_driver.c:640
+#3  0x00007f86821784f2 in libxlVmReap (driver=0x7f8678023870,
+    vm=0x7f867805a860, reason=VIR_DOMAIN_SHUTOFF_DESTROYED)
+    at libxl/libxl_driver.c:661
+#4  0x00007f868217b676 in libxlDomainDestroyFlags (dom=0x7f8670002d40,
+    flags=<optimized out>) at libxl/libxl_driver.c:1795
+#5  0x00007f868f05a737 in virDomainDestroy (domain=0x7f8670002d40)
+    at libvirt.c:2224
+#6  0x000000000042e966 in remoteDispatchDomainDestroy (args=<optimized out>,
+    rerr=<optimized out>, msg=<optimized out>, client=<optimized out>,
+    server=<optimized out>) at remote_dispatch.h:1277
+#7  remoteDispatchDomainDestroyHelper (server=<optimized out>,
+    client=<optimized out>, msg=<optimized out>, rerr=0x7f8684896bf0,
+    args=<optimized out>, ret=<optimized out>) at remote_dispatch.h:1255
+#8  0x00007f868f0aac73 in virNetServerProgramDispatchCall (
+    msg=<optimized out>, client=<optimized out>, server=<optimized out>,
+    prog=<optimized out>) at rpc/virnetserverprogram.c:432
+#9  virNetServerProgramDispatch (prog=0x6bdfb0, server=0x6b2c20,
+    client=0x7f86700020f0, msg=0x7f8670001040) at rpc/virnetserverprogram.c:305
+#10 0x00007f868f0b02ce in virNetServerProcessMsg (srv=<optimized out>,
+    client=0x7f86700020f0, prog=0x6cabc0, msg=0x7f8670001040)
+    at rpc/virnetserver.c:162
+#11 0x00007f868f0b0f73 in virNetServerHandleJob (jobOpaque=<optimized out>,
+    opaque=0x6b2c20) at rpc/virnetserver.c:183
+#12 0x00007f868efbb4c6 in virThreadPoolWorker (opaque=<optimized out>)
+    at util/virthreadpool.c:144
+#13 0x00007f868efbaab7 in virThreadHelper (data=<optimized out>)
+    at util/virthreadpthread.c:161
+#14 0x00007f868bc1c7b6 in start_thread (arg=<optimized out>)
+    at pthread_create.c:301
+#15 0x00007f868b5719cd in clone ()
+    at ../sysdeps/unix/sysv/linux/x86_64/clone.S:112
+#16 0x0000000000000000 in ?? ()
+
+4, pv. i remember it fail at create.
+Program received signal SIGSEGV, Segmentation fault.
+0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>,
+    fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+    at libxl/libxl_driver.c:170
+#1  0x00007f522c45b1be in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/vireventpoll.c:500
+#2  virEventPollRunOnce () at util/vireventpoll.c:646
+#3  0x00007f522c459c0b in virEventRunDefaultImpl () at util/virevent.c:247
+#4  0x00007f522c5749f5 in virNetServerRun (srv=0x6b2c10)
+    at rpc/virnetserver.c:1108
+#5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1481
