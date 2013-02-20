@@ -1,28 +1,70 @@
 #!/bin/bash
+#help
+#1, search function add:
+#search.sh -k "^+libxlDomainCreateXML", will got 0001-Add-libxenlight-driver.patch, commit: 2b84e445d598894c711278afacfbb9247333bdd8
+#search.sh -k "static.void.umlNotifyLoadDomain", will got 0001-Add-domain-events-support-to-UML-driver.patch
 
-echo search $KEYWORD compare with $BASE
+while getopts 'b:k:' opt; do
+    case $opt in
+        b)
+            base=$OPTARG
+            ;;
+        k)
+            keyword=$OPTARG
+            ;;
+        *)
+            echo "Internal error!"
+            exit 1
+            ;;
+    esac
+done
+
+if [ -z $base ]; then
+    echo "Warning: base commit empty, using HEAD instead"
+    base=`git log -n 1 | grep ^commit | cut -d \  -f 2`
+fi
+
+if [ -z $keyword ]; then
+    echo "Error: keyword should not empty, exit"
+    exit 1
+fi
+
+echo search \"$keyword\" compare with \"$base\"
 
 current_year=`date +%Y`
 current_month=`date +%m`
 current_day=`date +%d`
-new=$BASE
+new=$base
+end_of_commit=0
 while true; do
     current_year=$((current_year - 1))
     old=`git log --before=${current_year}-${current_month} -n 1 | grep ^commit | cut -d \  -f 2`
-    echo compare with $BASE and $old
-    git diff --no-ext-diff $old $BASE | grep $KEYWORD 2>&1 > /dev/null
-    if [ $? -ne 0 ]; then
-        echo "got nothing, search previous year"
-    else
+    if [ -z $old ]; then
+#        current_year=$((current_year + 1))
+#        old=`git log --before=${current_year}-${current_month} | grep ^commit | tail -n 1 | cut -d \  -f 2`
+#        end_of_commit=1
+        echo could not handle the earlyest year. exit
+        exit 1
+    fi
+    echo compare with $old and $new
+    git diff --no-ext-diff $old $new | grep $keyword #2>&1 > /dev/null
+    if [ $? = 0 ]; then
         echo "got in this range"
         break
+    else
+#        if [ $end_of_commit -eq 1 ]; then
+#            echo "end of commit, exit"
+#            exit 1;
+#        else
+            echo "got nothing, search previous year"
+            new=$old
+#        fi
     fi
 done
 
-number=`git log $old..$new |grep ^commit | cut -d \  -f 2 | wc -l`
-#echo $number
-number=$((number / 2 + 1))
-echo $number
+number=`git log $old^..$new |grep ^commit | cut -d \  -f 2 | wc -l`
+echo total commit number: $number
+number=$(((number + 1) / 2))
 mid=`git log $new -n $number | grep ^commit | tail -n 1 | cut -d \  -f 2`
 
 while true; do
@@ -31,7 +73,7 @@ while true; do
     mid_date=`git log --date=iso -n 1 $mid |grep ^Date | sed "s/^Date:\ *//"`
     old_date=`git log --date=iso -n 1 $old |grep ^Date | sed "s/^Date:\ *//"`
     echo compare in $old..$mid, from $old_date to $mid_date
-    git diff --no-ext-diff $old $mid | grep $KEYWORD #2>&1 > /dev/null
+    git diff --no-ext-diff $old $mid | grep $keyword #2>&1 > /dev/null
     if [ $? = 0 ]; then
         if [ $number -eq 1 ]; then
             result=$mid
@@ -39,7 +81,7 @@ while true; do
             break
         fi
         echo got it in $old..$mid
-        number=`git log $old..$mid |grep ^commit | cut -d \  -f 2 | wc -l`
+        number=`git log $old^..$mid |grep ^commit | cut -d \  -f 2 | wc -l`
         number=$((number + 1))
         number=$((number / 2))
         new=$mid
@@ -47,7 +89,7 @@ while true; do
         continue
     fi
     echo compare in $mid..$new, from $mid_date to $new_date
-    git diff --no-ext-diff $mid $new | grep $KEYWORD #2>&1 > /dev/null
+    git diff --no-ext-diff $mid $new | grep $keyword #2>&1 > /dev/null
     if [ $? = 0 ]; then
         if [ $number -eq 1 ]; then
             result=$new
@@ -55,7 +97,7 @@ while true; do
             break
         fi
         echo got it in $mid..$new
-        number=`git log $mid..$new |grep ^commit | cut -d \  -f 2 | wc -l`
+        number=`git log $mid^..$new |grep ^commit | cut -d \  -f 2 | wc -l`
         number=$((number + 1))
         number=$((number / 2))
         old=$mid
@@ -67,50 +109,3 @@ done
 echo generating patch file
 git format-patch $result^!
 
-#search=virDomainObjLock; base=676688b69bb5761b74bd1e5bb491562bd6d3dd26;  for cs in `git log | grep commit | cut -d \  -f 2`; do echo "${cs}: ${search}"; git diff --no-ext-diff ${base} ${cs} | grep ${search}; done
-
-#echo search $KEYWORD compare with $BASE
-#
-#current_year=`date +%Y`
-#current_month=`date +%m`
-#current_day=`date +%d`
-#while true; do
-#    echo search between ${current_year}-${current_month} and $((${current_year}-1))-${current_month}
-#    current_year=$((current_year - 1))
-#    commit=`git log --before=${current_year}-${current_month} | head -n 1 | cut -d \  -f 2`
-#    echo compare with $BASE and $commit
-#    git diff --no-ext-diff $BASE $commit | grep $KEYWORD 2>&1 > /dev/null
-#    if [ $? -ne 0 ]; then
-#        echo "got nothing, search previous year"
-#    else
-#        echo "got in this range"
-#        break
-#    fi
-#done
-#
-#commit=`git log --after=${current_year}-${current_month} |grep ^commit | cut -d \  -f 2`
-#number=`echo $commit | wc -w`
-#echo $number
-#number=$((number / 2 + 1))
-#echo $number
-#range="--after=${current_year}-${current_month} -n $number"
-#echo $range
-#
-#while true; do
-#    if [ $number -eq 1 ]; then
-#        break
-#    fi
-#    if [ $number -eq 2 ]; then
-#        break
-#    fi
-#    commit=`git log $range | grep ^commit | cut -d \  -f 2 | tail -n 1`
-#    echo compare with $BASE and $commit in \"$range\"
-#    git diff --no-ext-diff $BASE $commit | grep $KEYWORD 2>&1 > /dev/null
-#    if [ $? -ne 0 ]; then
-#        number=$((number / 2 + 1))
-#        range="--after=${current_year}-${current_month} -n $number"
-#    else
-#        range="--after=${current_year}-${current_month} -n 1"
-#    fi
-#done
-#
