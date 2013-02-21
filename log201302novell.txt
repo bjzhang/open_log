@@ -756,10 +756,54 @@ GTD
 
 1, today
 1), 6h write script for search commit diff in git.
+2), Summary: 看了看代码, 感觉lock还是没有什么思路. 看看这周能不能把block stats这个搞出来.
+
+15:04 2013-02-20
+linux, modify root password
+1, add boot options in grub: 
+init=/bin/bash
+will automatically login with root.
+2, modify shadow file in filesystem. 
+suitable for virtual machines.
+
+18:39 2013-02-20
+performance issue about lvm and xen
+1, sles11 sp1 xen4.0, sles11 sp2 xen4.1
+https://www.suse.com/releasenotes/x86_64/SUSE-SLES/11-SP1
+https://www.suse.com/releasenotes/x86_64/SUSE-SLES/11-SP2
+2, xen4.1 release
+http://wiki.xen.org/xenwiki/Xen4.1
+http://wiki.xen.org/wiki/Xen_4.1_Release_Notes
+http://blog.xen.org/index.php/2011/03/25/xen-4-1-releases/
+http://old-list-archives.xen.org/archives/html/xen-devel/2011-03/msg01718.html
+http://old-list-archives.xen.org/archives/html/xen-devel/2011-06/msg01050.html
+http://lists.xen.org/archives/html/xen-users/2011-10/msg00394.html
+http://lists.xen.org/archives/html/xen-devel/2012-08/msg00928.html
+http://lists.xen.org/archives/html/xen-devel/2012-12/msg01329.html
+http://wiki.xen.org/wiki/Xen_Release_Features
+
+23:18 2013-2-20
+virtualization, libvirt, xen, kvm, vmware, virtualbox; migration
+1, 迁移 VMware 虚拟机到 KVM
+http://www.ibm.com/developerworks/cn/linux/l-cn-mgrtvm3/
+2, libvirt vmware, virtualbox driver:
+1), libvirt vmware esx driver
+http://libvirt.org/drvesx.html
+2), libvirt vmware workstation, vmware player driver:
+http://libvirt.org/drvvmware.html
+http://www.vmware.com/support/developer/vix-api/vix110_reference/
+3), libvirt virtual box driver:
+http://libvirt.org/drvvbox.html
+
+13:45 2013-02-21
+GTD
+0, 10:50-18:25 20:35-22:50
+
+1, today
+1), "13:42 2013-02-21" 国企，私企与外企利弊通观--关键时刻给应届毕业生及时点拨(转). http://zhan.renren.com/buaa19th/?checked=true
+2), 1h 16:54-18:23 20:35-22:35 write code for libxl qmp. see"14:36 2013-02-21".
 
 2, \TODO
-1), libvirt libxl lock patch. see"11:03 2013-02-19".
-3), \TODO: 其实lock这东西还有很多没实现的, 感觉有点难阿, 要不还是做block stats和console?
 3), work report.
 2), check the virtual team. about virtualization and arm.
 
@@ -836,27 +880,75 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-15:04 2013-02-20
-linux, modify root password
-1, add boot options in grub: 
-init=/bin/bash
-will automatically login with root.
-2, modify shadow file in filesystem. 
-suitable for virtual machines.
+14:36 2013-02-21
+virtualization, libvirt, xenlight, add libxl api, cont3, domainBlockStats, cont3, qemu, QMP, add qmp in libxl, cont3
+1, in xl hvm
+i could get the statics from sys just like xm: /sys/devices/xen-backend/vbd-1-768/statistics
+2, in xl pv
+i could get the statics from sys just like xm. why? only in libvirt, it not work?
+3, 调试xl qmp. 发现是没有得到正确的json项. 卡在了device, stats这个级别.
+4, code changes.
+1), SWITCH_FOREACH_OPT. commit: f4a5a1e1, 9a652ca8
+example
+/* int main_foo(int argc, char **argv) {
+ *     int opt;
+ *
+ *     SWITCH_FOREACH_OPT(opt, "blah", NULL, "foo", 0) {
+ *      case 'b':
+ *          ... handle b option...
+ *          break;
+ *      case 'l':
+ *          ... handle l option ...
+ *          break;
+ *      case etc etc...
+ *      }
+ *      ... do something useful with the options ...
+ * }
+ */
 
-18:39 2013-02-20
-lvm
-xen
+changes in main_blockinfo, so as to main_qmp.
+    int opt;
 
-23:18 2013-2-20
-virtualization, libvirt, xen, kvm, vmware, virtualbox; migration
-1, 迁移 VMware 虚拟机到 KVM
-http://www.ibm.com/developerworks/cn/linux/l-cn-mgrtvm3/
-2, libvirt vmware, virtualbox driver:
-1), libvirt vmware esx driver
-http://libvirt.org/drvesx.html
-2), libvirt vmware workstation, vmware player driver:
-http://libvirt.org/drvvmware.html
-http://www.vmware.com/support/developer/vix-api/vix110_reference/
-3), libvirt virtual box driver:
-http://libvirt.org/drvvbox.html
+-    if ((opt = def_getopt(argc, argv, "", "block-info", 2)) != -1)
+-        return opt;
++    SWITCH_FOREACH_OPT(opt, "", NULL, "block-info", 2) {
++        /* No options */
++    }
+5, 不知道之前的test case是怎么样的. 反正现在这pv, hvm都可以. 而且没有找到qdisk.
+配置文件保存在: ~/work/virtualization/libvirt/20130221_vm_conf_for_block_stats
+暂时先按照libvirt xen driver的写法做, 以后再看是否需要qmp.
+1), 虽然这样可以实现, 但是要加一个函数, 判断是否与xenstore连接当没读到数据的时候(是否需要呢?).
+      add libxl_check_bd_connected in xen libxl
+        snprintf(s, sizeof(s), "/local/domain/0/backend/vbd/%d/%d/state",
+        check wether the result equal to "4" or not
+但是, 但是. 还是没法实现BlockStatsFlags, 因为缺参数. 
+这东西还真是不好实现, 因为hvm情况下, qmp根据就没有连接. 可以现实现pv的情况. 然后再看hvm怎么解决.
+hvm and pv qemu process:
+linux-vm4:/sys/devices/xen-backend # ps aux |grep qemu
+root      3602  0.0  0.5 151480  7016 ?        Ssl  21:28   0:00 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 11 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-11,server,nowait -mon chardev=libxl-cmd,mode=control -xen-attach -name sles11_sp2_pv -vnc 127.0.0.1:0 -M xenpv -m 513
+root      3706  0.0  0.2 123476  3396 ?        Sl   13:52   0:01 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 0 -xen-attach -name dom0 -nographic -M xenpv -daemonize -monitor /dev/null
+root      3750  4.2  0.8  97968 11316 ?        SLsl 21:30   2:30 /usr/lib/xen/bin/qemu-dm -d 12 -domain-name bjz_04_sles11_sp2 -vnc 127.0.0.1:0 -vncunused -videoram 8 -boot c -acpi -vcpus 4 -vcpu_avail 0x01 -net none -M xenfv
+
+hvm qemu commands: 
+-mon chardev=libxl-cmd,mode=control
+难道是可以用monitor command直接得到? 似乎可以, ref: libxl__qemu_traditional_cmd
+
+20:41 2013-02-21
+company, annual, summary
+1, the code is dynamic.
+when i work in previous company, close source, embedded software. in the project life, the code is not changed. e.g. the android version, the kernel version in our arm android pad project. 
+but in suse, it is not. even when i write a patch, the upstream maybe changes a lot.
+so, it is essential that keep an eye on mailing list. in fact, it is interesting. i had subscribe some mailing list before join the suse. but i rare to read them.
+2, hackweek.
+i love it.
+opensuse arm on allwinner a10.
+
+21:02 2013-02-21
+software skill, SCM, git, specifying range, examples
+ref: git rev-parse --help
+1, git format-patch A^~
+从commit A开始到最新commit的所有patch.
+2, git fotmat-patch A^!
+只生成这个commit的patch.
+注: r1^! includes commit r1 but excludes all of its parents.
+
