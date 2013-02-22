@@ -553,6 +553,260 @@ GTD
 1, today
 1), 11:30 test Jim patch for libxl xen4.2 bug. see"14:17 2013-02-06"2.
 
+11:49 2013-02-07
+kernel, porting, analysis, allwinner a10, cubieboard
+这世界变化太快了.
+单说现在3.8 kernel里面的irq处理就变化很大. 引入了device tree后, irq初始化定义在drivers/irqchip/irq-sunxi.c, 原来是在mach-xxx.
+另外还引入了irqdomain, 真是值得认真看看. 
+如果现在能看这个该多好, 可惜不行... \TODO
+
+11:07 2013-2-16
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont20, final version test, cont3, send crash message to Jim
+Hi, Jim
+
+Sorry for the late crash message. here is my crash log:
+1, hvm save and restore.
+save began during boot:
+Program received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7ffff7fa97e0 (LWP 4427)]
+0x00007fffea6bb690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007fffea6bb690 in libxlFDEventCallback (watch=<optimized out>,
+    fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+    at libxl/libxl_driver.c:170
+#1  0x00007ffff74d71be in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/vireventpoll.c:500
+#2  virEventPollRunOnce () at util/vireventpoll.c:646
+#3  0x00007ffff74d5c0b in virEventRunDefaultImpl () at util/virevent.c:247
+#4  0x00007ffff75f09f5 in virNetServerRun (srv=0x6b2c90)
+    at rpc/virnetserver.c:1108
+#5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1481
+
+2, pv create fail
+Program received signal SIGSEGV, Segmentation fault.
+0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>,
+    fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+    at libxl/libxl_driver.c:170
+#1  0x00007fc18bd451be in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/vireventpoll.c:500
+#2  virEventPollRunOnce () at util/vireventpoll.c:646
+#3  0x00007fc18bd43c0b in virEventRunDefaultImpl () at util/virevent.c:247
+#4  0x00007fc18be5e9f5 in virNetServerRun (srv=0x6b2c20)
+    at rpc/virnetserver.c:1108
+#5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1481
+(gdb) p *((libxlEventHookInfoPtr)0x7fc170000e80)
+$19 = {next = 0x0, priv = 0x71e2a0, xl_priv = 0x7fc178007a50, id = 1338}
+(gdb) p ((libxlEventHookInfoPtr)0x7fc170000e80)->xl_priv
+$15 = (void *) 0x7fc178007a50
+(gdb) p *(((libxlEventHookInfoPtr)0x7fc170000e80)->priv)
+$16 = {parent = {parent = {magic = 3405643790, refs = 5, klass = 0x726c30},
+    lock = {lock = {__data = {__lock = 0, __count = 0, __owner = 0,
+          __nusers = 0, __kind = 0, __spins = 0, __list = {__prev = 0x0,
+            __next = 0x0}}, __size = '\000' <repeats 39 times>,
+        __align = 0}}}, ctx = 0x71e650, deathW = 0x0, timerRegistrations = 0x0}
+(gdb) p (((libxlEventHookInfoPtr)0x7fc170000e80)->priv)->ctx
+$17 = (libxl_ctx *) 0x71e650
+
+3, pv crash at destroy:
+(gdb) where
+#0  libxl_osevent_occurred_timeout (ctx=<optimized out>,
+    for_libxl=0x7f8670002f20) at libxl_event.c:1105
+#1  0x00007f868217834a in libxlRegisteredTimeoutsCleanup (priv=<optimized out>)
+    at libxl/libxl_driver.c:378
+#2  libxlVmCleanup (driver=0x7f8678023870, vm=0x7f867805a860,
+    reason=<optimized out>) at libxl/libxl_driver.c:640
+#3  0x00007f86821784f2 in libxlVmReap (driver=0x7f8678023870,
+    vm=0x7f867805a860, reason=VIR_DOMAIN_SHUTOFF_DESTROYED)
+    at libxl/libxl_driver.c:661
+#4  0x00007f868217b676 in libxlDomainDestroyFlags (dom=0x7f8670002d40,
+    flags=<optimized out>) at libxl/libxl_driver.c:1795
+#5  0x00007f868f05a737 in virDomainDestroy (domain=0x7f8670002d40)
+    at libvirt.c:2224
+#6  0x000000000042e966 in remoteDispatchDomainDestroy (args=<optimized out>,
+    rerr=<optimized out>, msg=<optimized out>, client=<optimized out>,
+    server=<optimized out>) at remote_dispatch.h:1277
+#7  remoteDispatchDomainDestroyHelper (server=<optimized out>,
+    client=<optimized out>, msg=<optimized out>, rerr=0x7f8684896bf0,
+    args=<optimized out>, ret=<optimized out>) at remote_dispatch.h:1255
+#8  0x00007f868f0aac73 in virNetServerProgramDispatchCall (
+    msg=<optimized out>, client=<optimized out>, server=<optimized out>,
+    prog=<optimized out>) at rpc/virnetserverprogram.c:432
+#9  virNetServerProgramDispatch (prog=0x6bdfb0, server=0x6b2c20,
+    client=0x7f86700020f0, msg=0x7f8670001040) at rpc/virnetserverprogram.c:305
+#10 0x00007f868f0b02ce in virNetServerProcessMsg (srv=<optimized out>,
+    client=0x7f86700020f0, prog=0x6cabc0, msg=0x7f8670001040)
+    at rpc/virnetserver.c:162
+#11 0x00007f868f0b0f73 in virNetServerHandleJob (jobOpaque=<optimized out>,
+    opaque=0x6b2c20) at rpc/virnetserver.c:183
+#12 0x00007f868efbb4c6 in virThreadPoolWorker (opaque=<optimized out>)
+    at util/virthreadpool.c:144
+#13 0x00007f868efbaab7 in virThreadHelper (data=<optimized out>)
+    at util/virthreadpthread.c:161
+#14 0x00007f868bc1c7b6 in start_thread (arg=<optimized out>)
+    at pthread_create.c:301
+#15 0x00007f868b5719cd in clone ()
+    at ../sysdeps/unix/sysv/linux/x86_64/clone.S:112
+#16 0x0000000000000000 in ?? ()
+
+4, pv. i remember it fail at create.
+Program received signal SIGSEGV, Segmentation fault.
+0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+(gdb) where
+#0  0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>,
+    fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+    at libxl/libxl_driver.c:170
+#1  0x00007f522c45b1be in virEventPollDispatchHandles (fds=<optimized out>,
+    nfds=<optimized out>) at util/vireventpoll.c:500
+#2  virEventPollRunOnce () at util/vireventpoll.c:646
+#3  0x00007f522c459c0b in virEventRunDefaultImpl () at util/virevent.c:247
+#4  0x00007f522c5749f5 in virNetServerRun (srv=0x6b2c10)
+    at rpc/virnetserver.c:1108
+#5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+    at libvirtd.c:1481
+
+14:41 2013-02-17
+GTD
+0, 11:20-18:15
+
+1, today
+1), 16:29-18:10 libvirt libxl lock patch. see"15:40 2013-02-17"
+2), suse, virtualization, summary. "15:30 2013-02-17".
+
+15:30 2013-02-17
+suse, virtualization, summary
+1, xen two patches. two report bugs.
+2, libvirt
+1), work in libvirt xen4.2 support with Jim. review and test.
+2), libvirt xen management save. for both upstream and bug fix.
+3, in process
+1), lock
+2), blockstats.
+
+15:40 2013-02-17
+virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2
+1, 去年10月写的patch, 到现在已经己不清了.
+目前需要做的是看看如果支持xen4.2, 主要的变化应该是增加了异步通知的机制.
+如果没有migration的情况下, 只有save和dump是AsyncJob.
+还有就是能否利用aohow, 做abort job.
+2, 变化
+1), virDomainObjListAdd, virDomainListRemove
+(1), libxlDomainObjEndJob后面原来是用的是virDomainRemoveInactive, 现在需要改用virDomainListRemove. 后者是unref domain obj(到0会销毁).
+libxlDomainObjEndJob如果成功, 表示这个最后一个引用计数被unref, 此时才需要调用virDomainListRemove
+2), 之前jim的patch已经去掉了在save中判定persistent, 所以我相关代码也需要去掉.
+\TODO: 确定.
+3), patch完成. 明天编译运行通过后开始修改.
+
+11:02 2013-02-19
+GTD
+0, 10:50
+
+1, today
+1), 11:02-11:37 14:30- libvirt libxl lock patch. see"11:03 2013-02-19".
+2), 今天才发现libvirt很久以前就支持arm了. 看看能不能做libvirt PVH的支持.
+3), \TODO: 其实lock这东西还有很多没实现的, 感觉有点难阿, 要不还是做block stats和console?
+
+11:03 2013-02-19
+virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont1
+1, plan
+1), 用原来的脚本测试lock基本功能是否正确.
+2), 学习如何使用ao_how.
+2, compile error
+1), virObjectLockable 
+lock move from virDomainObj to virDomainObj.parent(virObjectLockable type).
+2), virDomainObjLock, virDomainObjUnlock dissappear.
+
+12:16 2013-02-19
+suse, linux, SLE11 SP3, SLE 11 SP3 Beta1 released; how to dump a uefi usb stick
+1, "Thorsten Kukuk <kukuk@suse.de>"_email_"[devel] [ANNOUNCE] SLE 11 SP3 Beta1 released"_20130215_1827
+to dump the ISO image on an USB stick (you must run "isohybrid --uefi <name_iso_image>" before dumping the ISO image on USB stick, otherwise USB Stick won't be recognized by UEFI firmware properly).
+
+12:50 2013-02-19
+Samuel Thibault
+1, Samuel Thibault work for citrix. write the stubdom in xen3.3, ref"14:08 2013-02-19".
+and he ask some PVH questions recently.
+
+14:08 2013-02-19
+virtualization, xen, stubdom
+1, http://wiki.xen.org/wiki/StubDom
+Stubdoms (or stub domains) are lightweight 'service' or 'driver' domain to run device models and one technique to implement Dom0 Disaggregation. The initial purpose of stub domains were to offload qemu workloads from dom0 into a seperate domain.
+So with stub domains, a separate unprivileged stub domain is created per HVM guest. This boosts performance and makes your system more secure. 
+2, stubdom use mini-os.
+3, Presentation about stubdoms at Xen Summit:
+http://www.xen.org/files/xensummitboston08/SamThibault_XenSummit.pdf
+4, http://wiki.xen.org/wiki/Device_Model_Stub_Domains
+how to use stub domain in xen 4.x for xl and xm/xend.
+
+14:14 2013-02-19
+virtualization, xen, Qubes, compare Qubes and other virtualizations technology, How is Qubes OS different from... 
+http://theinvisiblethings.blogspot.com/2012/09/how-is-qubes-os-different-from.html
+
+15:43 2013-02-19
+search=keyword; base=base_commit; for cs in `git log | grep commit | cut -d \  -f 2`; do echo "${cs}: ${search}"; git diff --no-ext-diff ${base} ${cs} | grep ${search}; done
+
+10:05 2013-02-20
+GTD
+0, 9:50-11:36 13:05-18:59
+
+1, today
+1), 6h write script for search commit diff in git.
+2), Summary: 看了看代码, 感觉lock还是没有什么思路. 看看这周能不能把block stats这个搞出来.
+
+15:04 2013-02-20
+linux, modify root password
+1, add boot options in grub: 
+init=/bin/bash
+will automatically login with root.
+2, modify shadow file in filesystem. 
+suitable for virtual machines.
+
+18:39 2013-02-20
+performance issue about lvm and xen
+1, sles11 sp1 xen4.0, sles11 sp2 xen4.1
+https://www.suse.com/releasenotes/x86_64/SUSE-SLES/11-SP1
+https://www.suse.com/releasenotes/x86_64/SUSE-SLES/11-SP2
+2, xen4.1 release
+http://wiki.xen.org/xenwiki/Xen4.1
+http://wiki.xen.org/wiki/Xen_4.1_Release_Notes
+http://blog.xen.org/index.php/2011/03/25/xen-4-1-releases/
+http://old-list-archives.xen.org/archives/html/xen-devel/2011-03/msg01718.html
+http://old-list-archives.xen.org/archives/html/xen-devel/2011-06/msg01050.html
+http://lists.xen.org/archives/html/xen-users/2011-10/msg00394.html
+http://lists.xen.org/archives/html/xen-devel/2012-08/msg00928.html
+http://lists.xen.org/archives/html/xen-devel/2012-12/msg01329.html
+http://wiki.xen.org/wiki/Xen_Release_Features
+
+23:18 2013-2-20
+virtualization, libvirt, xen, kvm, vmware, virtualbox; migration
+1, 迁移 VMware 虚拟机到 KVM
+http://www.ibm.com/developerworks/cn/linux/l-cn-mgrtvm3/
+2, libvirt vmware, virtualbox driver:
+1), libvirt vmware esx driver
+http://libvirt.org/drvesx.html
+2), libvirt vmware workstation, vmware player driver:
+http://libvirt.org/drvvmware.html
+http://www.vmware.com/support/developer/vix-api/vix110_reference/
+3), libvirt virtual box driver:
+http://libvirt.org/drvvbox.html
+
+13:45 2013-02-21
+GTD
+0, 10:50-18:25 20:35-22:50
+
+1, today
+1), "13:42 2013-02-21" 国企，私企与外企利弊通观--关键时刻给应届毕业生及时点拨(转). http://zhan.renren.com/buaa19th/?checked=true
+2), 1h 16:54-18:23 20:35-22:35 write code for libxl qmp. see"14:36 2013-02-21".
+
+2, \TODO
+3), work report.
+2), check the virtual team. about virtualization and arm.
+
 2, daily work
 1), tracking xen-arm update.
 2), read libvirt and xen-devel quickly, should less that 30minutes.
@@ -626,12 +880,77 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-11:49 2013-02-07
-kernel, porting, analysis, allwinner a10, cubieboard
-这世界变化太快了.
-单说现在3.8 kernel里面的irq处理就变化很大. 引入了device tree后, irq初始化定义在drivers/irqchip/irq-sunxi.c, 原来是在mach-xxx.
-另外还引入了irqdomain, 真是值得认真看看. 
-如果现在能看这个该多好, 可惜不行...
+14:36 2013-02-21
+virtualization, libvirt, xenlight, add libxl api, cont3, domainBlockStats, cont3, qemu, QMP, add qmp in libxl, cont3
+1, in xl hvm
+i could get the statics from sys just like xm: /sys/devices/xen-backend/vbd-1-768/statistics
+2, in xl pv
+i could get the statics from sys just like xm. why? only in libvirt, it not work?
+3, 调试xl qmp. 发现是没有得到正确的json项. 卡在了device, stats这个级别.
+4, code changes.
+1), SWITCH_FOREACH_OPT. commit: f4a5a1e1, 9a652ca8
+example
+/* int main_foo(int argc, char **argv) {
+ *     int opt;
+ *
+ *     SWITCH_FOREACH_OPT(opt, "blah", NULL, "foo", 0) {
+ *      case 'b':
+ *          ... handle b option...
+ *          break;
+ *      case 'l':
+ *          ... handle l option ...
+ *          break;
+ *      case etc etc...
+ *      }
+ *      ... do something useful with the options ...
+ * }
+ */
+
+changes in main_blockinfo, so as to main_qmp.
+    int opt;
+
+-    if ((opt = def_getopt(argc, argv, "", "block-info", 2)) != -1)
+-        return opt;
++    SWITCH_FOREACH_OPT(opt, "", NULL, "block-info", 2) {
++        /* No options */
++    }
+5, 不知道之前的test case是怎么样的. 反正现在这pv, hvm都可以. 而且没有找到qdisk.
+配置文件保存在: ~/work/virtualization/libvirt/20130221_vm_conf_for_block_stats
+暂时先按照libvirt xen driver的写法做, 以后再看是否需要qmp.
+1), 虽然这样可以实现, 但是要加一个函数, 判断是否与xenstore连接当没读到数据的时候(是否需要呢?).
+      add libxl_check_bd_connected in xen libxl
+        snprintf(s, sizeof(s), "/local/domain/0/backend/vbd/%d/%d/state",
+        check wether the result equal to "4" or not
+但是, 但是. 还是没法实现BlockStatsFlags, 因为缺参数. 
+这东西还真是不好实现, 因为hvm情况下, qmp根据就没有连接. 可以现实现pv的情况. 然后再看hvm怎么解决.
+hvm and pv qemu process:
+linux-vm4:/sys/devices/xen-backend # ps aux |grep qemu
+root      3602  0.0  0.5 151480  7016 ?        Ssl  21:28   0:00 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 11 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-11,server,nowait -mon chardev=libxl-cmd,mode=control -xen-attach -name sles11_sp2_pv -vnc 127.0.0.1:0 -M xenpv -m 513
+root      3706  0.0  0.2 123476  3396 ?        Sl   13:52   0:01 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 0 -xen-attach -name dom0 -nographic -M xenpv -daemonize -monitor /dev/null
+root      3750  4.2  0.8  97968 11316 ?        SLsl 21:30   2:30 /usr/lib/xen/bin/qemu-dm -d 12 -domain-name bjz_04_sles11_sp2 -vnc 127.0.0.1:0 -vncunused -videoram 8 -boot c -acpi -vcpus 4 -vcpu_avail 0x01 -net none -M xenfv
+
+hvm qemu commands: 
+-mon chardev=libxl-cmd,mode=control
+难道是可以用monitor command直接得到? 似乎可以, ref: libxl__qemu_traditional_cmd
+
+20:41 2013-02-21
+company, annual, summary
+1, the code is dynamic.
+when i work in previous company, close source, embedded software. in the project life, the code is not changed. e.g. the android version, the kernel version in our arm android pad project. 
+but in suse, it is not. even when i write a patch, the upstream maybe changes a lot.
+so, it is essential that keep an eye on mailing list. in fact, it is interesting. i had subscribe some mailing list before join the suse. but i rare to read them.
+2, hackweek.
+i love it.
+opensuse arm on allwinner a10.
+
+21:02 2013-02-21
+software skill, SCM, git, specifying range, examples
+ref: git rev-parse --help
+1, git format-patch A^~
+从commit A开始到最新commit的所有patch.
+2, git fotmat-patch A^!
+只生成这个commit的patch.
+注: r1^! includes commit r1 but excludes all of its parents.
 
 9:07 2013-2-22
 1, lab reservation system.
