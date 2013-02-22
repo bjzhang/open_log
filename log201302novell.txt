@@ -713,6 +713,7 @@ GTD
 3), \TODO: 其实lock这东西还有很多没实现的, 感觉有点难阿, 要不还是做block stats和console?
 
 11:03 2013-02-19
+(16:56 2013-02-22)
 virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont1
 1, plan
 1), 用原来的脚本测试lock基本功能是否正确.
@@ -721,6 +722,18 @@ virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont1
 1), virObjectLockable 
 lock move from virDomainObj to virDomainObj.parent(virObjectLockable type).
 2), virDomainObjLock, virDomainObjUnlock dissappear.
+drvier lock是否需要, 与obj是否需要做好流程.
+in qemu driver, there is a new variable virQEMUDriverConfigPtr for driver lock. which is managed by virClassNew.
+virQEMUDriverConfigPtr virQEMUDriverGetConfig(virQEMUDriverPtr driver)
+{
+    virQEMUDriverConfigPtr conf;
+    qemuDriverLock(driver);
+    conf = virObjectRef(driver->config);
+    qemuDriverUnlock(driver);
+    return conf;
+}
+
+patch: b090aa7d.
 
 12:16 2013-02-19
 suse, linux, SLE11 SP3, SLE 11 SP3 Beta1 released; how to dump a uefi usb stick
@@ -803,9 +816,122 @@ GTD
 1), "13:42 2013-02-21" 国企，私企与外企利弊通观--关键时刻给应届毕业生及时点拨(转). http://zhan.renren.com/buaa19th/?checked=true
 2), 1h 16:54-18:23 20:35-22:35 write code for libxl qmp. see"14:36 2013-02-21".
 
+14:36 2013-02-21
+virtualization, libvirt, xenlight, add libxl api, cont3, domainBlockStats, cont3, qemu, QMP, add qmp in libxl, cont3
+1, in xl hvm
+i could get the statics from sys just like xm: /sys/devices/xen-backend/vbd-1-768/statistics
+2, in xl pv
+i could get the statics from sys just like xm. why? only in libvirt, it not work?
+3, 调试xl qmp. 发现是没有得到正确的json项. 卡在了device, stats这个级别.
+4, code changes.
+1), SWITCH_FOREACH_OPT. commit: f4a5a1e1, 9a652ca8
+example
+/* int main_foo(int argc, char **argv) {
+ *     int opt;
+ *
+ *     SWITCH_FOREACH_OPT(opt, "blah", NULL, "foo", 0) {
+ *      case 'b':
+ *          ... handle b option...
+ *          break;
+ *      case 'l':
+ *          ... handle l option ...
+ *          break;
+ *      case etc etc...
+ *      }
+ *      ... do something useful with the options ...
+ * }
+ */
+
+changes in main_blockinfo, so as to main_qmp.
+    int opt;
+
+-    if ((opt = def_getopt(argc, argv, "", "block-info", 2)) != -1)
+-        return opt;
++    SWITCH_FOREACH_OPT(opt, "", NULL, "block-info", 2) {
++        /* No options */
++    }
+5, 不知道之前的test case是怎么样的. 反正现在这pv, hvm都可以. 而且没有找到qdisk.
+配置文件保存在: ~/work/virtualization/libvirt/20130221_vm_conf_for_block_stats
+暂时先按照libvirt xen driver的写法做, 以后再看是否需要qmp.
+1), 虽然这样可以实现, 但是要加一个函数, 判断是否与xenstore连接当没读到数据的时候(是否需要呢?).
+      add libxl_check_bd_connected in xen libxl
+        snprintf(s, sizeof(s), "/local/domain/0/backend/vbd/%d/%d/state",
+        check wether the result equal to "4" or not
+但是, 但是. 还是没法实现BlockStatsFlags, 因为缺参数. 
+这东西还真是不好实现, 因为hvm情况下, qmp根据就没有连接. 可以现实现pv的情况. 然后再看hvm怎么解决.
+hvm and pv qemu process:
+linux-vm4:/sys/devices/xen-backend # ps aux |grep qemu
+root      3602  0.0  0.5 151480  7016 ?        Ssl  21:28   0:00 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 11 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-11,server,nowait -mon chardev=libxl-cmd,mode=control -xen-attach -name sles11_sp2_pv -vnc 127.0.0.1:0 -M xenpv -m 513
+root      3706  0.0  0.2 123476  3396 ?        Sl   13:52   0:01 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 0 -xen-attach -name dom0 -nographic -M xenpv -daemonize -monitor /dev/null
+root      3750  4.2  0.8  97968 11316 ?        SLsl 21:30   2:30 /usr/lib/xen/bin/qemu-dm -d 12 -domain-name bjz_04_sles11_sp2 -vnc 127.0.0.1:0 -vncunused -videoram 8 -boot c -acpi -vcpus 4 -vcpu_avail 0x01 -net none -M xenfv
+
+hvm qemu commands: 
+-mon chardev=libxl-cmd,mode=control
+难道是可以用monitor command直接得到? 似乎可以, ref: libxl__qemu_traditional_cmd
+
+20:41 2013-02-21
+company, annual, summary
+1, the code is dynamic.
+when i work in previous company, close source, embedded software. in the project life, the code is not changed. e.g. the android version, the kernel version in our arm android pad project. 
+but in suse, it is not. even when i write a patch, the upstream maybe changes a lot.
+so, it is essential that keep an eye on mailing list. in fact, it is interesting. i had subscribe some mailing list before join the suse. but i rare to read them.
+2, hackweek.
+i love it.
+opensuse arm on allwinner a10.
+
+21:02 2013-02-21
+software skill, SCM, git, specifying range, examples
+ref: git rev-parse --help
+1, git format-patch A^~
+从commit A开始到最新commit的所有patch.
+2, git fotmat-patch A^!
+只生成这个commit的patch.
+注: r1^! includes commit r1 but excludes all of its parents.
+
+9:07 2013-2-22
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting
+1, lab reservation system.
+1), login with name and domain. do not login with ip address.
+2), send email to lab administrator and cc jason.
+2, chunyan
+1), bug for pci detach
+(1), pci detach not work while domain is not active.
+(2), qemu-dm. about the operation sequence.
+2), write pci Common library.
+(1), common code.
+(2), maintain the global state in libvirt. solve the conflict in the different driver.
+3, Bamvor
+Jim want me improve the lock patch.
+
+13:29 2013-02-22
+mailing list, virtualization, xen
+1, [Xen-devel] Planning Xen Test Days for 4.3
+http://lists.xen.org/archives/html/xen-devel/2013-02/msg01611.html
+Lars Kurth <lars.kurth.xen@xxxxxxxxx>
+Good morning,
+as we are approaching the Xen 4.3 freeze, I think it is time to start thinking about Test Days for Xen 4.3. The question we need to answer is
+a) How many test days do we think make sense during the release cycle
+b) What cadence? Every other week, every 3, ...
+c) At which point do we start?
+c) Are there any areas we want to point users to : in other words, we need a good document early pointing people to the new features we would like to see tested (and how this is done). The roadmap is a good start. Maybe we can start working on this in the next 2 docs days (the next one is on Monday).
+d) Who from the developer community would want to take the lead working with me or Russell on this 
+Best Regards
+Lars
+
+13:30 2013-02-22
+GTD
+0, 11:30-17:50
+
+1, today
+1), 9:00-9:40 US/China Sync meeing. see"9:07 2013-2-22".
+2), 30' mailing list. see"13:29 2013-02-22"
+3), 15:00- libvirt libxl lock patch. see"15:00 2013-02-22"
+
+
 2, \TODO
-3), work report.
-2), check the virtual team. about virtualization and arm.
+1), work report. send this after read jim email.
+2), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
+3), check the virtual team. about virtualization and arm.
 
 2, daily work
 1), tracking xen-arm update.
@@ -880,86 +1006,61 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-14:36 2013-02-21
-virtualization, libvirt, xenlight, add libxl api, cont3, domainBlockStats, cont3, qemu, QMP, add qmp in libxl, cont3
-1, in xl hvm
-i could get the statics from sys just like xm: /sys/devices/xen-backend/vbd-1-768/statistics
-2, in xl pv
-i could get the statics from sys just like xm. why? only in libvirt, it not work?
-3, 调试xl qmp. 发现是没有得到正确的json项. 卡在了device, stats这个级别.
-4, code changes.
-1), SWITCH_FOREACH_OPT. commit: f4a5a1e1, 9a652ca8
-example
-/* int main_foo(int argc, char **argv) {
- *     int opt;
- *
- *     SWITCH_FOREACH_OPT(opt, "blah", NULL, "foo", 0) {
- *      case 'b':
- *          ... handle b option...
- *          break;
- *      case 'l':
- *          ... handle l option ...
- *          break;
- *      case etc etc...
- *      }
- *      ... do something useful with the options ...
- * }
- */
+14:03 2013-02-22
+company, sle, virtualization
+"Jason Douglas"_email_"Future of Virtualization Technologies in SLES"
+Hi everyone,
 
-changes in main_blockinfo, so as to main_qmp.
-    int opt;
+In our team meeting last week, Michal Svec gave a presentation about the future of virtualization technologies in SLES. Since this impacts all of us, I thought it would be useful to provide a summary of his presentation for those who were not in attendance.
 
--    if ((opt = def_getopt(argc, argv, "", "block-info", 2)) != -1)
--        return opt;
-+    SWITCH_FOREACH_OPT(opt, "", NULL, "block-info", 2) {
-+        /* No options */
-+    }
-5, 不知道之前的test case是怎么样的. 反正现在这pv, hvm都可以. 而且没有找到qdisk.
-配置文件保存在: ~/work/virtualization/libvirt/20130221_vm_conf_for_block_stats
-暂时先按照libvirt xen driver的写法做, 以后再看是否需要qmp.
-1), 虽然这样可以实现, 但是要加一个函数, 判断是否与xenstore连接当没读到数据的时候(是否需要呢?).
-      add libxl_check_bd_connected in xen libxl
-        snprintf(s, sizeof(s), "/local/domain/0/backend/vbd/%d/%d/state",
-        check wether the result equal to "4" or not
-但是, 但是. 还是没法实现BlockStatsFlags, 因为缺参数. 
-这东西还真是不好实现, 因为hvm情况下, qmp根据就没有连接. 可以现实现pv的情况. 然后再看hvm怎么解决.
-hvm and pv qemu process:
-linux-vm4:/sys/devices/xen-backend # ps aux |grep qemu
-root      3602  0.0  0.5 151480  7016 ?        Ssl  21:28   0:00 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 11 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-11,server,nowait -mon chardev=libxl-cmd,mode=control -xen-attach -name sles11_sp2_pv -vnc 127.0.0.1:0 -M xenpv -m 513
-root      3706  0.0  0.2 123476  3396 ?        Sl   13:52   0:01 /usr/lib/xen/bin/qemu-system-i386 -xen-domid 0 -xen-attach -name dom0 -nographic -M xenpv -daemonize -monitor /dev/null
-root      3750  4.2  0.8  97968 11316 ?        SLsl 21:30   2:30 /usr/lib/xen/bin/qemu-dm -d 12 -domain-name bjz_04_sles11_sp2 -vnc 127.0.0.1:0 -vncunused -videoram 8 -boot c -acpi -vcpus 4 -vcpu_avail 0x01 -net none -M xenfv
+*** IMPORTANT: This discussion is still preliminary so you should NOT discuss this with people outside of SUSE. Until you hear otherwise, please leave those conversations to PM. ***
 
-hvm qemu commands: 
--mon chardev=libxl-cmd,mode=control
-难道是可以用monitor command直接得到? 似乎可以, ref: libxl__qemu_traditional_cmd
+-------
 
-20:41 2013-02-21
-company, annual, summary
-1, the code is dynamic.
-when i work in previous company, close source, embedded software. in the project life, the code is not changed. e.g. the android version, the kernel version in our arm android pad project. 
-but in suse, it is not. even when i write a patch, the upstream maybe changes a lot.
-so, it is essential that keep an eye on mailing list. in fact, it is interesting. i had subscribe some mailing list before join the suse. but i rare to read them.
-2, hackweek.
-i love it.
-opensuse arm on allwinner a10.
+For SLES 11, our virtualization story will remain unchanged: Xen and KVM are equally and fully supported. Support for SLES 11 continues through 2019.
 
-21:02 2013-02-21
-software skill, SCM, git, specifying range, examples
-ref: git rev-parse --help
-1, git format-patch A^~
-从commit A开始到最新commit的所有patch.
-2, git fotmat-patch A^!
-只生成这个commit的patch.
-注: r1^! includes commit r1 but excludes all of its parents.
 
-9:07 2013-2-22
-1, lab reservation system.
-1), login with name and domain. do not login with ip address.
-2), send email to lab administrator and cc jason.
-2, bug for pci detach
-1), pci detach not work while domain is not active.
-2), qemu-dm. about the operation sequence.
-3, write pci Common library.
-1), common code.
-2), maintain the global state in libvirt. solve the conflict in the different driver.
+For SLE 12, KVM will be positioned as our primary hypervisor. The reasons for making this change include lightening the workload for SUSE and partners and simplifying other SLE development efforts (such as Common Criteria).
+
+
+The plan is to offer XEN as a add-on offering to SLES 12 that would be an added cost to those who want to use it. It was mentioned that this would help track the demand for XEN.
+
+
+Before this decision can be finalized (hopefully by the end of the year), Michal needs to gather additional information about:
+1) Technical differences between XEN and KVM (supported limits, performance, etc.)
+2) Business Impact (impact to current XEN customers, potential loss of customers to RedHat, partner impact, etc.)
+3) Migration from Xen to KVM (documentation needed in the SLES 11 SP3 timeframe; migration tool needed for the SLE 12 timeframe).
+
+
+In response to Michal's presentation, Jan expressed concerns that the customer experience and integration of XEN with SLES will be negatively impacted by suddenly offering it as an add-on. Specifically, even now with XEN an integrated part of SLES, it is often ignored or forgotten when developers from other teams make changes to subsystems that interact with XEN (for example, power management). This leads to breakages that go unnoticed until a partner or customer runs into them. If XEN is decoupled from SLES, the likelihood of this happening increases dramatically. Michal suggested that we would still continue to develop XEN as part of SLES and that the split from SLES would only be done at the last possible moment. Jan rebutted that the negative impact would still occur once that split occurred.
+
+
+The discussion then shifted to virtualization management tools. We hear often from customers that they need something more than virt-manager for managing their virtualization environments -- something like convirt, ovirt, etc. Michal stated that SUSE Cloud is the next evolution of those tools and therefore we would skip tools such as these and move people to cloud. Additionally there is the possibility that SUSE Manager could be enhanced to help manage larger virtualization environments where cloud was not a good fit.
+
+--------
+
+I hope my summary was accurate and made sense. For those who were in attendance, if there are important points that I missed or summarized incorrectly, please reply to the group with your corrections.
+
+I have sent out an appointment for a follow-up discussion on this topic which will provide an opportunity to ask questions, make comments, or raise concerns. If you are unable to attend, please feel free to reply to this thread with those comments. Thanks.
+
+
+Jason
+
+Jason Douglas
+Engineering Manager, Virtualization
+SUSE
+jdouglas@suse.com
+1.801.861.1649
+
+14:12 2013-02-22
+company, sle12, virtual team
+1, virtual team:
+https://wiki.innerweb.novell.com/index.php/SUSE/SLE12/Virtual_Teams
+2, sle12 resource:
+https://wiki.innerweb.novell.com/index.php/SUSE/SLE12
+This webpage is to track SLE12 process, from features to completion. 
+https://wiki.innerweb.novell.com/index.php/SUSE/SLE12/HowToDevelop
+
+15:00 2013-02-22
+virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont2
 
