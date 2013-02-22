@@ -562,10 +562,10 @@ kernel, porting, analysis, allwinner a10, cubieboard
 
 11:07 2013-2-16
 virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont20, final version test, cont3, send crash message to Jim
-Hi, Jim
+1, Hi, Jim
 
 Sorry for the late crash message. here is my crash log:
-1, hvm save and restore.
+1), hvm save and restore.
 save began during boot:
 Program received signal SIGSEGV, Segmentation fault.
 [Switching to Thread 0x7ffff7fa97e0 (LWP 4427)]
@@ -584,7 +584,7 @@ Program received signal SIGSEGV, Segmentation fault.
 #5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
     at libvirtd.c:1481
 
-2, pv create fail
+2), pv create fail
 Program received signal SIGSEGV, Segmentation fault.
 0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
 170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
@@ -613,7 +613,7 @@ $16 = {parent = {parent = {magic = 3405643790, refs = 5, klass = 0x726c30},
 (gdb) p (((libxlEventHookInfoPtr)0x7fc170000e80)->priv)->ctx
 $17 = (libxl_ctx *) 0x71e650
 
-3, pv crash at destroy:
+3), pv crash at destroy:
 (gdb) where
 #0  libxl_osevent_occurred_timeout (ctx=<optimized out>,
     for_libxl=0x7f8670002f20) at libxl_event.c:1105
@@ -654,7 +654,7 @@ $17 = (libxl_ctx *) 0x71e650
     at ../sysdeps/unix/sysv/linux/x86_64/clone.S:112
 #16 0x0000000000000000 in ?? ()
 
-4, pv. i remember it fail at create.
+4), pv. i remember it fail at create.
 Program received signal SIGSEGV, Segmentation fault.
 0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
 170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
@@ -670,6 +670,163 @@ Program received signal SIGSEGV, Segmentation fault.
     at rpc/virnetserver.c:1108
 #5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
     at libvirtd.c:1481
+
+2, (20:31 2013-02-22)
+jim reply 20130221
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+> test version: libvirt upstream and xen-unstable. the xen package is in my ibs: sles11 sp3
+> Sorry for the late crash message. here is my crash log:
+>   
+
+It seems you easily cause crashes :).  Mine are harder to produce, but
+races can behave differently on different systems...
+
+> 1, hvm save and restore.
+> save began during boot:
+> Program received signal SIGSEGV, Segmentation fault.
+> [Switching to Thread 0x7ffff7fa97e0 (LWP 4427)]
+> 0x00007fffea6bb690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+>   
+
+You need to build with '-O0' so these variables aren't optimized out. 
+We need to see what caused the segfault.  Was info NULL?  Was info->priv
+NULL?  Can you print these two?
+
+> 170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+> (gdb) where
+> #0  0x00007fffea6bb690 in libxlFDEventCallback (watch=<optimized out>,
+>     fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+>     at libxl/libxl_driver.c:170
+> #1  0x00007ffff74d71be in virEventPollDispatchHandles (fds=<optimized out>,
+>     nfds=<optimized out>) at util/vireventpoll.c:500
+> #2  virEventPollRunOnce () at util/vireventpoll.c:646
+> #3  0x00007ffff74d5c0b in virEventRunDefaultImpl () at util/virevent.c:247
+> #4  0x00007ffff75f09f5 in virNetServerRun (srv=0x6b2c90)
+>     at rpc/virnetserver.c:1108
+> #5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+>     at libvirtd.c:1481
+>
+> 2, pv create fail
+> Program received signal SIGSEGV, Segmentation fault.
+> 0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+>   
+
+Same here.
+
+> 170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+> (gdb) where
+> #0  0x00007fc17ef29690 in libxlFDEventCallback (watch=<optimized out>,
+>     fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+>     at libxl/libxl_driver.c:170
+> #1  0x00007fc18bd451be in virEventPollDispatchHandles (fds=<optimized out>,
+>     nfds=<optimized out>) at util/vireventpoll.c:500
+> #2  virEventPollRunOnce () at util/vireventpoll.c:646
+> #3  0x00007fc18bd43c0b in virEventRunDefaultImpl () at util/virevent.c:247
+> #4  0x00007fc18be5e9f5 in virNetServerRun (srv=0x6b2c20)
+>     at rpc/virnetserver.c:1108
+> #5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+>     at libvirtd.c:1481
+> (gdb) p *((libxlEventHookInfoPtr)0x7fc170000e80)
+> $19 = {next = 0x0, priv = 0x71e2a0, xl_priv = 0x7fc178007a50, id = 1338}
+> (gdb) p ((libxlEventHookInfoPtr)0x7fc170000e80)->xl_priv
+> $15 = (void *) 0x7fc178007a50
+> (gdb) p *(((libxlEventHookInfoPtr)0x7fc170000e80)->priv)
+> $16 = {parent = {parent = {magic = 3405643790, refs = 5, klass = 0x726c30},
+>     lock = {lock = {__data = {__lock = 0, __count = 0, __owner = 0,
+>           __nusers = 0, __kind = 0, __spins = 0, __list = {__prev = 0x0,
+>             __next = 0x0}}, __size = '\000' <repeats 39 times>,
+>         __align = 0}}}, ctx = 0x71e650, deathW = 0x0, timerRegistrations = 0x0}
+> (gdb) p (((libxlEventHookInfoPtr)0x7fc170000e80)->priv)->ctx
+> $17 = (libxl_ctx *) 0x71e650
+>
+> 3, pv crash at destroy:
+>   
+
+Was this a segfault too?
+
+> (gdb) where
+> #0  libxl_osevent_occurred_timeout (ctx=<optimized out>,
+>     for_libxl=0x7f8670002f20) at libxl_event.c:1105
+> #1  0x00007f868217834a in libxlRegisteredTimeoutsCleanup (priv=<optimized out>)
+>     at libxl/libxl_driver.c:378
+> #2  libxlVmCleanup (driver=0x7f8678023870, vm=0x7f867805a860,
+>     reason=<optimized out>) at libxl/libxl_driver.c:640
+> #3  0x00007f86821784f2 in libxlVmReap (driver=0x7f8678023870,
+>     vm=0x7f867805a860, reason=VIR_DOMAIN_SHUTOFF_DESTROYED)
+>     at libxl/libxl_driver.c:661
+> #4  0x00007f868217b676 in libxlDomainDestroyFlags (dom=0x7f8670002d40,
+>     flags=<optimized out>) at libxl/libxl_driver.c:1795
+> #5  0x00007f868f05a737 in virDomainDestroy (domain=0x7f8670002d40)
+>     at libvirt.c:2224
+> #6  0x000000000042e966 in remoteDispatchDomainDestroy (args=<optimized out>,
+>     rerr=<optimized out>, msg=<optimized out>, client=<optimized out>,
+>     server=<optimized out>) at remote_dispatch.h:1277
+> #7  remoteDispatchDomainDestroyHelper (server=<optimized out>,
+>     client=<optimized out>, msg=<optimized out>, rerr=0x7f8684896bf0,
+>     args=<optimized out>, ret=<optimized out>) at remote_dispatch.h:1255
+> #8  0x00007f868f0aac73 in virNetServerProgramDispatchCall (
+>     msg=<optimized out>, client=<optimized out>, server=<optimized out>,
+>     prog=<optimized out>) at rpc/virnetserverprogram.c:432
+> #9  virNetServerProgramDispatch (prog=0x6bdfb0, server=0x6b2c20,
+>     client=0x7f86700020f0, msg=0x7f8670001040) at rpc/virnetserverprogram.c:305
+> #10 0x00007f868f0b02ce in virNetServerProcessMsg (srv=<optimized out>,
+>     client=0x7f86700020f0, prog=0x6cabc0, msg=0x7f8670001040)
+>     at rpc/virnetserver.c:162
+> #11 0x00007f868f0b0f73 in virNetServerHandleJob (jobOpaque=<optimized out>,
+>     opaque=0x6b2c20) at rpc/virnetserver.c:183
+> #12 0x00007f868efbb4c6 in virThreadPoolWorker (opaque=<optimized out>)
+>     at util/virthreadpool.c:144
+> #13 0x00007f868efbaab7 in virThreadHelper (data=<optimized out>)
+>     at util/virthreadpthread.c:161
+> #14 0x00007f868bc1c7b6 in start_thread (arg=<optimized out>)
+>     at pthread_create.c:301
+> #15 0x00007f868b5719cd in clone ()
+>     at ../sysdeps/unix/sysv/linux/x86_64/clone.S:112
+> #16 0x0000000000000000 in ?? ()
+>
+> 4, pv. i remember it fail at create.
+> Program received signal SIGSEGV, Segmentation fault.
+> 0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>, fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>) at libxl/libxl_driver.c:170
+>   
+
+All the segfaults occurred in libxlFDEventCallback.  I suspect libxl has
+deregistered the fd event and now we are trying to use it.  If so, we
+may have to track fd registrations similar to what I did for timer
+registrations.
+
+But we should first see what is causing the segfault by building with
+optimizations off :).
+
+> 170         libxl_osevent_occurred_fd(info->priv->ctx, info->xl_priv, fd, 0, events);
+> (gdb) where
+> #0  0x00007f521f63f690 in libxlFDEventCallback (watch=<optimized out>,
+>     fd=<optimized out>, vir_events=<optimized out>, fd_info=<optimized out>)
+>     at libxl/libxl_driver.c:170
+> #1  0x00007f522c45b1be in virEventPollDispatchHandles (fds=<optimized out>,
+>     nfds=<optimized out>) at util/vireventpoll.c:500
+> #2  virEventPollRunOnce () at util/vireventpoll.c:646
+> #3  0x00007f522c459c0b in virEventRunDefaultImpl () at util/virevent.c:247
+> #4  0x00007f522c5749f5 in virNetServerRun (srv=0x6b2c10)
+>     at rpc/virnetserver.c:1108
+> #5  0x000000000040ecb1 in main (argc=<optimized out>, argv=<optimized out>)
+>     at libvirtd.c:1481
+>
+3, Jim suggest me build with "-O0". do it on xen and libvirt.   
+1), replace "-O2" with "-O0"
+find . -name Makefile > list
+find . -name Rules.mk >> list
+sed -i  "s/\-O2/\-O0/" `cat list`
+2), cc1: error: -Wuninitialized is not supported without -O [-Wuninitialized]
+
+> for f in `cat list`; do echo $f; cp -p $f $f.orig; done
+> sed "s/\-Wuninitialized//" `cat list` -i
+4, test
+linux-work:/home/bamvor/log/novell/hypervisor_and_tools/libvirt/xen4.2_support/20130205 # build.sh ./test.sh /var/lib/xen/images_2/sles11_sp2_pv/sles11_sp2_pv.xml
+1), fail at shutdown at the first round. seqfault at call libxl_osevent_occurred_fd in libxlFDEventCallback. using gdb print the variable all the point is accessable. i still do not know which lead to seqfault. 
+compile it print info, info->priv, info->priv->ctx, info->xl_priv, fd, events.
+meanwhile, i do not agree that info->priv is NULL, because if is is NULL, virObjectLock will fail before calling libxl_osevent_occurred_fd.
 
 14:41 2013-02-17
 GTD
@@ -719,9 +876,9 @@ virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont1
 1), 用原来的脚本测试lock基本功能是否正确.
 2), 学习如何使用ao_how.
 2, compile error
-1), virObjectLockable 
+3, virObjectLockable 
 lock move from virDomainObj to virDomainObj.parent(virObjectLockable type).
-2), virDomainObjLock, virDomainObjUnlock dissappear.
+4, virDomainObjLock, virDomainObjUnlock dissappear.
 drvier lock是否需要, 与obj是否需要做好流程.
 in qemu driver, there is a new variable virQEMUDriverConfigPtr for driver lock. which is managed by virClassNew.
 virQEMUDriverConfigPtr virQEMUDriverGetConfig(virQEMUDriverPtr driver)
@@ -734,6 +891,11 @@ virQEMUDriverConfigPtr virQEMUDriverGetConfig(virQEMUDriverPtr driver)
 }
 
 patch: b090aa7d.
+感觉只要保证拿到obj ref count后不在拿driver lock就没有问题.
+现在obj没有锁, 如果driver再不锁, 那是不是就没人保护了?
+\TODO: check其他driver.
+5, virDomainFindByUUID is replaced by virDomainObjListFindByUUID.
+commit: 4f6ed6c3. it seems it is a simple rename.
 
 12:16 2013-02-19
 suse, linux, SLE11 SP3, SLE 11 SP3 Beta1 released; how to dump a uefi usb stick
@@ -920,13 +1082,14 @@ Lars
 
 13:30 2013-02-22
 GTD
-0, 11:30-17:50
+0, 11:30-17:50 19:55-
 
 1, today
 1), 9:00-9:40 US/China Sync meeing. see"9:07 2013-2-22".
 2), 30' mailing list. see"13:29 2013-02-22"
-3), 15:00- libvirt libxl lock patch. see"15:00 2013-02-22"
-
+3), 15:00-17:50 20:24-21:35 libvirt libxl lock patch. see"11:03 2013-02-19", "15:00 2013-02-22"
+4), 21:37-22:12 rebuild libvirt with "-O0" for xen4.2 support. see"11:07 2013-2-16"2.
+5), Summary: 今天加上晚上的时间, 勉强能到6小时工作时间. 现在脖子疼了, 下周继续加油. 
 
 2, \TODO
 1), work report. send this after read jim email.
@@ -1063,4 +1226,30 @@ https://wiki.innerweb.novell.com/index.php/SUSE/SLE12/HowToDevelop
 
 15:00 2013-02-22
 virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont2
+
+21:17 2013-02-22
+company, openSUSE 
+"Agustin Benito Bethencourt <abebe@suse.com>"_email_"[devel] please welcome new openSUSE Team member Ancor Gonzalez Sosa"_20130220_1808
+Hi,
+
+It's my pleasure to announce a new openSUSE Team member.
+
+Áncor González Sosa joined this Monday the openSUSE Team at SUSE. He will be 
+located in Nuremberg for around 18 months before moving back to his country to 
+work remotely, close to his family.
+
+Áncor is a senior Rails/Ruby Developer with experience as entrepreneurship, 
+product and project management. He is a GNU/Linux enthusiast for more than 12 
+years now and a well known Free Software advocate in his homeland. 
+
+Áncor is also a motorcycle and music (bass) fan.
+
+Please join me in giving him a warm welcome.
+
+Saludos
+-- 
+Agustin Benito Bethencourt
+openSUSE Team Lead at SUSE
+abebe@suse.com
+
 
