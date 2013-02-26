@@ -19,9 +19,6 @@ wait_started()
 {
     timeout_sec=$1
 
-    wait_start=`date +%s`
-    wait_end=$((wait_start + timeout_sec))
-
     domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
     echo domain id is $domain_id 
     echo "waiting domain started"
@@ -35,7 +32,7 @@ wait_started()
             echo cpu time is $cpu_time. $domain_name fully started. 
             break 
         fi
-        if [ `date +%s` -gt $wait_end ]; then
+        if [ `$cpu_time` -gt $timeout_sec ]; then
             echo "wait started timeout: $timeout_sec".
             break
         fi
@@ -91,7 +88,7 @@ if [ -z $1 ]; then
 fi
 
 if [ -z $timeout ]; then
-    timeout=60
+    timeout=120
     echo "timeout is empty, using $timeout as default"
 fi
 
