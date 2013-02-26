@@ -1227,11 +1227,12 @@ GTD
 
 11:02 2013-02-26
 GTD
-0, 10:40
+0, 10:40-18:45 20:20-22:00
 
 1, today
 1), 11:00-11:38 1h debug libvirt xen4.2 support. "11:39 2013-02-26"
-3), 16:29-18:15 libvirt libxl lock patch. see"16:28 2013-02-26"
+2), 16:29-18:43 20:20-21:52 libvirt libxl lock patch. see"16:28 2013-02-26"
+3), Summary: 时间上勉强到6个小时, 发现自己软件能力真的挺差的, 多花时间联系才好.
 
 2, \TODO
 1), work report. send this after read jim email.
@@ -1595,6 +1596,41 @@ Program received signal SIGSEGV, Segmentation fault.
     at conf/domain_conf.c:16193
 #4  0x00007fb6e68d9bdd in libxlListAllDomains (conn=0x729800,
     domains=0x7fb6ed883ad0, flags=1) at libxl/libxl_driver.c:4604
-2, 需要知道为什么去掉lock patch, 功能就没问题. 
+2, 需要知道为什么去掉lock patch, 功能就没问题. 逐步看自己的patch, 发现需要去掉
+libxlDomainObjBeginJobInternal成功时的virObjectUnref, 修改如下:
+From 31fa9e027bbeae64419e84ac5cd357b10bc3bf4d Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Tue, 26 Feb 2013 18:32:17 +0800
+Subject: [PATCH 1/1] remove virObjectUnref in libxlDomainObjBeginJobInternal
+ while it successful
 
+remove virObjectUnref in libxlDomainObjBeginJobInternal while it success. if not, the lock obj will be freeed at the end of libxlDomainObjBeginJobInternal. it lead to virObjectLock fail in future steps.
+---
+ src/libxl/libxl_driver.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index ac0aa33..dfbc904 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -556,7 +556,6 @@ retry:
+     if (libxlDomainTrackJob(job))
+         libxlDomainObjSaveJob(driver, obj);
+ 
+-    virObjectUnref(obj);
+     return 0;
+ 
+ error:
+-- 
+1.7.12
+3, 看看为什么vm刚启动时, shutdown会失败.
+1), shutdown, reboot trigger by write poweroff or reboot to /local/domain/6/control/shutdown, e.g.
+xenstore-write /local/domain/6/control/shutdown "reboot"
+在suspend里面看到, 似乎是清掉(ack)才表示操作完成.
+
+4, \TODO: 判断start不准确很不方便阿.
+
+5, 简单测试, hvm情况下都正确.
+看看能否利用上ao_how, 现在好像没有人用.
+at first, i should use for_event and not set callback.
 
