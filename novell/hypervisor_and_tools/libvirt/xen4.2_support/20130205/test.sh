@@ -1,5 +1,10 @@
 #!/bin/bash
 
+usage()
+{
+    echo "$0 -t timeout_second domain_xml"
+}
+
 test_ret()
 {
     if [ $1 -ne 0 ]; then
@@ -12,6 +17,11 @@ test_ret()
 
 wait_started()
 {
+    timeout_sec=$1
+
+    wait_start=`date +%s`
+    wait_end=$((wait_start + timeout_sec))
+
     domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
     echo domain id is $domain_id 
     echo "waiting domain started"
@@ -25,6 +35,10 @@ wait_started()
             echo cpu time is $cpu_time. $domain_name fully started. 
             break 
         fi
+        if [ `date +%s` -gt $wait_end ]; then
+            echo "wait started timeout: $timeout_sec".
+            break
+        fi
         last_cpu_time=$cpu_time
         sleep 3
     done
@@ -35,7 +49,7 @@ reboot_or_shutdown()
     action=$1
 
     domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
-    wait_started
+    wait_started $timeout
     echo "$action $domain_name"
     virsh $action $domain_name
     echo -n "wait for $domain_name $domain_id ${action}ing"
@@ -55,9 +69,30 @@ reboot_or_shutdown()
     fi
 }
 
+while getopts 'h:t:' opt; do
+    case $opt in
+        t)
+            timeout=$OPTARG
+            ;;
+        h)
+            usage
+            exit 1
+            ;;
+        *)
+            echo "Internal error!"
+            exit 1
+            ;;
+    esac
+done
+
 if [ -z $1 ]; then
     echo "Error: demain xml missing, exit". 
     exit 1
+fi
+
+if [ -z $timeout ]; then
+    timeout=60
+    echo "timeout is empty, using $timeout as default"
 fi
 
 domain_xml=$1
@@ -101,7 +136,7 @@ for i in `seq 100`; do
     reboot_or_shutdown shutdown
     virsh create $domain_xml
     sleep 1
-    wait_started
+    wait_started $timeout
 
     echo "test libxlDoDomainSave: save"
     virsh save $domain_name ${domain_name}.save
