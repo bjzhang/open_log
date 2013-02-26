@@ -853,6 +853,27 @@ index 22bd245..9ae967d 100644
 2013-02-25 06:15:13.246+0000: 23164: warning : virObjectLock:318 : Object (nil) ((unknown)) is not a virObjectLockable instance
 2013-02-25 06:15:13.246+0000: 23164: warning : virObjectUnlock:339 : Object (nil) ((unknown)) is not a virObjectLockable instance
 linux-work:上面安装的xen版本是否正确?
+6, (21:50 2013-2-25)
+Hi, Jim
+
+thanks your reply.
+
+i test with print info->priv and other variable in libxlFDEventCallback and -O0.
+test it on both pv and hvm. hvm test is not finished yet.
+
+for pv test, both fail at create(physial machine fail at the first round, vmware machine fail at the 6th round). 
+the failure is because info->priv is empty. but i do not why it is not empty in gdb while libvirtd crash before i print info->priv in libxlFDEventCallback.
+
+both fail just after the following test: define -> start -> destroy -> sleep 1 -> create. note that there is no sleep or wait between start and destroy. is that possible the destroy is broken and lead to create fail?
+
+i have also started test on hvm, it successful 7 times right now.
+
+my test combine with the several operations main focus on long running jobs.
+test version: libvirt commit: 676688b. xen commit: 66eb6f8b: xen: arm: implement domain_page_map_to_mfn.
+
+bamvor
+
+
 
 14:41 2013-02-17
 GTD
@@ -1172,9 +1193,6 @@ https://wiki.innerweb.novell.com/index.php/SUSE/SLE12
 This webpage is to track SLE12 process, from features to completion. 
 https://wiki.innerweb.novell.com/index.php/SUSE/SLE12/HowToDevelop
 
-15:00 2013-02-22
-virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont2
-
 21:17 2013-02-22
 company, openSUSE 
 "Agustin Benito Bethencourt <abebe@suse.com>"_email_"[devel] please welcome new openSUSE Team member Ancor Gonzalez Sosa"_20130220_1808
@@ -1205,7 +1223,15 @@ GTD
 0, 9:50
 
 1, today
-1), 14:00- rebuild libvirt with "-O0" for xen4.2 support. see"11:07 2013-2-16"5.
+1), 14:00-15:30 21:00-22:30 rebuild libvirt with "-O0" for xen4.2 support. see"11:07 2013-2-16"5.
+
+11:02 2013-02-26
+GTD
+0, 10:40
+
+1, today
+1), 11:00-11:38 1h debug libvirt xen4.2 support. "11:39 2013-02-26"
+3), 16:29-18:15 libvirt libxl lock patch. see"16:28 2013-02-26"
 
 2, \TODO
 1), work report. send this after read jim email.
@@ -1285,22 +1311,290 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-21:50 2013-2-25
-Hi, Jim
+11:39 2013-02-26
+virtualization, libvirt, xen, xenlight, libxl, xen4.2 support, cont20, final version test, cont4
+1, test on hvm fail at create: add disk fail
+libxl: debug: libxl_create.c:1198:do_domain_create: ao 0x7f2ee4002170: create: how=(nil) callback=(nil) poller=0x7f2ee4001980
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_create.c:644:initiate_domain_create: running bootloader
+libxl: debug: libxl_bootloader.c:321:libxl__bootloader_run: not a PV domain, skipping bootloader
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee4012ab0: deregister unregistered
+libxl: debug: libxl_numa.c:435:libxl__get_numa_candidate: New best NUMA placement candidate found: nr_nodes=1, nr_cpus=4, nr_vcpus=8, free_memkb=722
+libxl: detail: libxl_dom.c:192:numa_place_domain: NUMA placement candidate with 1 nodes, 4 cpus and 722 KB free selected
+xc: detail: elf_parse_binary: phdr: paddr=0x100000 memsz=0x9ce04
+xc: detail: elf_parse_binary: memory: 0x100000 -> 0x19ce04
+xc: info: VIRTUAL MEMORY ARRANGEMENT:
+  Loader:        0000000000100000->000000000019ce04
+  Modules:       0000000000000000->0000000000000000
+  TOTAL:         0000000000000000->000000001f800000
+  ENTRY ADDRESS: 0000000000100000
+xc: info: PHYSICAL MEMORY ALLOCATION:
+  4KB PAGES: 0x0000000000000200
+  2MB PAGES: 0x00000000000000fb
+  1GB PAGES: 0x0000000000000000
+xc: detail: elf_load_binary: phdr 0 at 0x0x7f2eeb383000 -> 0x0x7f2eeb416c7c
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/68/768/state token=3/10c: register slotnum=3
+libxl: debug: libxl_create.c:1211:do_domain_create: ao 0x7f2ee4002170: inprogress: poller=0x7f2ee4001980, flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/68/768/state token=3/10c: event epath=/local/domain/0/backend/vbd/68/768/state
+libxl: debug: libxl_event.c:647:devstate_watch_callback: backend /local/domain/0/backend/vbd/68/768/state wanted state 2 still waiting state 1
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/68/768/state token=3/10c: event epath=/local/domain/0/backend/vbd/68/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/68/768/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/68/768/state token=3/10c: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee4004788: deregister unregistered
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_dm.c:1135:libxl__spawn_local_dm: Spawning device-model /usr/lib/xen/bin/qemu-dm with arguments:
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   /usr/lib/xen/bin/qemu-dm
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -d
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   68
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -domain-name
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   bjz_04_sles11_sp2
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vnc
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   127.0.0.1:0
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vncunused
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -videoram
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   8
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -boot
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   c
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -acpi
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vcpus
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   4
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vcpu_avail
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   0x01
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -net
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   none
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -M
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   xenfv
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f2ee4012ce8 wpath=/local/domain/0/device-model/68/state token=3/10d: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4012ce8 wpath=/local/domain/0/device-model/68/state token=3/10d: event epath=/local/domain/0/device-model/68/state
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4012ce8 wpath=/local/domain/0/device-model/68/state token=3/10d: event epath=/local/domain/0/device-model/68/state
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f2ee4012ce8 wpath=/local/domain/0/device-model/68/state token=3/10d: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee4012ce8: deregister unregistered
+libxl: debug: libxl_event.c:1737:libxl__ao_progress_report: ao 0x7f2ee4002170: progress report: ignored
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7f2ee4002170: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7f2ee4002170: destroy
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x730ab0 wpath=@releaseDomain token=3/10e: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x730ab0 wpath=@releaseDomain token=3/10e: event epath=@releaseDomain
+libxl: debug: libxl.c:998:domain_death_xswatch_callback: [evg=0x7f2ee4004980:68] from domid=68 nentries=1 rc=1
+libxl: debug: libxl.c:1009:domain_death_xswatch_callback: [evg=0x7f2ee4004980:68]   got=domaininfos[0] got->domain=68
+libxl: debug: libxl.c:1036:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=ffff000a
+libxl: debug: libxl.c:1002:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1066:domain_death_xswatch_callback: domain death search done
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x730ab0 wpath=@releaseDomain token=3/10e: event epath=@releaseDomain
+libxl: debug: libxl.c:998:domain_death_xswatch_callback: [evg=0x7f2ee4004980:68] from domid=68 nentries=1 rc=1
+libxl: debug: libxl.c:1009:domain_death_xswatch_callback: [evg=0x7f2ee4004980:68]   got=domaininfos[0] got->domain=68
+libxl: debug: libxl.c:1036:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=10006
+libxl: debug: libxl.c:1048:domain_death_xswatch_callback:  shutdown reporting
+libxl: debug: libxl.c:1002:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1066:domain_death_xswatch_callback: domain death search done
+libxl: debug: libxl_event.c:1154:egc_run_callbacks: event 0x7f2ee4011180 callback type=domain_shutdown
+libxl: debug: libxl.c:1250:libxl_domain_destroy: ao 0x7f2ee40068d0: create: how=(nil) callback=(nil) poller=0x7f2ee4001980
+libxl: debug: libxl_dm.c:1238:libxl__destroy_device_model: Device Model signaled
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f2ee4003908 wpath=/local/domain/0/backend/vbd/68/768/state token=2/10f: register slotnum=2
+libxl: debug: libxl.c:1259:libxl_domain_destroy: ao 0x7f2ee40068d0: inprogress: poller=0x7f2ee4001980, flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4003908 wpath=/local/domain/0/backend/vbd/68/768/state token=2/10f: event epath=/local/domain/0/backend/vbd/68/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/68/768/state wanted state 6 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f2ee4003908 wpath=/local/domain/0/backend/vbd/68/768/state token=2/10f: deregister slotnum=2
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee4003908: deregister unregistered
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block remove
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7f2ee40068d0: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7f2ee40068d0: destroy
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x730ab0 wpath=@releaseDomain token=3/10e: deregister slotnum=3
+libxl: debug: libxl_create.c:1198:do_domain_create: ao 0x7f2ee40068d0: create: how=(nil) callback=(nil) poller=0x7f2ee4001980
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_create.c:644:initiate_domain_create: running bootloader
+libxl: debug: libxl_bootloader.c:321:libxl__bootloader_run: not a PV domain, skipping bootloader
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee44130c0: deregister unregistered
+libxl: debug: libxl_numa.c:435:libxl__get_numa_candidate: New best NUMA placement candidate found: nr_nodes=1, nr_cpus=4, nr_vcpus=8, free_memkb=723
+libxl: detail: libxl_dom.c:192:numa_place_domain: NUMA placement candidate with 1 nodes, 4 cpus and 723 KB free selected
+xc: detail: elf_parse_binary: phdr: paddr=0x100000 memsz=0x9ce04
+xc: detail: elf_parse_binary: memory: 0x100000 -> 0x19ce04
+xc: info: VIRTUAL MEMORY ARRANGEMENT:
+  Loader:        0000000000100000->000000000019ce04
+  Modules:       0000000000000000->0000000000000000
+  TOTAL:         0000000000000000->000000001f800000
+  ENTRY ADDRESS: 0000000000100000
+xc: info: PHYSICAL MEMORY ALLOCATION:
+  4KB PAGES: 0x0000000000000200
+  2MB PAGES: 0x00000000000000fb
+  1GB PAGES: 0x0000000000000000
+xc: detail: elf_load_binary: phdr 0 at 0x0x7f2eeb383000 -> 0x0x7f2eeb416c7c
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/69/768/state token=3/110: register slotnum=3
+libxl: debug: libxl_create.c:1211:do_domain_create: ao 0x7f2ee40068d0: inprogress: poller=0x7f2ee4001980, flags=i
+libxl: debug: libxl_event.c:478:watchfd_callback: watch w=0x7f2ee4004788 epath=@releaseDomain token=3/10e: counter != 110
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/69/768/state token=3/110: event epath=/local/domain/0/backend/vbd/69/768/state
+libxl: debug: libxl_event.c:647:devstate_watch_callback: backend /local/domain/0/backend/vbd/69/768/state wanted state 2 still waiting state 1
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/69/768/state token=3/110: event epath=/local/domain/0/backend/vbd/69/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/69/768/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f2ee4004788 wpath=/local/domain/0/backend/vbd/69/768/state token=3/110: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee4004788: deregister unregistered
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_dm.c:1135:libxl__spawn_local_dm: Spawning device-model /usr/lib/xen/bin/qemu-dm with arguments:
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   /usr/lib/xen/bin/qemu-dm
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -d
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   69
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -domain-name
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   bjz_04_sles11_sp2
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vnc
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   127.0.0.1:0
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vncunused
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -videoram
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   8
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -boot
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   c
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -acpi
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vcpus
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   4
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vcpu_avail
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   0x01
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -net
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   none
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -M
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   xenfv
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f2ee44132f8 wpath=/local/domain/0/device-model/69/state token=3/111: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee44132f8 wpath=/local/domain/0/device-model/69/state token=3/111: event epath=/local/domain/0/device-model/69/state
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee44132f8 wpath=/local/domain/0/device-model/69/state token=3/111: event epath=/local/domain/0/device-model/69/state
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f2ee44132f8 wpath=/local/domain/0/device-model/69/state token=3/111: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee44132f8: deregister unregistered
+libxl: debug: libxl_event.c:1737:libxl__ao_progress_report: ao 0x7f2ee40068d0: progress report: ignored
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7f2ee40068d0: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7f2ee40068d0: destroy
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x730ab0 wpath=@releaseDomain token=3/112: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x730ab0 wpath=@releaseDomain token=3/112: event epath=@releaseDomain
+libxl: debug: libxl.c:998:domain_death_xswatch_callback: [evg=0x7f2ee4004980:69] from domid=69 nentries=1 rc=1
+libxl: debug: libxl.c:1009:domain_death_xswatch_callback: [evg=0x7f2ee4004980:69]   got=domaininfos[0] got->domain=69
+libxl: debug: libxl.c:1036:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=ffff0022
+libxl: debug: libxl.c:1002:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1066:domain_death_xswatch_callback: domain death search done
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x730ab0 wpath=@releaseDomain token=3/112: event epath=@releaseDomain
+libxl: debug: libxl.c:998:domain_death_xswatch_callback: [evg=0x7f2ee4004980:69] from domid=69 nentries=1 rc=1
+libxl: debug: libxl.c:1009:domain_death_xswatch_callback: [evg=0x7f2ee4004980:69]   got=domaininfos[0] got->domain=69
+libxl: debug: libxl.c:1036:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=6
+libxl: debug: libxl.c:1048:domain_death_xswatch_callback:  shutdown reporting
+libxl: debug: libxl.c:1002:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1066:domain_death_xswatch_callback: domain death search done
+libxl: debug: libxl_event.c:1154:egc_run_callbacks: event 0x7f2ee400fc80 callback type=domain_shutdown
+libxl: debug: libxl.c:1250:libxl_domain_destroy: ao 0x7f2ee400ff00: create: how=(nil) callback=(nil) poller=0x7f2ee4001980
+libxl: debug: libxl_dm.c:1238:libxl__destroy_device_model: Device Model signaled
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f2ee40054e8 wpath=/local/domain/0/backend/vbd/69/768/state token=2/113: register slotnum=2
+libxl: debug: libxl.c:1259:libxl_domain_destroy: ao 0x7f2ee400ff00: inprogress: poller=0x7f2ee4001980, flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f2ee40054e8 wpath=/local/domain/0/backend/vbd/69/768/state token=2/113: event epath=/local/domain/0/backend/vbd/69/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/69/768/state wanted state 6 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f2ee40054e8 wpath=/local/domain/0/backend/vbd/69/768/state token=2/113: deregister slotnum=2
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7f2ee40054e8: deregister unregistered
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block remove
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7f2ee400ff00: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7f2ee400ff00: destroy
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x730ab0 wpath=@releaseDomain token=3/112: deregister slotnum=3
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=@releaseDomain token=3/112: empty slot
+libxl: debug: libxl_create.c:1198:do_domain_create: ao 0x7387e0: create: how=(nil) callback=(nil) poller=0x7f2ee4001980
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_create.c:644:initiate_domain_create: running bootloader
+libxl: debug: libxl_bootloader.c:321:libxl__bootloader_run: not a PV domain, skipping bootloader
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7402c0: deregister unregistered
+libxl: debug: libxl_numa.c:435:libxl__get_numa_candidate: New best NUMA placement candidate found: nr_nodes=1, nr_cpus=4, nr_vcpus=8, free_memkb=723
+libxl: detail: libxl_dom.c:192:numa_place_domain: NUMA placement candidate with 1 nodes, 4 cpus and 723 KB free selected
+xc: detail: elf_parse_binary: phdr: paddr=0x100000 memsz=0x9ce04
+xc: detail: elf_parse_binary: memory: 0x100000 -> 0x19ce04
+xc: info: VIRTUAL MEMORY ARRANGEMENT:
+  Loader:        0000000000100000->000000000019ce04
+  Modules:       0000000000000000->0000000000000000
+  TOTAL:         0000000000000000->000000001f800000
+  ENTRY ADDRESS: 0000000000100000
+xc: info: PHYSICAL MEMORY ALLOCATION:
+  4KB PAGES: 0x0000000000000200
+  2MB PAGES: 0x00000000000000fb
+  1GB PAGES: 0x0000000000000000
+xc: detail: elf_load_binary: phdr 0 at 0x0x7f2eeb383000 -> 0x0x7f2eeb416c7c
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: error: libxl.c:2101:device_disk_add: failed to get blktap devpath for 0x73f8c0
 
-thanks your reply.
+libxl: error: libxl_create.c:901:domcreate_launch_dm: unable to add disk devices
+libxl: error: libxl_dm.c:1229:libxl__destroy_device_model: could not find device-model's pid for dom 70
+libxl: error: libxl.c:1414:libxl__destroy_domid: libxl__destroy_device_model failed for 70
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7387e0: complete, rc=-3
+libxl: debug: libxl_create.c:1211:do_domain_create: ao 0x7387e0: inprogress: poller=0x7f2ee4001980, flags=ic
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7387e0: destroy
+xc: debug: hypercall buffer: total allocations:30027 total releases:30027
+xc: debug: hypercall buffer: current allocations:0 maximum allocations:4
+xc: debug: hypercall buffer: cache current size:4
+x
 
-i test with print info->priv and other variable in libxlFDEventCallback and -O0.
-test it on both pv and hvm. hvm test is not finished yet.
+14:04 2013-02-26
+company, IT, network
+"Maximilian Maher <mmaher@suse.de>"_email_"[devel] Renumbering of our Development Network 10.11.0.0/17"_20130226_1431
+Dear Colleagues,
 
-for pv test, both fail at create(physial machine fail at the first round, vmware machine fail at the 6th round). 
-the failure is because info->priv is empty. but i do not why it is not empty in gdb while libvirtd crash before i print info->priv in libxlFDEventCallback.
+with our new Core Switch in place, we will finalize the network
+renumbering of the SUSE R&D network in Nuremberg this week.
 
-both fail just after the following test: define -> start -> destroy -> sleep 1 -> create. note that there is no sleep or wait between start and destroy. is that possible the destroy is broken and lead to create fail?
+The former 10.11.0.0/17 network will be renumbered to 10.121.0.0/18.
 
-i have also started test on hvm, it successful 7 times right now.
+Means: all arch.suse.de machines will become new IPv4 addresses.
+As many of these machines are pre-production samples from our
+partners and provided to us under a strict NDA, we use the renumbering
+to establish a (simple) access list that will limit the access to
+those machines to the 10.120.0.0/14 (suse.de in Nuremberg) and
+10.100.0.0/16 (suse.cz in Prague) networks only.
 
-my test combine with the several operations main focus on long running jobs.
-test version: libvirt commit: 676688b. xen commit: 66eb6f8b: xen: arm: implement domain_page_map_to_mfn.
+For the time being,
+we also allow access from login.suse.de - but in short you might use
+Network to access the new 10.121.0.0./18 (arch.suse.de) network.
+any other developer machine in Nuremberg or Prague to access the new
+10.121.0.0/18 (arch.suse.de) network. If this is not possible for you,
+please send an email to rd-adm@suse.de
 
-bamvor
+We will renumber the machines step by step. Itanium Architecture is done
+already - PowerPC will be  next and then finally the x86_64 Hosts
+(that are managed by orthos.arch.suse.de).
+
+For an overview please have a look at:
+https://wiki.innerweb.novell.com/index.php/Services_Team/Infrastructure
+
+Best Regards,
+    OPS-Services Team
+
+16:17 2013-02-26
+http://www.nuomi.com/deal/history/wtsdv9qj.html
+
+16:28 2013-02-26
+virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont2
+1, test fail
+Program received signal SIGSEGV, Segmentation fault.
+[Switching to Thread 0x7f56d7500700 (LWP 6057)]
+0x00007f56dec102fc in virClassIsDerivedFrom (klass=0x1, parent=0x6d2da0)
+    at util/virobject.c:166
+166             if (klass->magic == parent->magic)
+(gdb) where
+#0  0x00007f56dec102fc in virClassIsDerivedFrom (klass=0x1, parent=0x6d2da0)
+    at util/virobject.c:166
+#1  0x00007f56dec104d4 in virObjectLock (anyobj=0x1) at util/virobject.c:316
+#2  0x00007f56dec36bed in virDomainObjListAddLocked (doms=0x7128e0,
+    caps=0x6f69e0, def=0x748d70, flags=2, oldDef=0x0)
+    at conf/domain_conf.c:1931
+#3  0x00007f56dec36e65 in virDomainObjListAdd (doms=0x7128e0, caps=0x6f69e0,
+    def=0x748d70, flags=2, oldDef=0x0) at conf/domain_conf.c:1995
+#4  0x00007f56d1d5fa9d in libxlDomainCreateXML (conn=0x728de0,
+    xml=0x736bf0 "<domain type='xen'>\n  <name>bjz_04_sles11_sp2</name>\n  <description>None</description>\n  <uuid>5c84adcc-bd59-788a-96d2-195f9b599cfe</uuid>\n  <memory>524288</memory>\n  <currentMemory>524288</currentMem"..., flags=0)
+    at libxl/libxl_driver.c:1717
+#5  0x00007f56deccbfcf in virDomainCreateXML (conn=0x728de0,
+    xmlDesc=0x736bf0 "<domain type='xen'>\n  <name>bjz_04_sles11_sp2</name>\n  <description>None</description>\n  <uuid>5c84adcc-bd59-788a-96d2-195f9b599cfe</uuid>\n  <memory>524288</memory>\n  <currentMemory>524288</currentMem"...,
+    flags=0) at libvirt.c:1988
+1), klass is 0x1, it is invalid.
+2), but virsh create successful, fail at virsh list
+#0  0x00007fb6f37914e8 in virObjectLock (anyobj=0x729a50)
+    at util/virobject.c:317
+#1  0x00007fb6f37b3145 in virDomainListPopulate (payload=0x729a50,
+    name=0x6d2d90, opaque=0x7fb6ed883920) at conf/domain_conf.c:16096
+#2  0x00007fb6f377d079 in virHashForEach (table=0x70d2f0,
+    iter=0x7fb6f37b30f0 <virDomainListPopulate>, data=0x7fb6ed883920)
+    at util/virhash.c:514
+#3  0x00007fb6f37b2a97 in virDomainObjListExport (doms=0x712800,
+    conn=<optimized out>, domains=0x7fb6ed883ad0, flags=<optimized out>)
+    at conf/domain_conf.c:16193
+#4  0x00007fb6e68d9bdd in libxlListAllDomains (conn=0x729800,
+    domains=0x7fb6ed883ad0, flags=1) at libxl/libxl_driver.c:4604
+2, 需要知道为什么去掉lock patch, 功能就没问题. 
+
+
