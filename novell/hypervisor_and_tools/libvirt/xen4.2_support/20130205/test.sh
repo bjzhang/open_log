@@ -32,7 +32,7 @@ wait_started()
             echo cpu time is $cpu_time. $domain_name fully started. 
             break 
         fi
-        if [ `$cpu_time` -gt $timeout_sec ]; then
+        if [ `echo $cpu_time | sed "s/\.[0-9]*s//"` -gt $timeout_sec ]; then
             echo "wait started timeout: $timeout_sec".
             break
         fi
