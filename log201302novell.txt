@@ -1564,10 +1564,73 @@ GTD
 nap 30'
 3), Summary: 今天下午看代码, 终于有了点进展.
 
+14:00 2013-02-27
+work report - week 07, 08
+1, [devel-server] work report - week 07, 08
+1), libvirt xen4.2 patch review and test: debug and discuss with Jim.
+2), improve the lock patch in libvirt libxl driver base on xen-unstable.
+some api changes after xen4.1 and the new asynchronous mechanism in xenlight may be useful for my patch.
+3), Week 07: Chinese Spring Festival. 
+4), US/China Sync. 
+
+14:14 2013-02-27
+virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont3
+1, hang at libxlDomainCoreDump.
+seems hang during core dump, because the driver lock is not released.
+2, read code about ao_how
+1), in libxl__ao_inprogress
+if poller is empty, just set rc=0. is that right? 看起来是没有实现的状态阿.
+2), 似乎domain create里面还用了一些ao_how.
+domcreate_bootloader_console_available -> domcreate_console_available 
+domcreate_attach_pci -> domcreate_console_available 
+domcreate_console_available -> libxl__ao_progress_report
+3, go back to read the init commit about ao_how: 889a89c7
+1), from the initial commit and the code, i could know that if i use ao_how, i should register a event to libvirt, then get the event at the end of such operation.
+2), read egc_run_callbacks:
+aops_for_callback for progress report, aos_for_callback for completion report.
+
+libxl_event_wait -> libxl__egc_cleanup 
+libxl__ao_inprogress -> libxl__egc_cleanup 
+libxl__egc_cleanup -> egc_run_callbacks
+
+3), i need read all the relative function
+libxl__ao_complete_check_progress_reports
+4), 这个好像就能回答"2)"的问题, from commit 889a89c7, if the operation is asynchronous, the caller will return immediate after the operation is trigger. it will not wait for the completion. So, set rc = 0 is right.
+the above things is implemented in libxl__ao_inprogress. and it is indeed at the end of each long running operation.
+5), So, how to register the event handler to libvirt?
+4, when aos_for_callback/aops_for_callback insert into list by LIBXL_TAILQ_INSERT_TAIL?
+libxl__ao_complete_check_progress_reports add aos_for_callback
+libxl__ao_progress_report add aops_for_callback
+
+5, about aops_for_callback
+callback, if provided, is responsible for freeing the event.
+
+6, (13:13 2013-02-28)
+try to add libxl_event code libxl then use it in libvirt:
+ref: tools/libxl/libxl.h
+ * If ao_how->callback==NULL, a libxl_event will be generated which
+ * can be obtained from libxl_event_wait or libxl_event_check.  The
+ * event will have type OPERATION_COMPLETE (which is not used
+ * elsewhere).
+1), 怎么说也得有个fd阿, 上哪里找去?
+搞不明白这个libxl_event是咋回事. 明天怎么也得把libxl_event搞清楚了.
+
+12:54 2013-02-28
+hackweek
+1, study HA.
+2, implement PVH in libvirt.
+it maybe very simple.
+
+12:55 2013-02-28
+GTD
+0, 12:20
+
+1, today
+1), 12:50-13:50 14:35-18:31 libvirt libxl lock patch. see"14:14 2013-02-27"6.
+2), check the virtual team. about virtualization and arm. 没有arm的virtual team。 虚拟化只有讨论sle12里面xen和kvm比较, 取舍的team.
+
 2, \TODO
-1), work report. send this after read jim email.
 2), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
-3), check the virtual team. about virtualization and arm.
 
 2, daily work
 1), tracking xen-arm update.
@@ -1642,43 +1705,37 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-14:00 2013-02-27
-work report - week 07, 08
-1, [devel-server] work report - week 07, 08
-1), libvirt xen4.2 patch review and test: debug and discuss with Jim.
-2), improve the lock patch in libvirt libxl driver base on xen-unstable.
-some api changes after xen4.1 and the new asynchronous mechanism in xenlight may be useful for my patch.
-3), Week 07: Chinese Spring Festival. 
-4), US/China Sync. 
+12:57 2013-02-28
+suse, opensuse, 12.3 RC2 release, flow
+"Alberto Planas Dominguez <aplanas@suse.de>"_email_"[devel] Testing openSUSE 12.3 RC2"_20130227_1907
+Hi,
 
-14:14 2013-02-27
-virtualization, libvirt, xen, patch, lock, cont2, modify for xen4.2, cont3
-1, hang at libxlDomainCoreDump.
-seems hang during core dump, because the driver lock is not released.
-2, read code about ao_how
-1), in libxl__ao_inprogress
-if poller is empty, just set rc=0. is that right? 看起来是没有实现的状态阿.
-2), 似乎domain create里面还用了一些ao_how.
-domcreate_bootloader_console_available -> domcreate_console_available 
-domcreate_attach_pci -> domcreate_console_available 
-domcreate_console_available -> libxl__ao_progress_report
-3, go back to read the init commit about ao_how: 889a89c7
-1), from the initial commit and the code, i could know that if i use ao_how, i should register a event to libvirt, then get the event at the end of such operation.
-2), read egc_run_callbacks:
-aops_for_callback for progress report, aos_for_callback for completion report.
+Tomorrow will be an important day for this team. Our release manager (coolo) 
+asked autobuild team to sign build0094. That means that openSUSE RC2 is here!
 
-libxl_event_wait -> libxl__egc_cleanup 
-libxl__ao_inprogress -> libxl__egc_cleanup 
-libxl__egc_cleanup -> egc_run_callbacks
+The full team is testing the distribution, including KDE, GNOME, UEFI and 
+Secure Boot features. But in order to have the best openSUSE 12.X release we 
+need your help.
 
-3), i need read all the relative function
-libxl__ao_complete_check_progress_reports
-4), 这个好像就能回答"2)"的问题, from commit 889a89c7, if the operation is asynchronous, the caller will return immediate after the operation is trigger. it will not wait for the completion. So, set rc = 0 is right.
-the above things is implemented in libxl__ao_inprogress. and it is indeed at the end of each long running operation.
-5), So, how to register the event handler to libvirt?
-4, when aos_for_callback/aops_for_callback insert into list by LIBXL_TAILQ_INSERT_TAIL?
-libxl__ao_complete_check_progress_reports add aos_for_callback
-libxl__ao_progress_report add aops_for_callback
+If you have time, please, help us in the testing process, with every crazy 
+configuration that you can provide. The ISO images are now in:
 
-5, about aops_for_callback
-callback, if provided, is responsible for freeing the event.
+/mounts/dist/install/openSUSE-UNTESTED
+
+Do not test the NET images, because the repository is yet RC1, and not RC2. 
+That means that if you install the NET ISO (or make a network installation 
+using Ludwig's amazing script) you are testing the RC1 one.
+
+Break the distro, and publish the bugs here:
+
+https://bugzilla.novell.com/index.cgi
+
+There is a openSUSE 12.3 product in Bugzilla.
+
+Thanks,
+Alberto Planas.
+
+17:50 2013-02-28
+software skill, debug library
+LD_DEBUG=libs ~/firefox/firefox
+
