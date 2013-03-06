@@ -1142,7 +1142,7 @@ GTD
 
 14:03 2013-02-22
 company, sle, virtualization
-"Jason Douglas"_email_"Future of Virtualization Technologies in SLES"_20121024_2207
+1, "Jason Douglas"_email_"Future of Virtualization Technologies in SLES"_20121024_2207
 Hi everyone,
 
 In our team meeting last week, Michal Svec gave a presentation about the future of virtualization technologies in SLES. Since this impacts all of us, I thought it would be useful to provide a summary of his presentation for those who were not in attendance.
@@ -1185,6 +1185,9 @@ Engineering Manager, Virtualization
 SUSE
 jdouglas@suse.com
 1.801.861.1649
+2, Michal Svec
+Senior Product Manager
+msvec@suse.com
 
 14:12 2013-02-22
 company, sle12, virtual team
@@ -1630,7 +1633,29 @@ typedef struct {
     } u;
 } libxl_asyncop_how;
 
-8, (11:01 2013-03-05)
+8, (10:51 2013-03-06)
+domain_suspend_cb -> libxl__ao_complete -> libxl__ao_complete_check_progress_reports
+后者会有NEW_EVENT, 调用libxl__event_occurred.
+libxl__event_occurred有两种情况, 如果存在CTX->event_hooks会把event插入到occurred_for_callback, 如果不存在, 会调到libxl__poller_wakeup. 
+libxl__poller_wakeup应该是在没有libvirtd等deamon情况下用的?
+1), which one for libvirt?
+(1), CTX->event_hooks
+CTX->event_hooks: set by libxl_event_register_callbacks.
+egc_run_callbacks: iterate the list, remove event from list and handle event.
+libxl__event_occurred: insert event to list.
+LIBXL_INIT_EGC: init list.
+
+libxl_event_register_callbacks is called by libxlCreateDomEvents.
+libxlVmStart -> libxlCreateDomEvents
+libxlReconnectDomain -> libxlCreateDomEvents
+libxlVmStart is called while the vm create, reboot and restore.
+(2), i do know. but libxl__ao_complete and libxl__event_occurred is called twice after xl save helper(libxl_save_helper).
+
+libxl_ctx_alloc():
+LIBXL_TAILQ_INIT(&ctx->occurred);
+
+现有问题: 不清楚fd从哪里来的.
+如果是fd或timeout的注册, 是通过libxl__ev_fd_register, libxl__ev_timeout_register. 传入的fd调用libvirt注册的fd_register, timeout_register调用virEventAddHandle.
 
 12:54 2013-02-28
 hackweek
