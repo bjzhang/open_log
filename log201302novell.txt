@@ -1657,10 +1657,57 @@ LIBXL_TAILQ_INIT(&ctx->occurred);
 现有问题: 不清楚fd从哪里来的.
 如果是fd或timeout的注册, 是通过libxl__ev_fd_register, libxl__ev_timeout_register. 传入的fd调用libvirt注册的fd_register, timeout_register调用virEventAddHandle.
 
+9, (11:12 2013-03-07)
+1), find out which patch will libxl__event_occurred run.
+break in libxl__ao_complete.
+(gdb) p *(egc->gc->owner)
+$11 = {lg = 0x625010, xch = 0x625250, xsh = 0x625710, nogc_gc = {
+    alloc_maxsize = -1, alloc_ptrs = 0x0, owner = 0x625050},
+  event_hooks = 0x0, event_hooks_user = 0x0, lock = {__data = {__lock = 1,
+      __count = 1, __owner = 4017, __nusers = 1, __kind = 1, __spins = 0,
+      __list = {__prev = 0x0, __next = 0x0}},
+    __size = "\001\000\000\000\001\000\000\000\261\017\000\000\001\000\000\000\001", '\000' <repeats 22 times>, __align = 4294967297}, occurred = {
+    tqh_first = 0x0, tqh_last = 0x6250b8}, osevent_in_hook = 0,
+  osevent_hooks = 0x0, osevent_user = 0x0, poller_app = {entry = {
+      le_next = 0x0, le_prev = 0x0}, fd_polls = 0x0, fd_polls_allocd = 0,
+    fd_rindices_allocd = 0, fd_rindices = 0x0, wakeup_pipe = {7, 9}},
+  pollers_event = {lh_first = 0x0}, pollers_idle = {lh_first = 0x0},
+  hook_fd_nexi_idle = {slh_first = 0x0}, hook_timeout_nexi_idle = {
+    slh_first = 0x0}, efds = {lh_first = 0x0}, etimes = {tqh_first = 0x0,
+    tqh_last = 0x625138}, watch_slots = 0x0, watch_nslots = 0,
+  watch_freeslots = {slh_first = 0x0}, watch_counter = 0, watch_efd = {
+    fd = -1, events = 0, func = 0, entry = {le_next = 0x0, le_prev = 0x0},
+    nexus = 0x0}, death_list = {tqh_first = 0x0, tqh_last = 0x625190},
+  death_reported = {tqh_first = 0x0, tqh_last = 0x0}, death_watch = {
+    path = 0x0, callback = 0, slotnum = -1, counterval = 0},
+  disk_eject_evgens = {lh_first = 0x0}, childproc_hooks = 0x622c60,
+  childproc_user = 0x0, sigchld_selfpipe = {21, 22}, children = {
+    lh_first = 0x0}, version_info = {xen_version_major = 0,
+    xen_version_minor = 0, xen_version_extra = 0x0, compiler = 0x0,
+    compile_by = 0x0, compile_domain = 0x0, compile_date = 0x0,
+    capabilities = 0x0, changeset = 0x0, virt_start = 0, pagesize = 0,
+    commandline = 0x0}}
+2), 如果说是libxlCreateDomEvents注册了event, 那其实需要两个函数, 一个是event_occurs(libxlEventHandler). 似乎还需要libxl_evenable_domain_death, 不确定是否需要第二个函数.
+可以现传入ao_how, 然后在libxlEventHandler加入该event->type.
+先加入ao_how看看有什么结果.
+(1), do i need add callback while adding ao_how?
+aos_for_callback is used in
+egc_run_callbacks: call the callback.
+libxl__ao_complete_check_progess_reports: insert callback to list.
+libxl__alloc_failed: 
+LIBXL_INIT_EGC: init list.
+
+问题是这个aos_for_callback init只有在LIBXL_INIT_EGC, EGC_INIT, AO_CREATE调用.
+LIBXL_INIT_EGC: called by libxl__ao_inprogess while ao_how is null.
+EGC_INIT: called by libxl_osevent_occurred_fd, libxl_osevent_occurred_timeout.
+AO_CREATE: called by all the long-running functi
+
 12:54 2013-02-28
+(16:57 2013-03-07)
 hackweek
 1, study HA.
-2, implement PVH in libvirt.
+2, nested virtual machine: xen on kvm.
+3, implement PVH in libvirt.
 it maybe very simple.
 
 12:55 2013-02-28
