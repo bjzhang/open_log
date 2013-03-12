@@ -1711,8 +1711,154 @@ AO_CREATE: called by all the long-running functi
 1), 在xenlight和libvirt driver里面加入打印info.
 一加打印信息发现原来有很多东西没有看到阿.
 linux-vm5没装的包太多了, 只好换到linux-vm4上面.
+2), enable debug in libxl_event.c for monitor the fd registered by run_helper.
 
-2), \TODO:  enable debug in libxl_event.c for monitor the fd registered by run_helper.
+12, (10:48 2013-03-12)
+1), build
+(1), install xen 25.1 from my repo
+(2), build xen tools
+./configure --enable-xenapi --prefix=/usr --exec_prefix=/usr --bindir=/usr/bin --sbindir=/usr/sbin --libdir=/usr/lib64 --datadir=/usr/share
+make tools -j8
+make install-tools
+(3), build libvirt
+2), debug why virsh save hang after add ao_how
+libxl__srm_callout_received_save is called so many times.
+the last function is libxl__srm_callout_callback_complete.
+3), helper_exited should be called after save operation.
+(1), the log with ao_how after libxl-save-helper complete: 
+xc: detail: All memory is saved
+xc: detail: Save exit rc=0
+libxl-save-helper: debug: complete r=0: Success
+libxl: debug: libxl_save_callout.c:391:libxl__srm_callout_callback_complete: libxl__srm_callout_callback_complete start
+libxl: debug: libxl_event.c:229:libxl__ev_fd_deregister: ev_fd=0x7fd23000cf30 deregister fd=44
+libxl: debug: libxl_save_callout.c:361:libxl__srm_callout_sendreply: libxl__srm_callout_sendreply start
+libxl: debug: libxl_event.c:181:libxl__ev_fd_register: ev_fd=0x72c398 register fd=23 events=1
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x72c3e0 wpath=@releaseDomain token=3/0: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x72c3e0 wpath=@releaseDomain token=3/0: event epath=@releaseDomain
+libxl: debug: libxl.c:1000:domain_death_xswatch_callback: [evg=0x7369f0:1] from domid=1 nentries=1 rc=1
+libxl: debug: libxl.c:1011:domain_death_xswatch_callback: [evg=0x7369f0:1]   got=domaininfos[0] got->domain=1
+libxl: debug: libxl.c:1038:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=20006
+libxl: debug: libxl.c:1050:domain_death_xswatch_callback:  shutdown reporting
+libxl: debug: libxl.c:1004:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1068:domain_death_xswatch_callback: domain death search done
+libxl: debug: libxl_event.c:1154:egc_run_callbacks: event 0x7f3e3c005fc0 callback type=domain_shutdown
+(2), if i disable ao_how, there is lots of libxl__ao_inprogress.
+xc: detail: All memory is saved
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x749ab0 occurs fd=50 events=3 revents=1
+xc: detail: Save exit rc=0
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x749ab0 occurs fd=50 events=3 revents=1
+libxl-save-helper: debug: complete r=0: Success
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x749ab0 occurs fd=50 events=3 revents=1
+libxl: debug: libxl_save_callout.c:391:libxl__srm_callout_callback_complete: libxl__srm_callout_callback_complete start
+libxl: debug: libxl_event.c:229:libxl__ev_fd_deregister: ev_fd=0x749ab0 deregister fd=50
+libxl: debug: libxl_save_callout.c:361:libxl__srm_callout_sendreply: libxl__srm_callout_sendreply start
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:225:libxl__ev_fd_deregister: ev_fd=0x749ab0 deregister unregistered
+libxl: debug: libxl_dom.c:890:libxl__domain_suspend_device_model: Saving device model state to /var/lib/xen/qemu-save.2
+libxl: debug: libxl_dom.c:1377:libxl__domain_save_device_model: qemu save file /var/lib/xen/qemu-save.2 is 6029 bytes
+libxl: debug: libxl_event.c:181:libxl__ev_fd_register: ev_fd=0x749bd0 register fd=47 events=1
+libxl: debug: libxl_event.c:181:libxl__ev_fd_register: ev_fd=0x749bf8 register fd=45 events=4
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x749bf8 occurs fd=45 events=4 revents=4
+libxl: debug: libxl_event.c:229:libxl__ev_fd_deregister: ev_fd=0x749bf8 deregister fd=45
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x749bd0 occurs fd=47 events=1 revents=1
+libxl: debug: libxl_event.c:229:libxl__ev_fd_deregister: ev_fd=0x749bd0 deregister fd=47
+libxl: debug: libxl_event.c:181:libxl__ev_fd_register: ev_fd=0x749bf8 register fd=45 events=4
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x6ee860: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x749bf8 occurs fd=45 events=4 revents=4
+libxl: debug: libxl_event.c:225:libxl__ev_fd_deregister: ev_fd=0x749bd0 deregister unregistered
+libxl: debug: libxl_event.c:229:libxl__ev_fd_deregister: ev_fd=0x749bf8 deregister fd=45
+libxl: debug: libxl_event.c:225:libxl__ev_fd_deregister: ev_fd=0x749bd0 deregister unregistered
+libxl: debug: libxl_event.c:225:libxl__ev_fd_deregister: ev_fd=0x749bf8 deregister unregistered
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x6ee860: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x6ee860: destroy
+libxl: debug: libxl.c:1252:libxl_domain_destroy: ao 0x750b20: create: how=(nil) callback=(nil) poller=0x7f4ad4000c20
+libxl: debug: libxl_dm.c:1238:libxl__destroy_device_model: Device Model signaled
+libxl: debug: libxl_event.c:345:libxl__ev_time_register_rel: ev_time=0x72cde0 register ms=10000
+libxl: debug: libxl_event.c:0:libxl__ev_time_register_rel: ev_time=0x72cde0 done rc=0 .func=0x7f4ade98e3d4 infinite=0 abs=1363078492.731538
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x72cdc8 wpath=/local/domain/0/backend/vbd/2/768/state token=1/7: register slotnum=1
+libxl: debug: libxl_event.c:345:libxl__ev_time_register_rel: ev_time=0x750cd8 register ms=2000
+libxl: debug: libxl_event.c:0:libxl__ev_time_register_rel: ev_time=0x750cd8 done rc=0 .func=0x7f4ade98209a infinite=0 abs=1363078484.733572
+libxl: debug: libxl_event.c:345:libxl__ev_time_register_rel: ev_time=0x74feb0 register ms=10000
+libxl: debug: libxl_event.c:0:libxl__ev_time_register_rel: ev_time=0x74feb0 done rc=0 .func=0x7f4ade98e3d4 infinite=0 abs=1363078492.741054
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x74fe98 wpath=/local/domain/0/backend/vif/2/0/state token=2/8: register slotnum=2
+libxl: debug: libxl.c:1261:libxl_domain_destroy: ao 0x750b20: inprogress: poller=0x7f4ad4000c20, flags=i
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x6f3d28 occurs fd=23 events=1 revents=1
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x72cdc8 wpath=/local/domain/0/backend/vbd/2/768/state token=1/7: event epath=/local/domain/0/backend/vbd/2/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/2/768/state wanted state 6 ok
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x72cde0 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x72cde0 done rc=0 .func=(nil) infinite=0 abs=1363078492.731538
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x72cdc8 wpath=/local/domain/0/backend/vbd/2/768/state token=1/7: deregister slotnum=1
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x72cde0 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x72cde0 done rc=0 .func=(nil) infinite=0 abs=1363078492.731538
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x72cdc8: deregister unregistered
+libxl: debug: libxl_event.c:345:libxl__ev_time_register_rel: ev_time=0x72ce18 register ms=10000
+libxl: debug: libxl_event.c:0:libxl__ev_time_register_rel: ev_time=0x72ce18 done rc=0 .func=0x7f4ade980cbc infinite=0 abs=1363078492.753764
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block remove
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/backend/vbd/2/768/state token=1/7: empty slot
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x74fe98 wpath=/local/domain/0/backend/vif/2/0/state token=2/8: event epath=/local/domain/0/backend/vif/2/0/state
+libxl: debug: libxl_event.c:647:devstate_watch_callback: backend /local/domain/0/backend/vif/2/0/state wanted state 6 still waiting state 5
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:993:afterpoll_internal: ev_fd=0x6f3d28 occurs fd=23 events=1 revents=1
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x74fe98 wpath=/local/domain/0/backend/vif/2/0/state token=2/8: event epath=/local/domain/0/backend/vif/2/0/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vif/2/0/state wanted state 6 ok
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x74feb0 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x74feb0 done rc=0 .func=(nil) infinite=0 abs=1363078492.741054
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x74fe98 wpath=/local/domain/0/backend/vif/2/0/state token=2/8: deregister slotnum=2
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x74feb0 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x74feb0 done rc=0 .func=(nil) infinite=0 abs=1363078492.741054
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x74fe98: deregister unregistered
+libxl: debug: libxl_event.c:345:libxl__ev_time_register_rel: ev_time=0x74fee8 register ms=10000
+libxl: debug: libxl_event.c:0:libxl__ev_time_register_rel: ev_time=0x74fee8 done rc=0 .func=0x7f4ade980cbc infinite=0 abs=1363078492.765527
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/vif-bridge offline
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x72ce18 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x72ce18 done rc=0 .func=(nil) infinite=0 abs=1363078492.753764
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x72ce18 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x72ce18 done rc=0 .func=(nil) infinite=0 abs=1363078492.753764
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x74fee8 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x74fee8 done rc=0 .func=(nil) infinite=0 abs=1363078492.765527
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x74fee8 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x74fee8 done rc=0 .func=(nil) infinite=0 abs=1363078492.765527
+libxl: debug: libxl_event.c:1683:libxl__ao_inprogress: ao 0x750b20: not ready, waiting
+libxl: debug: libxl_event.c:1025:afterpoll_internal: ev_time=0x750cd8 occurs abs=1363078484.733572
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x750cd8 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x750cd8 done rc=0 .func=(nil) infinite=0 abs=1363078484.733572
+libxl: debug: libxl_event.c:370:libxl__ev_time_deregister: ev_time=0x750cd8 deregister
+libxl: debug: libxl_event.c:0:libxl__ev_time_deregister: ev_time=0x750cd8 done rc=0 .func=(nil) infinite=0 abs=1363078484.733572
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x750b20: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x750b20: destroy
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x6f3d70 wpath=@releaseDomain token=3/6: deregister slotnum=3
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=@releaseDomain token=3/6: empty slot
+(3), the difference between with and without ao_how: libxl__domain_suspend_device_model is not called while ao_how not null.
+
+libxl__domain_suspend_common_callback -> libxl__domain_suspend_device_model
+libxl__xc_domain_save_done -> libxl__domain_suspend_device_model
+
+#0  libxl__domain_suspend_common_callback (user=0x6d95c8) at libxl_dom.c:930
+#1  0x00007fa19d43170a in libxl__srm_callout_received_save (
+    msg=0x7fa1a260d4f2 "", len=<optimized out>, user=0x6d95c8)
+    at _libxl_save_msgs_callout.c:131
+#2  0x00007fa19d430ec8 in helper_stdout_readable (egc=0x7fa1a260d6a0,
+    ev=<optimized out>, fd=50, events=<optimized out>, revents=<optimized out>)
+    at libxl_save_callout.c:284
+#3  0x00007fa19d4344cd in afterpoll_internal (egc=0x7fa1a260d6a0,
+    poller=0x6d4e20, nfds=4, fds=0x6da2a0, now=...) at libxl_event.c:995
+#4  0x00007fa19d435115 in eventloop_iteration (egc=0x7fa1a260d6a0,
+    poller=0x6d4e20) at libxl_event.c:1440
+#5  0x00007fa19d43569e in libxl__ao_inprogress (ao=0x6dbfd0,
+    file=<optimized out>, line=<optimized out>, func=<optimized out>)
+    at libxl_event.c:1685
+#6  0x00007fa19d417186 in libxl_domain_suspend (ctx=<optimized out>, domid=6,
+    fd=45, flags=0, ao_how=<optimized out>) at libxl.c:786
 
 12:54 2013-02-28
 (16:57 2013-03-07)
