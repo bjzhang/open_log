@@ -14,16 +14,16 @@ end
 break libxlSuspendCallback
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxlSuspendCallback"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break libxl_domain_suspend
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl_domain_suspend"
+shell date +%m%d_%M%H%S_%N
 #set ao_how=0
 cont
 end
@@ -31,8 +31,17 @@ end
 break virDomainEventNewFromObj
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "virDomainEventNewFromObj"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break libxlEventHandler
+commands
+silent
+print "libxlEventHandler"
+shell date +%m%d_%M%H%S_%N
+where
 cont
 end
 
@@ -40,32 +49,86 @@ end
 break libxl__domain_suspend
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__domain_suspend"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break libxl__xc_domain_save
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__xc_domain_save"
+shell date +%m%d_%M%H%S_%N
 cont
 end
+
+##break in libxl__xc_domain_save
+#break libxl__srm_callout_received_save
+#commands
+#silent
+#print "libxl__srm_callout_received_save"
+#shell date +%m%d_%M%H%S_%N
+#where 2
+#cont
+#end
+
+break libxl__srm_callout_callback_complete
+commands
+silent
+print "libxl__srm_callout_callback_complete"
+shell date +%m%d_%M%H%S_%N
+where 3
+cont
+end
+
+break libxl__srm_callout_sendreply
+commands
+silent
+print "libxl__srm_callout_sendreply"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break libxl__xc_domain_save_done
+commands
+silent
+print "libxl__xc_domain_save_done"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break libxl__domain_suspend_device_model
+commands
+silent
+print "libxl__domain_suspend_device_model"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break libxl__domain_save_device_model
+commands
+silent
+print "libxl__domain_save_device_model"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+##break in libxl__xc_domain_save end
 
 break libxl__toolstack_save
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__toolstack_save"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break run_helper
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "run_helper"
+shell date +%m%d_%M%H%S_%N
+#print "enable gdb reverse debug"
+#target record
 cont
 end
 
@@ -73,32 +136,32 @@ end
 break libxl__exec
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__exec"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break libxl__carefd_close
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__carefd_close"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break libxl__ev_fd_register
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__ev_fd_register"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break helper_exited
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "helper_exited"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
@@ -108,8 +171,8 @@ break libxl__ao_complete
 commands
 silent
 where 2
-shell date +%m%d_%M%H%S_%N
 print "libxl__ao_complete"
+shell date +%m%d_%M%H%S_%N
 print egc->gc->owner->event_hooks
 print egc->gc->owner->occurred
 print egc->gc->owner->pollers_event
@@ -119,45 +182,49 @@ end
 break domain_suspend_cb
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "domain_suspend_cb"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break libxl__domain_suspend_common_callback
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__domain_suspend_common_callback"
+shell date +%m%d_%M%H%S_%N
+where 3
+#record stop
 cont
 end
 
 break libxl__toolstack_save
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "libxl__toolstack_save"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break libxl__event_occurred
 commands
 silent
-where 2
-shell date +%m%d_%M%H%S_%N
 print "libxl__event_occurred"
+shell date +%m%d_%M%H%S_%N
 print egc->gc->owner->event_hooks
 print egc->gc->owner->occurred
 print egc->gc->owner->pollers_event
 print event
+print *event
+where 2
 cont
 end
 
 break libxl__poller_wakeup
 commands
 silent
+print "libxl__poller_wakeup"
 shell date +%m%d_%M%H%S_%N
-print "libxl__event_occurred"
+where 2
 cont
 end
 
@@ -165,43 +232,107 @@ end
 break startup
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "startup"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break xc_domain_save
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "xc_domain_save"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break toolstack_save_cb
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "toolstack_save_cb"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break complete
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "complete"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 
 break helper_stub_complete
 commands
 silent
-shell date +%m%d_%M%H%S_%N
 print "helper_stub_complete"
+shell date +%m%d_%M%H%S_%N
 cont
 end
 ##break point for libxl_save_helper end
+
+break eventloop_iteration
+commands
+silent
+print "eventloop_iteration"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break libxl/libxl_event.c:995
+commands
+silent
+print "libxl/libxl_event.c:995"
+shell date +%m%d_%M%H%S_%N
+print efd
+cont
+end
+
+break libxl/libxl_event.c:1027
+commands
+silent
+print "libxl/libxl_event.c:1027"
+shell date +%m%d_%M%H%S_%N
+print etime
+cont
+end
+
+break libxl__ao_complete_check_progress_reports
+commands
+silent
+print "libxl__ao_complete_check_progress_reports"
+shell date +%m%d_%M%H%S_%N
+where
+cont
+end
+
+#about pipe wakeup
+#break afterpoll_check_fd
+#commands
+#silent
+#print "afterpoll_check_fd"
+#shell date +%m%d_%M%H%S_%N
+#where 2
+#cont
+#end
+#
+break libxl__self_pipe_eatall
+commands
+silent
+print "libxl__self_pipe_eatall"
+shell date +%m%d_%M%H%S_%N
+where 2
+cont
+end
+
+break libxl__fork_selfpipe_woken
+commands
+silent
+print "libxl__fork_selfpipe_woken"
+shell date +%m%d_%M%H%S_%N
+where 2
+cont
+end
+
 
 cont
 
