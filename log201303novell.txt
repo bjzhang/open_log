@@ -774,7 +774,6 @@ EGC_FREE is caleld the following functions: libxl_osevent_beforepoll, libxl_osev
 try to dig into the save process without ao_how.
 (5), ao_how == NULL.
 it looks like libxl__self_pipe_eatall get the result from libxl__poller_wakeup.
-from the log, 似乎是对的:
 $1028 = "libxl__poller_wakeup"
 #0  libxl__poller_wakeup (egc=0x7fafbbd826a0, p=0x7fafac002240) at libxl_event.c:1357
 #1  0x00007fafb63a89e0 in libxl__ao_complete_check_progress_reports (egc=0x7fafbbd826a0, ao=0x7fafac002660) at libxl_event.c:1600
@@ -834,6 +833,22 @@ $1040 = "libxl__poller_wakeup"
 #0  libxl__poller_wakeup (egc=0x7fafbbd82680, p=0x7fafac002240) at libxl_event.c:1357
 #1  0x00007fafb63a89e0 in libxl__ao_complete_check_progress_reports (egc=0x7fafbbd82680, ao=0x74f230) at libxl_event.c:1600
 
+5, (11:05 2013-03-15)
+sigchld_handler set to SIGCHLD by the libxl__ev_child_fork. which called while libxl-save-helper is forked.
+总是忘了fork返回值的含义. 0: 返回子进程. n(>0): 返回父进程.
+summary for xenlight save routine.
+run_helper fork the child process for run libxl-save-helper.  
+\TODO: what does the sigchld_handler for?
+
+后来又仔细看了看代码, 感觉会不会是ao_how不是NULL时, 所有的fd和time callback都没有执行?
+(1), from the debug log, libxl__srm_callout_callback_progress is called lots of times. this function is a logging function.
+xtl_progress is added in commit 7f9a888a: xtl: New xentoollog mini-library
+xtl means "xentoollog"
+besides, log and progress, only suspend and complete is called during virsh save.
+but these function are called by helper_stdout_readable which is definitely called by libvirt event handler. it is not make sense. why these function are not called while ao_how is not NULL.
+再继续debug, helper_stdout_readable以及最终调用的log, progress, suspend, complete数目都相投, 也就是说到这里还是正确的.
+
+
 15:02 2013-03-13
 software skill, debug, gdb, get struct offset
 1, from:
@@ -884,11 +899,108 @@ struct A {
 
 10:43 2013-03-14
 GTD
-0, 9:30-11:40 13:00-18:25
+0, 9:30-11:40 13:00
 
 1, today
-1), 10:51-11:37 13:53-18:19 libvirt libxl lock patch. see"14:24 2013-03-13"4.
+1), 10:51-11:37 13:53- libvirt libxl lock patch. see"14:24 2013-03-13"4.
 2), Summary: 明天要改正的习惯是来公司现开始工作, 下班前再处理其他事情. 另外晚上看mailing list比较适合.
+
+16:31 2013-03-14
+sles11 sp2 x86_64 md5sum
+SLES-11-SP2-DVD-x86_64-GM-DVD1.iso     	461d82ae6e15062b0807c1338f040497
+SLES-11-SP2-DVD-x86_64-GM-DVD2.iso     	8dcbdda57208acc39327548abbc0064c
+
+16:36 2013-03-14
+rpm cache location
+1, zypper
+/var/cache/zypp/pacakges
+2, osc local build
+/var/tmp/osbuild-packagecache
+
+10:59 2013-03-15
+company, suse, maintenance, sle11, sles11 sp3 only have sp3 repo do not have sp2 repo
+highlight: SLES 11 SP3 will have only one official update repository (SP3-Updates).
+1, ""Simona Arsene" <sarsene@suse.com>"_email_"[devel] SLES 11 SP3 Channel Setup"_20130314_2345
+Hi, 
+
+based on the questions raised in the last couple of days, I would like to share with everyone the channel setup for
+SLES 11 SP3. 
+(for the new colleagues, I have added some 'Background info' so that you can better understand the setup) 
+
+==============================================
+Highlights:
+==============================================
+SLES 11 SP3 will have only one official update repository (SP3-Updates), but customers are allowed
+and educated how to manually add older repository (e.g.
+SLES 11 SP1 Updates, SLES 11 SP2 Updates, etc), even when being registered directly to NCC.
+Previously this was only possible when using SMT or SUSE Manager.
+
+
+Background info: 
+==============================================
+Over the last years with a clear desire for improvements based on customers feedback,
+SUSE has implemented various changes regarding the way we deliver updates to our users. 
+
+- in SLES 9, there was only one update repository that collected all the updates; the most recent
+release update was the only one to be supported.
+– Starting with SLES 10 SP1, the concept of a “SP specific repository” has been introduced. This
+means that all the updates for a specific Service Pack are delivered in one specific repository.
+Once users migrate to a newer Service Pack, they lose access to the preceding repositories if
+they registered directly to NCC. Users of SMT or SUSE Manager were able and are still able to
+subscribe to any SP channel freely
+The main reason for this change was the concept of a 6 months overlap period (n-1 service
+pack support) to allow validation of the released service pack and a window of migration for
+customers, where they would be continued to be maintained and supported fully within the old
+SP
+– SLES 11 GA and SLES 11 SP1 have followed the SLES 10 model. With SLES 11 SP2 we
+introduced a new repository model, consisting of the following:
+i.SLES 11 SP1 Updates repository remained subscribed. All updates that were also
+applicable to SP2 were also or only released into the SP1 Updates repository, which
+means that all the updates that don't break the ABI and API compatibility should
+have continued to be delivered here.
+ii. SLES 11 SP2 Updates repository includes only the latest and innovative updates that
+can't be delivered on the SP1 Updates Repository (for various reasons).
+In addition to this, we introduced a Core Repository, which provided the “gap” of
+packages that were neither released into SP1-Updates or SP2-Updates repository.
+
+
+SLES 11 SP3 Channel Setup
+==============================================
+SLES 11 SP3 will have only one official update repository (SP3-Updates), but users can access other patches via the
+download webpage or by enabling older channels for their products. 
+
+Q1: What channels should a SLES 11 SP3 user have? 
+SLES11-SP3-Pool
+SLES11-SP3-Updates
+SLES11-SP3-Extensions
+SLE11-SP3-Debuginfo-Pool
+SLE11-SP3-Debuginfo-Updates 
+
+As you know from SLES 11 SP1, the pool channel (SLES11-SP3-Pool) will include the media and will not change during the
+lifetime of the Service Pack. 
+The SLES11-SP3-Updates will be populated with updates that will be released for SP3. 
+
+Q2: From where should a SP3 user get his update? 
+All the updates for SP3 will be available in the SLES11-SP3-Updates (and only in this channel). 
+
+Q3: Where can I get more info regarding the SLES 11 SP2 channel setup in order to understand this change? 
+In case you want to learn more about the SP2 channel setup, please check the release notes
+https://www.suse.com/documentation/sled11/singlehtml/book_sle_deployment/book_sle_deployment.html#cha.update.sle
+and the available TID (http://www.novell.com/support/kb/doc.php?id=7010225 )
+
+In case you have questions regarding the support statements, please don't hesitate to contact me. 
+
+If there are additional questions that I have not covered in this email, please feel free to reach out to me. 
+
+Simona 
+
+11:03 2013-03-15
+GTD
+0, 10:20-18:20
+
+1, today
+1), 11:04-11:30 13:06-18:19 libvirt libxl lock patch. see"14:24 2013-03-13"5.
+2), Summary: 昨天刚说完来公司要尽快开始工作, 今天又耽误很多时间. 以后时间管理要详细记录这些事情.
 
 2, \TODO
 2), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
@@ -965,16 +1077,4 @@ libxl_dm.c:
 (1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run.
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
-
-16:31 2013-03-14
-sles11 sp2 x86_64 md5sum
-SLES-11-SP2-DVD-x86_64-GM-DVD1.iso     	461d82ae6e15062b0807c1338f040497
-SLES-11-SP2-DVD-x86_64-GM-DVD2.iso     	8dcbdda57208acc39327548abbc0064c
-
-16:36 2013-03-14
-rpm cache location
-1, zypper
-/var/cache/zypp/pacakges
-2, osc local build
-/var/tmp/osbuild-packagecache
 

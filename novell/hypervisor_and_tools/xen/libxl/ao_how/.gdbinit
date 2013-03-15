@@ -62,7 +62,7 @@ shell date +%m%d_%M%H%S_%N
 cont
 end
 
-##break in libxl__xc_domain_save
+#break in libxl__xc_domain_save
 #break libxl__srm_callout_received_save
 #commands
 #silent
@@ -72,8 +72,64 @@ end
 #cont
 #end
 
-break libxl__srm_callout_callback_complete
+break _libxl_save_msgs_callout.c:108
 commands
+silent
+print "_libxl_save_msgs_callout.c:108:log"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break _libxl_save_msgs_callout.c:122
+commands
+silent
+print "_libxl_save_msgs_callout.c:122:progress"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break _libxl_save_msgs_callout.c:131
+commands
+silent
+print "_libxl_save_msgs_callout.c:131:suspend"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break _libxl_save_msgs_callout.c:141
+commands
+silent
+print "_libxl_save_msgs_callout.c:141:postcopy"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break _libxl_save_msgs_callout.c:150
+commands
+silent
+print "_libxl_save_msgs_callout.c:150:checkpoint"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break _libxl_save_msgs_callout.c:162
+commands
+silent
+print "_libxl_save_msgs_callout.c:162:switch_qemu_logdirty"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break _libxl_save_msgs_callout.c:173
+commands
+silent
+print "_libxl_save_msgs_callout.c:173:complete"
+shell date +%m%d_%M%H%S_%N
+cont
+end
+
+break libxl__srm_callout_callback_complete
+command
 silent
 print "libxl__srm_callout_callback_complete"
 shell date +%m%d_%M%H%S_%N
@@ -270,29 +326,31 @@ cont
 end
 ##break point for libxl_save_helper end
 
-break eventloop_iteration
-commands
-silent
-print "eventloop_iteration"
-shell date +%m%d_%M%H%S_%N
-cont
-end
+#break eventloop_iteration
+#commands
+#silent
+#print "eventloop_iteration"
+#shell date +%m%d_%M%H%S_%N
+#cont
+#end
 
-break libxl/libxl_event.c:995
+break libxl_event.c:995
 commands
 silent
-print "libxl/libxl_event.c:995"
+print "tools/libxl/libxl_event.c:995"
 shell date +%m%d_%M%H%S_%N
 print efd
+print efd->func
 cont
 end
 
-break libxl/libxl_event.c:1027
+break libxl_event.c:1027
 commands
 silent
 print "libxl/libxl_event.c:1027"
 shell date +%m%d_%M%H%S_%N
 print etime
+print etime->func
 cont
 end
 
@@ -333,6 +391,24 @@ where 2
 cont
 end
 
+#
+break libxl__sigchld_installhandler
+commands
+silent
+print "libxl__sigchld_installhandler"
+shell date +%m%d_%M%H%S_%N
+where 2
+cont
+end
+
+#break sigchld_handler
+#commands
+#silent
+#print "sigchld_handler"
+#shell date +%m%d_%M%H%S_%N
+##where 2
+#cont
+#end
 
 cont
 
