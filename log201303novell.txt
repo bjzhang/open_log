@@ -848,6 +848,56 @@ besides, log and progress, only suspend and complete is called during virsh save
 but these function are called by helper_stdout_readable which is definitely called by libvirt event handler. it is not make sense. why these function are not called while ao_how is not NULL.
 再继续debug, helper_stdout_readable以及最终调用的log, progress, suspend, complete数目都相投, 也就是说到这里还是正确的.
 
+6, (10:42 2013-03-18)
+根据上周的debug, 需要看complete之后哪里出了问题.
+1), 看看complete后libxl__srm_callout_sendreply之后干啥了.
+it looks like libxl__domain_suspend_device_model is called after libxl__srm_callout_sendreply in libxl__ao_inprogress.
+libxl__domain_suspend_common_callback/libxl__xc_domian_save_done -> libxl__domain_suspend_device_model
+
+libvirtd得到fd event((shs->pipes[1])->fd), 然后调用helper_stdout_readable. save情况下后者调用libxl__srm_callout_received_save. 目前我是卡在处理event->type == complete. 这里面似乎只是注销helper_stdout_readable, 然后给一个反馈.
+问题是这个反馈给谁了?
+(1), 第一感觉是是否是给libvirtd了.
+如果是libvirtd, 就应该是会调用helper_stdout_readable. 但是这个已经注销了, 所以肯定不是这个问题??? 先试一下再说.
+的确后在sendreply后面有helper_stdout_readable调用, 但是这个是直接原因么? 先看下面这个问题.
+2), remove progress breakpoint in libxl__srm_callout_received_save, and compare successful and fail log again.
+(1), save刚开始地方:
+libxl__self_pipe_eatall在libvirtd里面是没有调用的. 我是否可以理解为应该把afterpoll_internal的除了fd, time之外的内容也需要在libvirtd里面作为事件注册呢?
+看看这个libxl__self_pipe_eatall起什么作用.
+while save successful, libxl__self_pipe_eatall is called 4times. two called at line 999, two called at line 1006.
+999: 
+    if (afterpoll_check_fd(poller,fds,nfds, poller->wakeup_pipe[0],POLLIN)) {
+        int e = libxl__self_pipe_eatall(poller->wakeup_pipe[0]);
+        if (e) LIBXL__EVENT_DISASTER(egc, "read wakeup", e, 0);
+    }
+1006:
+    int selfpipe = libxl__fork_selfpipe_active(CTX);
+    if (selfpipe >= 0 &&
+        afterpoll_check_fd(poller,fds,nfds, selfpipe, POLLIN)) {
+        int e = libxl__self_pipe_eatall(selfpipe);
+        if (e) LIBXL__EVENT_DISASTER(egc, "read sigchld pipe", e, 0);
+        libxl__fork_selfpipe_woken(egc);
+    }
+似乎只有libxl__fork_selfpipe_woken是关键, 可是看代码不像. 假设如此, 把它注释掉就能得到和libvirt with ao_how一样的结果.
+注释之后的确是连virsh start都不工作了. 看看到底干了什么坏事.
+3), gdb log says:
+$1152 = "libxl__self_pipe_eatall"
+#0  libxl__self_pipe_eatall (fd=42) at libxl_event.c:1378
+#1  0x00007fcf72f6155b in afterpoll_internal (egc=0x7fcf7893b690, poller=0x7fcf6c0016b0, 
+    nfds=4, fds=0x7fcf6c002970, now=...) at libxl_event.c:1006
+$1153 = "libxl__fork_selfpipe_woken"
+#0  libxl__fork_selfpipe_woken (egc=0x7fcf7893b690) at libxl_fork.c:282
+#1  0x00007fcf72f61595 in afterpoll_internal (egc=0x7fcf7893b690, poller=0x7fcf6c0016b0, 
+    nfds=4, fds=0x7fcf6c002970, now=...) at libxl_event.c:1008
+$1154 = "helper_exited"
+$1155 = "libxl__carefd_close"
+$1156 = "libxl__carefd_close"
+$1157 = "libxl__xc_domain_save_done"
+$1158 = "libxl__domain_suspend_device_model"
+[New Thread 0x7fcf80b96700 (LWP 16570)]
+[Thread 0x7fcf80b96700 (LWP 16570) exited]
+$1159 = "libxl__domain_save_device_model"
+$1160 = "libxl__ev_fd_register"
+$1161 = "libxl__ev_fd_register"
 
 15:02 2013-03-13
 software skill, debug, gdb, get struct offset
@@ -1002,6 +1052,31 @@ GTD
 1), 11:04-11:30 13:06-18:19 libvirt libxl lock patch. see"14:24 2013-03-13"5.
 2), Summary: 昨天刚说完来公司要尽快开始工作, 今天又耽误很多时间. 以后时间管理要详细记录这些事情.
 
+14:28 2013-3-16
+1, 我会尽力改进自己的工作
+hi, 家驹
+
+首先很抱歉, 周五我态度不好.
+我工作有很多要改进的地方, 多向chunyan和你学习对我工作会有很大帮助. 另外也不希望因为我影响team的performance.  
+我工作中目前是lock patch卡住我很久, 我自己觉得除了自己动作慢, 还是对于xen还有事件处理不太了解. 打算找时间和chunyan讨论讨论.
+其实xen4.2, xen4.3有一些改进，chunyan和我虽然做的东西不完全一样, 如你所说, 对于一些共同的内容, 大家多一起讨论也会提高工作效率.
+
+hackweek我之前也考虑过, 但不成熟, 下次虚拟化开会时如果有机会可以向大家请教.
+
+bamvor
+2, Jiaju
+呵呵，没事，我都没感觉到你态度不好；）
+3, bamvor: 
+其实事后想想, 没必要说自己态度不好, 重点应该放在如何改进上.
+
+10:31 2013-03-18
+GTD
+0, 10:10-11:58 13:30-18:15
+
+1, today
+1), write letter for Jiaju. see"14:28 2013-3-16"
+2), 10:41-11:58 13:36-18:09 libvirt libxl lock patch. see"14:24 2013-03-13"6.
+
 2, \TODO
 2), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
 
@@ -1078,11 +1153,42 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-14:28 2013-3-16
-家驹
-抱歉。
-不想影响team.
-正好lock patch有个问题卡住我很久。
-xen4.3有一些改进，工作中可能早晚会遇到，如果一起讨论可能会有帮助。
-hackweek我之前也考虑过，但不成熟，下次Jason问，可以讨论一下。
+16:07 2013-03-18
+software skill, debugger, gdb, conditional breakpoint
+1, ref:
+http://blog.vinceliu.com/2009/07/gdbs-conditional-breakpoints.html
+http://sourceware.org/gdb/current/onlinedocs/gdb/Conditions.html
+2, gdb里面加入条件断点: 
+break util/vireventpoll.c:484 if fds[n].fd == 7 
+
+17:34 2013-03-18
+"Dirk Müller<dirk@dmllr.de>"_email_"Re: [opensuse-arm] openSUSE 12.3 builds"_20130316_1854
+2013/3/16 Michal Hrusecky <michal@hrusecky.net>:
+
+> boards to 12.3, but my project with 12.3 enable rebuilt everything for
+> Factory, but 12.3 is still in scheduled state for few days... Am I doing
+> something wrong?
+
+Hi Michal,
+
+yes, this is a security feature.. in order to build something for 12.3
+you need to migrate to a qemu build. Unfortunately
+the 12.3:Ports repository was changed to do native builds, which is
+blocked for everybody else.
+
+You need to set the path to devel:ARM:12.3:Contrib project and then
+abortbuild all the scheduled jobs (because the build service does not
+notice
+that you changed the path), and then call osc rebuild on them. Then it
+should work.
+
+For reference, have a look at the devel:ARM:12.3:Contrib:Chromebook
+project, this is how you should set it up as well.
+
+Greetings,
+Dirk
+
+17:50 2013-03-18
+virtualization, xen, xend, vm configuration
+/var/lib/xend/domains/<vm-uuid>
 
