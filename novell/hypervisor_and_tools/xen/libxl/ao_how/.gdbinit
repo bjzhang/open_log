@@ -45,6 +45,16 @@ where
 cont
 end
 
+##break util/vireventpoll.c:484 if fds[n].fd == 7 
+#break util/vireventpoll.c:484
+#commands
+#silent
+#print "util/vireventpoll.c:484"
+#shell date +%m%d_%M%H%S_%N
+#print fds[n].fd
+#cont
+#end
+
 #function in xenlight
 break libxl__domain_suspend
 commands
@@ -80,14 +90,14 @@ shell date +%m%d_%M%H%S_%N
 cont
 end
 
-break _libxl_save_msgs_callout.c:122
-commands
-silent
-print "_libxl_save_msgs_callout.c:122:progress"
-shell date +%m%d_%M%H%S_%N
-cont
-end
-
+#break _libxl_save_msgs_callout.c:122
+#commands
+#silent
+#print "_libxl_save_msgs_callout.c:122:progress"
+#shell date +%m%d_%M%H%S_%N
+#cont
+#end
+#
 break _libxl_save_msgs_callout.c:131
 commands
 silent
@@ -125,6 +135,8 @@ commands
 silent
 print "_libxl_save_msgs_callout.c:173:complete"
 shell date +%m%d_%M%H%S_%N
+break libxl__srm_callout_sendreply
+break eventloop_iteration
 cont
 end
 
@@ -137,14 +149,14 @@ where 3
 cont
 end
 
-break libxl__srm_callout_sendreply
-commands
-silent
-print "libxl__srm_callout_sendreply"
-shell date +%m%d_%M%H%S_%N
-cont
-end
-
+#break libxl__srm_callout_sendreply
+#commands
+#silent
+#print "libxl__srm_callout_sendreply"
+#shell date +%m%d_%M%H%S_%N
+#cont
+#end
+#
 break libxl__xc_domain_save_done
 commands
 silent
@@ -334,26 +346,26 @@ end
 #cont
 #end
 
-break libxl_event.c:995
-commands
-silent
-print "tools/libxl/libxl_event.c:995"
-shell date +%m%d_%M%H%S_%N
-print efd
-print efd->func
-cont
-end
-
-break libxl_event.c:1027
-commands
-silent
-print "libxl/libxl_event.c:1027"
-shell date +%m%d_%M%H%S_%N
-print etime
-print etime->func
-cont
-end
-
+#break libxl_event.c:995
+#commands
+#silent
+#print "tools/libxl/libxl_event.c:995"
+#shell date +%m%d_%M%H%S_%N
+#print efd
+#print efd->func
+#cont
+#end
+#
+#break libxl_event.c:1027
+#commands
+#silent
+#print "libxl/libxl_event.c:1027"
+#shell date +%m%d_%M%H%S_%N
+#print etime
+#print etime->func
+#cont
+#end
+#
 break libxl__ao_complete_check_progress_reports
 commands
 silent
@@ -388,7 +400,7 @@ silent
 print "libxl__fork_selfpipe_woken"
 shell date +%m%d_%M%H%S_%N
 where 2
-cont
+#cont
 end
 
 #
@@ -409,6 +421,16 @@ end
 ##where 2
 #cont
 #end
+
+#
+break helper_stdout_readable
+commands
+silent
+print "helper_stdout_readable"
+shell date +%m%d_%M%H%S_%N
+where 2
+cont
+end
 
 cont
 
