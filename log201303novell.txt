@@ -1077,6 +1077,53 @@ GTD
 1), write letter for Jiaju. see"14:28 2013-3-16"
 2), 10:41-11:58 13:36-18:09 libvirt libxl lock patch. see"14:24 2013-03-13"6.
 
+16:07 2013-03-18
+software skill, debugger, gdb, conditional breakpoint
+1, ref:
+http://blog.vinceliu.com/2009/07/gdbs-conditional-breakpoints.html
+http://sourceware.org/gdb/current/onlinedocs/gdb/Conditions.html
+2, gdb里面加入条件断点: 
+break util/vireventpoll.c:484 if fds[n].fd == 7 
+
+17:34 2013-03-18
+"Dirk Müller<dirk@dmllr.de>"_email_"Re: [opensuse-arm] openSUSE 12.3 builds"_20130316_1854
+2013/3/16 Michal Hrusecky <michal@hrusecky.net>:
+
+> boards to 12.3, but my project with 12.3 enable rebuilt everything for
+> Factory, but 12.3 is still in scheduled state for few days... Am I doing
+> something wrong?
+
+Hi Michal,
+
+yes, this is a security feature.. in order to build something for 12.3
+you need to migrate to a qemu build. Unfortunately
+the 12.3:Ports repository was changed to do native builds, which is
+blocked for everybody else.
+
+You need to set the path to devel:ARM:12.3:Contrib project and then
+abortbuild all the scheduled jobs (because the build service does not
+notice
+that you changed the path), and then call osc rebuild on them. Then it
+should work.
+
+For reference, have a look at the devel:ARM:12.3:Contrib:Chromebook
+project, this is how you should set it up as well.
+
+Greetings,
+Dirk
+
+17:50 2013-03-18
+virtualization, xen, xend, vm configuration
+/var/lib/xend/domains/<vm-uuid>
+
+13:46 2013-03-19
+GTD
+0, 11:10
+
+1, today
+1), 14:00-18:20 find out whether xend have hook for migration. see"14:00 2013-03-19"
+1), libvirt libxl lock patch. see"14:24 2013-03-13"6.
+
 2, \TODO
 2), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
 
@@ -1153,42 +1200,126 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-16:07 2013-03-18
-software skill, debugger, gdb, conditional breakpoint
-1, ref:
-http://blog.vinceliu.com/2009/07/gdbs-conditional-breakpoints.html
-http://sourceware.org/gdb/current/onlinedocs/gdb/Conditions.html
-2, gdb里面加入条件断点: 
-break util/vireventpoll.c:484 if fds[n].fd == 7 
+14:00 2013-03-19
+virtualization, xen, find out whether xend have hook for migration
+1, www.xen.org/files/xensummit_4/talk_Cully.pdf
+said that there is a checkpoint in xen for it.
+but i do not see it after read this doc.
 
-17:34 2013-03-18
-"Dirk Müller<dirk@dmllr.de>"_email_"Re: [opensuse-arm] openSUSE 12.3 builds"_20130316_1854
-2013/3/16 Michal Hrusecky <michal@hrusecky.net>:
+2, http://blog.prgmr.com/mt/mt-search.cgi?blog_id=1&tag=migration&limit=20
+[textbox title: Device Migration Hooks]
+Xen includes the option of calling an external device migration script at each step of a save or migrate. Although the feature was originally added for the sake of TPM migration, it's since been extended to migrating arbitrary devices.
 
-> boards to 12.3, but my project with 12.3 enable rebuilt everything for
-> Factory, but 12.3 is still in scheduled state for few days... Am I doing
-> something wrong?
+Enable the external-device-migrate script by setting the external-migration-tool directive in /etc/xen/xend-config.sxp. Most likely you'll want to set (external-migration-tool 'external-device-migrate') and let that script source appropriate scripts for external devices.
+[end textbox]
 
-Hi Michal,
+3, check external-migration-tool in xen manpage
+external-migration-tool
+    The name of an application or script that can handle external device migration, such as for example virtual TPM migration. An example script is /etc/xen/scripts/external-device-migrate. 
 
-yes, this is a security feature.. in order to build something for 12.3
-you need to migrate to a qemu build. Unfortunately
-the 12.3:Ports repository was changed to do native builds, which is
-blocked for everybody else.
+4, mailing list
+http://hg.vergenet.net/xen/xen-3.4-testing/rev/1fe63743a147
+commit: abd30192c
+there is explain about the step. ref""7
 
-You need to set the path to devel:ARM:12.3:Contrib project and then
-abortbuild all the scheduled jobs (because the build service does not
-notice
-that you changed the path), and then call osc rebuild on them. Then it
-should work.
+5, modify /etc/xen/xend-config.sxp
+(external-migration-tool '/etc/xen/scripts/external-device-migrate')
+got the log, same at from goole.
+linux-vm4:/etc/xen/scripts # cat /var/log/xen/xend.log |grep "Calling external migration tool" -A2                                                              
+[2013-03-19 15:41:53 5174] INFO (DevController:361) Calling external migration tool for step 0                                                                  
+[2013-03-19 15:42:03 5174] INFO (DevController:361) Calling external migration tool for step 0                                                                  
+[2013-03-19 15:42:15 5174] INFO (DevController:361) Calling external migration tool for step 0                                                                  
+[2013-03-19 15:44:20 5174] INFO (DevController:361) Calling external migration tool for step 0                                                                  
+[2013-03-19 15:45:31 5174] DEBUG (SrvServer:77) SrvServer.cleanup()             
+[2013-03-19 15:45:31 5174] DEBUG (XMLRPCServer:251) XMLRPCServer.cleanup()      
+--                                                                              
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 0                                                                  
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vbd-migration.sh'                                            
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 0                                                                  
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vif-migration.sh'                                            
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 1                                                                  
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vbd-migration.sh'                                            
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 1                                                                  
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vif-migration.sh'                                            
+[2013-03-19 15:45:38 5310] DEBUG (XendCheckpoint:124) [xc_save]: /usr/lib64/xen/bin/xc_save 27 3 0 0 4
+--
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 2
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vbd-migration.sh'
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 2
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vif-migration.sh'
+[2013-03-19 15:45:38 5310] INFO (XendCheckpoint:135) Domain 3 suspended.
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 3
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vbd-migration.sh'
+[2013-03-19 15:45:38 5310] INFO (DevController:361) Calling external migration tool for step 3
+[2013-03-19 15:45:38 5310] INFO (DevController:365) Error: Could not find script '/etc/xen/scripts/vif-migration.sh'
+[2013-03-19 15:45:38 5310] INFO (image:538) signalDeviceModel:restore dm state to running
 
-For reference, have a look at the devel:ARM:12.3:Contrib:Chromebook
-project, this is how you should set it up as well.
+6, cat vbd-migration.sh
+#!/bin/bash
 
-Greetings,
-Dirk
+echo start
+xm list
+echo $*
+echo $@
+echo end
 
-17:50 2013-03-18
-virtualization, xen, xend, vm configuration
-/var/lib/xend/domains/<vm-uuid>
+1), Error: Migration tool returned 127
+2), it is ok if call exit.
+#!/bin/bash
+exit
+3), i am wrong, the "wrapper" script external-device-migrate do the two type things.
+the first one is source the $typ$stype-migration.sh, this script should set the environment variable e.g. script path.
+the second one is execute the scipt named $typ_recover if migration fail or $typ_migration_step if migration successful.
+the reason why i need exit in vbd-migration.sh is the actual script is not provided. e.g. vbd_migration_step is not located in system path.
+
+7, mail to Jiaju
+how to add the hook script in migration for devcie migration
+
+there are 4 points in migration progress for device migration hook script. your could get the explaination of the steps in [1]. i guess that the 4th step(3 in code, it count from 0) is useful for your requirement.
+
+here is the script howto
+1), add following line in /etc/xen/xend-config.sxp
+(external-migration-tool '/etc/xen/scripts/external-device-migrate')
+2), add the script named "$type"-migration.sh in /etc/xen/scripts.
+the type is the storage or network if in xen. e.g. vbd, vif.
+this script is sourced by external-device-migrate. it should set the environment for the actual hook script. e.g. set the path.
+linux-vm4:/etc/xen/scripts # cat vbd-migration.sh
+#!/bin/sh
+export BAMVOR_TEST="1"
+export PATH=/etc/xen/scripts:$PATH
+3), add device migration hook script with executable permission for both migration successful and migration failure recovery.
+name: "$type"_migration_step, "$type"_recover
+linux-vm4:/etc/xen/scripts # cat vbd_migration_step
+#!/bin/bash
+echo $@
+echo $BAMVOR_TEST
+notes: the log will output to /var/log/xen/xend.log
+
+[1] http://hg.vergenet.net/xen/xen-3.4-testing/rev/1fe63743a147
+or xen git commit: abd30192c
+
+In a 1st step (step = 0 in the code) migration of all devices of a
+domain is 'tested', that means their driver implementations (blkif.py,
+netif.py, tpmif.py, usbif.py, pciif.py) are queried whether migration is
+possible at all. Currently all device representations respond with a
+'yes' (=0), although probably a VM mounting a hard drive partition
+should respond with a 'no' (-1) already. This first step is a quick
+check to see whether devices can be migrated.
+
+The 2nd step is to do whatever can be done before the domain is
+suspended. At this point migration of the device could be initiated, if
+at all possible.
+
+The 3rd step is to migrate a device after the domain has been suspended,
+meaning that it is not scheduled anymore and the VM is 'settled'. All
+devices are called again and a good implementation would initiate the
+migration in a background process to achieve as much concurrency as
+possible.
+
+The 4th step is to synchronize with the 3rd step. At this point the
+implementor has to make sure that anything that was initiated in step 3
+has completed. Once all steps 4 have been processed, the VM will resume
+on the remove machine.
+
+8, continue to study how device migrate is called during migration.
 
