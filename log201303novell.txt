@@ -1124,7 +1124,7 @@ GTD
 1), 14:00-18:20 find out whether xend have hook for migration. see"14:00 2013-03-19"
 
 14:00 2013-03-19
-virtualization, xen, find out whether xend have hook for migration
+virtualization, xen, find out whether xend have hook for migration; bnc#801663
 1, www.xen.org/files/xensummit_4/talk_Cully.pdf
 said that there is a checkpoint in xen for it.
 but i do not see it after read this doc.
@@ -1337,7 +1337,7 @@ Michal, Sunny and Theo)
 Cornelius Schumacher <cschum@suse.de>
 
 10:07 2013-03-20
-virtualization, xen, migration, add hook for lvm
+virtualization, xen, migration, add hook for lvm; bnc#801663
 1, Jiaju mail
 Hi Bamvor,
 
@@ -1669,7 +1669,7 @@ but it is not work. even if Chunyan sleep 2 before waitForDevices.
              dominfo.waitForDevices() # Wait for backends to set up
          finally:
 
-8, Chunyan found that the hotplug is error. from the time stamp, we could not that this is before the suspend.
+8, Chunyan found that the hotplug is error. from the time stamp, we could not valid it before the suspend.
 1), Wed Mar 20 16:16:38 CST 2013
 xenstore-ls /local/domain/0/backend/vbd/
     vbd = ""
@@ -1715,7 +1715,13 @@ fatal() {
   exit 1
 }
 
-10, \TODO how to retrigger hotplug?
+10, Summry:
+for this bug, there are two problem.
+1), the lvm cluster could only disconnect from src server while src is not mount the lv. this is only happened when the vm is destroy after migration.
+which also means we could not provide this lvm cluster to dst server before vm in src server in destroyed.
+in order to fix this problem, we need to sync the src vm destroy and dst vm unpause. or i can add a step after src vm destroy for hook.
+2), before memory transmition, dst xend is add all the device into vm including our lv disk. it lead to the hotplug failure.
+for this problem: we need to recover it after migration.
 
 10:08 2013-03-20
 GTD
@@ -1723,6 +1729,70 @@ GTD
 
 1, today
 1), 9:50-11:40 12:40-18:40 xen migration hook, bnc#801663. see"10:07 2013-03-20"
+
+17:28 2013-03-20
+next X11: wayland
+ubuntu: mir
+
+8:44 2013-03-21
+mailing list, virtualization, xen, PMU(performance monitor); xen arm status
+1, nested PMU for intel cpu in xen
+1), Dietmar
+> Hi all, > I want to know if PMU in Xen HVM or PV is supported now? I have done a test > that in the latest xen-unstable source, "perf" command cannot give right > output in VMs. My CPU is Intel(R) Xeon(R) CPU E5620 @ 2.40GHz.
+
+perf should be supported for HVM guests in the last xen-unstable source for most Intel processors. You have to add the 'vpmu' flag as hypervisor boot parameter. If you start your HVM guest you should see a message in the hypervisor logs if your cpu is not supported.
+2), http://wiki.xen.org/wiki/Xen_Profiling:_oprofile_and_perf
+
+2, xen arm status
+http://lists.xen.org/archives/html/xen-devel/2013-03/msg01500.html
+On Mon, 2013-03-18 at 12:31 +0000, Stefano Stabellini wrote:
+> On Mon, 18 Mar 2013, Ian Campbell wrote:
+> > > == Not yet complete ==
+> > 
+> > > * ARM v7 server port
+> > >   owner: ijc@citrix
+> > >   prognosis: Excellent
+> > >   status: Core hypervisor and Linux patches accepted.  Tools patches 
+> > > submitted.
+> > > 
+> > > * ARM v8 server port (tech preview)
+> > >   owner: ijc@citrix
+> > >   status: ?
+> > >   prognosis: Tech preview only
+> > 
+> > There are a few outstanding patch series and there may be other stuff
+> > which comes along but what is in tree now for v7 and v8 is in pretty
+> > good shape I think.
+> > 
+> > So I think we could reasonably call these done for 4.3. Stefano what do
+> > you think?
+> 
+> I think we need SMP guest support before we can call them done
+
+True, that would be *really* good to have.
+
+Ian.
+
+3, xen 4.3 schedule
+http://lists.xen.org/archives/html/xen-devel/2013-03/msg01469.html
+= Timeline =
+
+We are planning on a 9-month release cycle.  Based on that, below are
+our estimated dates:
+* Feature freeze: 25 March 2013
+* Code freezing point: 8 April 2013
+* First RC: 6 May 2013
+* Release: 17 June 2013
+
+10:27 2013-03-21
+GTD
+0, 10:00-18:30
+
+1, today
+1), 30' mailing list, virtlualization. see"8:44 2013-03-21"
+2), 10:30-12:30 15:30-18:30 xen migration hook, bnc#801663. see"10:28 2013-03-21"
+3), suse all hands meeting. see"14:06 2013-03-21".
+4), markdown tools: retext. see"13:36 2012-10-11"3.
 
 1), libvirt libxl lock patch. see"14:24 2013-03-13"6.
 2, \TODO
@@ -1801,28 +1871,128 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-17:28 2013-03-20
-next X11: wayland
-ubuntu: mir
+10:28 2013-03-21
+virtualization, xen, migration, add hook for lvm, cont1; bnc#801663
+1, investigate the hotplug, ref"10:07 2013-03-20"10-2)
+2, read the hotplug script for dmmd: block-dmmd
+1), there is function for activate lvm
+/sbin/lvchange -ay $1
+2), try if it would be ok when i manaully detach and attach lv:
+# xm block-list 10
+Vdev  BE handle state evt-ch ring-ref BE-path
+768    0    0     4      9      8     /local/domain/0/backend/vbd/10/768
+5632   0    0     4      10     9     /local/domain/0/backend/vbd/10/5632
+# xm block-detach 10 hdc
+# xm block-list 10
+Vdev  BE handle state evt-ch ring-ref BE-path
+768    0    0     4      9      8     /local/domain/0/backend/vbd/10/768
+# xm block-attach 10 "dmmd:lvm;/dev/vg/lv1" /dev/hdc w
+# xm block-list  10
+Vdev  BE handle state evt-ch ring-ref BE-path
+768    0    0     4      9      8     /local/domain/0/backend/vbd/10/768
+5632   0    0     4      10     279   /local/domain/0/backend/vbd/10/5632
+So, it is ok on linux-vm4. try it after migration.
+3, talk with Jiaju.
+Jiaju will send this bug for Jim for the potential risk while modify the flow.
+4, paste lmb comments here and continue to read how the tap2 device works.
+https://bugzilla.novell.com/show_bug.cgi?id=801663
+Lars Marowsky-Bree 2013-03-19 12:22:02 UTC
+(In reply to comment #79)
+> Yes, in theory this would be the best solution;) However, in order to make sure
+> we are on the right track, I think we need to do another testing. Lars, I guess
+> in your test script the VG is activated normally but not exclusive activated,
+> thus my suggestion would be to exclusive activate the VG in your test script
+> and see if the performance of clvm_mirror can be improved. If yes, we are
+> pretty sure that we are on the right track, otherwise, it should indicate that
+> the clustering overhead is just one reason that influenced the performance but
+> not the root cause. 
+> 
+> Do you think having another test makes sense?
+I did this test quickly on my lab hardware; did 3 runs each, the numbers were
+very stable.
+With lvchange -ay (normal, fully clustered activation), I got ~82MB/s read
+performance. (The number was consistent across nodes.)
+With lvchange -aey (local, exclusive activation of the same LV), I got around
+~280MB/s, approximately a factor of 3.5 speed-up.
+So it's truly the cLVM2 cluster overhead here.
 
-8:44
-mailing list, virtualization, xen, PMU(performance monitor)
+Now, what we want to do:
+- Modify the Xen block scripts to run "lvchange -aey" when a device is
+activated on a node
+- And run "lvchange -an" when it is deactivated.
+
+This may be best handled as an option to the tap2 code somehow in xend? Jim
+Fehlig should be able to advise.
+
+And, since we no longer want to activate the whole VG, I think we should add a
+quick RA that handles activation at the "lvchange" level. Alternatively, we
+could mod the LVM agent to not activate LVs that have a specific tag set; those
+would then be managed by Xen directly. That should be quite simple to add, the
+meat is in the Xen modifications. (I'd guess though that even that isn't more
+than a week or two, max.)
+5, tap2
+pause tap2 device while vm pause. unpare tap2 device while vm unpause.
+    def unpause(self):
+        """Unpause domain
+
+        @raise XendError: Failed unpausing a domain
+        """
+        try:
+            if(self.domid):
+                dev =  xstransact.List(self.vmpath + '/device/tap2')
+                for x in dev:
+                    path = self.getDeviceController('tap2').readBackend(x, 'params')
+                    if path and path.startswith(TapdiskController.TAP_DEV):
+                        TapdiskController.unpause(path)
+6, in "def save"
+    dominfo.destroy()
+    dominfo.testDeviceComplete()
+if i should remvoe lvm successful after testDeviceComplete. how about insert a check point here? STEP4.
+
+
+14:06 2013-03-21
+company, suse, all-hands, ralf
+1, opensuse 12.3 release party
+2, microsoft azure in beta.
+3, open 42 position in suse.
+4, FY13 forecast at 108% of plan.
+rolling 4 quarters of "China East" at 14milion USD.
+China East: china, taiwan,  korean.
+5, bonus base on Profit.
+6, site manageer
+1), role
+(1), work environment, team building, hackweek.
+(2), cooperate with other department, e.g. HR. market.
+(3), technology.
+(4), work with Andy.
+2), split the function.
+jiaju: SLE Architect China.
+Sun Yan: R&D site leader Beijing.
+7, exchange.
+1), as soon as possible.
+lance wang, Dong Mao Zhang.
+2), This summer/fall:
+Liu, Bin Wei: sles tester. learn more with sles in Europe.
+Tang, Jerry: automation. discuss with the user of hamster.
+
+8, 2nd April kick off.
+
+18:29 2013-03-21
+virtualization, xen, migration, add hook for lvm, cont1; bnc#801663; ref in virtualization-xen mailing list
 1, 
-1), Dietmar
-> Hi all, > I want to know if PMU in Xen HVM or PV is supported now? I have done a test > that in the latest xen-unstable source, "perf" command cannot give right > output in VMs. My CPU is Intel(R) Xeon(R) CPU E5620 @ 2.40GHz.
+https://lists.innerweb.novell.com/pipermail/virtualization-xen/2013-February/004156.html
+This is almost the same place that Jim Fehligs "domain-lock"  utility ties in.
 
-perf should be supported for HVM guests in the last xen-unstable source for most Intel processors. You have to add the 'vpmu' flag as hypervisor boot parameter. If you start your HVM guest you should see a message in the hypervisor logs if your cpu is not supported.
-2), http://wiki.xen.org/wiki/Xen_Profiling:_oprofile_and_perf
+He just made a change here in the python script.  See bug 802690
 
-2, xen arm status
->>>* ARM v7 server port owner: ijc@citrix prognosis: Excellent status: Core hypervisor and Linux patches accepted. Tools patches submitted.
 
->>>* ARM v8 server port (tech preview) owner: ijc@citrix status: ? prognosis: Tech preview only
+Jim Short
+Novell Security Response Team Lead 
+Linux Kernel STSE
+jshort at novell.com
+801.861.9284
 
->>There are a few outstanding patch series and there may be other stuff which comes along but what is in tree now for v7 and v8 is in pretty good shape I think.
+Novell | SUSE
 
->>So I think we could reasonably call these done for 4.3. Stefano what do you think?
+2, https://bugzilla.novell.com/show_bug.cgi?id=802690
 
->I think we need SMP guest support before we can call them done
-
-Do you think that may be ready for v7 by the time we do a code freeze? Will ARM v7 be *ready* in 4.3, or still be mainly a tech preview?
