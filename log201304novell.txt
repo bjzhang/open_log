@@ -67,8 +67,7 @@ serial="pty"
   <target port='0'/>
 </console>
 2, check how the cfg is passed to xenstore.
-3, the console is fail because console pty parse is remove after update to xen4.2.
-ref: qemu-dm command line:
+3, ref: qemu-dm command line:
 /usr/lib/xen/bin/qemu-dm -d 3 -domain-name bjz_04_sles11_sp2 -vnc 127.0.0.1:0 -vncunused -serial pty -videoram 8 -boot c -acpi -vcpus 4 -vcpu_avail 0x01 -net none -M xenfv
 
 12:13 2013-4-2
@@ -94,6 +93,74 @@ web security: webgoat.
 11, Forrest Kong
 智能小车。
 xbox. 无线手柄：linux userspace tools.
+
+23:36 2013-04-02
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont2
+1, libxl_dm.c, libxl__build_device_model_args_new()
+add serial to qemu-dm command-line.
+        if (b_info->u.hvm.serial) {
+            flexarray_vappend(dm_args, "-serial", b_info->u.hvm.serial, NULL);
+        }
+2, user should set hvm.serial in domain build info.
+in xl_cmdimpl.c, parse_config_data():
+        xlu_cfg_replace_string (config, "serial", &b_info->u.hvm.serial, 0);
+
+3, but in libxlMakeDomBuildInfo, hvm.serial is not set.
+本来这个东西是在libxl_device_model_info保存, 并且在libxlMakeDeviceModelInfo由libvirt def设置到这里.
+但是xen4.2去掉了libxl_device_model_info, 原有功能都并入libxl_domain_build_info, 并在libvirt中用libxlMakeDomBuildInfo处理.
+所以现在需要在后者加入写入hvm.serial的代码.
+4, (13:48 2013-04-03)
+struct _virDomainDef {
+...
+    size_t nserials;
+    virDomainChrDefPtr *serials;
+
+    size_t nparallels;
+    virDomainChrDefPtr *parallels;
+
+    size_t nchannels;
+    virDomainChrDefPtr *channels;
+
+    size_t nconsoles;
+    virDomainChrDefPtr *consoles;
+...
+
+def->serials->source.type
+
+08:02 2013-04-03
+sync
+1, Jiaju attend.
+2, Boyang: virt-io bug.
+
+12:50 2013-04-03
+suse, hackweek 9, opensuse on ARM
+1, https://github.com/SUSE/hackweek/wiki/Geeko-Pumping-Iron-%28ARM%29-Session
+1), Description
+Now that openSUSE 12.3 is out, the openSUSE ARM Team﻿ want to step up a gear. As the cycle was shorter than normal, there are a few wrinkles that need to be ironed out and also a whole heap of new things that can be added. After some discussion at FOSDEM, it was decided to hold a Hackathon to address these items. The Hackathon will take place on 08 to 12 April, both at the SUSE offices in Nuremberg as well as online for those that can't attend in person.
+
+We have a long TODO list:
+
+    AArch64 fixes for 12.3 & Factory
+    Build openSUSE 12.3 for Raspberry Pi
+    Resolve outstanding 12.3 ARM Image issues
+    Release 12.3 images
+    Create OpenStack images for ARM
+    Setup KVM capable hardware as workers for external build service
+    Build OBS Worker image for armv7l
+    Setup emulator hardware for AArch64
+    Get Xen on Chromebook & Arndale running
+    Tune OBS for more optimized ARM builds
+
+There will also be the opportunity for new device bring up for those that want to, but our intention is to work through and complete as much of the above TODO list as possible first. For those interested in joining in the fun, please either join us in Nuremberg and/or join the opensuse-arm mailing list, the #opensuse-arm IRC channel on Freenode and also keep an eye on the openSUSE on ARM Trello board. If you have any questions please let us know on the mailing list or on IRC.
+2), People
+Andrew Wafaa originated this idea.
+Alexander Graf
+Dirk Müller
+Marcus Schäfer
+
+2, \TODO: how to join in trello? 
+https://trello.com/board/opensuse-on-arm/5007cfc12cf0ae352e21d8dc
+
 
 01:28 2013-4-3
 company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting, prepare notes
@@ -124,7 +191,6 @@ nap 30'
 discuss with Lance about mobile and pad. 30'
 
 \TODO
-work report
 send patch
 hackweek
 
@@ -208,7 +274,7 @@ libxl_dm.c:
 2), try armv8 emulator and read armv8 kernel code.
 
 13:35 2013-04-07
-suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont2, send console patch to Chunyan for review
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, send console patch to Chunyan for review
 1, test patch pass.
 commit时用了"-a", 结果不需要的修改push到github了.
 2, 整理patch and send it to Chunyan for review.
@@ -272,71 +338,5 @@ software skill, editor, vim, vertical split, vsplit
 hackweek
 1, hi,
 i was interested in "Get Xen on Chromebook & Arndale running". and i buy Arndale from vendor(howchip) in the early of March. But now, they said that my board will ship within two weeks, definitely after hackweek...
-meanwhile, i want to try to add opensuse support for cubieboard. last hackweek, i put opensuse 12.2 running on MK802, the same SOC with cubieboard. but the kernel was 3.0, i am not sure whether i could run opensuse 12.3 on kenel 3.0, if i need to update the kernel then study how to use kiwi generate the image.
-
-23:36 2013-04-02
-1, libxl_dm.c, libxl__build_device_model_args_new()
-add serial to qemu-dm command-line.
-        if (b_info->u.hvm.serial) {
-            flexarray_vappend(dm_args, "-serial", b_info->u.hvm.serial, NULL);
-        }
-2, user should set hvm.serial in domain build info.
-in xl_cmdimpl.c, parse_config_data():
-        xlu_cfg_replace_string (config, "serial", &b_info->u.hvm.serial, 0);
-
-3, but in libxlMakeDomBuildInfo, hvm.serial is not set.
-本来这个东西是在libxl_device_model_info保存, 并且在libxlMakeDeviceModelInfo由libvirt def设置到这里.
-但是xen4.2去掉了libxl_device_model_info, 原有功能都并入libxl_domain_build_info, 并在libvirt中用libxlMakeDomBuildInfo处理.
-所以现在需要在后者加入写入hvm.serial的代码.
-4, (13:48 2013-04-03)
-struct _virDomainDef {
-...
-    size_t nserials;
-    virDomainChrDefPtr *serials;
-
-    size_t nparallels;
-    virDomainChrDefPtr *parallels;
-
-    size_t nchannels;
-    virDomainChrDefPtr *channels;
-
-    size_t nconsoles;
-    virDomainChrDefPtr *consoles;
-...
-
-def->serials->source.type
-
-08:02 2013-04-03
-sync
-1, Jiaju attend.
-2, Boyang: virt-io bug.
-
-12:50 2013-04-03
-suse, hackweek 9, opensuse on ARM
-1, https://github.com/SUSE/hackweek/wiki/Geeko-Pumping-Iron-%28ARM%29-Session
-1), Description
-Now that openSUSE 12.3 is out, the openSUSE ARM Team﻿ want to step up a gear. As the cycle was shorter than normal, there are a few wrinkles that need to be ironed out and also a whole heap of new things that can be added. After some discussion at FOSDEM, it was decided to hold a Hackathon to address these items. The Hackathon will take place on 08 to 12 April, both at the SUSE offices in Nuremberg as well as online for those that can't attend in person.
-
-We have a long TODO list:
-
-    AArch64 fixes for 12.3 & Factory
-    Build openSUSE 12.3 for Raspberry Pi
-    Resolve outstanding 12.3 ARM Image issues
-    Release 12.3 images
-    Create OpenStack images for ARM
-    Setup KVM capable hardware as workers for external build service
-    Build OBS Worker image for armv7l
-    Setup emulator hardware for AArch64
-    Get Xen on Chromebook & Arndale running
-    Tune OBS for more optimized ARM builds
-
-There will also be the opportunity for new device bring up for those that want to, but our intention is to work through and complete as much of the above TODO list as possible first. For those interested in joining in the fun, please either join us in Nuremberg and/or join the opensuse-arm mailing list, the #opensuse-arm IRC channel on Freenode and also keep an eye on the openSUSE on ARM Trello board. If you have any questions please let us know on the mailing list or on IRC.
-2), People
-Andrew Wafaa originated this idea.
-Alexander Graf
-Dirk Müller
-Marcus Schäfer
-
-2, \TODO: how to join in trello? 
-https://trello.com/board/opensuse-on-arm/5007cfc12cf0ae352e21d8dc
+meanwhile, i want to try to add opensuse support for cubieboard(based on Allwinner A10 SOC). Allwinner A10 has good support on kernel 3.0, i am not sure whether i could run opensuse 12.3 on kenel 3.0, if not i need to update the kernel then learn how to use kiwi generate the image.
 
