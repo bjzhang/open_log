@@ -67,3 +67,69 @@ serial="pty"
 </console>
 2, check how the cfg is passed to xenstore.
 
+23:36 2013-04-02
+1, libxl_dm.c, libxl__build_device_model_args_new()
+add serial to qemu-dm command-line.
+        if (b_info->u.hvm.serial) {
+            flexarray_vappend(dm_args, "-serial", b_info->u.hvm.serial, NULL);
+        }
+2, user should set hvm.serial in domain build info.
+in xl_cmdimpl.c, parse_config_data():
+        xlu_cfg_replace_string (config, "serial", &b_info->u.hvm.serial, 0);
+
+3, but in libxlMakeDomBuildInfo, hvm.serial is not set.
+本来这个东西是在libxl_device_model_info保存, 并且在libxlMakeDeviceModelInfo由libvirt def设置到这里.
+但是xen4.2去掉了libxl_device_model_info, 原有功能都并入libxl_domain_build_info, 并在libvirt中用libxlMakeDomBuildInfo处理.
+所以现在需要在后者加入写入hvm.serial的代码.
+4, (13:48 2013-04-03)
+struct _virDomainDef {
+...
+    size_t nserials;
+    virDomainChrDefPtr *serials;
+
+    size_t nparallels;
+    virDomainChrDefPtr *parallels;
+
+    size_t nchannels;
+    virDomainChrDefPtr *channels;
+
+    size_t nconsoles;
+    virDomainChrDefPtr *consoles;
+...
+
+def->serials->source.type
+
+08:02 2013-04-03
+sync
+1, Jiaju attend.
+2, Boyang: virt-io bug.
+
+12:50 2013-04-03
+suse, hackweek 9, opensuse on ARM
+1, https://github.com/SUSE/hackweek/wiki/Geeko-Pumping-Iron-%28ARM%29-Session
+1), Description
+Now that openSUSE 12.3 is out, the openSUSE ARM Team﻿ want to step up a gear. As the cycle was shorter than normal, there are a few wrinkles that need to be ironed out and also a whole heap of new things that can be added. After some discussion at FOSDEM, it was decided to hold a Hackathon to address these items. The Hackathon will take place on 08 to 12 April, both at the SUSE offices in Nuremberg as well as online for those that can't attend in person.
+
+We have a long TODO list:
+
+    AArch64 fixes for 12.3 & Factory
+    Build openSUSE 12.3 for Raspberry Pi
+    Resolve outstanding 12.3 ARM Image issues
+    Release 12.3 images
+    Create OpenStack images for ARM
+    Setup KVM capable hardware as workers for external build service
+    Build OBS Worker image for armv7l
+    Setup emulator hardware for AArch64
+    Get Xen on Chromebook & Arndale running
+    Tune OBS for more optimized ARM builds
+
+There will also be the opportunity for new device bring up for those that want to, but our intention is to work through and complete as much of the above TODO list as possible first. For those interested in joining in the fun, please either join us in Nuremberg and/or join the opensuse-arm mailing list, the #opensuse-arm IRC channel on Freenode and also keep an eye on the openSUSE on ARM Trello board. If you have any questions please let us know on the mailing list or on IRC.
+2), People
+Andrew Wafaa originated this idea.
+Alexander Graf
+Dirk Müller
+Marcus Schäfer
+
+2, \TODO: how to join in trello? 
+https://trello.com/board/opensuse-on-arm/5007cfc12cf0ae352e21d8dc
+
