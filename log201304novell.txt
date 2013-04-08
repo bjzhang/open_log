@@ -190,11 +190,102 @@ GTD
 nap 30'
 discuss with Lance about mobile and pad. 30'
 
+13:35 2013-04-07
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, send console patch to Chunyan for review
+1, test patch pass.
+commit时用了"-a", 结果不需要的修改push到github了.
+2, 整理patch and send it to Chunyan for review.
+1), when did libxlMakeChrdevStr add in libvirt?
+it was 2b84e445 by Jim on 10, Feb 2011: Add libxenlight driver
+2), is it covery all the souce.type in libxlMakeChrdevStr?
+i could ref how qemu works. because in libxl hvm, it will pass to qemu-dm.
+ref: qemuBuildChrArgStr and qemuBuildChrChardevStr.
+VIR_DOMAIN_CHR_TYPE_UDP, VIR_DOMAIN_CHR_TYPE_TCP, VIR_DOMAIN_CHR_TYPE_UNIX.
+but VIR_DOMAIN_CHR_TYPE_SPICEVMC only exist in qemuBuildChrChardevStr.
+(1), check qemu mannual(qemu-dm and qemu upstream), spicevmc only support in -chardev parameter in qemu upstream not in qemu-dm:
+http://qemu.weilnetz.de/qemu-doc.html
+-chardev spicevmc ,id=id ,debug=debug, name=name
+    spicevmc is only available when spice support is built in.
+    debug debug level for spicevmc
+    name name of spice channel to connect to
+    Connect to a spice virtual machine channel, such as vdiport. 
+So, will xen using qemu xen?
+
+(2), in qemu-dm, libxl__build_device_model_args_new for qemu xen, libxl__build_device_model_args_old for qemu old
+
+domcreate_bootloader_done->domcreate_rebuild_done->domcreate_launch_dm->libxl__spawn_stub_dm/libxl__spawn_local_dm->libxl__domain_device_model
+                                  ->libxl__build_device_model_args
+
+libxl__domain_device_model: will determine whether use qemu-dm or qemu-system-i386
+libxl__domain_build_info_setdefault: set qemu-dm in hvm and set qemu upstream in pv. but will fall back to qemu-dm when qemu-xen was not found.
+
+if i want to enable spicevmc in libvirt libxl console, i need to modify the libxl_domain_build_info struct and libxl__build_device_model_args_new, maybe it had better do it in the dedicated patch? \TODO: write this in the email review.
+
+(3), summary: 
+add VIR_DOMAIN_CHR_TYPE_UDP, VIR_DOMAIN_CHR_TYPE_TCP, VIR_DOMAIN_CHR_TYPE_UNIX in libxlMakeChrdevStr, reference qemuBuildChrArgStr.
+add VIR_DOMAIN_CHR_TYPE_SPICEVMC in another patch in future.
+
+3, summary for where libxl handle the serial
+1), libxl_qmp.c: store_serial_port_info
+write hvm serial device(chardev) to xenstore path/to/domain/serial/port/tty
+
+13:37 2013-04-07
+software skill, SCM, git, push
+1, push all local branch to remote(even if such branch do not exist on remote):
+> git push --all 
+> git push --all github
+2, push one local branch to remote
+> git push github libxl_api_console_xen43_review
+Counting objects: 957, done.
+Delta compression using up to 8 threads.
+Compressing objects: 100% (207/207), done.
+Writing objects: 100% (757/757), 119.02 KiB, done.
+Total 757 (delta 660), reused 644 (delta 550)
+To git@github.com:bjzhang/libvirt.git
+ * [new branch]      libxl_api_console_xen43_review -> libxl_api_console_xen43_review
+3, git push fail:
+bamvor@linux-bjrd:libvirt> git push github                                      
+Counting objects: 169, done.                                                    
+Delta compression using up to 8 threads.                                        
+Compressing objects: 100% (49/49), done.                                        
+Writing objects: 100% (49/49), 41.27 KiB, done.                                 
+Total 49 (delta 46), reused 0 (delta 0)                                         
+To git@github.com:bjzhang/libvirt.git                                           
+   f0ac5b9..4327bf4  libxl_api_console_xen42 -> libxl_api_console_xen42         
+   292a1528..665a5c6 libxl_api_console_xen43 -> libxl_api_console_xen43         
+ ! [rejected]        master -> master (non-fast-forward)                        
+error: failed to push some refs to 'git@github.com:bjzhang/libvirt.git'         
+hint: Updates were rejected because a pushed branch tip is behind its remote    
+hint: counterpart. If you did not intend to push that branch, you may want to   
+hint: specify branches to push or set the 'push.default' configuration          
+hint: variable to 'current' or 'upstream' to push only the current branch.  
+
+原因很清楚, 但是我为了简单, 不希望每次都push master, 于是打算删除github上的master:
+git checkout another_branch
+git branch -D master
+git push github :master
+
+16:59 2013-04-07
+software skill, editor, vim, vertical split, vsplit
+
+17:46 2013-04-07
+hackweek
+1, hi,
+i was interested in "Get Xen on Chromebook & Arndale running". and i buy Arndale from vendor(howchip) in the early of March. But now, they said that my board will ship within two weeks, definitely after hackweek...
+meanwhile, i want to try to add opensuse support for cubieboard(based on Allwinner A10 SOC). Allwinner A10 has good support on kernel 3.0, i am not sure whether i could run opensuse 12.3 on kenel 3.0, if not i need to update the kernel then learn how to use kiwi generate the image.
+
+15:13 2013-04-08
+GTD
+0, 14:00
+
+1, today
+1), opensuse12.3 on cubieboard. see"15:14 2013-04-08"
+
 2, week plan
 1), hackweek
 (1), running cubieboard on opensuse12.3
 (2), learn how to use kiwi.
-2), send patch for chunyan review should be on Friday.
+2), test patch during hackweek; send patch for chunyan review should be on Friday.
 3), check the status about libvirt libxl xen4.2 support bugs. start and discuss with Jim.
 
 2, \TODO
@@ -276,70 +367,29 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-13:35 2013-04-07
-suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, send console patch to Chunyan for review
-1, test patch pass.
-commit时用了"-a", 结果不需要的修改push到github了.
-2, 整理patch and send it to Chunyan for review.
-1), when did libxlMakeChrdevStr add in libvirt?
-it was 2b84e445 by Jim on 10, Feb 2011: Add libxenlight driver
-2), is it covery all the souce.type in libxlMakeChrdevStr?
-i could ref how qemu works. because in libxl hvm, it will pass to qemu-dm.
-ref: qemuBuildChrArgStr and qemuBuildChrChardevStr.
-VIR_DOMAIN_CHR_TYPE_UDP, VIR_DOMAIN_CHR_TYPE_TCP, VIR_DOMAIN_CHR_TYPE_UNIX.
-but VIR_DOMAIN_CHR_TYPE_SPICEVMC only exist in qemuBuildChrChardevStr.
-(1), check qemu mannual(qemu-dm and qemu upstream), spicevmc only support in -chardev parameter in qemu upstream not in qemu-dm:
-http://qemu.weilnetz.de/qemu-doc.html
--chardev spicevmc ,id=id ,debug=debug, name=name
-    spicevmc is only available when spice support is built in.
-    debug debug level for spicevmc
-    name name of spice channel to connect to
-    Connect to a spice virtual machine channel, such as vdiport. 
-So, will xen using qemu xen?
+15:14 2013-04-08
+suse, opensuse, opensuse12.3 on cubieboard
+1, plan
+1), try opensuse12.3 + kernel 3.0 on cubieboard.
+2), if successful, packaging all the package and build it on obs.
 
-(2), in qemu-dm, libxl__build_device_model_args_new for qemu xen, libxl__build_device_model_args_old for qemu old
+16:02 2013-04-08
+software skill, disk, delete useless device mapper device: loop device
+0, status
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # ll /dev/mapper/loop1p1
+lrwxrwxrwx 1 root root 7 Apr  8 15:56 /dev/mapper/loop1p1 -> ../dm-0
+1, losetup fail:
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # losetup -d /dev/mapper/loop1p1 -v
+loop: can't delete device /dev/mapper/loop1p1: No such device or address
+2, delete by dmsetup(device mapper setup):
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # dmsetup table
+loop1p1: 0 32768 linear 7:1 2048
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # dmsetup ls
+loop1p1 (253, 0)
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # dmsetup remove loop1p1
 
-domcreate_bootloader_done->domcreate_rebuild_done->domcreate_launch_dm->libxl__spawn_stub_dm/libxl__spawn_local_dm->libxl__domain_device_model
-                                  ->libxl__build_device_model_args
-
-libxl__domain_device_model: will determine whether use qemu-dm or qemu-system-i386
-libxl__domain_build_info_setdefault: set qemu-dm in hvm and set qemu upstream in pv. but will fall back to qemu-dm when qemu-xen was not found.
-
-if i want to enable spicevmc in libvirt libxl console, i need to modify the libxl_domain_build_info struct and libxl__build_device_model_args_new, maybe it had better do it in the dedicated patch? \TODO: write this in the email review.
-
-(3), summary: 
-add VIR_DOMAIN_CHR_TYPE_UDP, VIR_DOMAIN_CHR_TYPE_TCP, VIR_DOMAIN_CHR_TYPE_UNIX in libxlMakeChrdevStr, reference qemuBuildChrArgStr.
-add VIR_DOMAIN_CHR_TYPE_SPICEVMC in another patch in future.
-
-3, summary for where libxl handle the serial
-1), libxl_qmp.c: store_serial_port_info
-write hvm serial device(chardev) to xenstore path/to/domain/serial/port/tty
-
-
-
-13:37 2013-04-07
-bamvor@linux-bjrd:libvirt> git push github                                      
-Counting objects: 169, done.                                                    
-Delta compression using up to 8 threads.                                        
-Compressing objects: 100% (49/49), done.                                        
-Writing objects: 100% (49/49), 41.27 KiB, done.                                 
-Total 49 (delta 46), reused 0 (delta 0)                                         
-To git@github.com:bjzhang/libvirt.git                                           
-   f0ac5b9..4327bf4  libxl_api_console_xen42 -> libxl_api_console_xen42         
-   292a1528..665a5c6 libxl_api_console_xen43 -> libxl_api_console_xen43         
- ! [rejected]        master -> master (non-fast-forward)                        
-error: failed to push some refs to 'git@github.com:bjzhang/libvirt.git'         
-hint: Updates were rejected because a pushed branch tip is behind its remote    
-hint: counterpart. If you did not intend to push that branch, you may want to   
-hint: specify branches to push or set the 'push.default' configuration          
-hint: variable to 'current' or 'upstream' to push only the current branch.  
-
-16:59 2013-04-07
-software skill, editor, vim, vertical split, vsplit
-
-17:46 2013-04-07
+17:28 2013-04-08
 hackweek
-1, hi,
-i was interested in "Get Xen on Chromebook & Arndale running". and i buy Arndale from vendor(howchip) in the early of March. But now, they said that my board will ship within two weeks, definitely after hackweek...
-meanwhile, i want to try to add opensuse support for cubieboard(based on Allwinner A10 SOC). Allwinner A10 has good support on kernel 3.0, i am not sure whether i could run opensuse 12.3 on kenel 3.0, if not i need to update the kernel then learn how to use kiwi generate the image.
+1, run opensuse12.3 XFCE rootfs version successful on cubieboard.
+compile X11 driver.
 
