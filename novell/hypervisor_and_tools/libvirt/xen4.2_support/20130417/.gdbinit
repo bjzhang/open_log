@@ -18,6 +18,13 @@ where
 cont
 end
 
+break libxl/libxl_driver.c:192
+commands
+silent
+printf "libxlFDRegisterEventHook: virEventAddHandle fail\n"
+cont
+end
+
 break libxlFDDeregisterEventHook
 commands
 silent
@@ -55,6 +62,20 @@ break util/vireventpoll.c:582
 commands
 printf "cleanup handler: i<%d>, fd<%d>, watch<%d>, info<%p>\n", i, eventLoop.handles[i].fd, eventLoop.handles[i].watch, eventLoop.handles[i].opaque
 where 4
+cont
+end
+
+break conf/domain_conf.c:1929
+commands
+printf "virDomainObjDispose call privateDataFreeFunc\n"
+where 4
+cont
+end
+
+break libxlDomainObjPrivateFree
+commands
+printf "libxlDomainObjPrivateFree"
+where 2
 cont
 end
 
