@@ -1,0 +1,1283 @@
+.LOG
+14:08 2013-04-01
+software, skill, locale的设定及其LANG、LC_ALL、LANGUAGE环境变量的区别
+ref: http://hi.baidu.com/edeed/item/c23752f36abdd916ce9f3289
+> locale
+LANG=zh_CN.UTF-8
+LC_CTYPE="zh_CN.UTF-8"
+LC_NUMERIC="zh_CN.UTF-8"
+LC_TIME="zh_CN.UTF-8"
+LC_COLLATE="zh_CN.UTF-8"
+LC_MONETARY="zh_CN.UTF-8"
+LC_MESSAGES="zh_CN.UTF-8"
+LC_PAPER="zh_CN.UTF-8"
+LC_NAME="zh_CN.UTF-8"
+LC_ADDRESS="zh_CN.UTF-8"
+LC_TELEPHONE="zh_CN.UTF-8"
+LC_MEASUREMENT="zh_CN.UTF-8"
+LC_IDENTIFICATION="zh_CN.UTF-8"
+LC_ALL=
+> export LANG=en_US.UTF8
+> locale
+LANG=en_US.UTF8
+LC_CTYPE="en_US.UTF8"
+LC_NUMERIC="en_US.UTF8"
+LC_TIME="en_US.UTF8"
+LC_COLLATE="en_US.UTF8"
+LC_MONETARY="en_US.UTF8"
+LC_MESSAGES="en_US.UTF8"
+LC_PAPER="en_US.UTF8"
+LC_NAME="en_US.UTF8"
+LC_ADDRESS="en_US.UTF8"
+LC_TELEPHONE="en_US.UTF8"
+LC_MEASUREMENT="en_US.UTF8"
+LC_IDENTIFICATION="en_US.UTF8"
+LC_ALL=
+
+14:12 2013-04-01
+software skill, SCM, git, am: apply patch
+1, bamvor@localhost:libvirt> git am 0004-add-alloc-and-free-function-for-virConsole.patch
+previous rebase directory /home/bamvor/work_home/source/virtualization/libvirt/.git/rebase-apply still exists but mbox given.
+2, this is because the previous git am is paused:
+bamvor@localhost:libvirt> git am 0002-fix-comile-fail.patch
+正应用：fix comile fail
+error: patch failed: src/libxl/libxl_conf.h:36
+error: src/libxl/libxl_conf.h: patch does not apply
+Patch failed at 0001 fix comile fail
+When you have resolved this problem run "git am --resolved".
+If you would prefer to skip this patch, instead run "git am --skip".
+To restore the original branch and stop patching run "git am --abort".
+because i already patch and commit manaully, i should run "git am --skip" to give previous patch.
+then git am will ok.
+
+18:01 2013-04-01
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont1
+1, "/local/domain/11/serial/0/tty" is missing.
+check the xenconsole code. the code is never changed.
+meanwhile if i create vm with xl, it is ok.
+1), in xl cfg:
+serial="pty"
+2), in libvirt cfg:
+<serial type='pty'>
+  <source path='/dev/pts/2'/>
+  <target port='0'/>
+</serial>
+<console type='pty'>
+  <source path='/dev/pts/3'/>
+  <target port='0'/>
+</console>
+2, check how the cfg is passed to xenstore.
+3, ref: qemu-dm command line:
+/usr/lib/xen/bin/qemu-dm -d 3 -domain-name bjz_04_sles11_sp2 -vnc 127.0.0.1:0 -vncunused -serial pty -videoram 8 -boot c -acpi -vcpus 4 -vcpu_avail 0x01 -net none -M xenfv
+
+12:13 2013-4-2
+suse, hackweek 9
+1, yifan
+openNI api. 体感设备通用api.
+2, bin wei LIU.
+3, fei xiang ZHANG.
+4, calen
+1), HA automation in Hamsta.
+5, jia YAO
+selenium: 模拟交互测试，浏览器。
+6, Han zhibin, Hao Junwei.
+VirtOnline.
+7, David liang
+Gtg on Android. Gtg: get thing Gnome.
+8, Lance Wang
+a parted shell in lua.
+9, Chunyan LIU
+1), storage motion.
+10, Shawn
+web security: webgoat.
+11, Forrest Kong
+智能小车。
+xbox. 无线手柄：linux userspace tools.
+
+23:36 2013-04-02
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont2
+1, libxl_dm.c, libxl__build_device_model_args_new()
+add serial to qemu-dm command-line.
+        if (b_info->u.hvm.serial) {
+            flexarray_vappend(dm_args, "-serial", b_info->u.hvm.serial, NULL);
+        }
+2, user should set hvm.serial in domain build info.
+in xl_cmdimpl.c, parse_config_data():
+        xlu_cfg_replace_string (config, "serial", &b_info->u.hvm.serial, 0);
+
+3, but in libxlMakeDomBuildInfo, hvm.serial is not set.
+本来这个东西是在libxl_device_model_info保存, 并且在libxlMakeDeviceModelInfo由libvirt def设置到这里.
+但是xen4.2去掉了libxl_device_model_info, 原有功能都并入libxl_domain_build_info, 并在libvirt中用libxlMakeDomBuildInfo处理.
+所以现在需要在后者加入写入hvm.serial的代码.
+4, (13:48 2013-04-03)
+struct _virDomainDef {
+...
+    size_t nserials;
+    virDomainChrDefPtr *serials;
+
+    size_t nparallels;
+    virDomainChrDefPtr *parallels;
+
+    size_t nchannels;
+    virDomainChrDefPtr *channels;
+
+    size_t nconsoles;
+    virDomainChrDefPtr *consoles;
+...
+
+def->serials->source.type
+
+08:02 2013-04-03
+sync
+1, Jiaju attend.
+2, Boyang: virt-io bug.
+
+12:50 2013-04-03
+suse, hackweek 9, opensuse on ARM
+1, https://github.com/SUSE/hackweek/wiki/Geeko-Pumping-Iron-%28ARM%29-Session
+1), Description
+Now that openSUSE 12.3 is out, the openSUSE ARM Team want to step up a gear. As the cycle was shorter than normal, there are a few wrinkles that need to be ironed out and also a whole heap of new things that can be added. After some discussion at FOSDEM, it was decided to hold a Hackathon to address these items. The Hackathon will take place on 08 to 12 April, both at the SUSE offices in Nuremberg as well as online for those that can't attend in person.
+
+We have a long TODO list:
+
+    AArch64 fixes for 12.3 & Factory
+    Build openSUSE 12.3 for Raspberry Pi
+    Resolve outstanding 12.3 ARM Image issues
+    Release 12.3 images
+    Create OpenStack images for ARM
+    Setup KVM capable hardware as workers for external build service
+    Build OBS Worker image for armv7l
+    Setup emulator hardware for AArch64
+    Get Xen on Chromebook & Arndale running
+    Tune OBS for more optimized ARM builds
+
+There will also be the opportunity for new device bring up for those that want to, but our intention is to work through and complete as much of the above TODO list as possible first. For those interested in joining in the fun, please either join us in Nuremberg and/or join the opensuse-arm mailing list, the #opensuse-arm IRC channel on Freenode and also keep an eye on the openSUSE on ARM Trello board. If you have any questions please let us know on the mailing list or on IRC.
+2), People
+Andrew Wafaa originated this idea.
+Alexander Graf
+Dirk Müller
+Marcus Schäfer
+
+2, \TODO: how to join in trello? 
+https://trello.com/board/opensuse-on-arm/5007cfc12cf0ae352e21d8dc
+
+
+01:28 2013-4-3
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting, prepare notes
+1, console patch. hvm fail because of xen4.2 changes.
+2. will send to chunyan for review.
+
+10:17 2013-04-07
+software skill, SCM, git
+Your name and email address were configured automatically based
+on your username and hostname. Please check that they are accurate.
+You can suppress this message by setting them explicitly:
+
+    git config --global user.name "Your Name"
+    git config --global user.email you@example.com
+
+After doing this, you may fix the identity used for this commit with:
+
+    git commit --amend --reset-author
+
+10:26 2013-04-07
+GTD
+0, 9:40-11:30 12:52-13:44 14:44-18:03
+
+1, today
+1), 10:27- work report. 4weeks. see"18:01 2013-03-22"
+2), 12:56-13:35 14:45-18:03  work in libxl console patch. "13:35 2013-04-07"
+nap 30'
+discuss with Lance about mobile and pad. 30'
+
+13:35 2013-04-07
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, send console patch to Chunyan for review
+1, test patch pass.
+commit时用了"-a", 结果不需要的修改push到github了.
+2, 整理patch and send it to Chunyan for review.
+1), when did libxlMakeChrdevStr add in libvirt?
+it was 2b84e445 by Jim on 10, Feb 2011: Add libxenlight driver
+2), is it covery all the souce.type in libxlMakeChrdevStr?
+i could ref how qemu works. because in libxl hvm, it will pass to qemu-dm.
+ref: qemuBuildChrArgStr and qemuBuildChrChardevStr.
+VIR_DOMAIN_CHR_TYPE_UDP, VIR_DOMAIN_CHR_TYPE_TCP, VIR_DOMAIN_CHR_TYPE_UNIX.
+but VIR_DOMAIN_CHR_TYPE_SPICEVMC only exist in qemuBuildChrChardevStr.
+(1), check qemu mannual(qemu-dm and qemu upstream), spicevmc only support in -chardev parameter in qemu upstream not in qemu-dm:
+http://qemu.weilnetz.de/qemu-doc.html
+-chardev spicevmc ,id=id ,debug=debug, name=name
+    spicevmc is only available when spice support is built in.
+    debug debug level for spicevmc
+    name name of spice channel to connect to
+    Connect to a spice virtual machine channel, such as vdiport. 
+So, will xen using qemu xen?
+
+(2), in qemu-dm, libxl__build_device_model_args_new for qemu xen, libxl__build_device_model_args_old for qemu old
+
+domcreate_bootloader_done->domcreate_rebuild_done->domcreate_launch_dm->libxl__spawn_stub_dm/libxl__spawn_local_dm->libxl__domain_device_model
+                                  ->libxl__build_device_model_args
+
+libxl__domain_device_model: will determine whether use qemu-dm or qemu-system-i386
+libxl__domain_build_info_setdefault: set qemu-dm in hvm and set qemu upstream in pv. but will fall back to qemu-dm when qemu-xen was not found.
+
+if i want to enable spicevmc in libvirt libxl console, i need to modify the libxl_domain_build_info struct and libxl__build_device_model_args_new, maybe it had better do it in the dedicated patch? \TODO: write this in the email review.
+
+(3), summary: 
+add VIR_DOMAIN_CHR_TYPE_UDP, VIR_DOMAIN_CHR_TYPE_TCP, VIR_DOMAIN_CHR_TYPE_UNIX in libxlMakeChrdevStr, reference qemuBuildChrArgStr.
+add VIR_DOMAIN_CHR_TYPE_SPICEVMC in another patch in future.
+
+3, summary for where libxl handle the serial
+1), libxl_qmp.c: store_serial_port_info
+write hvm serial device(chardev) to xenstore path/to/domain/serial/port/tty
+
+13:37 2013-04-07
+software skill, SCM, git, push
+1, push all local branch to remote(even if such branch do not exist on remote):
+> git push --all 
+> git push --all github
+2, push one local branch to remote
+> git push github libxl_api_console_xen43_review
+Counting objects: 957, done.
+Delta compression using up to 8 threads.
+Compressing objects: 100% (207/207), done.
+Writing objects: 100% (757/757), 119.02 KiB, done.
+Total 757 (delta 660), reused 644 (delta 550)
+To git@github.com:bjzhang/libvirt.git
+ * [new branch]      libxl_api_console_xen43_review -> libxl_api_console_xen43_review
+3, git push fail:
+bamvor@linux-bjrd:libvirt> git push github                                      
+Counting objects: 169, done.                                                    
+Delta compression using up to 8 threads.                                        
+Compressing objects: 100% (49/49), done.                                        
+Writing objects: 100% (49/49), 41.27 KiB, done.                                 
+Total 49 (delta 46), reused 0 (delta 0)                                         
+To git@github.com:bjzhang/libvirt.git                                           
+   f0ac5b9..4327bf4  libxl_api_console_xen42 -> libxl_api_console_xen42         
+   292a1528..665a5c6 libxl_api_console_xen43 -> libxl_api_console_xen43         
+ ! [rejected]        master -> master (non-fast-forward)                        
+error: failed to push some refs to 'git@github.com:bjzhang/libvirt.git'         
+hint: Updates were rejected because a pushed branch tip is behind its remote    
+hint: counterpart. If you did not intend to push that branch, you may want to   
+hint: specify branches to push or set the 'push.default' configuration          
+hint: variable to 'current' or 'upstream' to push only the current branch.  
+
+原因很清楚, 但是我为了简单, 不希望每次都push master, 于是打算删除github上的master:
+git checkout another_branch
+git branch -D master
+git push github :master
+
+16:59 2013-04-07
+software skill, editor, vim, vertical split, vsplit
+
+17:46 2013-04-07
+hackweek
+1, hi,
+i was interested in "Get Xen on Chromebook & Arndale running". and i buy Arndale from vendor(howchip) in the early of March. But now, they said that my board will ship within two weeks, definitely after hackweek...
+meanwhile, i want to try to add opensuse support for cubieboard(based on Allwinner A10 SOC). Allwinner A10 has good support on kernel 3.0, i am not sure whether i could run opensuse 12.3 on kenel 3.0, if not i need to update the kernel then learn how to use kiwi generate the image.
+
+15:13 2013-04-08
+GTD
+0, 14:00
+
+1, today
+1), opensuse12.3 on cubieboard. see"15:14 2013-04-08"
+
+15:14 2013-04-08
+suse, opensuse, opensuse12.3 on cubieboard
+1, plan
+1), try opensuse12.3 + kernel 3.0 on cubieboard.
+2), if successful, packaging all the package and build it on obs.
+2, (13:18 2013-04-09)
+plan: compile X11 driver
+3, fb device missing. 
+ref: http://linux-sunxi.org/Framebuffer
+compile hdmi into kernel:
+CONFIG_FB_SUNXI=y
+CONFIG_FB_SUNXI_LCD=y
+CONFIG_FB_SUNXI_HDMI=y
+
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_FONT_8x8=y
+CONFIG_FONT_8x16=y
+
+opensuse 12.3 xfce start successful.
+4, write u-boot to sd card
+dd if=spl/sunxi-spl.bin of=/dev/sdd bs=1024 seek=8
+dd if=u-boot.bin of=/dev/sdd bs=1024 seek=32
+5, if i add console=tty0 and disp.screen0_output_mode=EDID, framebuffer console will worked. the full bootargs is:
+console=ttyS0,115200 console=tty0 root=/dev/mmcblk0p2 init=/init loglevel=8 rootfstype=ext4 rootwait disp.screen0_output_mode=EDID  
+6, other ref:
+http://linux-sunxi.org/Binary_drivers#Mali_kernel_driver
+http://linux-sunxi.org/Mali400
+7, issue:
+1), could not install package because could not connect to host at opensuse.cs.utah.edu:80
+\TODO: bamvor: i could direct add mirror instead automatic select by opensuse.org
+2), no webbrower(firefox) installed.
+3), yast do not recognize the eth0 by automatically. report a bug?
+8, plan
+1), compile kernel and u-boot on obs and try kiwi.
+
+16:02 2013-04-08
+software skill, disk, delete useless device mapper device: loop device
+0, status
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # ll /dev/mapper/loop1p1
+lrwxrwxrwx 1 root root 7 Apr  8 15:56 /dev/mapper/loop1p1 -> ../dm-0
+1, losetup fail:
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # losetup -d /dev/mapper/loop1p1 -v
+loop: can't delete device /dev/mapper/loop1p1: No such device or address
+2, delete by dmsetup(device mapper setup):
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # dmsetup table
+loop1p1: 0 32768 linear 7:1 2048
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # dmsetup ls
+loop1p1 (253, 0)
+linux-bjrd:/home/bamvor/work_bak/arm/Allwinner/source/a10-tools # dmsetup remove loop1p1
+
+17:28 2013-04-08
+hackweek
+1, run opensuse12.3 XFCE rootfs version successful on cubieboard.
+compile X11 driver.
+
+13:13 2013-04-09
+mailing list, virtualization, xen, libvirt, libvirt libxl driver support
+"Stefano Stabellini <stefano.stabellini@eu.citrix.com>"_email_"Re: [Xen-devel] OT: xen libvirt issue"_20130409_0122
+> > Looking at the patch i totally agree that it isn't trivial...
+> >   
+> 
+> It will certainly help, but I've heard reports there are still problems
+> even with that patch.  IIRC, Bamvor has seen a similar segfault using
+> git master of libvirt and xen-unstable, although it is a bit harder to
+> trigger.
+ 
+Do you have a link to a bug report somewhere?
+
+
+> I think we need to rework the code for handling shutdown events.  The
+> current code worked with libxl in Xen 4.1, but has proven to be racy
+> with libxl in Xen 4.2.  I plan to work on this, but unfortunately not
+> for a few weeks.  I'm busy with another project this week and will be
+> traveling the week of April 15.
+
+I realize that it actually takes time but it would be great if you could
+write down in a bit more details the proposed fix, in case somebody else
+volunteers to fix the issue in the meantime.
+
+
+> > i'll hold off for now. and will work more towards libvirt integration for 
+> > Mageia 4 (our release freeze is now in effect for Mageia 3).
+> >   
+> 
+> FYI, although it is deprecated, the xm/xend toolstack works well with
+> Xen 4.2, and the legacy libvirt xen driver is quite stable.  It was the
+> first hypervisor driver in libvirt  :).
+
+The problem is that xend doesn't support upstream QEMU as a disk
+backend, and the status of blktap in most distros is pretty poor.
+
+13:16 2013-04-09
+mailing list, virtualization, xen, libvirt
+""Ralf Dannert" <rdannert@suse.com>"_email_"Re: [virtualization-xen] supported software for SUSE's Xen backup"_20130408_1853
+Hi Sebastián,
+
+you should have a look at:
+http://wiki.sepsoftware.com/wiki/index.php/Online_backup_of_virtual_XEN_machines
+http://www.sep.de/products/virtual-machine-backup/xen/
+
+
+SEP is an ISV (SEP sesam was the first 3rd party software certified on SUSE in 1997)
+SEP sesam is an automatic data backup system for heterogenous network environments.
+
+ System Requirements:
+
+    A working XEN environment on LVM (Logical Volume Manager)
+    An installed SEP sesam client on the XEN host system
+    The XEN host systems must be added as a client to the SEP sesam server 
+
+
+hth,
+Ralf
+
+
+
+>>> On 4/8/2013 at 11:16 AM, in message
+<5162A71D0200008C0008A87F@nat28.tlf.novell.com>, "Sebastian Martinez"
+<smartinez@suse.com> wrote: 
+
+> Hi all, 
+> 
+> I am working in a Xen project and I would like to know if any of you knows a 
+> backup solution for SUSE's Xen, that could
+> run on the host ( without agents in the VMs ). Xen VMs are going to be 
+> created in CLVM "raw" disks. 
+> 
+> Best regards, 
+> Sebastián Martínez
+> Business Development Manager
+> C/José Echegaray 8 Edif. III, 1ª, oficina 5 y 6.  
+> 28232. Las Rozas. Spain.
+> +34 652 86 19 49
+> smartinez@suse.com
+> SUSE
+
+13:18 2013-04-09
+GTD
+0, 12:40-20:49
+
+1, today
+1), 6h opensuse12.3 on cubieboard. see"15:14 2013-04-08"2
+
+16:20 2013-04-10
+GTD
+0, 11:40-18:12
+
+1, today
+1), 16:22-18:10 opensuse12.3 on cubieboard. see"16:21 2013-04-10".
+
+16:21 2013-04-10
+suse, opensuse, opensuse12.3 on cubieboard, cont1
+1, build u-boot and kernel on obs for both opensuse 12.2 and opensuse 12.3
+2, create uboot package
+1), input the following command and input package info then save and exit.
+> osc meta pkg -e home:bjzhang:sun4i uboot-sun4i
+Sending meta data...                                                            
+Done.
+2), checkout
+> osc co home:bjzhang:sun4i uboot-sun4i
+A    home:bjzhang:sun4i
+A    home:bjzhang:sun4i/uboot-sun4i
+At revision None.
+3, create subproject: devel:ARM:12.3:Contrib:sun4i, ref"19:54 2012-12-29"
+1), create subproject on obs website.
+(1), modify prj meta ref "devel:ARM:12.3:Contrib:IMX53":
+suse@prodclientoct99:~/work_bak/arm/arm_linux/opensuse/build_service/devel:ARM:12.3:Contrib:IMX53> osc meta prj
+<project name="devel:ARM:12.3:Contrib:IMX53">
+  <title>openSUSE 12.3 for Freescale i.MX53 based devices</title>
+  <description>There seem to be less i.MX53 devices than i.MX51 devices out there. Unfortunately, we can't push everything into openSUSE proper, so this repo keeps all the bits that we need to allow i.MX53 devices to run openSUSE easily.&#13;
+</description>
+  <person userid="algraf" role="maintainer"/>
+  <person userid="algraf" role="bugowner"/>
+  <build>
+    <enable/>
+  </build>
+  <debuginfo>
+    <enable/>
+  </debuginfo>
+  <repository name="standard">
+    <path project="devel:ARM:12.3:Contrib" repository="ports"/>
+    <arch>armv7l</arch>
+  </repository>
+  <repository name="images">
+    <path project="devel:ARM:12.3:Contrib:IMX53" repository="standard"/>
+    <arch>armv7l</arch>
+    <arch>local</arch>
+  </repository>
+</project>
+
+mine:
+<project name="home:bjzhang:devel:ARM:12.3:Contrib:sun4i" kind="maintenance">
+  <title>opensuse for Allwinner A10 SOC</title>
+  <description></description>
+  <person userid="bjzhang" role="maintainer"/>
+  <person userid="bjzhang" role="bugowner"/>
+  <build>
+    <enable/>
+  </build>
+  <debuginfo>
+    <enable/>
+  </debuginfo>
+  <repository name="standard">
+    <path project="devel:ARM:12.3:Contrib" repository="ports"/>
+    <arch>armv7l</arch>
+  </repository>
+  <repository name="images">
+    <path project="home:bjzhang:devel:ARM:12.3:Contrib:sun4i" repository="standard"/>
+    <arch>armv7l</arch>
+    <arch>local</arch>
+  </repository>
+</project>
+(2), modify prjconf ref: devel:ARM:12.3:Contrib:Cubox
+%if "%_repository" == "images"
+Type: kiwi
+Repotype: staticlinks
+Patterntype: none
+%endif
+2), create kernel-sun4i
+bjzhang@macintyre:~/opensuse_arm/home:bjzhang:devel:ARM:12.3:Contrib:sun4i> osc mkpac kernel-sun4i
+A    kernel-sun4i 
+bjzhang@macintyre:~/opensuse_arm/home:bjzhang:devel:ARM:12.3:Contrib:sun4i> cd kernel-sun4i/                                                                    
+bjzhang@macintyre:~/opensuse_arm/home:bjzhang:devel:ARM:12.3:Contrib:sun4i/kernel-sun4i> ls                                                                     
+bjzhang@macintyre:~/opensuse_arm/home:bjzhang:devel:ARM:12.3:Contrib:sun4i/kernel-sun4i> osc commit -m "create package kernel-sun4i"
+Sending meta data...
+Done.
+Sending    kernel-sun4i
+nothing to do for package kernel-sun4i
+bjzhang@macintyre:~/opensuse_arm/home:bjzhang:devel:ARM:12.3:Contrib:sun4i/kernel-sun4i> osc meta pkg
+<package name="kernel-sun4i" project="home:bjzhang:devel:ARM:12.3:Contrib:sun4i">
+  <title></title>
+  <description></description>
+</package>
+3), create uboot-sun4i
+(1), compile command:
+make cubieboard_config 
+make all -j4
+(2), build u-boot fail
+[  139s] ... running 04-check-filelist
+[  139s] ... checking filelist
+[  139s] uboot-sun4i-3.0.52-1.1.armv7hl.rpm: directories not owned by a package:
+[  139s]  - /spl
+ref: "12:15 2013-04-11"1-2)
+
+12:15 2013-04-11
+suse, opensuse, opensuse12.3 on cubieboard, cont2
+1, fix build error.
+1), 
+[ 1841s] Checking for unpackaged file(s): /usr/lib/rpm/check-files /home/abuild/rpmbuild/BUILDROOT/kernel-sun4i-3.0.52-1.1.arm
+[ 1842s] error: Installed (but unpackaged) file(s) found:
+[ 1842s]    /lib/firmware/kaweth/new_code.bin
+[ 1842s]    /lib/firmware/kaweth/new_code_fix.bin
+[ 1842s]    /lib/firmware/kaweth/trigger_code.bin
+[ 1842s]    /lib/firmware/kaweth/trigger_code_fix.bin
+add kaweth directory in %files:
+/lib/firmware/kaweth/*
+2), 
+[ 4181s] ... running 04-check-filelist
+[ 4183s] ... checking filelist
+[ 4183s] kernel-sun4i-3.0.52-2.1.armv7hl.rpm: directories not owned by a package:
+[ 4183s]  - /lib/firmware/kaweth
+modify in %files:
++%dir /lib/firmware/
++%dir /lib/firmware/kaweth/
+ /lib/firmware/kaweth/*
+
+notes: uboot get the similar error.
+3), uboot
+[  719s] Executing(%install): /bin/sh -e /var/tmp/rpm-tmp.z2XjwD                
+[  719s] + umask 022                                                            
+[  719s] + cd /home/abuild/rpmbuild/BUILD                                       
+[  719s] + cd u-boot-sunxi                                                      
+[  719s] + install -m644 spl/sunxi-spl.bin /home/abuild/rpmbuild/BUILDROOT/uboot-sun4i-3.0.52-6.1.arm/boot/
+[  726s] install: target '/home/abuild/rpmbuild/BUILDROOT/uboot-sun4i-3.0.52-6.1.arm/boot/' is not a directory: No such file or directory
+[  726s] error: Bad exit status from /var/tmp/rpm-tmp.z2XjwD (%install)
+
+Index: uboot-sun4i.spec
+===================================================================
+--- uboot-sun4i.spec    (revision 6)
++++ uboot-sun4i.spec    (working copy)
+@@ -38,6 +38,7 @@
+ make all -j4
+
+ %install
++mkdir -p $RPM_BUILD_ROOT/boot/
+ install -m644 spl/sunxi-spl.bin $RPM_BUILD_ROOT/boot/
+ install -m644 u-boot.bin $RPM_BUILD_ROOT/boot/
+
+
+2, kiwi
+ref: openSUSE_for_ARM_on_your_device.pdf
+1), copy from IMX53:
+> osc copypac devel:ARM:12.3:Contrib:IMX53 JeOS-loco home:bjzhang:devel:ARM:12.3:Contrib:sun4i Jeos-cubieboard
+Sending meta data...
+Copying files...
+<revision rev="1" vrev="1">
+  <srcmd5>e5be612f30711f2604ff534d0792b57b</srcmd5>
+  <version>unknown</version>
+  <time>1365665896</time>
+  <user>bjzhang</user>
+  <comment>osc copypac from project:devel:ARM:12.3:Contrib:IMX53 package:JeOS-loco revision:11</comment>
+  <requestid/>
+</revision>
+2), 
+> osc co home:bjzhang:devel:ARM:12.3:Contrib:sun4i Jeos-cubieboard
+
+3, modify script:
+1), uboot-image-install: put spl and uboot to disk.
+2), uboot-image-setup: generate boot.scr. 
+
+4, local build
+> osc build JeOS-cubieboard.kiwi images armv7l --clean
+Building armv7l for JeOS-cubieboard.kiwi/images
+Unknown build type: ''. Build description should end in .spec, .dsc or .kiwi.
+
+5, email to opensuse-arm@opensuse.org
+fail on generate kiwi image for cubieboard(Allwinner A10) for opensuse 12.3
+hi, 
+
+cubieboard is  Allwinner A10 based board, including 1GHz Cortex-A8 and Mali-400 GPU.
+i am trying to build a kiwi image for Allwinner A10. i have already run opensuse 12.3 successful on kernel 3.0. the kernel and uboot is build on obs:
+home:bjzhang:devel:ARM:12.3:Contrib:sun4i/kernel-sun4i
+home:bjzhang:devel:ARM:12.3:Contrib:sun4i/uboot-sun4i
+
+i reference "openSUSE for ARM on your device" slide and modify Image.kiwi.in then generate kiwi through "sh pre_checkin.sh". but i got lots of problems. i do not use kiwi before this, sorry for the noise:
+
+1), when will uboot-setup.tgz used?
+it seems that it only used when kernel update on opensuse arm?
+So, i could just ignore it when build image at the beginning?
+
+2), Jeos-cubieboard build successful, but xz image seems empty and tar.bz2 is generated. i could only see xz package on http://download.opensuse.org/ports/armv7hl/distribution/12.3/images/ except XFCE-rootfs.
+do i miss something important in Jeos-cubieboard.kiwi?
+
+3), build image on server is very slow, i want to build locally, but i failed on both x86_64 and arm.
+(1), if i build on x64_64 on opensuse 12.3: 
+XFCE-cubieboard> osc build XFCE-cubieboard.kiwi images armv7l --clean
+Building armv7l for XFCE-cubieboard.kiwi/images
+Unknown build type: ''. Build description should end in .spec, .dsc or .kiwi.
+(2), if i build on arm on opensuse12.2, lots of package not found, e.g. gawk, patch.
+
+4), i could not find my package on https://build.opensuse.org/project/show?project=home%3Abjzhang%3Adevel%3AARM%3A12.3%3AContrib%3Asun4i, but i could search and access the package on obs, why?
+
+5), some name of my packages is not correct, but i do not know how to rename it, e.g. it had better rename uboot-sun4i to u-boot-sun4i and rename Jeos-cubieboard to JeOS-cubieboard. 
+
+beside, i could not find firefox on my opensuse arm 12.3, do i missing something?
+
+thanks in advance.
+
+Bamvor
+
+6, Dirk say kiwi should at the end of command.
+osc build images armv7l XFCE-cubieboard.kiwi 
+
+2:20 2013-4-12
+hackweek, opensuse, arm, cubieboard, packaging, kiwi
+1, kiwi
+1), fail because without conv=notrunc.
+2), todo: need load kernel from ext. test cmd and add it.
+(09:14 2013-04-12)
+#!/bin/bash
+
+set -x
+
+file=boot/boot.script
+
+echo 'printenv kerneladdr || setenv kerneladdr ${kernel_addr_r}'   >> $file
+echo 'setenv lk "ext2load mmc 0:2 ${kerneladdr} boot/uImage"'      >> $file
+echo -n 'setenv bootcmd "'                                         >> $file
+echo -n 'run lk; '                                                 >> $file
+echo 'bootm ${kerneladdr}";'                                       >> $file
+
+#==========================================
+# Create machine readable uboot format
+#------------------------------------------
+mkopts="-A arm -O linux -a 0 -e 0 -T script -C none";
+inputf="boot/boot.script";
+result="boot/boot.scr";
+if ! mkimage $mkopts -n 'Boot-Script' -d $inputf $result;then
+        echo "Failed to create uboot script image"
+        exit 1
+fi
+
+2, ref
+kiwi
+http://en.opensuse.org/SDB:KIWI_Cookbook_Data_Separation#Partitioning_vs._Data_separation_via_partitions
+a10 boot process
+http://rhombus-tech.net/allwinner_a10/a10_boot_process/
+Editing AllWinner A10 Board Configuration Files (script.bin)
+http://www.cnx-software.com/2012/05/06/editing-allwinner-a10-board-configuration-files-script-bin/
+A10 Boot process and an UPDATED Uboot for the A10
+http://forum.doozan.com/read.php?6,8481
+
+11:08 2013-04-12
+hackweek, opensuse 12.3 on cubieboard
+prepare specific package for opensuse arm for my arm board.
+how arm board boot up. what is the different between x86 and arm.
+how to build a image through kiwi.
+
+11:15 2013-04-12
+GTD
+0, 11:00
+
+1, today
+1), Yan SUN给我报销了150元开发板费用: cubieboard.
+
+13:33 2013-04-12
+1, try to load kernel from ext /boot partition
+1), original env:
+sun4i#printenv                   
+baudrate=115200
+boot_mmc=fatload mmc 0 0x48000000 uImage; bootm 0x48000000
+bootargs=console=ttyS0,115200 root=/dev/mmcblk0p2 init=/init loglevel=8 rootfstype=ext4 rootwait
+bootcmd=run load1 boot_mmc
+bootdelay=3
+console=ttyS0,115200
+filesize=A4A0
+init=/init
+load=fatload mmc 0 43000000 sys_config1_evb_hdmi.bin
+load1=fatload mmc 0 43000000 evb.bin
+load2=fatload mmc 0 43000000 mele.bin
+load3=fatload mmc 0 43000000 sys_config1.mele_mod.bin
+loglevel=8
+mmc_root=/dev/mmcblk0p2
+setargs=setenv bootargs console=${console} root=${mmc_root} init=${init} loglevel=${loglevel}
+stderr=serial
+stdin=serial
+stdout=serial
+2), modify:
+boot_mmc_e=ext2load mmc 0:2 0x48000000 /boot/uImage; bootm 0x48000000          
+bootargs=console=ttyS0,115200 console=tty0 root=/dev/mmcblk0p2 init=/init loglevel=8 rootfstype=ext4 rootwait disp.screen0_output_mode=EDID                   
+bootcmd=run loade boot_mmc_e                                                   
+loade=ext2load mmc 0:2 43000000 /boot/evb.bin
+
+14:32 2013-4-12
+lance
+1, embeded shell. 
+结合shell和源语言的优势。
+2. why?
+脚本太多，不容易掌握，用通用语言。
+3, how
+lua: 功能强大。便于嵌入长字符串。
+
+jerry:
+hamsta: get dmc 信息。
+
+22:38 2013-04-13
+(19:46 2013-04-14)
+introduce my image in Allwinner A10 community
+1, Linux on small ARM machines <arm-netbook@lists.phcomp.co.uk>
+Re: [Arm-netbook] Mele doing updates of the A1000 with A20 (Dual-Core) and A31 (Quad-Core)
+>On Fri, Apr 12, 2013 at 3:52 PM, Albert ARIBAUD
+><albert.u.boot@aribaud.net> wrote:
+>> Hi Jean-Luc,
+>>
+>> On Fri, 12 Apr 2013 12:33:34 +0700, Jean-Luc Aufranc
+>> <cnxsoft@cnx-software.com> wrote:
+>>
+>>> On Friday, April 12, 2013 12:30 AM, luke.leighton wrote:
+>>> > well, a nice surprise: someone from mele contacted me, because they
+>>> > were surprised i think by the large interest shown in the A1000, so
+>>> > they'd like to build on that and so would like to offer engineering
+>>> > types the opportunity to buy the A20-based and A31-based versions of
+>>> > the same product.
+>>> >
+>>> > as with all these things the spec needs lots of clarification :)  the
+>>> > A31 version definitely has SATA in the spec, i've a query outstanding
+>>> > about the A20 version.  yes to the RJ45 on both.  yes to built-in
+>>> > 802.11n WIFI on both.  yes to SD/MMC Card reader on both.  the A31
+>>> > version has 2gb RAM and 8gb NAND, 3 USB2s and 1 USB-OTG, as well as an
+>>> > SATA Dock.  the A20 version is listed as 1GB RAM, 4GB NAND and 1 USB2
+>>> > - no mention of SATA yet.
+>>> >
+>>> > i'll try and push them on the SATA for the A20 version.
+>>> >
+>>> > so.
+>>> >
+>>> > question!
+>>> >
+>>> > please spread the word: who would be interested to buy early versions
+>>> > of these as developer systems?
+>>> >
+>>> > l.
+>>> >
+>>> Let's try to "recruit" a few more people then:
+>>> http://www.cnx-software.com/2013/04/12/mele-a1000g-quad-set-top-box-features-allwinner-a31-soc/
+>>>
+>>> It's about $140 on Aliexpress with shipping, hopefully, they can provide
+>>> a discount to developers.
+>>
+>> Alright... Where do developers apply?
+>
+>numbers / declarations of interest at the moment (although as
+>jean-luc's found the mele aliexpress link you could probably just
+>order one!)
+>
+> i can use the numbers / declarations of interest to get better
+>pricing for you from mele.
+i am interested in it. i have mele A1000, MK802 and cubieboard and build
+opensuse image from them, u could get the cubieboard image from
+http://download.opensuse.org/repositories/home:/bjzhang:/devel:/ARM:/12.3:/Contrib:/sun4i/images
+i test it on cubieboard, this should be work on mele A10 1G memory STB.
+BTW, i am in China, will u have a "quick" link from taobao other than Aliexpress?
+>l.
+
+2, opensuse 12.3 with XFCE on cubieboard
+1), cubieboard@googlegroups.com
+hi, 
+
+i built opensuse 12.3 with XFCE on cubieboard. u could get it from
+http://download.opensuse.org/repositories/home:/bjzhang:/devel:/ARM:/12.3:/Contrib:/sun4i/images/openSUSE-12.3-ARM-XFCE-cubieboard.armv7l-1.12.1-Build38.1.raw.xz
+and dd to sdcard(at least 8G sdcard) through:
+unxz -d -c image.raw.xz | dd of=/path/to/sdcard
+
+u could generate the specific image by branching: 
+https://build.opensuse.org/package/show?package=XFCE-cubieboard&project=home%3Abjzhang%3Adevel%3AARM%3A12.3%3AContrib%3Asun4i
+
+thanks.
+
+Bamvor
+2), reply
+(1), Silverio Diquigiovanni <silverio.android@gmail.com> Apr 13 10:02AM -0700  
+Unfortunately download link don't works ... "Object not found!"
+(2), Scott Castaline <skotchman@gmail.com> Apr 13 11:19PM -0400  
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA1
+ 
+On 04/13/2013 01:02 PM, Silverio Diquigiovanni wrote:
+> cubieboard+unsubscribe@googlegroups.com. Visit this group at
+> http://groups.google.com/group/cubieboard?hl=en. For more options,
+> visit https://groups.google.com/groups/opt_out.
+ 
+Try this:
+http://download.opensuse.org/repositories/home:/bjzhang:/devel:/ARM:/12.3:/Contrib:/sun4i/images/
+I stepped through the directories myself until I found them and copied
+the URL, hope this one works.
+(3),
+hi, 
+
+sorry for inconvenience. i am update the image after i send this email. the image the name is openSUSE-12.3-ARM-XFCE-cubieboard.armv7l-1.12.1-BuildXX.X.raw.xz, while the version changes automatically. this is the rules defined by opensuse build service. i could not set a permanent name.
+currently, the link is http://download.opensuse.org/repositories/home:/bjzhang:/devel:/ARM:/12.3:/Contrib:/sun4i/images/openSUSE-12.3-ARM-XFCE-cubieboard.armv7l-1.12.1-Build41.1.raw.xz
+BTW, if u have any problem about common issues about opensuse arm, u could send it to opensuse-arm@opensuse.org
+
+bamvor
+
+3, reply to Matt Chen
+
+>>> Matt Chen <machen@suse.com> 2013-3-22 上午 11:14 >>>
+> Hi,
+> 
+> I just bought a cubieboard and found a image in
+> https://www.miniand.com/forums/forums/development/topics/install-opensuse-12-2-with-xfce.
+this image was created manually.
+> This image is without enabling the LAN driver but is working fine to me.
+> And I am wondering where I can find the source of the image ?
+i put 12.3 XFCE image source at: home:bjzhang:devel:ARM:12.3:Contrib:sun4i XFCE-cubieboard, link[1].
+> 
+> Or is there any project in our obs for building the image for cubieboard ?
+> 
+> Thanks.
+
+[1] https://build.opensuse.org/package/show?package=XFCE-cubieboard&project=home%3Abjzhang%3Adevel%3AARM%3A12.3%3AContrib%3Asun4i
+
+19:41 2013-04-14
+GTD
+2, plan
+1), try my console on PV and HVM.
+2), opensuse 12.3 on cubieboard: check mali X11 driver on it. I guess, currently, no mali support, it should be affect the performance.  
+3), work on libvirt libxl driver. ref"13:13 2013-04-09": Jim said that it is a shutdown issue.
+disuss with Jim on Tuesday.
+
+2, week plan
+1), hackweek
+(1), running cubieboard on opensuse12.3
+(2), learn how to use kiwi.
+2), test patch during hackweek; send patch for chunyan review should be on Friday.
+3), check the status about libvirt libxl xen4.2 support bugs. start and discuss with Jim.
+
+2, \TODO
+1), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
+2), do some work if jim gsoc is not selected by student and opensuse.org. see"18:08 2013-03-22"
+3), is there any other changes in Jim libvirt libxl xen4.2 support patch. like console things?
+在Jim xen4.2 patch里面有没有类似影响console的libxl功能的修改?
+
+2, daily work
+1), tracking xen-arm update.
+2), read libvirt and xen-devel quickly, should less that 30minutes.
+3), read linux news
+http://www.linux.com/
+http://www.phoronix.com/scan.php?page=home
+
+3, week plan
+1), send console patch to upstream.
+2), finish libxl block status and relative functions.
+3), libvirt libxl lock patch. see"14:24 2013-03-13"6.
+
+4, next
+1), read code about lastest kernel porting. see"11:49 2013-02-07".
+1), coding excise for pthread_atfork.
+2), rt-thread moto control driver in lua. first version do not use the PWM.
+
+1), for libxl xen4.2 bug, figure out why virsh got event after libxl think its done. see"10:41 2013-01-24".
+2), write code for libxl qmp. see"17:15 2013-01-23"
+4), read jim patch on libvirt and xen.
+3), debug libvirt libxl console. see"16:50 2013-01-04"
+1), send xen libexec patch.
+1), test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
+3), re-read all the patch about libxl xen4.2.
+1), got arm technical symposia pdf.
+2), libvirt blkstats:
+(1), add block stats in libxl_qmp.c, add cmd in xl.
+(2), add patch in libvirt, send it to Jim. if the former patch only accept by xen-unstable not xen4.2-testing. i could not send patch to libvirt upstream.
+3), try xen on kvm.
+4), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个.
+
+3, next week
+1), work on lock patch.
+2), try to build MK802 kernel on obs. speed up. i want it work on opensuse12.3
+2), read kernel doc: "10:36 2012-11-23"
+1), read code for patch. see"10:25 2012-11-23"2-2)-(2).
+2), after "1)" finish. try xen on kvm.
+3), read the mail on "Andrew Wafaa <awafaa@opensuse.org>"_email_"[opensuse-arm] Fwd: [fedora-arm] ARMv8 Bootstrap Project"_20121122
+3), work on xen on ARM. ref"22:33 2012-11-19"
+4), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+5), ask jim to invite me to xen irc.
+
+3, next next
+1), gsoc: "22:23 2012-11-17"
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c:
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1).
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run.
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
+2), try armv8 emulator and read armv8 kernel code.
+
+
+15:03 2013-4-14
+mali 400 debian drivers
+Siarhei Siamashka <siarhei.siamashka@gmail.com> Apr 13 01:06PM -0700
+If you really want to use mali drivers for accelerating a small part of the video playback pipeline (just scaling to fullscreen), you can try mplayer:
+
+$ wget http://www.mplayerhq.hu/MPlayer/releases/MPlayer-1.1.tar.xz $ tar -xJf MPlayer-1.1.tar.xz $ cd MPlayer-1.1 $ ./configure --extra-cflags="-mfpu=neon"
+
+Now pay special attention to the output and make sure that you have the following two lines there:
+
+Checking for ARM NEON ... yes Checking for OpenGL ... yes (backends: egl_x11 sdl)
+
+16:26 2013-04-16
+GTD
+0, 11:30-18:13
+
+1, today
+1), 16:26- work report.
+2), write a question for virtualization team sync. "17:35 2013-04-16".
+
+16:28 2013-04-16
+suse, sle12; opensuse arm status
+1, "Andreas Jaeger <aj@suse.com>"_email_"[devel] Some SLE 12 Updates"_20130415_2015
+The SLE 12 blog at http://sle12.nue.suse.com/ has been recently updated 
+with these three blog posts:
+
+SLE 12 Update
+openSUSE and SLE 12 schedule
+SLE 12 will focus on 64-bit architectures
+
+Andreas
+-- 
+ Andreas Jaeger aj@{suse.com,opensuse.org} Twitter/Identica: jaegerandi
+  SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, Germany
+   GF: Jeff Hawn,Jennifer Guild,Felix Imendörffer,HRB16746 (AG Nürnberg)
+    GPG fingerprint = 93A3 365E CE47 B889 DF7F  FED1 389A 563C C272 A126
+2, SLE 12 Update
+http://sle12.nue.suse.com/2013/04/sle-12-update/
+1), SLE2 Schedule
+    2013-07-12 Feature Submission Deadline
+    2013-09-30 Feature Feedback Deadline
+    2014-01-06 Partner Code Drop Deadline
+    2014-02-20 Beta1
+    2014-09-xx First customer shipment
+2), Planned interlocks in April
+The virtual teams plan to bring the following topics to interlock in April:
+    Enterprise Community Package Repository (contact: Scott Bahling)
+    Xen vs KVM, hypervisors for SLE12 (contact: Michal Svec)
+    Security: Common Criteria and FIPS Certifications (ELT decision) (contact: Matthias Eckermann and Thomas Biege)
+    Desktop (contact: Jan Weber and Stefan Behlert)
+3, SLE 12 will focus on 64-bit architectures
+http://sle12.nue.suse.com/2013/04/sle-12-will-focus-on-64-bit-architectures/
+Posted on April 15, 2013 by Andreas Jaeger
+we will have at least three different architectures to support: Intel/AMD x86-64, IBM POWER and IBM System z.
+We do not have any plans to support the 32-bit ARM architecture in SLE 12. The upcoming 64-bit ARM AArch64 architecture is another story. There is no hardware available yet and we discuss with partners under NDA what they are planning to do and whether we shall release an enterprise distribution for it. Note that the openSUSE community has both 32-bit and initial 64-bit ARM distributions done now.  For an Note that the end of Intel Itanium support is not publically announced and will not be announced for some more time!
+4, openSUSE and SLE 12 schedule
+http://sle12.nue.suse.com/2013/04/opensuse-and-sle-12-schedule/
+Posted on April 11, 2013 by Andreas Jaeger
+openSUSE 13.1 will be released in November 2013 and openSUSE 13.2 in July 2014. We’re currently considering when to branch SLE 12 off. There are two options:
+    Base SLE 12 basically on openSUSE 13.1 but take some newer packages from Factory, for example sharing the kernel between openSUSE 13.2 and SLE 12.
+    Branch SLE 12 from Factory after openSUSE 13.1 release but before openSUSE 13.2 beta.
+5, ref: About ARMv7 progress and ARMing for AArch64 
+https://news.opensuse.org/2013/04/15/about-armv7-progress-and-arming-for-aarch64-and/
+
+17:32 2013-04-16
+virtualization, xen, libxl, libvirt
+1, from Xen Roadmap 4.3, i could see that the "xl QXL Spice support" is complete. and from qemu_driver.c in libvirt, it is simple to implement it in libvirt.
+\TODO: check it next week.
+
+17:35 2013-04-16
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting, question
+1, i get from sle12.nue.suse.com that there is some planned interlocks in April: Xen vs KVM, hypervisors for SLE12 (contact: Michal Svec).
+i am interested in how will these decided. is it decided now?
+2, no sync after two weeks? 
+
+17:53 2013-04-16
+work report - week 15
+
+18:38 2013-04-16
+(11:58 2013-04-17)
+mailing list, virtualization, xen; about mini-os stack protector; 
+1, mini-os not implement stack protector because in different system(linux, freebsd...), the stack protector of gcc is different.
+cyliu@suse.com Re: [Xen-devel] pv-grub will cause page fault if build with flag -fstack-protector
+1), Ian Compbell
+If you can figure out a way to override this in stubdom/* regardless of the flags set by the user (or RPM) at the toplevel (e.g. by inserting -fno-stack-protector in the right place) then that might be a patch we could consider for upstream.
+
+> I checked the objdump of problem pv-grub, the page fault place is in > xc_interface_open_common, the detail line is a line inserted by > -fstack-protector (see 0x404bb in following):
+
+If you wanted to get really advanced you could implement stack protector support for mini-os. I've no idea how hard that would be though.
+
+Ian.
+2), Samuel Thibault
+> I agree with Jan.
+
+mini-os, which stubdoms are based on, explicitly tries to disable
+stack-protector, see extras/mini-os/minios.mk
+
+> > I checked the objdump of problem pv-grub, the page fault place is in
+> > xc_interface_open_common, the detail line is a line inserted by
+> > -fstack-protector (see 0x404bb in following):
+> 
+> If you wanted to get really advanced you could implement stack protector
+> support for mini-os. I've no idea how hard that would be though.
+
+Actually we can't really support it, because the code introduced by
+gcc, which typically uses fs: or gs: adressing, is host-dependent, i.e.
+depending on being built on linux, or on freebsd, etc. mini-os would
+have to behave differently because the code introduced by gcc behaves
+differently... The solution would be to use a separate host triplet, but
+we ended up avoiding doing it due to the introduced complexity.
+3), Ian Compbell
+> The solution would be to use a separate host triplet, but
+> we ended up avoiding doing it due to the introduced complexity.
+
+Right. I've occasionally flirted with implementing the separate triplet
+but it's a lot of pieces to get right (binutils etc etc).
+
+Ian.
+4), Samuel Thibault
+> > Actually we can't really support it, because the code introduced by
+> > gcc, [...] is host-dependent,
+> 
+> I didn't know about this. Does this not affect the hypervisor itself
+> too?
+
+Yes.
+
+> I don't see any stack protector disabling going on there. Maybe I'm
+> looking in the wrong places.
+
+Probably:
+
+./Config.mk:EMBEDDED_EXTRA_CFLAGS := -nopie -fno-stack-protector 
+-fno-stack-protector-all
+./xen/arch/x86/Rules.mk:$(call 
+cc-options-add,CFLAGS,CC,$(EMBEDDED_EXTRA_CFLAGS))
+
+> > The solution would be to use a separate host triplet, but
+> > we ended up avoiding doing it due to the introduced complexity.
+> 
+> Right. I've occasionally flirted with implementing the separate triplet
+> but it's a lot of pieces to get right (binutils etc etc).
+
+Yes.  That was mostly why we dropped the support I had initially
+written.
+
+Samuel
+
+2, Xen to Become Linux Foundation Collaborative Project
+1),http://www.linuxfoundation.org/news-media/announcements/2013/04/xen-become-linux-foundation-collaborative-project 
+(1), no suse? 
+Amazon Web Services, AMD, Bromium, Calxeda, CA Technologies, Cisco, Citrix, Google, Intel, Oracle, Samsung and Verizon affirm commitment to the Xen Project, 
+(2),In addition to providing the necessary framework to support the Xen Project community’s growth, The Linux Foundation also supports the KVM community by hosting KVM Forum and other activities that support the project. 
+(3), Recent Xen Project highlights include: 
+    The addition of Mirage OS, a library OS that supports the most common web protocols and enables the development of sealed Xen Project appliances that can be run without a guest operating system on any Xen Project based cloud - led by Cambridge University
+    Support for ARMv7 and ARMv8 based servers - led by Citrix
+    Improvements to Nested Virtualization - led by Intel
+    Significant extensions to the Xen Project Security Modules and Flask - led by the National Security Agency
+    A new virtualization mode called PVH, which promises to combine the best aspects of hardware virtualization and paravirtualization - led by Oracle
+    Significant performance and scalability improvements - led by SUSE
+
+2), simple version on lwn: 
+http://lwn.net/Articles/547341/
+
+12:19 2013-04-17
+GTD
+0, 11:30-18:22
+
+1, next
+1), work on libvirt libxl driver. ref"13:13 2013-04-09": Jim said that it is a shutdown issue. see"15:21 2013-04-17"
+1), 16:26- work report.
+2), try my console on PV and HVM.
+
+2, week plan
+1), hackweek
+(1), running cubieboard on opensuse12.3
+(2), learn how to use kiwi.
+2), test patch during hackweek; send patch for chunyan review should be on Friday.
+3), check the status about libvirt libxl xen4.2 support bugs. start and discuss with Jim.
+
+2, \TODO
+1), subscribe LWN while my palpay account have enough money.
+1), keep an eye on Xen Test Days. see"13:29 2013-02-22"1
+2), do some work if jim gsoc is not selected by student and opensuse.org. see"18:08 2013-03-22"
+3), is there any other changes in Jim libvirt libxl xen4.2 support patch. like console things?
+在Jim xen4.2 patch里面有没有类似影响console的libxl功能的修改?
+
+2, daily work
+1), tracking xen-arm update.
+2), read libvirt and xen-devel quickly, should less that 30minutes.
+3), read linux news
+http://www.linux.com/
+http://www.phoronix.com/scan.php?page=home
+
+3, week plan
+1), send console patch to upstream.
+2), finish libxl block status and relative functions.
+3), libvirt libxl lock patch. see"14:24 2013-03-13"6.
+
+4, next
+1), read code about lastest kernel porting. see"11:49 2013-02-07".
+1), coding excise for pthread_atfork.
+2), rt-thread moto control driver in lua. first version do not use the PWM.
+
+1), for libxl xen4.2 bug, figure out why virsh got event after libxl think its done. see"10:41 2013-01-24".
+2), write code for libxl qmp. see"17:15 2013-01-23"
+4), read jim patch on libvirt and xen.
+3), debug libvirt libxl console. see"16:50 2013-01-04"
+1), send xen libexec patch.
+1), test Jim patch for libxl xen4.2 bug. see"11:00 2012-12-21"
+3), re-read all the patch about libxl xen4.2.
+1), got arm technical symposia pdf.
+2), libvirt blkstats:
+(1), add block stats in libxl_qmp.c, add cmd in xl.
+(2), add patch in libvirt, send it to Jim. if the former patch only accept by xen-unstable not xen4.2-testing. i could not send patch to libvirt upstream.
+3), try xen on kvm.
+4), 对于vi不能方便查找keywords这个事情, 实在不能忍了, 如果这周能把managed save和bridge-utils bug fix, 就把这个做一个.
+
+3, next week
+1), work on lock patch.
+2), try to build MK802 kernel on obs. speed up. i want it work on opensuse12.3
+2), read kernel doc: "10:36 2012-11-23"
+1), read code for patch. see"10:25 2012-11-23"2-2)-(2).
+2), after "1)" finish. try xen on kvm.
+3), read the mail on "Andrew Wafaa <awafaa@opensuse.org>"_email_"[opensuse-arm] Fwd: [fedora-arm] ARMv8 Bootstrap Project"_20121122
+3), work on xen on ARM. ref"22:33 2012-11-19"
+4), check the error from "10:18 2012-11-15"2
+2012-11-15 04:02:45.318+0000: 4307: error : virNodeGetSecurityModel:9567 : this function is not supported by the connection driver: virNodeGetSecurityModel
+5), ask jim to invite me to xen irc.
+
+3, next next
+1), gsoc: "22:23 2012-11-17"
+1), notes about Huawei from eet-china.
+2), read bug:https://bugzilla.novell.com/show_bug.cgi?id=781425
+
+2, next
+1), try to improve attach-disk, detach-disk in libxl driver, see"18:17 2012-11-07"4
+2), test attach-disk command. see"10:41 2012-10-30"2
+3), maybe libxl and qemu could communicate with qemu through xenstore?
+
+libxl_dm.c:
+        /* Find uuid and the write the vnc password to xenstore for qemu. */
+        t = xs_transaction_start(ctx->xsh);
+        vm_path = libxl__xs_read(&gc,t,libxl__sprintf(&gc, "%s/vm", p->dom_path));
+        if (vm_path) {
+            /* Now write the vncpassword into it. */
+            pass_stuff = libxl__calloc(&gc, 3, sizeof(char *));
+            pass_stuff[0] = "vncpasswd";
+            pass_stuff[1] = info->vncpasswd;
+            libxl__xs_writev(&gc,t,vm_path,pass_stuff);
+
+3, for Jim
+1), xenlight event lock in libvirt. see"16:52 2012-11-06"2-1).
+
+4, next month
+1), opensuse on MK802
+(1), generate the 512MB version with opensuse12.2 RC2 which enable yast fist run.
+(2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
+2), try armv8 emulator and read armv8 kernel code.
+
+
+12:20 2013-04-17
+mailing list, lwn.net, ARM kernel floating-point emulation code removed
+https://lwn.net/Articles/546840/
+1, Russell King
+This I have done after it has been brought to my attention by the OSADL's
+GPL-violations project that the license for the softfloat library is
+incompatible with GPLv2.  This is because the FSF have ruled that
+indemnification clauses consitute an "additional restriction" which is
+incompatible with the GPLv2 section 6.  NWFPE contains the softfloat
+library, and VFP's emulation code is a derivative of softfloat.
+
+This will be very disruptive for ARMv4 and ARMv5 CPUs, which will no
+longer be able to run userspace with NWFPE support removed.  A possible
+solution there is to resurrect FASTFPE support and merge that into
+mainline in place of NWFPE.  FASTFPE's hooks are all present in the
+kernel, and it should just be a case of adding the FASTFPE code.
+However, FASTFPE is probably lacking GDB and signal stack support.
+(FastFPE's per-thread workspace is different from NWFPE.)
+
+2, Posted Apr 10, 2013 21:35 UTC (Wed) by gb (subscriber, #58328) [Link]
+I am familiar with debian-based things. Debian comes in 3 favor on arm: arm, armel, and armhf. Armhf is unaffected by any emulation stuff. Armel is eabi port with softfloat, not affected too. Read here: http://wiki.debian.org/ArmEabiPort.
+
+Only affected thing as i understand is arm port in case your arm cpu does not support emulation. And arm port is deprecated long ago, you can see on debian popcon that there are 55 total arm machines reporting. n900 is not affected (armel) openmoko gta02 - armel, gta04 - armhf, who knows may be some ancient machines?
+
+15:21 2013-04-17
+virtualization, libvirt, xen, libxl, shutdown issue
+1, add debug info in libxlEventHookInfoFree, see who free the priv and does it lead to the segment fault.
+今天在linux-vm5上测试(sles11_sp2_pv), 遇到create时没法注册设备的问题. 但是没有遇到之前的segfault问题.
+/var/lib/xen/images_2/sles11_sp2_pv/sles11_sp2_pv.xml
+难道是因为在libxlEventHookInfoFree设置断点, 影响了时序?
+去掉断点试试.
+
+15:27 2013-04-17
+software skill, rpm, search
+# search the package name including xen.
+rpm -qa |grep xen
+
+16:45 2013-04-17
+"Alan Gao"_email_"新闻稿: SUSE正式加入中国开源云联盟"
+引全球开源之云 助中国产业前行 - SUSE正式加入中国开源云联盟
+
+2013年4月18日，北京 近日， 全球企业级开源软件行业先锋SUSE公司正式宣布加入中国开源云联盟，成为其核心成员。作为OpenStack重要成员的SUSE，在加入中国开源云联盟后，将与核心成员英特尔、联想、中兴通讯股份有限公司、新浪网、中标软件、上海交通大学、爱奇艺、华胜天成等共同致力于整合企业用户对云计算基础架构平台的需求，基于OpenStack开源框架协同研发，推动中国云计算产业发展，打造易于部署、功能丰富且易于扩展的云计算平台。
+
+作为OpenStack社区项目的白金会员，长久以来SUSE积极投身于相关产品的研发，并在去年推出了SUSE Cloud，首个基于OpenStack架构的自动化的云管理平台，帮助企业客户快速轻松地构建私有云基础设施。同时，SUSE在中国还扮演着桥梁的角色，把国外先进的架构和技术，与中国国内的需求相结合，使之能够适合中国的发展。此次，SUSE正式加入中国开源云联盟，必将更好的帮助整合中国的OpenStack开发资源，深入参与OpenStack社区项目开发，传播开源价值与文化，加大中国开发者和公司在国际OpenStack社区中的贡献力量，更好地为中国客户提供基于云架构的解决方案。
+
+SUSE不仅是一家领先的企业Linux和云计算解决方案提供商，同时也是多个开源社区的领导者和支持者。 英特尔中国首席开源科学家、中国开源云联盟主席冯晓焰先生认为，我们有理由相信，SUSE的加入必将更好的帮助中国开源云计算联盟的发展，促进OpenStack社区在中国的开发与推广，并针对不同的应用领域，探索基于OpenStack的解决方案，以加速OpenStack在中国的产业化应用发展。
+
+OpenStack项目的市场需求强劲，拥有超过8000名个人会员和超过150家企业和组织会员。OpenStack 基金会主席，SUSE行业创新、新兴标准和开源总监的 Alan Clark先生也指出， 在这么庞大的社区里，OpenStack还不断帮助贡献者提升自身的竞争力。例如，SUSE正帮助中国的开源支持者和贡献者，进一步深化与OpenStack社区的沟通与交流，这将有助于吸引更多优秀的人才和资源加入到这一群体之中。
+
+长期以来，SUSE一直为众多开源社区项目和合作，提供着服务与支持。其中最大也是最有影响的，是为大家所熟知的openSUSE项目。 Attachmate大中华地区及韩国总经理江永清先生表示，作为Linux的开拓先锋，我们有着深厚的历史。我们不仅是开源社区的一部分，我们也为在企业Linux领域做出的长期贡献而倍感自豪。未来，我们还将继续为OpenStack以及开源云项目，提供我们最大的技术与服务支持，通过SUSE实际而高效的创新，帮助企业客户更好地解决当今难以置信的复杂IT挑战。
+ 
+17:56 2013-04-17
+Texas Instruments OMAP 5 Cortex A15 Systems-on-Module Galore
+http://www.cnx-software.com/2012/11/13/texas-instruments-omap-5-cortex-a15-systems-on-module-galore/
+
+18:02 2013-04-17
+1, http://www.cnx-software.com/2013/04/06/allwinner-a20-linux-source-code-evb-schematics-and-product-brief/
+Linux for A20  has been imported into github at https://github.com/amery/linux-allwinner/tree/import/lichee-3.3/a20-dev. AllWinner A20 is known as sun7i in the code.
+2, not 100% pin2pin compatibility:
+Allwinner’s A10 and A20 are they really pin-to-pin compatible and drop-in replacement 
+http://olimex.wordpress.com/2013/04/05/allwinners-a10-and-a20-are-they-really-pin-to-pin-compatible-and-drop-in-replacement/
+A10 have two chip-select one clock and two clock enables (second is not used in our schematic) and addresses up to A14
+A20 have one clock enable with two pairs of clocks (one not wired on the A20 reference schematic) and addresses up to A15
+so both chips can address up to 2GB RAM but in different way.
+We didn’t complete our A10 schematic this info comes right on time, so we can make our schematic compatible with both A10 and A20 and to may support up to 2GB RAM
+Conclusion: YES, it’s possible to design board which to may work with both A10 and A20, but not if you have not received the A20 info when you made your A10 board :)  
+
+09:08 2013-4-18
+1, "Anthony PERARD <anthony.perard@citrix.com>"_email_"Linux based stub-domain"
+Here is the long overdue patch series to bring support for a Linux based stubdom which will enable to use QEMU upstream as device model in a stubdom.
+
+The first three patches will provide the necessary to build Linux and a disk image for the stubdomain itself. This is created in a separated directory "stubdom-linux". Calling `make` in this directory will build Linux and the disk. Then a `make install` will copy the two files to the same directory as the MiniOS use.
+
+The last three patches are the libxl support. There is a field called "stubdomain_version" which is automatically set to the appropriate value, depending on the QEMU version used. It call also be set from VM config file.
+
+So, to start a Linux stubdomain, just set those two variables and it shoud start: device_model_stubdomain_override = 1 device_model_version = "qemu-xen"
+
+There is few things that does not have support yet and are on my todo list: - video output - save/restore So for now, we have the network and the console and the disk of the domain.
+
+Regards,
+
+Anthony PERARD (6): linux-stubdomain: Compile QEMU linux-stubdomain: Compile Linux linux-stubdomain: Build a disk image. libxl: Add "stubdomain_version" to domain_build_info. libxl: Handle Linux stubdomain specifique QEMU option. libxl: Build the domain with a Linux based stubdomain.
+
