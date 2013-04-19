@@ -13,7 +13,8 @@ end
 break libxlFDRegisterEventHook
 commands
 silent
-printf "libxlFDRegisterEventHook\n"
+printf "libxlFDRegisterEventHook: priv<%p>\n", priv
+print *((libxlDomainObjPrivatePtr)priv)
 where
 cont
 end
@@ -37,7 +38,8 @@ end
 break virEventPollAddHandle
 commands
 silent
-printf "virEventPollAddHandle: nextWatch<%d>\n", nextWatch
+printf "virEventPollAddHandle: nextWatch<%d>, info<%p>, info->priv<%p>\n", nextWatch, (libxlEventHookInfoPtr)opaque, ((libxlEventHookInfoPtr)opaque)->priv
+#print *((libxlEventHookInfoPtr)opaque)->priv
 where 4
 cont
 end
@@ -60,6 +62,7 @@ end
 #
 break util/vireventpoll.c:582
 commands
+silent
 printf "cleanup handler: i<%d>, fd<%d>, watch<%d>, info<%p>\n", i, eventLoop.handles[i].fd, eventLoop.handles[i].watch, eventLoop.handles[i].opaque
 where 4
 cont
@@ -67,16 +70,57 @@ end
 
 break conf/domain_conf.c:1929
 commands
+silent
 printf "virDomainObjDispose call privateDataFreeFunc\n"
 where 4
 cont
 end
 
+break virDomainObjDispose
+commands
+silent
+printf "virDomainObjDispose\n"
+where 4
+cont
+end
+
+break libxlDomainObjPrivateAlloc
+commands
+silent
+printf "libxlDomainObjPrivateAlloc\n"
+where 2
+cont
+end
+
+break libxl_osevent_register_hooks
+commands
+silent
+printf "libxl_osevent_register_hooks: priv<%p>, priv->lock<%p>\n", priv, priv->lock
+cont
+end
+
 break libxlDomainObjPrivateFree
 commands
+silent
 printf "libxlDomainObjPrivateFree"
 where 2
 cont
 end
 
+break libxlVmReap
+commands
+silent
+printf "libxlVmReap"
+where 4
 cont
+end
+
+break libxl_osevent_occurred_fd
+commands
+silent
+printf "libxl_osevent_occurred_fd"
+cont
+end
+
+cont
+
