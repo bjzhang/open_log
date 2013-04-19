@@ -1243,6 +1243,96 @@ the debug log do not support my guess. work on it tomorrow.
 曾经以为是virEventPollAddHandle加入时priv为NULL是异常, 后来发现priv本来就是在add handle之后加入的, 这个没有问题. 目前集中精力看看info->priv->lock为什么会为空.
 debug发现, 在fd_register时就是空的. 
 1), 正常来说lock是啥时候分配的?
+2), Chunyan help:
+和chunyan讨论, 感觉还是要看看lock是啥时候分配的.
+
+6, Boyang help:
+1), 首先还是怀疑是进入libxl_osevent_occurred_fd前后有问题. 
+但是关于lock, bo指出, lock地址是有效的就没问题, lock的内容是0不一定是问题.
+另外, 用gdb看进入该函数后的几个变量, 包括ctx和xl_priv, 都没有问题. 同时, 考虑到libxl_osevent_occurred_fd我加了断点打印, 没有打印说明根本没有进入这个函数.
+所以还是要看进入函数这个"瞬间". 
+2), 反汇编
+the segfault position is before call libxl_osevent_osccurred_fd: "mov 0x38(%rax),%rd" 
+   0x00007ff0e3886fe6 <libxlFDEventCallback+120>:	mov    -0x18(%rbp),%rax
+   0x00007ff0e3886fea <libxlFDEventCallback+124>:	mov    0x8(%rax),%rdi
+   0x00007ff0e3886fee <libxlFDEventCallback+128>:	callq  0x7ff0e387f578 <virObjectUnlock@plt>
+   0x00007ff0e3886ff3 <libxlFDEventCallback+133>:	mov    -0xc(%rbp),%eax
+   0x00007ff0e3886ff6 <libxlFDEventCallback+136>:	movswl %ax,%ecx
+   0x00007ff0e3886ff9 <libxlFDEventCallback+139>:	mov    -0x18(%rbp),%rax
+   0x00007ff0e3886ffd <libxlFDEventCallback+143>:	mov    0x10(%rax),%rsi
+   0x00007ff0e3887001 <libxlFDEventCallback+147>:	mov    -0x18(%rbp),%rax
+   0x00007ff0e3887005 <libxlFDEventCallback+151>:	mov    0x8(%rax),%rax
+=> 0x00007ff0e3887009 <libxlFDEventCallback+155>:	mov    0x38(%rax),%rdi
+   0x00007ff0e388700d <libxlFDEventCallback+159>:	mov    -0x28(%rbp),%edx
+   0x00007ff0e3887010 <libxlFDEventCallback+162>:	mov    %ecx,%r8d
+   0x00007ff0e3887013 <libxlFDEventCallback+165>:	mov    $0x0,%ecx
+   0x00007ff0e3887018 <libxlFDEventCallback+170>:	callq  0x7ff0e387ff08 <libxl_osevent_occurred_fd@plt>
+(1), info register: rax is 0x0.
+So, the move will fail. but why?
+(2), check the code while calling virObjectUnlock, we could get that rpb - 0x18 is info, and rax + 0x8 is priv. note that the pointer is 8bytes in 64bit.
+/* Object used to store info related to libxl event registrations */
+struct _libxlEventHookInfo {
+    libxlEventHookInfoPtr next;
+    libxlDomainObjPrivatePtr priv;
+    void *xl_priv;
+    int id;
+};
+So, rax + 0x38 is ctx. but right now rax is zero.
+\TODO: how to get struct offset in GDB.
+3), why?
+两个人讨论了一下, 因为priv是整个domain全局的. 而info是每次注册fd时alloc的.
+如果有线程在我正要进入libxl_osevent_occurred_fd时free priv. 就会把瞬间的info->priv赋值为0. 
+后来我再看code, free这个事情肯定没有, 但是注册时是先注册handle在给priv, xl_priv赋值. 而且没有锁的保护. 最早Jim是先赋值后注册的, 不知道为什么二月份改了, 目前我的patch: 
+From aa525a3aaf2648f7358cca049a87ea18a285ef9a Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Fri, 19 Apr 2013 19:28:36 +0800
+Subject: [PATCH] try to fix segfault during virsh save
+
+move assign before virEventAddHandle. i do not know why jim move it in e0622ca2.
+---
+ src/libxl/libxl_driver.c | 14 ++++++++------
+ 1 file changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 9980b38..96cd2c0 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -186,12 +186,6 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+         vir_events |= VIR_EVENT_HANDLE_READABLE;
+     if (events & POLLOUT)
+         vir_events |= VIR_EVENT_HANDLE_WRITABLE;
+-    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
+-                                 info, libxlEventHookInfoFree);
+-    if (info->id < 0) {
+-        VIR_FREE(info);
+-        return -1;
+-    }
+ 
+     info->priv = priv;
+     /*
+@@ -204,6 +198,14 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+     info->xl_priv = xl_priv;
+     *hndp = info;
+ 
++    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
++                                 info, libxlEventHookInfoFree);
++    if (info->id < 0) {
++        virObjectUnref(info->priv);
++        VIR_FREE(info);
++        return -1;
++    }
++
+     return 0;
+ }
+ 
+-- 
+1.7.12
+4), 加入patch后测试, 之前是测试三轮会挂. 现在是测试5轮通过.
+
+6, gdb commands summary
+thread apply all bt: print all backtrace in each thread.
+disassemable start,+len: disassembly from start to start+len.
+
 
 15:27 2013-04-17
 software skill, rpm, search
@@ -1304,12 +1394,17 @@ GTD
 
 1, today
 1), work on libvirt libxl driver. ref"13:13 2013-04-09": Jim said that it is a shutdown issue. see"15:21 2013-04-17"
-1), 16:26- work report.
+
+19:38 2013-04-19
+GTD
+0, 11:30-19:45
+
+1, today
+1), work on libvirt libxl driver. ref"13:13 2013-04-09": Jim said that it is a shutdown issue. see"15:21 2013-04-17"
 
 2, week plan
-1), hackweek
-(1), running cubieboard on opensuse12.3
-(2), learn how to use kiwi.
+1), test the case on hvm and pv in different environment.
+1), 16:26- work report.
 2), test patch during hackweek; send patch for chunyan review should be on Friday.
 2), try my console on PV and HVM.
 
