@@ -128,24 +128,29 @@ for i in `seq 100`; do
 
     echo "test libxlDomainReboot: reboot"
     reboot_or_shutdown reboot
+    sleep 5
 
     echo "test libxlShutdownFlags: shutdown"
     reboot_or_shutdown shutdown
+    sleep 5
     virsh create $domain_xml
-    sleep 1
+    sleep 5
     wait_started $timeout
 
     echo "test libxlDoDomainSave: save"
     virsh save $domain_name ${domain_name}.save
     test_ret $?
+    sleep 5
 
     echo "test libxlDomainRestoreFlags: restore"
     virsh restore ${domain_name}.save 
     test_ret $?
+    sleep 5
 
     echo "test libxlDomainCoreDump: dump"
     virsh dump $domain_name ${domain_name}.dump
     test_ret $?
+    sleep 5
 
     echo "test libxlDomainDestroyFlags: destroy"
     virsh destroy $domain_name
