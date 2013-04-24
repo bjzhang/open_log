@@ -106,25 +106,25 @@ for i in `seq 100`; do
     test_ret $?
 
     virsh destroy $domain_name
-    sleep 1
+    sleep 5
 
     echo "test libxlDomainCreateXML: create"
     virsh create $domain_xml
     virsh list | grep $domain_name -w
     test_ret $?
-    sleep 1
+    sleep 5
 
     echo "test libxlDomainSuspend: suspend"
     virsh suspend $domain_name
     virsh list | grep $domain_name -w | grep paused -w
     test_ret $?
-    sleep 1
+    sleep 5
 
     echo "test libxlDomainResume: resume"
     virsh resume $domain_name
     virsh list | grep $domain_name -w | grep running -w
     test_ret $?
-    sleep 1
+    sleep 5
 
     echo "test libxlDomainReboot: reboot"
     reboot_or_shutdown reboot
@@ -150,8 +150,9 @@ for i in `seq 100`; do
     echo "test libxlDomainDestroyFlags: destroy"
     virsh destroy $domain_name
     test_ret $?
+    sleep 5
     virsh create $domain_xml
-    sleep 1
+    sleep 5
 
     echo "test libxlDomainSetMemoryFlags: setmem"
     echo "set memory to 256M"
