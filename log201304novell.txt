@@ -1,5 +1,4 @@
-.LOG
-14:08 2013-04-01
+.LOG 14:08 2013-04-01
 software, skill, locale的设定及其LANG、LC_ALL、LANGUAGE环境变量的区别
 ref: http://hi.baidu.com/edeed/item/c23752f36abdd916ce9f3289
 > locale
@@ -1060,7 +1059,7 @@ I am familiar with debian-based things. Debian comes in 3 favor on arm: arm, arm
 Only affected thing as i understand is arm port in case your arm cpu does not support emulation. And arm port is deprecated long ago, you can see on debian popcon that there are 55 total arm machines reporting. n900 is not affected (armel) openmoko gta02 - armel, gta04 - armhf, who knows may be some ancient machines?
 
 15:21 2013-04-17
-virtualization, libvirt, xen, libxl, shutdown issue
+virtualization, libvirt, xen, libxl, shutdown issue; software skill, debug, gdb, disassemble ""6
 1, add debug info in libxlEventHookInfoFree, see who free the priv and does it lead to the segment fault.
 今天在linux-vm5上测试(sles11_sp2_pv), 遇到create时没法注册设备的问题. 但是没有遇到之前的segfault问题.
 /var/lib/xen/images_2/sles11_sp2_pv/sles11_sp2_pv.xml
@@ -1815,6 +1814,648 @@ GTD
 1), 1h test console patch and send it to chunyan. see"17:02 2013-04-23"
 2), install opensuse12.3
 
+17:02 2013-04-23
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, send console patch to Chunyan for review, cont1
+1, test pass
+2, commit messsage
+add console support in libxl
+
+this patch introduce the console api in libxl driver for both pv and
+hvm guest.  and import and update the libxlMakeChrdevStr function which
+was deleted in commit dfa1e1dd.
+
+17:13 2013-04-23
+virtualization, tools, libvirt, libvirt-designer
+""Daniel P. Berrange" <berrange redhat com>"_email_"[Libvirt-announce] [ANNOUNCE] libvirt-designer 0.0.1 release"_20121009_1138
+    Date: Tue, 9 Oct 2012 11:38:53 +0100
+I am pleased to announce that the first release of the libvirt-designer
+package, version 0.0.1, is now available from
+
+  ftp://ftp.libvirt.org/libvirt/designer/
+
+The packages are GPG signed with
+
+    Key fingerprint: DAF3 A6FD B26B 6291 2D0E  8E3F BE86 EBB4 1510 4FDF (4096R)
+
+New in this release:
+
+  - Everything !
+
+The libvirt-designer package provides a library that integrates libosinfo
+and libvirt-gconfig. Given an operating system identifier and libvirt
+host capabilities, it queries the libosinfo database to determine optimal
+hardware configuration and uses this information to design suitable domain
+XML for running the OS as a guest. In a similar manner it facilitates the
+setup of guest hardware devices such as disks, network interfaces, video
+cards, etc. These APIs are inspired by experience creating internal APIs
+for similar tasks in the virt-install/virt-manager projects.
+
+Since it builds on libosinfo and libvirt-gconfig, the libvirt-designer
+library relies on GObject introspection to provide access to its APIs
+for non-C programming languages. In addition it explicitly avoids a
+direct depedancy on libvirt.so, to enable usage by applications using
+alternative SNMP, CIM, etc bindings to libvirt, or those applications
+which simply need to construct libvirt XML without actually booting
+the guests afterwards.
+
+These early releases of libvirt-designer should be considered experimental.
+While we don't actively plan to change/break the API/ABI, we are not going
+to guarantee API/ABI stability of libvirt-designer at this time.
+
+Follow up comments about libvirt-designer should be directed to the
+regular libvir-list redhat com development list.
+
+Thanks to all the people involved in contributing to this release, in
+particular Michal who is actually doing the vast majority of the hard
+work here.
+
+Regards,
+Daniel
+
+21:04 2013-4-23
+ian c 20130409_2209
+On Thu, 2013-03-21 at 18:42 +0000, Stefano Stabellini wrote:
+
+It's possible that we might want to restrict the available operations? e.g. remove VPCUOP_initialize/up if we are doing this via PSCI instead?
+
+My concern is that there have been security bugs in VCPUOP_initialize on x86 in the past and if we don't have to expose that possibility on ARM lets not.
+
+Ian.
+
+11:29 2013-04-24
+virtualization, libvirt, xen, libxl, segfault, discuss with Jim, continue testing
+1, reply to Jim
+>Bamvor Jian Zhang wrote:
+>> set point in info and increase info->priv ref count before virEventAddHandle.
+>> if do this after virEventAddHandle, the fd callback or fd deregister maybe got
+>> the empty priv, xl_priv or wrong ref count.
+>>   
+>
+>Thanks for the analysis.
+>
+>> the sequence was right in dfa1e1dd, but it changed in e0622ca2. AFAIK, the
+>> latter one introduce virObjectLockable and add ref count while fd register.
+>> i do not know why the location of priv and xl_priv assign is changed.
+>>   
+>
+>I'm not sure why I changed it either :-/.  Maybe it just seemed more
+>logical at the time, and hopefully not an attempt to fix some other bug.
+>
+>> after apply this patch, test 24 around passed compare to fail within 3round
+>> without this patch. each round includes define -> start -> destroy -> create ->
+>> suspend -> resume -> reboot -> shutdown -> save -> resotre -> dump -> destroy ->
+>> create -> setmem -> setvcpus -> destroy.
+>>   
+>
+>My testing was a subset of this, so I think you would have found any bug
+>I was trying to fix by the change in e0622ca2.  Moving those lines was
+>probably just unintentional.  BTW, have you done your testing with
+>libvirtd not running in gdb? :)  I found running in gdb changed the
+>behavior of my tests.
+No. i am tesing it right now.
+>
+>> ---
+>>  src/libxl/libxl_driver.c |   14 ++++++++------
+>>  1 file changed, 8 insertions(+), 6 deletions(-)
+>>
+>> diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+>> index 9980b38..96cd2c0 100644
+>> --- a/src/libxl/libxl_driver.c
+>> +++ b/src/libxl/libxl_driver.c
+>> @@ -186,12 +186,6 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+>>          vir_events |= VIR_EVENT_HANDLE_READABLE;
+>>      if (events & POLLOUT)
+>>          vir_events |= VIR_EVENT_HANDLE_WRITABLE;
+>> -    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
+>> -                                 info, libxlEventHookInfoFree);
+>> -    if (info->id < 0) {
+>> -        VIR_FREE(info);
+>> -        return -1;
+>> -    }
+>>  
+>>      info->priv = priv;
+>>      /*
+>> @@ -204,6 +198,14 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+>>      info->xl_priv = xl_priv;
+>>      *hndp = info;
+>>  
+>> +    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
+>> +                                 info, libxlEventHookInfoFree);
+>> +    if (info->id < 0) {
+>> +        virObjectUnref(info->priv);
+>> +        VIR_FREE(info);
+>> +        return -1;
+>> +    }
+>> +
+>>   
+>
+>I wonder if we should do the same for timeouts, for consistency's sake
+>if nothing else.  Huh, come to think of it, I probably changed FD
+>registration to be consistent with timeouts in e0622ca2...
+yes. I think so. i will change the code in timeouts and test again.
+>
+>Thanks!
+>Jim
+>
+>>      return 0;
+>>  }
+>>  
+
+2, reply to Jim
+>Bamvor Jian Zhang wrote: > hi, Jim
+>>
+>> i just send a patch to u about fixing the segfault in virsh save.
+>> i have some issue while using git send-email in my home, so i direct copy my patch and paste to mail.
+>> i am sorry if there is some malform in it.
+>>   
+>
+>Looks fine for review.  I'll respond to it with comments.
+>
+>> at i said in previous email, test pass 24 round with my patch, but in 25th round "virsh create", it fail because of the hotplug script timeout:
+>> libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+>> libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/backend/vbd/252/51712/state token=3/3e0: empty slot
+>> libxl: debug: libxl_device.c:956:device_hotplug_timeout_cb: killing hotplug script /etc/xen/scripts/block add because of timeout
+>>   
+>
+>So libxl hit a timeout waiting for the block script to complete.  Maybe
+>there is something useful in /var/log/messages.  Did udev even invoke
+>the block script?  If so, you would see something like the following in
+>/var/log/messages
+>
+>Feb 27 09:11:28 xen141 logger: /etc/xen/scripts/block: add
+>XENBUS_PATH=backend/vbd/1/51712
+yes, I could see the following, it seems that fail because of tap connect failure?
+Apr 19 20:42:21 linux-work logger: /etc/xen/scripts/block: add XENBUS_PATH=backend/vbd/251/51712
+Apr 19 20:42:21 linux-work logger: /etc/xen/scripts/vif-bridge: online type_if=vif XENBUS_PATH=backend/vif/251/0
+Apr 19 20:42:21 linux-work kernel: [91065.569659] device vif251.0 entered promiscuous mode
+Apr 19 20:42:21 linux-work kernel: [91065.571501] br0: port 2(vif251.0) entering forwarding state
+Apr 19 20:42:21 linux-work kernel: [91065.571504] br0: port 2(vif251.0) entering forwarding state
+Apr 19 20:42:21 linux-work logger: /etc/xen/scripts/vif-bridge: Successful vif-bridge online for vif251.0, bridge br0.
+Apr 19 20:42:21 linux-work logger: /etc/xen/scripts/vif-bridge: Writing backend/vif/251/0/hotplug-status connected to xenstore.
+Apr 19 20:42:22 linux-work kernel: [91066.016235] blkback: ring-ref 8, event-channel 9, protocol 1 (x86_64-abi)
+Apr 19 20:42:22 linux-work kernel: [91066.268053] br0: port 2(vif251.0) entering forwarding state
+Apr 19 20:42:22 linux-work kernel: [91066.268256] br0: port 2(vif251.0) entering disabled state
+Apr 19 20:42:22 linux-work logger: /etc/xen/scripts/block: remove XENBUS_PATH=backend/vbd/251/51712
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10166: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10212: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10983: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl13680: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl14888: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15684: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15769: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15929: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl16543: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl21494: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl22322: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24085: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24915: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl25153: 111
+Apr 19 20:42:22 linux-work tapdisk2[28218]: received 'pid' message (uuid = 0)
+Apr 19 20:42:22 linux-work tapdisk2[28218]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl29480: 111
+Apr 19 20:42:22 linux-work tapdisk2[30164]: received 'pid' message (uuid = 0)
+Apr 19 20:42:22 linux-work tapdisk2[30164]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl31841: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl32239: 111
+Apr 19 20:42:22 linux-work logger: /etc/xen/scripts/vif-bridge: offline type_if=vif XENBUS_PATH=backend/vif/251/0
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4111: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4122: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4187: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4280: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4471: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4517: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4666: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4686: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4767: 111
+Apr 19 20:42:22 linux-work logger: /etc/xen/scripts/vif-bridge: brctl delif br0 vif251.0 failed
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4846: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4982: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5051: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5420: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5550: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5631: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5787: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7065: 111
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7174: 111
+Apr 19 20:42:22 linux-work logger: /etc/xen/scripts/vif-bridge: ifconfig vif251.0 down failed
+Apr 19 20:42:22 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7180: 111
+Apr 19 20:42:23 linux-work tapdisk2[7190]: received 'pid' message (uuid = 0)
+Apr 19 20:42:23 linux-work tapdisk2[7190]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7323: 111
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7356: 111
+Apr 19 20:42:23 linux-work tapdisk2[7579]: received 'pid' message (uuid = 0)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7824: 111
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8192: 111
+Apr 19 20:42:23 linux-work logger: /etc/xen/scripts/vif-bridge: Successful vif-bridge offline for vif251.0, bridge br0.
+Apr 19 20:42:23 linux-work tapdisk2[8220]: received 'pid' message (uuid = 0)
+Apr 19 20:42:23 linux-work tapdisk2[8220]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8306: 111
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8602: 111
+Apr 19 20:42:23 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8944: 111
+Apr 19 20:42:23 linux-work tapdisk2[7190]: received 'list' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[7190]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[7190]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: received 'list' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[8220]: received 'list' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[8220]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[8220]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[28218]: received 'list' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[28218]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[28218]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[30164]: received 'list' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[30164]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[30164]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: received 'close' message (uuid = 11)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: closed image /var/lib/xen/images_2/sles11_sp2_pv/disk0.raw (0 users, state: 0x00000000, type: 0)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: sending 'close response' message (uuid = 11)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: received 'detach' message (uuid = 11)
+Apr 19 20:42:23 linux-work tapdisk2[7579]: sending 'detach response' message (uuid = 11)
+Apr 19 20:42:23 linux-work kernel: [91067.479552] blktap_ring_vm_close: unmapping ring 11
+Apr 19 20:42:23 linux-work kernel: [91067.479558] blktap_ring_release: freeing device 11
+Apr 19 20:42:23 linux-work kernel: [91067.480261] blktap_device_destroy: destroy device 11 users 0
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10166: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10212: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10983: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl13680: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl14888: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15684: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15769: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15929: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl16543: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl21494: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl22322: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24085: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24915: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl25153: 111
+Apr 19 20:42:34 linux-work tapdisk2[28218]: received 'pid' message (uuid = 0)
+Apr 19 20:42:34 linux-work tapdisk2[28218]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl29480: 111
+Apr 19 20:42:34 linux-work tapdisk2[30164]: received 'pid' message (uuid = 0)
+Apr 19 20:42:34 linux-work tapdisk2[30164]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl31841: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl32239: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4111: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4122: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4187: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4280: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4471: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4517: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4666: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4686: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4767: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4846: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4982: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5051: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5420: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5550: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5631: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5787: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7065: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7174: 111
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7180: 111
+Apr 19 20:42:34 linux-work tapdisk2[7190]: received 'pid' message (uuid = 0)
+Apr 19 20:42:34 linux-work tapdisk2[7190]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:34 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7323: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7356: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7824: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8192: 111
+Apr 19 20:42:35 linux-work tapdisk2[8220]: received 'pid' message (uuid = 0)
+Apr 19 20:42:35 linux-work tapdisk2[8220]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8306: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8602: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8944: 111
+Apr 19 20:42:35 linux-work tapdisk2[7190]: received 'list' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[7190]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[7190]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[8220]: received 'list' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[8220]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[8220]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[28218]: received 'list' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[28218]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[28218]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[30164]: received 'list' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[30164]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work tapdisk2[30164]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:35 linux-work kernel: [91079.472223] blktap_control_allocate_tap: allocated tap ffff880090e5f000
+Apr 19 20:42:35 linux-work tapdisk2[8157]: I/O queue driver: lio
+Apr 19 20:42:35 linux-work tapdisk2[8157]: received 'attach' message (uuid = 11)
+Apr 19 20:42:35 linux-work tapdisk2[8157]: sending 'attach response' message (uuid = 11)
+Apr 19 20:42:35 linux-work tapdisk2[8157]: received 'open' message (uuid = 11)
+Apr 19 20:42:35 linux-work tapdisk2[8157]: block-aio open('/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw')
+Apr 19 20:42:35 linux-work tapdisk2[8157]: open(/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw) with O_DIRECT
+Apr 19 20:42:35 linux-work tapdisk2[8157]: Image size:  	pre sector_shift  [2147483648] 	post sector_shift [4194304]
+Apr 19 20:42:35 linux-work tapdisk2[8157]: opened image /var/lib/xen/images_2/sles11_sp2_pv/disk0.raw (1 users, state: 0x00000001, type: 0)
+Apr 19 20:42:35 linux-work tapdisk2[8157]: VBD CHAIN:
+Apr 19 20:42:35 linux-work tapdisk2[8157]: /var/lib/xen/images_2/sles11_sp2_pv/disk0.raw: 0
+Apr 19 20:42:35 linux-work tapdisk2[8157]: sending 'open response' message (uuid = 11)
+Apr 19 20:42:35 linux-work kernel: [91079.489330] blktap_ring_open: opening device blktap11
+Apr 19 20:42:35 linux-work kernel: [91079.489336] blktap_ring_open: opened device 11
+Apr 19 20:42:35 linux-work kernel: [91079.489357] blktap_ring_mmap: blktap: mapping pid is 8158
+Apr 19 20:42:35 linux-work kernel: [91079.490812] blktap_validate_params: aio:/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw: capacity: 4194304, sector-size: 512
+Apr 19 20:42:35 linux-work kernel: [91079.490820] blktap_validate_params: aio:/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw: capacity: 4194304, sector-size: 512
+Apr 19 20:42:35 linux-work kernel: [91079.490825] blktap_device_create: minor 11 sectors 4194304 sector-size 512
+Apr 19 20:42:35 linux-work kernel: [91079.491145] blktap_device_create: creation of 252:11: 0
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10166: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10212: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10983: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl13680: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl14888: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15684: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15769: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15929: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl16543: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl21494: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl22322: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24085: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24915: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl25153: 111
+Apr 19 20:42:35 linux-work tapdisk2[28218]: received 'pid' message (uuid = 0)
+Apr 19 20:42:35 linux-work tapdisk2[28218]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl29480: 111
+Apr 19 20:42:35 linux-work tapdisk2[30164]: received 'pid' message (uuid = 0)
+Apr 19 20:42:35 linux-work tapdisk2[30164]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl31841: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl32239: 111
+Apr 19 20:42:35 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4111: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4122: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4187: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4280: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4471: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4517: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4666: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4686: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4767: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4846: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4982: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5051: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5420: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5550: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5631: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5787: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7065: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7174: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7180: 111
+Apr 19 20:42:36 linux-work tapdisk2[7190]: received 'pid' message (uuid = 0)
+Apr 19 20:42:36 linux-work tapdisk2[7190]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7323: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7356: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7824: 111
+Apr 19 20:42:36 linux-work tapdisk2[8157]: received 'pid' message (uuid = 0)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8192: 111
+Apr 19 20:42:36 linux-work tapdisk2[8220]: received 'pid' message (uuid = 0)
+Apr 19 20:42:36 linux-work tapdisk2[8220]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8306: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8602: 111
+Apr 19 20:42:36 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8944: 111
+Apr 19 20:42:36 linux-work tapdisk2[7190]: received 'list' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[7190]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[7190]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: received 'list' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8220]: received 'list' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8220]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8220]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[28218]: received 'list' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[28218]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[28218]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[30164]: received 'list' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[30164]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[30164]: sending 'list response' message (uuid = 65535)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: received 'close' message (uuid = 11)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: closed image /var/lib/xen/images_2/sles11_sp2_pv/disk0.raw (0 users, state: 0x00000000, type: 0)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: sending 'close response' message (uuid = 11)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: received 'detach' message (uuid = 11)
+Apr 19 20:42:36 linux-work tapdisk2[8157]: sending 'detach response' message (uuid = 11)
+Apr 19 20:42:36 linux-work kernel: [91080.888255] blktap_ring_vm_close: unmapping ring 11
+Apr 19 20:42:36 linux-work kernel: [91080.888261] blktap_ring_release: freeing device 11
+Apr 19 21:02:36 linux-work -- MARK --
+
+>
+>> libxl: error: libxl_exec.c:129:libxl_report_child_exitstatus: /etc/xen/scripts/block add [8166] died due to fatal signal Killed
+>> libxl: error: libxl_create.c:901:domcreate_launch_dm: unable to add disk devices
+>>
+>> i hope i could debug it tomorrow.
+>>
+>> thanks.
+>>
+>>   
+>>>   
+
+3, error in /var/log/message 
+Apr 19 20:42:34 linux-work tapdisk2[30164]: sending 'pid response' message (uuid = 0)
+Apr 19 20:42:34 linux-work tapdisk2[7190]: received 'pid' message (uuid = 0)
+
+4, reply to Jim
+>BTW, what version of xen are you using in your testing?  xen-ustable? 
+>Our latest xen-4.2.x packages?
+xen-unstable, commit 66eb6f8b7, including the your patch on 24th Jan.
+I build it on ibs: https://build.suse.de/package/show?package=xen_4.3&project=home%3Abjzhang
+I was want to test it on our lastest xen-4.2.x package after all test passed in xen-unstable.
+
+5, modify timeout as same as fd, test
+1), failt @ 41 round
+(1), log
+test libxlDomainCreateXML: create
+error: Failed to create domain from /var/lib/xen/images_2/sles11_sp2_pv/sles11_sp2_pv.xml
+error: internal error libxenlight failed to create new domain 'sles11_sp2_pv'
+(2), log in libxl: 
+libxl: debug: libxl_device.c:229:libxl__device_disk_set_backend: Disk vdev=xvda spec.backend=tap
+libxl: error: libxl.c:2101:device_disk_add: failed to get blktap devpath for 0x7f9e34017130
+libxl: error: libxl_create.c:901:domcreate_launch_dm: unable to add disk devices
+2), fail @ 17 round, restore
+same at create: fail at block add.
+(1), libxl
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_device.c:956:device_hotplug_timeout_cb: killing hotplug script /etc/xen/scripts/block add because of timeout
+libxl: error: libxl_exec.c:129:libxl_report_child_exitstatus: /etc/xen/scripts/block add [21406] died due to fatal signal Killed
+libxl: error: libxl_create.c:901:domcreate_launch_dm: unable to add disk devices
+3), discuss with Chunyan
+(1), enable hotplug debug: add "set -x" in /etc/xen/scripts/block-common.sh, the log will output to "/var/log/xen/xen-hotplug.log"
+linux-work:/etc/xen/scripts # diff -urp block-common.sh block-common.sh~
+--- block-common.sh     2013-04-24 16:47:36.000000000 +0800
++++ block-common.sh~    2013-01-30 13:34:28.000000000 +0800
+@@ -16,7 +16,6 @@
+ #
+ 
+ 
+-set -x
+ dir=$(dirname "$0")
+ . "$dir/xen-hotplug-common.sh"
+
+(2), check the message in /var/log/message
+linux-work:/home/bamvor # tail -f /var/log/messages
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10166: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10212: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl10983: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl13680: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl14888: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15684: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15769: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl15929: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl16543: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl21494: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl22322: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24085: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl24915: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl25153: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl28219: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl29480: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl30165: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl31841: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl32239: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4111: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4122: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4187: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4280: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4471: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4517: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4666: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4686: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4767: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4846: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl4982: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5051: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5420: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5550: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5631: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl5787: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7065: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7174: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7180: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7191: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7323: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7356: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl7824: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8192: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8221: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8306: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8602: 111
+Apr 24 17:00:13 linux-work libvirtd: tap-err:tap_ctl_connect: couldn't connect to /var/run/blktap-control/ctl8944: 111
+Apr 24 17:00:13 linux-work kernel: [  655.966703] blktap_control_allocate_tap: allocated tap ffff8800d324e000
+Apr 24 17:00:14 linux-work tapdisk2[4927]: I/O queue driver: lio
+Apr 24 17:00:14 linux-work tapdisk2[4927]: received 'attach' message (uuid = 0)
+Apr 24 17:00:14 linux-work tapdisk2[4927]: sending 'attach response' message (uuid = 0)
+Apr 24 17:00:14 linux-work tapdisk2[4927]: received 'open' message (uuid = 0)
+Apr 24 17:00:14 linux-work kernel: [  656.027125] blktap_ring_open: opening device blktap0
+Apr 24 17:00:14 linux-work kernel: [  656.027131] blktap_ring_open: opened device 0
+Apr 24 17:00:14 linux-work kernel: [  656.027153] blktap_ring_mmap: blktap: mapping pid is 4928
+Apr 24 17:00:14 linux-work tapdisk2[4927]: block-aio open('/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw')
+Apr 24 17:00:14 linux-work tapdisk2[4927]: open(/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw) with O_DIRECT
+Apr 24 17:00:14 linux-work tapdisk2[4927]: Image size:          pre sector_shift  [2147483648]  post sector_shift [4194304]
+Apr 24 17:00:14 linux-work tapdisk2[4927]: opened image /var/lib/xen/images_2/sles11_sp2_pv/disk0.raw (1 users, state: 0x00000001, type: 0)
+Apr 24 17:00:14 linux-work tapdisk2[4927]: VBD CHAIN:
+Apr 24 17:00:14 linux-work tapdisk2[4927]: /var/lib/xen/images_2/sles11_sp2_pv/disk0.raw: 0
+Apr 24 17:00:14 linux-work tapdisk2[4927]: sending 'open response' message (uuid = 0)
+Apr 24 17:00:14 linux-work kernel: [  656.260188] blktap_validate_params: aio:/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw: capacity: 4194304, sector-size: 512
+Apr 24 17:00:14 linux-work kernel: [  656.260194] blktap_validate_params: aio:/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw: capacity: 4194304, sector-size: 512
+Apr 24 17:00:14 linux-work kernel: [  656.260199] blktap_device_create: minor 0 sectors 4194304 sector-size 512
+Apr 24 17:00:14 linux-work kernel: [  656.260468] blktap_device_create: creation of 252:0: 0
+Apr 24 17:00:14 linux-work logger: /etc/xen/scripts/block: add XENBUS_PATH=backend/vbd/1/51712
+Apr 24 17:00:14 linux-work logger: /etc/xen/scripts/vif-bridge: online type_if=vif XENBUS_PATH=backend/vif/1/0
+Apr 24 17:00:14 linux-work kernel: [  656.858359] device vif1.0 entered promiscuous mode
+Apr 24 17:00:14 linux-work kernel: [  656.860201] br0: port 2(vif1.0) entering forwarding state
+Apr 24 17:00:14 linux-work kernel: [  656.860204] br0: port 2(vif1.0) entering forwarding state
+Apr 24 17:00:14 linux-work logger: /etc/xen/scripts/vif-bridge: Successful vif-bridge online for vif1.0, bridge br0.
+Apr 24 17:00:14 linux-work logger: /etc/xen/scripts/vif-bridge: Writing backend/vif/1/0/hotplug-status connected to xenstore.
+Apr 24 17:00:15 linux-work kernel: [  657.329151] blkback: ring-ref 8, event-channel 9, protocol 1 (x86_64-abi)
+Apr 24 17:00:16 linux-work avahi-daemon[3116]: Registering new address record for fe80::fcff:ffff:feff:ffff on vif1.0.*.
+Apr 24 17:00:25 linux-work kernel: [  667.868096] vif1.0: no IPv6 routers presen
+(3), Chunyan suggest that read the code, found that what it is done after "blktap_device_create: creation of 252:0: 0", maybe the front end driver do not get the reply, so, xen timeout occurred.
+
+6, send my lastest patch to Jim.
+Hi, Jim
+
+here is my lastest patch. the first patch is unchanged, i simple add a patch for fixing timeout register function. i will merge the patch when i send it out if needed.
+today, i test this patch two times. on sles11 sp2. with xen and libvirt upstream. xen commit: 66eb6f8b, libvirt commit: fd1432c7.  kernel: 3.0.13-0.27-xen
+there are 42 round test successful and 17 round test successful respectively. and fail at create and restore, and both fail because of block add timeout. it seems that they both timeout after "blktap_device_create: creation of 252:2: 0"
+i plan read the backend driver code in order to check what happens after blktap_device_create.
+
+right now, and another same test is running, 14 round successful.
+
+notes: each round includes define -> start -> destroy -> create -> suspend -> resume -> reboot -> shutdown -> save -> resotre -> dump -> destroy -> create -> setmem -> setvcpus -> destroy.
+
+thanks
+
+Bamvor
+
+14:43 2013-04-24
+mailing list, virtualization, virtualization-dev, windows iso
+""Charles Arnold" <carnold@suse.com>"_email_"Re: [Virtualization-dev] w2k3 image?"_20130423_2245
+We have the ISO's for all windows releases on xen100
+For win2k3, see /share/iso/windows/2k3 (also accessible via ftp).
+If you use win-2k3-sp2-64-auto.iso, it will do a complete install without user interaction.
+Depending on your need, you may want to run updates but don't try to activate the license.
+- Charles
+
+>>> On 4/23/2013 at 05:41 AM, in message
+<51768F8502000078000CFF23@nat28.tlf.novell.com>, "Jan Beulich"
+<JBeulich@suse.com> wrote: 
+>>>> On 23.04.13 at 13:36, "Jan Beulich" <JBeulich@suse.com> wrote:
+>> Do we have a w2k3 image that I could copy over for testing purposes?
+> 
+> Sorry, meant this to go to the internal list. It would really help if
+> the mailing list names were distinguishable by more than the 14th
+> and 16th character...
+> 
+> Thanks, Jan
+> 
+> _______________________________________________
+> virtualization-dev mailing list
+> virtualization-dev@lists.novell.com
+> https://lists.innerweb.novell.com/mailman/listinfo/virtualization-dev
+> Search Archives: https://lists.innerweb.novell.com/search
+
+14:45 2013-04-24
+mailing list, virtualization, virtualization-xen, how to debug guest kernel crash
+1), ""Jared Hudson" <jahudson@novell.com>"_email_"[virtualization-xen] Antw: Re: How to kdump when issue occures within XEN, soonr"
+> Can you please point us in the correct direction, thanks. 
+
+You must not have the debug repositories added.
+
+http://en.opensuse.org/Package_repositories#Debug
+
+You should add all of the openSUSE 12.2 debug repositories then you can just use zypper to find the  kernel-xen-debuginfo, kernel-xen-base-debuginfo and kernel-xen-devel-debuginfo RPM packages you will need.
+
+Here is a direct link to the RPMs as well.
+http://download.opensuse.org/debug/update/12.2/x86_64/kernel-xen-debuginfo-3.4.33-2.24.1.x86_64.rpm
+http://download.opensuse.org/debug/update/12.2/x86_64/kernel-xen-base-debuginfo-3.4.33-2.24.1.x86_64.rpm
+http://download.opensuse.org/debug/update/12.2/x86_64/kernel-xen-devel-debuginfo-3.4.33-2.24.1.x86_64.rpm
+
+Within the kernel-xen-devel-debuginfo-3.4.33-2.24.1.x86_64.rpm RPM is the file /usr/lib/debug/boot/vmlinux-3.4.33-2.24-xen.debug which is the debug kernel I mentioned in my last e-mail. Technically it's a normal kernel's debug symbols.
+
+You may also want to set your Xen VM configuration to produce a crash dump automatically by setting
+on_crash="coredump-destroy" in /etc/xen/vm/vmname
+You would want to do this so you can produce a crash dump closer to the point where the problem actually happens.
+
+In addition to editing your configuration file you can probably apply that setting without restarting the VM by using
+xenstore-write /vm/169cf645-c5f9-fcef-2551-a8ac4f604750/on_crash coredump-destroy
+
+substituting 169cf645-c5f9-fcef-2551-a8ac4f604750 with your own VM's UUID of course.
+
+If you choose not to, then shutdown and startup a fresh copy of your VM.
+
+Then enable the setting panic_on_oops inside of your VM by editing /etc/sysctl.conf and add
+kernel.panic_on_oops=1
+then run sysctl -p
+
+The next time your VM experiences the issue it will hopefully trigger the host OS to start producing a crash dump of the VM. If it doesn't then just run xm dump-core command as Jan recommended.
+
+Jared H.
+
+14:55 2013-04-24
+GTD
+0, 11:00
+
+1, today
+1), reply to Jim and talk with Jim about libvirt libxl driver segfault.
+
+3), send libvirt libxl driver patch to Jim before leaving.
+
 2, next
 1), console patch: do the make test and send it to Chunyan.
 
@@ -1898,70 +2539,9 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-17:02 2013-04-23
-suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, send console patch to Chunyan for review, cont1
-1, test pass
-2, commit messsage
-add console support in libxl
+17:38 2013-04-24
+Wine_QQ
+http://linux-wiki.cn/wiki/Wine_QQ
+http://www.longene.org/forum/viewtopic.php?t=4700
+http://www.linuxdiyf.com/viewarticle.php?id=378468
 
-this patch introduce the console api in libxl driver for both pv and
-hvm guest.  and import and update the libxlMakeChrdevStr function which
-was deleted in commit dfa1e1dd.
-
-17:13 2013-04-23
-virtualization, tools, libvirt, libvirt-designer
-""Daniel P. Berrange" <berrange redhat com>"_email_"[Libvirt-announce] [ANNOUNCE] libvirt-designer 0.0.1 release"_20121009_1138
-    Date: Tue, 9 Oct 2012 11:38:53 +0100
-I am pleased to announce that the first release of the libvirt-designer
-package, version 0.0.1, is now available from
-
-  ftp://ftp.libvirt.org/libvirt/designer/
-
-The packages are GPG signed with
-
-    Key fingerprint: DAF3 A6FD B26B 6291 2D0E  8E3F BE86 EBB4 1510 4FDF (4096R)
-
-New in this release:
-
-  - Everything !
-
-The libvirt-designer package provides a library that integrates libosinfo
-and libvirt-gconfig. Given an operating system identifier and libvirt
-host capabilities, it queries the libosinfo database to determine optimal
-hardware configuration and uses this information to design suitable domain
-XML for running the OS as a guest. In a similar manner it facilitates the
-setup of guest hardware devices such as disks, network interfaces, video
-cards, etc. These APIs are inspired by experience creating internal APIs
-for similar tasks in the virt-install/virt-manager projects.
-
-Since it builds on libosinfo and libvirt-gconfig, the libvirt-designer
-library relies on GObject introspection to provide access to its APIs
-for non-C programming languages. In addition it explicitly avoids a
-direct depedancy on libvirt.so, to enable usage by applications using
-alternative SNMP, CIM, etc bindings to libvirt, or those applications
-which simply need to construct libvirt XML without actually booting
-the guests afterwards.
-
-These early releases of libvirt-designer should be considered experimental.
-While we don't actively plan to change/break the API/ABI, we are not going
-to guarantee API/ABI stability of libvirt-designer at this time.
-
-Follow up comments about libvirt-designer should be directed to the
-regular libvir-list redhat com development list.
-
-Thanks to all the people involved in contributing to this release, in
-particular Michal who is actually doing the vast majority of the hard
-work here.
-
-Regards,
-Daniel
-
-21:04 2013-4-23
-ian c 20130409_2209
-On Thu, 2013-03-21 at 18:42 +0000, Stefano Stabellini wrote:
-
-It's possible that we might want to restrict the available operations? e.g. remove VPCUOP_initialize/up if we are doing this via PSCI instead?
-
-My concern is that there have been security bugs in VCPUOP_initialize on x86 in the past and if we don't have to expose that possibility on ARM lets not.
-
-Ian.
