@@ -2569,3 +2569,262 @@ hello.
 my first blog
 
 dropbox.py start -i successful, dropbox start -i, got network connection error
+
+08:07 2013-04-25
+software skill, network, console, connection, print all connection in current machine
+> pinky
+Login    Name                 TTY      Idle   When             Where
+bamvor   bamvor jian zhang   ?:0       ?????  2013-04-24 16:50 console
+bamvor   bamvor jian zhang    pts/0    13:25  2013-04-24 16:50 147.2.207.58
+bamvor   bamvor jian zhang    pts/1    15:08  2013-04-24 16:50
+bamvor   bamvor jian zhang    pts/2    13:50  2013-04-24 16:56 147.2.207.58
+bamvor   bamvor jian zhang    pts/3           2013-04-25 07:54 149.44.166.178
+bamvor   bamvor jian zhang    pts/4    14:40  2013-04-24 17:17 147.2.207.58
+bamvor   bamvor jian zhang    pts/6    14:29  2013-04-24 17:22 147.2.207.58
+bamvor   bamvor jian zhang    pts/5    13:48  2013-04-24 18:04 147.2.207.58
+
+08:35 2013-04-25
+1, Jim reply 20130425_0633
+Re: [PATCH][RFC] fix segfault during virsh save in pv guest
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+> here is my lastest patch. the first patch is unchanged, i simple add a patch for fixing timeout register function. i will merge the patch when i send it out if needed.
+>   
+
+Yeah, I think one patch is fine.
+
+> today, i test this patch two times. on sles11 sp2. with xen and libvirt upstream. xen commit: 66eb6f8b, libvirt commit: fd1432c7.  kernel: 3.0.13-0.27-xen
+> there are 42 round test successful and 17 round test successful respectively. and fail at create and restore, and both fail because of block add timeout. it seems that they both timeout after "blktap_device_create: creation of 252:2: 0"
+> i plan read the backend driver code in order to check what happens after blktap_device_create.
+>   
+
+Ok, thanks.  Seems like a problem unrelated to the libvirt libxl driver.
+
+> right now, and another same test is running, 14 round successful.
+>
+> notes: each round includes define -> start -> destroy -> create -> suspend -> resume -> reboot -> shutdown -> save -> resotre -> dump -> destroy -> create -> setmem -> setvcpus -> destroy.
+>
+>   
+
+> From aa525a3aaf2648f7358cca049a87ea18a285ef9a Mon Sep 17 00:00:00 2001
+> From: Bamvor Jian Zhang <bjzhang@suse.com>
+> Date: Fri, 19 Apr 2013 19:28:36 +0800
+> Subject: [PATCH 1/2][RFC] fix segfault during virsh save in pv guest
+>
+> set point in info and increase info->priv ref count before virEventAddHandle.
+> if do this after virEventAddHandle, the fd callback or fd deregister maybe got
+> the empty priv, xl_priv or wrong ref count.
+>
+> the sequence was right in dfa1e1dd, but it changed in e0622ca2.
+
+You can add this sentence to the previous paragraph
+
+>  AFAIK, the
+> latter one introduce virObjectLockable and add ref count while fd register.
+> i do not know why the location of priv and xl_priv assign is changed.
+>   
+
+and remove this part of the commit message.
+
+> after apply this patch, test 24 around passed compare to fail within 3round
+> without this patch. each round includes define -> start -> destroy -> create ->
+> suspend -> resume -> reboot -> shutdown -> save -> resotre -> dump -> destroy ->
+> create -> setmem -> setvcpus -> destroy.
+>
+>
+> move assign before virEventAddHandle. i do not know why jim move it in e0622ca2.
+>   
+
+This last sentence can be killed as well :).
+
+> ---
+>  src/libxl/libxl_driver.c | 14 ++++++++------
+>  1 file changed, 8 insertions(+), 6 deletions(-)
+>
+> diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+> index 9980b38..96cd2c0 100644
+> --- a/src/libxl/libxl_driver.c
+> +++ b/src/libxl/libxl_driver.c
+> @@ -186,12 +186,6 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+>          vir_events |= VIR_EVENT_HANDLE_READABLE;
+>      if (events & POLLOUT)
+>          vir_events |= VIR_EVENT_HANDLE_WRITABLE;
+> -    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
+> -                                 info, libxlEventHookInfoFree);
+> -    if (info->id < 0) {
+> -        VIR_FREE(info);
+> -        return -1;
+> -    }
+>  
+>      info->priv = priv;
+>      /*
+> @@ -204,6 +198,14 @@ libxlFDRegisterEventHook(void *priv, int fd, void **hndp,
+>      info->xl_priv = xl_priv;
+>      *hndp = info;
+>  
+> +    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
+> +                                 info, libxlEventHookInfoFree);
+> +    if (info->id < 0) {
+> +        virObjectUnref(info->priv);
+> +        VIR_FREE(info);
+> +        return -1;
+> +    }
+> +
+>   
+
+Hmm, maybe best to move all the libvirt event loop stuff together, e.g.
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 9980b38..9889062 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -182,6 +182,15 @@ libxlFDRegisterEventHook(void *priv, int fd, void
+**hndp,
+        return -1;
+    }
+
++    info->priv = priv;
++    /*
++     * Take a reference on the domain object.  Reference is dropped in
++     * libxlEventHookInfoFree, ensuring the domain object outlives the fd
++     * event objects.
++     */
++    virObjectRef(info->priv);
++    info->xl_priv = xl_priv;
++
+    if (events & POLLIN)
+        vir_events |= VIR_EVENT_HANDLE_READABLE;
+    if (events & POLLOUT)
+@@ -189,19 +198,11 @@ libxlFDRegisterEventHook(void *priv, int fd, void
+**hndp,
+    info->id = virEventAddHandle(fd, vir_events, libxlFDEventCallback,
+                                 info, libxlEventHookInfoFree);
+    if (info->id < 0) {
++        virObjectUnref(info->priv);
+        VIR_FREE(info);
+        return -1;
+    }
+
+-    info->priv = priv;
+-    /*
+-     * Take a reference on the domain object.  Reference is dropped in
+-     * libxlEventHookInfoFree, ensuring the domain object outlives the fd
+-     * event objects.
+-     */
+-    virObjectRef(info->priv);
+-
+-    info->xl_priv = xl_priv;
+    *hndp = info;
+
+    return 0;
+
+
+>      return 0;
+>  }
+>  
+> -- 1.8.1.4
+> ------------------------------------------------------------------------
+>
+> From 255ff4445b3192cb4294b11168fa06331d0dbf59 Mon Sep 17 00:00:00 2001
+> From: Bamvor Jian Zhang <bamv2005@gmail.com>
+> Date: Wed, 24 Apr 2013 15:14:07 +0800
+> Subject: [PATCH 2/2][RFC] modify libxlTimeoutRegisterEventHook as same as
+>  libxlFDRegisterEventHook
+>   
+
+As mentioned, squash this into the first patch.
+
+> ---
+>  src/libxl/libxl_driver.c | 15 +++++++++------
+>  1 file changed, 9 insertions(+), 6 deletions(-)
+>
+> diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+> index 96cd2c0..baeb71d 100644
+> --- a/src/libxl/libxl_driver.c
+> +++ b/src/libxl/libxl_driver.c
+> @@ -296,12 +296,6 @@ libxlTimeoutRegisterEventHook(void *priv,
+>      } else {
+>          timeout = res.tv_sec * 1000 + (res.tv_usec + 999) / 1000;
+>      }
+> -    info->id = virEventAddTimeout(timeout, libxlTimerCallback,
+> -                                  info, libxlEventHookInfoFree);
+> -    if (info->id < 0) {
+> -        VIR_FREE(info);
+> -        return -1;
+> -    }
+>  
+>      info->priv = priv;
+>      /*
+> @@ -317,6 +311,15 @@ libxlTimeoutRegisterEventHook(void *priv,
+>      info->xl_priv = xl_priv;
+>      *hndp = info;
+>  
+> +    info->id = virEventAddTimeout(timeout, libxlTimerCallback,
+> +                                  info, libxlEventHookInfoFree);
+> +    if (info->id < 0) {
+> +        virObjectUnref(info->priv);
+> +        VIR_FREE(info);
+> +        return -1;
+> +    }
+>   
+
+It looks like you moved this a bit too far, since the timer has already
+been added to the list of timerRegistrations.  I think it is safe to add
+the timeout to libvirt event loop right after taking a ref on
+info->priv, e.g.
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 9980b38..97f5035 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -284,6 +284,14 @@ libxlTimeoutRegisterEventHook(void *priv,
+        return -1;
+    }
+
++    info->priv = priv;
++    /*
++     * Also take a reference on the domain object.  Reference is dropped in
++     * libxlEventHookInfoFree, ensuring the domain object outlives the
+timeout
++     * event objects.
++     */
++    virObjectRef(info->priv);
++
+    gettimeofday(&now, NULL);
+    timersub(&abs_t, &now, &res);
+    /* Ensure timeout is not overflowed */
+@@ -297,18 +305,11 @@ libxlTimeoutRegisterEventHook(void *priv,
+    info->id = virEventAddTimeout(timeout, libxlTimerCallback,
+                                  info, libxlEventHookInfoFree);
+    if (info->id < 0) {
++        virObjectUnref(info->priv);
+        VIR_FREE(info);
+        return -1;
+    }
+
+-    info->priv = priv;
+-    /*
+-     * Also take a reference on the domain object.  Reference is dropped in
+-     * libxlEventHookInfoFree, ensuring the domain object outlives the
+timeout
+-     * event objects.
+-     */
+-    virObjectRef(info->priv);
+-
+    virObjectLock(info->priv);
+    LIBXL_EV_REG_APPEND(info->priv->timerRegistrations, info);
+    virObjectUnlock(info->priv);
+
+> +
+> +
+>      return 0;
+>  }
+>  
+> -- 1.8.1.4
+
+2, in timeout register
+i put "info->xl_priv = xl_priv;" after virObjectRef, and put "*hndp = info;" before function return.
+3, make libvirt. need make clean first. because src/rpc/gendispatch.pl and "src/remote/remote_protocol.x" changes.
+if not, will lead to function undefined in src/remote/remote_driver.c
+
