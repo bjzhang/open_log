@@ -2781,6 +2781,215 @@ GTD
 2), 10' send patch for libvirt compile error.
 3), Summary: 今天上午还算有点效率, 下午又是四处乱看. 晚上还是要完成计划的.
 
+19:28 2013-04-25
+software skill, opensuse 12.3, multimedia
+1, ref: http://opensuse-community.org/Restricted_formats/12.3
+for KDE. for GNOME reference the original web
+1), add repo 
+sudo zypper addrepo  http://packman.inode.at/suse/12.3 packman_12_3
+sudo zypper addrepo -r http://www.opensuse-guide.org/repo/12.3/libdvdcss.repo
+2), install
+zypper install libxine2-codecs k3b-codecs ffmpeg lame gstreamer-0_10-plugins-bad gstreamer-0_10-plugins-ugly gstreamer-0_10-plugins-ugly-orig-addon gstreamer-0_10-plugins-ffmpeg libdvdcss2
+
+08:10 2013-04-26
+company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting, prepare notes
+1, Bamvor
+1), console, lock. block status.
+2), libxl block add timeout.
+Jim: remote blocktap module, got the same error.
+try qemu upstream.
+4.3 will use qemu upstream as default.
+2, Chunyan
+3, Jim:
+think about the GSOC2013 libxl guys, what he need to do in Summer.
+4, Lin Ma
+testing qcow2.
+
+12:52 2013-04-26
+GTD
+0, 11:20
+
+1, today
+1), sync
+2), 12:50- personal stuff.
+3), 30' send patch to libvir-list.
+4), talk with Jim. see"13:16 2013-04-26"
+
+13:16 2013-04-26
+virtualization, libvirt, xen, libvirt, conversation with Jim
+1, Previous Conversations Above
+Jim Fehlig: Hi
+Bamvor Jian Zhang: hi
+Jim Fehlig: I sent a patch to xen-devel that add support for qdisk backend type
+Jim Fehlig: I was testing with that patch (with driver name = 'qemu') and didn't hit the block script timeout we have been seeing
+Bamvor Jian Zhang: ok. i will test it.
+Jim Fehlig: I'm going to bed now, have a good day
+Bamvor Jian Zhang: have a good sleep.
+Jim Fehlig: btw, send the libxl bug fix patch upstream today
+Jim Fehlig: I'll commit it tomorrow
+Bamvor Jian Zhang: ok. i will. 
+Bamvor Jian Zhang: ok, see your patch. in xen-devel.
+Bamvor Jian Zhang: libvirt-libxl-qdisk.patch
+Jim Fehlig: right
+Jim Fehlig: bye
+Jim Fehlig logged out at 1:12:21 PM.
+2, (23:44 2013-04-25)
+try to add qemu-system-i386 for hvm and pv, but fail on hvm. after discuss with Jim.
+1), i shoud apply the patch add by David Scott. see"18:39 2013-4-25"3.
+2), apply Jim patch. and configure example. see"18:39 2013-4-25"4.
+
+18:39 2013-4-25
+mailing list, virtualization, xen, [Xen-devel] libvirt, libxl and QDISKs
+1, ian c
+Perhaps having LIBXL_DISK_FORMAT as an enum was a mistake and really it should have been a string with a mapping to backends in a configuration file, so it could be extensible without needing to recompile the library. This could be something to consider for a future libxl.
+
+2, Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>
+It looks like the defaults are the same of libxl.
+However the mapping of RAW to TAP (libxl does the same) has always been a bit dubious to me: now that upstream QEMU is used with HVM guests too by libxl, there is no reason to use blktap over QEMU for raw files any more.
+
+3, David Scott <dave.scott@eu.citrix.com>
+
+This also works for me!
+
+On a related note, what do you think about the attached patch? It allows the user to select a non-default qemu via the <emulator> element. My domain XML looked like this:
+
+  <devices>
+    <emulator>/usr/lib/xen/bin/qemu-system-i386</emulator>
+    <disk device="disk" type="network">
+      <driver name='qemu'/>
+      <source protocol="rbd" name="rbd:rbd/ubuntu1204.img"/>
+      <target dev="hda"/>
+    </disk>
+    <graphics type="vnc" port="-1" autoport="yes" listen="0.0.0.0"/>
+  </devices>
+
+Now that upstream qemu is the default in xen-4.3, it seems useful to be able to select the traditional qemu for older VMs.
+
+Also I backported this to my xen-4.2 system and used this patch + your patch + the previous 'stat()' fix to successfully start a VM on ceph storage via libvirt + libxl (my quest is almost complete!)
+
+Cheers,
+Dave
+
+patch: log/novell/hypervisor_and_tools/libvirt/xen4.2_support/20130427_block_add_timeout_test/libxl-make-emulator.patch
+
+4, Jim Fehlig
+
+    Something like the attached, which seems to work well for me when
+    specifying driverName = qemu, e.g.
+    
+        <disk type='file' device='disk'>
+          <driver name='qemu'/>
+          <source file='/var/lib/xen/images/sles11sp2-pv/disk0.raw'/>
+          <target dev='xvda' bus='xen'/>
+        </disk>
+
+patch: log/novell/hypervisor_and_tools/libvirt/xen4.2_support/20130427_block_add_timeout_test/libvirt-libxl-qdisk.patch
+
+5, Jim Fehlig
+> This also works for me!
+Good to hear.  I'll send the patch to the libvirt list.
+>
+> On a related note, what do you think about the attached patch? It
+> allows the user to select a non-default qemu via the <emulator>
+> element. My domain XML looked like this:
+>
+>   <devices>
+>     <emulator>/usr/lib/xen/bin/qemu-system-i386</emulator>
+IMO, the possible emulators should be exposed in the capabilities.  E.g.
+on a machine with both kvm and qemu, both emulators are shown as
+possibilities for an hvm, x86_64 guest
+# virsh capabilities
+...
+<guest>
+  <os_type>hvm</os_type>
+  <arch name='x86_64'>
+  <wordsize>64</wordsize>
+  <domain type='qemu'>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <machine>pc-1.1</machine>
+    <machine canonical='pc-1.1'>pc</machine>
+    <machine>pc-1.0</machine>
+    <machine>pc-0.15</machine>
+    <machine>pc-0.14</machine>
+    <machine>pc-0.13</machine>
+    <machine>pc-0.12</machine>
+    <machine>pc-0.11</machine>
+    <machine>pc-0.10</machine>
+    <machine>isapc</machine>
+  </domain>
+  <domain type='kvm'>
+    <emulator>/usr/bin/qemu-kvm</emulator>
+    <machine>pc-1.1</machine>
+    <machine canonical='pc-1.1'>pc</machine>
+    <machine>pc-1.0</machine>
+    <machine>pc-0.15</machine>
+    <machine>pc-0.14</machine>
+    <machine>pc-0.13</machine>
+    <machine>pc-0.12</machine>
+    <machine>pc-0.11</machine>
+    <machine>pc-0.10</machine>
+    <machine>isapc</machine>
+  </domain>
+   ....
+</guest>
+...
+>     <disk device="disk" type="network">
+>       <driver name='qemu'/>
+>       <source protocol="rbd" name="rbd:rbd/ubuntu1204.img"/>
+>       <target dev="hda"/>
+>     </disk>
+>     <graphics type="vnc" port="-1" autoport="yes" listen="0.0.0.0"/>
+>   </devices>
+>
+> Now that upstream qemu is the default in xen-4.3, it seems useful to
+> be able to select the traditional qemu for older VMs.
+Agreed.  And reporting that both emulators exist via the capabilities
+would be helpful for users.
+>
+> Also I backported this to my xen-4.2 system and used this patch + your
+> patch + the previous 'stat()' fix to successfully start a VM on ceph
+> storage via libvirt + libxl (my quest is almost complete!)
+Nice!
+> diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+> index f549a5d..abbd3c0 100644
+> --- a/src/libxl/libxl_conf.c
+> +++ b/src/libxl/libxl_conf.c
+> @@ -811,6 +811,30 @@ libxlMakeCapabilities(libxl_ctx *ctx)
+>  }
+>
+>  int
+> +libxlMakeEmulator(virDomainDefPtr def, libxl_domain_config *d_config)
+> +{
+> +    /* No explicit override means use the default */
+> +    if (!def->emulator) {
+> +        return 0;
+> +    }
+> +    if (strstr(def->emulator, "/qemu-system-")) {
+> +        d_config->b_info.device_model_version =
+> +            LIBXL_DEVICE_MODEL_VERSION_QEMU_XEN;
+> +        return 0;
+> +    }
+>
+Here we could check the requested emulator against the capabilities, and
+then do the proper mapping for device_model_version.
+Do you have time for an upstream libvirt patch to expose the possible
+emulators in the capabilities, along with this patch allowing the user
+to specify one?
+
+Regards,
+Jim
+
+14:47 2013-04-27
+GTD
+0, 14:00-15:51 16:31-20:30
+
+1, today
+1), 16:31-20:30 libvirt libxl driver: block add timeout. add David Scott patch and test. ref"14:52 2013-04-27". see"15:31 2013-04-27"
+meal: 40'
+2), Summary: 今天感觉比较累, 明天希望有个端倪: 是哪个patch引起的, 为什么destroy失败. 给Jim发个简单的邮件描述这个问题(因为我要放假三天).
+
+\TODO: install SLES11 SP3 RC1 and test this bug. the xen and libvirt package is not update. i need update libvirt at first.
+
 2, next
 1), console patch: do the make test and send it to Chunyan.
 
@@ -2864,61 +3073,89 @@ libxl_dm.c:
 (2), try opensuse based on ubuntu kernel in order to solve the error from miniand.
 2), try armv8 emulator and read armv8 kernel code.
 
-19:28 2013-04-25
-software skill, opensuse 12.3, multimedia
-1, ref: http://opensuse-community.org/Restricted_formats/12.3
-for KDE. for GNOME reference the original web
-1), add repo 
-sudo zypper addrepo  http://packman.inode.at/suse/12.3 packman_12_3
-sudo zypper addrepo -r http://www.opensuse-guide.org/repo/12.3/libdvdcss.repo
-2), install
-zypper install libxine2-codecs k3b-codecs ffmpeg lame gstreamer-0_10-plugins-bad gstreamer-0_10-plugins-ugly gstreamer-0_10-plugins-ugly-orig-addon gstreamer-0_10-plugins-ffmpeg libdvdcss2
+15:20 2013-04-27
+opensuse 12.3, vmware player
+1, sudo zypper in kernel-devel
+2, missing canberra-gtk-module
+run the command is successful.
+/usr/bin/kdesu '/usr/bin/vmware-modconfig' --icon='vmware-player' --appname='VMware'
 
-08:10 2013-04-26
-company, virtualization, suse, xen, regular meeting: US / China Virtualization Sync, meeting, prepare notes
-1, Bamvor
-1), console, lock. block status.
-2), libxl block add timeout.
-Jim: remote blocktap module, got the same error.
-try qemu upstream.
-4.3 will use qemu upstream as default.
-2, Chunyan
-3, Jim:
-think about the GSOC2013 libxl guys, what he need to do in Summer.
-4, Lin Ma
-testing qcow2.
+15:31 2013-04-27
+virtualization, libvirt, xen, libxl, block add timeout, test mailing list patch
+1, error
+libxl: debug: libxl_device.c:920:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_dm.c:1135:libxl__spawn_local_dm: Spawning device-model /usr/lib/xen/bin/qemu-system-i386 with arguments:
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   /usr/lib/xen/bin/qemu-system-i386
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -xen-domid
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   1
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -chardev
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-1,server,nowait
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -mon
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   chardev=libxl-cmd,mode=control
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -name
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   bjz_04_sles11_sp2
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vnc
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   127.0.0.1:0,to=99
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -vga
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   cirrus
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -boot
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   order=c
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -smp
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   4,maxcpus=1
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -net
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   none
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -M
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   xenfv
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -m
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   504
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   -drive
+libxl: debug: libxl_dm.c:1137:libxl__spawn_local_dm:   file=/var/lib/xen/images_2/bjz_04_sles11_sp2/disk0.raw,if=ide,index=0,media=disk,format=raw,cache=writeback
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f491ad743c8 wpath=/local/domain/0/device-model/1/state token=3/1: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f491ad743c8 wpath=/local/domain/0/device-model/1/state token=3/1: event epath=/local/domain/0/device-model/1/state
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7f491ad743c8 wpath=/local/domain/0/device-model/1/state token=3/1: deregister slotnum=3
+libxl: error: libxl_dm.c:1204:device_model_spawn_outcome: domain 1 device model: spawn failed (rc=-3)
+libxl: error: libxl_create.c:1042:domcreate_devmodel_started: device model did not start: -3
+libxl: error: libxl_dm.c:1235:libxl__destroy_device_model: Device Model already exited
+1), So, the command line for qemu: /usr/lib/xen/bin/qemu-system-i386 -xen-domid 1 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-1,server,nowait -mon chardev=libxl-cmd,mode=control -name bjz_04_sles11_sp2 -vnc 127.0.0.1:0,to=99 -vga cirrus -boot order=c -smp 4,maxcpus=1 -net none -M xenfv -m 504 -drive file=/var/lib/xen/images_2/bjz_04_sles11_sp2/disk0.raw,if=ide,index=0,media=disk,format=raw,cache=writeback
+2), the error message in /var/log/xen/qemu-dm-bjz_04_sles11_sp2.log 
+maxcpus must be equal to or greater than smp
+3), change maxcpus from 1 to 4, run qemu manually
+qemu: hardware error: map shared IO page returned error 3 handle=0x7f8df8bac550
+Aborted
+2, check the code. libxl_dm.c:1137:libxl__spawn_local_dm
+the args print in libxl__spawn_local_dm, is set by libxl__build_device_model_args_new, the i found that:
+        if (b_info->max_vcpus > 1) {
+            flexarray_append(dm_args, "-smp");
+            if (b_info->avail_vcpus.size) {
+                int nr_set_cpus = 0;
+                nr_set_cpus = libxl_bitmap_count_set(&b_info->avail_vcpus);
 
-12:52 2013-04-26
-GTD
-0, 11:20
-
-1, today
-1), sync
-2), 12:50- personal stuff.
-
-13:16 2013-04-26
-Previous Conversations Above
-Jim Fehlig: Hi
-Bamvor Jian Zhang: hi
-Jim Fehlig: I sent a patch to xen-devel that add support for qdisk backend type
-Jim Fehlig: I was testing with that patch (with driver name = 'qemu') and didn't hit the block script timeout we have been seeing
-Bamvor Jian Zhang: ok. i will test it.
-Jim Fehlig: I'm going to bed now, have a good day
-Bamvor Jian Zhang: have a good sleep.
-Jim Fehlig: btw, send the libxl bug fix patch upstream today
-Jim Fehlig: I'll commit it tomorrow
-Bamvor Jian Zhang: ok. i will. 
-Bamvor Jian Zhang: ok, see your patch. in xen-devel.
-Bamvor Jian Zhang: libvirt-libxl-qdisk.patch
-Jim Fehlig: right
-Jim Fehlig: bye
-Jim Fehlig logged out at 1:12:21 PM.
-
-18:39 2013-4-25
-2, ian c
-Perhaps having LIBXL_DISK_FORMAT as an enum was a mistake and really it should have been a string with a mapping to backends in a configuration file, so it could be extensible without needing to recompile the library. This could be something to consider for a future libxl.
-3, Stefano Stabellini <Stefano.Stabellini@eu.citrix.com>
-It looks like the defaults are the same of libxl.
-
-However the mapping of RAW to TAP (libxl does the same) has always been a bit dubious to me: now that upstream QEMU is used with HVM guests too by libxl, there is no reason to use blktap over QEMU for raw files any more.
+                flexarray_append(dm_args, libxl__sprintf(gc, "%d,maxcpus=%d",
+                                                         b_info->max_vcpus,
+                                                         nr_set_cpus));
+            } else
+                flexarray_append(dm_args, libxl__sprintf(gc, "%d",
+                                                         b_info->max_vcpus));
+        }
+\TODO: check nr_set_cpus.
+1), only hvm hit this. in pv no this argument:
+/usr/lib/xen/bin/qemu-system-i386 -xen-domid 6 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-6,server,nowait -mon chardev=libxl-cmd,mode=control -xen-attach -name sles11_sp2_pv -vnc 127.0.0.1:5 -M xenpv -m 513 
+2), if i changes the vcpu to 1, create successful, but destroy fails.
+3), test pv guest first.
+hang at create. define->start->destroy->create...
+(1), (1), (1), (1), (1), (1), (1), (1), (1), it hang at ao_in_progress, does it broken after destroy?
+Thread 9 (Thread 0x7fe91e181700 (LWP 4470)):
+#0  0x00007fe92279f4f6 in *__GI___poll (fds=0x7fe928406d90, nfds=7, timeout=-1) at ../sysdeps/unix/sysv/linux/poll.c:87
+#1  0x00007fe9270b6c77 in eventloop_iteration (egc=0x7fe91e1803e0, poller=0x7fe928406560) at libxl_event.c:1425
+#2  0x00007fe9270b71ea in libxl__ao_inprogress (ao=0x7fe928402370, file=<optimized out>, line=<optimized out>, func=<optimized out>) at libxl_event.c:1685
+#3  0x00007fe92709d307 in do_domain_create (ctx=<optimized out>, d_config=<optimized out>, domid=0x7fe91e1805ec, restore_fd=1, ao_how=<optimized out>, aop_console_how=0x0)
+    at libxl_create.c:1211
+(2), in "xl list" domain 1 is not full destoryed.
+xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0  3186     4     r-----      33.4
+(null)                                       1     2     1     --p--d       0.3
+sles11_sp2_pv                                2     0     0     --p---       0.0
+(3), 排查是哪个修改导致了这个问题.
+这次又和libxl__ao_inprogress有关系, 上次就没看明白...
 
