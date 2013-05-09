@@ -146,12 +146,75 @@ fatload mmc 0:2 48000000 linux/uImage_noinitrd
 setenv bootargs "console=ttyS0,115200 root=/dev/mmcblk0p3 init=/init loglevel=8"
 bootm 48000000
 
+fatload mmc 0:2 43000000 script.bin
+fatload mmc 0:2 40007800 linux/uImage
+setenv bootargs "console=ttyS0,115200 root=rootfs init=/init loglevel=8"
+bootm 40007800
+
 2, try 独立的initramfs
 fatload mmc 0:2 43000000 script.bin
 fatload mmc 0:2 40007800 linux/uImage_noinitrd
 fatload mmc 0:2 41000000 linux/rootfs.cpio.gz
 setenv bootargs "console=ttyS0,115200 init=/init loglevel=8 initrd=0x41000000,3541253 root=/dev/ram0"
 bootm 40007800
+
+3, try multi image
+mkimage -A arm -O linux -T multi -C none -a 0x40008000 -e 0x40008000 -n 'Linux' -d Image uImage
+
+4, (17:44 2013-05-09)
+simple rootfs seems successful
+[    2.875152] sun6i-rtc sun6i-rtc: sun6i_rtc_gettime
+[    2.879952] sun6i-rtc sun6i-rtc: read time 1970-1-1 1:37:27
+[    2.885566] sun6i-rtc sun6i-rtc: setting system clock to 1970-01-01 01:37:27 UTC (5847)
+[    2.893727] Warning: unable to open an initial console.
+[    2.899766] Freeing init memory: 492K
+[    2.903455] Write protecting the kernel text section c0008000 - c05de000
+[    2.910288] rodata_test: attempting to write to read-only section:
+[    2.916486] write to read-only section trapped, success
+[    3.301994] ====codec_resume_events===
+[    3.606928] [mmc]: mmc 0 detect change, present 1
+[    4.102006] [mmc]: sdc0 set ios: clk 0Hz bm PP pm UP vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.122005] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.209329] [mmc]: *** sw_mci_dump_errinfo(L559): smc 0 err, cmd 52,  RTO !!
+[    4.217274] [mmc]: *** sw_mci_dump_errinfo(L559): smc 0 err, cmd 52,  RTO !!
+[    4.224356] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.236043] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.247427] [mmc]: *** sw_mci_dump_errinfo(L559): smc 0 err, cmd 5,  RTO !!
+[    4.255277] [mmc]: *** sw_mci_dump_errinfo(L559): smc 0 err, cmd 5,  RTO !!
+[    4.263130] [mmc]: *** sw_mci_dump_errinfo(L559): smc 0 err, cmd 5,  RTO !!
+[    4.270975] [mmc]: *** sw_mci_dump_errinfo(L559): smc 0 err, cmd 5,  RTO !!
+[    4.278651] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.287834] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.299403] [mmc]: sdc0 set ios: clk 400000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.353958] [mmc]: sdc0 set ios: clk 25000000Hz bm PP pm ON vdd 3.3V width 1 timing LEGACY(SDR12) dt B
+[    4.418407] [mmc]: sdc0 set ios: clk 25000000Hz bm PP pm ON vdd 3.3V width 4 timing LEGACY(SDR12) dt B
+[    4.427773] mmc0: new SD card at address 8a08
+[    4.432958] mmcblk0: mmc0:8a08 SD02G 1.84 GiB 
+[    4.439327]  mmcblk0: p2 p3
+
+5, disable verify while booting in order to avoid CRC error.
+setenv verify n
+
+6, try to compile busybox by myself.
+1), u-boot
+fatload mmc 0:2 43000000 script.bin
+fatload mmc 0:2 48000000 linux/uImage
+setenv bootargs "console=ttyS0,115200 root=rootfs init=/bin/sh loglevel=8"
+setenv bootargs "console=ttyS0,115200 init=/bin/sh loglevel=8"
+bootm 48000000
+
+1), it should be work, because it prompt about initial console:
+[    3.758628] Warning: unable to open an initial console.
+[    3.768112] Root-NFS: no NFS server address
+[    3.775424] VFS: Unable to mount root fs via NFS, trying floppy.
+[    3.790277] VFS: Cannot open root device "rootfs" or unknown-block(2,0)
+Please append a correct "root=" boot option; here are the available partitions:
+[    3.803567] Please append a correct "root=" boot option; here are the available partitions:
+[    3.819127] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(2,0)
+
+
+
+5, how to align the image before mkimage?
 
 17:06 2013-05-07
 1, Jim_email_20130503
@@ -185,4 +248,107 @@ repo: http://download.suse.de/ibs/Devel:/Virt:/SLE-11-SP3/SLE_11_SP3/
 3, \TODO
 add SDK DVD to vm.
 3, check whether all the patch is pushed into libvirt 1.0.5
+
+10:52 2013-05-09
+0, try qdisk on sles11 sp3 rc1 in xl. xen 4.2.2, libvirt 1.0.5
+xl create successful.
+disk=[ 'format=raw, vdev=xvda, access=rw, backendtype=qdisk, target=/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw', ]
+1, backend: qdisk
+# xenstore-ls /local/domain/0/backend/qdisk
+1 = ""
+ 51712 = ""
+  frontend = "/local/domain/1/device/vbd/51712"
+  params = "aio:/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw"
+  frontend-id = "1"
+  online = "1"
+  removable = "0"
+  bootable = "1"
+  state = "4"
+  dev = "xvda"
+  type = "qdisk"
+  mode = "w"
+  device-type = "disk"
+  feature-barrier = "1"
+  info = "0"
+  hotplug-status = "connected"
+  sector-size = "512"
+  sectors = "4194304"
+
+2, frontend
+# xenstore-ls /local/domain/1/device/vbd/51712
+backend = "/local/domain/0/backend/qdisk/1/51712"
+backend-id = "0"
+state = "4"
+virtual-device = "51712"
+device-type = "disk"
+ring-ref = "8"
+event-channel = "12"
+protocol = "x86_64-abi"
+
+3, try again on xen 4.3 on sles11 sp2.
+xl create successful but xl vnc hang.
+1), backend
+# xenstore-ls /local/domain/0/backend/qdisk
+1 = ""
+ 51712 = ""
+  frontend = "/local/domain/1/device/vbd/51712"
+  params = "aio:/var/lib/xen/images_2/sles11_sp2_pv/disk0.raw"
+  frontend-id = "1"
+  online = "1"
+  removable = "0"
+  bootable = "1"
+  state = "4"
+  dev = "xvda"
+  type = "qdisk"
+  mode = "w"
+  device-type = "disk"
+  feature-flush-cache = "1"
+  feature-persistent = "1"
+  info = "0"
+  sector-size = "512"
+  sectors = "4194304"
+  hotplug-status = "connected"
+2), frontend
+# xenstore-ls /local/domain/1/device/vbd/51712
+backend = "/local/domain/0/backend/qdisk/1/51712"
+backend-id = "0"
+state = "4"
+virtual-device = "51712"
+device-type = "disk"
+ring-ref = "8"
+event-channel = "12"
+protocol = "x86_64-abi"
+
+4, try xen 4.2.2 on sp2.
+successful.
+
+5, discuss with Jim:
+  Previous Conversations Above
+Jim Fehlig: I was probably using whatever was in SP3 beta4
+Jim Fehlig: xen4.2.1 IIRC
+Jim Fehlig: maybe 4.2.2
+Jim Fehlig: but SP3 beta4 for sure
+Bamvor Jian Zhang: in xen4.3, xl create succesful, but i could not connect to vm through vnc. 
+Bamvor Jian Zhang: the backend is qdisk in xenstore-ls. i guess something go wrong in create. 
+Jim Fehlig: you should try to track that down since xen4.3 is near release
+Jim Fehlig: would be nice to know what the problem is before 4.3 final
+Jim Fehlig: I haven't tried 4.3 yet
+Jim Fehlig: maybe get around to it tomorrow or Friday
+Jim Fehlig: let me know if you find anything
+Bamvor Jian Zhang: ok. 
+Jim Fehlig: I'm done for the day 
+Jim Fehlig: talk to you later, have a good day
+Bamvor Jian Zhang: sorry, just one question
+Bamvor Jian Zhang: where could find the debug log for xl. xl -v ?
+Bamvor Jian Zhang: i want to compare the log while vm create. i could get in libxl.log if i use libvirt. but i do not know in xl.
+Jim Fehlig: hmm, I'm not sure
+Jim Fehlig: don't see anything in xl or xl.cfg man pages
+Jim Fehlig: or http://wiki.xen.org/wiki/XL
+Jim Fehlig: the libvirt libxl driver fopens the logfile and calls xtl_createlogger_stdiostream() to wire up the logging
+Jim Fehlig: you could see if xl does something similar via some undocumented option or env var
+Jim Fehlig logged out at 12:05:07 PM.
+
+3, try libvirt.
+1), check the patch.
+
 
