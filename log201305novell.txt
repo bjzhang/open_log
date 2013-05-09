@@ -351,4 +351,54 @@ Jim Fehlig logged out at 12:05:07 PM.
 3, try libvirt.
 1), check the patch.
 
+22:01 2013-05-09
+1, error
+[  213s] gcc-4.6 -P -E -Ui386 -DEFI -D__ASSEMBLY__ -include /usr/src/packages/BUILD/xen-4.3/xen/include/xen/config.h -O2 -fomit-frame-pointer -m64 -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -DNDEBUG -fno-builtin -fno-common -Wredundant-decls -iwithprefix include -Werror -Wno-pointer-arith -pipe -I/usr/src/packages/BUILD/xen-4.3/xen/include -I/usr/src/packages/BUILD/xen-4.3/xen/include/asm-x86/mach-generic -I/usr/src/packages/BUILD/xen-4.3/xen/include/asm-x86/mach-default -msoft-float -fno-stack-protector -fno-exceptions -Wnested-externs -mno-red-zone -mno-sse -fpic -fno-asynchronous-unwind-tables -DGCC_HAS_VISIBILITY_ATTRIBUTE -nostdinc -g -D__XEN__ -include /usr/src/packages/BUILD/xen-4.3/xen/include/xen/config.h -DHAS_ACPI -DHAS_GDBSX -DHAS_PASSTHROUGH -DMAX_PHYS_CPUS=256 -MMD -MF .efi.lds.d -o efi.lds xen.lds.S
+[  213s] boot.c: In function 'efi_init_memory':
+[  213s] boot.c:1574:13: error: implicit declaration of function 'map_pages_to_xen' [-Werror=implicit-function-declaration]
+[  213s] boot.c:1574:13: error: nested extern declaration of 'map_pages_to_xen' [-Werror=nested-externs]
+
+1), the first try, not work:
+> cat fix_efi_boot.patch
+Index: xen-4.3/xen/arch/x86/efi/boot.c
+===================================================================
+--- xen-4.3.orig/xen/arch/x86/efi/boot.c
++++ xen-4.3/xen/arch/x86/efi/boot.c
+@@ -25,6 +25,7 @@
+ #include <asm/mm.h>
+ #include <asm/msr.h>
+ #include <asm/processor.h>
++#include <asm/page.h>
+
+ #define SHIM_LOCK_PROTOCOL_GUID \
+       { 0x605dab50, 0xe046, 0x4300, {0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23} }
+
+2), pass, this time. but fail on stubdom
+> cat fix_efi_boot.patch
+Index: xen-4.3/xen/arch/x86/efi/boot.c
+===================================================================
+--- xen-4.3.orig/xen/arch/x86/efi/boot.c
++++ xen-4.3/xen/arch/x86/efi/boot.c
+@@ -25,6 +25,7 @@
+ #include <asm/mm.h>
+ #include <asm/msr.h>
+ #include <asm/processor.h>
++#include <xen/mm.h>
+
+ #define SHIM_LOCK_PROTOCOL_GUID \
+       { 0x605dab50, 0xe046, 0x4300, {0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23} }
+
+3), error message:
+[  242s] [ -d mini-os-x86_64-grub ] || \
+[  242s]        for i in $(cd /usr/src/packages/BUILD/xen-4.3/stubdom/../extras/mini-os ; find . -type d) ; do \
+[  242s]                 mkdir -p mini-os-x86_64-grub/$i ; \
+[  242s]        done
+[  242s] /usr/bin/wget -c http://xenbits.xen.org/xen-extfiles/polarssl-1.1.4-gpl.tgz
+[  242s] --2013-05-09 14:42:18--  http://xenbits.xen.org/xen-extfiles/polarssl-1.1.4-gpl.tgz
+[  242s] Resolving xenbits.xen.org... failed: Name or service not known.
+[  242s] wget: unable to resolve host address `xenbits.xen.org'
+[  242s] make[1]: *** [polarssl-1.1.4-gpl.tgz] Error 1
+
+4), only make tools.
+
 
