@@ -493,15 +493,17 @@ fail
 
 7, but the basic uart write test pass. with "mw 0x01c28000 0x61".
 
-8, start modify head.S
+8, start modify from head.S
 1), EARLY_UART_BASE_ADDRESS is defined in debug-xxx.inc. the latter one is selected in xen/arch/arm/Rules.mk
 ref: docs/misc/arm/early-printk.txt
-
-1), notes:
-init_uart
-cortex_a15_init
-2), PT_ means page table. PT_UPPER, PT_LOWER get the different page table attribute bits.
-3), memory layout in include/asm-arm/config.h
+add debug-sun6i.inc
+notes: for simple, i just skip the early_uart_init which is called by init_uart.
+because the uart should be initiated successful by the u-boot.
+2), proc-ca15.S, asm/processor-ca15.h. cortex_a15_init.
+So, cortex-A7 should have the same code as cortex-A15, So, just skip it.
+maybe i need add cortex-a7 id. 
+3), PT_ means page table. PT_UPPER, PT_LOWER get the different page table attribute bits.
+4), memory layout in include/asm-arm/config.h
 /*
  * Memory layout:
  *  0  -   2M   Unmapped
@@ -520,4 +522,53 @@ cortex_a15_init
  *   - in head.S for the DTB for device_tree_early_init().
  *   - in setup_pagetables() when relocating Xen.
  */
+
+9, try build, if i saw the uart print, continue coding
+ref: http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions
+make dist-xen XEN_TARGET_ARCH=arm32 CROSS_COMPILE=arm-none-linux-gnueabi- CONFIG_EARLY_PRINTK=sun6i
+1), fail
+prelink.o:(.ARM.exidx+0x0): undefined reference to `__aeabi_unwind_cpp_pr1'
+prelink.o:(.ARM.exidx+0x20): undefined reference to `__aeabi_unwind_cpp_pr0'
+http://blog.csdn.net/feihongwang/article/details/7474813
+http://blog.csdn.net/ce123/article/details/6621579
+from gcc manpage: 
+-nostdlib
+    Do not use the standard system startup files or libraries when
+    linking.  No startup files and only the libraries you specify will
+    be passed to the linker, options specifying linkage of the system
+    libraries, such as "-static-libgcc" or "-shared-libgcc", will be
+    ignored.  The compiler may generate calls to "memcmp", "memset",
+    "memcpy" and "memmove".  These entries are usually resolved by
+    entries in libc.  These entry points should be supplied through
+    some other mechanism when this option is specified.
+
+    One of the standard libraries bypassed by -nostdlib and
+    -nodefaultlibs is libgcc.a, a library of internal subroutines that
+    GCC uses to overcome shortcomings of particular machines, or
+    special needs for some languages.
+
+    In most cases, you need libgcc.a even when you want to avoid other
+    standard libraries.  In other words, when you specify -nostdlib or
+    -nodefaultlibs you should usually specify -lgcc as well.  This
+    ensures that you have no unresolved references to internal GCC
+    library subroutines.  (For example, __main, used to ensure C++
+    constructors will be called.)
+
+add it in Config.mk:
+Config.mk:EMBEDDED_EXTRA_CFLAGS += -nostdlib
+\TODO: why no one found this? does the compile version too low?
+
+2), generate the uImage
+mkimage -A arm -T kernel -a 0x40200000 -e 0x40200000 -C none -d "xen/xen.bin" xen-uImage 
+
+boot:
+fatload mmc 0:2 40008000 linux/xen-uImage
+bootm 40008000
+
+
+3), hang. i found that i forget to modify the Rules.mk in xen/arch/arm
+
+4), hang. from dissemble, i found that the link address is 0x80200000, So, we need change the link addr.
+
+5), it looks like i need slow down. i plan to read the dissemble from u-boot.bin line by line and create a dedicated small environment.
 
