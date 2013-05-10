@@ -200,7 +200,6 @@ setenv verify n
 fatload mmc 0:2 43000000 script.bin
 fatload mmc 0:2 48000000 linux/uImage
 setenv bootargs "console=ttyS0,115200 root=rootfs init=/bin/sh loglevel=8"
-setenv bootargs "console=ttyS0,115200 init=/bin/sh loglevel=8"
 bootm 48000000
 
 1), it should be work, because it prompt about initial console:
@@ -350,5 +349,110 @@ Jim Fehlig logged out at 12:05:07 PM.
 
 3, try libvirt.
 1), check the patch.
+
+15:36 2013-05-10
+1, 才看到Ian Campbell在5月1日给我回了信.
+reply to him: 
+>On Tue, 2013-04-30 at 00:07 +0800, Bamvor Zhang wrote:
+>>* hi, *
+>>* *
+>>* i have got the mele quad core STB. it is indeed has the same uart*
+>>* connector as mele A1000. and the MP tools is out, it could support *
+>>* make a bootable sd card. So, i am trying to put opensuse 12.3 on it.*
+>>* the photos and bootlog, ref: *
+>>* http://xen_on_arm.farbox.com/post/mele_m9_quadcore *
+>Cool! Thanks for posting there. Are you still planning to try and get
+>Xen running on this system?
+yes. it is what i want.
+>With my Xen.org hat on I'm quite interested in this platform (and in the
+>A20/A31 generally),
+So, do i. Currently, A20/A31 is only open source SOC in Cortex-A7 world.
+i guess it is the cheapest device for arm virtualization.
+>so I'll be keeping an eye on your progress. Good
+>Luck & See you on xen-devel@ ;-)!
+Thanks, i will.
+right now, i only post some xen tools patches to xen-devel with the email:
+bjzhang at suse.com. i hope i could participate the xen arm hypervisor
+development too.
+>Ian.
+
+Bamvor
+
+16:05 2013-05-10
+try uart code on A31
+1, which is the default mode for Cortex-A7? hyp?
+how to setup the mininal environment for Cortex-A7.
+do i need set the vector for Cortex-A7 in the front of the start? I guess So.
+2, how to compile the asm code?
+arm-none-eabi-gcc head.S -o head -T uart_test.lds
+
+3, 
+sunxi#fatload mmc 0:2 0x4000a000 linux/head.image
+sunxi#bootm 0x4000a000
+## Booting kernel from Legacy Image at 4000a000 ...
+   Image Name:   uart_test
+   Image Type:   ARM U-Boot Standalone Program (uncompressed)
+   Data Size:    36277 Bytes = 35.4 KiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+   Loading Standalone Program ... OK
+OK
+[      57.183] ERROR : swi entry mismatch[      57.183] The input swi number is 16777215, 0x00ffffff
+
+4, 搞了半天居然是把elf文件打包了.
+sunxi#fatload mmc 0:2 0x4000a000 linux/head
+reading linux/head
+
+37094 bytes read
+sunxi#md 4000a000
+4000a000: 464c457f 00010101 00000000 00000000    .ELF............
+4000a010: 00280002 00000001 00000180 00000034    ..(.........4...
+4000a020: 000084e0 05000002 00200034 00280001    ........4. ...(.
+4000a030: 000b000e 00000001 00008000 00000000    ................
+4000a040: 00000000 00000444 00000460 00000007    ....D...`.......
+
+\TODO: check the elf header.
+
+5, generate the bin file
+        arm-none-eabi-gcc head.S -o head -T uart_test.lds
+        arm-none-eabi-objcopy --gap-fill=0xff -O binary head head.bin
+        mkimage -A arm -O u-boot -T standalone -C none -a 0x40008000 -e 0x40008000 -n 'uart_test' -d head.bin head.Image
+
+6,
+#fatload mmc 0:2 0x4000a000 linux/head.bin
+#go 0x4000a000
+
+fail
+
+7, but the basic uart write test pass. with "mw 0x01c28000 0x61".
+
+8, start modify head.S
+1), EARLY_UART_BASE_ADDRESS is defined in debug-xxx.inc. the latter one is selected in xen/arch/arm/Rules.mk
+ref: docs/misc/arm/early-printk.txt
+
+1), notes:
+init_uart
+cortex_a15_init
+2), PT_ means page table. PT_UPPER, PT_LOWER get the different page table attribute bits.
+3), memory layout in include/asm-arm/config.h
+/*
+ * Memory layout:
+ *  0  -   2M   Unmapped
+ *  2M -   4M   Xen text, data, bss
+ *  4M -   6M   Fixmap: special-purpose 4K mapping slots
+ *  6M  -  8M   Early boot misc (see below)
+ *
+ * 32M - 128M   Frametable: 24 bytes per page for 16GB of RAM
+ * 256M -  1G   VMAP: ioremap and early_ioremap use this virtual address
+ *                    space
+ *
+ *  1G -   2G   Xenheap: always-mapped memory
+ *  2G -   4G   Domheap: on-demand-mapped
+ *
+ * The early boot misc area is used:
+ *   - in head.S for the DTB for device_tree_early_init().
+ *   - in setup_pagetables() when relocating Xen.
+ */
 
 
