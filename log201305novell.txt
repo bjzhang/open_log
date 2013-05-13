@@ -574,6 +574,10 @@ bootm 40008000
 
 10, (08:18 2013-05-12)
 try arm-linux-gnueabihf- from linaro. it is ok. oh, i god, i waste a lots of time about compiler.
+build command: 
+make dist-xen XEN_TARGET_ARCH=arm32 CROSS_COMPILE=arm-linux-gnueabihf- CONFIG_EARLY_PRINTK=sun6i
+link: http://releases.linaro.org/13.04/components/toolchain/binaries/gcc-linaro-arm-linux-gnueabihf-4.8-2013.04-20130417_linux.tar.bz2
+and after update the compiler to 4.8 gnueabihf, there is no need to add -nostdlib while linking.
 notes: there are two types of boot log: cpu 0 and other cpu.
 
 sunxi#fatload mmc 0:2 40008000 linux/xen-uImage
@@ -594,6 +598,14 @@ OK
 
 Starting kernel ...
 
+cpu 0:
+- UART enabled -
+- CPU 00000000 booting -
+- Machine ID 00000f34- Setting up control registers -
+- Turning on paging -
+- Ready 
+
+other cpu: 
 - CPU 00000007 booting -
 - UART enabled -
 - Setting up control registers -
@@ -606,6 +618,37 @@ Starting kernel ...
 update it.
 1), add sun6i.h in xen/include/asm-arm/platforms
 2), Interrupt Controller Type Reg is implementation defined. according to ARM_ARM.
+but the implemnt in cortex-a7 and cortex-a15 is the same. it might be different in qualcomm processor.
 
-2, cortex a15 init.
+2, cortex_a15_init.
+currently, cortex_a15_init only enable SMP bit in ACTLR(Auxiliary Control Register).
+it is as the same as cortex-a7.
+
+3, current log
+- UART enabled -
+- CPU 00000000 booting -
+- Machine ID 00000f34 -
+- Started in Secure state -
+- Entering Hyp mode -
+- CPSR 400001da -
+- Zero BSS -
+- Setting up control registers -
+- WARNING: using cortex_a15_init for Cortex-A7 -
+- Turning on paging -
+- Ready -
+
+the mode is hyp mode. it seems that enter C code. 
+but i need check the mapping.
+
+4, Cortex-A7 and cortex-A15 do not implment the specific for HTCR. So, it is common code for them.
+
+5, after some analysis, i know that the console addr will not be wrong. because the page table base address is get from array in mm.c, and the uart physical address is get from r11. r11 is set at the beginning of the head.S.
+
+6, ensure that i enter start_xen. if so, maybe i need add device tree for sun6i.
+it seems that dead in smp_clear_cpu_maps, but only c code in it. it should not happen. 
+unless data abort???
+
+
+
+
 
