@@ -870,6 +870,55 @@ make dtbs
 /home/bamvor/sda5_rd/home/bamvor/work_bak/arm/samsung_exynos/linux/scripts/dtc/dtc -O dtb -o arch/arm/boot/dts/exynos5440-ssdk5440.dtb -b 0  -d arch/arm/boot/dts/.exynos5440-ssdk5440.dtb.d arch/arm/boot/dts/exynos5440-ssdk5440.dts
 3, compile for sun6i
 /home/bamvor/sda5_rd/home/bamvor/work_bak/arm/samsung_exynos/linux/scripts/dtc/dtc -O dtb -o arch/arm/boot/dts/sun6i.dtb -b 0  -d arch/arm/boot/dts/.sun6i.dtb.d arch/arm/boot/dts/sun6i.dts
+4, 
+Starting kernel ...
+
+- UART enabled -
+- CPU 00000000 booting -
+- Machine ID 00000f34 -
+- Started in Secure state -
+- Entering Hyp mode -
+- Zero BSS -
+- Setting up control registers -
+- WARNING: using cortex_a15_init for Cortex-A7 -
+- Turning on paging -
+- Ready -
+start_xen:419
+start_xen:422
+start_xen:425
+fdt<00600100>
+fdt[0]<5>
+ret<-9>
+No valid device tree
+5, (17:34 2013-05-20)
+the fdt is came from power PC. So, it is the BE.
+#define FDT_MAGIC	0xd00dfeed	/* 4: version, 4: total size */
+it will be "edfe0dd0" in image.
+
+6, add debug print and compile:
+log.sh make dist-xen XEN_TARGET_ARCH=arm32 CROSS_COMPILE=arm-linux-gnueabihf- CONFIG_EARLY_PRINTK=sun6i CONFIG_DTB_FILE=/home/bamvor/work_bak/arm/samsung_exynos/linux/arch/arm/boot/dts/sun6i.dts CONFIG_LOAD_ADDRESS=0x40000000
+mkimage -A arm -T kernel -a 0x40200000 -e 0x40200000 -C none -d "xen/xen.bin" xen-uImage
+1), !!!  wrong config, should be dtb not dts!!!
+
+7, dead in scan dtb
+start_xen:419
+start_xen:422
+start_xen:425
+BOOT_MISC_VIRT_START<600000>, fdt_paddr<402d7700>, device_tree_flattened<6d7700>
+fdt<006d7700>
+fdt[0]<edfe0dd0>
+device_tree_early_init:540
+device_tree_for_each_node:250. node<0>, depth<0>.
+device_tree_for_each_node:250. node<90>, depth<1>.
+device_tree_for_each_node:250. node<14c>, depth<2>.
+device_tree_for_each_node:250. node<158>, depth<3>.
+device_tree_for_each_node:250. node<1bc>, depth<1>.
+device_tree_for_each_node:250. node<21c>, depth<1>.
+device_tree_for_each_node:250. node<24c>, depth<1>.
+device_tree_for_each_node:250. node<278>, depth<2>.
+
+8, next: check dts with arndale board.
+
 
 15:35 2013-05-17
 software skill, resize filesystem, ext4, lvs, lv, vg, resize ext4 filesystem on lvs
@@ -923,4 +972,36 @@ Source7:        polarssl-1.1.4-gpl.tgz
 %setup -q -n %xen_build_dir -a 1 -a 2 -a 3 -a 4 -a 5 -a 20000
 tar xfj %{SOURCE6} -C $RPM_BUILD_DIR/%{xen_build_dir}/tools
 mv %{SOURCE7} $RPM_BUILD_DIR/%{xen_build_dir}/xen/stubdom
+
+15:39 2013-05-20
+1, 
+[  457s] error: Installed (but unpackaged) file(s) found:
+[  457s]    /usr/etc/qemu/target-x86_64.conf
+[  457s]    /usr/libexec/qemu-bridge-helper
+2, error again
+[  449s] ... checking filelist
+[  450s] xen-tools: "/usr/etc/qemu/target-x86_64.conf" is not allowed anymore in FHS 2.2.
+[  450s] xen-tools: "/usr/libexec" is not allowed anymore in FHS 2.2.
+[  450s] xen-tools: "/usr/libexec/qemu-bridge-helper" is not allowed anymore in FHS 2.2.
+1), meaning
+http://forums.opensuse.org/english/other-forums/development/open-build-service-obs/411537-error-prg-not-allowed-anymore-fhs-2-2-a.html
+Hi
+You need to have a read here;
+<http://www.pathname.com/fhs/2.2/>
+
+Basically it means /usr/local/bin is not allowed anymore. I think you
+need to use /opt instead.
+2), how to solve it.
+http://lists.opensuse.org/opensuse-buildservice/2008-12/msg00022.html
+On Tue, Dec 02, 2008 at 04:37:29PM +0100, Carsten Hoeger wrote:
+>Hi,
+>in order to install our stuff to /opt/open-xchange, I needed to add
+>BuildRequires: -post-build-checks
+>to my specfile (I found that solution into the obs ml archive).
+>That, however, makes it impossible for me to build locally using rpmbuild:
+Use
+#!BuildIgnore: post-build-checks
+instead.
+Cheers,
+Michael.
 
