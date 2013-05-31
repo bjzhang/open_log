@@ -1,0 +1,134 @@
+diff --git a/xen/arch/arm/Makefile b/xen/arch/arm/Makefile
+index 87fabe1..333441c 100644
+--- a/xen/arch/arm/Makefile
++++ b/xen/arch/arm/Makefile
+@@ -43,7 +43,7 @@ ALL_OBJS := $(TARGET_SUBARCH)/head.o $(ALL_OBJS)
+ $(TARGET): $(TARGET)-syms $(TARGET).bin
+ 	# XXX: VE model loads by VMA so instead of
+ 	# making a proper ELF we link with LMA == VMA and adjust crudely
+-	$(OBJCOPY) --change-addresses +0x80000000 $< $@
++	$(OBJCOPY) --change-addresses +0x40000000 $< $@
+ 	$(STRIP) $@
+ 
+ #
+diff --git a/xen/arch/arm/Rules.mk b/xen/arch/arm/Rules.mk
+index 422ed04..59d29c4 100644
+--- a/xen/arch/arm/Rules.mk
++++ b/xen/arch/arm/Rules.mk
+@@ -64,6 +64,11 @@ EARLY_PRINTK_INC := pl011
+ EARLY_PRINTK_BAUD := 115200
+ EARLY_UART_BASE_ADDRESS := 0xfff36000
+ endif
++ifeq ($(CONFIG_EARLY_PRINTK), sun6i)
++EARLY_PRINTK_INC := sun6i
++EARLY_PRINTK_BAUD := 115200
++EARLY_UART_BASE_ADDRESS := 0x01c28000
++endif
+ 
+ ifneq ($(EARLY_PRINTK_INC),)
+ EARLY_PRINTK := y
+diff --git a/xen/arch/arm/arm32/Makefile b/xen/arch/arm/arm32/Makefile
+index aaf277a..09b5256 100644
+--- a/xen/arch/arm/arm32/Makefile
++++ b/xen/arch/arm/arm32/Makefile
+@@ -3,6 +3,7 @@ subdir-y += lib
+ obj-y += entry.o
+ obj-y += mode_switch.o
+ obj-y += proc-ca15.o
++obj-y += proc-ca7.o
+ 
+ obj-y += traps.o
+ obj-y += domain.o
+diff --git a/xen/arch/arm/arm32/head.S b/xen/arch/arm/arm32/head.S
+index 0588d54..38dd49d 100644
+--- a/xen/arch/arm/arm32/head.S
++++ b/xen/arch/arm/arm32/head.S
+@@ -20,6 +20,7 @@
+ #include <asm/config.h>
+ #include <asm/page.h>
+ #include <asm/processor-ca15.h>
++#include <asm/processor-ca7.h>
+ #include <asm/asm_defns.h>
+ 
+ #define ZIMAGE_MAGIC_NUMBER 0x016f2818
+@@ -195,8 +196,16 @@ skip_bss:
+         /* Is this a Cortex A15? */
+         ldr   r1, =(CORTEX_A15_ID)
+         teq   r0, r1
++        bne   test_ca7
+         bleq  cortex_a15_init
++        b     cpu_init_done
++        /* Is this a Cortex A7? */
++test_ca7:
++        ldr   r1, =(CORTEX_A7_ID)
++        teq   r0, r1
++        bleq  cortex_a7_init
+ 
++cpu_init_done:
+         /* Set up memory attribute type tables */
+         ldr   r0, =MAIR0VAL
+         ldr   r1, =MAIR1VAL
+diff --git a/xen/arch/arm/arm32/mode_switch.S b/xen/arch/arm/arm32/mode_switch.S
+index c92a1cf..0fc26e0 100644
+--- a/xen/arch/arm/arm32/mode_switch.S
++++ b/xen/arch/arm/arm32/mode_switch.S
+@@ -21,6 +21,7 @@
+ #include <asm/page.h>
+ #include <asm/platforms/vexpress.h>
+ #include <asm/platforms/exynos5.h>
++#include <asm/platforms/sun6i.h>
+ #include <asm/asm_defns.h>
+ #include <asm/gic.h>
+ 
+@@ -90,15 +91,23 @@ enter_hyp_mode:
+         bic   r0, r0, #0xe           /* Clear EA, FIQ and IRQ */
+         mcr   CP32(r0, SCR)
+ 
+-        ldr   r2, =MACH_TYPE_SMDK5250   /* r4 := Arndale machine ID */
+         /* By default load Arndale defaults values */
++        ldr   r2, =MACH_TYPE_SMDK5250   /* r4 := Arndale machine ID */
+         ldr   r0, =EXYNOS5_TIMER_FREQUENCY  /* r0 := timer's frequency */
+         ldr   r1, =EXYNOS5_GIC_BASE_ADDRESS /* r1 := GIC base address */
+-        /* If it's not the Arndale machine ID, load VE values */
+         teq   r5, r2
++        beq   board_set_done
++        /* If it's not the Arndale machine ID, try sun6i */
++        ldr   r2, =MACH_TYPE_SUN6I          /* r2 := sun6i machine ID */
++        ldr   r0, =SUN6I_TIMER_FREQUENCY    /* r0 := timer's frequency */
++        ldr   r1, =SUN6I_GIC_BASE_ADDRESS   /* r1 := GIC base address */
++        teq   r5, r2
++        beq   board_set_done
++        /* If it's not the sun6i machine ID, load VE values */
+         ldrne r0, =V2M_TIMER_FREQUENCY
+         ldrne r1, =V2M_GIC_BASE_ADDRESS
+ 
++board_set_done:
+         /* Ugly: the system timer's frequency register is only
+          * programmable in Secure state.  Since we don't know where its
+          * memory-mapped control registers live, we can't find out the
+diff --git a/xen/include/asm-arm/platforms/sun6i.h b/xen/include/asm-arm/platforms/sun6i.h
+index f3bcc49..f910ad6 100644
+--- a/xen/include/asm-arm/platforms/sun6i.h
++++ b/xen/include/asm-arm/platforms/sun6i.h
+@@ -5,19 +5,15 @@
+ #ifdef __ASSEMBLY__
+ 
+ /* GIC Base Address */
+-/* \TODO it should be CPU base */
+-#define AW_GIC_DIST_BASE             0x01c81000
+-#define AW_GIC_CPU_BASE              0x01c82000
+-#define SUN6I_GIC_BASE_ADDRESS       AW_GIC_CPU_BASE
++#define SUN6I_GIC_BASE_ADDRESS       0x01c82000
+ 
+ /* Timer's frequency */
+ /* \TODO I do not know yet, assume it 24MHz. check it later */
+ #define SUN6I_TIMER_FREQUENCY       (24 * 1000 * 1000) /* 24 MHz */
+ 
+ /* Arndale machine ID */
+-/* \TODO 3894 is off upstream number for sun6i. 4137 is upstream number for sun6i */
++/* XXX 3894 is downstream number for sun6i. 4137 is upstream number for sun6i */
+ #define MACH_TYPE_SUN6I             4137
+-//#define MACH_TYPE_SUN6I             3892
+ 
+ #endif /* __ASSEMBLY__ */
+ 

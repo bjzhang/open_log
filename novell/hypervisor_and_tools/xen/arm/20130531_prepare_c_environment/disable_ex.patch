@@ -1,0 +1,59 @@
+diff --git a/xen/arch/arm/arm32/lib/bitops.h b/xen/arch/arm/arm32/lib/bitops.h
+index 689f2e8..c5ca279 100644
+--- a/xen/arch/arm/arm32/lib/bitops.h
++++ b/xen/arch/arm/arm32/lib/bitops.h
+@@ -1,5 +1,7 @@
+ #include <xen/config.h>
+ 
++#define DISABLE_EX
++
+ #if __LINUX_ARM_ARCH__ >= 6
+ 	.macro	bitop, instr
+ 	ands	ip, r1, #3
+@@ -9,11 +11,19 @@
+ 	mov	r0, r0, lsr #5
+ 	add	r1, r1, r0, lsl #2	@ Get word offset
+ 	mov	r3, r2, lsl r3
+-1:	ldrex	r2, [r1]
++#ifdef DISABLE_EX
++	ldr		r2, [r1]
++#else
++	ldrex	r2, [r1]
++#endif
+ 	\instr	r2, r2, r3
++#ifdef DISABLE_EX
++	str		r2, [r1]
++#else
+ 	strex	r0, r2, [r1]
+ 	cmp	r0, #0
+ 	bne	1b
++#endif
+ 	bx	lr
+ 	.endm
+ 
+@@ -25,14 +35,25 @@
+ 	mov	r0, r0, lsr #5
+ 	add	r1, r1, r0, lsl #2	@ Get word offset
+ 	mov	r3, r2, lsl r3		@ create mask
++#ifdef DISABLE_EX
++    dmb
++	ldrex	r2, [r1]
++#else
+ 	smp_dmb
+ 1:	ldrex	r2, [r1]
++#endif
+ 	ands	r0, r2, r3		@ save old value of bit
+ 	\instr	r2, r2, r3		@ toggle bit
++#ifdef DISABLE_EX
++	strex	ip, r2, [r1]
++	dmb
++	mov	r0, #0
++#else
+ 	strex	ip, r2, [r1]
+ 	cmp	ip, #0
+ 	bne	1b
+ 	smp_dmb
++#endif
+ 	cmp	r0, #0
+ 	movne	r0, #1
+ 2:	bx	lr
