@@ -2091,3 +2091,84 @@ Olaf Kirch - Director SUSE Linux Enterprise; R&D (okir@suse.com)
 SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, Germany
 GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg) 
 
+21:33 2013-06-04
+Andre Przywara <andre.przywara@calxeda.com> 20130603_1718
+On 06/03/2013 09:29 AM, Bamvor Jian Zhang wrote:
+> "Andre Przywara <andre.przywara@calxeda.com>"> On 05/31/2013 02:53 PM, Bamvor Jian Zhang wrote:
+>> On 05/31/2013 02:53 PM, Bamvor Jian Zhang wrote:
+>>> These series patch enable Allwinner A31(code name sun6i) support in
+>>> assemble. with these patches, the cpu 0 of sun6i SOC could successful
+>>> boot into the c environment.
+>>
+>> Hi Bamvor,
+
+Hi Bamvor,
+
+thanks for the answer and the u-boot link.
+
+>> * Have you tried KVM on this?
+> No. which kernel version does KVM needed? currently, only 3.3 source is
+> available for A31.
+
+Are you sure? I see Allwinner A1X support being merged with 3.7-rc6.
+KVM needs v3.9, so you could just give the latest version a try.
+The patches in the repo you linked to seem to be for Android only, right?
+But in fact KVM currently only supports A15 cores, so A7 wouldn't work 
+out-of-the-box. The actual enablement of A7 doesn't seem to be 
+complicated, actually I would mostly suffice to just add the MIDR value 
+to the list of support CPUs (in arch/arm/kvm/guest.c:kvm_target_cpu())
+
+>> On the big.LITTLE TC-2 from ARM we got
+>> issues when trying to initialize KVM on the A7s, but couldn't get the
+>> real root cause yet. It hangs as soon as we write the HSCLTR.
+>> Have you found anything interesting differences between A15 and A7?
+> there are different implementation of cp15 for A15 and A7. but it is the
+> same definition for HSCLTR for writable bits. only diffferece is bit[21]
+> the value in CA15 is 1 while in CA7 is 0 although both document say that
+> FI(Fast Interrupt Configuration Enable Bit) is not implemented.
+
+Yeah, I saw this already, too. But as you mention that seems to be 
+bogus, as the specification isn't consistent in this regards.
+Also I tried both 0 and 1 here, it didn't make a difference.
+
+> BTW, i am hang in xen in setup_pagetables, it seems that it is crash after
+> flush the new page table. I was think that it it because the wrong memory
+> mapping. no sure whether it is same issue or not.
+
+The KVM crash happens as soon as we enable HSCLTR[0], which is the MMU.
+On A15 the same code works well.
+Currently I don't have time to debug this - and A7 isn't my particular 
+target anyway. But would be interesting to see what's wrong here.
+
+Thanks,
+Andre.
+
+> [1] http://git.rhombus-tech.net/?p=u-boot.git;a=tree;h=refs/heads/allwinner-sunxi-a31;hb=refs/heads/allwinner-sunxi-a31
+>
+> Thanks,
+> Bamvor
+>> Thanks,
+>> Andre.
+>>
+>>> Bamvor Jian Zhang (4):
+>>>     xen/arm: introduce Cortex-A7 support
+>>>     xen/arm: introduce Allwinner sun6i SOC basic support
+>>>     xen/arm: enable early printk for sun6i
+>>>     xen/arm: enable switch to hyper mode for sun6i
+>>>
+>>>    xen/arch/arm/Rules.mk                 |  5 ++++
+>>>    xen/arch/arm/arm32/Makefile           |  1 +
+>>>    xen/arch/arm/arm32/debug-sun6i.inc    | 50 +++++++++++++++++++++++++++++++++++
+>>>    xen/arch/arm/arm32/head.S             | 11 ++++++++
+>>>    xen/arch/arm/arm32/mode_switch.S      | 13 +++++++--
+>>>    xen/arch/arm/arm32/proc-ca7.S         | 36 +++++++++++++++++++++++++
+>>>    xen/include/asm-arm/platforms/sun6i.h | 28 ++++++++++++++++++++
+>>>    xen/include/asm-arm/processor-ca7.h   | 25 ++++++++++++++++++
+>>>    8 files changed, 167 insertions(+), 2 deletions(-)
+>>>    create mode 100644 xen/arch/arm/arm32/debug-sun6i.inc
+>>>    create mode 100644 xen/arch/arm/arm32/proc-ca7.S
+>>>    create mode 100644 xen/include/asm-arm/platforms/sun6i.h
+>>>    create mode 100644 xen/include/asm-arm/processor-ca7.h
+>
+>
+
