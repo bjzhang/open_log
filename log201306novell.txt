@@ -789,7 +789,7 @@ virtualization, libvirt, kvm, bnc#815201, cont2
 2013-06-17 10:14:05.296+0000: 11351: debug : qemuMonitorIOWrite:450 : QEMU_MONITOR_IO_WRITE: mon=0x7f61941082e0 buf={"execute":"query-migrate","id":"libvirt-256"}
 
 2, response on bugzilla
-I am working on it and it could be reproduce.
+i have discuss with Bo yang and and it could be reproduce right now.
 after some test, i found that if the vm use memory more than 2giga bytes(about, not exactly), virsh save will hang.
 and as you said, QEMU_MONITOR_IO_PROCESS, QEMU_MONITOR_RECV_REPLY are missing after QEMU_MONITOR_SEND_MSG and QEMU_MONITOR_IO_WRITE execute.
 i will try the lastest version of libvirt tomorrow.
@@ -797,7 +797,377 @@ i will try the lastest version of libvirt tomorrow.
 3, try lastest version.
 
 19:17 2013-06-17
+software skill, debugger, gdb, logging
 # cat /root/.gdbinit
 add-auto-load-safe-path /home/bamvor/log/novell/hypervisor_and_tools/libvirt/kvm_win7_save_hang/20130617/.gdbinit
 
+20:31 2013-06-17
+virtualization, xen, arm, allwinner A31, sun6i, send patch to upstream, deal with upstream reply
+Ian Campbell reply
+1, patch 1/4
+On Fri, 2013-05-31 at 20:53 +0800, Bamvor Jian Zhang wrote:
+> diff --git a/xen/arch/arm/arm32/head.S b/xen/arch/arm/arm32/head.S
+> index 0588d54..d3b849b 100644
+> --- a/xen/arch/arm/arm32/head.S
+> +++ b/xen/arch/arm/arm32/head.S
+> @@ -20,6 +20,7 @@
+>  #include <asm/config.h>
+>  #include <asm/page.h>
+>  #include <asm/processor-ca15.h>
+> +#include <asm/processor-ca7.h>
+>  #include <asm/asm_defns.h>
+>  
+>  #define ZIMAGE_MAGIC_NUMBER 0x016f2818
+> @@ -195,8 +196,18 @@ skip_bss:
+>          /* Is this a Cortex A15? */
+>          ldr   r1, =(CORTEX_A15_ID)
+>          teq   r0, r1
+> +        bne   test_ca7
+>          bleq  cortex_a15_init
+> +        PRINT("- cortex-a15 init done -\r\n")
+> +        b     cpu_init_done
+> +        /* Is this a Cortex A7? */
+> +test_ca7:
+> +        ldr   r1, =(CORTEX_A7_ID)
+> +        teq   r0, r1
+> +        bleq  cortex_a7_init
+> +        PRINT("- cortex-a7 init done -\r\n")
+
+I think now that we have a second processor here it is time to go for a
+more scalable approach. A linker table driven thing, similar to what
+Julien did for the platform (PLATFORM_START et al) or the Linux proc
+table thing seems like the right answer. At the moment it would just
+contain the MIDR mask and match values plus an optional init function
+pointer, in time I suspect it will grow other functionality.
+
+> +cpu_init_done:
+>          /* Set up memory attribute type tables */
+>          ldr   r0, =MAIR0VAL
+>          ldr   r1, =MAIR1VAL
+> diff --git a/xen/arch/arm/arm32/proc-ca7.S b/xen/arch/arm/arm32/proc-ca7.S
+> new file mode 100644
+> index 0000000..e0c1bc2
+> --- /dev/null
+> +++ b/xen/arch/arm/arm32/proc-ca7.S
+> @@ -0,0 +1,36 @@
+> +/*
+> + * xen/arch/arm/proc-ca7.S
+> + *
+> + * Cortex A7 specific initializations
+> + *
+> + * Bamvor Jian Zhang <bjzhang@suse.com>
+> + * Copyright (c) 2013 SUSE
+> + *
+> + * This program is free software; you can redistribute it and/or modify
+> + * it under the terms of the GNU General Public License as published by
+> + * the Free Software Foundation; either version 2 of the License, or
+> + * (at your option) any later version.
+> + *
+> + * This program is distributed in the hope that it will be useful,
+> + * but WITHOUT ANY WARRANTY; without even the implied warranty of
+> + * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+> + * GNU General Public License for more details.
+> + */
+> +
+> +#include <asm/asm_defns.h>
+> +#include <asm/processor-ca7.h>
+> +
+> +.globl cortex_a7_init
+> +cortex_a7_init:
+> +        /* Set up the SMP bit in ACTLR */
+> +        mrc   CP32(r0, ACTLR)
+> +        orr   r0, r0, #(ACTLR_CA7_SMP) /* enable SMP bit */
+> +        mcr   CP32(r0, ACTLR)
+> +        mov   pc, lr
+> +
+> +/*
+> + * Local variables:
+> + * mode: ASM
+> + * indent-tabs-mode: nil
+> + * End:
+> + */
+> diff --git a/xen/include/asm-arm/processor-ca7.h b/xen/include/asm-arm/processor-ca7.h
+> new file mode 100644
+> index 0000000..b773c34
+> --- /dev/null
+> +++ b/xen/include/asm-arm/processor-ca7.h
+> @@ -0,0 +1,25 @@
+> +#ifndef __ASM_ARM_PROCESSOR_CA7_H
+> +#define __ASM_ARM_PROCESSOR_CA7_H
+> +
+> +
+> +#define CORTEX_A7_ID     (0x410FC070)
+> +
+> +/* ACTLR Auxiliary Control Register, Cortex A7 */
+> +#define ACTLR_CA7_DDI                (1<<28)
+> +#define ACTLR_CA7_DDVM               (1<<15)
+> +/* 2 bits */
+> +#define ACTLR_CA7_L1PCTL             (1<<13)
+> +#define ACTLR_CA7_L1RADIS            (1<<12)
+> +#define ACTLR_CA7_L2RADIS            (1<<11)
+> +#define ACTLR_CA7_DODMBS             (1<<10)
+> +#define ACTLR_CA7_SMP                (1<<6)
+
+Is the content of this register really different between A7 and A15?
+
+At least CA7_SMP is the same as CA15_SMP, which suggests we could share
+the init function (to set the SMP bit) and have both a7 and a15 in the
+same proc-v7.S file.
+
+> +
+> +#endif /* __ASM_ARM_PROCESSOR_CA7_H */
+> +/*
+> + * Local variables:
+> + * mode: C
+> + * c-file-style: "BSD"
+> + * c-basic-offset: 4
+> + * indent-tabs-mode: nil
+> + * End:
+> + */
+
+1), __lookup_processor_type(arch/arm/kernel/head-common.S).
+arch/arm/mm/proc-xxx.S
+
+2, patch 2
+On Fri, 2013-05-31 at 20:53 +0800, Bamvor Jian Zhang wrote:
+> Allwinner A31(code name sun6i) is a quad-core Cortex-A7 SOC. Allwinner has
+> released the source code in http://git.rhombus-tech.net.
+> 
+> This patch define registers and macros for early printk and mode switch.
+> kick cpu is not implemneted yet. because the secondary cpu boot up
+> sequence is a little bit different from exynos5.
+> 
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> ---
+>  xen/arch/arm/arm32/debug-sun6i.inc    | 50 +++++++++++++++++++++++++++++++++++
+>  xen/include/asm-arm/platforms/sun6i.h | 28 ++++++++++++++++++++
+>  2 files changed, 78 insertions(+)
+>  create mode 100644 xen/arch/arm/arm32/debug-sun6i.inc
+>  create mode 100644 xen/include/asm-arm/platforms/sun6i.h
+> 
+> diff --git a/xen/arch/arm/arm32/debug-sun6i.inc b/xen/arch/arm/arm32/debug-sun6i.inc
+> new file mode 100644
+> index 0000000..eaa1197
+> --- /dev/null
+> +++ b/xen/arch/arm/arm32/debug-sun6i.inc
+> @@ -0,0 +1,50 @@
+> +/*
+> + * xen/arch/arm/arm32/debug-sun6i.inc
+> + *
+> + * Allwinner sun6i specific debug code
+> + *
+> + * Bamvor Jian Zhang <bjzhang@suse.com>
+> + * Copyright (c) 2013 SUSE
+> + *
+> + * This program is free software; you can redistribute it and/or modify
+> + * it under the terms of the GNU General Public License as published by
+> + * the Free Software Foundation; either version 2 of the License, or
+> + * (at your option) any later version.
+> + *
+> + * This program is distributed in the hope that it will be useful,
+> + * but WITHOUT ANY WARRANTY; without even the implied warranty of
+> + * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+> + * GNU General Public License for more details.
+> + */
+> +
+> +/* sun6i UART initialization
+
+This does appear to use a distinct set of registers from either the
+existing pl011 or exynos4xxx UART driver so it should be a separate
+driver. Do you know if this particular logic block is specific to sn6i
+or is it used elsewhere (e.g. in all sun*i)? Do you know if there is a
+more generic name for the part?
+
+Not a big deal -- we can always rename to be more generic as we see
+other examples of the same UART.
+
+> + * rb: register which contains the UART base address
+> + * rc: scratch register 1 (unused here)
+> + * rd: scratch register 2 (unused here) */
+> +.macro early_uart_init rb, rc, rd
+> +/* assume the uart already init by bootloader */
+> +.endm
+
+I think Andre's refactoring of the UART init stuff in and around commit
+130645eee340608c12b632535d3f983508348ba1 lets you avoid this by just not
+setting EARLY_PRINTK_INIT_UART.
+
+> +
+> +/* sun6i UART wait UART to be ready to transmit
+> + * rb: register which contains the UART base address
+> + * rc: scratch register */
+> +.macro early_uart_ready rb, rc
+> +1:
+> +        ldr   \rc, [\rb, #0x7c]     /* <- UART_USR (Status Register) */
+> +        tst   \rc, #0x2             /* Check BUSY bit */
+> +        beq   1b                    /* Wait for the UART to be ready */
+> +.endm
+> +
+> +/* sun6i UART transmit character
+> + * rb: register which contains the UART base address
+> + * rt: register which contains the character to transmit */
+> +.macro early_uart_transmit rb, rt
+> +        str   \rt, [\rb]            /* -> UART_THR (Transmit Holding Register) */
+> +.endm
+> +
+> +/*
+> + * Local variables:
+> + * mode: ASM
+> + * indent-tabs-mode: nil
+> + * End:
+> + */
+> diff --git a/xen/include/asm-arm/platforms/sun6i.h b/xen/include/asm-arm/platforms/sun6i.h
+> new file mode 100644
+> index 0000000..f910ad6
+> --- /dev/null
+> +++ b/xen/include/asm-arm/platforms/sun6i.h
+> @@ -0,0 +1,28 @@
+> +#ifndef __ASM_ARM_PLATFORMS_SUN6I_H
+> +#define __ASM_ASM_PLATFORMS_SUN6I_H
+> +
+> +/* Constants below is only used in assembly because the DTS is not yet parsed */
+> +#ifdef __ASSEMBLY__
+> +
+> +/* GIC Base Address */
+> +#define SUN6I_GIC_BASE_ADDRESS       0x01c82000
+> +
+> +/* Timer's frequency */
+> +/* \TODO I do not know yet, assume it 24MHz. check it later */
+> +#define SUN6I_TIMER_FREQUENCY       (24 * 1000 * 1000) /* 24 MHz */
+> +
+> +/* Arndale machine ID */
+
+Comment is out of date, but I hope we can avoid needing to know machine
+numbers entirely some where down the line. (I expect this will be
+clearer after my reply to #4)
+
+> +/* XXX 3894 is downstream number for sun6i. 4137 is upstream number for sun6i */
+> +#define MACH_TYPE_SUN6I             4137
+> +
+> +#endif /* __ASSEMBLY__ */
+> +
+> +#endif /* __ASM_ARM_PLATFORMS_SUN6I_H */
+> +/*
+> + * Local variables:
+> + * mode: C
+> + * c-file-style: "BSD"
+> + * c-basic-offset: 4
+> + * indent-tabs-mode: nil
+> + * End:
+> + */
+
+3, patch 3
+On Fri, 2013-05-31 at 20:53 +0800, Bamvor Jian Zhang wrote:
+> enable early printk for sun6i base on the macro introduce by previous
+> patch.
+
+FWIW I think you could squash them together.
+
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> ---
+>  xen/arch/arm/Rules.mk | 5 +++++
+>  1 file changed, 5 insertions(+)
+> 
+> diff --git a/xen/arch/arm/Rules.mk b/xen/arch/arm/Rules.mk
+> index 422ed04..59d29c4 100644
+> --- a/xen/arch/arm/Rules.mk
+> +++ b/xen/arch/arm/Rules.mk
+> @@ -64,6 +64,11 @@ EARLY_PRINTK_INC := pl011
+>  EARLY_PRINTK_BAUD := 115200
+>  EARLY_UART_BASE_ADDRESS := 0xfff36000
+>  endif
+> +ifeq ($(CONFIG_EARLY_PRINTK), sun6i)
+> +EARLY_PRINTK_INC := sun6i
+> +EARLY_PRINTK_BAUD := 115200
+
+Since you assume the bootloader did the init I don't think you use this?
+
+> +EARLY_UART_BASE_ADDRESS := 0x01c28000
+> +endif
+>  
+>  ifneq ($(EARLY_PRINTK_INC),)
+>  EARLY_PRINTK := y
+
+4, patch 4
+On Fri, 2013-05-31 at 20:53 +0800, Bamvor Jian Zhang wrote:
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> ---
+>  xen/arch/arm/arm32/mode_switch.S | 13 +++++++++++--
+>  1 file changed, 11 insertions(+), 2 deletions(-)
+> 
+> diff --git a/xen/arch/arm/arm32/mode_switch.S b/xen/arch/arm/arm32/mode_switch.S
+> index c92a1cf..0fc26e0 100644
+> --- a/xen/arch/arm/arm32/mode_switch.S
+> +++ b/xen/arch/arm/arm32/mode_switch.S
+> @@ -21,6 +21,7 @@
+>  #include <asm/page.h>
+>  #include <asm/platforms/vexpress.h>
+>  #include <asm/platforms/exynos5.h>
+> +#include <asm/platforms/sun6i.h>
+>  #include <asm/asm_defns.h>
+>  #include <asm/gic.h>
+>  
+> @@ -90,15 +91,23 @@ enter_hyp_mode:
+
+I'd really like to avoid adding more boards here. Accepting the Arndale
+stuff was a pragmatic decision for the Xen 4.3 release but for 4.4 we
+need to transition to something better and delete this file completely.
+
+The way we want to fix this is to fix the bootloader, to correctly
+launch kernels in NS HYP mode (Andre has patches to u-boot which I think
+are upstream already) and to setup the GIC, timers etc for the specific
+platform.
+
+Updating the bootloader would be the ideal/preferred way to fix things
+but in practice there will be cases where the bootloader cannot be fixed
+e.g. because upstream u-boot does not support the platform well, or
+because the methods for unbricking the board when things go wrong are
+unavailable/unreliable. In those cases we want to remove this code from
+Xen by using a boot-wrapper style shim like [0] or [1] which would run
+between the bootloader and Xen and fix up all this sort of thing such
+that it appears to Xen like it was loaded by a correct bootloader.
+
+In this way we can maintain a clean separation between the main Xen code
+base and the hacks required for initialisation on a specific platform.
+
+Of course the bootwrapper can hardcode all sorts of system specific
+stuff since it will be expected to be compiled for the specific
+platform.
+
+I don't know which one applies to the sun6i platform -- it looks to me
+like upstream u-boot support is well under way and the presence of FEL
+mode makes unbricking the system pretty easy (I've had to use it on my
+own A31 based tablet and it seems OK).
+
+Ian.
+
+[0] http://xenbits.xen.org/gitweb/?p=people/ianc/boot-wrapper.git;a=summary
+[1] https://git.linaro.org/gitweb?p=arm/models/boot-wrapper.git;a=summary
+
+
+>          bic   r0, r0, #0xe           /* Clear EA, FIQ and IRQ */
+>          mcr   CP32(r0, SCR)
+>  
+> -        ldr   r2, =MACH_TYPE_SMDK5250   /* r4 := Arndale machine ID */
+>          /* By default load Arndale defaults values */
+> +        ldr   r2, =MACH_TYPE_SMDK5250   /* r4 := Arndale machine ID */
+>          ldr   r0, =EXYNOS5_TIMER_FREQUENCY  /* r0 := timer's frequency */
+>          ldr   r1, =EXYNOS5_GIC_BASE_ADDRESS /* r1 := GIC base address */
+> -        /* If it's not the Arndale machine ID, load VE values */
+>          teq   r5, r2
+> +        beq   board_set_done
+> +        /* If it's not the Arndale machine ID, try sun6i */
+> +        ldr   r2, =MACH_TYPE_SUN6I          /* r2 := sun6i machine ID */
+> +        ldr   r0, =SUN6I_TIMER_FREQUENCY    /* r0 := timer's frequency */
+> +        ldr   r1, =SUN6I_GIC_BASE_ADDRESS   /* r1 := GIC base address */
+> +        teq   r5, r2
+> +        beq   board_set_done
+> +        /* If it's not the sun6i machine ID, load VE values */
+>          ldrne r0, =V2M_TIMER_FREQUENCY
+>          ldrne r1, =V2M_GIC_BASE_ADDRESS
+>  
+> +board_set_done:
+>          /* Ugly: the system timer's frequency register is only
+>           * programmable in Secure state.  Since we don't know where its
+>           * memory-mapped control registers live, we can't find out the
 
