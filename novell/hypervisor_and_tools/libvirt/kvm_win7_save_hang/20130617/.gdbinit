@@ -53,5 +53,36 @@ where
 cont
 end
 
+break qemuMonitorMigrateToFile
+commands
+silent
+printf "qemuMonitorMigrateToFile\n"
+where
+cont
+end
+
+break qemuMigrationWaitForCompletion
+commands
+silent
+printf "qemuMigrationWaitForCompletion\n"
+where
+cont
+end
+
+break qemuMigrationUpdateJobStatus
+commands
+silent
+printf "qemuMigrationUpdateJobStatus\n"
+where
+cont
+end
+
+break qemuMonitorIOWriteWithFD
+commands
+silent
+printf "qemuMonitorIOWriteWithFD\n"
+cont
+end
+
 cont
 
