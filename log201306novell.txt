@@ -1489,3 +1489,81 @@ but i could not open the qemu monitor console.
 =2,cores=1,threads=1 -drive file=/home/bamvor/vm/kvm/images/windowsvistax64/disk0.raw,if=none,id=drive-ide0-0-0,format=raw -device ide-hd,bus=ide.0,unit=0,drive=drive-ide0-0-0,id=ide0-0-0,bootindex=1
 the save process seems slow than driven by libvirt.
 
+09:50 2013-06-19
+GTD
+0, 9:20-17:30
+
+1, today
+1), 9:20-9:51 news. "09:51 2013-06-19"
+2), 9:55-10:30 personal stuff.
+3), 10' reply to linux-sunxi. 
+4), 10:50-11:30 12:20-16:30 libvirt save hang. see"11:01 2013-06-19".
+5), 17:00-17:30 work on xen arm; sun6i c env. see"16:38 2013-06-19"
+
+\todo: write a article about how a make a bootable sd card for A31.
+
+09:51 2013-06-19
+cloud, virtualization, citrix, XenMobile
+1, Citrix XenMobile企业版重新定义移动企业
+http://www.citrix.com.cn/article/668/3075.aspx
+业界最全面的企业移动解决方案，可用于管理各类应用、数据和设备
+2, XenMobile MDM版如何工作 
+http://www.citrix.com.cn/column/685.aspx
+
+10:12 2013-06-19
+allwinner, A31, mele M9, MP tools
+1, burn tools
+http://pan.baidu.com/share/link?shareid=1014252800&uk=1812122577
+image
+http://pan.baidu.com/share/link?shareid=1012084068&uk=1812122577
+
+11:01 2013-06-19
+virtualization, libvirt, kvm, bnc#815201, cont3
+1, 可以确定是qemuMonitorIOWrite之后qemu没给反馈。
+2, 如果不查询状态会不会可以呢?
+会卡在
+    if (qemuDomainObjEnterMonitorAsync(driver, vm, asyncJob) == 0) {
+        qemuMonitorSetMigrationSpeed(priv->mon, saveMigBandwidth);
+        priv->migMaxBandwidth = saveMigBandwidth;
+        qemuDomainObjExitMonitorWithDriver(driver, vm);
+    }
+如果也跳过这个, 会卡在.
+virFileWrapperFdClose. waitpid: 
+30617 # ps aux|grep 2886
+root      2886  0.6  0.0  44688  2508 ?        S    14:37   0:03 /usr/lib64/libvirt_iohelper /home/bamvor/log/novell/hypervisor_and_tools/libvirt/kvm_win7_save_hang/20130617/05_win7.save 0 1
+
+3, iohelper
+(gdb) where
+#0  0x00007fcf23a4a3e0 in __read_nocancel () from /lib64/libpthread.so.0
+#1  0x00000000004146be in read (__nbytes=788282, __buf=0x7fcf2551f8c6, __fd=0)
+    at /usr/include/bits/unistd.h:44
+#2  saferead (fd=fd@entry=0, buf=<optimized out>, buf@entry=0x7fcf254e0000, 
+    count=788282, count@entry=1048576) at util/virutil.c:111
+#3  0x0000000000409adb in runIO (length=0, oflags=<optimized out>, fd=1, 
+    path=0x7fff8839cf5d "/home/bamvor/log/novell/hypervisor_and_tools/libvirt/kvm_win7_save_hang/20130617/05_win7.save") at util/iohelper.c:151
+#4  main (argc=<optimized out>, argv=<optimized out>) at util/iohelper.c:305
+
+如果是iohelper没有返回, 那以应该是qemu-kvm hang. 或者是io_helper已经出错了?
+
+length为什么是0? 
+是正常的.
+
+4, 
+正常流程中VIR_CLOSE(fd)关闭fd 0, 这会引起libvirt_iohelper退出.
+virFileWrapperFdClose(wrapperFd)就不会hang住.
+
+save失败时close fd没有导致iohelper退出, 除非qemu还在占用?
+
+5, Summary:
+今天分析没有什么建设性的结果.
+1), 首先并不是发多了monitor command把qemu-kvm搞死了.
+2), 即使不发monitor command, 也会死在等待libvirt_iohelper结束中. 为什么不结束也许和qemu-kvm出错有关.
+3), 明天只好看一看qemu monitor是如何处理的. 然后找出所有libvirt发给qemu的命令.
+ref for qemu monitor:  
+http://www.ibm.com/developerworks/cn/linux/l-cn-qemu-monitor/
+http://kashyapc.wordpress.com/2013/03/31/multiple-ways-to-access-qemu-monitor-protocol-qmp/
+
+16:38 2013-06-19
+virtualization, xen, arm, allwinner A31, sun6i, c env patch v2
+1, ref"20:31 2013-06-17"
+
