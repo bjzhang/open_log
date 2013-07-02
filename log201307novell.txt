@@ -5,12 +5,8 @@ GTD
 
 1, today
 1), 10:50-11:20 work report. see"10:54 2013-07-01"
-2), 13:57-17:20 xen arm patch.
+2), 13:57-17:20 xen arm patch. see"14:38 2013-07-01"
 1h personal stuff
-
-2, next
-1), reply to virsh save hang bug.
-2), debug the console patch.
 
 10:54 2013-07-01
 work report - week 25, 26
@@ -20,9 +16,13 @@ work report - week 25, 26
 2, US/China virtualization sync.
 
 14:38 2013-07-01
+virtualization, xen, arm, allwinner A31, sun6i, c env patch v2, cont1
 1, build
 make dist-xen XEN_TARGET_ARCH=arm32 CROSS_COMPILE=arm-linux-gnueabihf- CONFIG_EARLY_PRINTK=sun6i CONFIG_DTB_FILE=/home/bamvor/work_bak/arm/samsung_exynos/linux/arch/arm/boot/dts/sun6i.dtb CONFIG_LOAD_ADDRESS=0x40000000
 mkimage -A arm -T kernel -a 0x40200000 -e 0x40200000 -C none -d "xen/xen.bin" xen-uImage
+boot:
+fatload mmc 0:2 40008000 linux/xen-uImage
+bootm 40008000
 2, do i need include omap5432 patch in my patch. i guess not.
 3, hang in cpu init
 Starting kernel ...
@@ -34,7 +34,56 @@ Starting kernel ...
 - Entering Hyp mode -
 - Zero BSS -
 - Setting up control registers -
+4, (10:13 2013-07-02)
+after debug i know that, bl is wrong. because bl will take the pc+4 as lr, which is obvious wrong. i should set lr through the adr instruction like kernel:
+	adr	lr, BSYM(1f)			@ return (PIC) address
+1f: 
+    xxx
 
+2), BTW, the compile command
+arm-linux-gnueabihf-gcc -D__ASSEMBLY__ -include /home/bamvor/sda3/home/novell/work/source/virtualization/xen/upstream/xen_arm/xen-unstable/xen/include/xen/config.h -O1 -fno-omit-frame-pointer -marm -g -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -Wno-unused-local-typedefs -fno-builtin -fno-common -Wredundant-decls -iwithprefix include -Werror -Wno-pointer-arith -pipe -I/home/bamvor/sda3/home/novell/work/source/virtualization/xen/upstream/xen_arm/xen-unstable/xen/include -fno-stack-protector -fno-exceptions -Wnested-externs -msoft-float -mcpu=cortex-a15 -mfpu=vfpv3 -mfloat-abi=softfp -DGCC_HAS_VISIBILITY_ATTRIBUTE -fno-optimize-sibling-calls -DEARLY_PRINTK -DEARLY_PRINTK_INC=\"debug-8250.inc\" -DEARLY_PRINTK_BAUD= -DEARLY_UART_BASE_ADDRESS=0x01c28000 -g -D__XEN__ -include /home/bamvor/sda3/home/novell/work/source/virtualization/xen/upstream/xen_arm/xen-unstable/xen/include/xen/config.h -DVERBOSE -fno-omit-frame-pointer -DCONFIG_FRAME_POINTER -MMD -MF .head.o.d -DCONFIG_DTB_FILE=\"/home/bamvor/work_bak/arm/samsung_exynos/linux/arch/arm/boot/dts/sun6i.dtb\" -c arm32/head.S -o arm32/head.o
+
+5, what does AT ( XEN_PHYS_START ) mean?
+this specfied the load address.
+
+6, write v2 patch.
+1), \TODO modify head.S
+is it worth that create a seperated lookup_processor_type function in proc-v7.S?
+2), patch 1 commit message
+xen: arm: introduce Cortex-A7 support
+
+Introduce Cortex-A7 with a scalable proc_info_list which including cpu id
+and cpu initialize function.
+In head.S, search cpu specific MIDR in procinfo and call such initialize
+function. Currently, support Cortex-A7 and Cortex-A15.
+
+3), patch 2 commit message:
+xen: arm: implement early prink for 8250 uart
+
+implement early printk for 8250 uart which is used by lots of arm SOC, such as
+Allwinner A31(sun6i) and OMAP5432.
+
+4), finish v2 version, review it again and send it out.
+
+---
+it seems that it would better create a common head for both debug-8250.inc and
+ns16550.c when ns16550.c is worked on arm soc.
+
+5), send patch
+git format-patch --cover-letter --signoff -n2
+git send-email --no-chain-reply-to --annotate --to xen-devel@lists.xen.org --cc ian.campbell@citrix.com --cc julien.grall@linaro.org --cc Stefano.Stabellini@eu.citrix.com --cc andre.przywara@calxeda.com --cc bjzhang@suse.com --cc baozich@gmail.com 000*.patch
+
+7, add mode switch patch and test again.
+fail
+
+8, todo 
+1), try the same thing as Chao baozi, check where it failed.
+if it fail after mmu flush, is that mean there is some memory map fail in sun6i?
+2), if fail. find out why load/store exclusive fail, is it because other core not started? try it on kernel.
+3), do i need to modify mcpu in gcc command?
+i guess not. because BIG.little technology.
+4), and addr in Makefile.
+0x80000000 -> 0x40000000, is it necessary?
 
 16:35 2013-07-01
 mailing list, virtualization, xen, hypercall
@@ -50,7 +99,44 @@ Thanks,
 Dongxiao
  
 9:26 2013-7-2
-m.hamayun@virtualopensystems.com
+mailing list, virtualization, kvm, arm, Cortex-A57
+1, Huawei has had worked on kvm support Cortex-A57, is it means that huawei'A57 will out on 2014?
+[PATCH 0/6][RFC] AArch64 support for Versatile Express using KVM
+1), m.hamayun@virtualopensystems.com
 The work has been sponsored by Huawei, and developed in collaboration with Huawei Technologies Duesseldorf GmbH, European Research Center Munich (ERC). A working tree of this implementation is available on the "kvm-aarch64" branch of the following github repository.
 
 https://github.com/virtualopensystems/qemu.git
+2), Peter Maydell peter.maydell@linaro.org 
+This rather overlaps with a bunch of work John Rigby has already done
+(though not yet published to the mailing lists):
+
+https://git.linaro.org/gitweb?p=people/pmaydell/qemu-aarch64.git;a=shortlog;h=refs/heads/kvm-aarch64-wip
+
+so now we need to reconcile the two trees. If you'd let us know
+you were doing this a bit earlier we could probably have
+coordinated something...
+
+3), Andreas Färber afaerber@suse.de
+Andreas join the discussion, because he is a qemu developer.
+
+2, same series patch: about how to pick up kernel headers
+Peter Maydell peter.maydell@linaro.org 
+Sorry, this bit is wrong; ignore it. We pick the kernel headers based
+on $cpu, not $target, so get the aarch64 ones whether we're building
+arm-softmmu or aarch64-softmmu.
+
+10:08 2013-07-02
+GTD
+0, 9:40-21:14
+
+1, today
+1), 20' mailing list: kvm. see"9:26 2013-7-2"
+2), 10:12-11:30 14:00-19:00 20:43-21:20 xen arm patch. see"14:38 2013-07-01"4
+3), after finish the patch check the Chen baozi discuss status.
+
+2, next
+1), reply to virsh save hang bug.
+2), debug the console patch.
+3), arm call.
+4), continue to debug xen for sun6i. ref"14:38 2013-07-01"8
+
