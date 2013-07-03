@@ -136,7 +136,7 @@ GTD
 
 10:11 2013-07-03
 GTD
-0, 10:10
+0, 10:10-21:43
 
 1, today
 1), 20'(in subway): check the mail.
@@ -279,5 +279,443 @@ xen, arm, sun6i
     memset(this_cpu(xen_dommap), 0, DOMHEAP_SECOND_PAGES*PAGE_SIZE);
 \TODO: do i actually enter into hyp mode???
 
+19:55 2013-07-03
+1, Patch 1
+1), Ian C
+> On Tue, 2013-07-02 at 21:11 +0800, Bamvor Jian Zhang wrote:
+> > Introduce Cortex-A7 with a scalable proc_info_list which including cpu id
+> > and cpu initialize function.
+> > In head.S, search cpu specific MIDR in procinfo and call such initialize
+> > function. Currently, support Cortex-A7 and Cortex-A15.
+> 
+> I like the general shape of it, thanks!
+> 
+> A few comments below.
+> 
+> > Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> 
+> > diff --git a/xen/arch/arm/arm32/head.S b/xen/arch/arm/arm32/head.S
+> > index 0588d54..d62401d 100644
+> > --- a/xen/arch/arm/arm32/head.S
+> > +++ b/xen/arch/arm/arm32/head.S
+> > @@ -20,6 +20,7 @@
+> >  #include <asm/config.h>
+> >  #include <asm/page.h>
+> >  #include <asm/processor-ca15.h>
+> > +#include <asm/processor-ca7.h>
+> >  #include <asm/asm_defns.h>
+> >  
+> >  #define ZIMAGE_MAGIC_NUMBER 0x016f2818
+> > @@ -188,15 +189,33 @@ skip_bss:
+> >  
+> >          PRINT("- Setting up control registers -\r\n")
+> >  
+> > -        /* Read CPU ID */
+> > +        /* Get processor specific proc info */
+> >          mrc   CP32(r0, MIDR)
+> >          ldr   r1, =(MIDR_MASK)
+> >          and   r0, r0, r1
+> > -        /* Is this a Cortex A15? */
+> > -        ldr   r1, =(CORTEX_A15_ID)
+> > -        teq   r0, r1
+> > -        bleq  cortex_a15_init
+> > +        ldr   r1, = __proc_info_start
+> > +        add   r1, r1, r10
+> > +        ldr   r2, = __proc_info_end
+> > +        add   r2, r2, r10
+> > +1:      ldr   r3, [r1]
+> > +        teq   r0, r3
+> > +        beq   2f
+> > +        add   r1, r1, #PROCINFO_sizeof
+> > +        cmp   r1, r2
+> > +        blo   1b
+> > +        mov   r4, r0
+> > +        PRINT("- Missing processor info: ")
+> > +        mov   r0, r4
+> > +        bl    putn
+> > +        PRINT(" -\r\n")
+> > +        b     fail
+> > +2:
+> 
+> At the end of all this r1 == physical address of the platform
+> information?
+yes
+> Can the initial comment say "Get processor specific proc info into rX" please.
+sure
+> If you could also follow the lead of other code in this file and
+> obsessively comment what it is doing that would be great. e.g. comments
+> like "r1 := physical address of start of table", "r2 := physical address
+> of end of table" etc.
+ok. i will
+> 
+> >  
+> > +        /* Set return address(PIC) */
+> > +        /* XXX: it only work while thumb2 is not enable in xen */
+> 
+> That's true of lots/all of our asm. Lets ignore that for now (no need to
+> comment).
+ok
+> Since we already have physoffset in r10 would it be clearer to make use
+> of that?
+sorry if i am wrong. do u mean change "adr lr, 1f" to something like 
+"add lr, pc, r10"?
+> 
+> > +        adr   lr, 1f
+> > +        add   pc, r1, #PROCINFO_cpu_init 
+> > +1:
+> >          /* Set up memory attribute type tables */
+> >          ldr   r0, =MAIR0VAL
+> >          ldr   r1, =MAIR1VAL
+> 
+> > diff --git a/xen/arch/arm/arm32/proc-v7.S b/xen/arch/arm/arm32/proc-v7.S
+> > new file mode 100644
+> > index 0000000..2d46dca
+> > --- /dev/null
+> > +++ b/xen/arch/arm/arm32/proc-v7.S
+> > @@ -0,0 +1,36 @@
+> [...]
+> > +#include <asm/asm_defns.h>
+> > +#include <asm/arm32/processor.h>
+> > +
+> > +.globl v7_init
+> > +v7_init:
+> > +        /* Set up the SMP bit in ACTLR */
+> > +        mrc   CP32(r0, ACTLR)
+> > +        orr   r0, r0, #(ACTLR_V7_SMP) /* enable SMP bit */
+> > +        mcr   CP32(r0, ACTLR)
+> > +        mov   pc, lr
+> 
+> Lets put the __v7_ca7mp_proc_info and __v7_ca15mp_proc_info here,
+> calling v7_init directly and do away with proc-ca15.S and proc-ca7.S.
+Ok. 
+So, i will remove proc-ca15.S and proc-ca7.S?
+> 
+> > +
+> > +/*
+> > + * Local variables:
+> > + * mode: ASM
+> > + * indent-tabs-mode: nil
+> > + * End:
+> > + */
+> 
+> > diff --git a/xen/include/asm-arm/arm32/procinfo.h b/xen/include/asm-arm/arm32/procinfo.h
+> > new file mode 100644
+> > index 0000000..7e7a775
+> > --- /dev/null
+> > +++ b/xen/include/asm-arm/arm32/procinfo.h
+> > @@ -0,0 +1,30 @@
+> > +/*
+> > + * include/asm-arm/arm32/procinfo.h
+> 
+> I suggest to put this in just include/asm-arm/procinfo.h. The same
+> struct should eventually apply to 64-bit too.
+ok.
+> 
+> [...]
+> > +#ifndef __ASM_ARM_ARM32_PROCINFO_H
+> > +#define __ASM_ARM_ARM32_PROCINFO_H
+> > +
+> > +struct proc_info_list {
+> > +	unsigned int		cpu_val;
+> 
+> I think we should include "unsigned int cpu_mask" here too and remove
+> MIDR_MASK. Will need equivalent changes in head.S as well.
+yes, i need to do this for Aarch64 extesion in future.
+> 
+> > +	unsigned long		cpu_init;        /* used by head.S */
+> > +};
+> > +
+> > +#endif
+> > diff --git a/xen/include/asm-arm/processor-ca15.h b/xen/include/asm-arm/processor-ca15.h
+> > index 06cdbdd..96438f0 100644
+> > --- a/xen/include/asm-arm/processor-ca15.h
+> > +++ b/xen/include/asm-arm/processor-ca15.h
+> > @@ -1,9 +1,6 @@
+> >  #ifndef __ASM_ARM_PROCESSOR_CA15_H
+> >  #define __ASM_ARM_PROCESSOR_CA15_H
+> >  
+> > -
+> > -#define CORTEX_A15_ID     (0x410FC0F0)
+> > -
+> >  /* ACTLR Auxiliary Control Register, Cortex A15 */
+> >  #define ACTLR_CA15_SNOOP_DELAYED      (1<<31)
+> >  #define ACTLR_CA15_MAIN_CLOCK         (1<<30)
+> > @@ -26,7 +23,6 @@
+> >  #define ACTLR_CA15_OPT                (1<<9)
+> >  #define ACTLR_CA15_WFI                (1<<8)
+> >  #define ACTLR_CA15_WFE                (1<<7)
+> > -#define ACTLR_CA15_SMP                (1<<6)
+> 
+> Lets leave this for completeness even if we aren't using it.
+i was thinking about it. if i define the following
+#define ACTLR_CA15_SMP                ACTLR_V7_SMP
+i need include asm/arm/processor.h which including CP micros.
+> 
+> >  #define ACTLR_CA15_PLD                (1<<5)
+> >  #define ACTLR_CA15_IP                 (1<<4)
+> >  #define ACTLR_CA15_MICRO_BTB          (1<<3)
 
+2, patch 2
+1), Ian C
+> On Tue, 2013-07-02 at 21:11 +0800, Bamvor Jian Zhang wrote:
+> > diff --git a/xen/arch/arm/arm32/debug-8250.inc b/xen/arch/arm/arm32/debug-8250.inc
+> > new file mode 100644
+> > index 0000000..c11357d
+> > --- /dev/null
+> > +++ b/xen/arch/arm/arm32/debug-8250.inc
+> > @@ -0,0 +1,48 @@
+> > +/*
+> > + * xen/arch/arm/arm32/debug-8250.inc
+> > + *
+> > + * 8250 specific debug code
+> > + *
+> > + * Bamvor Jian Zhang <bjzhang@suse.com>
+> > + * Copyright (c) 2013 SUSE
+> > + *
+> > + * This program is free software; you can redistribute it and/or modify
+> > + * it under the terms of the GNU General Public License as published by
+> > + * the Free Software Foundation; either version 2 of the License, or
+> > + * (at your option) any later version.
+> > + *
+> > + * This program is distributed in the hope that it will be useful,
+> > + * but WITHOUT ANY WARRANTY; without even the implied warranty of
+> > + * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+> > + * GNU General Public License for more details.
+> > + */
+> > +
+> > +
+> > +#define UART_TX           (0x00<<2)    /* Out: Transmit buffer */
+> > +#define UART_LSR          (0x05<<2)    /* In:  Line Status Register */
+> 
+> Is the shift 2 on Baozi's platform too? Perhaps this could be a #define
+> provided in the same style as EARLY_UART_BASE_ADDRESS or via some other
+> means?
+> 
+> The definitions themselves duplicate those in
+> xen/drivers/char/ns16550.c, perhaps we could refactor those into a
+> suitable header?
+yes. it should be. meanwhile considering the shift bit and other things. 
+i am not sure how to merge the headers until i got the ns16550 actual used by
+arm SOC. 
+> 
+> > +
+> > +#define UART_LSR_THRE     0x20         /* Xmit holding register empty */
+> > +
+> > +/* 8250 UART wait UART to be ready to transmit
+> > + * rb: register which contains the UART base address
+> > + * rc: scratch register */
+> > +.macro early_uart_ready rb, rc
+> > +1:
+> > +        ldr   \rc, [\rb, #UART_LSR]    /* <- UART_LSR (Line Status Register) */
+> > +        tst   \rc, #UART_LSR_THRE      /* Check BUSY bit */
+> > +        beq   1b                       /* Wait for the UART to be ready */
+> > +.endm
+> > +
+> > +/* 8250 UART transmit character
+> > + * rb: register which contains the UART base address
+> > + * rt: register which contains the character to transmit */
+> > +.macro early_uart_transmit rb, rt
+> > +        str   \rt, [\rb, #UART_TX]     /* -> UART_TX */
+> > +.endm
+> > +
+> > +/*
+> > + * Local variables:
+> > + * mode: ASM
+> > + * indent-tabs-mode: nil
+> > + * End:
+> > + */
+
+2), Chan Baozi
+
+On Jul 3, 2013, at 7:09 PM, Ian Campbell <Ian.Campbell@citrix.com> wrote:
+
+> On Tue, 2013-07-02 at 21:11 +0800, Bamvor Jian Zhang wrote:
+>> diff --git a/xen/arch/arm/arm32/debug-8250.inc b/xen/arch/arm/arm32/debug-8250.inc
+>> new file mode 100644
+>> index 0000000..c11357d
+>> --- /dev/null
+>> +++ b/xen/arch/arm/arm32/debug-8250.inc
+>> @@ -0,0 +1,48 @@
+>> +/*
+>> + * xen/arch/arm/arm32/debug-8250.inc
+>> + *
+>> + * 8250 specific debug code
+>> + *
+>> + * Bamvor Jian Zhang <bjzhang@suse.com>
+>> + * Copyright (c) 2013 SUSE
+>> + *
+>> + * This program is free software; you can redistribute it and/or modify
+>> + * it under the terms of the GNU General Public License as published by
+>> + * the Free Software Foundation; either version 2 of the License, or
+>> + * (at your option) any later version.
+>> + *
+>> + * This program is distributed in the hope that it will be useful,
+>> + * but WITHOUT ANY WARRANTY; without even the implied warranty of
+>> + * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+>> + * GNU General Public License for more details.
+>> + */
+>> +
+>> +
+>> +#define UART_TX           (0x00<<2)    /* Out: Transmit buffer */
+>> +#define UART_LSR          (0x05<<2)    /* In:  Line Status Register */
+> 
+> Is the shift 2 on Baozi's platform too? Perhaps this could be a #define
+> provided in the same style as EARLY_UART_BASE_ADDRESS or via some other
+> means?
+Yes, mine has the shift 2 too. It is because every register's size is 4-Bytes on both of our platforms.
+
+However, it seems this patch doesn't work on OMAP543 (I've modified EARLY_UART_BASE_ADDRESS to 0x48020000 which is the correct address). I'm looking for the reasons…
+
+> 
+> The definitions themselves duplicate those in
+> xen/drivers/char/ns16550.c, perhaps we could refactor those into a
+> suitable header?
++1
+
+> 
+>> +
+>> +#define UART_LSR_THRE     0x20         /* Xmit holding register empty */
+>> +
+>> +/* 8250 UART wait UART to be ready to transmit
+>> + * rb: register which contains the UART base address
+>> + * rc: scratch register */
+>> +.macro early_uart_ready rb, rc
+>> +1:
+>> +        ldr   \rc, [\rb, #UART_LSR]    /* <- UART_LSR (Line Status Register) */
+>> +        tst   \rc, #UART_LSR_THRE      /* Check BUSY bit */
+>> +        beq   1b                       /* Wait for the UART to be ready */
+>> +.endm
+>> +
+>> +/* 8250 UART transmit character
+>> + * rb: register which contains the UART base address
+>> + * rt: register which contains the character to transmit */
+>> +.macro early_uart_transmit rb, rt
+>> +        str   \rt, [\rb, #UART_TX]     /* -> UART_TX */
+>> +.endm
+>> +
+>> +/*
+>> + * Local variables:
+>> + * mode: ASM
+>> + * indent-tabs-mode: nil
+>> + * End:
+>> + */
+> 
+> 
+3), Chen Baozi
+> However, it seems this patch doesn't work on OMAP543 (I've modified EARLY_UART_BASE_ADDRESS to 0x48020000 which is the correct address). I'm looking for the reasons…
+After fixing a typo when modifying EARLY_UART_BASE_ADDRESS and making clean the working tree, it works for me. Sorry for my carelessness.
+
+4), Chen Baozi
+
+> diff --git a/docs/misc/arm/early-printk.txt b/docs/misc/arm/early-printk.txt
+> index fbc3208..eaa66a1 100644
+> --- a/docs/misc/arm/early-printk.txt
+> +++ b/docs/misc/arm/early-printk.txt
+> @@ -13,6 +13,7 @@ where mach is the name of the machine:
+>    - exynos5250: printk with the second UART
+>    - midway: printk with the pl011 on Calxeda Midway processors
+>    - fastmodel: printk on ARM Fastmodel software emulators
+> +  - sun6i: printk with 8250 on Allwinner A31 processors
+Could this be better to add:
+
+    - omap5432: printk with 8250 compatible UART on OMAP5432 processors
+
+>  
+>  The base address and baud rate is hardcoded in xen/arch/arm/Rules.mk,
+>  see there when adding support for new machines.
+> diff --git a/xen/arch/arm/Rules.mk b/xen/arch/arm/Rules.mk
+> index 422ed04..51e823d 100644
+> --- a/xen/arch/arm/Rules.mk
+> +++ b/xen/arch/arm/Rules.mk
+> @@ -64,6 +64,11 @@ EARLY_PRINTK_INC := pl011
+>  EARLY_PRINTK_BAUD := 115200
+>  EARLY_UART_BASE_ADDRESS := 0xfff36000
+>  endif
+> +ifeq ($(CONFIG_EARLY_PRINTK), sun6i)
+> +# uart configured at 115200 by bootloader
+> +EARLY_PRINTK_INC := 8250
+> +EARLY_UART_BASE_ADDRESS := 0x01c28000
+> +endif
+
+EARLY_UART_BASE_ADDRESS on OMAP5432 is 0x48020000, so I think we'd better to add another case to support it? For example:
+
++ifeq ($(CONFIG_EARLY_PRINTK), omap5432)
++# uart configured at 115200 by bootloader
++EARLY_PRINTK_INC := 8250
++EARLY_UART_BASE_ADDRESS := 0x48020000
++endif
+
+5), Ian C
+> On Wed, 2013-07-03 at 19:50 +0800, Chen Baozi wrote:
+> > On Tue, 2013-07-02 at 21:11 +0800, Bamvor Jian Zhang wrote:
+> > 
+> > > implement early printk for 8250 uart which is used by lots of arm SOC, such as
+> > > Allwinner A31(sun6i) and OMAP5432.
+> > > 
+> > > Signed-off-by: Bamvor Jian Zhang <bjzhang@xxxxxxxx>
+> > > ---
+> > >  docs/misc/arm/early-printk.txt    |  1 +
+> > >  xen/arch/arm/Rules.mk             |  5 ++++
+> > >  xen/arch/arm/arm32/debug-8250.inc | 48 +++++++++++++++++++++++++++++++++++++++
+> > >  3 files changed, 54 insertions(+)
+> > >  create mode 100644 xen/arch/arm/arm32/debug-8250.inc
+> > > 
+> > > diff --git a/docs/misc/arm/early-printk.txt b/docs/misc/arm/early-printk.txt
+> > > index fbc3208..eaa66a1 100644
+> > > --- a/docs/misc/arm/early-printk.txt
+> > > +++ b/docs/misc/arm/early-printk.txt
+> > > @@ -13,6 +13,7 @@ where mach is the name of the machine:
+> > >    - exynos5250: printk with the second UART
+> > >    - midway: printk with the pl011 on Calxeda Midway processors
+> > >    - fastmodel: printk on ARM Fastmodel software emulators
+> > > +  - sun6i: printk with 8250 on Allwinner A31 processors
+> > Could this be better to add:
+> > 
+> >     - omap5432: printk with 8250 compatible UART on OMAP5432 processors
+> > 
+> > >  
+> > >  The base address and baud rate is hardcoded in xen/arch/arm/Rules.mk,
+> > >  see there when adding support for new machines.
+> > > diff --git a/xen/arch/arm/Rules.mk b/xen/arch/arm/Rules.mk
+> > > index 422ed04..51e823d 100644
+> > > --- a/xen/arch/arm/Rules.mk
+> > > +++ b/xen/arch/arm/Rules.mk
+> > > @@ -64,6 +64,11 @@ EARLY_PRINTK_INC := pl011
+> > >  EARLY_PRINTK_BAUD := 115200
+> > >  EARLY_UART_BASE_ADDRESS := 0xfff36000
+> > >  endif
+> > > +ifeq ($(CONFIG_EARLY_PRINTK), sun6i)
+> > > +# uart configured at 115200 by bootloader
+> > > +EARLY_PRINTK_INC := 8250
+> > > +EARLY_UART_BASE_ADDRESS := 0x01c28000
+> > > +endif
+> > 
+> > EARLY_UART_BASE_ADDRESS on OMAP5432 is 0x48020000, so I think we'd
+> > better to add another case to support it?
+> 
+> Yes, this is exactly what should happen. You could either send a patch
+> on top of Bamvor's or perhaps he would be willing to integrate these
+> bits into his existing patch.
+yes, i'd like to do it. meanwhile adding omap5432 uart support is a little
+bit confuse with my cover letter. 
+how about i send one patch for Cortex-A7 support. and another series patch 
+for 8250 compatibility uart. which including
+1/3: debug-8250.inc
+2/3: sun6i changes in early-printk.txt and Rules.mk.
+3/3: omap5432 changes in early-printk.txt and Rules.mk.
+
+> 
+> >  For example:
+> > 
+> > +ifeq ($(CONFIG_EARLY_PRINTK), omap5432)
+> > +# uart configured at 115200 by bootloader
+> > +EARLY_PRINTK_INC := 8250
+> > +EARLY_UART_BASE_ADDRESS := 0x48020000
+> > +endif
+> 
+> Ian.
+
+21:21 2013-07-03
+ARM Cortex-A7 support in Linux
+http://comments.gmane.org/gmane.linux.ports.arm.kernel/237252
 
