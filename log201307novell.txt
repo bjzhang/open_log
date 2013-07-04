@@ -142,10 +142,8 @@ GTD
 1), 20'(in subway): check the mail.
 2), 10:40-11:40 15:30-15:51 reply to virsh save hang bug. see"10:40 2013-07-03"
 3), debug the console patch. see"15:51 2013-07-03"
-
-2, next
-3), arm call.
-4), continue to debug xen for sun6i. ref"14:38 2013-07-01"8
+4), 40' arm call.
+5), discuss with mac_ and other guys about how to enable kvm-arm on a Cortex-A7 SOC. see"13:15 2013-07-04"
 
 10:34 2013-07-03
 company, suse, hackweek, award
@@ -250,7 +248,9 @@ To unsubscribe, e-mail: opensuse-arm+unsubscribe@opensuse.org
 To contact the owner, e-mail: opensuse-arm+owner@opensuse.org
 
 15:51 2013-07-03
+(14:19 2013-07-04)
 suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont4, rebase
+1, compile
 
 16:19 2013-07-03
 company, colleague, openSUSE team, Tomás Chvátal, report to Agustin Benito Bethencourt
@@ -280,6 +280,7 @@ xen, arm, sun6i
 \TODO: do i actually enter into hyp mode???
 
 19:55 2013-07-03
+virtualization, xen, arm, allwinner A31, sun6i, c env patch v2, cont2, upstream reply
 1, Patch 1
 1), Ian C
 > On Tue, 2013-07-02 at 21:11 +0800, Bamvor Jian Zhang wrote:
@@ -715,7 +716,110 @@ for 8250 compatibility uart. which including
 > 
 > Ian.
 
+3, (20:19 2013-07-04)
+\TODO
+1), send patch v3 with Ian C and Tim Deegan update. do not forget to add changes since v2.
+2), wait chenbaozi send ns16550 console patch.
+then update debug 8250 code.
+
 21:21 2013-07-03
 ARM Cortex-A7 support in Linux
 http://comments.gmane.org/gmane.linux.ports.arm.kernel/237252
+
+13:15 2013-07-04
+virtualization, kvm, arm, irc, kvm-arm
+log location:
+novell/im/irc_kvm_arm_20130703.txt
+novell/im/irc_opensuse_arm_20130703.txt
+1, how to port Cortex-A7 to KVM:
+<maz_> bamvor: the biggest task is to look in the A7 TRM and find out what are the cp15 operations we need to trap if any.
+<bamvor> maz_: do u mean the trap in hyp mode? i guess than most of it is identical with ca15. but i need check it one by one. 
+<maz_> bamvor: I don't expect that to be a very long task anyway, but that's a good ramp-up for playing with KVM.
+<Bamvor1> maz_: where could i get the lastest kvm-arm code, the github code seems out of date.
+<maz_> Bamvor1: use mainline. everything is there.
+2, maz_ has a A20 device
+<maz_> XavierGr: dual A7, apparently. But I gave up trying to find a recent kernel/bootloader for this. If Maxime manages to get mainline running on it, I'll have a look again.
+3, <mgalgs> bamvor: we're also looking into kvm support for A7 here at QuIC (msm8226) so I guess we're in good company :)
+
+14:01 2013-07-04
+GTD
+0, 10:30-21:20
+
+1, today
+1), 30' 1h discuss with Guangliang about cept support in xen. see"14:12 2013-07-04" 
+2), 30' 18:17-19:00 19:31-19:59 debug the console patch. see"15:51 2013-07-03"
+3), 20:00-20:16 send patch to virtualization-dev. see"15:28 2013-07-04"
+4), 20:17-21:15 debug sun6i xen. see"21:11 2013-07-04"
+
+2, next
+1), work on patch for xen arm. ref"19:55 2013-07-03"3
+2), continue to debug xen for sun6i. ref"14:38 2013-07-01"8
+3), enable rbd on qemu-img.
+
+3, next week
+1), 下周无论如何需要开始搞libxl event. 没有其它合适的东西啊。
+2), Cortex-A12 introduction: 20130711 15UTC
+http://spectrum.ieee.org/webinar/delivering-fullfeatured-mobile-experiences-on-midrange-devices?utm_source=ARM&utm_medium=email&utm_campaign=promo
+
+14:12 2013-07-04
+virtualization, kvm, xen, ceph
+1, link about ceph on libvirt and qemu
+1), the example for qemu command
+Guangliang Zhao: http://ceph.com/docs/master/rbd/qemu-rbd/
+qemu -m 1024 -drive format=rbd,file=rbd:data/squeeze,cache=writeback
+2), for libvirt xml:
+Guangliang Zhao: http://ceph.com/docs/master/rbd/libvirt/
+<disk type='network' device='disk'>
+        <source protocol='rbd' name='libvirt-pool/new-libvirt-image'>
+                <host name='{monitor-host}' port='6789'/>
+        </source>
+        <target dev='hdb' bus='ide'/>
+</disk>
+2, \TODO ask guangliang build a ceph environment for both kvm and xen. 
+3, it seems that only i need to do is add device and drive support in libxl.
+e.g. add drive in libxl_dm.c
+\TODO check the chance add drive and someting in libxl_dm.c
+
+15:28 2013-07-04
+virtualization, qemu, send patch to virtualization-dev
+1, [PATCH RFC] fix overflow in qemu save
+there is a bug reported by Martin Jakl <martin.jakl@qbicon.cz>, about virsh save hang.
+after some test, i found that this bug could be reproduce 100% when the vm actually used more that 2Gbytes. after some debug, i know that this is because a variable overflow during save cleanup routine in qemu. see the details in my patch.
+
+i have update to qemu to 1.3.1 and apply my patch, Martin said that basiclly it works.  i am not familiar with how to submit a patch to qemu package. and i want to know that if Martin think it works, what should i do for applying this patch in opensuse12,3. both kvm and qemu package need this patch.
+
+BTW: this bug is not found in sle11 sp2 and sp3.
+
+Index: qemu-1.3.1/buffered_file.c
+===================================================================
+--- qemu-1.3.1.orig/buffered_file.c
++++ qemu-1.3.1/buffered_file.c
+@@ -142,7 +142,7 @@ static int buffered_close(void *opaque)
+ 
+     DPRINTF("closing\n");
+ 
+-    s->xfer_limit = INT_MAX;
++    s->xfer_limit = UINT_MAX;
+     while (!qemu_file_get_error(s->file) && s->buffer_size) {
+         ret = buffered_flush(s);
+         if (ret < 0) {
+
+21:11 2013-07-04
+virtualization, xen, arm, allwinner A31, sun6i, debug hang in setup_pagetables
+1, 
+setup_pagetables<441>: 002d7600, 002d7600
+setup_pagetables<447>: 002d7600, 002ce000
+setup_pagetables<448>: 480943578
+setup_pagetables<450>
+setup_pagetables<453>
+Xen heap: 131072 pages  Dom heap: 131072 pages
+
+per_cpu(xen_dommap, 0) is right.
+this_cpu(xen_dommap) is wrong.
+because  READ_SYSREG(TPIDR_EL2) is ramdom(this time 480943578).
+#define HTPIDR          p15,4,c13,c0,2  /* HYp Software Thread Id Register */
+why?
+
+2, \TODO
+try using the all 2G memory, and test again.
 
