@@ -1770,3 +1770,176 @@ start_xen<486>
 
 6, i guess that dig in how to get the sun6i kernel running. is useful to debug this issue.
 
+11:08 2013-07-11
+mailing list, virtualization, sles
+1, "David Byte" <dbyte@suse.com>""_email_"[Virtualization-dev] Fwd: SLES as virtual guest"_20130710_0127
+Question from a partner that I have not thought about or investigated.  Anyone?
+-------------------------------------------------
+ 
+Does the Linux kernel (not including any virtual drivers, etc.) alter its processor utilization, scheduling or resource management (i.e. memory, IO, etc) in any way when it’s running on a hypervisor vs. bare-metal?
+ 
+David Byte
+Sr. Technology Strategist, OEM
+SUSE
+dbyte@novell.com
+(P)918.230.2771www.suse.com 
+https://www.suse.com/partners/integrated-systems/
+
+2, ""Jan Beulich" <JBeulich@suse.com>"_email_20130710_0326
+>>> On 09.07.13 at 19:27, "David Byte" <dbyte@suse.com> wrote:
+> Does the Linux kernel (not including any virtual drivers, etc.) alter its 
+> processor utilization, scheduling or resource management (i.e. memory, IO, 
+> etc) in any way when it’s running on a hypervisor vs. bare-metal?
+
+If "the Linux kernel" is any of the kernel flavors we ship, then I'm
+relatively certain the answer is "no".
+
+If however "the Linux kernel" is more widely scoped, then there are
+kernel configurations where this is possible (because the transition
+to using virtual drivers is not as sharp as you/they may imagine).
+
+And even the "no" above is depending on the perspective you/they
+take: The kernel using things like the "pause" instruction can have
+a more measurable effect when running virtualized than when
+running on bare metal.
+
+Jan
+
+11:15 2013-07-11
+"Alexander Osthof <aosthof@suse.de>"_email_"[devel] SUSE Studio 1.3 Extension for System z Beta3 is available for testing"_20130710_2117
+Hi,
+
+the SUSE Studio team is happy to announce that SUSE Studio 1.3 Extension 
+for Sytem z Beta3 is ready and available for testing.
+
+The files can be downloaded from
+
+http://download.suse.de/install/SLE-11-SP2-Studio-1.3-System-Z-Runner-Beta3/
+
+Note:
+In order to enable the s390 templates on the Studio Onsite 1.3 host, one 
+needs to install the updated packages from the 'ui-server' subdirectoy.
+
+Happy testing,
+
+   Your Studio team.
+
+-- 
+Alexander Osthof             Project Manager SUSE Studio & Public Clouds
+SUSE LINUX Products GmbH   Maxfeldstr. 5, D-90409 Nürnberg, www.suse.com
+GF:Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg)
+GPG 1024D/06EF2575     3362 3E18 9A21 5080 50F2 000C 7F04 A5B0 06EF 2575
+
+11:18 2013-07-11
+1, "Tim Deegan <tim@xen.org>"_email_20130711_0114
+Hi,
+
+At 17:47 +0800 on 09 Jul (1373392034), Bamvor Jian Zhang wrote:
+>          PRINT("- Setting up control registers -\r\n")
+>  
+> -        /* Read CPU ID */
+> -        mrc   CP32(r0, MIDR)
+> -        ldr   r1, =(MIDR_MASK)
+> -        and   r0, r0, r1
+> -        /* Is this a Cortex A15? */
+> -        ldr   r1, =(CORTEX_A15_ID)
+> -        teq   r0, r1
+> -        bleq  cortex_a15_init
+> +        /* Get processor specific proc info into r1 */
+> +        mrc   CP32(r0, MIDR)                /* r0 := our cpu id */
+> +        ldr   r1, = __proc_info_start
+> +        add   r1, r1, r10                   /* r1 := paddr of table (start) */
+> +        ldr   r2, = __proc_info_end
+> +        add   r2, r2, r10                   /* r2 := paddr of table (end) */
+> +1:      ldr   r3, [r1, #PROCINFO_cpu_mask]
+> +        and   r0, r0, r3
+
+This mask clobbers the only copy of the CPU ID, so the second and
+subsequent checks will be wrong.  You need to keep a copy of the
+original around or read MIDR inside the loop.
+
+> +        ldr   r3, [r1, #PROCINFO_cpu_val]   /* r3 := cpu val in current proc info */
+> +        teq   r0, r3
+> +        beq   2f                            /* Match => exit, or try next proc info */
+> +        add   r1, r1, #PROCINFO_sizeof
+> +        cmp   r1, r2
+> +        blo   1b
+> +        mov   r4, r0
+> +        PRINT("- Missing processor info: ")
+> +        mov   r0, r4
+
+It would be good to print the un-masked ID here too. 
+
+> +        bl    putn
+> +        PRINT(" -\r\n")
+> +        b     fail
+> +
+> +2:
+> +        /* Jump to cpu_init */
+> +        ldr   r1, [r1, #PROCINFO_cpu_init]  /* r1 := vaddr(init func) */
+> +        adr   lr, cpu_init_done             /* Save return address */
+> +        add   pc, r1, r10                   /* Call paddr(init func) */
+>  
+> +cpu_init_done:
+[...]
+> +.globl v7_init
+> +v7_init:
+> +        /* Set up the SMP bit in ACTLR */
+> +        mrc   CP32(r0, ACTLR)
+> +        orr   r0, r0, #(ACTLR_V7_SMP) /* enable SMP bit */
+> +        mcr   CP32(r0, ACTLR)
+> +        mov   pc, lr
+> +
+> +        .section ".init.proc.info", #alloc, #execinstr
+> +        .type __v7_ca15mp_proc_info, #object
+> +__v7_ca15mp_proc_info:
+> +        .long 0x410FC0F0             /* Cortex-A15 */
+> +        .long 0xFF0FFFF0             /* Mask */
+> +        .long v7_init
+> +        .size __v7_ca15mp_proc_info, . - __v7_ca15mp_proc_info
+> +
+> +        .section ".init.proc.info", #alloc, #execinstr
+> +        .type __v7_ca7mp_proc_info, #object
+> +__v7_ca7mp_proc_info:
+> +        .long 0x410FC070             /* Cortex-A7 */
+> +        .long 0xFF0FFFF0             /* Mask */
+> +        .long v7_init
+> +        .size __v7_ca7mp_proc_info, . - __v7_ca7mp_proc_info
+> +
+
+I'd asked for these to be defined in C -- that way all the OFFSET_
+macros in head.S are guaranteed to be right.  But OTOH it's nice to have
+them here in the same file as the code they reference, so I guess it's
+OK this way too.
+
+The rest of this looks good to me.
+
+Cheers,
+
+Tim.
+
+14:27 2013-07-11
+virtualization, kvm, xen, ceph
+1, http://download.suse.de/ibs/Devel:/Storage:/Ceph/SLE11SP2/
+2, libxl
+1), format: RAW
+2), backend? RBD?
+
+15:25 2013-07-11
+GTD
+1, today
+1), send jim email about my work.
+
+15:31 2013-07-11
+qemu-kvm script
+cat > %{buildroot}%{_bindir}/qemu-kvm << 'EOF'
+#!/bin/sh
+%ifarch %s390x
+exec /usr/bin/qemu-system-s390x -machine accel=kvm "$@"
+%else
+exec /usr/bin/qemu-system-x86_64 -machine accel=kvm "$@"
+%endif
+EOF
+
+
+
