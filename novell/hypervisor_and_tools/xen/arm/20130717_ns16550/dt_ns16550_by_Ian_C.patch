@@ -1,0 +1,333 @@
+diff --git a/xen/drivers/char/ns16550.c b/xen/drivers/char/ns16550.c
+index e0c87bb..ed18b91 100644
+--- a/xen/drivers/char/ns16550.c
++++ b/xen/drivers/char/ns16550.c
+@@ -19,7 +19,10 @@
+ #include <xen/iocap.h>
+ #include <xen/pci.h>
+ #include <xen/pci_regs.h>
++#include <xen/vmap.h>
+ #include <asm/io.h>
++#include <asm/early_printk.h>
++#include <asm/device.h>
+ #ifdef CONFIG_X86
+ #include <asm/fixmap.h>
+ #endif
+@@ -39,7 +42,8 @@ string_param("com2", opt_com2);
+ 
+ static struct ns16550 {
+     int baud, clock_hz, data_bits, parity, stop_bits, fifo_size, irq;
+-    unsigned long io_base;   /* I/O port or memory-mapped I/O address. */
++    u64 io_base;   /* I/O port or memory-mapped I/O address. */
++    u64 io_size;
+     char __iomem *remapped_io_base;  /* Remapped virtual address of MMIO. */
+     /* UART with IRQ line: interrupt-driven I/O. */
+     struct irqaction irqaction;
+@@ -56,6 +60,7 @@ static struct ns16550 {
+     u32 bar;
+     u16 cr;
+     u8 bar_idx;
++    struct dt_irq dt_irq;
+ } ns16550_com[2] = { { 0 } };
+ 
+ /* Register offsets */
+@@ -128,18 +133,20 @@ static struct ns16550 {
+ #define RESUME_DELAY    MILLISECS(10)
+ #define RESUME_RETRIES  100
+ 
++#define REG_SHIFT 2
++
+ static char ns_read_reg(struct ns16550 *uart, int reg)
+ {
+-    if ( uart->remapped_io_base == NULL )
+-        return inb(uart->io_base + reg);
+-    return readb(uart->remapped_io_base + reg);
++//    if ( uart->remapped_io_base == NULL )
++//        return inb(uart->io_base + reg);
++    return readl(uart->remapped_io_base + (reg<<REG_SHIFT));
+ }
+ 
+ static void ns_write_reg(struct ns16550 *uart, int reg, char c)
+ {
+-    if ( uart->remapped_io_base == NULL )
+-        return outb(c, uart->io_base + reg);
+-    writeb(c, uart->remapped_io_base + reg);
++//    if ( uart->remapped_io_base == NULL )
++//        return outb(c, uart->io_base + reg);
++    writel(c, uart->remapped_io_base + (reg<<REG_SHIFT));
+ }
+ 
+ static void ns16550_interrupt(
+@@ -214,6 +221,7 @@ static int ns16550_getc(struct serial_port *port, char *pc)
+     return 1;
+ }
+ 
++#if 0
+ static void pci_serial_early_init(struct ns16550 *uart)
+ {
+     if ( !uart->ps_bdf_enable || uart->io_base >= 0x10000 )
+@@ -231,6 +239,7 @@ static void pci_serial_early_init(struct ns16550 *uart)
+     pci_conf_write16(0, uart->ps_bdf[0], uart->ps_bdf[1], uart->ps_bdf[2],
+                      PCI_COMMAND, PCI_COMMAND_IO);
+ }
++#endif
+ 
+ static void ns16550_setup_preirq(struct ns16550 *uart)
+ {
+@@ -239,7 +248,9 @@ static void ns16550_setup_preirq(struct ns16550 *uart)
+ 
+     uart->intr_works = 0;
+ 
++#if 0
+     pci_serial_early_init(uart);
++#endif
+ 
+     lcr = (uart->data_bits - 5) | ((uart->stop_bits - 1) << 2) | uart->parity;
+ 
+@@ -260,7 +271,8 @@ static void ns16550_setup_preirq(struct ns16550 *uart)
+         /* Baud rate already set: read it out from the divisor latch. */
+         divisor  = ns_read_reg(uart, DLL);
+         divisor |= ns_read_reg(uart, DLM) << 8;
+-        uart->baud = uart->clock_hz / (divisor << 4);
++        early_printk("divisor %d\n", divisor);
++        //uart->baud = uart->clock_hz / (divisor << 4);
+     }
+     ns_write_reg(uart, LCR, lcr);
+ 
+@@ -285,8 +297,10 @@ static void __init ns16550_init_preirq(struct serial_port *port)
+         uart->remapped_io_base = (void __iomem *)fix_to_virt(idx);
+         uart->remapped_io_base += uart->io_base & ~PAGE_MASK;
+ #else
+-        uart->remapped_io_base = (char *)ioremap(uart->io_base, 8);
++        uart->remapped_io_base = ioremap_attr(uart->io_base, uart->io_size, PAGE_HYPERVISOR_NOCACHE);
++//        uart->remapped_io_base = (char *)ioremap(uart->io_base, 8);
+ #endif
++        early_printk("UART mapped at %p\n", uart->remapped_io_base);
+     }
+ 
+     ns16550_setup_preirq(uart);
+@@ -326,23 +340,27 @@ static void __init ns16550_init_postirq(struct serial_port *port)
+ 
+     /* Calculate time to fill RX FIFO and/or empty TX FIFO for polling. */
+     bits = uart->data_bits + uart->stop_bits + !!uart->parity;
+-    uart->timeout_ms = max_t(
+-        unsigned int, 1, (bits * uart->fifo_size * 1000) / uart->baud);
+-
++//    uart->timeout_ms = max_t(
++//        unsigned int, 1, (bits * uart->fifo_size * 1000) / uart->baud);
++    uart->timeout_ms = 1;
+     if ( uart->irq > 0 )
+     {
+         uart->irqaction.handler = ns16550_interrupt;
+         uart->irqaction.name    = "ns16550";
+         uart->irqaction.dev_id  = port;
+-        if ( (rc = setup_irq(uart->irq, &uart->irqaction)) != 0 )
+-            printk("ERROR: Failed to allocate ns16550 IRQ %d\n", uart->irq);
++        //if ( (rc = setup_irq(uart->irq, &uart->irqaction)) != 0 )
++        //    printk("ERROR: Failed to allocate ns16550 IRQ %d\n", uart->irq);
++        if ( (rc = setup_dt_irq(&uart->dt_irq, &uart->irqaction)) != 0 )
++            printk("ERROR: Failed to allocate ns16550 DT IRQ.\n");
+     }
+ 
+     ns16550_setup_postirq(uart);
+ 
++#if 0
+     if ( uart->bar || uart->ps_bdf_enable )
+         pci_hide_device(uart->ps_bdf[0], PCI_DEVFN(uart->ps_bdf[1],
+                                                    uart->ps_bdf[2]));
++#endif
+ }
+ 
+ static void ns16550_suspend(struct serial_port *port)
+@@ -351,13 +369,16 @@ static void ns16550_suspend(struct serial_port *port)
+ 
+     stop_timer(&uart->timer);
+ 
++#if 0
+     if ( uart->bar )
+        uart->cr = pci_conf_read16(0, uart->ps_bdf[0], uart->ps_bdf[1],
+                                   uart->ps_bdf[2], PCI_COMMAND);
++#endif
+ }
+ 
+ static void _ns16550_resume(struct serial_port *port)
+ {
++#if 0
+     struct ns16550 *uart = port->uart;
+ 
+     if ( uart->bar )
+@@ -367,6 +388,7 @@ static void _ns16550_resume(struct serial_port *port)
+        pci_conf_write16(0, uart->ps_bdf[0], uart->ps_bdf[1], uart->ps_bdf[2],
+                         PCI_COMMAND, uart->cr);
+     }
++#endif
+ 
+     ns16550_setup_preirq(port->uart);
+     ns16550_setup_postirq(port->uart);
+@@ -440,6 +462,12 @@ static int __init ns16550_irq(struct serial_port *port)
+     return ((uart->irq > 0) ? uart->irq : -1);
+ }
+ 
++static const struct dt_irq __init *ns16550_dt_irq(struct serial_port *port)
++{
++    struct ns16550 *uart = port->uart;
++    return &uart->dt_irq;
++}
++
+ static struct uart_driver __read_mostly ns16550_driver = {
+     .init_preirq  = ns16550_init_preirq,
+     .init_postirq = ns16550_init_postirq,
+@@ -449,9 +477,13 @@ static struct uart_driver __read_mostly ns16550_driver = {
+     .tx_ready     = ns16550_tx_ready,
+     .putc         = ns16550_putc,
+     .getc         = ns16550_getc,
+-    .irq          = ns16550_irq
++    .irq          = ns16550_irq,
++    .dt_irq_get   = ns16550_dt_irq,
++
+ };
+ 
++#if 0
++
+ static int __init parse_parity_char(int c)
+ {
+     switch ( c )
+@@ -709,8 +741,78 @@ void __init ns16550_init(int index, struct ns16550_defaults *defaults)
+     /* Default is no transmit FIFO. */
+     uart->fifo_size = 1;
+ 
+-    ns16550_parse_port_config(uart, (index == 0) ? opt_com1 : opt_com2);
++    /* Register with generic serial driver. */
++    serial_register_uart(uart - ns16550_com, &ns16550_driver, uart);
+ }
++#endif
++
++#if 1
++static int __init ns16550_uart_dt_init(struct dt_device_node *dev,
++                                       const void *data)
++{
++    struct ns16550 *uart;
++    int res;
++
++    early_printk("%s\n", __func__);
++
++    uart = &ns16550_com[0];
++
++    uart->baud      = BAUD_AUTO;//115200;
++    uart->clock_hz  = UART_CLOCK_HZ;
++    uart->data_bits = 8;
++    uart->parity    = PARITY_NONE;
++    uart->stop_bits = 1;
++    //uart->irq       = defaults->irq;
++    //uart->io_base   = defaults->io_base;
++    /* Default is no transmit FIFO. */
++    uart->fifo_size = 1;
++
++    res = dt_device_get_address(dev, 0, &uart->io_base, &uart->io_size);
++    if ( res )
++    {
++        early_printk("ns16550: Unable to retrieve the base"
++                     " address of the UART\n");
++        return res;
++    }
++
++    early_printk("ns16550 at %"PRIx64"-%"PRIx64"\n", uart->io_base, uart->io_base + uart->io_size);
++
++//    uart->io_base = addr; //ioremap_attr(addr, size, PAGE_HYPERVISOR_NOCACHE);
++//    if ( !uart->io_base )
++//    {
++//        early_printk("ns16550: Unable to map the UART memory\n");
++//
++//        return -ENOMEM;
++//    }
++
++    res = dt_device_get_irq(dev, 0, &uart->dt_irq);
++    if ( res )
++    {
++        early_printk("ns16550: Unable to retrieve the IRQ\n");
++        return res;
++    }
++
++    /* Register with generic serial driver. */
++    serial_register_uart(uart - ns16550_com, &ns16550_driver, uart);
++
++    dt_device_set_used_by(dev, DOMID_XEN);
++
++    early_printk("console done?\n");
++    printk("normal printk\n");
++    return 0;
++}
++
++static const char const *ns16550_dt_compat[] __initdata =
++{
++    "snps,dw-apb-uart",
++    NULL
++};
++
++DT_DEVICE_START(ns16550, "NS16550 UART", DEVICE_SERIAL)
++        .compatible = ns16550_dt_compat,
++        .init = ns16550_uart_dt_init,
++DT_DEVICE_END
++#endif
+ 
+ /*
+  * Local variables:
+diff --git a/xen/include/asm-arm/io.h b/xen/include/asm-arm/io.h
+index aea5233..170263f 100644
+--- a/xen/include/asm-arm/io.h
++++ b/xen/include/asm-arm/io.h
+@@ -1,6 +1,54 @@
+ #ifndef _ASM_IO_H
+ #define _ASM_IO_H
+ 
++static inline void __raw_writeb(u8 val, volatile void __iomem *addr)
++{
++        asm volatile("strb %1, %0"
++                     : "+Qo" (*(volatile u8 __force *)addr)
++                     : "r" (val));
++}
++
++static inline void __raw_writel(u32 val, volatile void __iomem *addr)
++{
++        asm volatile("str %1, %0"
++                     : "+Qo" (*(volatile u32 __force *)addr)
++                     : "r" (val));
++}
++
++static inline u8 __raw_readb(const volatile void __iomem *addr)
++{
++        u8 val;
++        asm volatile("ldrb %1, %0"
++                     : "+Qo" (*(volatile u8 __force *)addr),
++                       "=r" (val));
++        return val;
++}
++
++static inline u32 __raw_readl(const volatile void __iomem *addr)
++{
++        u32 val;
++        asm volatile("ldr %1, %0"
++                     : "+Qo" (*(volatile u32 __force *)addr),
++                       "=r" (val));
++        return val;
++}
++
++#define __iormb()               rmb()
++#define __iowmb()               wmb()
++
++#define readb_relaxed(c) ({ u8  __r = __raw_readb(c); __r; })
++#define readl_relaxed(c) ({ u32 __r = le32_to_cpu((__force __le32) \
++                                        __raw_readl(c)); __r; })
++
++#define writeb_relaxed(v,c)     __raw_writeb(v,c)
++#define writel_relaxed(v,c)     __raw_writel((__force u32) cpu_to_le32(v),c)
++
++#define readb(c)                ({ u8  __v = readb_relaxed(c); __iormb(); __v; })
++#define readl(c)                ({ u32 __v = readl_relaxed(c); __iormb(); __v; })
++
++#define writeb(v,c)             ({ __iowmb(); writeb_relaxed(v,c); })
++#define writel(v,c)             ({ __iowmb(); writel_relaxed(v,c); })
++
+ #endif
+ /*
+  * Local variables:
