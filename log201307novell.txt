@@ -4266,42 +4266,6 @@ GTD
 supper 30'
 6), 10' summary about my patch. see"19:37 2013-07-18"
 
-2, next
-1), arm
-(1), try sun6i upstream kernel.
-(2), do i need to reply the uart discuss in xen-devel? 
-(3), xen: arm: 8250 debug patch. see"15:05 2013-07-17"
-(4), confirm about arndale early printk init macro bug. and send a email.
-(5), ask help for run opensuse arm.
-2), libxl
-(1), console patch.
-(2), confirm rbd is work in libxl driver.
-(3), blkstatus in libxl.
-3), read the xen 4.4 discuss
-http://lists.xen.org/archives/html/xen-devel/2013-06/msg01391.html
-
-3, week plan
-这周希望两个patch能收，工作内容就差不多了。另外rbd patch希望作为下周sync的工作汇报。
-1), xen arm. first priority. 1/2 patch accepted.
-2), libxl driver console patch.
-3), discuss about lock patch with Jim. i do not want to do it this week.
-4), libxl rbd. is it possible to do that? i hope i could write a initial version for it this week.
-CANCELLED. it has been discussed in april in xen list. it should be work in libxl driver right now.
-\TODO: read the code about how libvirt and libxl handle rbd. 
-5), xen arm: ldrex/strex. try upstream kernel? ref"15:38 2013-07-09". compare mm code.
-6), after console patch commit: discuss with Jim about lock.
-
-4, year plan
-1), write 24 patch in one year. one patch per month is a little bit less.
-
-2, next
-1), lock?
-
-3, next week
-1), 下周无论如何需要开始搞libxl event. 没有其它合适的东西啊。
-2), Cortex-A12 introduction: 20130711 15UTC
-http://spectrum.ieee.org/webinar/delivering-fullfeatured-mobile-experiences-on-midrange-devices?utm_source=ARM&utm_medium=email&utm_campaign=promo
-
 10:52 2013-07-18
 virtualization, xen, lock
 title: about my work in libxl driver
@@ -4355,6 +4319,147 @@ currently, i know i should register the handler to libvirt event loop, but i do 
 best regards
 
 bamvor
+
+4, (10:56 2013-07-19)
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+> 1, first of all, thanks for your review and test for my patch. And i am sorry about make check and syntax-check fail.
+> i have sent v2 patch to upstream with your suggestions.
+>   
+
+Thanks, saw the V2.  danpb and myself have commented on it and you'll
+need a V3, sorry :).
+
+> BTW: i got a error in virnettlscontexttest in "make check", which fail in the following checks, it should not relative to my patch, right? but why it happens?
+>   
+
+Yep, I'm seeing it as well but haven't had a chance to investigate.  It
+is certainly not caused by your patch though and can be ignored as far
+as considering 'make check' success.
+
+>     /* Key usage:dig-sig:not-critical */
+>     static struct testTLSCertReq cacert5req = {
+>         NULL, NULL, "cacert5.pem", "UK",
+>         "libvirt CA 5", NULL, NULL, NULL, NULL,
+>         true, true, true,
+>         true, false, GNUTLS_KEY_DIGITAL_SIGNATURE,
+>         false, false, NULL, NULL,
+>         0, 0,
+>     };
+>     /* Technically a CA cert with basic constraints
+>      * key purpose == key signing + non-critical should
+>      * be rejected. GNUTLS < 3 does not reject it and
+>      * we don't anticipate them changing this behaviour
+>      */
+>     DO_CTX_TEST(true, cacert5req, servercertreq, GNUTLS_VERSION_MAJOR >= 3);
+>
+> my tls package(opensuse 12.3):
+>   
+>> rpm -qa |grep tls
+>>     
+> libgnutls28-32bit-3.0.28-1.1.1.x86_64
+> libgnutls-devel-3.0.28-1.1.1.x86_64
+> gnutls-3.0.28-1.1.1.x86_64
+> libgnutls28-3.0.28-1.1.1.x86_64
+>
+> 2, about lock
+> i notice that there is a fate changes:
+> 315157 Add support for virtlockd in libvirt xen driver, https://fate.suse.com/315157
+> - SLES-12: Unconfirmed
+> + SLES-12: New
+>
+> is it mean that it maybe a fate in sle12?
+>   
+
+Yes.  State "New" means it is under evaluation by PM.  They will add
+"Important", "Mandatory", etc. after evaluating the feature.
+
+> IIRC, u suggested that doing the lock thing and reference the qemu work. do u mean for both jobs and virtlockd?
+>   
+
+The qemu driver can be referenced for job support and virtlockd
+integration.  These are two orthogonal tasks though that don't have
+anything in common afaik.
+
+Also, wrt finer-grained locking in the libxl driver, Michal Privoznik
+just posted a series to improve the locking in the LXC driver
+
+https://www.redhat.com/archives/libvir-list/2013-July/msg01085.html
+
+That should be a good reference (in addition to the qemu driver) for
+doing the same in the libxl driver.
+
+> i have read some code about how this lock used in qemu driver. it seems that this lock is no dependency with jobs, right?
+> if yes, which should i do first?
+>   
+
+No, I don' think there is any dependency with jobs.  And we need both,
+but without some investigation I'm not sure which would be a better
+first candidate.  If a jobs patch would subsequently need a bunch of
+changing to accommodate fine-grained locking, then the locking patch
+should be done first IMO.  Off-hand, I'm not sure how much one affects
+the other.
+
+> 3, about job patch
+> i still hang in how to use the ao_how in libxl driver. maybe i will discuss it with Chunyan.
+> currently, i know i should register the handler to libvirt event loop, but i do not know the exact point, i try to register in libxlEventHandler, but it is not work.
+>   
+
+I don't think you register it in the event loop.  The choices are
+
+1) define a callback to be invoked on completion and specify it in
+libxl_asyncop_how.callback
+2) don't specify a callback and let libxl generate a libxl_event, which
+you must obtain with libxl_event_wait() and/or libxl_event_check(). 
+Here's the docu on libxl_asyncop_how from libxl.h
+
+/*
+ * Some libxl operations can take a long time.  These functions take a
+ * parameter to control their concurrency:
+ *     libxl_asyncop_how *ao_how
+ *
+ * If ao_how==NULL, the function will be synchronous.
+ *
+ * If ao_how!=NULL, the function will set the operation going, and if
+ * this is successful will return 0.  In this case the zero error
+ * response does NOT mean that the operation was successful; it just
+ * means that it has been successfully started.  It will finish later,
+ * perhaps with an error.
+ *
+ * If ao_how->callback!=NULL, the callback will be called when the
+ * operation completes.  The same rules as for libxl_event_hooks
+ * apply, including the reentrancy rules and the possibility of
+ * "disaster", except that libxl calls ao_how->callback instead of
+ * libxl_event_hooks.event_occurs.  (See libxl_event.h.)
+ *
+ * If ao_how->callback==NULL, a libxl_event will be generated which
+ * can be obtained from libxl_event_wait or libxl_event_check.  The
+ * event will have type OPERATION_COMPLETE (which is not used
+ * elsewhere).
+ *
+ * Note that it is possible for an asynchronous operation which is to
+ * result in a callback to complete during its initiating function
+ * call.  In this case the initiating function will return 0
+ * indicating the at the operation is "in progress", even though by
+ * the time it returns the operation is complete and the callback has
+ * already happened.
+ *
+ * The application must set and use ao_how->for_event (which will be
+ * copied into libxl_event.for_user) or ao_how->for_callback (passed
+ * to the callback) to determine which operation finished, and it must
+ * of course check the rc value for errors.
+ *
+ * *ao_how does not need to remain valid after the initiating function
+ * returns. All other parameters must remain valid for the lifetime of
+ * the asynchronous operation, unless otherwise specified.
+ *
+ * Callbacks may occur on any thread in which the application calls
+ * libxl.
+ */
+
+Thanks for the update!
+Jim
 
 13:09 2013-7-18
 all hands meeting, suse
@@ -4549,4 +4654,267 @@ Author: Ian Jackson <ian.jackson@eu.citrix.com>
 Date:   Thu Jan 24 12:47:52 2013 +0000
 
     libxl: fix stale fd event callback race
+
+10:56 2013-07-19
+GTD
+0, 10:40-17:30
+
+1, today
+1), Jim reply. see"10:52 2013-07-18"4.
+2), 14:22-17:27 console patch. see"11:08 2013-07-19"
+
+2, next
+1), arm
+(1), try sun6i upstream kernel.
+(2), do i need to reply the uart discuss in xen-devel? 
+(3), xen: arm: 8250 debug patch. see"15:05 2013-07-17"
+(4), confirm about arndale early printk init macro bug. and send a email.
+(5), ask help for run opensuse arm.
+2), libxl
+(1), console patch.
+(2), confirm rbd is work in libxl driver.
+(3), blkstatus in libxl.
+3), read the xen 4.4 discuss
+http://lists.xen.org/archives/html/xen-devel/2013-06/msg01391.html
+
+3, week plan
+这周希望两个patch能收，工作内容就差不多了。另外rbd patch希望作为下周sync的工作汇报。
+1), xen arm. first priority. 1/2 patch accepted.
+2), libxl driver console patch.
+3), discuss about lock patch with Jim. i do not want to do it this week.
+4), libxl rbd. is it possible to do that? i hope i could write a initial version for it this week.
+CANCELLED. it has been discussed in april in xen list. it should be work in libxl driver right now.
+\TODO: read the code about how libvirt and libxl handle rbd. 
+5), xen arm: ldrex/strex. try upstream kernel? ref"15:38 2013-07-09". compare mm code.
+6), after console patch commit: discuss with Jim about lock.
+
+4, year plan
+1), write 24 patch in one year. one patch per month is a little bit less.
+
+2, next
+1), lock?
+
+3, next week
+1), 下周无论如何需要开始搞libxl event. 没有其它合适的东西啊。
+2), Cortex-A12 introduction: 20130711 15UTC
+http://spectrum.ieee.org/webinar/delivering-fullfeatured-mobile-experiences-on-midrange-devices?utm_source=ARM&utm_medium=email&utm_campaign=promo
+
+11:08 2013-07-19
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont3, deal with upstream reply
+1, upstream reply
+1), "Daniel P. Berrange" <berrange@redhat.com>
+On Thu, Jul 18, 2013 at 08:14:17PM +0800, Bamvor Jian Zhang wrote:
+> this patch introduce the console api in libxl driver for both pv and
+> hvm guest.  and import and update the libxlMakeChrdevStr function
+> which was deleted in commit dfa1e1dd.
+> 
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> ---
+> changes since V1:
+> 1), add virDomainOpenConsoleEnsureACL
+> 3), remove virReportOOMErrorFull when virAsprintf fail.
+> 4), change size_t for non-nagetive number in libxlDomainOpenConsole
+>     size_t i;
+>     size_t num = 0;
+> 5), fix for make check
+> (1), replace virAsprintf with VIR_STRDUP in two places
+> (2), delete space.
+> 
+>  src/libxl/libxl_conf.c   |  88 ++++++++++++++++++++++++++++++++++
+>  src/libxl/libxl_conf.h   |   3 ++
+>  src/libxl/libxl_driver.c | 122 +++++++++++++++++++++++++++++++++++++++++++++++
+>  3 files changed, 213 insertions(+)
+> 
+
+> +static int
+>  libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>  {
+>      libxl_domain_build_info *b_info = &d_config->b_info;
+> @@ -403,6 +487,10 @@ libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>          if (VIR_STRDUP(b_info->u.hvm.boot, bootorder) < 0)
+>              goto error;
+>  
+> +        if (def->nserials &&
+> +            (libxlMakeChrdevStr(def->serials[0], &b_info->u.hvm.serial) < 0))
+> +            goto error;
+
+If you're going to hardcode  def->serials[0], then you should explicitly
+report an error if  'def->nserials > 1'.
+
+Also you should probably report an error if  def->nparallels != 0, since
+you don't support that at all.
+
+> +static int
+> +libxlDomainOpenConsole(virDomainPtr dom,
+> +                       const char *dev_name,
+> +                       virStreamPtr st,
+> +                       unsigned int flags)
+> +{
+> +    libxlDriverPrivatePtr driver = dom->conn->privateData;
+> +    virDomainObjPtr vm = NULL;
+> +    int ret = -1;
+> +    size_t i;
+> +    virDomainChrDefPtr chr = NULL;
+> +    libxlDomainObjPrivatePtr priv;
+> +    char *console = NULL;
+> +    size_t num = 0;
+> +    libxl_console_type type;
+> +
+> +    virCheckFlags(VIR_DOMAIN_CONSOLE_SAFE |
+> +                  VIR_DOMAIN_CONSOLE_FORCE, -1);
+> +
+> +    libxlDriverLock(driver);
+> +    vm = virDomainObjListFindByUUID(driver->domains, dom->uuid);
+> +    libxlDriverUnlock(driver);
+> +    if (!vm) {
+> +        char uuidstr[VIR_UUID_STRING_BUFLEN];
+> +        virUUIDFormat(dom->uuid, uuidstr);
+> +        virReportError(VIR_ERR_NO_DOMAIN,
+> +                       _("No domain with matching uuid '%s'"), uuidstr);
+> +        goto cleanup;
+> +    }
+> +
+> +    if (virDomainOpenConsoleEnsureACL(dom->conn, vm->def) < 0)
+> +        goto cleanup;
+> +
+> +    if (!virDomainObjIsActive(vm)) {
+> +        virReportError(VIR_ERR_OPERATION_INVALID,
+> +                       "%s", _("domain is not running"));
+> +        goto cleanup;
+> +    }
+> +
+> +    priv = vm->privateData;
+> +
+> +    if (dev_name) {
+> +        for (i = 0; !chr && i < vm->def->nconsoles; i++) {
+> +            if (vm->def->consoles[i]->info.alias &&
+> +                STREQ(dev_name, vm->def->consoles[i]->info.alias)) {
+> +                chr = vm->def->consoles[i];
+> +                num = i;
+> +            }
+> +        }
+> +        for (i = 0; !chr && i < vm->def->nserials; i++) {
+> +            if (STREQ(dev_name, vm->def->serials[i]->info.alias)) {
+> +                chr = vm->def->serials[i];
+> +                num = i;
+> +            }
+> +        }
+> +        for (i = 0; !chr && i < vm->def->nparallels; i++) {
+> +            if (STREQ(dev_name, vm->def->parallels[i]->info.alias)) {
+> +                chr = vm->def->parallels[i];
+> +                num = i;
+> +            }
+> +        }
+
+Nothing in the libxl driver appears to ever set the info.alias string
+names. So this code will crash on a NULL pointer. You should either
+ensure the alias is set, or use STREQ_NULLABLE to handle NULL pointers.
+
+> +    } else {
+> +        if (vm->def->nconsoles)
+> +            chr = vm->def->consoles[0];
+> +        else if (vm->def->nserials)
+> +            chr = vm->def->serials[0];
+> +    }
+
+Daniel
+-- 
+|: http://berrange.com      -o-    http://www.flickr.com/photos/dberrange/ :|
+|: http://libvirt.org              -o-             http://virt-manager.org :|
+|: http://autobuild.org       -o-         http://search.cpan.org/~danberr/ :|
+|: http://entangle-photo.org       -o-       http://live.gnome.org/gtk-vnc :|
+
+2), Jim Fehlig
+Daniel P. Berrange wrote:
+> On Thu, Jul 18, 2013 at 08:14:17PM +0800, Bamvor Jian Zhang wrote:
+>   
+>> this patch introduce the console api in libxl driver for both pv and
+>> hvm guest.  and import and update the libxlMakeChrdevStr function
+>> which was deleted in commit dfa1e1dd.
+>>
+>> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+>> ---
+>> changes since V1:
+>> 1), add virDomainOpenConsoleEnsureACL
+>> 3), remove virReportOOMErrorFull when virAsprintf fail.
+>> 4), change size_t for non-nagetive number in libxlDomainOpenConsole
+>>     size_t i;
+>>     size_t num = 0;
+>> 5), fix for make check
+>> (1), replace virAsprintf with VIR_STRDUP in two places
+>> (2), delete space.
+>>
+>>  src/libxl/libxl_conf.c   |  88 ++++++++++++++++++++++++++++++++++
+>>  src/libxl/libxl_conf.h   |   3 ++
+>>  src/libxl/libxl_driver.c | 122 +++++++++++++++++++++++++++++++++++++++++++++++
+>>  3 files changed, 213 insertions(+)
+>>
+>>     
+>
+>   
+>> +static int
+>>  libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>>  {
+>>      libxl_domain_build_info *b_info = &d_config->b_info;
+>> @@ -403,6 +487,10 @@ libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>>          if (VIR_STRDUP(b_info->u.hvm.boot, bootorder) < 0)
+>>              goto error;
+>>  
+>> +        if (def->nserials &&
+>> +            (libxlMakeChrdevStr(def->serials[0], &b_info->u.hvm.serial) < 0))
+>> +            goto error;
+>>     
+>
+> If you're going to hardcode  def->serials[0], then you should explicitly
+> report an error if  'def->nserials > 1'.
+>   
+
+Yes, good point. Currently libxl only supports defining one serial port,
+so we should enforce that here.
+
+> Also you should probably report an error if  def->nparallels != 0, since
+> you don't support that at all.
+>   
+
+Right. Maybe that should be a separate patch.
+
+Poking around a bit, I'm not even sure how to map libvirt's parallel
+device config to libxl's 'num_ioports' and 'ioports' fields in
+libxl_domain_build_info struct. xl.cfg(5) contains this info about the
+'ioports' setting
+
+ioports=[ "IOPORT_RANGE", "IOPORT_RANGE", ... ]
+Allow guest to access specific legacy I/O ports. Each IOPORT_RANGE is
+given in hexadecimal
+and may either a span e.g. "2f8-2ff" (inclusive) or a single I/O port "2f8".
+
+It is recommended to use this option only for trusted VMs under
+administrator control.
+
+Regards,
+Jim
+
+2, thinking
+1), remove parallels, so i should remove console as well? 
+only serial is enough for libxl.
+2), do i need to remove all the code about for loop: check each serial device?
+if libxl only support one serial. it is useless.
+but what does the difference between libxl_console_get_tty and libxl_primary_console_get_tty?
+IIRC, the pv serial support more than one serial.
+after check the code, i only find another libxl__device_console_add in spawn_stub_launch_dm. besides the stubdom, only one serial.
+2), the hvm, if qemu support, could support more than one seiral as well.
+but the xenstore only support one tty.
+
+3, 
+Changes since V2:
+
+changes since V1:
+1), add virDomainOpenConsoleEnsureACL
+3), remove virReportOOMErrorFull when virAsprintf fail.
+4), change size_t for non-nagetive number in libxlDomainOpenConsole
+    size_t i;
+    size_t num = 0;
+5), fix for make check
+(1), replace virAsprintf with VIR_STRDUP in two places
+(2), delete space.
 
