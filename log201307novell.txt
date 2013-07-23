@@ -3289,6 +3289,41 @@ Here's the docu on libxl_asyncop_how from libxl.h
 Thanks for the update!
 Jim
 
+5, (15:17 2013-07-23)
+compare to the reply on last Nov
+> return error because of the there is no cancelation opeartion in libvirt libxl
+> driver with xen 4.1. according to xen4.2 release document, maybe the
+> cancelation of long-running jobs is supported.
+
+I finally got some time to take a closer look at Xen 4.2 libxl and
+notice that the "long running" operations (create, save, dump, restore,
+etc.) now support a 'libxl_asyncop_how *ao_how' parameter to control
+their concurrency.  If ao_how->callback is NULL, a libxl_event is
+generated when the operation completes.  We'll just need to handle these
+events in the existing libxlEventHandler.  Some of the async operations
+support reporting intermediate progress (e.g. for
+libxlDomainGetJobInfo), but at this time none of them support
+cancellation AFAICT.
+
+With the new asynchronous support in Xen 4.2 libxl, IMO we should delay
+this patchset until converting the driver to support 4.2.  I didn't
+think this patch would be affected by Xen 4.1 vs 4.2 libxl, but it is
+and I don't see any reason to add code that further complicates the
+conversion.
+
+BTW, Ondrej was working on a patch to convert the driver to 4.2.  Now
+that I have some free time, I'll pick up some of this work too.
+
+> but it is still useful for save, dump and migration(in future), because libvirt
+> should block the user abort operation othervise xenlight might crash
+>   
+
+If it is left unimplemented, libvirt would block the operation anyhow,
+failing with "not supported"
+
+Regards,
+Jim
+
 13:09 2013-7-18
 all hands meeting, suse
 1, bookings result q1 fy14
@@ -3722,8 +3757,6 @@ GTD
 3), console patch. no response.... wait tomorrow.
 4), try ao_how. ref jim reply. see"11:04 2013-07-22"
 
-3), try chen baozi console patch. ?
-
 09:56 2013-07-22
 GTD, week review, week plan
 1, working item review
@@ -3794,4 +3827,105 @@ osc bco Virtualization xen
 2, read the code
 domcreate_launch_dm seems important.
 domcreate_rebuild_done -> domcreate_launch_dm -> libxl__spawn_local_dm
+
+10:46 2013-07-23
+work, opensuse to sle12, bug; osc, retrieve, package
+1, "Stephan Kulow <coolo@suse.de>"_email_"[devel] Your first SLE12 Bugs are comin"_20130722_2013
+Hi,
+
+To make the road to SLE12 as smooth as possible, a small team
+was setup to find all patches in SP3 that are not yet in openSUSE's
+Factory to avoid regressions later on.
+
+We tried to automate that as much as possible, but figured soon
+that we need the experts to look at the results as some changes
+are not defined by adding patches. So we will start the process
+of filing bug reports about packages that we could not white list.
+Unfortunately there are a lot of those, so we will roll out the
+bugs in waves - to avoid information overflow.
+
+The bugs look all alike, you can look at Werner's sample bug at
+https://bugzilla.novell.com/830546 to see what you're missing if
+you're not in the first wave ;)
+
+What we need you to do:
+
+- Make sure you're the best assignee - if not, you should correct
+  the maintainer information on build.suse.de
+- Look at the report, remember what it was about and make sure
+  openSUSE:Factory is fine
+- Close the bug as INVALID if Factory is not affected (this is
+  part of the process, don't feel bad about it)
+
+Greetings, Stephan
+
+-- 
+"Mind if I smoke?"
+"Yes, I'd like to see that, does it come out of your ears or what?"
+
+2, Bug 830594 - [openSUSE goes SLE12]: bridge-utils: Change and/or patches may have been lost
+https://bugzilla.novell.com/show_bug.cgi?id=830594
+These are the findings of the openSUSE-Hardening Team to help avoid regressions
+when going from SLE 11 code base to SLE 12 based on current openSUSE code base.
+
+These findings are based on automated scripts created to help detect such
+regressions and are only meant as guidance for your work as a package owner.
+While we tried to write these reports to be as helpful as possible, please
+consider that they are purely automatic. So if we made a mistake (and you know
+your package better than we do), just set this bug to INVALID - it's part of
+the process we came up with.
+
+The assignee of this bug report is taken from the bugowner data of
+https://build.suse.de/search/owner. If this data is wrong, now is a good time
+to fix it. But please note that external users do not have access to the SLE 11
+patches, so the current openSUSE bugowner can't help.
+
+An HTML version of this report can be found at
+http://w3.suse.de/~max/openSUSE-Hardening/bridge-utils.html
+
+We looked at the patches that were added in the life time of SLE 11 and do not
+appear in openSUSE:Factory. Please double check if the following patches are
+still needed:
+
+    bridge-utils-1.4-show-selected-bridge.patch
+
+When looking at the sources, we found references in SLE 11 that did not appear
+in openSUSE's sources. It's worth double checking that ignoring them for
+openSUSE is not causing regressions later:
+
+    BNC#789275
+
+To retrieve SLE code:
+
+    osc -A https://api.suse.de co SUSE:SLE-11-SP3:GA bridge-utils
+
+also it is worth to check the projects SUSE:SLE-11-SP3:Update and
+SUSE:SLE-11-SP3:Update:Test for available updates of bridge-utils which may
+have happened after this report.
+
+To retrieve openSUSE code:
+
+    DP=$(osc -A https://api.opensuse.org develproject openSUSE:Factory
+bridge-utils)
+    osc -A https://api.opensuse.org co $DP bridge-utils
+
+10:47 2013-07-23
+GTD
+0, 10:40-11:40 12:40-18:10
+
+1, today
+1), 10' sle12 work, close bnc#830594 as invalid. see"10:46 2013-07-23"
+2), 11:00-11:40 afternoon try ao_how. ref jim reply. see"11:00 2013-07-23"
+
+3), try chen baozi console patch. ?
+
+11:00 2013-07-23
+try ao_how, cont1
+1, where define LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN, LIBXL_EVENT_TYPE_OPERATION_COMPLETE.
+tools/libxl/libxl_types.idl
+2, libvirtd boot fail.
+1), try without my patch: it is OK.
+2), rebase my patch to that lastest master and try again.
+maybe alloc in libxlStateInitialize is not allow?
+
 
