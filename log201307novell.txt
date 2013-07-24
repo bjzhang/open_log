@@ -3289,6 +3289,41 @@ Here's the docu on libxl_asyncop_how from libxl.h
 Thanks for the update!
 Jim
 
+5, (15:17 2013-07-23)
+compare to the reply on last Nov
+> return error because of the there is no cancelation opeartion in libvirt libxl
+> driver with xen 4.1. according to xen4.2 release document, maybe the
+> cancelation of long-running jobs is supported.
+
+I finally got some time to take a closer look at Xen 4.2 libxl and
+notice that the "long running" operations (create, save, dump, restore,
+etc.) now support a 'libxl_asyncop_how *ao_how' parameter to control
+their concurrency.  If ao_how->callback is NULL, a libxl_event is
+generated when the operation completes.  We'll just need to handle these
+events in the existing libxlEventHandler.  Some of the async operations
+support reporting intermediate progress (e.g. for
+libxlDomainGetJobInfo), but at this time none of them support
+cancellation AFAICT.
+
+With the new asynchronous support in Xen 4.2 libxl, IMO we should delay
+this patchset until converting the driver to support 4.2.  I didn't
+think this patch would be affected by Xen 4.1 vs 4.2 libxl, but it is
+and I don't see any reason to add code that further complicates the
+conversion.
+
+BTW, Ondrej was working on a patch to convert the driver to 4.2.  Now
+that I have some free time, I'll pick up some of this work too.
+
+> but it is still useful for save, dump and migration(in future), because libvirt
+> should block the user abort operation othervise xenlight might crash
+>   
+
+If it is left unimplemented, libvirt would block the operation anyhow,
+failing with "not supported"
+
+Regards,
+Jim
+
 13:09 2013-7-18
 all hands meeting, suse
 1, bookings result q1 fy14
@@ -3723,8 +3758,6 @@ GTD
 4), try ao_how. ref jim reply. see"11:04 2013-07-22"
 5), summary: 4hours work. more than 1hour sleep. 1hour waste. 2h for lunch and pay for credit card bill.
 
-3), try chen baozi console patch. ?
-
 09:56 2013-07-22
 GTD, week review, week plan
 1, working item review
@@ -3798,3 +3831,539 @@ domcreate_rebuild_done -> domcreate_launch_dm -> libxl__spawn_local_dm
 
 18:53 2013-7-22
 昨天觉得会不会是因为设置了inner, outer. 所以没有第二个cluster打开时exclusive operation没法完成。但是如果这样的话，arm vexpress board也会出问题。
+
+10:46 2013-07-23
+work, opensuse to sle12, bug; osc, retrieve, package
+1, "Stephan Kulow <coolo@suse.de>"_email_"[devel] Your first SLE12 Bugs are comin"_20130722_2013
+Hi,
+
+To make the road to SLE12 as smooth as possible, a small team
+was setup to find all patches in SP3 that are not yet in openSUSE's
+Factory to avoid regressions later on.
+
+We tried to automate that as much as possible, but figured soon
+that we need the experts to look at the results as some changes
+are not defined by adding patches. So we will start the process
+of filing bug reports about packages that we could not white list.
+Unfortunately there are a lot of those, so we will roll out the
+bugs in waves - to avoid information overflow.
+
+The bugs look all alike, you can look at Werner's sample bug at
+https://bugzilla.novell.com/830546 to see what you're missing if
+you're not in the first wave ;)
+
+What we need you to do:
+
+- Make sure you're the best assignee - if not, you should correct
+  the maintainer information on build.suse.de
+- Look at the report, remember what it was about and make sure
+  openSUSE:Factory is fine
+- Close the bug as INVALID if Factory is not affected (this is
+  part of the process, don't feel bad about it)
+
+Greetings, Stephan
+
+-- 
+"Mind if I smoke?"
+"Yes, I'd like to see that, does it come out of your ears or what?"
+
+2, Bug 830594 - [openSUSE goes SLE12]: bridge-utils: Change and/or patches may have been lost
+https://bugzilla.novell.com/show_bug.cgi?id=830594
+These are the findings of the openSUSE-Hardening Team to help avoid regressions
+when going from SLE 11 code base to SLE 12 based on current openSUSE code base.
+
+These findings are based on automated scripts created to help detect such
+regressions and are only meant as guidance for your work as a package owner.
+While we tried to write these reports to be as helpful as possible, please
+consider that they are purely automatic. So if we made a mistake (and you know
+your package better than we do), just set this bug to INVALID - it's part of
+the process we came up with.
+
+The assignee of this bug report is taken from the bugowner data of
+https://build.suse.de/search/owner. If this data is wrong, now is a good time
+to fix it. But please note that external users do not have access to the SLE 11
+patches, so the current openSUSE bugowner can't help.
+
+An HTML version of this report can be found at
+http://w3.suse.de/~max/openSUSE-Hardening/bridge-utils.html
+
+We looked at the patches that were added in the life time of SLE 11 and do not
+appear in openSUSE:Factory. Please double check if the following patches are
+still needed:
+
+    bridge-utils-1.4-show-selected-bridge.patch
+
+When looking at the sources, we found references in SLE 11 that did not appear
+in openSUSE's sources. It's worth double checking that ignoring them for
+openSUSE is not causing regressions later:
+
+    BNC#789275
+
+To retrieve SLE code:
+
+    osc -A https://api.suse.de co SUSE:SLE-11-SP3:GA bridge-utils
+
+also it is worth to check the projects SUSE:SLE-11-SP3:Update and
+SUSE:SLE-11-SP3:Update:Test for available updates of bridge-utils which may
+have happened after this report.
+
+To retrieve openSUSE code:
+
+    DP=$(osc -A https://api.opensuse.org develproject openSUSE:Factory
+bridge-utils)
+    osc -A https://api.opensuse.org co $DP bridge-utils
+
+10:47 2013-07-23
+GTD
+0, 10:40-11:40 12:40-18:10
+
+1, today
+1), 10' sle12 work, close bnc#830594 as invalid. see"10:46 2013-07-23"
+2), 11:00-11:40 afternoon try ao_how. ref jim reply. see"11:00 2013-07-23"
+
+11:00 2013-07-23
+try ao_how, cont1
+1, where define LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN, LIBXL_EVENT_TYPE_OPERATION_COMPLETE.
+tools/libxl/libxl_types.idl
+2, libvirtd boot fail.
+1), try without my patch: it is OK.
+2), rebase my patch to that lastest master and try again.
+maybe alloc in libxlStateInitialize is not allow?
+No. that because i remove the libxlDriverUnlock in libxlStateInitialize.
+3, (17:25 2013-07-24)
+virsh create successful. virsh save hang.
+4, 
+(gdb) info break
+Num     Type           Disp Enb Address            What
+1       breakpoint     keep y   0x00007f57f63e3f10 in libxl_event_wait 
+                                                   at libxl_event.c:1451
+2       breakpoint     keep y   0x00007f57f63de880 in helper_stdout_readable 
+                                                   at libxl_save_callout.c:257
+3       breakpoint     keep y   0x00007f57f63e1a90 in libxl__ev_fd_register 
+                                                   at libxl_event.c:174
+4       breakpoint     keep y   0x00007f57f63d2f20 in libxl__domain_suspend_common_callback at libxl_dom.c:996
+5       breakpoint     keep y   0x00007f57f63d1180 in libxl__toolstack_save 
+                                                   at libxl_dom.c:1138
+5, save-helper is exited while virsh save hang.
+i need to know what is done after save-helper exit. is it relative to ao_how handle bug in libxl?
+
+14:43 2013-07-24
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont4, deal with upstream reply; console alias name
+1, Jim 20130724_1721
+Bamvor Jian Zhang wrote:
+> Hi, Denial
+>
+>
+> thanks your reply. 
+>
+>
+>   
+>>>> "Daniel P. Berrange" 2013-7-19 下午 23:53 >>>
+>>>>         
+>> On Fri, Jul 19, 2013 at 11:48:56PM +0800, Bamvor Jian Zhang wrote:
+>>     
+>>> this patch introduce the console api in libxl driver for both pv and
+>>> hvm guest. and import and update the libxlMakeChrdevStr function
+>>> which was deleted in commit dfa1e1dd.
+>>>
+>>> Signed-off-by: Bamvor Jian Zhang 
+>>> ---
+>>> Changes since V2:
+>>> 1), forbid parallel configure because libxl do not support it
+>>> 2), only support one serial on libxl driver.
+>>> 3), also remove console code in libxl driver, AFAICS serial is enough for connecting to libxl console.
+>>> changes since V1:
+>>> 1), add virDomainOpenConsoleEnsureACL
+>>> 3), remove virReportOOMErrorFull when virAsprintf fail.
+>>> 4), change size_t for non-nagetive number in libxlDomainOpenConsole
+>>> size_t i;
+>>> size_t num = 0;
+>>> 5), fix for make check
+>>> (1), replace virAsprintf with VIR_STRDUP in two places
+>>> (2), delete space.
+>>>
+>>> src/libxl/libxl_conf.c | 100 +++++++++++++++++++++++++++++++++++++++++++++++
+>>> src/libxl/libxl_conf.h | 3 ++
+>>> src/libxl/libxl_driver.c | 87 +++++++++++++++++++++++++++++++++++++++++
+>>> 3 files changed, 190 insertions(+)
+>>>
+>>> diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+>>> index 4a0fba9..539d537 100644
+>>> --- a/src/libxl/libxl_conf.c
+>>> +++ b/src/libxl/libxl_conf.c
+>>> @@ -331,6 +331,90 @@ error:
+>>> }
+>>>
+>>> static int
+>>> +libxlMakeChrdevStr(virDomainChrDefPtr def, char **buf)
+>>> +{
+>>> + const char *type = virDomainChrTypeToString(def->source.type);
+>>> + int ret;
+>>> +
+>>> + if (!type) {
+>>> + virReportError(VIR_ERR_INTERNAL_ERROR,
+>>> + "%s", _("unexpected chr device type"));
+>>> + return -1;
+>>> + }
+>>> +
+>>> + switch (def->source.type) {
+>>> + case VIR_DOMAIN_CHR_TYPE_NULL:
+>>> + case VIR_DOMAIN_CHR_TYPE_STDIO:
+>>> + case VIR_DOMAIN_CHR_TYPE_VC:
+>>> + case VIR_DOMAIN_CHR_TYPE_PTY:
+>>> + if (VIR_STRDUP(*buf, type) < 0)
+>>> + return -1;
+>>> + break;
+>>> +
+>>> + case VIR_DOMAIN_CHR_TYPE_FILE:
+>>> + case VIR_DOMAIN_CHR_TYPE_PIPE:
+>>> + if (virAsprintf(buf, "%s:%s", type,
+>>> + def->source.data.file.path) < 0)
+>>> + return -1;
+>>> + break;
+>>> +
+>>> + case VIR_DOMAIN_CHR_TYPE_DEV:
+>>> + if (VIR_STRDUP(*buf, def->source.data.file.path) < 0)
+>>> + return -1;
+>>> + break;
+>>> +
+>>> + case VIR_DOMAIN_CHR_TYPE_UDP: {
+>>> + const char *connectHost = def->source.data.udp.connectHost;
+>>> + const char *bindHost = def->source.data.udp.bindHost;
+>>> + const char *bindService = def->source.data.udp.bindService;
+>>> +
+>>> + if (connectHost == NULL)
+>>> + connectHost = "";
+>>> + if (bindHost == NULL)
+>>> + bindHost = "";
+>>> + if (bindService == NULL)
+>>> + bindService = "0";
+>>> +
+>>> + ret = virAsprintf(buf, "udp:%s:%s@%s:%s",
+>>> + connectHost,
+>>> + def->source.data.udp.connectService,
+>>> + bindHost,
+>>> + bindService);
+>>> + if (ret < 0)
+>>> + return -1;
+>>> + break;
+>>> +
+>>> + }
+>>> + case VIR_DOMAIN_CHR_TYPE_TCP:
+>>> + if (def->source.data.tcp.protocol == VIR_DOMAIN_CHR_TCP_PROTOCOL_TELNET)
+>>> + ret = virAsprintf(buf, "telnet:%s:%s%s",
+>>> + def->source.data.tcp.host,
+>>> + def->source.data.tcp.service,
+>>> + def->source.data.tcp.listen ? ",server,nowait" : "");
+>>> + else
+>>> + ret = virAsprintf(buf, "tcp:%s:%s%s",
+>>> + def->source.data.tcp.host,
+>>> + def->source.data.tcp.service,
+>>> + def->source.data.tcp.listen ? ",server,nowait" : "");
+>>> +
+>>> + if (ret < 0)
+>>> + return -1;
+>>> + break;
+>>> +
+>>> + case VIR_DOMAIN_CHR_TYPE_UNIX:
+>>> + ret = virAsprintf(buf, "unix:%s%s",
+>>> + def->source.data.nix.path,
+>>> + def->source.data.nix.listen ? ",server,nowait" : "");
+>>> + if (ret < 0)
+>>> + return -1;
+>>> + break;
+>>> +
+>>> + }
+>>> +
+>>> + return 0;
+>>> +}
+>>> +
+>>> +static int
+>>> libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>>> {
+>>> libxl_domain_build_info *b_info = &d_config->b_info;
+>>> @@ -403,6 +487,22 @@ libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain> > + if (def->nserials > 1) {
+>>> + virReportError(VIR_ERR_INTERNAL_ERROR,
+>>> + "%s", _("Only one serial is supported by libxl"));
+>>> + goto error;
+>>> + }
+>>> + if (libxlMakeChrdevStr(def->serials[0], &b_info->u.hvm.serial) < 0)
+>>> + goto error;
+>>> + }
+>>> +
+>>> + if (def->nparallels) {
+>>> + virReportError(VIR_ERR_INTERNAL_ERROR,
+>>> + "%s", _("Parallel is not supported"));
+>>> + goto error;
+>>> + }
+>>> +
+>>> /*
+>>> * The following comment and calculation were taken directly from
+>>> * libxenlight's internal function libxl_get_required_shadow_memory():
+>>> diff --git a/src/libxl/libxl_conf.h b/src/libxl/libxl_conf.h
+>>> index 2b4a281..861d689 100644
+>>> --- a/src/libxl/libxl_conf.h
+>>> +++ b/src/libxl/libxl_conf.h
+>>> @@ -34,6 +34,7 @@
+>>> # include "configmake.h"
+>>> # include "virportallocator.h"
+>>> # include "virobject.h"
+>>> +# include "virchrdev.h"
+>>>
+>>>
+>>> # define LIBXL_VNC_PORT_MIN 5900
+>>> @@ -94,6 +95,8 @@ struct _libxlDomainObjPrivate {
+>>>
+>>> /* per domain libxl ctx */
+>>> libxl_ctx *ctx;
+>>> + /* console */
+>>> + virChrdevsPtr devs;
+>>> libxl_evgen_domain_death *deathW;
+>>>
+>>> /* list of libxl timeout registrations */
+>>> diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+>>> index 358d387..b3a8d50 100644
+>>> --- a/src/libxl/libxl_driver.c
+>>> +++ b/src/libxl/libxl_driver.c
+>>> @@ -417,6 +417,9 @@ libxlDomainObjPrivateAlloc(void)
+>>>
+>>> libxl_osevent_register_hooks(priv->ctx, &libxl_event_callbacks, priv);
+>>>
+>>> + if (!(priv->devs = virChrdevAlloc()))
+>>> + return NULL;
+>>> +
+>>> return priv;
+>>> }
+>>>
+>>> @@ -429,6 +432,7 @@ libxlDomainObjPrivateDispose(void *obj)
+>>> libxl_evdisable_domain_death(priv->ctx, priv->deathW);
+>>>
+>>> libxl_ctx_free(priv->ctx);
+>>> + virChrdevFree(priv->devs);
+>>> }
+>>>
+>>> static void
+>>> @@ -4493,6 +4497,88 @@ cleanup:
+>>> return ret;
+>>> }
+>>>
+>>> +
+>>> +static int
+>>> +libxlDomainOpenConsole(virDomainPtr dom,
+>>> + const char *dev_name,
+>>> + virStreamPtr st,
+>>> + unsigned int flags)
+>>> +{
+>>> + libxlDriverPrivatePtr driver = dom->conn->privateData;
+>>> + virDomainObjPtr vm = NULL;
+>>> + int ret = -1;
+>>> + virDomainChrDefPtr chr = NULL;
+>>> + libxlDomainObjPrivatePtr priv;
+>>> + char *console = NULL;
+>>> +
+>>> + virCheckFlags(VIR_DOMAIN_CONSOLE_SAFE |
+>>> + VIR_DOMAIN_CONSOLE_FORCE, -1);
+>>> +
+>>> + libxlDriverLock(driver);
+>>> + vm = virDomainObjListFindByUUID(driver->domains, dom->uuid);
+>>> + libxlDriverUnlock(driver);
+>>> + if (!vm) {
+>>> + char uuidstr[VIR_UUID_STRING_BUFLEN];
+>>> + virUUIDFormat(dom->uuid, uuidstr);
+>>> + virReportError(VIR_ERR_NO_DOMAIN,
+>>> + _("No domain with matching uuid '%s'"), uuidstr);
+>>> + goto cleanup;
+>>> + }
+>>> +
+>>> + if (virDomainOpenConsoleEnsureACL(dom->conn, vm->def) < 0)
+>>> + goto cleanup;
+>>> +
+>>> + if (!virDomainObjIsActive(vm)) {
+>>> + virReportError(VIR_ERR_OPERATION_INVALID,
+>>> + "%s", _("domain is not running"));
+>>> + goto cleanup;
+>>> + }
+>>> +
+>>> + priv = vm->privateData;
+>>> +
+>>> + if (vm->def->nserials)
+>>> + chr = vm->def->serials[0];
+>>>       
+>> Now you're ignoring 'dev_name' completely which is definitely not
+>> right. You should be assigning aliases to the serial devices when
+>> starting the guest, so you can match them here.
+>>     
+> sorry, maybe i am not get your point. the pty device is get from libxl
+> lib through the libxl_primary_console_get_tty. then pass it to
+> virChrdevOpen. i do not understand why save it in another place.
+>   
+
+You can look at the uml or qemu driver as an example of Daniel's point. 
+When a domain is started, aliases are created and assigned to the serial
+devices, and are available in the device XML.  E.g.,
+
+    <serial type='pty'>
+      <source path='/dev/pts/2'/>
+      <target port='0'/>
+      <alias name='serial0'/>
+    </serial>
+
+The alias can then be used as 'dev_name'.
+
+But libxl only supports one serial device, so I think its behavior wrt
+aliases should be the same as the legacy Xen driver
+
+    if (dev_name) {
+        /* XXX support device aliases in future */
+        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+                       _("Named device aliases are not supported"));
+        goto cleanup;
+    }
+
+Support for generating aliases on domain startup and matching them in
+domainOpenConsole can be added if/when libxl supports multiple serial
+devices.
+
+Regards,
+Jim
+
+2, Changes since V3:
+implicity forbit dev_name pass to libxl driver due to only one 
+console supported by libxl.
+
+3, 
+git send-email --no-chain-reply-to --annotate --to libvir-list@redhat.com --cc jfehlig@suse.com --cc berrange@redhat.com
+
+15:00 2013-07-24
+GTD
+0, 12:40-15:02 15:32-20:16
+
+1, today
+1), 3h debug libxl_event_wait. see"11:00 2013-07-23"3.
+2), 50' console patch. see"14:43 2013-07-24"
+3), 19:45-20:16 send a RFC patch for fix sun6i crash on xen boot. see"20:14 2013-07-24"
+
+2, todo?
+1), try the patch: [linux-sunxi] [PATCH 00/10] ARM: sunxi: Add support for the Allwinner A31 SoC
+Maxime Ripard <maxime.ripard@free-electrons.com>
+2), try chen baozi console patch. ?
+
+15:47 2013-07-24
+software skill, im, empathy
+DongMao推荐
+
+16:33 2013-07-24
+software skill, stroage, lvm, extend
+1, status
+linux-work:/home/bamvor # lvs
+  LV   VG     Attr   LSize  Origin Snap%  Move Log Copy%  Convert
+  home system -wi-ao 17.82g                                      
+  root system -wi-ao 11.88g                                      
+linux-work:/home/bamvor # vgs
+  VG     #PV #LV #SN Attr   VSize  VFree
+  system   1   2   0 wz--n- 29.69g    0 
+linux-work:/home/bamvor # pvs
+  PV         VG     Fmt  Attr PSize  PFree
+  /dev/sda12 system lvm2 a-   29.69g    0 
+linux-work:/home/bamvor # ls -l /dev/mapper/
+total 0
+crw-rw---- 1 root root 10, 236 Jul 24 16:24 control
+lrwxrwxrwx 1 root root       7 Jul 24 16:31 system-home -> ../dm-0
+lrwxrwxrwx 1 root root       7 Jul 24 16:31 system-root -> ../dm-1
+linux-work:/home/bamvor # ls -l /dev/system/
+home  root  
+linux-work:/home/bamvor # ls -l /dev/system/
+total 0
+lrwxrwxrwx 1 root root 7 Jul 24 16:24 home -> ../dm-0
+lrwxrwxrwx 1 root root 7 Jul 24 16:31 root -> ../dm-1
+linux-work:/home/bamvor # 
+
+2, extend lvm
+linux-work:/home/bamvor # pvcreate /dev/sda6 
+  Physical volume "/dev/sda6" successfully created
+linux-work:/home/bamvor # pvs
+  PV         VG     Fmt  Attr PSize  PFree 
+  /dev/sda12 system lvm2 a-   29.69g     0 
+  /dev/sda6         lvm2 a-   40.00g 40.00g
+linux-work:/home/bamvor # vgextend system /dev/sda6 
+  Volume group "system" successfully extended
+linux-work:/home/bamvor # vgs
+  VG     #PV #LV #SN Attr   VSize  VFree 
+  system   2   2   0 wz--n- 69.69g 40.00g
+linux-work:/home/bamvor # pvs
+  PV         VG     Fmt  Attr PSize  PFree 
+  /dev/sda12 system lvm2 a-   29.69g     0 
+  /dev/sda6  system lvm2 a-   40.00g 40.00g
+linux-work:/home/bamvor # lvs
+  LV   VG     Attr   LSize  Origin Snap%  Move Log Copy%  Convert
+  home system -wi-ao 17.82g                                      
+  root system -wi-ao 11.88g                                      
+linux-work:/home/bamvor # lvextend -L20G  system/root
+  Extending logical volume root to 20.00 GiB
+  Logical volume root successfully resized
+linux-work:/home/bamvor # lvs
+  LV   VG     Attr   LSize  Origin Snap%  Move Log Copy%  Convert
+  home system -wi-ao 17.82g                                      
+  root system -wi-ao 20.00g                                      
+
+3, resize file system
+linux-work:/home/bamvor # df -h
+Filesystem               Size  Used Avail Use% Mounted on
+/dev/mapper/system-root   12G   12G     0 100% /
+devtmpfs                 1.9G  444K  1.9G   1% /dev
+tmpfs                    1.9G  6.4M  1.9G   1% /dev/shm
+/dev/sda11               152M  118M   26M  82% /boot
+/dev/mapper/system-home   18G  9.7G  7.0G  59% /home
+/dev/sda3                 95G   76G   15G  85% /home/bamvor/sda3
+/dev/sda10                30G  8.7G   20G  31% /var/lib/xen/images_2
+linux-work:/home/bamvor # resize2fs /dev/system/root 
+resize2fs 1.41.9 (22-Aug-2009)
+Filesystem at /dev/system/root is mounted on /; on-line resizing required
+old desc_blocks = 1, new_desc_blocks = 2
+Performing an on-line resize of /dev/system/root to 5242880 (4k) blocks.
+The filesystem on /dev/system/root is now 5242880 blocks long.
+
+linux-work:/home/bamvor # df -h
+Filesystem               Size  Used Avail Use% Mounted on
+/dev/mapper/system-root   20G   12G  7.5G  61% /
+devtmpfs                 1.9G  444K  1.9G   1% /dev
+tmpfs                    1.9G  6.4M  1.9G   1% /dev/shm
+/dev/sda11               152M  118M   26M  82% /boot
+/dev/mapper/system-home   18G  9.7G  7.0G  59% /home
+/dev/sda3                 95G   76G   15G  85% /home/bamvor/sda3
+/dev/sda10                30G  8.7G   20G  31% /var/lib/xen/images_2
+
+16:45 2013-07-24
+company, colleague, SUSE lab, Torsten Duwe, Jiri Kosina team
+"Jiri Kosina <jkosina@suse.cz>"_email_"[devel] New SUSE Labs colleague -- Torsten Duwe"_20130724_1457
+It's my pleasure to announce that 
+
+	Torsten Duwe
+
+has joined SUSE Labs department.
+
+As all of you likely know, Torsten has a long history of being part of 
+Arch team, where his responsibilities were mostly (but not limited to) PPC 
+kernel maintainance and grub maintainership.
+
+He is now going to followup on this experience while working in Labs 
+kernel team.
+
+Welcome to Labs, Torsten!
+
+-- 
+Jiri Kosina
+SUSE Labs
+
+20:14 2013-07-24
+virtualization, xen, arm, patch
+Subject: [PATCH RFC] fix sun6i crash on setup_pagetables
+
+this patch move set_processor_id in front of setup_pagetables
+in order to fix crash when calling this_cpu in that functions.
+the HPTIDR is unknown value according to ARM ARM 7AR(DDI0406C),
+B4-1598. we should use it before using it.
+
+but i do not know why other board like arndale board. should
+bootloader write this register?
+
