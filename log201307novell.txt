@@ -4243,11 +4243,6 @@ GTD
 2), 50' console patch. see"14:43 2013-07-24"
 3), 19:45-20:16 send a RFC patch for fix sun6i crash on xen boot. see"20:14 2013-07-24"
 
-2, todo?
-1), try the patch: [linux-sunxi] [PATCH 00/10] ARM: sunxi: Add support for the Allwinner A31 SoC
-Maxime Ripard <maxime.ripard@free-electrons.com>
-2), try chen baozi console patch. ?
-
 15:47 2013-07-24
 software skill, im, empathy
 DongMao推荐
@@ -4357,7 +4352,7 @@ SUSE Labs
 
 20:14 2013-07-24
 virtualization, xen, arm, patch
-Subject: [PATCH RFC] fix sun6i crash on setup_pagetables
+1, Subject: [PATCH RFC] fix sun6i crash on setup_pagetables
 
 this patch move set_processor_id in front of setup_pagetables
 in order to fix crash when calling this_cpu in that functions.
@@ -4366,4 +4361,974 @@ B4-1598. we should use it before using it.
 
 but i do not know why other board like arndale board. should
 bootloader write this register?
+
+2, (11:00 2013-07-25)
+Julien reply to me.
+On 07/24/2013 01:14 PM, Bamvor Jian Zhang wrote:
+> this patch move set_processor_id in front of setup_pagetables
+> in order to fix crash when calling this_cpu in that functions.
+> the HPTIDR is unknown value according to ARM ARM 7AR(DDI0406C),
+> B4-1598. we should use it before using it.
+> 
+> but i do not know why other board like arndale board. should
+> bootloader write this register?
+
+On the Arndale, by default the value of HPTIDR is equal to 0. So it
+works without any issue.
+
+During the afternoon, I have noticed this error and send a similar
+patch few minutes ago. I also moved percpu_init_areas earlier.
+
+For the next patches, could you add the appropriate people? It will
+avoid to loose your patch with the other mail of the mailing list :).
+
+> 
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> ---
+>  xen/arch/arm/setup.c | 2 +-
+>  1 file changed, 1 insertion(+), 1 deletion(-)
+> 
+> diff --git a/xen/arch/arm/setup.c b/xen/arch/arm/setup.c
+> index 2f9fdc8..3bf1b40 100644
+> --- a/xen/arch/arm/setup.c
+> +++ b/xen/arch/arm/setup.c
+> @@ -437,6 +437,7 @@ void __init start_xen(unsigned long boot_phys_offset,
+>      cpus = smp_get_max_cpus();
+>      cmdline_parse(device_tree_bootargs(device_tree_flattened));
+>  
+> +    set_processor_id(0); /* needed early, for this_cpu() */
+>      setup_pagetables(boot_phys_offset, get_xen_paddr());
+>      setup_mm(fdt_paddr, fdt_size);
+>  
+> @@ -459,7 +460,6 @@ void __init start_xen(unsigned long boot_phys_offset,
+>      make_cpus_ready(cpus, boot_phys_offset);
+>  
+>      percpu_init_areas();
+
+I think you can also move percpu_init_areas earlier.
+
+> -    set_processor_id(0); /* needed early, for smp_processor_id() */
+>      set_current((struct vcpu *)0xfffff000); /* debug sanity */
+>      idle_vcpu[0] = current;
+>  
+> 
+
+3, Julien send the similar patch several minutes earlier than me, and it is better because he move percpu_init_areas too.
+"Julien Grall <julien.grall@linaro.org>"_email_"[PATCH] xen/arm: Initialize PERCPU variables at the	beginning of start_xen"_20130725_0201
+
+PERCPU variables rely on HTPIDR (TPIDR_EL2) which is in an unknown state when
+a processor boot.
+
+For the boot CPU, the first use of PERCPU is in setup_pagetables. So
+initialize PERCPU and set the processor ID before.
+
+Signed-off-by: Julien Grall <julien.grall@xxxxxxxxxx>
+---
+ xen/arch/arm/setup.c |    5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/xen/arch/arm/setup.c b/xen/arch/arm/setup.c
+index 2f9fdc8..1ec5e38 100644
+--- a/xen/arch/arm/setup.c
++++ b/xen/arch/arm/setup.c
+@@ -428,6 +428,9 @@ void __init start_xen(unsigned long boot_phys_offset,
+ 
+     setup_cache();
+ 
++    percpu_init_areas();
++    set_processor_id(0); /* needed early, for smp_processor_id() */
++
+     smp_clear_cpu_maps();
+ 
+     device_tree_flattened = (void *)BOOT_MISC_VIRT_START
+@@ -458,8 +461,6 @@ void __init start_xen(unsigned long boot_phys_offset,
+     gic_init();
+     make_cpus_ready(cpus, boot_phys_offset);
+ 
+-    percpu_init_areas();
+-    set_processor_id(0); /* needed early, for smp_processor_id() */
+     set_current((struct vcpu *)0xfffff000); /* debug sanity */
+     idle_vcpu[0] = current;
+ 
+-- 
+1.7.10.4
+
+4, Ian C
+On Wed, 2013-07-24 at 19:33 +0100, Julien Grall wrote:
+> On 07/24/2013 01:14 PM, Bamvor Jian Zhang wrote:
+> > this patch move set_processor_id in front of setup_pagetables
+> > in order to fix crash when calling this_cpu in that functions.
+> > the HPTIDR is unknown value according to ARM ARM 7AR(DDI0406C),
+> > B4-1598. we should use it before using it.
+> > 
+> > but i do not know why other board like arndale board. should
+> > bootloader write this register?
+> 
+> On the Arndale, by default the value of HPTIDR is equal to 0. So it
+> works without any issue.
+
+Right, but strictly the register is undefined reset on reset.
+
+The bootloader cannot initialise it because the meaning is entirely OS
+specific.
+
+> During the afternoon, I have noticed this error and send a similar
+> patch few minutes ago. I also moved percpu_init_areas earlier.
+
+Right, I think this makes sense.
+
+I suppose I should just take your (Julien's) version of this patch?
+
+> For the next patches, could you add the appropriate people? It will
+> avoid to loose your patch with the other mail of the mailing list :).
+
+Yes please!
+
+5, reply
+> I suppose I should just take your (Julien's) version of this patch?
+agree.
+> 
+> > For the next patches, could you add the appropriate people? It will
+> > avoid to loose your patch with the other mail of the mailing list :).
+> 
+> Yes please!
+i will, thanks.
+
+10:43 2013-07-25
+GTD
+0, 10:30-14:26 15:22-17:45
+
+1, today
+1), reply email about xen arm patch. see"20:14 2013-07-24"2.
+2), bash, array. see"11:21 2013-07-25"
+3), 12:36-14:00 16:05-17:45 console patch. see"12:36 2013-07-25"
+rest 40'
+4), 14:00-14:26 15:46-16:04 mailing list: xen, arm. see"14:24 2013-07-25", "16:00 2013-07-25".
+
+1), send patch to Jim.
+1), debug libxl_event_wait. ref"11:00 2013-07-23"3.
+2), 1h personal stuff. 
+
+2, todo?
+1), try the patch: [linux-sunxi] [PATCH 00/10] ARM: sunxi: Add support for the Allwinner A31 SoC
+Maxime Ripard <maxime.ripard@free-electrons.com>
+2), try chen baozi console patch. ?
+
+10:48 2013-07-25
+company, lunch and learn, systemd
+https://wiki.innerweb.novell.com/index.php/SUSE/Development/Lunch_and_Learn
+"Frederic Crozat <fcrozat@suse.com>"_email"[devel] Lunch and Learn "systemd how-to" next week THURSDAY (August 1st) 12 a.m."_20130725_2303
+Hi all,
+
+visiting in Nuremberg office next week, I'll use this opportunity to do
+a Lunch & Learn talk on systemd (what ? again ? ;) but focusing more on
+how to use it, how to write systemd unit files, how to debug it, etc... 
+
+Title:    systemd how-to
+
+Speaker:  Frederic Crozat
+Date:     Thursday, August 1st
+Time:     12 a.m. to 2 p.m. (CEST)
+Location: All Hands Area (NUE)
+Lunch:    Please bring your own food or have late lunch.
+
+The presentation will be recorded for those of you who can't attend in 
+person.
+
+See you all next week :)
+
+-- 
+Frederic Crozat <fcrozat@suse.com>
+SUSE
+
+11:21 2013-07-25
+software skill, shell, bash, split; array
+http://stackoverflow.com/questions/918886/how-do-i-split-a-string-on-a-delimiter-in-bash
+1, method by questioner. 
+Edit: After suggestions from the answers below, I ended up with the following which is what I was after:
+
+#!/usr/bin/env bash
+
+IN="bla@some.com;john@home.com"
+
+arr=$(echo $IN | tr ";" "\n")
+
+for x in $arr
+do
+    echo "> [$x]"
+done
+output:
+
+> [bla@some.com]
+> [john@home.com]
+Edit2: There was a solution involving setting Internal_field_separator (IFS) to ';'. I am not sure what happened with that answer, how do you reset IFS back to default?
+
+Edit3: RE: IFS solution, I tried this and it works, I keep the old IFS and then restore it:
+
+IN="bla@some.com;john@home.com"
+
+OIFS=$IFS
+IFS=';'
+arr2=$IN
+for x in $arr2
+do
+    echo "> [$x]"
+done
+
+IFS=$OIFS
+BTW, when I tried
+
+arr2=($IN) 
+I only got the first string when printing it in loop, without brackets around $IN it works.
+
+2, get string from array, it is useful while need several parts and want to avoid loop statement.
+How about this approach:
+
+IN="bla@some.com;john@home.com" 
+set -- "$IN" 
+IFS=";"; declare -a Array=($*) 
+echo "${Array[@]}" 
+echo "${Array[0]}" 
+echo "${Array[1]}" 
+
+3, chunyan test
+the brace mean define an array in bash: 
+> abc=(str1 str2 aaa bbb)
+> echo ${#abc[0]}
+4
+> echo ${abc[0]}
+str1
+> echo ${abc[1]}
+str2
+> echo ${abc[2]}
+aaa
+> echo ${abc[3]}
+bbb
+
+12:36 2013-07-25
+suse, virtualization, libvirt, qemu, xen, libxlDomainOpenConsole, base on xen4.3, cont5, deal with upstream reply
+1, Jim reply
+Bamvor Jian Zhang wrote:
+> this patch introduce the console api in libxl driver for both pv and
+> hvm guest.  and import and update the libxlMakeChrdevStr function
+> which was deleted in commit dfa1e1dd.
+>
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> ---
+> Changes since V3:
+> implicity forbit dev_name pass to libxl driver due to only one
+> console supported by libxl.
+>
+> Changes since V2:
+> 1), forbid parallel configure because libxl do not support it
+> 2), only support one serial on libxl driver.
+> 3), also remove console code in libxl driver, AFAICS serial is enough for
+> connecting to libxl console.
+>
+> Changes since V1:
+> 1), add virDomainOpenConsoleEnsureACL
+> 3), remove virReportOOMErrorFull when virAsprintf fail.
+> 4), change size_t for non-nagetive number in libxlDomainOpenConsole
+>     size_t i;
+>     size_t num = 0;
+> 5), fix for make check
+> (1), replace virAsprintf with VIR_STRDUP in two places
+> (2), delete space.
+>
+>  src/libxl/libxl_conf.c   | 100 +++++++++++++++++++++++++++++++++++++++++++++++
+>  src/libxl/libxl_conf.h   |   3 ++
+>  src/libxl/libxl_driver.c |  94 ++++++++++++++++++++++++++++++++++++++++++++
+>  3 files changed, 197 insertions(+)
+>
+> diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+> index 4a0fba9..539d537 100644
+> --- a/src/libxl/libxl_conf.c
+> +++ b/src/libxl/libxl_conf.c
+> @@ -331,6 +331,90 @@ error:
+>  }
+>  
+>  static int
+> +libxlMakeChrdevStr(virDomainChrDefPtr def, char **buf)
+> +{
+> +    const char *type = virDomainChrTypeToString(def->source.type);
+> +    int ret;
+> +
+> +    if (!type) {
+> +        virReportError(VIR_ERR_INTERNAL_ERROR,
+>   
+
+The error should be VIR_ERR_CONFIG_UNSUPPORTED.
+
+> +                       "%s", _("unexpected chr device type"));
+> +        return -1;
+> +    }
+> +
+> +    switch (def->source.type) {
+> +        case VIR_DOMAIN_CHR_TYPE_NULL:
+> +        case VIR_DOMAIN_CHR_TYPE_STDIO:
+> +        case VIR_DOMAIN_CHR_TYPE_VC:
+> +        case VIR_DOMAIN_CHR_TYPE_PTY:
+>   
+
+Super nit: a majority of libvirt code has 'switch' and 'case' at same
+indentation.  I realize there are inconsistencies even within this file,
+but new code should follow the predominant style.
+
+> +            if (VIR_STRDUP(*buf, type) < 0)
+> +                return -1;
+> +            break;
+> +
+> +        case VIR_DOMAIN_CHR_TYPE_FILE:
+> +        case VIR_DOMAIN_CHR_TYPE_PIPE:
+> +            if (virAsprintf(buf, "%s:%s", type,
+> +                            def->source.data.file.path) < 0)
+> +                return -1;
+> +            break;
+> +
+> +        case VIR_DOMAIN_CHR_TYPE_DEV:
+> +            if (VIR_STRDUP(*buf, def->source.data.file.path) < 0)
+> +                return -1;
+> +            break;
+> +
+> +        case VIR_DOMAIN_CHR_TYPE_UDP: {
+> +            const char *connectHost = def->source.data.udp.connectHost;
+> +            const char *bindHost = def->source.data.udp.bindHost;
+> +            const char *bindService  = def->source.data.udp.bindService;
+> +
+> +            if (connectHost == NULL)
+> +                connectHost = "";
+> +            if (bindHost == NULL)
+> +                bindHost = "";
+> +            if (bindService == NULL)
+> +                bindService = "0";
+> +
+> +            ret = virAsprintf(buf, "udp:%s:%s@%s:%s",
+> +                              connectHost,
+> +                              def->source.data.udp.connectService,
+> +                              bindHost,
+> +                              bindService);
+> +            if (ret < 0)
+> +                return -1;
+> +            break;
+> +
+> +        }
+> +        case VIR_DOMAIN_CHR_TYPE_TCP:
+> +            if (def->source.data.tcp.protocol == VIR_DOMAIN_CHR_TCP_PROTOCOL_TELNET)
+>   
+
+These long lines could be shortened by having a function-local
+virDomainChrSourceDef variable.
+
+> +                ret = virAsprintf(buf, "telnet:%s:%s%s",
+> +                                  def->source.data.tcp.host,
+> +                                  def->source.data.tcp.service,
+> +                                  def->source.data.tcp.listen ? ",server,nowait" : "");
+> +            else
+> +                ret = virAsprintf(buf, "tcp:%s:%s%s",
+> +                                  def->source.data.tcp.host,
+> +                                  def->source.data.tcp.service,
+> +                                  def->source.data.tcp.listen ? ",server,nowait" : "");
+> +
+> +            if (ret < 0)
+>   
+
+No need for 'ret' here.  See my attached diff, which contains a bit of
+logic simplification here.
+
+> +                return -1;
+> +            break;
+> +
+> +        case VIR_DOMAIN_CHR_TYPE_UNIX:
+> +            ret = virAsprintf(buf, "unix:%s%s",
+> +                              def->source.data.nix.path,
+> +                              def->source.data.nix.listen ? ",server,nowait" : "");
+> +            if (ret < 0)
+> +                return -1;
+> +            break;
+>   
+
+There should be a default case to report error for unsupported types.
+
+> +
+> +    }
+> +
+> +    return 0;
+> +}
+> +
+> +static int
+>  libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>  {
+>      libxl_domain_build_info *b_info = &d_config->b_info;
+> @@ -403,6 +487,22 @@ libxlMakeDomBuildInfo(virDomainDefPtr def, libxl_domain_config *d_config)
+>          if (VIR_STRDUP(b_info->u.hvm.boot, bootorder) < 0)
+>              goto error;
+>  
+> +        if (def->nserials) {
+> +            if (def->nserials > 1) {
+> +                virReportError(VIR_ERR_INTERNAL_ERROR,
+>   
+
+VIR_ERR_CONFIG_UNSUPPORTED
+
+> +                               "%s", _("Only one serial is supported by libxl"));
+> +                goto error;
+> +            }
+> +            if (libxlMakeChrdevStr(def->serials[0], &b_info->u.hvm.serial) < 0)
+> +                goto error;
+> +        }
+> +
+> +        if (def->nparallels) {
+> +            virReportError(VIR_ERR_INTERNAL_ERROR,
+>   
+
+VIR_ERR_CONFIG_UNSUPPORTED
+
+> +                           "%s", _("Parallel is not supported"));
+> +            goto error;
+> +        }
+> +
+>          /*
+>           * The following comment and calculation were taken directly from
+>           * libxenlight's internal function libxl_get_required_shadow_memory():
+> diff --git a/src/libxl/libxl_conf.h b/src/libxl/libxl_conf.h
+> index 2b4a281..861d689 100644
+> --- a/src/libxl/libxl_conf.h
+> +++ b/src/libxl/libxl_conf.h
+> @@ -34,6 +34,7 @@
+>  # include "configmake.h"
+>  # include "virportallocator.h"
+>  # include "virobject.h"
+> +# include "virchrdev.h"
+>  
+>  
+>  # define LIBXL_VNC_PORT_MIN  5900
+> @@ -94,6 +95,8 @@ struct _libxlDomainObjPrivate {
+>  
+>      /* per domain libxl ctx */
+>      libxl_ctx *ctx;
+> +    /* console */
+> +    virChrdevsPtr devs;
+>      libxl_evgen_domain_death *deathW;
+>  
+>      /* list of libxl timeout registrations */
+> diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+> index 358d387..9299484 100644
+> --- a/src/libxl/libxl_driver.c
+> +++ b/src/libxl/libxl_driver.c
+> @@ -417,6 +417,9 @@ libxlDomainObjPrivateAlloc(void)
+>  
+>      libxl_osevent_register_hooks(priv->ctx, &libxl_event_callbacks, priv);
+>  
+> +    if (!(priv->devs = virChrdevAlloc()))
+> +        return NULL;
+> +
+>      return priv;
+>  }
+>  
+> @@ -429,6 +432,7 @@ libxlDomainObjPrivateDispose(void *obj)
+>          libxl_evdisable_domain_death(priv->ctx, priv->deathW);
+>  
+>      libxl_ctx_free(priv->ctx);
+> +    virChrdevFree(priv->devs);
+>   
+
+IMO, freeing the libxl_ctx should be the last thing done in this function.
+
+>  }
+>  
+>  static void
+> @@ -4493,6 +4497,95 @@ cleanup:
+>      return ret;
+>  }
+>  
+> +
+> +static int
+> +libxlDomainOpenConsole(virDomainPtr dom,
+> +                       const char *dev_name,
+> +                       virStreamPtr st,
+> +                       unsigned int flags)
+> +{
+> +    libxlDriverPrivatePtr driver = dom->conn->privateData;
+> +    virDomainObjPtr vm = NULL;
+> +    int ret = -1;
+> +    virDomainChrDefPtr chr = NULL;
+> +    libxlDomainObjPrivatePtr priv;
+> +    char *console = NULL;
+> +
+> +    virCheckFlags(VIR_DOMAIN_CONSOLE_SAFE |
+> +                  VIR_DOMAIN_CONSOLE_FORCE, -1);
+>   
+
+I verified that 'force' works, but what is 'safe' for?  I'm not quite
+sure how that works in the qemu driver either.
+
+> +
+> +    if (dev_name) {
+> +        /* XXX support device aliases in future */
+> +        virReportError(VIR_ERR_CONFIG_UNSUPPORTED, "%s",
+> +                       _("Named device aliases are not supported"));
+> +        goto cleanup;
+> +    }
+> +
+> +    libxlDriverLock(driver);
+> +    vm = virDomainObjListFindByUUID(driver->domains, dom->uuid);
+> +    libxlDriverUnlock(driver);
+> +    if (!vm) {
+> +        char uuidstr[VIR_UUID_STRING_BUFLEN];
+> +        virUUIDFormat(dom->uuid, uuidstr);
+> +        virReportError(VIR_ERR_NO_DOMAIN,
+> +                       _("No domain with matching uuid '%s'"), uuidstr);
+> +        goto cleanup;
+> +    }
+> +
+> +    if (virDomainOpenConsoleEnsureACL(dom->conn, vm->def) < 0)
+> +        goto cleanup;
+> +
+> +    if (!virDomainObjIsActive(vm)) {
+> +        virReportError(VIR_ERR_OPERATION_INVALID,
+> +                       "%s", _("domain is not running"));
+> +        goto cleanup;
+> +    }
+> +
+> +    priv = vm->privateData;
+> +
+> +    if (vm->def->nserials)
+> +        chr = vm->def->serials[0];
+> +
+> +    if (!chr) {
+> +        virReportError(VIR_ERR_INTERNAL_ERROR,
+> +                       _("cannot find character device %s"),
+> +                       NULLSTR(dev_name));
+> +        goto cleanup;
+> +    }
+> +
+> +    if (chr->source.type != VIR_DOMAIN_CHR_TYPE_PTY) {
+> +        virReportError(VIR_ERR_INTERNAL_ERROR,
+> +                       _("character device %s is not using a PTY"),
+> +                       NULLSTR(dev_name));
+> +        goto cleanup;
+> +    }
+> +
+> +    ret = libxl_primary_console_get_tty(priv->ctx, vm->def->id, &console);
+> +    if (ret)
+> +        goto cleanup;
+> +
+> +    if (VIR_STRDUP(chr->source.data.file.path, console) < 0)
+> +        goto cleanup;
+> +
+> +    /* handle mutually exclusive access to console devices */
+> +    ret = virChrdevOpen(priv->devs,
+> +                         &chr->source,
+> +                         st,
+> +                         (flags & VIR_DOMAIN_CONSOLE_FORCE) != 0);
+>   
+
+Whitespace is off a bit on these parameters.
+
+> +
+> +    if (ret == 1) {
+> +        virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+> +                       _("Active console session exists for this domain"));
+> +        ret = -1;
+> +    }
+> +
+> +cleanup:
+> +    VIR_FREE(console);
+> +    if (vm)
+> +        virObjectUnlock(vm);
+> +    return ret;
+> +}
+> +
+>  static int
+>  libxlDomainSetSchedulerParameters(virDomainPtr dom, virTypedParameterPtr params,
+>                                    int nparams)
+> @@ -4875,6 +4968,7 @@ static virDriver libxlDriver = {
+>      .domainManagedSave = libxlDomainManagedSave, /* 0.9.2 */
+>      .domainHasManagedSaveImage = libxlDomainHasManagedSaveImage, /* 0.9.2 */
+>      .domainManagedSaveRemove = libxlDomainManagedSaveRemove, /* 0.9.2 */
+> +    .domainOpenConsole = libxlDomainOpenConsole, /* 1.1.1 */
+>   
+
+We are now in 1.1.1 freeze, so this will have to wait for 1.1.2.
+
+I've tested this patch quite a bit and haven't noticed any problems.  It
+is a small patch that actually fills a big hole in the driver, so I'd
+like to get it committed for 1.1.2.  Can you rebase, squash in my
+changes, and post a V5?
+
+Regards,
+Jim
+
+
+diff --git a/src/libxl/libxl_conf.c b/src/libxl/libxl_conf.c
+index b1be91d..827dfdd 100644
+--- a/src/libxl/libxl_conf.c
++++ b/src/libxl/libxl_conf.c
+@@ -333,82 +333,84 @@ error:
+ static int
+ libxlMakeChrdevStr(virDomainChrDefPtr def, char **buf)
+ {
+-    const char *type = virDomainChrTypeToString(def->source.type);
+-    int ret;
++    virDomainChrSourceDef srcdef = def->source;
++    const char *type = virDomainChrTypeToString(srcdef.type);
+ 
+     if (!type) {
+-        virReportError(VIR_ERR_INTERNAL_ERROR,
+-                       "%s", _("unexpected chr device type"));
++        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                       "%s", _("unknown chrdev type"));
+         return -1;
+     }
+ 
+-    switch (def->source.type) {
+-        case VIR_DOMAIN_CHR_TYPE_NULL:
+-        case VIR_DOMAIN_CHR_TYPE_STDIO:
+-        case VIR_DOMAIN_CHR_TYPE_VC:
+-        case VIR_DOMAIN_CHR_TYPE_PTY:
+-            if (VIR_STRDUP(*buf, type) < 0)
+-                return -1;
+-            break;
++    switch (srcdef.type) {
++    case VIR_DOMAIN_CHR_TYPE_NULL:
++    case VIR_DOMAIN_CHR_TYPE_STDIO:
++    case VIR_DOMAIN_CHR_TYPE_VC:
++    case VIR_DOMAIN_CHR_TYPE_PTY:
++        if (VIR_STRDUP(*buf, type) < 0)
++            return -1;
++        break;
+ 
+-        case VIR_DOMAIN_CHR_TYPE_FILE:
+-        case VIR_DOMAIN_CHR_TYPE_PIPE:
+-            if (virAsprintf(buf, "%s:%s", type,
+-                            def->source.data.file.path) < 0)
+-                return -1;
+-            break;
++    case VIR_DOMAIN_CHR_TYPE_FILE:
++    case VIR_DOMAIN_CHR_TYPE_PIPE:
++        if (virAsprintf(buf, "%s:%s", type, srcdef.data.file.path) < 0)
++            return -1;
++        break;
+ 
+-        case VIR_DOMAIN_CHR_TYPE_DEV:
+-            if (VIR_STRDUP(*buf, def->source.data.file.path) < 0)
+-                return -1;
+-            break;
++    case VIR_DOMAIN_CHR_TYPE_DEV:
++        if (VIR_STRDUP(*buf, srcdef.data.file.path) < 0)
++            return -1;
++        break;
++
++    case VIR_DOMAIN_CHR_TYPE_UDP: {
++        const char *connectHost = srcdef.data.udp.connectHost;
++        const char *bindHost = srcdef.data.udp.bindHost;
++        const char *bindService  = srcdef.data.udp.bindService;
++
++        if (connectHost == NULL)
++            connectHost = "";
++        if (bindHost == NULL)
++            bindHost = "";
++        if (bindService == NULL)
++            bindService = "0";
++
++        if (virAsprintf(buf, "udp:%s:%s@%s:%s",
++                        connectHost,
++                        srcdef.data.udp.connectService,
++                        bindHost,
++                        bindService) < 0)
++            return -1;
++        break;
++    }
+ 
+-        case VIR_DOMAIN_CHR_TYPE_UDP: {
+-            const char *connectHost = def->source.data.udp.connectHost;
+-            const char *bindHost = def->source.data.udp.bindHost;
+-            const char *bindService  = def->source.data.udp.bindService;
+-
+-            if (connectHost == NULL)
+-                connectHost = "";
+-            if (bindHost == NULL)
+-                bindHost = "";
+-            if (bindService == NULL)
+-                bindService = "0";
+-
+-            ret = virAsprintf(buf, "udp:%s:%s@%s:%s",
+-                              connectHost,
+-                              def->source.data.udp.connectService,
+-                              bindHost,
+-                              bindService);
+-            if (ret < 0)
+-                return -1;
+-            break;
++    case VIR_DOMAIN_CHR_TYPE_TCP: {
++        const char *prefix;
+ 
+-        }
+-        case VIR_DOMAIN_CHR_TYPE_TCP:
+-            if (def->source.data.tcp.protocol == VIR_DOMAIN_CHR_TCP_PROTOCOL_TELNET)
+-                ret = virAsprintf(buf, "telnet:%s:%s%s",
+-                                  def->source.data.tcp.host,
+-                                  def->source.data.tcp.service,
+-                                  def->source.data.tcp.listen ?  ",server,nowait" : "");
+-            else
+-                ret = virAsprintf(buf, "tcp:%s:%s%s",
+-                                  def->source.data.tcp.host,
+-                                  def->source.data.tcp.service,
+-                                  def->source.data.tcp.listen ?
+",server,nowait" : "");
+-
+-            if (ret < 0)
+-                return -1;
+-            break;
++        if (srcdef.data.tcp.protocol == VIR_DOMAIN_CHR_TCP_PROTOCOL_TELNET)
++            prefix = "telnet";
++        else
++            prefix = "tcp";
+ 
+-        case VIR_DOMAIN_CHR_TYPE_UNIX:
+-            ret = virAsprintf(buf, "unix:%s%s",
+-                              def->source.data.nix.path,
+-                              def->source.data.nix.listen ?  ",server,nowait" : "");
+-            if (ret < 0)
+-                return -1;
+-            break;
++        if (virAsprintf(buf, "%s:%s:%s%s",
++                        prefix,
++                        srcdef.data.tcp.host,
++                        srcdef.data.tcp.service,
++                        srcdef.data.tcp.listen ? ",server,nowait" : "") < 0)
++            return -1;
++        break;
++    }
++
++    case VIR_DOMAIN_CHR_TYPE_UNIX:
++        if (virAsprintf(buf, "unix:%s%s",
++                        srcdef.data.nix.path,
++                        srcdef.data.nix.listen ? ",server,nowait" : "") < 0)
++            return -1;
++        break;
+ 
++    default:
++        virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                       _("unsupported chardev '%s'"), type);
++        return -1;
+     }
+ 
+     return 0;
+@@ -497,8 +499,9 @@ libxlMakeDomBuildInfo(virDomainObjPtr vm,
+libxl_domain_config *d_config)
+ 
+         if (def->nserials) {
+             if (def->nserials > 1) {
+-                virReportError(VIR_ERR_INTERNAL_ERROR,
+-                               "%s", _("Only one serial is supported by libxl"));
++                virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                               "%s",
++                               _("Only one serial device is supported by libxl"));
+                 goto error;
+             }
+             if (libxlMakeChrdevStr(def->serials[0], &b_info->u.hvm.serial) < 0)
+@@ -506,8 +509,9 @@ libxlMakeDomBuildInfo(virDomainObjPtr vm, libxl_domain_config *d_config)
+         }
+ 
+         if (def->nparallels) {
+-            virReportError(VIR_ERR_INTERNAL_ERROR,
+-                           "%s", _("Parallel is not supported"));
++            virReportError(VIR_ERR_CONFIG_UNSUPPORTED,
++                           "%s",
++                           _("Parallel devices are not supported by libxl"));
+             goto error;
+         }
+ 
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index ad1a5d1..4b603b1 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -431,8 +431,8 @@ libxlDomainObjPrivateDispose(void *obj)
+     if (priv->deathW)
+         libxl_evdisable_domain_death(priv->ctx, priv->deathW);
+ 
+-    libxl_ctx_free(priv->ctx);
+     virChrdevFree(priv->devs);
++    libxl_ctx_free(priv->ctx);
+ }
+ 
+ static void
+@@ -4568,9 +4568,9 @@ libxlDomainOpenConsole(virDomainPtr dom,
+ 
+     /* handle mutually exclusive access to console devices */
+     ret = virChrdevOpen(priv->devs,
+-                         &chr->source,
+-                         st,
+-                         (flags & VIR_DOMAIN_CONSOLE_FORCE) != 0);
++                        &chr->source,
++                        st,
++                        (flags & VIR_DOMAIN_CONSOLE_FORCE) != 0);
+ 
+     if (ret == 1) {
+         virReportError(VIR_ERR_OPERATION_FAILED, "%s",
+
+2, discuss
+1), TYPE_TCP
+(1), Jim suggestion
+> +        case VIR_DOMAIN_CHR_TYPE_TCP:
+> +            if (def->source.data.tcp.protocol == VIR_DOMAIN_CHR_TCP_PROTOCOL_TELNET)
+>   
+
+These long lines could be shortened by having a function-local
+virDomainChrSourceDef variable.
+(2), qemu_command.c
+    case VIR_DOMAIN_CHR_TYPE_TCP:
+        telnet = dev->data.tcp.protocol == VIR_DOMAIN_CHR_TCP_PROTOCOL_TELNET;
+        virBufferAsprintf(&buf,
+                          "socket,id=char%s,host=%s,port=%s%s%s",
+                          alias,
+                          dev->data.tcp.host,
+                          dev->data.tcp.service,
+                          telnet ? ",telnet" : "",
+                          dev->data.tcp.listen ? ",server,nowait" : "");
+        break;
+ 
+2), modify it later
+(1), Jim:
+No need for 'ret' here.  See my attached diff, which contains a bit of
+logic simplification here.
+
+3), type to string?
+(1), Jim
+There should be a default case to report error for unsupported types.
+(2), IIRC: there should be a type to string function in libvirt?
+virDomainChrTypeToString
+
+4), about console argument
+(1), Jim
+> +    virCheckFlags(VIR_DOMAIN_CONSOLE_SAFE |
+> +                  VIR_DOMAIN_CONSOLE_FORCE, -1);
+>   
+
+I verified that 'force' works, but what is 'safe' for?  I'm not quite
+sure how that works in the qemu driver either.
+(2), should I only preserve FORCE flags?
+    virCheckFlags(VIR_DOMAIN_CONSOLE_FORCE, -1);
+
+12:42 2013-07-25
+mailing list, virtualization, xen, libxl, libvirt
+1, 65026d72: libxl: Correctly initialize vcpu bitmap
+Stefan Bader <stefan.bader@canonical.com>
+Date: Wed, 24 Jul 2013 13:43:43 +0200
+
+The avail_vcpu bitmap has to be allocated before it can be used (using the maximum allowed value for that). Then for each available VCPU the
+bit in the mask has to be set (libxl_bitmap_set takes a bit position
+as an argument, not the number of bits to set).
+
+Without this, I would always only get one VCPU for guests created
+through libvirt/libxl.
+
+Signed-off-by: Stefan Bader <stefan.bader@canonical.com>
+
+1), cpu bit map is set by libxl_bitmap_set.
+
+
+14:24 2013-07-25
+mailing list, virtualization, xen, arm, thumb2 encoding, big endian
+1, Julien Grall
+>> >> +    switch ( len )
+>> >> +    {
+>> >> +    /* 16-bit instruction */
+>> >> +    case 2:
+>> >> +        *instr &= 0xffff;
+>> >> +        break;
+>> >> +    /* 32-bit instruction */
+>> >> +    case 4:
+>> >> +        *instr = (*instr & 0xffff) << 16 | (*instr & 0xffff0000) >> 16;
+>> >
+>> > Since you only ever consult bits 12..15 or 0..3 of the result couldn't
+>> > you just read two bytes from pc+2 instead of reading 4 bytes and
+>> > swapping etc?
+>>
+>> I was thinking to provide a "high level" function to retrieve an
+>> instruction just in case we need it in the future.
+>
+> I suppose that does sound potentially useful.
+>
+> Were does this the idea of swapping them come from though? The ARM ARM
+> seems (see e.g. section A6.3) to describe things in the order they are
+> in memory -- is doing otherwise not going to end up confusing us?
+
+In THUMB set, a 32-bit instruction consisting of two consecutive
+halfwords (see section A6.1).
+So the instruction is in "big endian", but Xen will read the word as a
+"little endian" things.
+
+But in ARM set, a 32-bit instruction is a single word. I will add a
+check to handle this case.
+
+2, Julien Grall
+http://lists.xen.org/archives/html/xen-devel/2013-07/msg02287.html
+The ARM ARM specification describes a THUMB 32 bit instruction with
+   HW1 HW2
+
+HW1 => [31:16] => most significant
+HW2 => [15:0] => less significant
+
+raw_copy_from_copy will directly read 4 bytes and store in an uint32_t.
+As Xen is running in little endian, it ends up in:
+HW2 => [31:16]
+HW1 => [15:0]
+
+Which is false. If it's more clear, I can do something like this
+
+uint16_t a[2];
+rc = raw_copy_from_guest(instr, (void * __user)regs->pc, len);
+
+...
+
+switch ( len )
+{
+...
+case 4:
+   instr = a[0] << 16 | a[1];
+...
+}
+
+> Have you tested and actually observed this case on real h/w?
+
+I tried on the arndale board.
+
+-- 
+Julien
+
+16:00 2013-07-25
+mailing list, virtualization, xen, arm, device tree
+1, put DT at 0.5G system memory, in order to not overlap with linux mapping
+http://lists.xen.org/archives/html/xen-devel/2013-07/msg02280.html
+On Wed, 2013-07-24 at 14:44 +0100, Julien Grall wrote:
+> On 07/23/2013 06:12 PM, Ian Campbell wrote:
+> > From: Ian Campbell <ian.campbell@xxxxxxxxxx>
+> > 
+> > The 32-bit Linux kernel uses its lowmem direct mapping to access the FDT. 
+> > The
+> > lowmem mapping is around 3/4GiB but varies depending on the kernel's 
+> > .config.
+> > Use a limit of 1/2G to be safe.
+> > 
+> > Signed-off-by: Ian Campbell <ian.campbell@xxxxxxxxxx>
+> 
+> I'm curious, how did you find this value? I can't easily find a specific
+> range for the lowmem direct mapping.
+
+There isn't one...
+
+With a standard 3:1 user:kernel split there is ~1G of kernel address
+space, but some of that is taken up by vmalloc areas, fixmap areas etc.
+My experience is that there is generally around 700-800M of actual 1:1
+mapping of RAM, but the precise value depends on the kernel .config
+(e.g. how many fixmaps are implied by the settings etc). 512MB is
+therefore just a conservative guess...
+
+BTW I asked for confirmation on linux-arm-kernel but I don't see that in
+my l-a-k folder or the archives -- did you get the copy I CCd to you?
+Subject is "Requirements for FDT load address on ARM".
+
+Ian.
 
