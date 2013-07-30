@@ -3098,7 +3098,7 @@ GTD
 http://lists.xen.org/archives/html/xen-devel/2013-06/msg01391.html
 
 10:52 2013-07-18
-virtualization, xen, lock
+virtualization, xen, lock; ao_how
 title: about my work in libxl driver
 Hi, Jim
 
@@ -3807,7 +3807,7 @@ Our revenues were $222.2 million which was 96.3% of our plan revenue of $230.8. 
 Second, we will continue to be extremely disciplined on our spending.  In many cases, we will slow down our planned investments (investments are mostly new hires) until we see better progress in our sales results. 
 
 11:04 2013-07-22
-try ao_how
+virtualization, xen, libxl, async, try ao_how
 1, plan
 1), build lastest xen: using the xen 4.3 release version should be enough for me.
 osc bco Virtualization xen
@@ -3911,7 +3911,7 @@ GTD
 2), 11:00-11:40 afternoon try ao_how. ref jim reply. see"11:00 2013-07-23"
 
 11:00 2013-07-23
-try ao_how, cont1
+virtualization, xen, libxl, async, try ao_how, cont1
 1, where define LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN, LIBXL_EVENT_TYPE_OPERATION_COMPLETE.
 tools/libxl/libxl_types.idl
 2, libvirtd boot fail.
@@ -4482,6 +4482,28 @@ agree.
 > 
 > Yes please!
 i will, thanks.
+
+6, (10:09 2013-07-30)
+the final result: ack by Ian C and Tim, modify the commit by Ian C.
+commit c433774a6ea84c46c25fdf8ef7e2657aaf2c7f2b
+Author: Julien Grall <julien.grall@linaro.org>
+Date:   Wed Jul 24 18:01:36 2013 +0100
+
+    xen/arm: Initialize PERCPU variables at the beginning of start_xen
+
+    PERCPU variables rely on HTPIDR (TPIDR_EL2) which is in an unknown state when
+    a processor boot.
+
+    For the boot CPU, the first use of PERCPU is in setup_pagetables. So
+    initialize PERCPU and set the processor ID before.
+
+    Bamvor Jian Zhang observed this failure on the sun6i processor which does not
+    initialise HTPIDR and contributed a very similar patch.
+
+    Signed-off-by: Julien Grall <julien.grall@linaro.org>
+    Acked-by: Ian Campbell <ian.campbell@citrix.com>
+    Acked-by: Tim Deegan <tim@xen.org>
+    [ ijc -- added last para of commit message ]
 
 10:43 2013-07-25
 GTD
@@ -5514,7 +5536,7 @@ GTD
 1, today
 1), 10:17-16:17 rbd. see"10:27 2013-07-29".
 about xen4.3 compile on sle11 sp2.
-2), 16:50-17:13 grub2. see"17:13 2013-07-29"
+2), 16:50-17:13 grub2 howto. see"17:13 2013-07-29"
 3), 10' work report. see"17:17 2013-07-29"
 4), Summary: it would be great, i arrive at company at 9 o'clock.
 
@@ -5531,6 +5553,26 @@ Requires:       dmidecode
 %endif
 2, compile libvirt local.
 implentment a empty dbus_message_set_serial function in test/virsystemdmock.c
+diff --git a/tests/virsystemdmock.c b/tests/virsystemdmock.c
+index 1f4413c..2e4e254 100644
+--- a/tests/virsystemdmock.c
++++ b/tests/virsystemdmock.c
+@@ -57,6 +57,11 @@ dbus_bool_t dbus_connection_set_watch_functions(DBusConnection
+*connection ATTRI
+     return 1;
+ }
+
++void dbus_message_set_serial(DBusMessage *message ATTRIBUTE_UNUSED, int number AT
+TRIBUTE_UNUSED)
++{
++    return;
++}
++
+ DBusMessage *dbus_connection_send_with_reply_and_block(DBusConnection *connection
+ ATTRIBUTE_UNUSED,
+                                                        DBusMessage *message,
+                                                        int timeout_milliseconds A
+TTRIBUTE_UNUSED,
 
 3, modify the configure
 http://lists.xen.org/archives/html/xen-devel/2013-04/msg02761.html
@@ -5575,12 +5617,16 @@ file=rbd/test,if=ide,index=2,media=disk,format=raw,cache=writeback
 or i could enhance it in xl commands.
 
 17:13 2013-07-29
-software skill, bootloader, grub2
+software skill, bootloader, grub2; boot-repair
 1, add new entry(e.g. xen) to /boot/grub2/grub.cfg and backup.
 2, grubenv for default bootup.
 3, install the grub:
 grub2-install /dev/sda
 4, notes: if using "yast2 bootloader", the grub.cfg will regenerated.
+5, (17:28 2013-07-30)
+tools: boot-repair could do the similar thing automatically.
+it is a ubuntu iso.
+how to burn cd in linux, see"17:17 2013-07-30".
 
 17:17 2013-07-29
 work report - week 30
@@ -5588,4 +5634,170 @@ GREEN
 1, libvirt libxl console patch modify 2 round and finally got ack from upstream.
 2, libvirt libxl async operation: hang in virsh save, try to find out why.
 3, Virtualization Sync meeting.
+
+09:58 2013-07-30
+GTD
+0, 9:40-11:10 13:02-17:28 18:52-20:35
+
+1, today
+1), 10:10-11:10 13:02-16:53 18:54-20:30 debug libxl_event_wait. see"10:04 2013-07-30"
+2), 16:55-17:28 burn dvd. see"17:17 2013-07-30"
+3), Summary: too long time for rest, it should be better less then 1 hour including meal.
+
+if event wait process not good, try to check how to improve rbd support.
+discuss with Charles about xen4.3 compile on sle11 sp2.
+
+10:04 2013-07-30
+virtualization, xen, libxl, async, try ao_how, cont2, debug sav2, debug save
+1, when complete event(OPERATION_COMPLETE) will send?
+
+egc_run_callbacks -> libxl__ao_complete_check_progress_reports
+libxl__ao_complete -> libxl__ao_complete_check_progress_reports
+
+domain_suspend_cb -> libxl__ao_complete
+
+1), physmap
+     physmap = ""
+      1f800000 = ""
+       start_addr = "f0000000"
+       size = "800000"
+       name = "vga.vram"
+2), both pv and hvm will call: libxl__domain_suspend_device_model 
+pv call it from libxl__domain_suspend_common_callback, hvm call it from libxl__xc_domain_save_done.
+
+libxl__domain_suspend_device_model will issue the save cmd to qemu.
+
+(1), pv: libxl__domain_suspend_common_callback -> libxl__domain_suspend_device_model 
+
+(2), hvm: libxl__xc_domain_save_done -> libxl__domain_suspend_device_model 
+set by libxl__xc_domain_save_done
+
+3), toolstack_save
+by libxl_domain_suspend, set libxl__toolstack_save
+by libxl_save_helper, set toolstack_save_cb 4), 
+libxl__xc_domain_save 
+    toolstack_save(libxl__toolstack_save) 
+    dss->shs.recv_callback = libxl__srm_callout_received_save;
+    dss->shs.completion_callback = libxl__xc_domain_save_done;
+    run_helper
+
+5), 
+run_helper
+    libxl__ev_fd_register
+        helper_stdout_readable
+            recv_callback
+
+6), libxl_save_helper.c
+libxl_save_msgs_helper.c
+helper_stub_suspend
+
+helper_setcallbacks_save -> helper_stub_suspend
+it is valid if suspend in parent is exist. it is exists and it is libxl__domain_suspend_common_callback.
+
+complete is called at the end of libxl_save_helper. so libxl__srm_callout_callback_complete and libxl__srm_callout_sendreply will definitly called.
+
+7), how to complete
+libxl__srm_callout_callback_complete set completed to 1.
+helper_exited check the completed flags.
+
+helper_exited -> helper_done -> completion_callback(libxl__xc_domain_save_done)
+
+libxl_childproc_reaped -> childproc_reaped -> cb->callback()
+libxl__fork_selfpipe_woken -> libxl_childproc_reaped 
+                           -> reaped_callback(xl_reaped_callback)
+
+xl_reaped_callback belong to childproc_hooks, which set by libxl_childproc_setmode in xl_ctx_alloc.
+
+eventloop_iteration -> afterpoll_internal -> libxl__fork_selfpipe_woken 
+
+8), i need to know who call domain_suspend_cb. after gdb debug:
+
+save_device_model_datacopier_done -> domain_suspend_done -> domain_suspend_cb
+
+save_device_model_datacopier_done is set by libxl__domain_save_device_model
+libxl__xc_domain_save_done -> libxl__domain_save_device_model
+
+9), i need to know who called save_device_model_datacopier_done.
+datacopier_check_state ->datacopier_callback ->  save_device_model_datacopier_done
+
+10), how the pipe wakeup?
+libxl__ev_child_fork -> libxl__sigchld_installhandler: set sigchld_handler
+
+11), need to disable dbus when compile on sle11 sp2. because the dbus is too old. missing DBUS_TYPE_UNIX_FD in dbus/dbus-protocol.h
+
+12), compare the log: 
+libxl__fork_selfpipe_woken and the 2nd libxl__ao_complete_check_progress_reports not called.
+
+domain_suspend_cb
+#0  domain_suspend_cb (egc=0x7f96603567d0, dss=0x7f96500ae7c0, rc=0) at libxl.c:754
+#1  0x00007f96576f7d0a in domain_suspend_done (egc=0x7f96603567d0, dss=0x7f96500ae7c0, rc=0) at libxl_dom.c:1497
+#2  0x00007f96576f79c1 in save_device_model_datacopier_done (egc=0x7f96603567d0, dc=0x7f96500ae968, onwrite=0, errnoval=<optimized out>) at libxl_dom.c:1480
+#3  0x00007f9657703b8b in datacopier_callback (egc=0x7f96603567d0, dc=0x7f96500ae968, onwrite=0, errnoval=0) at libxl_aoutils.c:45
+libxl__ao_complete_check_progress_reports
+#0  libxl__ao_complete_check_progress_reports (egc=0x7f96603567d0, ao=0x7f9650014750) at libxl_event.c:1579
+#1  0x00007f96577098bf in libxl__ao_complete (egc=0x7f96603567d0, ao=0x7f9650014750, rc=0) at libxl_event.c:1575
+#2  0x00007f96576e32c3 in domain_suspend_cb (egc=0x7f96603567d0, dss=<optimized out>, rc=0) at libxl.c:756
+#3  0x00007f96576f7d0a in domain_suspend_done (egc=0x7f96603567d0, dss=0x7f96500ae7c0, rc=0) at libxl_dom.c:1497
+Detaching after fork from child process 5733.
+libxl__fork_selfpipe_woken
+#0  libxl__fork_selfpipe_woken (egc=0x7f96603567b0) at libxl_fork.c:282
+#1  0x00007f9657709361 in afterpoll_internal (egc=0x7f96603567b0, poller=0x7f96676690a0, nfds=4, fds=0x7f96676725f0, now=...) at libxl_event.c:1008
+#2  0x00007f9657709ed7 in eventloop_iteration (egc=0x7f96603567b0, poller=0x7f96676690a0) at libxl_event.c:1440
+libxl__ao_complete_check_progress_reports
+#0  libxl__ao_complete_check_progress_reports (egc=0x7f96603567b0, ao=0x7f96500c0550) at libxl_event.c:1579
+#1  0x00007f96577098bf in libxl__ao_complete (egc=0x7f96603567b0, ao=0x7f96500c0550, rc=0) at libxl_event.c:1575
+#2  0x00007f96576e327a in domain_destroy_cb (egc=0x7f96603567b0, dds=0x7f96500ae7c0, rc=0) at libxl.c:1271
+#3  0x00007f96576e2ff4 in destr
+
+2, why not wake up when i use the ao_how?
+it seems that it hang after domain_suspend_cb. the eventloop_iteration should exit.
+
+17:17 2013-07-30
+software skill, linux, burn cdrom, growisofs
+http://blog.csdn.net/hecssy/article/details/4037464
+the equal mark is very important. if missing it will generate the file to iso image. i mean IT WILL NOT burn your original iso.
+
+compare:
+growisofs -Z /dev/dvdrw4=./boot-repair-disk-64bit.isogc
+growisofs -Z /dev/dvdrw4 boot-repair-disk-64bit.isogc
+
+1, # growisofs -Z /dev/dvdrw4=./boot-repair-disk-64bit.isogc
+Executing 'builtin_dd if=./boot-repair-disk-64bit.iso of=/dev/dvdrw4 obs=32k seek=0'
+/dev/dvdrw4: "Current Write Speed" is 16.4x1352KBps.gc
+          0/532557824 ( 0.0%) @0x, remaining ??:?? RBU 100.0% UBU   0.0%gc
+          0/532557824 ( 0.0%) @0x, remaining ??:?? RBU 100.0% UBU   0.0%gc
+          0/532557824 ( 0.0%) @0x, remaining ??:?? RBU 100.0% UBU   0.0%gc
+          0/532557824 ( 0.0%) @0x, remaining ??:?? RBU 100.0% UBU   0.0%gc
+...
+  450232320/532557824 (84.5%) @8.0x, remaining 0:15 RBU  99.9% UBU  99.7%
+  487817216/532557824 (91.6%) @8.1x, remaining 0:07 RBU 100.0% UBU  99.7%
+  525926400/532557824 (98.8%) @8.3x, remaining 0:01 RBU  19.8% UBU  99.7%
+builtin_dd: 260048*2KB out @ average 4.3x1352KBps
+/dev/dvdrw4: flushing cache
+/dev/dvdrw4: closing track
+/dev/dvdrw4: closing session
+/dev/dvdrw4: reloading tray
+
+2, growisofs -Z /dev/dvdrw4 boot-repair-disk-64bit.isogc
+Executing 'genisoimage boot-repair-disk-64bit.iso | builtin_dd of=/dev/dvdrw4 obs=32k seek=0'gc
+I: -input-charset not specified, using utf-8 (detected in locale settings)gc
+1.92% done, estimate finish Tue Jul 30 17:03:17 2013gc
+3.85% done, estimate finish Tue Jul 30 17:03:17 2013gc
+5.76% done, estimate finish Tue Jul 30 17:03:17 2013gc
+/dev/dvdrw4: "Current Write Speed" is 16.4x1352KBps.
+...
+96.08% done, estimate finish Tue Jul 30 17:04:57 2013
+98.00% done, estimate finish Tue Jul 30 17:04:57 2013
+99.92% done, estimate finish Tue Jul 30 17:04:56 2013
+Total translation table size: 0
+Total rockridge attributes bytes: 0
+Total directory bytes: 0
+Path table size(bytes): 10
+Max brk space used 0
+260212 extents written (508 MB)
+builtin_dd: 260224*2KB out @ average 3.8x1352KBps
+/dev/dvdrw4: flushing cache
+/dev/dvdrw4: closing track
+/dev/dvdrw4: closing session
+/dev/dvdrw4: reloading tray
 
