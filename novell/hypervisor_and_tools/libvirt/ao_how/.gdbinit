@@ -7,8 +7,8 @@ commands
 silent
 shell date +%H%M%S_%N
 printf "libxl__ao_complete_check_progress_reports\n"
-where
-cont
+#where
+#cont
 end
 
 break domain_suspend_cb
@@ -229,14 +229,24 @@ end
 ##cont
 #end
 
+
+#break libxl_event_wait
+
 #####libvirt
-break libxlFDEventCallback
+#break libxlFDEventCallback
+#commands
+#silent
+#shell date +%H%M%S_%N
+#printf "libxlFDEventCallback\n"
+#where
+#cont
+#end
+
+break libxl/libxl_driver.c:2425
 commands
 silent
 shell date +%H%M%S_%N
-printf "libxlFDEventCallback\n"
-where
-cont
+printf "after libxl_event_check\n"
 end
 
 cont
