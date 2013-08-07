@@ -111,6 +111,10 @@ i wait it in two weeks. must do it this week.
 2), try ao_how.
 3), sr kvm patch to bruce with him suggestion.
 
+3, other
+1), xen: arm. add cpu in dts. add platform support for sun6i in xen.
+ask linux-sunxi about u-boot.
+
 18:47 2013-08-05
 xen, arm, sun6i
 1, try kernel 3.4 when could the ldrex/strex use?
@@ -196,8 +200,6 @@ GTD
 1), mail.
 2), 13:40-15:40. nap.
 3), 15:40-17:30 ao_how. why event not return. see"15:42 2013-08-06"
-4), xen: arm. add cpu in dts. add platform support for sun6i in xen.
-ask linux-sunxi about u-boot.
 
 10:51 2013-08-06
 company, colleague, SLE Core Team, Pawel Wieczorkiewicz
@@ -241,4 +243,104 @@ because it is the only thing missing in libvirt but inplement in afterpoll_inter
         if (e) LIBXL__EVENT_DISASTER(egc, "read sigchld pipe", e, 0);
         libxl__fork_selfpipe_woken(egc);
     }
+
+09:00 2013-08-07
+GTD
+0, 8:50-11:30 12:30-17:10
+
+1, today
+1), 9:30-11:30 12:30- is it possible handle libxl__fork_selfpipe_woken in libxl? see"09:19 2013-08-07"
+some time for personal stuff.
+2), ask help about boot A31 kernel. send email?
+3), Summary: 1hour for lunch, is it too long?
+
+09:09 2013-08-07
+mailing list, virtualization, xen, guest support
+"Lars Pinne <lars.pinne@suse.com>"_email_"[virtualization-xen] SLES version is supported as guest on which SLES version as host?"_to_"XEN Hypervisor Technology Discussion"
+1, "Antoine Ginies <aginies@suse.com>" reply
+1), 
+Lars Pinne:
+> - we have a list of guest OS supported with Xen host SLES11sp3
+> https://www.suse.com/documentation/sled11/book_xen/?page=/documentation/sled11/book_xen/data/book_xen.html
+> 
+> - we have a list of Xen hosts supported with guest SLES11sp2
+> http://doc.opensuse.org/products/draft/SLES/SLES-xen_sd_draft/cha.xen.basics.html
+> 
+> Do we have an overview or a general rule for
+> which SLES version is supported as guest on which SLES version as host?
+
+There is no general rule. There is a white-paper on VT, he should help
+you understand which host/guest scenario we support:
+
+http://www.novell.com/docrep/2009/09/SUSE_Linux_Enterprise_Server_Virtualization_Technology_Support_en.pdf
+
+
+-- 
+Antoine Ginies <aginies@suse.com>
+Project Manager
+SUSE France
+
+2), 
+Lars Pinne:
+> Hi Antoine,
+> I did not find infos about running newer versions on older hosts.
+> And in the paper's version for sp2, we did not mention sp3 as guest.
+> 
+> Or is it a rule, that we will support any SLES as guest on any
+> older SLES, as long as both are under support?
+
+
+This is true, we support any SLES as guest on any older SLES as long as
+both are under support.
+There is one exception: 
+we are not able to boot a SLE11 SP3 PV guest on SLE10 SP4 (secure boot
+issue).
+
+> Such cases might be very common, since no customers wants to update
+> its Xen hosts without urgent need.
+
+
+regards
+Antoine
+
+-- 
+Antoine Ginies <aginies@suse.com>
+Project Manager
+SUSE France
+
+09:19 2013-08-07
+virtualization, xen, libxl, async, try ao_how, cont2, debug save, cont3
+1, 现在的关键问题是helper_exited没有人调用.
+helper_exited will be called during childproc_reaped: ch->callback.
+
+libxl__fork_selfpipe_woken -> childproc_reaped
+libxl_childproc_reaped -> childproc_reaped
+
+i could call libxl_childproc_reaped in libxl driver. but when?
+1), read the doc about subprocess handling. in xen/tools/libxl/libxl_event.h
+according to this doc, i should call libxl_childproc_setmode.
+using libxl_sigchld_owner_mainloop or libxl_sigchld_owner_libxl_always?
+
+2), if use libxl_sigchld_owner_libxl_always
+ *     libxl_sigchld_owner_libxl_always:
+ *       The application expects libxl to reap all of its children,
+ *       and provides a callback to be notified of their exit
+ *       statues.
+
+sigchld_handler is installed when libxl_sigchld_owner_libxl_always set. sigchld_handler will write to sigchld_owner->sigchld_selfpipe[1]. who listen this?
+i could register this to libvirt event loop then call the callback by myself.
+
+3), if use libxl_sigchld_owner_mainloop 
+i need to hand the signal in libvirt. it seems that there is no libvirt common function for this. except the virnetserver.c, the latter one is too complex for my requirement.
+
+2, try libxl_sigchld_owner_libxl_always
+1), register event to loop.
+2), libxl_childproc_reaped need pid of child process.
+should i get pid from fork_replacement? yes.
+sigchld_selfpipe could not get from libxl outside. i need to modify the code.
+
+3, currently, there are three choices for me, i am trying choice 2).
+1), using ao_how without callback -> libxl_sigchld_owner_mainloop
+2), using ao_how without callback -> libxl_sigchld_owner_libxl_always?
+3), using ao_how with callback
 
