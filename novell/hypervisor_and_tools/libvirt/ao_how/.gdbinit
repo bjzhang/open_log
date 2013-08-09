@@ -232,6 +232,24 @@ end
 
 #break libxl_event_wait
 
+#break sigchld_handler
+#commands
+#silent
+#shell date +%H%M%S_%N
+#printf "sigchld_handler\r"
+#where
+##cont
+#end
+
+break libxl__self_pipe_wakeup
+commands
+#silent
+shell date +%H%M%S_%N
+printf "libxl__self_pipe_wakeup\r"
+where
+#cont
+end
+
 #####libvirt
 #break libxlFDEventCallback
 #commands
@@ -242,11 +260,21 @@ end
 #cont
 #end
 
-break libxl/libxl_driver.c:2425
+#TBD
+#break libxl/libxl_driver.c:2425
+#commands
+#silent
+#shell date +%H%M%S_%N
+#printf "after libxl_event_check\n"
+#end
+
+break libxl_sigchld_callback
 commands
-silent
+#silent
 shell date +%H%M%S_%N
-printf "after libxl_event_check\n"
+printf "libxl_sigchld_callback\n"
+where
+#cont
 end
 
 cont
