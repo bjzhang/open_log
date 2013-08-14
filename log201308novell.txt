@@ -404,6 +404,82 @@ Program received signal SIGABRT, Aborted.
     at libxl_internal.h:2701
 (gdb)      
 
+3, (10:00 2013-08-14)
+figure out why fault in libxl__ctx_lock
+
+4, using the "-O0" flag as last week. restart the following process after re-install xen-tools, xen-libs: 
+# zypper ps
+The following running processes use deleted files:
+
+PID  | PPID | UID | Login | Command                    | Service | Files                
+-----+------+-----+-------+----------------------------+---------+----------------------
+1057 | 1    | 0   | root  | xenstored                  |         | /usr/lib64/libxenct->
+     |      |     |       |                            |         | /usr/sbin/xenstored->
+1064 | 1    | 0   | root  | xenconsoled                |         | /usr/lib64/libxenct->
+     |      |     |       |                            |         | /usr/lib64/libxenst->
+     |      |     |       |                            |         | /usr/sbin/xenconsol->
+1090 | 1    | 0   | root  | qemu-system-i386 (deleted) |         | /usr/lib64/libxenst->
+     |      |     |       |                            |         | /usr/lib64/libxenct->
+     |      |     |       |                            |         | /usr/lib64/libxengu->
+     |      |     |       |                            |         | /usr/lib/xen/bin/qe->
+
+/usr/sbin/xenstored --pid-file /var/run/xenstored.pid
+xenconsoled --pid-file=/var/run/xenconsoled.pid
+/usr/lib/xen/bin/qemu-system-i386 -xen-domid 0 -xen-attach -name dom0 -nographic -M xenpv -daemonize -monitor /dev/null
+
+after enable "-O0", xen kernel module, xenstore, qemu not loaded. but 
+/etc/rc.d/xencommons restart
+successful.
+
+5, remove CTX_LOCK and CTX_UNLOCK in libxl_childproc_reaped for test.
+ctx is invalid in childproc_reaped, so this is why CTX_LOCK get 22(EINVAL).
+$7 = {lg = 0x6b63617473, xch = 0x0, xsh = 0x6365537269760000, nogc_gc = {
+    alloc_maxsize = 1953067637, alloc_ptrs = 0x73654e6464416b63, owner = 0x646574}, 
+  event_hooks = 0x6365537269760000, event_hooks_user = 0x6174537974697275, lock = {
+    __data = {__lock = 1699179363, __count = 1936019060, __owner = 6579572, 
+      __nusers = 6512996, __kind = 1969448307, __spins = 2037672306, __list = {
+        __prev = 0x746972756365732f, __next = 0x632e6361645f79}}, 
+    __size = "ckGetNested\000dac\000security/security_dac.c", 
+    __align = 8315138548831841123}, occurred = {tqh_first = 0x7220746f6e6e6163, 
+    tqh_last = 0x732065766c6f7365}, osevent_in_hook = 1768713593, 
+  osevent_hooks = 0x75253a75250073, osevent_user = 0x250074756f2e7325, poller_app = {
+    entry = {le_next = 0x6e692e73, le_prev = 0x6e69747465530000}, 
+    fd_polls = 0x7375204341442067, fd_polls_allocd = 1629516389,
+    fd_rindices_allocd = 1730176110, fd_rindices = 0x206e6f2070756f72, wakeup_pipe = {
+      661857575, 544175136}}, pollers_event = {lh_first = 0x646c253a646c2527}, 
+  pollers_idle = {lh_first = 0x6e69747465530027}, hook_fd_nexi_idle = {
+    slh_first = 0x6120726573752067}, hook_timeout_nexi_idle = {
+    slh_first = 0x70756f726720646e}, efds = {lh_first = 0x646c2527206f7420}, etimes = {
+    tqh_first = 0x6e6f2027646c253a, tqh_last = 0x6f6e202773252720}, 
+  watch_slots = 0x726f707075732074, watch_nslots = 543450484, watch_freeslots = {
+    slh_first = 0x6574737973656c69}, watch_counter = 1699938413, watch_efd = {
+    fd = 1937055847, events = 29285, func = 0x70756f726720646e, entry = {
+      le_next = 0x646c2527206f7420, le_prev = 0x6e6f2027646c253a}, 
+    nexus = 0x6f6e202773252720}, death_list = {tqh_first = 0x74696d7265702074, 
+    tqh_last = 0x646574}, death_reported = {tqh_first = 0x6e69747465530000, 
+    tqh_last = 0x6120726573752067}, death_watch = {
+    path = 0x70756f726720646e <Address 0x70756f726720646e out of bounds>, 
+    callback = 0x646c2527206f7420, slotnum = 1684809018, counterval = 1852776487}, 
+  disk_eject_evgens = {lh_first = 0x6f6e202773252720}, 
+  childproc_hooks = 0x626973736f702074, childproc_user = 0x6572206e6f20656c, 
+  sigchld_selfpipe = {1852793953, 1713404268}, children = {
+    lh_first = 0x6574737973656c69}, version_info = {xen_version_major = 1853161581, 
+    xen_version_minor = 1701601889, 
+    xen_version_extra = 0x20746573206f7420 <Address 0x20746573206f7420 out of bounds>, 
+    compiler = 0x646e612072657375 <Address 0x646e612072657375 out of bounds>, 
+    compile_by = 0x742070756f726720 <Address 0x742070756f726720 out of bounds>, 
+    compile_domain = 0x253a646c2527206f <Address 0x253a646c2527206f out of bounds>, 
+    compile_date = 0x27206e6f2027646c <Address 0x27206e6f2027646c out of bounds>, 
+    capabilities = 0x277325 <Address 0x277325 out of bounds>, 
+    changeset = 0x726f747365520000 <Address 0x726f747365520000 out of bounds>, 
+    virt_start = 2324773593510538857, pagesize = 1919251317, 
+    commandline = 0x6f2070756f726720 <Address 0x6f2070756f726720 out of bounds>}}
+
+6, check when the ctx is freed?
+libxl_ctx_free breakpoints not entered. so, i using the wrong ctx???
+yes. i not set the ctx to for info struct.
+1), child_reaped pass after changing. but it entered several times. i should remove it.
+2), i still could not recevice the event in libxl_check_event. check it tomorrow.
 
 17:47 2013-08-08
 virtualization, libvirt, kvm, bnc#815201, save hang, cont8, submit request to kvm package
@@ -469,11 +545,218 @@ kpartx also use dm.
 gnu/linux hardening(linux加固).
 
 18:01 2013-08-09
-Hi, xxx
+sent to Maxime Ripard(maxime.ripard@free-electrons.com) 
+Hi, Maxime 
 
 I saw your A31 patch sent to linux-arm.
 i want to test your patch in my mele M9 box(A31 with 2G memory).
 but i fail on u-boot loading kernel.
 i am not sure if the u-boot ship with my box is too old to using the dtb and kernel.
-So, if u could give me some instruction about how to make a bootable sd card and your u-boot and initfs. i will appreciate that, thasks.
+So, if u could give me some instruction about how to make a bootable sd card and your u-boot and initfs. i will appreciate that, thanks.
+
+do i need to use fex?
+
+bamvor
+
+10:15 2013-08-13
+virtualization, nested, xen
+http://www.slideshare.net/xen_com_mgr/nested-virtualization-update-from-intel
+1, xiantao.zhang@intel.com
+2, Why nested virtualization?
+Ordinary OS are adopting  VMX now
+    Windows 7 XP compatibility mode 
+    Windows 8 Hyper-V
+Other Commercial VMMs requires VMX for better performance
+    vmware vmm
+Anti-virus software depends on VMX
+    McAfee Deep Defender
+3, What is the goal ?
+    To make VMX-based system software run smoothly in a Xen guest. 
+
+14:34 2013-08-13
+fate, virtualization, kvm, arm
+Feature changed by: Michal Svec <msvec@suse.com>
+Feature #314465, revision 10
+  Title: Support the ARM architecture of KVM
+   
+- SLES-12: Rejected
++ SLES-12: Rejected by Michal Svec <msvec@suse.com>
++ reject date: 2013-08-09 15:41:18
++ reject reason: There are no plans to support ARMv7 in SLE 12. ARMv8
++ AArch64 is also not in the current plan of SLE 12, but we'd be open and
++ happy to have engagement on the BizDev side.
+  Priority
+      Requester: Desirable
+   
+  Requested by: yi li <yili@novell.com>
+  Product Manager: Michal Svec <msvec@suse.com>
+  Product Manager: Vladimir Botka <vbotka@suse.com>
+  Partner organization: SUSE
+   
+  Categories:
+  Virtualization, Virtualization / KVM
+   
+Description:
+  Support ARM: create VM on ARM architecture, include passthrough the
+  amba device to the guest os.
+   
+-- 
+https://fate.novell.com/314465
+More information about FATE on https://wiki.innerweb.novell.com/index.php/FATE
+This feature is available to SUSE at: https://partnerfate.novell.com/314465
+
+09:54 2013-08-14
+GTD
+0, 9:40-11:35 12:40-17:50
+
+1, today
+1), 10' mail.
+2), 9:59-11:35 13:50-17:44 try to finish choice 2). mentioned in "09:19 2013-08-07"3-2). see"17:45 2013-08-08"3.
+3), sun6i: reply to Bob. see"13:14 2013-08-14"
+
+3), work report?
+3), a31 email.
+3), jim email.
+2), why gmail not sync?
+
+09:54 2013-08-14
+virtualization, storage, storage motion
+1, "Sebastian Martinez" <smartinez@suse.com>""
+I have found this:  
+http://wiki.xen.org/wiki/Storage_XenMotion and I would like to know if we support this kind of technology (storage live
+migration without shared storage). 
+And Is there any similar for KVM? 
+
+Best regards, 
+
+Sebastián Martínez
+Business Development Manager
+C/José Echegaray 8 Edif. III, 1ª, oficina 5 y 6.  
+28232. Las Rozas. Spain.
++34 652 86 19 49
+smartinez@suse.com
+SUSE
+
+2, Jim Fehlig
+Sebastian Martinez wrote:
+>
+> I have found this:
+>
+> /_http://wiki.xen.org/wiki/Storage_XenMotion_/ and I would like to
+> know if we support this kind of technology (storage live migration
+> without shared storage).
+>
+
+Storage XenMotion is supported by the XCP toolstack from Citrix, which
+is not provided in SLES.
+
+> And Is there any similar for KVM?
+>
+
+libvirt's migrate API supports a VIR_MIGRATE_NON_SHARED_DISK flag, which
+is implemented in the QEMU/KVM driver.  With virsh, you should be able
+to do something like
+
+virsh migrate vm-name --copy-storage-all ...
+
+Regards,
+Jim
+
+3, Bruce Rogers
+>>> On 8/12/2013 at 09:07 AM, Jim Fehlig <jfehlig@suse.com> wrote: 
+> Sebastian Martinez wrote:
+>>
+>> I have found this:
+>>
+>> /_http://wiki.xen.org/wiki/Storage_XenMotion_/ and I would like to
+>> know if we support this kind of technology (storage live migration
+>> without shared storage).
+>>
+> 
+> Storage XenMotion is supported by the XCP toolstack from Citrix, which
+> is not provided in SLES.
+> 
+>> And Is there any similar for KVM?
+>>
+> 
+> libvirt's migrate API supports a VIR_MIGRATE_NON_SHARED_DISK flag, which
+> is implemented in the QEMU/KVM driver.  With virsh, you should be able
+> to do something like
+> 
+> virsh migrate vm-name --copy-storage-all ...
+> 
+> Regards,
+> Jim
+
+Although available for KVM, we haven't stated support for storage migration.
+We could certainly consider it if there is customer demand.
+
+Bruce
+
+12:40 2013-08-14
+virtualization, xen, arm
+[Xen-devel] How ARM Xen process the harddisk requests from DomU
+1, Ian C
+On Mon, 2013-08-12 at 12:06 +0800, Josh Zhao wrote:
+> I am wondering how arm xen process the harddisk requests from DomU, is
+> there a daemon in dom0 to do this work?
+Xen on ARM supports only PV devices, so the PV disk backend will deal
+with it. I'm not sure anyone has tried qdisk on ARM, although it should
+work fine, but I expect most people are currently using the in-kernel
+blkback driver in their driver domain.
+
+2, Ian C
+On Mon, 2013-08-12 at 14:23 +0800, Josh Zhao wrote:
+> As the dom0 can use map_devices_from_device_tree() to map all devices
+> into dom0 memory space , why we need to use the sysmmu ?
+All ARM domains run with hardware nested page tables ("second stage
+paging" in ARM speak, equivalent to HAP for x86 HVM guests). So an IOMMU
+is needed to translate guest physical addresses into host physical
+addresses for the device e.g. for doing DMA.
+
+13:14 2013-08-14
+allwinner, A31, mele M9
+1, Bob Ham <rah@settrans.net>
+Hi there,
+
+I've just got a Mele A1000G which you stated is the same as the A1000
+you unboxed here:
+
+  http://xen_on_arm.farbox.com/post/mele_m9_quadcore
+
+I'd like to get the serial output from u-boot in order to work on Linux
+on the device.  In your hacking page, you noted a 3v3 uart: "the uart
+pin is same as mele A1000, from left to right: 3v3, Tx, Rx, Gnd".
+
+However, it isn't clear which connector you're referring to on the
+board.  Could you possible tell me which connector is the UART? :-)
+
+Any help is much appreciated.
+
+Kind regards,
+
+Bob Ham
+
+2, reply
+Hi, Bob
+
+glad to see more and more people hacking A31. and sorry to late to reply to u.
+my box is a engineering test version of mele M9. i am not sure it is same or not with
+your box.
+
+could u see the right-down connector in my inside picture(next to the last picture)?
+that is the uart connector. there are four pins in that, 3v3, Tx, Rx, Gnd.
+AFAIK, there is only one four pins connector in this board.
+
+BTW, i am trying to port xen to A31. currently, i need a upstream kernel. and recently, 
+Maxime Ripard(maxime.ripard@free-electrons.com) send the A31 patches to linux-arm-kernel
+ and linux-sunxi mailing list. but i do not get a chance to test it.
+will u try it?
+
+and if u could get any kernel and filsystem running successful on A31. i could package 
+it to opensuse arm. it would be useful for others one.
+
+regards
+
+bamvor
 

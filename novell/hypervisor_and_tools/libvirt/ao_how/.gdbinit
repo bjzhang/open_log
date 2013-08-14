@@ -243,11 +243,20 @@ end
 
 break libxl__self_pipe_wakeup
 commands
-#silent
+silent
 shell date +%H%M%S_%N
 printf "libxl__self_pipe_wakeup\r"
 where
-#cont
+cont
+end
+
+break libxl_ctx_free
+commands
+silent
+shell date +%H%M%S_%N
+printf "libxl_ctx_free\r"
+where
+cont
 end
 
 #####libvirt
