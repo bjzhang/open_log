@@ -614,11 +614,6 @@ GTD
 2), 9:59-11:35 13:50-17:44 try to finish choice 2). mentioned in "09:19 2013-08-07"3-2). see"17:45 2013-08-08"3.
 3), sun6i: reply to Bob. see"13:14 2013-08-14"
 
-3), work report?
-3), a31 email.
-3), jim email.
-2), why gmail not sync?
-
 09:54 2013-08-14
 virtualization, storage, storage motion
 1, "Sebastian Martinez" <smartinez@suse.com>""
@@ -759,4 +754,404 @@ it to opensuse arm. it would be useful for others one.
 regards
 
 bamvor
+
+09:53 2013-08-15
+GTD
+0, 9:40-18:00
+
+1, today
+1), 10' jim email. CANCEL.
+2), 17:00-17:54 ao_how
+
+3), a31 email.
+
+09:58 2013-08-15
+mailing list, virtualization, libvirt, libxl, logging
+1, [libvirt] [PATCH] libxl: Create per-domain log file 
+1), Daniel reply to Jim.
+> > Startup of libvirtd SEGVs with this change in GIT
+> >
+> > ==4706== For counts of detected and suppressed errors, rerun with: -v
+> > ==4706== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 2 from 2)
+> > ==4601== Thread 12:
+> > ==4601== Invalid read of size 8
+> > ==4601==    at 0x1E57964F: xtl_logv (in /usr/lib64/libxenctrl.so.4.2.0)
+> > ==4601==    by 0x1E5796D3: xtl_log (in /usr/lib64/libxenctrl.so.4.2.0)
+> > ==4601==    by 0x1E33258A: ??? (in /usr/lib64/libxenlight.so.2.0.0)
+> > ==4601==    by 0x1E332641: ??? (in /usr/lib64/libxenlight.so.2.0.0)
+> > ==4601==    by 0x1E317CD7: libxl_ctx_alloc (in /usr/lib64/libxenlight.so.2.0.0)
+> >   
+> 
+> I should have looked at the xen code closer.  Seems libxl doesn't cope
+> well with a NULL logger :(.
+> 
+> Hmm, should the logger for this driver-wide ctx (used for getting libxl
+> version and the like, no domain ops) just dump messages to /dev/null or
+> should they go to a driver-wide log file?
+
+Depends if you think there's any useful info to be had from the
+driver wide context object ? If so, then probably best to have a
+driver-wide log file for those messages
+
+
+Daniel
+
+2), 
+> > Daniel
+> Eric
+Daniel
+
+> > Depends if you think there's any useful info to be had from the
+> > driver wide context object ? If so, then probably best to have a
+> > driver-wide log file for those messages
+> 
+> Or even just reply the data into the main libvirtd.log (ie. use existing
+> virLog functionality, rather than creating a new file), since ideally
+> the log will be relatively sparse: in my case, it would be just one
+> message stating that libxl is not available, at which point the libxl
+> driver no longer does anything else during the life of libvirtd.
+
+I was going to suggest that, but IIUC, the libxl logger API requires
+you to give it a FILE * instance to which it writes directly. To feed
+it into our normal logs, we'd want it to let us give it a callback
+for writing log messages.
+
+Daniel
+
+3), Jim reply to Daniel
+> I was going to suggest that, but IIUC, the libxl logger API requires
+> you to give it a FILE * instance to which it writes directly.
+
+Right.
+
+>  To feed
+> it into our normal logs, we'd want it to let us give it a callback
+> for writing log messages.
+>   
+
+I was going to pass the logger create function 'stderr' for the
+driver-wide ctx.  Would that be safe?
+
+Regards,
+Jim
+
+4), Eric reply to Daniel
+> I was going to suggest that, but IIUC, the libxl logger API requires
+> you to give it a FILE * instance to which it writes directly. To feed
+> it into our normal logs, we'd want it to let us give it a callback
+> for writing log messages.
+
+Can we rely on open_memstream() being present on any platform with
+libxl?  If so, that would give us a FILE* interface to libxl, while
+still giving us access to the strings it prints which we can then turn
+around and hand to our logger.
+
+-- 
+Eric Blake   eblake redhat com    +1-919-301-3266
+Libvirt virtualization library http://libvirt.org
+
+5), Jim
+I should have tested this change on a system with libxl, but not booted
+to Xen.  libxl would have then complained, and I would have seen the
+crash.  Lesson learned...
+
+I've sent a patch to fix the issue
+
+https://www.redhat.com/archives/libvir-list/2013-August/msg00484.html
+
+Regards,
+Jim
+
+6), Dario Faggioli reply to Jim
+> I should have tested this change on a system with libxl, but not booted
+> to Xen.  libxl would have then complained, and I would have seen the
+> crash.  Lesson learned...
+> 
+Ups! I was wondering how that could happen, since I tested this too and
+it worked, but yes, I tested it on Xen too... Did not think about doing
+the above, although, yes, it definitely sounds like a reasonable thing
+to do! :-P
+
+Note taken for next time. :-)
+
+Dario
+
+2, example about how to use xtl_createlogger_stdiostream in libvirt.
+[libvirt] [PATCH] libxl: fix libvirtd segfault
+https://www.redhat.com/archives/libvir-list/2013-August/msg00484.html
+
+@@ -1229,6 +1232,7 @@ libxlStateInitialize(bool privileged,
+                      void *opaque ATTRIBUTE_UNUSED)
+ {
+     const libxl_version_info *ver_info;
++    char *log_file = NULL;
+     virCommandPtr cmd;
+     int status, ret = 0;
+     unsigned int free_mem;
+@@ -1308,6 +1312,17 @@ libxlStateInitialize(bool privileged,
+         goto error;
+     }
+ 
++    if (virAsprintf(&log_file, "%s/libxl-driver.log", libxl_driver->logDir) < 0)
++        goto error;
++
++    if ((libxl_driver->logger_file = fopen(log_file, "a")) == NULL)  {
++        virReportSystemError(errno,
++                             _("failed to create logfile %s"),
++                             log_file);
++        goto error;
++    }
++    VIR_FREE(log_file);
++
+     /* read the host sysinfo */
+     if (privileged)
+         libxl_driver->hostsysinfo = virSysinfoRead();
+@@ -1316,8 +1331,18 @@ libxlStateInitialize(bool privileged,
+     if (!libxl_driver->domainEventState)
+         goto error;
+ 
+-    if (libxl_ctx_alloc(&libxl_driver->ctx, LIBXL_VERSION, 0, NULL)) {
+-        VIR_INFO("cannot initialize libxenlight context, probably not running in a Xen Dom0, disabling driver");
++    libxl_driver->logger =
++            (xentoollog_logger *)xtl_createlogger_stdiostream(libxl_driver->logger_file, XTL_DEBUG, 0);
++    if (!libxl_driver->logger) {
++        VIR_INFO("cannot create logger for libxenlight, disabling driver");
++        goto fail;
++    }
++
++    if (libxl_ctx_alloc(&libxl_driver->ctx,
++                       LIBXL_VERSION, 0,
++                       libxl_driver->logger)) {
++        VIR_INFO("cannot initialize libxenlight context, probably not running "
++                 "in a Xen Dom0, disabling driver");
+         goto fail;
+     }
+ 
+@@ -1383,6 +1408,7 @@ libxlStateInitialize(bool privileged,
+ error:
+     ret = -1;
+ fail:
++    VIR_FREE(log_file);
+     if (libxl_driver)
+         libxlDriverUnlock(libxl_driver);
+     libxlStateCleanup();
+
+10:11 2013-08-15
+title: about your per domain log patch
+Hi, Jim
+
+i read your per domain log patch and relative segfault patch.
+IIRC, you said that it is relative to my jobs patch? but i am not understand this.
+
+
+10:35 2013-08-15
+bamvor@linux-rd:libvirt> sudo zypper in libvirt
+Loading repository data...
+Reading installed packages...
+Resolving package dependencies...
+
+The following NEW packages are going to be installed:
+  libvirt libvirt-client libvirt-daemon libvirt-daemon-config-nwfilter 
+  libvirt-daemon-driver-interface libvirt-daemon-driver-libxl libvirt-daemon-driver-lxc 
+  libvirt-daemon-driver-network libvirt-daemon-driver-nodedev 
+  libvirt-daemon-driver-nwfilter libvirt-daemon-driver-qemu 
+  libvirt-daemon-driver-secret libvirt-daemon-driver-storage libvirt-daemon-driver-uml 
+  libvirt-daemon-driver-vbox libvirt-daemon-driver-xen 
+
+16 new packages to install.
+Overall download size: 7.2 MiB. After the operation, additional 28.5 MiB will be used.
+Continue? [y/n/?] (y): 
+
+11:01 2013-08-15
+mailing list, virtualization, xen
+1, "ar16 <ar16@imapmail.org>"_email_"[opensuse-virtual] "EVTCHNOP failure" @ OS 12.3 + Xen 4.3 boot for some Guests; launch manually OK"_20130815_1018
+I've recently upgraded pkgs an Opensuse 12.3 + XEN 4.3
+(xen-4.3.0_08-264.1.x86_64) server.
+
+It's got two guests set for auto-launch @ boot.
+
+It's been working fine for awhile.  The guest cfg's have not changed in
+ages.  Just the upgrade has occured recently.
+
+Now, reproducibly after boot, one Guest is missing,
+
+	xl list
+		Name                                        ID   Mem
+		VCPUs      State   Time(s)
+		(null)                                       0   985    
+		4     r-----      44.2             <====== Why "(null)"
+		here? systemd?
+		test2                                        2  1024    
+		4     -b----      13.3
+
+but launches manually 
+
+	xl create /etc/xen/auto/test1.cfg
+	xl list
+		Name                                        ID   Mem
+		VCPUs      State   Time(s)
+		(null)                                       0   985    
+		4     r-----      48.2
+		test2                                        2  1024    
+		4     -b----      13.8
+		test1                                        3   768    
+		2     -b----       2.3
+
+and functions normally.
+
+checking xen boot logs, I find these, new failures
+
+	xl dmesg
+		...
+		[  OK  ] Started Haveged Entropy Gathering Daemon.
+		[  OK  ] Started Restore Sound Card State.
+		[  OK  ] Started LSB: irqbalance daemon providing irq
+		balancing on MP-machines.
+		[  OK  ] Started LSB: Framebuffer setup.
+		[   35.614880] Event-channel device installed.
+		[   35.677851] usbcore: registered new interface driver
+		usbback
+		[   35.711552] pciback: backend is vpci
+		[   35.748410] blktap_device_init: blktap device major
+		252
+
+		Welcome to openSUSE 12.3 "Dartmouth" - Kernel
+		3.7.10-1.16-xen (xvc0).
+
+
+		testsvr login:
+
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		(XEN) [2013-08-15 01:42:22] event_channel.c:233:d0
+		EVTCHNOP failure: domain 2, error -22
+		[  OK  ] Started LSB: Configure network interfaces and
+		set up routing.
+		[  OK  ] Reached target Network.
+		         Starting Command Scheduler...
+		...
+
+Those
+
+	"event_channel.c:233:d0 EVTCHNOP failure: domain 2, error -22"
+
+errors are new to me.
+
+Looks like a XEN issue.  I've seen recent work on event channel deadlock
+on the dev list, but my xen's logs don't mention anything evtchn-related
+since ~ Nov 2011.
+
+Before deciding to file a bug, I need to do some local troubleshooting.
+
+Any suggestions as to what this might be about, or specific additional
+info that might be enlightening?
+
+AR
+-- 
+To unsubscribe, e-mail: opensuse-virtual+unsubscribe@opensuse.org
+To contact the owner, e-mail: opensuse-virtual+owner@opensuse.org
+
+1), bamvor: i got the same error. keep an eye on this bug report.
+
+2, Jan reply
+These being failures of Dom0 trying to bind inter-domain event
+channels between itself and Dom2, these would quite likely be
+accompanied by some log entries from the xen tools or the Dom0
+kernel. In any case - the failure message here indicates that the
+event channel either wasn't in "unbound" state, or wasn't
+intended to be bound to by Dom0. For what it's worth, both seem
+pretty unlikely...
+
+Furthermore, you certainly realize that with the update to Xen 4.3,
+which isn't part of 12.3, you also got switched from xend/xm to the
+libxl based tools, which may be part of your problem. Thus it would
+also be important to know what's so specific about this one failing
+VM (there ought to be something, or else it wouldn't be always the
+same VM that fails to come up).
+
+Jan
+
+11:29 2013-08-15
+libxlEventHandler
+LIBXL_EVENT_TYPE_OPERATION_COMPLETE
+
+16:47 2013-08-15
+1, Josh zhao <alephman@gmail.com>
+你好 jian zhang,
+我最近对xen arm很有兴趣，所以也关注 xen maillist. 发现除Arndale board 外，你发了一些针对全志A31的patchs。
+我刚入手了一块A20(dual A7) 的开发板，我想应该区别不大，所以想把xen 移植 上去。我对xen是新手，所以请教几个问题：
+1)  我在xen的主树（http://xenbits.xen.org/gitweb/?p=xen.git;a=summary）的master
+branch中看不到你的代码，不知在什么地方？
+2）在最新的3,8 以上的linux kernel中没有全志A31/A20的板子支持（只有A1X），不知哪里可以看到最新
+针对A31/A20的Linux kernel 代码？
+
+非常感谢！
+
+-- 
+Best regards!
+
+Josh Zhao
+
+2, 
+Hi, Josh 
+> 你好 jian zhang,
+> 我最近对xen arm很有兴趣，所以也关注 xen maillist. 发现除Arndale board 外，你发了一些针对全志A31的patchs。
+> 我刚入手了一块A20(dual A7) 的开发板，我想应该区别不大，所以想把xen 移植 上去。我对xen是新手，所以请教几个问题：
+A20目前社区很活跃啊，你可以关注linux-sunxi mailing list. 其实我也有打算移植xen到A20，只是想买cubietruck(2G memory). 你用的什么板子？cubieboard2, OlinuXino, pad ,机顶盒?
+> 1)  我在xen的主树（http://xenbits.xen.org/gitweb/?p=xen.git;a=summary）的master
+> branch中看不到你的代码，不知在什么地方？
+你搜索Bamvor看看。因为我有的patch也不是只针对A31，有些针对A31相关的patch不适合放在xen里面。最终的patch title并不是A31，所以你没搜到？
+> 2）在最新的3,8 以上的linux kernel中没有全志A31/A20的板子支持（只有A1X），不知哪里可以看到最新
+> 针对A31/A20的Linux kernel 代码？
+linux-sunxi mailing list里面有Maxime Ripard基于upstream的A20/A31的patch: code name sun7i, sun6i.
+> 
+> 非常感谢！
+很乐意和你一起把xen for sunxi做好，咱们可以多沟通。
+我在IRC freenode: bjzhang
+Google+ : bamv2005@gmail.com
+
+regards
+
+bamvor
+> 
+> -- 
+> Best regards!
+> 
+> Josh Zhao
+
+17:01 2013-08-15
+company, colleague, SUSE labs, Shirish Pargaonkar
+[devel] New Colleague in SUSE Labs: Shirish Pargaonkar
+Hi all -
+
+It's my pleasure to announce that we have a new member of the SUSE Labs
+File Systems and Storage team: Shirish Pargaonkar. Shirish is located in
+Austin (US) and will be joining us remotely.
+
+He'll be primarily working on storage drivers and software RAID.
+
+Welcome, Shirish!
+
+-Jeff
+
+-- 
+Jeff Mahoney
+SUSE Labs
+
 
