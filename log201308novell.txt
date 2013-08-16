@@ -546,7 +546,7 @@ gnu/linux hardening(linux加固).
 
 18:01 2013-08-09
 (21:00 2013-08-15)
-sent to Maxime Ripard(maxime.ripard@free-electrons.com) 
+1, sent to Maxime Ripard(maxime.ripard@free-electrons.com) 
 Hi, Maxime 
 
 this is Bamvor Jian Zhang. currently, i work on port xen to sun6i. and i need a upstream kernel for sun6i.
@@ -562,6 +562,60 @@ i am so excited to boot your kernel in my board. and i hope i could make a opens
 thanks
 
 bamvor
+
+2, reply
+Hi Bamvor,
+
+On Thu, Aug 15, 2013 at 07:12:42AM -0600, Bamvor Jian Zhang wrote:
+> this is Bamvor Jian Zhang. currently, i work on port xen to sun6i. and
+> i need a upstream kernel for sun6i.
+
+Cool :)
+
+> i have had ping u at linux-sunxi in freenode last week,
+
+Sorry about that. I'm currently on holidays, hence why I probably didn't
+see your ping.
+
+> and got your github branch for sun6i
+> (https://github.com/mripard/linux/tree/sunxi-next-a31). I also
+> saw your A31 patch sent to linux-arm.  which one should i use for boot
+> sun6i kernel?
+
+The github branch you picked is the latest I sent to the ML.
+
+> i test your patch in my mele M9 box(A31 with 2G memory). but i fail on
+> u-boot loading kernel.
+
+How so ?
+
+What is the error from the kernel? What configuration did you use? Which
+device tree did you use? How do you load the kernel and device tree
+images?
+
+> i am not sure if the u-boot ship with my box is too old to using the
+> dtb and kernel.
+
+I can't answer that question. You can always use CONFIG_ARM_APPENDED_DTB
+if your u-boot is too old.
+
+> So, could u do me a favor to give me some instruction about how to
+> boot your kernel, including proper u-boot, cmdline and filesystem.
+
+http://linux-sunxi.org/Mainline_Kernel_Howto
+
+> BTW: do i need to use fex for booting your kernel?
+
+No. We don't and never will support fex. We use device tree just like
+any other ARM platform.
+
+Maxime
+
+-- 
+Maxime Ripard, Free Electrons
+Embedded Linux, Kernel and Android engineering
+http://free-electrons.com
+
 
 10:15 2013-08-13
 virtualization, nested, xen
@@ -1190,4 +1244,357 @@ GTD
 1, today
 1), 
 mp3 editor in linux. ask YiFan.
+
+10:46 2013-08-16
+mailing list, virtualization
+"David Byte" <dbyte@suse.com>""_to_"virtualization-dev@lists.novell.com","linux-server@lists.novell.com"_email_"[Virtualization-dev] Virtualization HA RFP Questions"_20130815_2252
+These are some questions from a virtualization RFP we are responding to at Avaya.  Any help is appreciated.
+
+HV is hypervisor.  These questions are specific to HA + KVM or HA + Xen.
+
+Avaya needs instantaneous failover feature (<250 ms time to failover to backup server and resume service), a hot standby solution for applications in the event of server failure. Does your HV support this speed, if not what is your failover speed? 
+
+ Ideally Avaya would like to have a hot standby solution that continues to use the local storage on the servers, can your HV provide that? If not please detail what the storage requirements are for hot standby HA. 
+
+Ideally Avaya would like to have a warm standby solution that continues to use the local storage on the servers, can your HV provide that? If not please detail what the storage requirements are for warm standby HA.
+
+Please detail resource requirements for warm standby and hot standby failovers. 
+
+
+Are there maximum core and memory limits, what are range and network requirements between servers? 
+
+Does the hot or warm standby configuration have a performance cost to the application? 
+
+
+David ByteSr. Technology Strategist, OEMSUSEdbyte@novell.com(P)918.230.2771
+www.suse.com https://www.suse.com/partners/integrated-systems/
+
+10:48 2013-08-16
+1, Jim reply
+ar16 wrote:
+> Ooops, sry, cp'd the wrong result.  Same result for BOTH Guests, alone.
+>
+> My point is that in BOTH cases, the single-guest -- whether it's "test1"
+> or "test2" -- launches without error.
+>
+> If BOTH guests are included to auto-launch, then only the one launches
+> successfully.
+>   
+
+Were you using the xl toolstack before the packages were updated?
+
+Do both guests start if you run the xendomains script after boot?  I.e.
+disable the script from running at boot, then do '/etc/init.d/xendomains
+start' after boot.
+
+Your suspicion of systemd might warrent some investigation
+
+ # rpm -q xen --changelog | grep -A 7 systemd
+- Added support for systemd with the following service files
+  xenstored.service
+  blktapctrl.service
+  xend.service
+  xenconsoled.service
+  xen-watchdog.service
+  xendomains.service
+  xencommons.service
+
+Perhaps a bit of tweaking on the xendomains script might give some hints
+too, e.g.
+
+--- /etc/init.d/xendomains.orig    2013-08-15 11:53:39.487569293 -0600
++++ /etc/init.d/xendomains    2013-08-15 11:54:33.440841893 -0600
+@@ -34,7 +34,7 @@
+ $CMD list &> /dev/null
+ if test $? -ne 0
+ then
+-    CMD=${SBINDIR}/xl
++    CMD=${SBINDIR}/xl -v
+     HEADCOMP="Xen saved domain"
+ fi
+ 
+@@ -297,7 +297,7 @@
+         if [ $? -eq 0 ] || is_running $dom; then
+         echo -n "(skip)"
+         else
+-        XMC=`$CMD create --quiet --defconfig $dom`
++        XMC=`$CMD create --defconfig $dom`
+         if [ $? -ne 0 ]; then
+             echo -e "\nAn error occurred while creating domain
+${dom##*/}: $XMC\n"
+             rc_failed $?
+
+Regards,
+Jim
+
+2, ar16 reply
+On Thu, Aug 15, 2013, at 11:02 AM, Jim Fehlig wrote:
+> Were you using the xl toolstack before the packages were updated?
+
+Yes.  I've been using Xen 4.3 for quite a long time.
+
+> Do both guests start if you run the xendomains script after boot?  I.e.
+> disable the script from running at boot, then do '/etc/init.d/xendomains
+> start' after boot.
+
+Yes, without fail or error.
+
+> Your suspicion of systemd might warrent some investigation
+>  # rpm -q xen --changelog | grep -A 7 systemd
+> - Added support for systemd with the following service files
+
+Noted
+
+> Perhaps a bit of tweaking on the xendomains script might give some hints
+> too, e.g.
+...
+
+Aha!.  Just found that, if I edit BOTH .cfg's,
+
+ -    vcpus        = 2
+ -    cpu_cap      = 100
+ -    cpu_weight   = 256
+ +    #vcpus        = 2
+ +    #cpu_cap      = 100
+ +    #cpu_weight   = 256
+
+then reboot, now BOTH Guests launch,
+
+xl list
+    Name                                        ID   Mem VCPUs     
+    State   Time(s)
+    (null)                                       0  1241     4    
+    r-----      38.9
+    test1                                        1  1024     1    
+    -b----       6.6
+    test2                                        2  1024     1    
+    r-----      14.0
+
+Those configs most certainly used to be OK and functional.
+
+I can still tweak the xendomains script here in a bit ...
+
+3, Jim reply to ar16
+> Just one question ...
+>
+> I'm not sure that Xen *should* depend on external network being up, but
+> rather just local network and bridges -- even without attached eth0
+> interfaces.  I think ...
+>   
+
+Agreed, Xen should not depend on the external network being up.  But we
+are talking about xendomains, which IMO should depend on external
+network.  The domains it starts may need that...
+
+Regards,
+Jim
+
+4, ar16
+1), 
+> > carnold will take care of it, no bug necessary IMO.
+
+Updating @Dom0
+
+ rpm -qa | grep -i xen
+    ipset-kmp-xen-6.19_k3.7.10_1.1-32.1.x86_64
+    kernel-xen-3.7.10-1.16.1.x86_64
+    kernel-xen-devel-3.7.10-1.16.1.x86_64
+    xen-4.3.0_09-265.1.x86_64
+    xen-devel-4.3.0_09-265.1.x86_64
+    xen-libs-4.3.0_09-265.1.x86_64
+    xen-tools-4.3.0_09-265.1.x86_64
+
+  rpm -q --changelog xen | head -n5
+    * Thu Aug 15 2013 carnold@suse.com
+    - Change the default bridge in xl.conf from xenbr0 to just br0
+      xl-conf-default-bridge.patch
+    - Add network.target to xendomains.service 'After' tag
+      xendomains.service
+
+after reboot, not so good,
+
+  xl list
+    Name                                        ID   Mem VCPUs     
+    State   Time(s)
+    (null)                                       0  1280     4    
+    r-----     114.0
+    (null)                                       1     0     0    
+    --p---       0.0
+    (null)                                       2     0     0    
+    --p---       0.0
+
+and,
+
+journatctl -b | grep xen
+...
+Aug 15 15:56:14 testsvr.loc xenstored[1124]: Checking store ...
+Aug 15 15:56:14 testsvr.loc xenstored[1124]: Checking store complete.
+Aug 15 15:56:14 testsvr.loc xenstored[1124]: Checking store ...
+Aug 15 15:56:14 testsvr.loc xenstored[1124]: Checking store complete.
+Aug 15 15:56:16 testsvr.loc xenconsoled[1516]: xenstore watch on
+@introduceDomain fails.
+Aug 15 15:56:20 testsvr.loc kernel: xenstored[1124]: segfault at 4 ip
+00007f5f74f82eac sp 00007fff1f5ab310 error 4
+Aug 15 15:56:20 testsvr.loc kernel:  in
+libxenctrl.so.4.3.0[7f5f74f67000+25000]
+Aug 15 15:56:20 testsvr.loc dkms_autoinstaller[1044]: dkms: running auto
+installation service for kernel 3.7.10-1.16-xen
+Aug 15 15:56:20 testsvr.loc xenstored[1076]: FATAL: Failed to open
+evtchn device: No such file or directory
+Aug 15 15:56:20 testsvr.loc xenconsoled[1516]: xenstore watch on
+@introduceDomain fails.
+Aug 15 15:56:27 testsvr.loc systemd[1]: Starting Xendomains - start and
+stop Xen VMs on boot and shutdown...
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: Starting auto Xen domains:
+test1.cfglibxl: error: libxl_xshelp.c:134:libxl__xs_get_dompath: failed
+to get dompath for 1: Bad file descriptor
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_create.c:644:initiate_domain_create: cannot make domain: -3
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_xshelp.c:134:libxl__xs_get_dompath: failed to get dompath for 1:
+Bad file descriptor
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_xshelp.c:134:libxl__xs_get_dompath: failed to get dompath for 1:
+Bad file descriptor
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl.c:1342:domain_destroy_callback: unable to destroy guest with domid
+1
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_create.c:1209:domcreate_destruction_cb: unable to destroy domain 1
+following failed creation
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: An error occurred while
+creating domain test1.cfg:
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: !
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: test2.cfgDomain name must
+be specified.
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_xshelp.c:134:libxl__xs_get_dompath: failed to get dompath for 2:
+Bad file descriptor
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_create.c:644:initiate_domain_create: cannot make domain: -3
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_xshelp.c:134:libxl__xs_get_dompath: failed to get dompath for 2:
+Bad file descriptor
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_xshelp.c:134:libxl__xs_get_dompath: failed to get dompath for 2:
+Bad file descriptor
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl.c:1342:domain_destroy_callback: unable to destroy guest with domid
+2
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: libxl: error:
+libxl_create.c:1209:domcreate_destruction_cb: unable to destroy domain 2
+following failed creation
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: An error occurred while
+creating domain test2.cfg:
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: !
+Aug 15 15:56:29 testsvr.loc xendomains[2895]: ..done
+Aug 15 15:56:29 testsvr.loc systemd[1]: Started Xendomains - start and
+stop Xen VMs on boot and shutdown.
+
+2), 
+changing
+
+	edit /etc/sysconfig/kernel
+	-       DOMU_INITRD_MODULES="xennet xenblk"
+	+       DOMU_INITRD_MODULES="xennet xenblk evtchn"
+
+then
+
+	mkinitrd
+	reboot
+
+now,
+
+	lsmod | grep evt
+		evtchn                 13162  1 
+
+bug NO guests
+
+	xl list
+		Name                                        ID   Mem
+		VCPUs      State   Time(s)
+		(null)                                       0  1280    
+		4     r-----      38.2
+
+checking
+
+	journalctl -b | egrep -i "xen|evt"
+		...
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: Starting
+		auto Xen domains: test1.cfglibxl: error:
+		libxl_bootloader.c:364:libxl__bootloader_run: failed to
+		create bootloader dir /var/run/xen/bootloader.1.d: No
+		such file or directory
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: libxl:
+		error: libxl_create.c:900:domcreate_rebuild_done: cannot
+		(re-)build domain: -3
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: An error
+		occurred while creating domain test1.cfg:
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: !
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]:
+		test2.cfglibxl: error:
+		libxl_bootloader.c:364:libxl__bootloader_run: failed to
+		create bootloader dir /var/run/xen/bootloader.2.d: No
+		such file or directory
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: libxl:
+		error: libxl_create.c:900:domcreate_rebuild_done: cannot
+		(re-)build domain: -3
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: An error
+		occurred while creating domain test2.cfg:
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: !
+		Aug 15 16:28:09 testsvr.loc xendomains[2924]: ..done
+		Aug 15 16:28:09 testsvr.loc systemd[1]: Started
+		Xendomains - start and stop Xen VMs on boot and
+		shutdown.
+
+and
+
+	ls -al /var/run/xen/
+		ls: cannot access /var/run/xen/: No such file or
+		directory
+
+
+i suspsect you'll need, at least, some form of
+
+	cat /etc/tmpfiles.d/xendomains.conf
+		D /var/run/xen      0755 root root -   ('root' user
+		correct here?)
+
+and
+
+	systemd-tmpfiles --create /etc/tmpfiles.d/xendomains.conf
+
+on install
+
+3), 
+doing
+
+    edit /etc/tmpfiles.d/xendomains.conf
+        D /var/run/xen      0755 root root -
+
+    systemd-tmpfiles --create /etc/tmpfiles.d/xendomains.conf
+
+here, does the trick.  after reboot,
+
+  xl list
+    Name                                        ID   Mem VCPUs     
+    State   Time(s)
+    (null)                                       0  1269     4    
+    r-----      43.7
+    test1                                        1  1024     2    
+    -b----       7.7
+    test2                                        2  1024     4    
+    -b----      28.6
+
+and back to full function.
+
+still have that "(null") rather than Dom0 in its Name, but doesn't
+appear (yet) to have any detrimental effect on function
+-- 
+To unsubscribe, e-mail: opensuse-virtual+unsubscribe@opensuse.org
+To contact the owner, e-mail: opensuse-virtual+owner@opensuse.org
+
+13:42 2013-08-16
+mkdir sda5_rd sles11_sp2_home vm Downloads_new sda3/home /var/lib/xen/images_2 -p
+
 
