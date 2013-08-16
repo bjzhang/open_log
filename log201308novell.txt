@@ -1224,6 +1224,10 @@ test precedure.
 4), create another hvm, domain id 4.
 So, the only the first hvm domain id is wrong.
 
+2, (17:16 2013-08-16)
+using my lastest patch. save and restore successful. but restore to domain as 0. 
+if using the libvirt in Virtualization, it is ok.
+
 21:14 2013-08-15
 sorry, i could input Chinese right now.
 here is the a20 cubie2 branch from Maxime, i do not know the exact status about this:
@@ -1239,11 +1243,10 @@ http://lists.infradead.org/pipermail/linux-arm-kernel/2013-August/189046.html
 
 09:55 2013-08-16
 GTD
-0, 9:40
+0, 9:40-18:15
 
 1, today
-1), 
-mp3 editor in linux. ask YiFan.
+1), \TODO:  mp3 editor in linux. ask YiFan.
 
 10:46 2013-08-16
 mailing list, virtualization
@@ -1597,4 +1600,304 @@ To contact the owner, e-mail: opensuse-virtual+owner@opensuse.org
 13:42 2013-08-16
 mkdir sda5_rd sles11_sp2_home vm Downloads_new sda3/home /var/lib/xen/images_2 -p
 
+17:37 2013-08-16
+1, 
+CONFIG_ARM_APPENDED_DTB=y
+CONFIG_ARM_ATAG_DTB_COMPAT=y
+CONFIG_ARM_ATAG_DTB_COMPAT_CMDLINE_FROM_BOOTLOADER=y
+
+enable early printk:
+CONFIG_DEBUG_LL=y
+CONFIG_DEBUG_SUNXI_UART0=y
+CONFIG_DEBUG_LL_INCLUDE="debug/sunxi.S"
+CONFIG_DEBUG_UNCOMPRESS=y
+CONFIG_UNCOMPRESS_INCLUDE="debug/uncompress.h"
+CONFIG_EARLY_PRINTK=y
+
+2, log, wrong r1:
+i got the following message: 
+U-Boot 2011.09-rc1-00001-g8f3ca1c-dirty (Apr 23 2013 - 15:07:05) Allwinner Technology 
+
+CPU:   SUNXI Family
+Board: SUN6I
+DRAM:  2 GiB
+MMC:   SUNXI SD/MMC: 0
+In:    serial
+Out:   serial
+Err:   serial
+MMC: block number 0x72a004 exceeds max(0x1e4600)
+bootcmd set setargs_mmc
+Hit any key to stop autoboot:  0 
+sunxi#setenv fdt_high ffffffff
+sunxi#fatload mmc 0:2 0x48000000 uImage
+reading uImage
+
+2864928 bytes read
+sunxi#bootm 48000000
+## Booting kernel from Legacy Image at 48000000 ...
+   Image Name:   
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    2864864 Bytes = 2.7 MiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+[      31.726]
+
+Starting kernel ...
+
+Uncompressing Linux... done, booting the kernel.
+
+Error: unrecognized/unsupported machine ID (r1 = 0x00000f34).
+
+Available machine support:
+
+ID (hex)        NAME
+ffffffff        Generic DT based system
+ffffffff        Allwinner A1X (Device Tree)
+
+Please check your kernel config and/or bootloader.
+
+the kernel commit is cc5d8a7c.
+
+3, i forget to append the dtb
+linux> cd arch/arm/boot/
+boot> cat zImage dts/sun6i-a31
+sun6i-a31-colombus.dtb  sun6i-a31-colombus.dts  sun6i-a31.dtsi
+boot> cat zImage dts/sun6i-a31-colombus.dtb > zImage_dtb
+boot> cd ..
+arm> cd ..
+arch> cd ..
+linux> mkimage -A arm -O linux -T kernel -C none -a 0x40008000 -e 0x40008000 -d arch/arm/boot/zImage_dtb arch/arm/boot/uImage_dtb
+Image Name:   
+Created:      Fri Aug 16 17:58:06 2013
+Image Type:   ARM Linux Kernel Image (uncompressed)
+Data Size:    2868027 Bytes = 2800.81 kB = 2.74 MB
+Load Address: 40008000
+Entry Point:  40008000
+
+kernel boot ok:
+U-Boot 2011.09-rc1-00001-g8f3ca1c-dirty (Apr 23 2013 - 15:07:05) Allwinner Technology 
+
+CPU:   SUNXI Family
+Board: SUN6I
+DRAM:  2 GiB
+MMC:   SUNXI SD/MMC: 0
+In:    serial
+Out:   serial
+Err:   serial
+MMC: block number 0x72a004 exceeds max(0x1e4600)
+bootcmd set setargs_mmc
+Hit any key to stop autoboot:  0 
+sunxi#
+sunxi#
+sunxi#fatload mmc 0:2 48000000 uImage_dtb
+reading uImage_dtb
+
+2868091 bytes read
+sunxi#setenv fdt_high ffffffff
+sunxi#bootm 48000000
+## Booting kernel from Legacy Image at 48000000 ...
+   Image Name:   
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    2868027 Bytes = 2.7 MiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+[      34. 34]
+
+Starting kernel ...
+
+Uncompressing Linux... done, booting the kernel.
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 3.11.0-rc4-12838-gcc5d8a7-dirty (bamvor@linux-rd.site) (gcc version 4.8.1 20130401 (prerelease) (crosstool-NG linaro-1.13.1-4.8-2013.04-20130417 - Linaro GCC 2013.04) ) #3 SMP Fri Aug 16 17:34:07 CST 2013
+[    0.000000] CPU: ARMv7 Processor [410fc073] revision 3 (ARMv7), cr=10c5387d
+[    0.000000] CPU: PIPT / VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] Machine: Allwinner A1X (Device Tree), model: WITS A31 Colombus Evaluation Board
+[    0.000000] bootconsole [earlycon0] enabled
+[    0.000000] Memory policy: ECC disabled, Data cache writealloc
+[    0.000000] PERCPU: Embedded 5 pages/cpu @c182b000 s7104 r0 d13376 u32768
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 522768
+[    0.000000] Kernel command line: earlyprintk console=ttyS0,115200
+[    0.000000] PID hash table entries: 4096 (order: 2, 16384 bytes)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 7, 524288 bytes)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 6, 262144 bytes)
+[    0.000000] Memory: 2074076K/2097152K available (4184K kernel code, 201K rwdata, 892K rodata, 190K init, 243K bss, 23076K reserved, 1318912K highmem)
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]     vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+[    0.000000]     fixmap  : 0xfff00000 - 0xfffe0000   ( 896 kB)
+[    0.000000]     vmalloc : 0xf0000000 - 0xff000000   ( 240 MB)
+[    0.000000]     lowmem  : 0xc0000000 - 0xef800000   ( 760 MB)
+[    0.000000]     pkmap   : 0xbfe00000 - 0xc0000000   (   2 MB)
+[    0.000000]       .text : 0xc0008000 - 0xc04fd29c   (5077 kB)
+[    0.000000]       .init : 0xc04fe000 - 0xc052dbc0   ( 191 kB)
+[    0.000000]       .data : 0xc052e000 - 0xc0560600   ( 202 kB)
+[    0.000000]        .bss : 0xc0560600 - 0xc059d3d4   ( 244 kB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] Hierarchical RCU implementation.
+[    0.000000] NR_IRQS:16 nr_irqs:16 16
+[    0.000000] sched_clock: 32 bits at 24MHz, resolution 41ns, wraps every 178956ms
+[    0.000000] Console: colour dummy device 80x30
+[    0.004720] Calibrating delay loop... 2007.04 BogoMIPS (lpj=10035200)
+[    0.062979] pid_max: default: 32768 minimum: 301
+[    0.067813] Mount-cache hash table entries: 512
+[    0.074063] CPU: Testing write buffer coherency: ok
+[    0.079751] /cpus/cpu@0 missing clock-frequency property
+[    0.085680] /cpus/cpu@1 missing clock-frequency property
+[    0.091079] /cpus/cpu@2 missing clock-frequency property
+[    0.096980] /cpus/cpu@3 missing clock-frequency property
+[    0.102383] CPU0: thread -1, cpu 0, socket 0, mpidr 80000000
+[    0.108147] Setting up static identity map for 0xc03f99e0 - 0xc03f9a38
+[    0.116226] CPU1: failed to boot: -38
+[    0.120589] CPU2: failed to boot: -38
+[    0.124914] CPU3: failed to boot: -38
+[    0.128665] Brought up 1 CPUs
+[    0.132009] SMP: Total of 1 processors activated (2007.04 BogoMIPS).
+[    0.138437] CPU: All CPU(s) started in SVC mode.
+[    0.143717] devtmpfs: initialized
+[    0.150720] pinctrl core: initialized pinctrl subsystem
+[    0.156294] regulator-dummy: no parameters
+[    0.160724] NET: Registered protocol family 16
+[    0.165866] DMA: preallocated 256 KiB pool for atomic coherent allocations
+[    0.177614] bio: create slab <bio-0> at 0
+[    0.182573] SCSI subsystem initialized
+[    0.187033] usbcore: registered new interface driver usbfs
+[    0.192640] usbcore: registered new interface driver hub
+[    0.198595] usbcore: registered new device driver usb
+[    0.204423] pps_core: LinuxPPS API ver. 1 registered
+[    0.209934] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.219158] PTP clock support registered
+[    0.223194] EDAC MC: Ver: 3.0.0
+[    0.227395] Switched to clocksource timer
+[    0.238540] NET: Registered protocol family 2
+[    0.243874] TCP established hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.251150] TCP bind hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.257787] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.264270] TCP: reno registered
+[    0.267911] UDP hash table entries: 512 (order: 2, 16384 bytes)
+[    0.274544] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes)
+[    0.281239] NET: Registered protocol family 1
+[    0.285975] RPC: Registered named UNIX socket transport module.
+[    0.291997] RPC: Registered udp transport module.
+[    0.296779] RPC: Registered tcp transport module.
+[    0.302031] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.310097] bounce pool size: 64 pages
+[    0.321059] NFS: Registering the id_resolver key type
+[    0.326753] Key type id_resolver registered
+[    0.331450] Key type id_legacy registered
+[    0.335769] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    0.343259] io scheduler noop registered
+[    0.347262] io scheduler deadline registered
+[    0.351754] io scheduler cfq registered (default)
+[    0.357916] sunxi-pinctrl 1c20800.pinctrl: initialized sunXi PIO driver
+[    0.406371] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.434326] 1c28000.serial: ttyS0 at MMIO 0x1c28000 (irq = 32) is a U6_16550A
+[    0.442264] console [ttyS0] enabled, bootconsole disabled
+[    0.442264] console [ttyS0] enabled, bootconsole disabled
+[    0.453953] serial: Freescale lpuart driver
+[    0.458324] [drm] Initialized drm 1.1.0 20060810
+[    0.463517] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    0.470053] ehci-platform: EHCI generic platform driver
+[    0.475417] usbcore: registered new interface driver usb-storage
+[    0.481832] mousedev: PS/2 mouse device common for all mice
+[    0.487724] sdhci: Secure Digital Host Controller Interface driver
+[    0.493894] sdhci: Copyright(c) Pierre Ossman
+[    0.498268] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.504284] usbcore: registered new interface driver usbhid
+[    0.509864] usbhid: USB HID core driver
+[    0.513908] TCP: cubic registered
+[    0.517757] NET: Registered protocol family 10
+[    0.522824] sit: IPv6 over IPv4 tunneling driver
+[    0.528077] Key type dns_resolver registered
+[    0.532411] VFP support v0.3: implementor 41 architecture 2 part 30 variant 7 rev 3
+[    0.540110] Registering SWP/SWPB emulation handler
+[    0.545501] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+[    0.552456] VFS: Cannot open root device "(null)" or unknown-block(0,0): error -6
+[    0.559949] Please append a correct "root=" boot option; here are the available partitions:
+[    0.568302] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[    0.576558] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 3.11.0-rc4-12838-gcc5d8a7-dirty #3
+[    0.584674] [<c00144a8>] (unwind_backtrace+0x0/0xf4) from [<c00113f0>] (show_stack+0x10/0x14)
+[    0.593198] [<c00113f0>] (show_stack+0x10/0x14) from [<c03f57b4>] (dump_stack+0x84/0x94)
+[    0.601287] [<c03f57b4>] (dump_stack+0x84/0x94) from [<c03f32cc>] (panic+0xa4/0x1f4)
+[    0.609028] [<c03f32cc>] (panic+0xa4/0x1f4) from [<c04ff0c8>] (mount_block_root+0x1a0/0x230)
+[    0.617459] [<c04ff0c8>] (mount_block_root+0x1a0/0x230) from [<c04ff260>] (mount_root+0x108/0x110)
+[    0.626410] [<c04ff260>] (mount_root+0x108/0x110) from [<c04ff3c0>] (prepare_namespace+0x158/0x19c)
+[    0.635448] [<c04ff3c0>] (prepare_namespace+0x158/0x19c) from [<c04fed84>] (kernel_init_freeable+0x1cc/0x1dc)
+[    0.645353] [<c04fed84>] (kernel_init_freeable+0x1cc/0x1dc) from [<c03f267c>] (kernel_init+0xc/0x160)
+[    0.654565] [<c03f267c>] (kernel_init+0xc/0x160) from [<c000e0b8>] (ret_from_fork+0x14/0x3c)
+
+4, reply to M
+Hi Maxime, 
+
+thanks your reply.
+> Hi Bamvor,
+> 
+> On Thu, Aug 15, 2013 at 07:12:42AM -0600, Bamvor Jian Zhang wrote:
+> > this is Bamvor Jian Zhang. currently, i work on port xen to sun6i. and
+> > i need a upstream kernel for sun6i.
+> 
+> Cool :)
+> 
+> > i have had ping u at linux-sunxi in freenode last week,
+> 
+> Sorry about that. I'm currently on holidays, hence why I probably didn't
+> see your ping.
+> 
+> > and got your github branch for sun6i
+> > (https://github.com/mripard/linux/tree/sunxi-next-a31). I also
+> > saw your A31 patch sent to linux-arm.  which one should i use for boot
+> > sun6i kernel?
+> 
+> The github branch you picked is the latest I sent to the ML.
+> 
+> > i test your patch in my mele M9 box(A31 with 2G memory). but i fail on
+> > u-boot loading kernel.
+> 
+> How so ?
+> 
+> What is the error from the kernel? What configuration did you use? Which
+> device tree did you use? How do you load the kernel and device tree
+> images?
+> 
+> > i am not sure if the u-boot ship with my box is too old to using the
+> > dtb and kernel.
+> 
+> I can't answer that question. You can always use CONFIG_ARM_APPENDED_DTB
+> if your u-boot is too old.
+> 
+> > So, could u do me a favor to give me some instruction about how to
+> > boot your kernel, including proper u-boot, cmdline and filesystem.
+> 
+> http://linux-sunxi.org/Mainline_Kernel_Howto
+after, append dtb to kernel and i could boot kernel to mounting filesystem.
+thanks your help!
+
+i will try to make a initramfs image. do u have some prebuild kernel and fs image for 
+testing?
+> 
+> > BTW: do i need to use fex for booting your kernel?
+> 
+> No. We don't and never will support fex. We use device tree just like
+> any other ARM platform.
+got it. do u plan add some peripheral for A31, e.g. sd, usb...
+currenly, i want to make xen dom0 bootup. after this, i'd like to do some sun6i driver
+work. if there is a some sort of task list, i could know which one i could do.
+
+regards
+
+bamvor
+> 
+> Maxime
+> 
+> -- 
+> Maxime Ripard, Free Electrons
+> Embedded Linux, Kernel and Android engineering
+> http://free-electrons.com
+
+5, try build root
+http://buildroot.uclibc.org/
+http://blog.csdn.net/youyudehexie/article/details/7583657
 
