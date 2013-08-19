@@ -1902,6 +1902,7 @@ http://buildroot.uclibc.org/
 http://blog.csdn.net/youyudehexie/article/details/7583657
 
 22:47 2013-08-16
+software skill, arm, hard float point
 the last line mean this is a Hard Float Point binary.
 arm-linux-gnueabihf-readelf -a busybox
   Tag_FP_arch: VFPv3-D16
@@ -1910,3 +1911,96 @@ arm-linux-gnueabihf-readelf -a busybox
   Tag_ABI_FP_number_model: IEEE 754
   Tag_ABI_HardFP_use: SP and DP
   Tag_ABI_VFP_args: VFP registers
+
+09:48 2013-08-19
+GTD
+0, 9:35-18:10
+
+1, today
+1), disable disgest mode for virtualiation-xxx list.
+2), 10:06-11:31 12:29-13:20 14:49-18:07 ao_how. see"10:06 2013-08-19"
+3), build common kernel and initramfs for sun6i and exynos5250. on obs?
+
+10:06 2013-08-19
+virtualization, xen, libxl, async, try ao_how, cont2, debug save, cont6, debug
+1, current status:
+1), using ao mode save 
+save with error?
+# virsh save bjz_04_sles11_sp2 bjz_04_sles11_sp2.save 
+error: Failed to save domain bjz_04_sles11_sp2 to bjz_04_sles11_sp2.save
+error: internal error Failed to save domain '4' with libxenlight
+2), restore: domain id is 0 after restore.
+
+2, save hang.
+libxl: error: libxl_exec.c:129:libxl_report_child_exitstatus: domain 3 save/restore helper [3129] died due to fatal signal Unknown signal 120 (core dumped)
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7ff82c0017d0: complete, rc=-3
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7ff82c0017d0: destroy
+libxl: debug: libxl_event.c:1154:egc_run_callbacks: event 0x7ff848d4fcc0 callback type=operation_complete
+libxl: debug: libxl.c:1251:libxl_domain_destroy: ao 0x7ff82c001940: create: how=(nil) callback=(nil) poller=0x7ff80c003a00
+libxl: debug: libxl_dm.c:1321:libxl__destroy_device_model: Device Model signaled
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7ff82c001dd8 wpath=/local/domain/0/backend/vbd/3/768/state token=2/4: register slotnum=2
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7ff82c002608 wpath=/local/domain/0/backend/vif/3/0/state token=1/5: register slotnum=1
+libxl: debug: libxl.c:1260:libxl_domain_destroy: ao 0x7ff82c001940: inprogress: poller=0x7ff80c003a00, flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7ff82c001dd8 wpath=/local/domain/0/backend/vbd/3/768/state token=2/4: event epath=/local/domain/0/backend/vbd/3/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/3/768/state wanted state 6 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7ff82c001dd8 wpath=/local/domain/0/backend/vbd/3/768/state token=2/4: deregister slotnum=2
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7ff82c001dd8: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/block remove
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/backend/vbd/3/768/state token=2/4: empty slot
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7ff82c002608 wpath=/local/domain/0/backend/vif/3/0/state token=1/5: event epath=/local/domain/0/backend/vif/3/0/state
+libxl: debug: libxl_event.c:647:devstate_watch_callback: backend /local/domain/0/backend/vif/3/0/state wanted state 6 still waiting state 5
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7ff82c002608 wpath=/local/domain/0/backend/vif/3/0/state token=1/5: event epath=/local/domain/0/backend/vif/3/0/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vif/3/0/state wanted state 6 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7ff82c002608 wpath=/local/domain/0/backend/vif/3/0/state token=1/5: deregister slotnum=1
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7ff82c002608: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/vif-bridge offline
+libxl: debug: libxl_device.c:995:device_hotplug_timeout_cb: killing hotplug script /etc/xen/scripts/block remove because of timeout
+libxl: debug: libxl_device.c:995:device_hotplug_timeout_cb: killing hotplug script /etc/xen/scripts/vif-bridge offline because of timeout
+
+1), it seems that missing some between libxl_report_child_exitstatus, libxl_domain_destroy.
+2), tracing with GDB. 
+123538_356650844
+#0  libxl__self_pipe_wakeup (fd=37) at libxl_event.c:1360
+#1  0x00007f917d7fad36 in sigchld_handler (signo=<optimized out>) at libxl_fork.c:160
+#2  <signal handler called>
+#3  0x00007fffd1bff698 in gettimeofday ()
+#4  0x00007f917d7f7e66 in libxl__gettimeofday (gc=0x7f91840e9810, 
+    now_r=<optimized out>) at libxl_event.c:246
+#5  0x00007f917d7f969e in eventloop_iteration (egc=egc@entry=0x7f91840e9810, 
+    poller=0x7f914c0049b0) at libxl_event.c:1401
+#6  0x00007f917d7fa8f5 in libxl__ao_inprogress (ao=ao@entry=0x7f9154000930, 
+    file=file@entry=0x7f917d805952 "libxl.c", line=line@entry=1260, 
+    func=func@entry=0x7f917d8079b0 <__func__.16595> "libxl_domain_destroy")
+    at libxl_event.c:1685
+#7  0x00007f917d7d338e in libxl_domain_destroy (ctx=0x7f914c002850, domid=4, 
+    ao_how=ao_how@entry=0x0) at libxl.c:1260
+#8  0x00007f917da5e212 in libxlVmReap (driver=0x7f91740931c0, vm=0x7f914c002cc0, 
+    reason=VIR_DOMAIN_SHUTOFF_SAVED) at libxl/libxl_driver.c:704
+
+libxl_childproc_setmode
+
+3, device_hotplug
+
+4, create, save, destroy, restore successful. after disable libxl_childproc_reaped enter twice.
+static void
+libxl_sigchld_callback(int watch ATTRIBUTE_UNUSED,
+                     int fd ATTRIBUTE_UNUSED,
+                     int vir_events,
+                     void *fd_info)
+{
+    sigchild_info *info = fd_info;
+    int rc;
+
+    if (1 == info->called)
+        return;
+
+    info->called = 1;
+    VIR_INFO("vir_events: %d", vir_events);
+    VIR_INFO("libxl_childproc_reaped pid: %d", info->pid);
+    rc = libxl_childproc_reaped(info->ctx, info->pid, info->status);
+    VIR_INFO("libxl_childproc_reaped rc: %d", rc);
+
+}
+
+5, \TODO: test other ao and try callbacks.
+
