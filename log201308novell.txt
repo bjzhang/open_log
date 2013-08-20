@@ -1901,6 +1901,51 @@ bamvor
 http://buildroot.uclibc.org/
 http://blog.csdn.net/youyudehexie/article/details/7583657
 
+6, (16:21 2013-08-20)
+Maxime_reply_20130817_0236
+Hi Bamvor,
+
+On Fri, Aug 16, 2013 at 04:11:58AM -0600, Bamvor Jian Zhang wrote:
+> > > So, could u do me a favor to give me some instruction about how to
+> > > boot your kernel, including proper u-boot, cmdline and filesystem.
+> > 
+> > http://linux-sunxi.org/Mainline_Kernel_Howto
+> after, append dtb to kernel and i could boot kernel to mounting
+> filesystem.  thanks your help!
+
+Great, you're welcome :)
+
+> i will try to make a initramfs image. do u have some prebuild kernel
+> and fs image for testing?
+
+I don't have a kernel image here, but you can find an initramfs image I
+use here
+
+http://free-electrons.com/~maxime/pub/uInitrd
+
+> > > BTW: do i need to use fex for booting your kernel?
+> > 
+> > No. We don't and never will support fex. We use device tree just like
+> > any other ARM platform.
+> got it. do u plan add some peripheral for A31, e.g. sd, usb...
+
+Yes, of course. I've been busy working on the A20/A31 bringup the last
+monthes, but as soon as these patches are merged, I'll work on
+supporting new IPs, probably MMC in priority.
+
+> currenly, i want to make xen dom0 bootup. after this, i'd like to do
+> some sun6i driver work. if there is a some sort of task list, i could
+> know which one i could do.
+
+http://linux-sunxi.org/Mainlining_Effort
+
+Maxime
+
+-- 
+Maxime Ripard, Free Electrons
+Embedded Linux, Kernel and Android engineering
+http://free-electrons.com
+
 22:47 2013-08-16
 software skill, arm, hard float point
 the last line mean this is a Hard Float Point binary.
@@ -2003,4 +2048,115 @@ libxl_sigchld_callback(int watch ATTRIBUTE_UNUSED,
 }
 
 5, \TODO: test other ao and try callbacks.
+
+13:33 2013-08-20
+company, colleague, L3, L3 Technical Coordinator, Milan Vančura
+"Petr Uzel <petr.uzel@suse.cz>"
+Dear colleagues,
+
+It is my pleasure to announce that Milan Vančura takes the role
+of L3 Technical Coordinator.
+
+In this role, Milan will be responsible for technical requirements of L3
+support. He will be the interface for project managers and autobuild team
+to discuss L3 requirement towards:
+- packages building
+- product configurations in IBS
+- product metadata
+
+Milan stays in the L3 team and continues reporting to me.
+
+Please join me in congratulating Milan to his new role and offering
+him full support for his work.
+
+
+
+
+Thanks,
+
+        Petr
+
+-- 
+Petr Uzel
+Team Lead SUSE L3 Team, Prague
+
+14:18 2013-08-20
+product, suse, sle11sp3, virtualization, features
+https://wiki.innerweb.novell.com/index.php/SLE11_SP3_VT_feature
+
+14:41 2013-08-20
+write blog about how to boot A31 upstream kernel on Mele M9.
+
+title: boot upstream kernel on A31(Mele M9)
+
+# build kernel
+there is a [howto](http://linux-sunxi.org/Mainline_Kernel_Howto) describe how to use the upstream kernel for Allwinner SOC. it could be apply to A31(sun6i) too.
+
+after contacts with Maxime, i got the lastest code for [A31](https://github.com/mripard/linux/tree/sunxi-next-a31).
+
+all the allwinner SOC support the arm multi-platform, so i could use multi_v7_defconfig for kernel:
+
+    ARCH=arm make multi_v7_defconfig
+
+the u-boot is got from Mele m9 update image, which does not support device tree. So, i need enable the append dtb:
+CONFIG_ARM_APPENDED_DTB=y
+
+    ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- make
+    ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- make dtbs
+
+generate the uImage including device tree blob:
+
+    cat arch/arm/boot/zImage arch/arm/boot/dts/sun6i-a31-colombus.dtb > arch/arm/boot/zImage_dtb
+    mkimage -A arm -O linux -T kernel -C none -a 0x40008000 -e 0x40008000 -d arch/arm/boot/zImage_dtb arch/arm/boot/uImage_dtb
+
+if the u-boot is the lastest one, only one comamnd is necessary:
+
+    ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- LOADADDR=0x40008000 make uImage dtbs
+
+# build rootfs
+[buildroot](http://buildroot.uclibc.org/)
+
+# u-boot commands
+
+# references: 
+1, [official website](linux-sunxi.org)
+2, [Allwinner Axx SOC mainline status](http://linux-sunxi.org/Mainlining_Effort)
+
+16:47 2013-08-20
+1, buildroot
+> arm-linux-gnueabihf-readelf -a bin/busybox |grep FP
+  Tag_FP_arch: VFPv3-D16
+  Tag_ABI_FP_denormal: Needed
+  Tag_ABI_FP_exceptions: Needed
+  Tag_ABI_FP_number_model: IEEE 754
+  Tag_ABI_HardFP_use: SP and DP
+  Tag_ABI_VFP_args: VFP registers
+
+2, Maxime:
+> arm-linux-gnueabihf-readelf -a bin/busybox |grep FP
+  Tag_ABI_FP_denormal: Needed
+  Tag_ABI_FP_exceptions: Needed
+  Tag_ABI_FP_number_model: IEEE 754
+
+3, opensuse arm initrd
+bamvor@linux-rd:bin> arm-linux-gnueabihf-readelf -a bash |grep FP
+  Tag_FP_arch: VFPv3-D16
+  Tag_ABI_FP_rounding: Needed
+  Tag_ABI_FP_denormal: Needed
+  Tag_ABI_FP_exceptions: Needed
+  Tag_ABI_FP_number_model: IEEE 754
+  Tag_ABI_HardFP_use: SP and DP
+  Tag_ABI_VFP_args: VFP registers
+
+4, initrd from opensuse for cubieboard, seems also work:
+although only one line print after free memory, i think it is printed from filesytem.
+[    0.886147] Freeing unused kernel memory: 188K (c04fe000 - c052d000)
+[    4.058261] systemd-udevd[80]: starting version 195
+
+5, todo:
+ref: http://linux-sunxi.org/Buildroot for buildroot.
+
+18:15 2013-08-20
+GTD
+0, 10:40-18:15
 
