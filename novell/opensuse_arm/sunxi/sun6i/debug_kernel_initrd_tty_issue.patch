@@ -1,0 +1,808 @@
+diff --git a/arch/arm/kernel/setup.c b/arch/arm/kernel/setup.c
+index afc2489..d401725 100644
+--- a/arch/arm/kernel/setup.c
++++ b/arch/arm/kernel/setup.c
+@@ -349,7 +349,7 @@ static void __init cacheid_init(void)
+  */
+ extern struct proc_info_list *lookup_processor_type(unsigned int);
+ 
+-void __init early_print(const char *str, ...)
++void early_print(const char *str, ...)
+ {
+ 	extern void printascii(const char *);
+ 	char buf[256];
+@@ -362,7 +362,7 @@ void __init early_print(const char *str, ...)
+ #ifdef CONFIG_DEBUG_LL
+ 	printascii(buf);
+ #endif
+-	printk("%s", buf);
++//	printk("%s", buf);
+ }
+ 
+ static void __init cpuid_init_hwcaps(void)
+@@ -850,10 +850,33 @@ void __init hyp_mode_check(void)
+ #endif
+ }
+ 
++#define test_ldrex() \
++    __asm__("ldrex  %0, [%1]" \
++        : "=r" (a1) \
++        : "r" (a2) \
++        : "memory", "cc")
++
++#if 0
++#define test_ldrex_with_dbg() \
++{ \
++    unsigned int a1; \
++    unsigned int a2 = 0xc0004000; \
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__); \
++    test_ldrex(); \
++    early_print("%s:%d: %u.\n", __FUNCTION__, __LINE__, a1); \
++    a2 = 0xc0008000; \
++    test_ldrex(); \
++    early_print("%s:%d: %u.\n", __FUNCTION__, __LINE__, a1); \
++}
++#else
++#define test_ldrex_with_dbg()
++#endif
++
+ void __init setup_arch(char **cmdline_p)
+ {
+ 	struct machine_desc *mdesc;
+ 
++    test_ldrex_with_dbg();
+ 	setup_processor();
+ 	mdesc = setup_machine_fdt(__atags_pointer);
+ 	if (!mdesc)
+@@ -879,14 +902,18 @@ void __init setup_arch(char **cmdline_p)
+ 
+ 	sort(&meminfo.bank, meminfo.nr_banks, sizeof(meminfo.bank[0]), meminfo_cmp, NULL);
+ 	sanity_check_meminfo();
++    test_ldrex_with_dbg();
+ 	arm_memblock_init(&meminfo, mdesc);
+ 
++    test_ldrex_with_dbg();
+ 	paging_init(mdesc);
++    test_ldrex_with_dbg();
+ 	request_standard_resources(mdesc);
+ 
+ 	if (mdesc->restart)
+ 		arm_pm_restart = mdesc->restart;
+ 
++    test_ldrex_with_dbg();
+ 	unflatten_device_tree();
+ 
+ 	arm_dt_init_cpu_maps();
+@@ -923,6 +950,8 @@ void __init setup_arch(char **cmdline_p)
+ 
+ 	if (mdesc->init_early)
+ 		mdesc->init_early();
++
++    test_ldrex_with_dbg();
+ }
+ 
+ 
+diff --git a/drivers/of/fdt.c b/drivers/of/fdt.c
+index 6bb7cf2..080d553 100644
+--- a/drivers/of/fdt.c
++++ b/drivers/of/fdt.c
+@@ -9,6 +9,8 @@
+  * version 2 as published by the Free Software Foundation.
+  */
+ 
++#define DEBUG
++
+ #include <linux/kernel.h>
+ #include <linux/initrd.h>
+ #include <linux/module.h>
+diff --git a/drivers/tty/n_tty.c b/drivers/tty/n_tty.c
+index 4bf0fc0..49d880b 100644
+--- a/drivers/tty/n_tty.c
++++ b/drivers/tty/n_tty.c
+@@ -51,6 +51,11 @@
+ #include <linux/module.h>
+ #include <linux/ratelimit.h>
+ 
++#if 0
++#define DEBUG_BJZ(fmt...)	printk(fmt)
++#else
++#define DEBUG_BJZ(fmt...)	do { } while (0)
++#endif
+ 
+ /* number of characters left in xmit buffer before select has we have room */
+ #define WAKEUP_CHARS 256
+@@ -2024,6 +2029,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
+ 	int c;
+ 	ssize_t retval = 0;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	/* Job control check -- must be done at start (POSIX.1 7.1.1.4). */
+ 	if (L_TOSTOP(tty) && file->f_op->write != redirected_tty_write) {
+ 		retval = tty_check_change(tty);
+@@ -2067,6 +2073,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
+ 				tty->ops->flush_chars(tty);
+ 		} else {
+ 			while (nr > 0) {
++                DEBUG_BJZ("%s:%d:%s: tty->ops->write<%x>\n", __FILE__, __LINE__, __FUNCTION__, tty->ops->write);
+ 				c = tty->ops->write(tty, b, nr);
+ 				if (c < 0) {
+ 					retval = c;
+diff --git a/drivers/tty/serial/8250/8250_core.c b/drivers/tty/serial/8250/8250_core.c
+index 86c00b1..1262f3a 100644
+--- a/drivers/tty/serial/8250/8250_core.c
++++ b/drivers/tty/serial/8250/8250_core.c
+@@ -47,6 +47,8 @@
+ 
+ #include "8250.h"
+ 
++extern void early_print(const char *str, ...);
++
+ /*
+  * Configuration:
+  *   share_irqs - whether we pass IRQF_SHARED to request_irq().  This option
+@@ -75,11 +77,19 @@ static unsigned int skip_txen_test; /* force skip of txen test at init time */
+ #endif
+ 
+ #if 0
+-#define DEBUG_INTR(fmt...)	printk(fmt)
++extern void early_print(const char *str, ...);
++#define DEBUG_INTR(fmt...)	early_print(fmt)
+ #else
+ #define DEBUG_INTR(fmt...)	do { } while (0)
+ #endif
+ 
++#if 0
++extern void early_print(const char *str, ...);
++#define DEBUG_BJZ(fmt...)	early_print(fmt)
++#else
++#define DEBUG_BJZ(fmt...)	do { } while (0)
++#endif
++
+ #define PASS_LIMIT	512
+ 
+ #define BOTH_EMPTY 	(UART_LSR_TEMT | UART_LSR_THRE)
+@@ -863,6 +873,7 @@ static void autoconfig_16550a(struct uart_8250_port *up)
+ 	unsigned char status1, status2;
+ 	unsigned int iersave;
+ 
++    early_print("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	up->port.type = PORT_16550A;
+ 	up->capabilities |= UART_CAP_FIFO;
+ 
+@@ -1280,6 +1291,7 @@ static void serial8250_stop_tx(struct uart_port *port)
+ 	struct uart_8250_port *up =
+ 		container_of(port, struct uart_8250_port, port);
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	__stop_tx(up);
+ 
+ 	/*
+@@ -1295,19 +1307,26 @@ static void serial8250_start_tx(struct uart_port *port)
+ {
+ 	struct uart_8250_port *up =
+ 		container_of(port, struct uart_8250_port, port);
++    static int debug_tx_reenable = 0;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter: up->ier<%d>\n", __FILE__, __LINE__, __FUNCTION__, up->ier);
+ 	if (up->dma && !serial8250_tx_dma(up)) {
++        DEBUG_BJZ("%s:%d:%s: dma\n", __FILE__, __LINE__, __FUNCTION__);
+ 		return;
+-	} else if (!(up->ier & UART_IER_THRI)) {
++	} else if (!(up->ier & UART_IER_THRI) || !debug_tx_reenable ) {
++        DEBUG_BJZ("%s:%d:%s: !(up->ier & UART_IER_THRI)\n", __FILE__, __LINE__, __FUNCTION__);
+ 		up->ier |= UART_IER_THRI;
+ 		serial_port_out(port, UART_IER, up->ier);
+ 
+ 		if (up->bugs & UART_BUG_TXEN) {
+ 			unsigned char lsr;
++            DEBUG_BJZ("%s:%d:%s: up->bugs & UART_BUG_TXEN\n", __FILE__, __LINE__, __FUNCTION__);
+ 			lsr = serial_in(up, UART_LSR);
+ 			up->lsr_saved_flags |= lsr & LSR_SAVE_FLAGS;
+-			if (lsr & UART_LSR_TEMT)
++			if (lsr & UART_LSR_TEMT) {
++                DEBUG_BJZ("%s:%d:%s: lsr & UART_LSR_TEMT\n", __FILE__, __LINE__, __FUNCTION__);
+ 				serial8250_tx_chars(up);
++            }
+ 		}
+ 	}
+ 
+@@ -1315,6 +1334,7 @@ static void serial8250_start_tx(struct uart_port *port)
+ 	 * Re-enable the transmitter if we disabled it.
+ 	 */
+ 	if (port->type == PORT_16C950 && up->acr & UART_ACR_TXDIS) {
++        DEBUG_BJZ("%s:%d:%s: Re-enable the transmitter if we disabled it\n", __FILE__, __LINE__, __FUNCTION__);
+ 		up->acr &= ~UART_ACR_TXDIS;
+ 		serial_icr_write(up, UART_ACR, up->acr);
+ 	}
+@@ -1624,6 +1644,7 @@ static irqreturn_t serial8250_interrupt(int irq, void *dev_id)
+  */
+ static void serial_do_unlink(struct irq_info *i, struct uart_8250_port *up)
+ {
++    early_print("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	spin_lock_irq(&i->lock);
+ 
+ 	if (!list_empty(i->head)) {
+@@ -1685,6 +1706,7 @@ static int serial_link_irq_chain(struct uart_8250_port *up)
+ 		irq_flags |= up->port.irqflags;
+ 		ret = request_irq(up->port.irq, serial8250_interrupt,
+ 				  irq_flags, "serial", i);
++        DEBUG_BJZ("%s:%d:%s: ret<%d>\n", __FILE__, __LINE__, __FUNCTION__, ret);
+ 		if (ret < 0)
+ 			serial_do_unlink(i, up);
+ 	}
+@@ -3224,6 +3246,7 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
+ 	if (up->port.uartclk == 0)
+ 		return -EINVAL;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	mutex_lock(&serial_mutex);
+ 
+ 	uart = serial8250_find_match_or_unused(&up->port);
+@@ -3288,6 +3311,7 @@ int serial8250_register_8250_port(struct uart_8250_port *up)
+ 			ret = uart->port.line;
+ 	}
+ 	mutex_unlock(&serial_mutex);
++    DEBUG_BJZ("%s:%d:%s: exit\n", __FILE__, __LINE__, __FUNCTION__);
+ 
+ 	return ret;
+ }
+diff --git a/drivers/tty/serial/8250/8250_dw.c b/drivers/tty/serial/8250/8250_dw.c
+index 76a8daa..6511279 100644
+--- a/drivers/tty/serial/8250/8250_dw.c
++++ b/drivers/tty/serial/8250/8250_dw.c
+@@ -33,6 +33,13 @@
+ 
+ #include "8250.h"
+ 
++#if 0
++extern void early_print(const char *str, ...);
++#define DEBUG_BJZ(fmt...)	early_print(fmt)
++#else
++#define DEBUG_BJZ(fmt...)	do { } while (0)
++#endif
++
+ /* Offsets for the DesignWare specific registers */
+ #define DW_UART_USR	0x1f /* UART Status Register */
+ #define DW_UART_CPR	0xf4 /* Component Parameter Register */
+@@ -266,6 +273,7 @@ static int dw8250_probe(struct platform_device *pdev)
+ 	struct dw8250_data *data;
+ 	int err;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	if (!regs || !irq) {
+ 		dev_err(&pdev->dev, "no registers/irq defined\n");
+ 		return -EINVAL;
+@@ -322,6 +330,7 @@ static int dw8250_probe(struct platform_device *pdev)
+ 	pm_runtime_set_active(&pdev->dev);
+ 	pm_runtime_enable(&pdev->dev);
+ 
++    DEBUG_BJZ("%s:%d:%s: exit\n", __FILE__, __LINE__, __FUNCTION__);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/tty/serial/serial_core.c b/drivers/tty/serial/serial_core.c
+index 28cdd28..6e82c4b 100644
+--- a/drivers/tty/serial/serial_core.c
++++ b/drivers/tty/serial/serial_core.c
+@@ -37,6 +37,14 @@
+ #include <asm/irq.h>
+ #include <asm/uaccess.h>
+ 
++#define DEBUG
++#if 0
++extern void early_print(const char *str, ...);
++#define DEBUG_BJZ(fmt...)	early_print(fmt)
++#else
++#define DEBUG_BJZ(fmt...)	do { } while (0)
++#endif
++
+ /*
+  * This is used to lock changes in serial line configuration.
+  */
+@@ -2109,6 +2117,7 @@ uart_configure_port(struct uart_driver *drv, struct uart_state *state,
+ {
+ 	unsigned int flags;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	/*
+ 	 * If there isn't a port here, don't do anything further.
+ 	 */
+@@ -2162,6 +2171,7 @@ uart_configure_port(struct uart_driver *drv, struct uart_state *state,
+ 		if (!uart_console(port))
+ 			uart_change_pm(state, UART_PM_STATE_OFF);
+ 	}
++    DEBUG_BJZ("%s:%d:%s: exit\n", __FILE__, __LINE__, __FUNCTION__);
+ }
+ 
+ #ifdef CONFIG_CONSOLE_POLL
+@@ -2571,6 +2581,7 @@ int uart_add_one_port(struct uart_driver *drv, struct uart_port *uport)
+ 	int ret = 0;
+ 	struct device *tty_dev;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	BUG_ON(in_interrupt());
+ 
+ 	if (uport->line >= drv->nr)
+@@ -2620,6 +2631,7 @@ int uart_add_one_port(struct uart_driver *drv, struct uart_port *uport)
+ 	 * Ensure UPF_DEAD is not set.
+ 	 */
+ 	uport->flags &= ~UPF_DEAD;
++    DEBUG_BJZ("%s:%d:%s: exit\n", __FILE__, __LINE__, __FUNCTION__);
+ 
+  out:
+ 	mutex_unlock(&port->mutex);
+diff --git a/drivers/tty/tty_io.c b/drivers/tty/tty_io.c
+index 366af83..f48767c 100644
+--- a/drivers/tty/tty_io.c
++++ b/drivers/tty/tty_io.c
+@@ -105,11 +105,18 @@
+ #include <linux/kmod.h>
+ #include <linux/nsproxy.h>
+ 
+-#undef TTY_DEBUG_HANGUP
++#define TTY_DEBUG_HANGUP
+ 
+ #define TTY_PARANOIA_CHECK 1
+ #define CHECK_TTY_COUNT 1
+ 
++#if 0
++extern void early_print(const char *str, ...);
++#define DEBUG_BJZ(fmt...)	early_print(fmt)
++#else
++#define DEBUG_BJZ(fmt...)	do { } while (0)
++#endif
++
+ struct ktermios tty_std_termios = {	/* for the benefit of tty drivers  */
+ 	.c_iflag = ICRNL | IXON,
+ 	.c_oflag = OPOST | ONLCR,
+@@ -1019,6 +1026,7 @@ static ssize_t tty_read(struct file *file, char __user *buf, size_t count,
+ 	struct tty_struct *tty = file_tty(file);
+ 	struct tty_ldisc *ld;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	if (tty_paranoia_check(tty, inode, "tty_read"))
+ 		return -EIO;
+ 	if (!tty || (test_bit(TTY_IO_ERROR, &tty->flags)))
+@@ -1072,6 +1080,7 @@ static inline ssize_t do_tty_write(
+ 	ssize_t ret, written = 0;
+ 	unsigned int chunk;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter: write: %x\n", __FILE__, __LINE__, __FUNCTION__, write);
+ 	ret = tty_write_lock(tty, file->f_flags & O_NDELAY);
+ 	if (ret < 0)
+ 		return ret;
+@@ -1196,6 +1205,7 @@ static ssize_t tty_write(struct file *file, const char __user *buf,
+  	struct tty_ldisc *ld;
+ 	ssize_t ret;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	if (tty_paranoia_check(tty, file_inode(file), "tty_write"))
+ 		return -EIO;
+ 	if (!tty || !tty->ops->write ||
+@@ -1219,6 +1229,7 @@ ssize_t redirected_tty_write(struct file *file, const char __user *buf,
+ {
+ 	struct file *p = NULL;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	spin_lock(&redirect_lock);
+ 	if (redirect)
+ 		p = get_file(redirect);
+@@ -1992,6 +2003,7 @@ static int tty_open(struct inode *inode, struct file *filp)
+ 	dev_t device = inode->i_rdev;
+ 	unsigned saved_flags = filp->f_flags;
+ 
++    DEBUG_BJZ("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	nonseekable_open(inode, filp);
+ 
+ retry_open:
+@@ -2096,13 +2108,16 @@ retry_open:
+ 	spin_unlock_irq(&current->sighand->siglock);
+ 	tty_unlock(tty);
+ 	mutex_unlock(&tty_mutex);
++    DEBUG_BJZ("%s:%d:%s: exit\n", __FILE__, __LINE__, __FUNCTION__);
+ 	return 0;
+ err_unlock:
++    DEBUG_BJZ("%s:%d:%s: exit: err_unlock\n", __FILE__, __LINE__, __FUNCTION__);
+ 	mutex_unlock(&tty_mutex);
+ 	/* after locks to avoid deadlock */
+ 	if (!IS_ERR_OR_NULL(driver))
+ 		tty_driver_kref_put(driver);
+ err_file:
++    DEBUG_BJZ("%s:%d:%s: exit: err_file\n", __FILE__, __LINE__, __FUNCTION__);
+ 	tty_free_file(filp);
+ 	return retval;
+ }
+diff --git a/fs/exec.c b/fs/exec.c
+index 9c73def..b5d6e12 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -71,6 +71,13 @@ int suid_dumpable = 0;
+ static LIST_HEAD(formats);
+ static DEFINE_RWLOCK(binfmt_lock);
+ 
++#if 0
++extern void early_print(const char *str, ...);
++#define DEBUG_BJZ(fmt...)	early_print(fmt)
++#else
++#define DEBUG_BJZ(fmt...)	do { } while (0)
++#endif
++
+ void __register_binfmt(struct linux_binfmt * fmt, int insert)
+ {
+ 	BUG_ON(!fmt);
+@@ -1375,6 +1382,7 @@ int search_binary_handler(struct linux_binprm *bprm)
+ 	struct linux_binfmt *fmt;
+ 	pid_t old_pid, old_vpid;
+ 
++    DEBUG_BJZ("%s:%d: depth: %u\n", __FUNCTION__, __LINE__, depth);
+ 	/* This allows 4 levels of binfmt rewrites before failing hard. */
+ 	if (depth > 5)
+ 		return -ELOOP;
+@@ -1404,10 +1412,14 @@ int search_binary_handler(struct linux_binprm *bprm)
+ 				continue;
+ 			read_unlock(&binfmt_lock);
+ 			bprm->recursion_depth = depth + 1;
++            DEBUG_BJZ("%s:%d: fn: %x\n", __FUNCTION__, __LINE__, fn);
+ 			retval = fn(bprm);
++            DEBUG_BJZ("%s:%d: retval: %d\n", __FUNCTION__, __LINE__, retval);
+ 			bprm->recursion_depth = depth;
+ 			if (retval >= 0) {
++                DEBUG_BJZ("%s:%d: retval >=0\n", __FUNCTION__, __LINE__);
+ 				if (depth == 0) {
++                    DEBUG_BJZ("%s:%d: depth == 0\n", __FUNCTION__, __LINE__);
+ 					trace_sched_process_exec(current, old_pid, bprm);
+ 					ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
+ 				}
+@@ -1420,11 +1432,15 @@ int search_binary_handler(struct linux_binprm *bprm)
+ 				proc_exec_connector(current);
+ 				return retval;
+ 			}
++            DEBUG_BJZ("%s:%d\n", __FUNCTION__, __LINE__);
+ 			read_lock(&binfmt_lock);
++            DEBUG_BJZ("%s:%d\n", __FUNCTION__, __LINE__);
+ 			put_binfmt(fmt);
++            DEBUG_BJZ("%s:%d\n", __FUNCTION__, __LINE__);
+ 			if (retval != -ENOEXEC || bprm->mm == NULL)
+ 				break;
+ 			if (!bprm->file) {
++                DEBUG_BJZ("%s:%d\n", __FUNCTION__, __LINE__);
+ 				read_unlock(&binfmt_lock);
+ 				return retval;
+ 			}
+@@ -1501,12 +1517,15 @@ static int do_execve_common(const char *filename,
+ 	clear_in_exec = retval;
+ 	current->in_execve = 1;
+ 
++    DEBUG_BJZ("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	file = open_exec(filename);
++    DEBUG_BJZ("%s:%d: filename<%s> opened file<%x>\n", __FUNCTION__, __LINE__, filename, file);
+ 	retval = PTR_ERR(file);
+ 	if (IS_ERR(file))
+ 		goto out_unmark;
+ 
+ 	sched_exec();
++    DEBUG_BJZ("%s:%d.\n", __FUNCTION__, __LINE__);
+ 
+ 	bprm->file = file;
+ 	bprm->filename = filename;
+@@ -1545,6 +1564,7 @@ static int do_execve_common(const char *filename,
+ 	if (retval < 0)
+ 		goto out;
+ 
++    DEBUG_BJZ("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	/* execve succeeded */
+ 	current->fs->in_exec = 0;
+ 	current->in_execve = 0;
+diff --git a/init/do_mounts.c b/init/do_mounts.c
+index 816014c..2873247 100644
+--- a/init/do_mounts.c
++++ b/init/do_mounts.c
+@@ -42,6 +42,8 @@ static int root_wait;
+ 
+ dev_t ROOT_DEV;
+ 
++extern void __init early_print(const char *str, ...);
++
+ static int __init load_ramdisk(char *str)
+ {
+ 	rd_doload = simple_strtol(str,NULL,0) & 3;
+@@ -304,6 +306,7 @@ static char * __initdata root_mount_data;
+ static int __init root_data_setup(char *str)
+ {
+ 	root_mount_data = str;
++    early_print("%s:%d: root_mount_data: %s\n", __FUNCTION__, __LINE__, root_mount_data);
+ 	return 1;
+ }
+ 
+@@ -356,6 +359,8 @@ static int __init do_mount_root(char *name, char *fs, int flags, void *data)
+ {
+ 	struct super_block *s;
+ 	int err = sys_mount(name, "/root", fs, flags, data);
++
++    early_print("%s:%d: sys_mount: ret: %d\n", __FUNCTION__, __LINE__, err);
+ 	if (err)
+ 		return err;
+ 
+@@ -382,10 +387,14 @@ void __init mount_block_root(char *name, int flags)
+ 	const char *b = name;
+ #endif
+ 
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	get_fs_names(fs_names);
++    early_print("%s:%d: fs_names: %s\n", __FUNCTION__, __LINE__, fs_names);
+ retry:
+ 	for (p = fs_names; *p; p += strlen(p)+1) {
+-		int err = do_mount_root(name, p, flags, root_mount_data);
++		int err;
++        early_print("%s:%d: name: %s, fs_name: %s, flags: %d, root_mount_data: %s\n", __FUNCTION__, __LINE__, name, p, flags, root_mount_data);
++		err = do_mount_root(name, p, flags, root_mount_data);
+ 		switch (err) {
+ 			case 0:
+ 				goto out;
+@@ -501,6 +510,7 @@ void __init change_floppy(char *fmt, ...)
+ 
+ void __init mount_root(void)
+ {
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ #ifdef CONFIG_ROOT_NFS
+ 	if (ROOT_DEV == Root_NFS) {
+ 		if (mount_nfs_root())
+@@ -523,7 +533,9 @@ void __init mount_root(void)
+ 	}
+ #endif
+ #ifdef CONFIG_BLOCK
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	create_dev("/dev/root", ROOT_DEV);
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	mount_block_root("/dev/root", root_mountflags);
+ #endif
+ }
+@@ -535,6 +547,7 @@ void __init prepare_namespace(void)
+ {
+ 	int is_floppy;
+ 
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	if (root_delay) {
+ 		printk(KERN_INFO "Waiting %d sec before mounting root device...\n",
+ 		       root_delay);
+@@ -556,6 +569,7 @@ void __init prepare_namespace(void)
+ 		root_device_name = saved_root_name;
+ 		if (!strncmp(root_device_name, "mtd", 3) ||
+ 		    !strncmp(root_device_name, "ubi", 3)) {
++            early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 			mount_block_root(root_device_name, root_mountflags);
+ 			goto out;
+ 		}
+diff --git a/init/do_mounts_initrd.c b/init/do_mounts_initrd.c
+index 3e0878e..2d8d3fa 100644
+--- a/init/do_mounts_initrd.c
++++ b/init/do_mounts_initrd.c
+@@ -25,8 +25,11 @@ int initrd_below_start_ok;
+ unsigned int real_root_dev;	/* do_proc_dointvec cannot handle kdev_t */
+ static int __initdata mount_initrd = 1;
+ 
++extern void early_print(const char *str, ...);
++
+ static int __init no_initrd(char *str)
+ {
++    early_print("%s:%d: there is no initrd\n", __FUNCTION__, __LINE__);
+ 	mount_initrd = 0;
+ 	return 1;
+ }
+@@ -118,7 +121,9 @@ static void __init handle_initrd(void)
+ 
+ int __init initrd_load(void)
+ {
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	if (mount_initrd) {
++        early_print("%s:%d: mount_initrd\n", __FUNCTION__, __LINE__);
+ 		create_dev("/dev/ram", Root_RAM0);
+ 		/*
+ 		 * Load the initrd data into /dev/ram0. Execute it as initrd
+@@ -128,6 +133,7 @@ int __init initrd_load(void)
+ 		 */
+ 		if (rd_load_image("/initrd.image") && ROOT_DEV != Root_RAM0) {
+ 			sys_unlink("/initrd.image");
++            early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 			handle_initrd();
+ 			return 1;
+ 		}
+diff --git a/init/do_mounts_rd.c b/init/do_mounts_rd.c
+index 6be2879..db52ef5 100644
+--- a/init/do_mounts_rd.c
++++ b/init/do_mounts_rd.c
+@@ -23,6 +23,7 @@
+ 
+ #include <linux/decompress/generic.h>
+ 
++extern void __init early_print(const char *str, ...);
+ 
+ int __initdata rd_prompt = 1;/* 1 = prompt for RAM disk, 0 = don't prompt */
+ 
+@@ -190,6 +191,7 @@ int __init rd_load_image(char *from)
+ 	char rotator[4] = { '|' , '/' , '-' , '\\' };
+ #endif
+ 
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	out_fd = sys_open("/dev/ram", O_RDWR, 0);
+ 	if (out_fd < 0)
+ 		goto out;
+@@ -282,12 +284,15 @@ int __init rd_load_image(char *from)
+ 	printk("done.\n");
+ 
+ successful_load:
++    early_print("%s:%d: successful_load\n", __FUNCTION__, __LINE__);
+ 	res = 1;
+ done:
++    early_print("%s:%d: done\n", __FUNCTION__, __LINE__);
+ 	sys_close(in_fd);
+ noclose_input:
+ 	sys_close(out_fd);
+ out:
++    early_print("%s:%d: out\n", __FUNCTION__, __LINE__);
+ 	kfree(buf);
+ 	sys_unlink("/dev/ram");
+ 	return res;
+diff --git a/init/initramfs.c b/init/initramfs.c
+index a67ef9d..0123380 100644
+--- a/init/initramfs.c
++++ b/init/initramfs.c
+@@ -8,6 +8,8 @@
+ #warning "Sparse checking disabled for this file"
+ #endif
+ 
++#define DEBUG 
++
+ #include <linux/init.h>
+ #include <linux/fs.h>
+ #include <linux/slab.h>
+diff --git a/init/main.c b/init/main.c
+index d03d2ec..f08e734 100644
+--- a/init/main.c
++++ b/init/main.c
+@@ -372,22 +372,30 @@ static noinline void __init_refok rest_init(void)
+ 	 * the init task will end up wanting to create kthreads, which, if
+ 	 * we schedule it before we create kthreadd, will OOPS.
+ 	 */
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	kernel_thread(kernel_init, NULL, CLONE_FS | CLONE_SIGHAND);
+ 	numa_default_policy();
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES);
+ 	rcu_read_lock();
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);
+ 	rcu_read_unlock();
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	complete(&kthreadd_done);
+ 
+ 	/*
+ 	 * The boot idle thread must execute schedule()
+ 	 * at least once to get things moving:
+ 	 */
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	init_idle_bootup_task(current);
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	schedule_preempt_disabled();
+ 	/* Call into cpu_idle with preempt disabled */
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	cpu_startup_entry(CPUHP_ONLINE);
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ }
+ 
+ /* Check for early params. */
+@@ -811,7 +819,9 @@ static noinline void __init kernel_init_freeable(void);
+ 
+ static int __ref kernel_init(void *unused)
+ {
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	kernel_init_freeable();
++    early_print("%s:%d: kernel_init_freeable\n", __FUNCTION__, __LINE__);
+ 	/* need to finish all async __init code before freeing the memory */
+ 	async_synchronize_full();
+ 	free_initmem();
+@@ -821,11 +831,13 @@ static int __ref kernel_init(void *unused)
+ 
+ 	flush_delayed_fput();
+ 
++    early_print("%s:%d: ramdisk_execute_command: %s\n", __FUNCTION__, __LINE__, ramdisk_execute_command);
+ 	if (ramdisk_execute_command) {
+ 		if (!run_init_process(ramdisk_execute_command))
+ 			return 0;
+ 		pr_err("Failed to execute %s\n", ramdisk_execute_command);
+ 	}
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 
+ 	/*
+ 	 * We try each of these until one succeeds.
+@@ -851,6 +863,7 @@ static int __ref kernel_init(void *unused)
+ 
+ static noinline void __init kernel_init_freeable(void)
+ {
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	/*
+ 	 * Wait until kthreadd is all set-up.
+ 	 */
+@@ -881,8 +894,11 @@ static noinline void __init kernel_init_freeable(void)
+ 	do_basic_setup();
+ 
+ 	/* Open the /dev/console on the rootfs, this should never fail */
+-	if (sys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0)
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
++	if (sys_open((const char __user *) "/dev/console", O_RDWR, 0) < 0) {
+ 		pr_err("Warning: unable to open an initial console.\n");
++		early_print("Warning: unable to open an initial console.\n");
++    }
+ 
+ 	(void) sys_dup(0);
+ 	(void) sys_dup(0);
+@@ -891,10 +907,13 @@ static noinline void __init kernel_init_freeable(void)
+ 	 * the work
+ 	 */
+ 
++    early_print("%s:%d: set ramdisk_execute_command\n", __FUNCTION__, __LINE__);
+ 	if (!ramdisk_execute_command)
+ 		ramdisk_execute_command = "/init";
+ 
++    early_print("%s:%d: sys_access ramdisk_execute_command\n", __FUNCTION__, __LINE__);
+ 	if (sys_access((const char __user *) ramdisk_execute_command, 0) != 0) {
++        early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 		ramdisk_execute_command = NULL;
+ 		prepare_namespace();
+ 	}
+@@ -906,5 +925,6 @@ static noinline void __init kernel_init_freeable(void)
+ 	 */
+ 
+ 	/* rootfs is available now, try loading default modules */
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	load_default_modules();
+ }
+diff --git a/kernel/cpu/idle.c b/kernel/cpu/idle.c
+index e695c0a..b41b279 100644
+--- a/kernel/cpu/idle.c
++++ b/kernel/cpu/idle.c
+@@ -12,6 +12,7 @@
+ #include <trace/events/power.h>
+ 
+ static int __read_mostly cpu_idle_force_poll;
++extern void early_print(const char *str, ...);
+ 
+ void cpu_idle_poll_ctrl(bool enable)
+ {
+@@ -67,6 +68,7 @@ void __weak arch_cpu_idle(void)
+  */
+ static void cpu_idle_loop(void)
+ {
++    early_print("%s:%d.\n", __FUNCTION__, __LINE__);
+ 	while (1) {
+ 		tick_nohz_idle_enter();
+ 
+diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
+index 5b5a708..07f6a19 100644
+--- a/kernel/printk/printk.c
++++ b/kernel/printk/printk.c
+@@ -54,6 +54,8 @@
+ #include "console_cmdline.h"
+ #include "braille.h"
+ 
++extern void early_print(const char *str, ...);
++
+ /* printk's without a loglevel use this.. */
+ #define DEFAULT_MESSAGE_LOGLEVEL CONFIG_DEFAULT_MESSAGE_LOGLEVEL
+ 
+@@ -2226,6 +2228,7 @@ void register_console(struct console *newcon)
+ 	struct console *bcon = NULL;
+ 	struct console_cmdline *c;
+ 
++    early_print("%s:%d:%s: enter\n", __FILE__, __LINE__, __FUNCTION__);
+ 	/*
+ 	 * before we register a new CON_BOOT console, make sure we don't
+ 	 * already have a valid console
+@@ -2367,6 +2370,7 @@ void register_console(struct console *newcon)
+ 			(newcon->flags & CON_BOOT) ? "boot" : "" ,
+ 			newcon->name, newcon->index);
+ 	}
++    early_print("%s:%d:%s: exit\n", __FILE__, __LINE__, __FUNCTION__);
+ }
+ EXPORT_SYMBOL(register_console);
+ 
