@@ -1,0 +1,61 @@
+From 9a2af923afa273b9b91fb10a251cfb10b9873966 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Wed, 7 Aug 2013 12:40:11 +0800
+Subject: [PATCH 6/9] test libxl_event_check. TEST FAIL
+
+---
+ src/libxl/libxl_driver.c | 31 +++++++++++++++++++++++++++++++
+ 1 file changed, 31 insertions(+)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 77c38b1..7546c66 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -2405,6 +2405,36 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     }
+ 
+ #ifdef AO_HOW
++#if 1
++    if (NULL != ao_how_p) {
++        VIR_INFO("Waiting for libxl event");
++
++        while (1) {
++            libxl_event *xl_event;
++            virObjectUnlock(vm);
++            libxlDriverUnlock(driver);
++            ret = libxl_event_check(priv->ctx, &xl_event, LIBXL_EVENTMASK_ALL, 0,0);
++            libxlDriverLock(driver);
++            virObjectLock(vm);
++            if (ret) {
++                VIR_ERROR("libxl_event_wait fail");
++                sleep(1);
++                continue;
++            }
++
++            switch (xl_event->type) {
++            case LIBXL_EVENT_TYPE_OPERATION_COMPLETE:
++                VIR_INFO("OPERATION_COMPLETE");
++                break;
++            default:
++                VIR_INFO("got %d xl_event", xl_event->type);
++                break;
++            }
++            break;
++        }
++    }
++
++#else
+     if (NULL != ao_how_p) {
+         VIR_INFO("Waiting for libxl event");
+ 
+@@ -2431,6 +2461,7 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+             break;
+         }
+     }
++#endif // #if 0
+ #endif
+ 
+     event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+-- 
+1.8.1.4
+

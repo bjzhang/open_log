@@ -1,0 +1,107 @@
+From 8acd8f8d12eeded06c7b23221fca7b2232252395 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Wed, 7 Aug 2013 12:39:23 +0800
+Subject: [PATCH 5/9] add ao_how callback. NOT TEST
+
+---
+ src/libxl/libxl_driver.c | 43 +++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 35 insertions(+), 8 deletions(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 0d215be..77c38b1 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -110,6 +110,7 @@ static libxlDriverPrivatePtr libxl_driver = NULL;
+ 
+ #ifdef AO_HOW
+ static int ao_how_enable = 0;
++static int ao_how_enable_cb = 0;
+ #endif
+ 
+ /* Function declarations */
+@@ -1406,6 +1407,13 @@ libxlStateInitialize(bool privileged,
+         VIR_INFO("do not use ao_how");
+         ao_how_enable = 0;
+     }
++    if (virFileExists("/var/lib/libvirt/libxl/ao_how_cb")) {
++        VIR_INFO("use ao_how callback function");
++        ao_how_enable_cb = 1;
++    } else {
++        VIR_INFO("do not use ao_how callback function");
++        ao_how_enable_cb = 0;
++    }
+ #endif
+     libxlDriverUnlock(libxl_driver);
+ 
+@@ -2325,6 +2333,12 @@ libxlDomainGetState(virDomainPtr dom,
+     return ret;
+ }
+ 
++
++void ao_how_callback(libxl_ctx *ctx ATTRIBUTE_UNUSED, int rc ATTRIBUTE_UNUSED, void *for_callback ATTRIBUTE_UNUSED)
++{
++    return;
++}
++
+ /* This internal function expects the driver lock to already be held on
+  * entry and the vm must be active. */
+ static int
+@@ -2380,6 +2394,8 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     if (ao_how_enable)
+         if(VIR_ALLOC(ao_how_p) < 0)
+             goto cleanup;
++    if (ao_how_enable_cb)
++        ao_how_p->callback = ao_how_callback;
+ #endif
+     if (libxl_domain_suspend(priv->ctx, vm->def->id, fd, 0, ao_how_p) != 0) {
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+@@ -2390,20 +2406,29 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ 
+ #ifdef AO_HOW
+     if (NULL != ao_how_p) {
+-        VIR_INFO("Waiting for saving");
++        VIR_INFO("Waiting for libxl event");
+ 
+         while (1) {
++            libxl_event *xl_event;
+             virObjectUnlock(vm);
+             libxlDriverUnlock(driver);
+-            if (virFileExists("/var/lib/libvirt/libxl/save_complete")) {
+-                libxlDriverLock(driver);
+-                virObjectLock(vm);
+-                break;
+-            } else {
+-                sleep(1);
+-            }
++            ret = libxl_event_wait(priv->ctx, &xl_event, LIBXL_EVENTMASK_ALL, 0,0);
+             libxlDriverLock(driver);
+             virObjectLock(vm);
++            if (ret) {
++                VIR_ERROR("libxl_event_wait fail");
++                break;
++            }
++
++            switch (xl_event->type) {
++            case LIBXL_EVENT_TYPE_OPERATION_COMPLETE:
++                VIR_INFO("OPERATION_COMPLETE");
++                break;
++            default:
++                VIR_INFO("got %d xl_event", xl_event->type);
++                break;
++            }
++            break;
+         }
+     }
+ #endif
+@@ -2444,6 +2469,8 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+             break;
+         }
+     }
++#endif
++#ifdef AO_HOW
+     VIR_FREE(ao_how_p);
+ #endif
+ 
+-- 
+1.8.1.4
+

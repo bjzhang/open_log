@@ -1,0 +1,115 @@
+From 83ed72268ef442a0b3044d675c58f97484ebbc05 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Wed, 24 Jul 2013 15:44:14 +0800
+Subject: [PATCH 2/9] ao_how patch. NOT TEST
+
+---
+ src/libxl/libxl_driver.c | 30 ++++++++++++++++++++----------
+ 1 file changed, 20 insertions(+), 10 deletions(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 7d453ee..454cad3 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -105,8 +105,9 @@ static virClassPtr libxlDomainObjPrivateClass;
+ 
+ static libxlDriverPrivatePtr libxl_driver = NULL;
+ 
+-static libxl_asyncop_how *g_ao_how_p;
++#ifdef AO_HOW
+ static int ao_how_enable = 0;
++#endif
+ 
+ /* Function declarations */
+ static int
+@@ -927,6 +928,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     char *managed_save_path = NULL;
+     int managed_save_fd = -1;
+     libxlDomainObjPrivatePtr priv = vm->privateData;
++    libxl_asyncop_how *ao_how_p = NULL;
+ 
+     /* If there is a managed saved state restore it instead of starting
+      * from scratch. The old state is removed once the restoring succeeded. */
+@@ -983,14 +985,21 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ 
+     /* use as synchronous operations => ao_how = NULL and no intermediate reports => ao_progress = NULL */
+ 
++#ifdef AO_HOW
++    if (ao_how_enable)
++        if(VIR_ALLOC(ao_how_p) < 0)
++            goto error;
++#endif
++
+     if (restore_fd < 0)
+         ret = libxl_domain_create_new(priv->ctx, &d_config,
+-                                      &domid, g_ao_how_p, NULL);
++                                      &domid, ao_how_p, NULL);
+     else
+         ret = libxl_domain_create_restore(priv->ctx, &d_config, &domid,
+-                                          restore_fd, g_ao_how_p, NULL);
++                                          restore_fd, ao_how_p, NULL);
+ 
+-    if (NULL != g_ao_how_p) {
++#ifdef AO_HOW
++    if (NULL != ao_how_p) {
+         VIR_INFO("Waiting for libxl event");
+ 
+         while (1) {
+@@ -1012,6 +1021,8 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+             break;
+         }
+     }
++    VIR_FREE(ao_how_p);
++#endif
+ 
+     if (ret) {
+         if (restore_fd < 0)
+@@ -1177,9 +1188,6 @@ libxlStateCleanup(void)
+     virMutexDestroy(&libxl_driver->lock);
+     VIR_FREE(libxl_driver);
+ 
+-    if (1 == ao_how_enable)
+-        VIR_FREE(g_ao_how_p);
+-
+     return 0;
+ }
+ 
+@@ -1383,15 +1391,16 @@ libxlStateInitialize(bool privileged,
+     virDomainObjListForEach(libxl_driver->domains, libxlDomainManagedSaveLoad,
+                             libxl_driver);
+ 
++#ifdef AO_HOW
+     if (virFileExists("/var/lib/libvirt/libxl/ao_how")) {
+         VIR_INFO("use ao_how");
+         ao_how_enable = 1;
+-        if(VIR_ALLOC(g_ao_how_p) < 0)
+-            goto error;
+     } else {
+         VIR_INFO("do not use ao_how");
+         ao_how_enable = 0;
+     }
++#endif
++    libxlDriverUnlock(libxl_driver);
+ 
+     return 0;
+ 
+@@ -2322,6 +2331,7 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     uint32_t xml_len;
+     int fd = -1;
+     int ret = -1;
++    libxl_asyncop_how *ao_how_p = NULL;
+ 
+     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
+         virReportError(VIR_ERR_OPERATION_INVALID,
+@@ -2358,7 +2368,7 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+         goto cleanup;
+     }
+ 
+-    if (libxl_domain_suspend(priv->ctx, vm->def->id, fd, 0, g_ao_how_p) != 0) {
++    if (libxl_domain_suspend(priv->ctx, vm->def->id, fd, 0, ao_how_p) != 0) {
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+                        _("Failed to save domain '%d' with libxenlight"),
+                        vm->def->id);
+-- 
+1.8.1.4
+
