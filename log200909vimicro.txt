@@ -278,7 +278,7 @@ port->timeout = (HZ * bits) / baud + HZ/50;
 (6), 从其它移植看, uart_update_timeout 应当在 uart_ops.set_termios 中设置. 我们的 set_termios 当时是想固定死115200 8n1所以基本就没参考其它uart的写法, 这是个疏漏. 其实uart移植中遇到的问题多数是没有依照规范移植的结果. 最早分析uart时zhangjian着重分析了printk相关内容, 后来zhicheng实际做的时候才发现用户空间的tty所需的uart驱动部分比printk部分复杂很多. 
 <TODO>总结</TODO>: 当时给我的uart和clock, 应当是按照缓急先做uart, 当时为了完成clock分析和建立文档所以花大量时间在clock上. 现在看来应该是先认真分析uart. 不过后来采用qemu虚拟机辅助分析是个好方法. 
 
-2), 解决uart只发送了两次的问题.
+4), 解决uart只发送了两次的问题.
 由于分析830代码暂时没有进展, 转而分析tty调用流程:
 (/dev/console): redirect_tty_write() -> tty_write() -> write_chan()(n_tty.c, 系统注册的默认tty line discipline, 实际硬件是uart) -> uart_write()(uart_ops.write, uart_ops是struct tty_operations) / uart_flush_chars()(uart_ops.flush_chars) -> uart_start() -> __uart_start() -> vc0830_start_tx() -> vc0830_tx_chars()
 write_chans 是把所有字符通过opost写入xmit缓冲后,调用一次uart_write发送这个字符. 所以后面的start_tx必须保证调用一次就发送完xmit中所有字符.
