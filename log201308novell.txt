@@ -2912,10 +2912,6 @@ nap 1h
 2), 16:56-17:56 finish sun6i kernel blog. see"14:41 2013-08-20"
 3), 18:01-18:10 19:28-21:19 reply to maxime and bob. see"10:40 2013-08-27"
 
-2, next
-1), send libxl and libxl driver patch to Jim.
-2), try lastest xen again.
-
 10:40 2013-08-27
 arm, sun6i, email
 1, reply to Maxime
@@ -3043,4 +3039,191 @@ The sparse infrastructure is pretty agnostic, and you can count pretty much anyt
 In particular, this is designed for doing things like matching up a "lock" with the pairing "unlock", and right now that's exactly what the code does: it makes each spinlock count as "+1" in the context, and each spinunlock count as "-1", and then hopefully it should all add up.
 
 基本上就是检查lock一个锁后是否有对应的unlock来解锁，在代码级来由sparse自动检查lock的匹配情况,程序员就可以轻松了。
+
+10:37 2013-08-28
+GTD
+0, 10:30-11:30 12:30-20:55
+
+1, today
+1), 10' mailing list. see"10:40 2013-08-28"
+2), 10:50-11:30 12:30-12:50 send libxl and libxl driver patch to Jim. see"10:42 2013-08-28"
+3), 13:00-14:11 rd all hands. see"13:02 2013-08-28"
+4), 14:12-20:55 try lastest xen again. see"15:36 2013-08-28"
+interrupt by "5)"
+supper 50'
+5), 30' discuss with Chunyan about libxl_domain_suspend procedure. see"15:26 2013-08-28"
+
+10:40 2013-08-28
+mailing list, virtualization, libvirt, lxc, how to allocate loopback device; \TODO programming excise
+1, [libvirt] [PATCH] Use loop-control to allocate loopback device. 
+Ian Main <imain@redhat.com>
+
+static int virFileLoopDeviceOpenLoopCtl(char **dev_name)
+{
+    int fd = -1;
+    int devnr;
+    char *looppath = NULL;
+
+    VIR_DEBUG("Opening loop-control device");
+    if ((fd = open("/dev/loop-control", O_RDWR)) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Unable to open /dev/loop-control"));
+        return -1;
+    }
+
+    if ((devnr = ioctl(fd, LOOP_CTL_GET_FREE)) < 0) {
+        virReportSystemError(errno, "%s",
+                             _("Unable to get free loop device via ioctl"));
+        close(fd);
+        return -1;
+    }
+    close(fd);
+
+    VIR_DEBUG("Found free loop device number %i", devnr);
+
+    if (virAsprintf(&looppath, "/dev/loop%i", devnr) < 0)
+        return -1;
+
+    if ((fd = open(looppath, O_RDWR)) < 0) {
+        virReportSystemError(errno,
+                _("Unable to open %s"), looppath);
+        VIR_FREE(looppath);
+        return -1;
+    }
+
+    *dev_name = looppath;
+    return fd;
+}
+
+10:42 2013-08-28
+virtualization, xen, libxl, async, try ao_how, cont3, discuss with Jim the status about ao_how without callback
+Hi, Jim
+
+i got ao_how work in libxl driver without callback, and i test create, save, restore, destroy. meanwhile i found somethings different from libxl doc. i am not sure if it need to send it to xen-devel. during last virtualization sync call, i report this and Jason suggest me discuss with u. here is the details:
+
+1, libxl_event_check do not work in libxl driver:
+in libxl.h doc, it says:
+ * If ao_how->callback==NULL, a libxl_event will be generated which
+ * can be obtained from libxl_event_wait or libxl_event_check.  The
+ * event will have type OPERATION_COMPLETE (which is not used
+ * elsewhere).
+
+but, in libvirt, because we regsiter the libxl_event_hooks through libxl_event_register_callbacks, when the event will append to egc->occurred_for_callback not to CTX->occurred, the latter one is the waited by libxl_event_check.
+at this point, ao_how without callback mode accually use the libxlEventHandler callback. if xen guys want to keep document right, they need to update libxl__event_occurred and distinguish the ao_how callback(egc->aos_for_callback) and event_hooks callback.
+
+2, add a new api in libxl and i need to register a new event to libvirt except the fd and timeout.
+in libxl, there are two ways for libvirt get the child exit event from libxl: libxl_sigchld_owner_mainloop and libxl_sigchld_owner_libxl_always.
+the first need libvirt handle the SIGCHLD. currently only virLXCControllerMain handle this through virNetServerAddSignalHandler. So, i use the second one.
+when the child(libxl-save-helper) exit, libxl will write to sigchld_owner->sigchld_selfpipe[1], So, i need read sigchld_selfpipe[1] by adding a new api libxl_get_pipe_handle. notes that libvirt could not access the item in ctx because ctx in defined in libxl internal.
+
+i append the libxl and libxl driver patch in this email.  this patch is far from send it out. it just a referece for what i am doing to ao_how. 
+if we realy send the patch out, i wll remove handle in libxlVmReap and remve lots of duplicated code.
+
+BTW: i am trying with callback this week.
+
+bamvor
+
+10:45 2013-08-28
+xen, arm
+Hi, 
+
+
+I also the try the lastest xen-unstable. because i saw some changes in bitops.
+
+diff --git a/log201308novell.txt b/log201308novell.txt
+index 205b148..bac6c35 100644
+--- a/log201308novell.txt
++++ b/log201308novell.txt
+@@ -3044,3 +3044,26 @@ In particular, this is designed for doing things like matching up a "lock" with
+ 
+ 基本上就是检查lock一个锁后是否有对应的unlock来解锁，在代码级来由sparse自动检查lock的匹配情况,程序员就可以轻松了。
+ 
+13:02 2013-08-28
+suse, rd, ralf, all hands
+1, achievement.
+helped to stabilized SUSE business in China.
+performance win compare with redhat( by calen chen).
+文件服务器, io performance.
+web server.
+database server. 
+
+2, china
+0), OEM: c和p是啥意思？
+1), recent customer wins
+china meteorology: total 2000 server? 年初200k. 9月会有60k.
+china life.400k 800-900 servers.
+icbc.
+zhejiang cmcc.
+
+3, jiaju离职感言。
+
+4, outlook
+hackweek: week of Oct 7th. 1008-1012.
+i must finish opensuse for sun6i at least.
+i hope i could got xen run on this device.
+
+15:26 2013-08-28
+virtualization, libvirt, libxl, save/migration, libxl_domain_suspend procedure
+1, there are two stage in save.
+1), the first one is memory save. this is done by xc_domain_save. 
+libxl create libxl-save-helper for doing this. and libxl communication with libxl-save-helper through stdin and stdout. including suspend and complete message.
+there are two fds for stdin and stdout respectively and libxl register this to libvirt(ro itself, i only talk about the progress when libxl use with libvirt). libvirt will handle the callback through datacopier_readable and datacopier_writable.
+
+2), the second stage:
+(1), for pv:
+domain suspend through libxl__domain_pvcontrol_write(xenstore things).
+(2), for hvm:
+save qemu device model. datacopier_readable read the save image from file and write to datacopier_writable(i guess, no prof).
+
+15:36 2013-08-28
+1, there is no problem in lastest xen, \TODO: why?
+Starting kernel ...
+
+- UART enabled -
+- CPU 00000000 booting -
+- Machine ID 00000f34 -
+- Started in Secure state -
+- Entering Hyp mode -
+- Zero BSS -
+- Setting up control registers -
+- Turning on paging -
+- Ready -
+RAM: 0000000040000000 - 00000000bfffffff
+
+MODULE[1]: 0000000060000000 - 0000000060400000 
+Placing Xen at 0x00000000bfe00000-0x00000000c0000000
+Xen heap: 65536 pages  Dom heap: 458752 pages
+Looking for UART console serial0
+Unable to initialize serial: -9
+
+2, add ns16550. hang at 
+(XEN) GIC: 160 lines, 4 cpus, secure (IID 0100043b).
+(XEN) Waiting for 0 other CPUs to be ready
+(XEN) Using scheduler: SMP Credit Scheduler (credit)
+
+1), 
+(XEN) GIC initialization:
+(XEN)         gic_dist_addr=0000000001c81000
+(XEN)         gic_cpu_addr=0000000001c82000
+(XEN)         gic_hyp_addr=0000000001c84000
+(XEN)         gic_vcpu_addr=0000000001c86000
+(XEN)         gic_maintenance_irq=25
+(XEN) GIC: 160 lines, 4 cpus, secure (IID 0100043b).
+(XEN) Waiting for 0 other CPUs to be ready
+(XEN) setup.c:562:start_xen
+(XEN) Using scheduler: SMP Credit Scheduler (credit)
+(XEN) setup.c:565:start_xen
+(XEN) setup.c:568:start_xen
+(XEN) setup.c:571:start_xen
+gic.c:767:gic_interrupt. irq: 1023
+gic.c:767:gic_interrupt. irq: 1023
+gic.c:767:gic_interrupt. irq: 1023
+gic.c:767:gic_interrupt. irq: 1023
+
+2), 
+gic_route_dt_irq -> gic_route_irq -> "desc->handler = &gic_host_irq_type"
+
+3), after print all the gic. i found that gic init is abnormal. check it later.
+
+
 
