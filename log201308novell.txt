@@ -2073,7 +2073,11 @@ arm is a active architecture(x86, mips, arm...), not 51.
 2), exception 
 3), mmu
 4), debug
-3, virtualization
+5), about pc. \TODO: pc+4, pc+8?
+3, support for os
+1), bitops: mutex...
+\TODO check the book.
+4, virtualization
 psci.
 
 13:33 2013-08-20
@@ -3047,7 +3051,7 @@ GTD
 1, today
 1), 10' mailing list. see"10:40 2013-08-28"
 2), 10:50-11:30 12:30-12:50 send libxl and libxl driver patch to Jim. see"10:42 2013-08-28"
-3), 13:00-14:11 rd all hands. see"13:02 2013-08-28"
+3), 13:00-14:11 ralf rd all hands. see"13:02 2013-08-28"
 4), 14:12-20:55 try lastest xen again. see"15:36 2013-08-28"
 interrupt by "5)"
 supper 50'
@@ -3175,7 +3179,12 @@ domain suspend through libxl__domain_pvcontrol_write(xenstore things).
 (2), for hvm:
 save qemu device model. datacopier_readable read the save image from file and write to datacopier_writable(i guess, no prof).
 
+3, others
+prefix data -> writeable; 
+readable(reregiste writable) -> writable
+
 15:36 2013-08-28
+xen, arm, sun6i
 1, there is no problem in lastest xen, \TODO: why?
 Starting kernel ...
 
@@ -3225,5 +3234,199 @@ gic_route_dt_irq -> gic_route_irq -> "desc->handler = &gic_host_irq_type"
 
 3), after print all the gic. i found that gic init is abnormal. check it later.
 
+08:55 2013-08-29
+GTD
+0, 8:50-11:30 13:33-17:59
 
+1, today
+1), 9:00-11:30 read the patch about device tree. see"13:49 2013-08-29"1
+2), 1h mailing list.
+3), figure out why gic not works.
+4), find out which modify make sun6i exclusive operation works in xen.
+5), if "3)" no progress, try boot-wrapper
+
+09:06 2013-08-29
+Julien Grall <julien.grall@linaro.org> 
+to: xen-devel@lists.xen.org
+cc: patches@linaro.org; Julien Grall <julien.grall@linaro.org>; ian.campbell@citrix.com; andre.przywara@linaro.org; stefano.stabellini@eu.citrix.com
+
+Hi Julien
+> On some board, there is no alias to the UART. To avoid modification in
+> the device tree, dt-uart should also search device by path.
+> 
+> To distinguish an alias from a path, dt-uart will check the first character.
+> If it's a / then it's path, otherwise it's an alias.
+> 
+> Signed-off-by: Julien Grall <julien.grall@xxxxxxxxxx>
+> Acked-by: Ian Cambell <ian.campbell@xxxxxxxxxx>
+> ---
+>  xen/drivers/char/dt-uart.c |   16 ++++++++++------
+>  1 file changed, 10 insertions(+), 6 deletions(-)
+> 
+> diff --git a/xen/drivers/char/dt-uart.c b/xen/drivers/char/dt-uart.c
+> index 93bb0f5..d7204fb 100644
+> --- a/xen/drivers/char/dt-uart.c
+> +++ b/xen/drivers/char/dt-uart.c
+> @@ -26,9 +26,10 @@
+>  
+>  /*
+>   * Configure UART port with a string:
+> - * alias,options
+> + * path,options
+>   *
+> - * @alias: alias used in the device tree for the UART
+> + * @path: full path used in the device tree for the UART. If the path
+> + * doesn't start with '/', we assuming that it's an alias.
+>   * @options: UART speficic options (see in each UART driver)
+>   */
+>  static char __initdata opt_dtuart[30] = "";
+> @@ -38,7 +39,7 @@ void __init dt_uart_init(void)
+>  {
+>      struct dt_device_node *dev;
+>      int ret;
+> -    const char *devalias = opt_dtuart;
+> +    const char *devpath = opt_dtuart;
+>      char *options;
+>  
+>      if ( !console_has("dtuart") || !strcmp(opt_dtuart, "") )
+> @@ -53,12 +54,15 @@ void __init dt_uart_init(void)
+>      else
+>          options = "";
+>  
+> -    early_printk("Looking for UART console %s\n", devalias);
+> -    dev = dt_find_node_by_alias(devalias);
+> +    early_printk("Looking for UART console %s\n", devpath);
+> +    if ( *devpath == '/' )
+> +        dev = dt_find_node_by_path(devpath);
+> +    else
+> +        dev = dt_find_node_by_alias(devpath);
+if '/' start an alias, it should be
++    if ( *devpath == '/' )
++        dev = dt_find_node_by_alias(devpath);
++    else
++        dev = dt_find_node_by_path(devpath);
+
+
+bamvor
+>  
+>      if ( !dev )
+>      {
+> -        early_printk("Unable to find device \"%s\"\n", devalias);
+> +        early_printk("Unable to find device \"%s\"\n", devpath);
+>          return;
+>      }
+>  
+> -- 
+> 1.7.10.4
+
+09:11 2013-08-29
+1, cmdline_parse will parse the parameter located in ".init.setup" section which start from __setup_start, and the end is __setup_end.
+parameter, e.g. "dtuart", defined in xen/drivers/char/dt-uart.c
+2, build domain
+construct_dom0 -> map_devices_from_device_tree -> handle_node -> map_device
+                                                              -> handle_node
+
+1), in construct_dom0
+(1), load the kernel where the load is set by the kernel_prepare in the construct_dom0.
+(2), xen will prepare the kernel boot register, for 32bit: r0=0, r1=0xffffffff, r2=dtb_addr; for aarch64: x0=dtb_addr, x1=0, x2=0, x3=0.
+(3), alloc_vcpu.
+
+3, after contruct_dom0, will unpause domain 0 by change vcpu status and final call init_done and finally call idle_loop.
+
+09:34 2013-08-29
+virtualization, xen, arm, device tree; psci
+[Xen-devel] [PATCH V1 00/29] Allow Xen to boot with a raw Device Tree, Julien Grall
+1, device tree
+1), http://www.devicetree.org/Device_Tree_Usage
+linux/Documentation/devicetree/booting-without-of.txt
+
+2), three basic element in device tree node:
+reg
+#address-cells
+#size-cells
+
+ref: 
+    Each addressable device gets a reg which is a list of tuples in the form reg = <address1 length1 [address2 length2] [address3 length3] ... >. Each tuple represents an address range used by the device. Each address value is a list of one or more 32 bit integers called cells. Similarly, the length value can either be a list of cells, or empty.
+    Since both the address and length fields are variable of variable size, the #address-cells and #size-cells properties in the parent node are used to state how many cells are in each field. Or in other words, interpreting a reg property correctly requires the parent node's #address-cells and #size-cells values. To see how this all works, lets add the addressing properties to the sample device tree, starting with the CPUs.
+
+e.g. sun6i:
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu@0 {
+			compatible = "arm,cortex-a7";
+			device_type = "cpu";
+			reg = <0>;
+		};
+
+		cpu@1 {
+			compatible = "arm,cortex-a7";
+			device_type = "cpu";
+			reg = <1>;
+		};
+
+        ...
+    }
+
+#address-cells equal 1 means the address length in reg is 32bit. while the #size-cells equals 0 means there is not length in reg. acctually, in cpu node, the number in reg means cpu number.
+and must including device_type which is cpu.
+the compatible value means which "driver" could use on this device. here is "arm,cortex-a7", if there is not cortex-a7 support in kernel, the cpu could not work.
+hehe, using uart as an example of compatible is better than cpu:
+
+    uart0: serial@01c28000 {
+        compatible = "snps,dw-apb-uart";
+        reg = <0x01c28000 0x400>;
+        interrupts = <0 0 1>;
+        reg-shift = <2>;
+        reg-io-width = <4>;
+        clocks = <&osc>;
+        status = "disabled";
+    };
+
+drivers/tty/serial/8250/8250_dw.c:
+    static const struct of_device_id dw8250_of_match[] = {
+        { .compatible = "snps,dw-apb-uart" },
+        { .compatible = "cavium,octeon-3860-uart" },
+        { /* Sentinel */ }
+    };
+    MODULE_DEVICE_TABLE(of, dw8250_of_match);
+
+2, PSCI
+Documentation/devicetree/bindings/arm/psci.txt
+Power State Coordination Interface (PSCI)
+
+
+13:49 2013-08-29
+mailing list, virtualization, xen, arm
+1, [Xen-devel] [PATCH V1 00/29] Allow Xen to boot with a raw Device Tree, Julien Grall
+ref"09:34 2013-08-29"
+2, [Xen-devel] [PATCH v3 00/10] xen/arm: live migration support in arndale board
+bamvor: as mentioned in this patch, there are still bugs in it.
+\TODO: read it later.
+
+14:18 2013-08-29
+mailing list, virtualization, network, multiqueue
+1, multiqueue
+1), Michal Privoznik <mprivozn@redhat.com> 
+Do you mean multiqueue network? It's supported from 1.0.6. You can set
+it in /domain/devices/interface/driver/@queues attribute:
+
+http://libvirt.org/formatdomain.html#elementsDriverBackendOptions
+
+2), multiqueue status in kvm
+http://www.linux-kvm.org/page/Multiqueue
+
+14:33 2013-08-29
+xen, arm, gic
+1, function calls
+gic_init -. 
+2, compare with arndale
+setenv kernel_addr_r 0x60000000
+setenv xen_addr_r 0x50000000
+setenv bootcmd_load_linux_mmc 'ext2load mmc 0 $kernel_addr_r zImage'
+setenv boot_xen_mmc 'run bootcmd_load_linux_mmc; ext2load mmc 0 $xen_addr_r xen-uImage; bootm $xen_addr_r -'
+setenv bootcmd 'run boot_xen_mmc'
+
+搞了半天觉得arndale板子串口工作不正常: 乱码, 丢数据. 原来是两个screen都在访问/dev/ttyS0.
 
