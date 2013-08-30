@@ -2058,6 +2058,7 @@ libxl_sigchld_callback(int watch ATTRIBUTE_UNUSED,
 5, \TODO: test other ao and try callbacks.
 
 18:23 2013-8-19
+(10:00 2013-08-30)
 arm, summary
 0, collecting a picture for popular arm device.
 1), preface
@@ -2077,7 +2078,11 @@ arm is a active architecture(x86, mips, arm...), not 51.
 3, support for os
 1), bitops: mutex...
 \TODO check the book.
-4, virtualization
+4, arm lower power design.
+1), risc vs cisc(take mips(xbust) and x86 as example).
+2), low voltage. put more and more thing into soc.
+3), low power device: memory. see"10:02 2013-08-30"
+5, virtualization
 psci.
 
 13:33 2013-08-20
@@ -3434,7 +3439,301 @@ setenv bootcmd 'run boot_xen_mmc'
 
 4, i have to write a small code for testing
 
-9:29
-arm lower power design.
-ldpddr3 in nexus 10, galaxy s4.
+10:02 2013-08-30
+memory, ddr, lpddr, lpddr3
+http://en.wikipedia.org/wiki/Mobile_DDR
+1, Products using LPDDR3 include the 2013 Macbook Air, Nexus 10 and Samsung Galaxy S4(GT-I9500).[7] LPDDR3 went mainstream in 2013, running at 800 MHz DDR (1600 MT/s), offering bandwidth comparable to PC3-12800 notebook memory in 2011 (12.8 GB/s of bandwidth).
+
+2, allwinner maybe support lpddr3(i guess A31?).
+\TODO: check it later.
+
+10:05 2013-08-30
+GTD
+0, 9:50-11:30 12:35-21:10
+
+1, today
+1), 20' 10:05-10:15 mailing list.
+2), 1h eink.
+3), 11:14-11:30 12:37-15:21 try gic. 
+4), 15:25-19:33 guangliang, jiaju.
+5), 19:35-20:34 dump uart register. see"20:24 2013-08-30"
+6), 20:35-20:45 install the printer on openSUSE12.3, and print the doc in "10:07 2013-08-30".
+print fail. need restart?
+
+10:05 2013-08-30
+mailing list, virtualization, kvm, arm, kvmarm
+Christoffer Dall christoffer.dall@linaro.org
+Minutes from the KVM Sync-up Call on 27 Aug, 2013
+=================================================
+
+The sync-up meeting is held bi-weekly only and an invite can be
+requested from Christoffer Dall.  The purpose of this call is purely
+technical and you should only be involved in this call if you are an
+engineer working on KVM/ARM or related technologies.
+
+ - Christoffer Dall explained what Linaro is working on: migration v7,
+   cross CPU type support, testing framework, qemu virtio-mmio, qemu
+   mach-virt.
+
+ - Marc Zyngier: Marc is the kvm/arm64 maintainer, and he looks after
+   the vgic and timers and kvmtool.
+
+ - Peter Maydell: qemu arm upstream maintainer, currently focusing on v8
+   kvm support in qemu trying to upstream patches that are floating
+   around in this area.  ARMv8 QEMU system support is next on the todo
+   list.
+
+ - Mark Burton from GreenSocs: worked on virtio-mmio, currently working
+   on reverse execution with ARM guest for the target.
+
+ - FreeScale: device assignment, platform device assignment, powerpc and
+   arm-based devices as well.  Working on QEMU side of device
+   passthrough as well.
+
+ - Antionios from VOS, working on device assignment as well.  Also
+   working on QEMU patches for using aarch64 KVM with QEMU by Mian.
+   Seems to be some overlapping work.  Concretely on aarch64, the
+   patches are not released in an upstreamable fashion, but virtio and
+   mach-virt are being upstreamed, which are prerequisites for the patch
+   set.  Future of ARMv8 KVM control patch set: VOS and Peter to
+   coordinate progress.
+
+ - QEMU "-cpu host" discussion:
+   On x86 you create a set of features you wish, ask KVM which of those
+   features are supported, KVM does a binary and of the two bitmasks and
+   returns some virtual CPU with a particular feature set.  End result,
+   you end up with some virtual cpu, which may or may not resemble
+   something that exists in real life, and there are no guarantees that
+   a guest will boot with these combinations.
+
+   On PowerPC they have a list of CPUs they support, just try to create
+   some CPU that QEMU knows about.  cpu host on powerpc probes the
+   hardware and chooses something that looks like the host CPU that it
+   runs on.
+
+   Peter proposed the current work, where the host CPU is abstracted
+   away from user space, and user space just says "create host-type
+   VCPU" to the kernel, and user space then only queries the CPU for the
+   info it needs from specific registers.  For example, it can query the
+   ID registers of the created virtual CPU.  Alex pointed out that Gleb
+   had suggested just presenting a custom virtual CPU.  However, Marc
+   explained that CPU feature registers don't tell the full story on
+   ARM.  A Cortex-A7 and Cortex-A15 are very different, but their flags
+   look the same.
+
+   Gleb raised the point that on x86 it turned out to be quite useful to
+   create CPUs with specific feature sets, because KVM may not be able
+   to handle the full feature set of the physical CPU, and therefore
+   having partial support of a what a real-life core can do, shown to
+   the guest, can be useful.  This is especially relevant when new CPU
+   cores come out and in the context of migration, where this is used
+   today to support migration between, for example, Nahalem and Hasswell
+   cores in an x86 cluster.
+
+   Christoffer then raised the point that the ecosystem on ARM is just
+   different than on x86, and current software, especially Linux, just
+   doesn't check feature bits in the same way as on x86, but instead
+   assumes the full properties of an ARM cpu to be available.
+
+   Gleb doubted that this would continue to be the case when ARM moves
+   into the server and networking space, and that both software and
+   hardware may change more toward the way things work on x86.
+
+   It was decided that if the API for KVM/ARM is changed to adding an
+   ioctl that allows user space to query the kernel's preferred CPU
+   model, which can then be fed back into the kernel (in contrast to
+   being able to ask directly for a host type cpu), then we can always
+   add more fine-grained settings of CPU feature bits later on, if and
+   when the ARM ecosystem becomes more oriented towards server
+   installations.
+
+ - In general:  To avoid duplicate work, people should should send out
+   notice of future work to the list.  If this is not possible due to
+   contractual obligations, perhaps pinging the maintainers
+   (Christoffer, Marc, and Peter) can provide some leeway.
+
+ - Next meeting: The next meeting is on September 10th, please send me
+   agenda items before that.
+
+10:07 2013-08-30
+news, print, \TODO
+1, linaro 2013.08 release
+http://www.linaro.org/downloads/1308#tab1
+2, kernel xen code
+The solution for platforms without an IOMMU is to use swiotlb-xen,
+adapted to autotranslate guests.
+http://lists.xen.org/archives/html/xen-devel/2013-08/msg02954.html
+3, \TODO check the allwinner maricast.
+
+10:08 2013-08-30
+mailing list, virtualizaiton, qemu
+1, how to deal with POP or MCP in qemu:
+Peter Maydell peter.maydell@linaro.org reply to Antony Pavlov <antonynpavlov@gmail.com> 
+> It's not a trivial question!
+> See "Digging Into 'DIGIC 4' Image Processor (2)" (http://techon.nikkeibp.co.jp/english/NEWS_EN/20090218/165866/).
+> The authors removed the upper package with a chemical solution and exposed the chips.
+> The 'DIGIC 4' contains 3 chips in one package:
+>  * processor itself;
+>  * 64-Mbit NOR flash memory, the "K8P6415UQB" (note that I have found another flash K8P3215UQB on my Canon A1100: Manufacturer ID: 0xEC, Device ID: 0x7E0301);
+>  * 512-Mbit SDRAM, the "K4X51323PE" (just the same 64 M RAM as I see with barebox).
+>
+> So we can assume taht these memory chips are inalienable parts of the SoC.
+
+Package-on-Package is really just a funky way of connecting
+up separate components (the layers are only connected
+together at PCB assembly time, wikipedia tells me), and
+indeed you can have different component combinations
+(as you've found with the flash memory). So I would suggest
+that either:
+ (a) just model them all as separate components
+   (SoC, memory, flash) instantiated by the board
+ (b) model them as separate components, and have a
+   "container" component which puts them together and
+   then the board just instantiates that.
+
+Whether (b) is worthwhile depends on whether we
+expect to have lots of boards that differ but have the
+same PoP stack. I suspect (a) is better.
+
+thanks
+-- PMM
+
+11:20 2013-08-30
+xen, arm, write gic test code
+1, compile the basic environment
+1), the command line for head.S in xen
+arm-linux-gnueabihf-gcc -D__ASSEMBLY__ -include /home/bamvor/sda3/home/novell/work/source/virtualization/xen/upstream/xen_arm/xen-unstable/xen/include/xen/config.h -O1 -fno-omit-frame-pointer -marm -g -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -Wno-unused-local-typedefs -I/home/bamvor/sda3/home/novell/work/source/virtualization/xen/upstream/xen_arm/xen-unstable/xen/include -fno-stack-protector -fno-exceptions -Wnested-externs -msoft-float -mcpu=cortex-a15 -DGCC_HAS_VISIBILITY_ATTRIBUTE -fno-optimize-sibling-calls -DEARLY_PRINTK -DEARLY_PRINTK_INC=\"debug-8250.inc\" -DEARLY_PRINTK_BAUD= -DEARLY_UART_BASE_ADDRESS=0x01c28000 -DEARLY_UART_REG_SHIFT=2 -fno-builtin -fno-common -Werror -Wredundant-decls -Wno-pointer-arith -pipe -g -D__XEN__ -include /home/bamvor/sda3/home/novell/work/source/virtualization/xen/upstream/xen_arm/xen-unstable/xen/include/xen/config.h -nostdinc -iwithprefix include -DVERBOSE -fno-omit-frame-pointer -DCONFIG_FRAME_POINTER -MMD -MF .head.o.d -DCONFIG_DTB_FILE=\"/home/bamvor/Downloads_new/arm/samsung_exynos/linux/arch/arm/boot/dts/sun6i.dtb\" -c arm32/head.S -o arm32/head.o
+
+2), what i need
+(1), right but too much.
+arm-linux-gnueabihf-gcc -O1 -fno-omit-frame-pointer -marm -g -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -Wno-unused-local-typedefs -fno-stack-protector -fno-exceptions -Wnested-externs -msoft-float -mcpu=cortex-a15 -fno-optimize-sibling-calls -fno-builtin -fno-common -Werror -Wredundant-decls -Wno-pointer-arith -pipe -g -nostdinc -iwithprefix include -fno-omit-frame-pointer -MMD -MF .head.o.d -c head.S -o head.o
+(2), wrong
+arm-linux-gnueabihf-gcc -fno-omit-frame-pointer head.S -o head -msoft-float -mcpu=cortex-a15 -nostdinc -fno-stack-protector -fno-exceptions -fno-builtin -fno-common  -pipe -g  -MMD 
+/home/bamvor/Downloads_new/arm/arm_linux/toolchain/gcc-linaro-arm-linux-gnueabihf-4.8-2013.04-20130417_linux/bin/../arm-linux-gnueabihf/libc/usr/lib/arm-linux-gnueabihf/crt1.o: In function `_start':
+(.text+0x30): undefined reference to `main'
+collect2: error: ld returned 1 exit status
+make: *** [head] Error 1
+(3), because i am missing "-c"!!!
+(4), final Makefile and log
+> cat Makefile
+all:
+        ${CROSS_COMPILE}gcc -O1 -fno-omit-frame-pointer -marm -g -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -Wno-unused-local-typedefs -fno-stack-protector -fno-exceptions -Wnested-externs -msoft-float -mcpu=cortex-a15 -fno-optimize-sibling-calls -fno-builtin -fno-common -Werror -Wredundant-decls -Wno-pointer-arith -pipe -g -nostdinc -fno-omit-frame-pointer -iwithprefix include -c head.S -o head.o
+        ${CROSS_COMPILE}ld head.o -o head -T uart_test.lds
+        ${CROSS_COMPILE}objcopy --gap-fill=0xff -O binary head head.bin
+        mkimage -A arm -O u-boot -T standalone -C none -a 0x40008000 -e 0x40008000 -n 'uart_test' -d head.bin head.Image
+
+clean:
+        rm head head.bin head.Image
+
+> make
+arm-linux-gnueabihf-gcc -O1 -fno-omit-frame-pointer -marm -g -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -Wno-unused-local-typedefs -fno-stack-protector -fno-exceptions -Wnested-externs -msoft-float -mcpu=cortex-a15 -fno-optimize-sibling-calls -fno-builtin -fno-common -Werror -Wredundant-decls -Wno-pointer-arith -pipe -g -nostdinc -fno-omit-frame-pointer -iwithprefix include -c head.S -o head.o
+arm-linux-gnueabihf-ld head.o -o head -T uart_test.lds
+arm-linux-gnueabihf-objcopy --gap-fill=0xff -O binary head head.bin
+mkimage -A arm -O u-boot -T standalone -C none -a 0x40008000 -e 0x40008000 -n 'uart_test' -d head.bin head.Image
+Image Name:   uart_test
+Created:      Fri Aug 30 13:17:00 2013
+Image Type:   ARM U-Boot Standalone Program (uncompressed)
+Data Size:    368 Bytes = 0.36 kB = 0.00 MB
+Load Address: 40008000
+Entry Point:  40008000
+bamvor@linux-rd:uart_test> vim Makefile
+bamvor@linux-rd:uart_test> vim ^C
+bamvor@linux-rd:uart_test> vim uart_test.lds
+bamvor@linux-rd:uart_test> make clean
+rm head head.bin head.Image
+bamvor@linux-rd:uart_test> make 
+arm-linux-gnueabihf-gcc -O1 -fno-omit-frame-pointer -marm -g -fno-strict-aliasing -Wall -Wstrict-prototypes -Wdeclaration-after-statement -Wno-unused-but-set-variable -Wno-unused-local-typedefs -fno-stack-protector -fno-exceptions -Wnested-externs -msoft-float -mcpu=cortex-a15 -fno-optimize-sibling-calls -fno-builtin -fno-common -Werror -Wredundant-decls -Wno-pointer-arith -pipe -g -nostdinc -fno-omit-frame-pointer -iwithprefix include -c head.S -o head.o
+arm-linux-gnueabihf-ld head.o -o head -T uart_test.lds
+arm-linux-gnueabihf-objcopy --gap-fill=0xff -O binary head head.bin
+mkimage -A arm -O u-boot -T standalone -C none -a 0x40008000 -e 0x40008000 -n 'uart_test' -d head.bin head.Image
+Image Name:   uart_test
+Created:      Fri Aug 30 13:17:27 2013
+Image Type:   ARM U-Boot Standalone Program (uncompressed)
+Data Size:    368 Bytes = 0.36 kB = 0.00 MB
+Load Address: 40008000
+Entry Point:  40008000
+
+20:24 2013-08-30
+arm, sun6i, kernel, uart hang issue
+1, Maxime reply to me 20130829_1715
+Hi Bamvor,
+
+On Tue, Aug 27, 2013 at 05:42:10AM -0600, Bamvor Jian Zhang wrote:
+> Hi Maxime,
+> 
+> > On Fri, Aug 16, 2013 at 04:11:58AM -0600, Bamvor Jian Zhang wrote:
+> > > > > So, could u do me a favor to give me some instruction about how to
+> > > > > boot your kernel, including proper u-boot, cmdline and filesystem.
+> > > > 
+> > > > http://linux-sunxi.org/Mainline_Kernel_Howto
+> > > after, append dtb to kernel and i could boot kernel to mounting
+> > > filesystem.  thanks your help!
+> > 
+> > Great, you're welcome :)
+> > 
+> > > i will try to make a initramfs image. do u have some prebuild kernel
+> > > and fs image for testing?
+> > 
+> > I don't have a kernel image here, but you can find an initramfs image I
+> > use here
+> > 
+> > http://free-electrons.com/~maxime/pub/uInitrd
+> thanks your fs, it works on my STB. i write some notes in my blog [1].
+> meanwhile, i found a weird issue: if i press keyboard before u-boot booted,
+> the interrupt of ttyS0 will be broken. i mean the u-boot log and kernel
+> printk works well but there is no message after filesystem mounted.
+
+Hmmm, that's really odd.
+
+Could you add some code to dump the UART registers in the probe
+function, right before we actually do something, and paste me the
+results in the failing and working cases?
+
+> i guess it will be ok if u-boot or kernel issue a reset to ttyS0. but i 
+> do not know how to do it. do u have some document which describe the reset
+> system in sun6i?
+
+It seems like there's no way to reset the UART controller.
+
+Thanks!
+Maxime
+
+-- 
+Maxime Ripard, Free Electrons
+Embedded Linux, Kernel and Android engineering
+http://free-electrons.com
+
+2, test
+only UART_IID(0x8) register is different. right: 0xc1, wrong: 0xc7.
+
+#define UART_IIR	2	/* In:  Interrupt ID Register */
+#define UART_IIR_NO_INT		0x01 /* No interrupts pending */
+#define UART_IIR_BUSY		0x07 /* DesignWare APB Busy Detect */
+
+and if i read all the uart register from regs->start to regs->end, it will be ok.
+
+3, 
+
+> Hmmm, that's really odd.
+> 
+> Could you add some code to dump the UART registers in the probe
+> function, right before we actually do something, and paste me the
+> results in the failing and working cases?
+here is the difference:
+> diff -urN screenlog.0.ok screenlog.0.fail
+--- screenlog.0.ok      2013-08-30 20:05:11.277296727 +0800
++++ screenlog.0.fail    2013-08-30 20:05:04.221222753 +0800
+@@ -1,6 +1,6 @@
+-addr<f1c28000>: 67
++addr<f1c28000>: 5b
+ addr<f1c28004>: 0
+-addr<f1c28008>: c1
++addr<f1c28008>: c7
+ addr<f1c2800c>: 3
+ addr<f1c28010>: 3
+ addr<f1c28014>: 60
+
+and if i read all the uart register from regs->start to regs->end, it will be ok.
+if i only read UART_IID, uart will 0xc7 and hang.
+is there some read clear register in 8250 affect it?
 
