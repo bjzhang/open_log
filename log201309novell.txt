@@ -1,0 +1,104 @@
+.LOG
+09:49 2013-09-02
+GTD
+0, 9:35-18:25
+
+1, today
+1), 9:51-9:59 check the mail.
+2), 9:59-10:10 10:48-11:40 12:40-14:00 17:12-17:45 try ao_how with callback. see"09:59 2013-09-02"
+3), surf 20'
+4), support xiaofei for kvm vm install: wrong br0 network bridge.
+
+09:49 2013-09-02
+1, week plan
+1), finish ao_how callback.
+2), finish sun6i gic test code.
+3), finish uart issue in sun6i upstream kernel.
+2, next week
+1), try sun6i android v3.2 kernel.
+
+09:59 2013-09-02
+virtualization, xen, libxl, async, try ao_how, cont4, callback
+1, the code in libxlVmReap is totally wrong
+        if(VIR_ALLOC(ao_how_p) < 0)
+            return -1;
+        if (ao_how_enable_cb)
+            return -1;
+            ao_how_p->callback = ao_how_callback;
+
+12:47 2013-09-02
+Jim reply 20130831_1823
+
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+> i got ao_how work in libxl driver without callback, and i test create, save, restore, destroy. 
+
+Nice.
+
+> meanwhile i found somethings different from libxl doc. i am not sure if it need to send it to xen-devel. during last virtualization sync call, i report this and Jason suggest me discuss with u. here is the details:
+>
+> 1, libxl_event_check do not work in libxl driver:
+> in libxl.h doc, it says:
+>  * If ao_how->callback==NULL, a libxl_event will be generated which
+>  * can be obtained from libxl_event_wait or libxl_event_check.  The
+>  * event will have type OPERATION_COMPLETE (which is not used
+>  * elsewhere).
+>
+> but, in libvirt, because we regsiter the libxl_event_hooks through libxl_event_register_callbacks, when the event will append to egc->occurred_for_callback not to CTX->occurred, the latter one is the waited by libxl_event_check.
+>   
+
+AFAIK, you only use libxl_event_{check,wait} when you have *not*
+registered event callbacks via libxl_event_register_callbacks.  From
+libxl_event.h
+
+void libxl_event_register_callbacks(libxl_ctx *ctx,
+                                    const libxl_event_hooks *hooks, void
+*user);
+  /*
+   * Arranges that libxl will henceforth call event_occurs for any
+   * events whose type is set in event_occurs_mask, rather than
+   * queueing the event for retrieval by libxl_event_check/wait.
+
+So I don't think we should be using those functions in the libxl driver
+since we register event callbacks.
+
+> at this point, ao_how without callback mode accually use the libxlEventHandler callback. if xen guys want to keep document right, they need to update libxl__event_occurred and distinguish the ao_how callback(egc->aos_for_callback) and event_hooks callback.
+>   
+
+I think the documentation is correct, albeit split across libxl.h and
+libxl_event.h.  But maybe I'm not understanding the problem correctly. 
+Does this clarify your question here?
+
+> 2, add a new api in libxl and i need to register a new event to libvirt except the fd and timeout.
+> in libxl, there are two ways for libvirt get the child exit event from libxl: libxl_sigchld_owner_mainloop and libxl_sigchld_owner_libxl_always.
+> the first need libvirt handle the SIGCHLD. currently only virLXCControllerMain handle this through virNetServerAddSignalHandler. So, i use the second one.
+> when the child(libxl-save-helper) exit, libxl will write to sigchld_owner->sigchld_selfpipe[1], So, i need read sigchld_selfpipe[1] by adding a new api libxl_get_pipe_handle. notes that libvirt could not access the item in ctx because ctx in defined in libxl internal.
+>   
+
+I'm not sure I understand this question...
+
+> i append the libxl and libxl driver patch in this email.  this patch is far from send it out. it just a referece for what i am doing to ao_how.
+
+but you forgot to attach the patches, which would have probably helped
+me understand it :).
+
+>  
+> if we realy send the patch out, i wll remove handle in libxlVmReap and remve lots of duplicated code.
+>
+> BTW: i am trying with callback this week.
+>   
+
+Cool.  One thing to keep in mind is which approach will work better with
+the job support patches you worked on a while back.  The qemu job
+support centers around interacting with the qemu monitor.  For job
+support in the libxl driver, would it be easier to implement against
+events or callbacks?
+
+BTW, I'll finally have some free time in the evenings so we can chat on
+IM next week.  It has been a hectic summer for me with visitors and work
+being done on my house, preventing me from working much more than an 8
+hour day. Thankfully I'm getting some of my free time back now :).
+
+Jim
+

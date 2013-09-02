@@ -457,5 +457,14 @@ where 6
 cont
 end
 
+break ao_how_callback
+commands
+silent
+shell date +%H%M%S_%N
+printf "ao_how_callback\n"
+where 6
+cont
+end
+
 cont
 
