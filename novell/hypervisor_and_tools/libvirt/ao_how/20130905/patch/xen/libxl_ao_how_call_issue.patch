@@ -1,0 +1,50 @@
+base on the xen 4.3 release
+
+Index: xen-4.3.0-testing/tools/libxl/libxl_event.c
+===================================================================
+--- xen-4.3.0-testing.orig/tools/libxl/libxl_event.c
++++ xen-4.3.0-testing/tools/libxl/libxl_event.c
+@@ -1575,6 +1575,23 @@ void libxl__ao_complete(libxl__egc *egc,
+     libxl__ao_complete_check_progress_reports(egc, ao);
+ }
+ 
++void libxl__ao_occurred(libxl__egc *egc)
++{
++    EGC_GC;
++    libxl__ao *ao, *ao_tmp;
++    LIBXL_TAILQ_FOREACH_SAFE(ao, &egc->aos_for_callback,
++                             entry_for_callback, ao_tmp) {
++        LIBXL_TAILQ_REMOVE(&egc->aos_for_callback, ao, entry_for_callback);
++        LOG(DEBUG,"ao %p: completion callback", ao);
++        ao->how.callback(CTX, ao->rc, ao->how.u.for_callback);
++        CTX_LOCK;
++        ao->notified = 1;
++        if (!ao->in_initiator)
++            libxl__ao__destroy(CTX, ao);
++        CTX_UNLOCK;
++    }
++}
++
+ void libxl__ao_complete_check_progress_reports(libxl__egc *egc, libxl__ao *ao)
+ {
+     /*
+@@ -1598,6 +1615,7 @@ void libxl__ao_complete_check_progress_r
+     } else if (ao->how.callback) {
+         LIBXL__LOG(ctx, XTL_DEBUG, "ao %p: complete for callback",ao);
+         LIBXL_TAILQ_INSERT_TAIL(&egc->aos_for_callback, ao, entry_for_callback);
++        libxl__ao_occurred(egc);
+     } else {
+         libxl_event *ev;
+         ev = NEW_EVENT(egc, OPERATION_COMPLETE, ao->domid, ao->how.u.for_event);
+Index: xen-4.3.0-testing/tools/libxl/libxl_internal.h
+===================================================================
+--- xen-4.3.0-testing.orig/tools/libxl/libxl_internal.h
++++ xen-4.3.0-testing/tools/libxl/libxl_internal.h
+@@ -1758,6 +1758,7 @@ _hidden int libxl__ao_inprogress(libxl__
+        const char *file, int line, const char *func); /* temporarily unlocks */
+ _hidden void libxl__ao_abort(libxl__ao *ao);
+ _hidden void libxl__ao_complete(libxl__egc *egc, libxl__ao *ao, int rc);
++_hidden void libxl__ao_occurred(libxl__egc *egc);
+ _hidden libxl__gc *libxl__ao_inprogress_gc(libxl__ao *ao);
+ 
+ /* Can be called at any time.  Use is essential for any aop user. */
