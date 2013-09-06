@@ -102,3 +102,277 @@ hour day. Thankfully I'm getting some of my free time back now :).
 
 Jim
 
+08:09 2013-09-05
+GTD
+0, 8:15
+
+1, today
+1), 8:15-11:30 12:45- ao_how
+
+08:12 2013-09-05
+1, create qcow2 image
+# qemu-img create -f qcow2 -o cluster_size=2M disk0.qcow2 8192M
+Formatting 'disk0.qcow2', fmt=qcow2 size=8589934592 encryption=off cluster_size=2097152 lazy_refcounts=off 
+
+if add "-o preallocation=metadata", qemu-img will alloc 8.1G for this file compare with only 6.1M without this options.
+qemu-img create -t qcow2 -o cluster_size=2M -o preallocation=metadata disk0.qcow2 8192M
+
+2, about qcow2 and pv guest
+1), patch from chunyan
+http://old-list-archives.xen.org/xen-devel/2011-10/msg01943.html
+
+3, it seems that i need collect all subprocess pid which created by libxl.
+e.g. qemu process pid will used while destroy.
+
+4, missing after libxl__ao__destroy:
+libxl: debug: libxl_event.c:1737:libxl__ao_progress_report: ao 0x7f5944001e00: progress report: ignored
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7f5944001e00: complete, rc=0
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7f5944001e00: destroy
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7f5944002900 wpath=@releaseDomain token=3/1: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7f5944002900 wpath=@releaseDomain token=3/1: event epath=@releaseDomain
+libxl: debug: libxl.c:999:domain_death_xswatch_callback: [evg=0x7f5944009280:17] from domid=17 nentries=1 rc=1
+libxl: debug: libxl.c:1010:domain_death_xswatch_callback: [evg=0x7f5944009280:17]   got=domaininfos[0] got->domain=17
+libxl: debug: libxl.c:1037:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=ffff0002
+libxl: debug: libxl.c:1003:domain_death_xswatch_callback: [evg=0] all reported
+1), libvirt do not get the complete event after libxl__ao_complete.
+    } else if (ao->how.callback) {
+        LIBXL__LOG(ctx, XTL_DEBUG, "ao %p: complete for callback",ao);
+        LIBXL_TAILQ_INSERT_TAIL(&egc->aos_for_callback, ao, entry_for_callback);
+
+i think this is a issue in libxl, according to the libxl.h:
+ * If ao_how->callback!=NULL, the callback will be called when the
+ * operation completes.  The same rules as for libxl_event_hooks
+ * apply, including the reentrancy rules and the possibility of
+ * "disaster", except that libxl calls ao_how->callback instead of
+ * libxl_event_hooks.event_occurs.  (See libxl_event.h.)
+
+ao_how->callback should have a similar routine as libxl_event_hooks.event_occurs.
+
+15:30 2013-09-05
+software skill, zypper
+1, list all the package in repo_name repo:
+zypper packages repo_name
+zypper pa repo_name
+
+10:43 2013-09-06
+GTD
+0, 10:35
+
+1, today
+1), discuss with jim about ao_how.
+
+10:43 2013-09-06
+1, jim reply to me on 0831_0623
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+> i got ao_how work in libxl driver without callback, and i test create, save, restore, destroy. 
+
+Nice.
+
+> meanwhile i found somethings different from libxl doc. i am not sure if it need to send it to xen-devel. during last virtualization sync call, i report this and Jason suggest me discuss with u. here is the details:
+>
+> 1, libxl_event_check do not work in libxl driver:
+> in libxl.h doc, it says:
+>  * If ao_how->callback==NULL, a libxl_event will be generated which
+>  * can be obtained from libxl_event_wait or libxl_event_check.  The
+>  * event will have type OPERATION_COMPLETE (which is not used
+>  * elsewhere).
+>
+> but, in libvirt, because we regsiter the libxl_event_hooks through libxl_event_register_callbacks, when the event will append to egc->occurred_for_callback not to CTX->occurred, the latter one is the waited by libxl_event_check.
+>   
+
+AFAIK, you only use libxl_event_{check,wait} when you have *not*
+registered event callbacks via libxl_event_register_callbacks.  From
+libxl_event.h
+
+void libxl_event_register_callbacks(libxl_ctx *ctx,
+                                   const libxl_event_hooks *hooks, void
+*user);
+ /*
+  * Arranges that libxl will henceforth call event_occurs for any
+  * events whose type is set in event_occurs_mask, rather than
+  * queueing the event for retrieval by libxl_event_check/wait.
+
+So I don't think we should be using those functions in the libxl driver
+since we register event callbacks.
+
+> at this point, ao_how without callback mode accually use the libxlEventHandler callback. if xen guys want to keep document right, they need to update libxl__event_occurred and distinguish the ao_how callback(egc->aos_for_callback) and event_hooks callback.
+>   
+
+I think the documentation is correct, albeit split across libxl.h and
+libxl_event.h.  But maybe I'm not understanding the problem correctly. 
+Does this clarify your question here?
+
+> 2, add a new api in libxl and i need to register a new event to libvirt except the fd and timeout.
+> in libxl, there are two ways for libvirt get the child exit event from libxl: libxl_sigchld_owner_mainloop and libxl_sigchld_owner_libxl_always.
+> the first need libvirt handle the SIGCHLD. currently only virLXCControllerMain handle this through virNetServerAddSignalHandler. So, i use the second one.
+> when the child(libxl-save-helper) exit, libxl will write to sigchld_owner->sigchld_selfpipe[1], So, i need read sigchld_selfpipe[1] by adding a new api libxl_get_pipe_handle. notes that libvirt could not access the item in ctx because ctx in defined in libxl internal.
+>   
+
+I'm not sure I understand this question...
+
+> i append the libxl and libxl driver patch in this email.  this patch is far from send it out. it just a referece for what i am doing to ao_how.
+
+but you forgot to attach the patches, which would have probably helped
+me understand it :).
+
+>  
+> if we realy send the patch out, i wll remove handle in libxlVmReap and remve lots of duplicated code.
+>
+> BTW: i am trying with callback this week.
+>   
+
+Cool.  One thing to keep in mind is which approach will work better with
+the job support patches you worked on a while back.  The qemu job
+support centers around interacting with the qemu monitor.  For job
+support in the libxl driver, would it be easier to implement against
+events or callbacks?
+
+BTW, I'll finally have some free time in the evenings so we can chat on
+IM next week.  It has been a hectic summer for me with visitors and work
+being done on my house, preventing me from working much more than an 8
+hour day. Thankfully I'm getting some of my free time back now :).
+
+Jim
+
+2, discuss with Jim
+there are two way to using ao_how: with callback and without callback. and there are two way to handle the libxl child exit: libxl_sigchld_owner_mainloop, libxl_sigchld_owner_libxl_always. want to choice a better way for job support patches.
+
+1), ao_how
+(1), without callback
+according to the libxl doc, when use ao_how without callback, user could call libxl_event_wait/check to wait or check the event. but because libxl driver register the event handler(libxlEventHandler), the event will send to it.
+for this choice, we do not need to change the code in libxl.
+(2), with callback.
+if i register the callback, it should be called when event occurred. the callback is inserted into list in libxl__ao_complete_check_progress_reports which is same as without ao and ao without callback. but, currently, only egc_run_callbacks will iteration these callbacks. in fact, it will call other callback at the same time. So, the egc_run_callbacks is not a choice for us.
+right now, i just call the callback in libxl__ao_complete_check_progress_reports for test. it works. 
+
+Index: xen-4.3.0-testing/tools/libxl/libxl_event.c
+===================================================================
+--- xen-4.3.0-testing.orig/tools/libxl/libxl_event.c
++++ xen-4.3.0-testing/tools/libxl/libxl_event.c
+@@ -1575,6 +1575,23 @@ void libxl__ao_complete(libxl__egc *egc,
+     libxl__ao_complete_check_progress_reports(egc, ao);
+ }
+ 
++void libxl__ao_occurred(libxl__egc *egc)
++{
++    EGC_GC;
++    libxl__ao *ao, *ao_tmp;
++    LIBXL_TAILQ_FOREACH_SAFE(ao, &egc->aos_for_callback,
++                             entry_for_callback, ao_tmp) {
++        LIBXL_TAILQ_REMOVE(&egc->aos_for_callback, ao, entry_for_callback);
++        LOG(DEBUG,"ao %p: completion callback", ao);
++        ao->how.callback(CTX, ao->rc, ao->how.u.for_callback);
++        CTX_LOCK;
++        ao->notified = 1;
++        if (!ao->in_initiator)
++            libxl__ao__destroy(CTX, ao);
++        CTX_UNLOCK;
++    }
++}
++
+ void libxl__ao_complete_check_progress_reports(libxl__egc *egc, libxl__ao *ao)
+ {
+     /*
+@@ -1598,6 +1615,7 @@ void libxl__ao_complete_check_progress_r
+     } else if (ao->how.callback) {
+         LIBXL__LOG(ctx, XTL_DEBUG, "ao %p: complete for callback",ao);
+         LIBXL_TAILQ_INSERT_TAIL(&egc->aos_for_callback, ao, entry_for_callback);
++        libxl__ao_occurred(egc);
+     } else {
+         libxl_event *ev;
+         ev = NEW_EVENT(egc, OPERATION_COMPLETE, ao->domid, ao->how.u.for_event);
+Index: xen-4.3.0-testing/tools/libxl/libxl_internal.h
+===================================================================
+--- xen-4.3.0-testing.orig/tools/libxl/libxl_internal.h
++++ xen-4.3.0-testing/tools/libxl/libxl_internal.h
+@@ -1758,6 +1758,7 @@ _hidden int libxl__ao_inprogress(libxl__
+        const char *file, int line, const char *func); /* temporarily unlocks */
+ _hidden void libxl__ao_abort(libxl__ao *ao);
+ _hidden void libxl__ao_complete(libxl__egc *egc, libxl__ao *ao, int rc);
++_hidden void libxl__ao_occurred(libxl__egc *egc);
+ _hidden libxl__gc *libxl__ao_inprogress_gc(libxl__ao *ao);
+ 
+ /* Can be called at any time.  Use is essential for any aop user. */
+
+(3), compare
+> Cool.  One thing to keep in mind is which approach will work better with
+> the job support patches you worked on a while back.  The qemu job
+> support centers around interacting with the qemu monitor.  For job
+> support in the libxl driver, would it be easier to implement against
+> events or callbacks?
+maybe i do not fully understand how qemu jobs works. if talk about quering result while save/migration in progress in qemu daemon. both could set the flag, then i know the status in the loop(done or not).
+
+2), child handler
+(1), libxl_sigchld_owner_mainloop
+doc saids user will got event when the child exit.
+there are two problems. firstly, i need to add the libxl_get_pipe_handle for get the fd and then register this fd to libvirt event loop. after doing this i could know the child exit. secondly, i do not know which child exit. it is important because i will call libxl_childproc_reaped with the pid and exit status.
+
+diff --git a/tools/libxl/libxl.h b/tools/libxl/libxl.h
+index 37e4d82..99b98ef 100644
+--- a/tools/libxl/libxl.h
++++ b/tools/libxl/libxl.h
+@@ -1016,6 +1016,8 @@ int libxl_flask_loadpolicy(libxl_ctx *ctx, void *policy, uint32_t size);
+ int libxl_fd_set_cloexec(libxl_ctx *ctx, int fd, int cloexec);
+ int libxl_fd_set_nonblock(libxl_ctx *ctx, int fd, int nonblock);
+ 
++int libxl_get_pipe_handle(libxl_ctx *ctx, int num);
++
+ #include <libxl_event.h>
+ 
+ #endif /* LIBXL_H */
+diff --git a/tools/libxl/libxl_fork.c b/tools/libxl/libxl_fork.c
+index 044ddad..1989258 100644
+--- a/tools/libxl/libxl_fork.c
++++ b/tools/libxl/libxl_fork.c
+@@ -418,6 +418,11 @@ int libxl__ev_child_xenstore_reopen(libxl__gc *gc, const char *what) {
+     return rc;
+ }
+ 
++int libxl_get_pipe_handle(libxl_ctx *ctx, int num)
++{
++    return ctx->sigchld_selfpipe[num];
++}
++
+ /*
+  * Local variables:
+  * mode: C
+
+(2), libxl_sigchld_owner_libxl_always
+in this way, libvirt libxl driver handler the SIGCHLD. i do not need to change the libxl code.
+
+3, \TODO: no COMPLETE while reap when ao without callback?
+
+16:21 2013-09-06
+Work report - week 35, 36
+1, libvirt
+use async operation in libvirt libxl driver. there are some issues in libxl. discuss it with Jim
+2, opensuse arm
+package sun6i upstream kernel. found a uart issue in it.
+
+16:43 2013-09-06
+Cortex-A7
+1, do not support divide instruction.
+2, L1 I$
+1), 
+a7: vipi.
+a15: pipt.
+\TODO why?
+2), smallest cache line in I$.
+a7: 8 words
+a15: 8 words or 16 words, defined by hardware(input IMINLN for cpu).
+3, \TODO compare
+    a7//a15
+    cpu->id_mmfr0 = 0x10101105;// cpu->id_mmfr0 = 0x10201105;
+    cpu->id_mmfr1 = 0x40000000;// cpu->id_mmfr1 = 0x20000000;
+    cpu->id_isar0 = 0x01101110;// cpu->id_isar0 = 0x02101110;
+
+18:47 2013-09-06
+ref:
+1), afaerber
+http://repo.or.cz/w/qemu/afaerber.git/shortlog/refs/heads/tegra
+2), hw/arm/highbank.c
+
+
+
