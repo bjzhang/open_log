@@ -369,10 +369,207 @@ a15: 8 words or 16 words, defined by hardware(input IMINLN for cpu).
     cpu->id_isar0 = 0x01101110;// cpu->id_isar0 = 0x02101110;
 
 18:47 2013-09-06
-ref:
+write sun6i qemu code, ref:
 1), afaerber
 http://repo.or.cz/w/qemu/afaerber.git/shortlog/refs/heads/tegra
 2), hw/arm/highbank.c
+
+14:18 2013-09-09
+qemu command line for xen hvm
+/usr/lib/xen/bin/qemu-system-i386 -xen-domid 2 -chardev socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-2,server,nowait -mon chardev=libxl-cmd,mode=control -name 05_win7_xen -vnc 127.0.0.1:0,to=99 -global isa-fdc.driveA= -vga cirrus -global vga.vram_size_mb=8 -boot order=d -smp 1,maxcpus=2 -net none -M xenfv -m 3064 -drive file=/home/bamvor/vm/xen/images/win7/disk0.raw,if=ide,index=0,media=disk,format=raw,cache=writeback -drive file=/home/bamvor/vm/iso/windows7.iso,if=ide,index=2,media=cdrom,format=raw,cache=writeback,id=ide-5632
+
+16:34 2013-09-09
+On Fri, 2013-08-30 at 10:51 +0100, Ian Campbell wrote:
+> I'll try that shortly and let you know how I get on. 
+
+Success! My failure previously was not getting the kernel command line
+in the right place, so no printk...
+
+Starting from
+https://github.com/linux-sunxi/u-boot-sunxi.git sunxi
+I merged your stuff:
+git pull git://git.linaro.org/people/aprzywara/u-boot.git hypmode_v4
+and applied the patch below (NB: u-boot doesn't support SMP on this
+platform yet, hence stubbing out the kicking of secondaries etc) and
+https://groups.google.com/forum/#!topic/linux-sunxi/7oS0CM2WSy4.
+
+Then built with:
+
+$ make Cubieboard2_FEL CROSS_COMPILE=arm-linux-gnueabihf- 
+
+Then I could boot via FEL (http://linux-sunxi.org/FEL/USBBoot) using
+usb-boot from git://github.com/linux-sunxi/sunxi-tools.git:
+usb-boot ~/devel/u-boot.git/spl/u-boot-spl.bin ~/devel/u-boot.git/u-boot.bin 
+uImage
+
+where uImage is the zImage+dtb (cat into tmp) and mkimage -A arm -O
+linux -T kernel -a 0x40008000 -e 0x40008000 -C none -d tmp uImage
+
+Linux says:
+[    0.000000] CPU: All CPU(s) started in HYP mode.
+[    0.000000] CPU: Virtualization extensions available.
+
+(All == all 1)
+
+Kernel is https://github.com/mripard/linux.git sunxi-next-a20-cubie2
+multi_v7_defconfig + CONFIG_DEBUG_LL w/ CONFIG_DEBUG_SUNXI_UART0 and
+CONFIG_EARLY_PRINTK.
+I used appended dtb and set /chosen/bootargs = "console=ttyS0,115200
+earlyprintk" in arch/arm/boot/dts/sun7i-a20-cubieboard2.dts (only
+because usb-boot doesn't happen to load dtb and pass it to bootm, will
+fix that up...)
+
+Now to try Xen!
+
+Ian.
+
+commit 9267730ab1c3b6be5cf9118b2ce4e708e9d4ba66
+Author: Ian Campbell <ijc@xxxxxxxxxxxxxx>
+Date:   Fri Aug 30 13:52:07 2013 +0100
+
+    sunxi: Enable hyp mode boot on sunxi platforms
+    
+    Required a call to cleanup_before_linux in order to disable caches before
+    switching to NS world, otherwise we switch to an incorrecly configured 
+banked
+    version of SCTLR.
+    
+    Signed-off-by: Ian Campbell <ijc@xxxxxxxxxxxxxx>
+
+diff --git a/arch/arm/cpu/armv7/virt-v7.c b/arch/arm/cpu/armv7/virt-v7.c
+index 4dc8c45..a76dcf7 100644
+--- a/arch/arm/cpu/armv7/virt-v7.c
++++ b/arch/arm/cpu/armv7/virt-v7.c
+@@ -132,6 +132,8 @@ int armv7_switch_nonsec(void)
+        unsigned int reg;
+        unsigned itlinesnr, i;
+ 
++       cleanup_before_linux();
++
+        /* check whether the CPU supports the security extensions */
+        reg = read_id_pfr1();
+        if ((reg & 0xF0) == 0) {
+diff --git a/board/sunxi/Makefile b/board/sunxi/Makefile
+index 4780c99..d756091 100644
+--- a/board/sunxi/Makefile
++++ b/board/sunxi/Makefile
+@@ -76,9 +76,13 @@ COBJS-$(CONFIG_UHOST_U1A)    += dram_sun4i_360_1024_iow8.o
+ COBJS-$(CONFIG_WOBO_I5)                += dram_wobo_i5.o
+ COBJS-$(CONFIG_XZPAD700)       += dram_xzpad700.o
+ 
++ifneq ($(CONFIG_ARMV7_NONSEC)$(CONFIG_ARMV7_VIRT),)
++SOBJS                           := smp.o
++endif
++
+ COBJS  := $(COBJS-y)
+-SRCS   := $(COBJS:.o=.c)
+-OBJS   := $(addprefix $(obj),$(COBJS))
++SRCS   := $(COBJS:.o=.c) $(SOBJS:.o=.S)
++OBJS   := $(addprefix $(obj),$(COBJS) $(SOBJS))
+ 
+ all:   $(LIB)
+ 
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index 50c07e2..4b8c732 100755
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -40,6 +40,20 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++/* Setting the address at which secondary cores start from.
++ * SMP currently unsupported.
++ */
++void smp_set_core_boot_addr(unsigned long addr, int corenr)
++{
++       printf("WARNING: ignoring attempt to set core boot address %lx on core 
+%d\n",
++              addr, corenr);
++}
++
++void smp_kick_all_cpus(void)
++{
++       printf("WARNING: Not kicking secondary CPUs\n");
++}
++
+ /* add board specific code here */
+ int board_init(void)
+ {
+diff --git a/board/sunxi/smp.S b/board/sunxi/smp.S
+new file mode 100644
+index 0000000..6a6e08c
+--- /dev/null
++++ b/board/sunxi/smp.S
+@@ -0,0 +1,33 @@
++/*
++ * code for redirecting secondary cores to their start address
++ *
++ * Copyright (c) 2013  Andre Przywara <andre.przywara@xxxxxxxxxx>
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.         See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <config.h>
++#include <linux/linkage.h>
++
++/* void _smp_waitloop(unsigned previous_address); */
++ENTRY(smp_waitloop)
++       /* SMP currently unsupported */
++1:     wfi
++       b 1b
++ENDPROC(smp_waitloop)
+diff --git a/include/configs/sun7i.h b/include/configs/sun7i.h
+index a6ede2a..f0d9222 100644
+--- a/include/configs/sun7i.h
++++ b/include/configs/sun7i.h
+@@ -34,6 +34,8 @@
+ #define CONFIG_SYS_PROMPT              "sun7i# "
+ #define CONFIG_MACH_TYPE               4283
+ 
++#define CONFIG_ARMV7_VIRT
++
+ #if defined(CONFIG_SYS_SECONDARY_ON)
+ #define CONFIG_BOARD_POSTCLK_INIT 1
+ #endif
+
+
+
+_______________________________________________
+Xen-devel mailing list
+Xen-devel@xxxxxxxxxxxxx
+http://lists.xen.org/xen-devel
+
+17:51 2013-09-09
+1, lastest u-boot could be booted after preinstalled u-boot.
+2, not apply
+1), 0003:
+diff --git a/include/configs/vexpress_ca15_tc2.h b/include/configs/vexpress_ca15_tc2.h
+index 9e230ad..4f425ac 100644
+--- a/include/configs/vexpress_ca15_tc2.h
++++ b/include/configs/vexpress_ca15_tc2.h
+@@ -31,6 +31,4 @@
+ #include "vexpress_common.h"
+ #define CONFIG_BOOTP_VCI_STRING     "U-boot.armv7.vexpress_ca15x2_tc2"
+ 
+-#define CONFIG_SYS_CLK_FREQ 24000000
+-
+3, patch finish, test tomorrow.
 
 
 
