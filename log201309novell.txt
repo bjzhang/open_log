@@ -430,8 +430,7 @@ Date:   Fri Aug 30 13:52:07 2013 +0100
     sunxi: Enable hyp mode boot on sunxi platforms
     
     Required a call to cleanup_before_linux in order to disable caches before
-    switching to NS world, otherwise we switch to an incorrecly configured 
-banked
+    switching to NS world, otherwise we switch to an incorrecly configured banked
     version of SCTLR.
     
     Signed-off-by: Ian Campbell <ijc@xxxxxxxxxxxxxx>
@@ -482,8 +481,7 @@ index 50c07e2..4b8c732 100755
 + */
 +void smp_set_core_boot_addr(unsigned long addr, int corenr)
 +{
-+       printf("WARNING: ignoring attempt to set core boot address %lx on core 
-%d\n",
++       printf("WARNING: ignoring attempt to set core boot address %lx on core %d\n",
 +              addr, corenr);
 +}
 +
@@ -569,7 +567,1072 @@ index 9e230ad..4f425ac 100644
  
 -#define CONFIG_SYS_CLK_FREQ 24000000
 -
-3, patch finish, test tomorrow.
+3, patch finish, add Ian patch.
+
+4, (09:22 2013-09-10)
+Ian C patch, this patch is the similar for vexpress from Andre.
+1), \TODO, learn:
++ifneq ($(CONFIG_ARMV7_NONSEC)$(CONFIG_ARMV7_VIRT),)
++SOBJS                           := smp.o
++endif
++
+ COBJS  := $(COBJS-y)
+-SRCS   := $(COBJS:.o=.c)
+-OBJS   := $(addprefix $(obj),$(COBJS))
++SRCS   := $(COBJS:.o=.c) $(SOBJS:.o=.S)
++OBJS   := $(addprefix $(obj),$(COBJS) $(SOBJS))
+
+5, boot into svc not hyper mode. 
+[    0.000000] CPU: All CPU(s) started in SVC mode.
+
+6, successful log:
+1), boot with individually fdt, fail at mount rootfs.
+U-Boot 2011.09-rc1-00009-g2a396c4-dirty (Sep 10 2013 - 11:51:13) Allwinner Technology 
+
+CPU:   SUNXI Family
+Board: SUN6I
+DRAM:  2 GiB
+MMC:   SUNXI SD/MMC: 0
+In:    serial
+Out:   serial
+Err:   serial
+MMC: block number 0x72a004 exceeds max(0x3af000)
+bootcmd set setargs_mmc
+Hit any key to stop autoboot:  0 
+sun6i#fatload mmc 0:2 45000000 linux/uImage_dtb 
+reading linux/uImage_dtb
+
+2987723 bytes read
+sun6i#fatload mmc 0:2 46000000 sun6i-a31-colombus.dtb
+reading sun6i-a31-colombus.dtb
+
+3163 bytes read
+sun6i#fatload mmc 0:2 47000000 uInitrd
+reading uInitrd
+
+2980928 bytes read
+sun6i#bootm 45000000 47000000 46000000
+## Booting kernel from Legacy Image at 45000000 ...
+   Image Name:   
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    2987659 Bytes = 2.8 MiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+## Loading init Ramdisk from Legacy Image at 47000000 ...
+   Image Name:   uInitrd
+   Image Type:   ARM Linux RAMDisk Image (uncompressed)
+   Data Size:    2980864 Bytes = 2.8 MiB
+   Load Address: 00000000
+   Entry Point:  00000000
+   Verifying Checksum ... OK
+## Flattened Device Tree blob at 46000000
+   Booting using the fdt blob at 0x46000000
+   Loading Kernel Image ... OK
+OK
+   Loading Ramdisk to bfb4b000, end bfe22c00 ... OK
+WARNING: ignoring attempt to set core boot address bff64934 on core -1
+WARNING: Not kicking secondary CPUs
+   Loading Device Tree to bfb47000, end bfb4ac5a ... OK
+[      83.312]
+
+Starting kernel ...
+
+Uncompressing Linux... done, booting the kernel.
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 3.11.0-rc4-12838-gcc5d8a7-dirty (bamvor@linux-rd.site) (gcc version 4.8.1 20130401 (prerelease) (crosstool-NG linaro-1.13.1-4.8-2013.04-20130417 - Linaro GCC 2013.04) ) #54 SMP Tue Sep 10 10:46:27 CST 2013
+[    0.000000] CPU: ARMv7 Processor [410fc073] revision 3 (ARMv7), cr=10c5387d
+[    0.000000] CPU: PIPT / VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] Machine: Allwinner A1X (Device Tree), model: WITS A31 Colombus Evaluation Board
+[    0.000000] bootconsole [earlycon0] enabled
+[    0.000000] Memory policy: ECC disabled, Data cache writealloc
+[    0.000000] call hyp_mode_check
+[    0.000000] CPU: All CPU(s) started in HYP mode.
+[    0.000000] CPU: Virtualization extensions available.
+[    0.000000] PERCPU: Embedded 5 pages/cpu @c1882000 s7104 r0 d13376 u32768
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 522768
+[    0.000000] Kernel command line: earlyprintk console=ttyS0,115200
+[    0.000000] PID hash table entries: 4096 (order: 2, 16384 bytes)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 7, 524288 bytes)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 6, 262144 bytes)
+[    0.000000] Memory: 2073844K/2097152K available (4368K kernel code, 202K rwdata, 928K rodata, 198K init, 243K bss, 23308K reserved, 1318912K highmem)
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]     vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+[    0.000000]     fixmap  : 0xfff00000 - 0xfffe0000   ( 896 kB)
+[    0.000000]     vmalloc : 0xf0000000 - 0xff000000   ( 240 MB)
+[    0.000000]     lowmem  : 0xc0000000 - 0xef800000   ( 760 MB)
+[    0.000000]     pkmap   : 0xbfe00000 - 0xc0000000   (   2 MB)
+[    0.000000]       .text : 0xc0008000 - 0xc05342dc   (5297 kB)
+[    0.000000]       .init : 0xc0535000 - 0xc0566bc0   ( 199 kB)
+[    0.000000]       .data : 0xc0568000 - 0xc059a9a0   ( 203 kB)
+[    0.000000]        .bss : 0xc059a9a0 - 0xc05d77d4   ( 244 kB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] Hierarchical RCU implementation.
+[    0.000000] NR_IRQS:16 nr_irqs:16 16
+[    0.000000] sched_clock: 32 bits at 24MHz, resolution 41ns, wraps every 178956ms
+[    0.000000] Console: colour dummy device 80x30
+[    0.004717] Calibrating delay loop... 2007.04 BogoMIPS (lpj=10035200)
+[    0.062977] pid_max: default: 32768 minimum: 301
+[    0.067815] Mount-cache hash table entries: 512
+[    0.073643] CPU: Testing write buffer coherency: ok
+[    0.078894] /cpus/cpu@0 missing clock-frequency property
+[    0.084313] /cpus/cpu@1 missing clock-frequency property
+[    0.090223] /cpus/cpu@2 missing clock-frequency property
+[    0.095614] /cpus/cpu@3 missing clock-frequency property
+[    0.101018] CPU0: thread -1, cpu 0, socket 0, mpidr 80000000
+[    0.106782] Setting up static identity map for 0xc0426fc0 - 0xc0427018
+[    0.114262] CPU1: failed to boot: -38
+[    0.118595] CPU2: failed to boot: -38
+[    0.122942] CPU3: failed to boot: -38
+[    0.127040] Brought up 1 CPUs
+[    0.130107] SMP: Total of 1 processors activated (2007.04 BogoMIPS).
+[    0.137143] CPU: All CPU(s) started in HYP mode.
+[    0.141845] CPU: Virtualization extensions available.
+[    0.147549] devtmpfs: initialized
+[    0.154851] pinctrl core: initialized pinctrl subsystem
+[    0.160938] regulator-dummy: no parameters
+[    0.165333] NET: Registered protocol family 16
+[    0.170501] DMA: preallocated 256 KiB pool for atomic coherent allocations
+[    0.182455] bio: create slab <bio-0> at 0
+[    0.187769] SCSI subsystem initialized
+[    0.191917] usbcore: registered new interface driver usbfs
+[    0.198019] usbcore: registered new interface driver hub
+[    0.203490] usbcore: registered new device driver usb
+[    0.209291] pps_core: LinuxPPS API ver. 1 registered
+[    0.214351] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.224468] PTP clock support registered
+[    0.228862] EDAC MC: Ver: 3.0.0
+[    0.232795] Switched to clocksource timer
+[    0.243596] NET: Registered protocol family 2
+[    0.248931] TCP established hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.256874] TCP bind hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.264125] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.271238] TCP: reno registered
+[    0.274878] UDP hash table entries: 512 (order: 2, 16384 bytes)
+[    0.281496] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes)
+[    0.288179] NET: Registered protocol family 1
+[    0.293358] RPC: Registered named UNIX socket transport module.
+[    0.299356] RPC: Registered udp transport module.
+[    0.304619] RPC: Registered tcp transport module.
+[    0.309401] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.318098] bounce pool size: 64 pages
+[    0.329144] NFS: Registering the id_resolver key type
+[    0.334361] Key type id_resolver registered
+[    0.338624] Key type id_legacy registered
+[    0.342966] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    0.351142] io scheduler noop registered
+[    0.355160] io scheduler deadline registered
+[    0.359654] io scheduler cfq registered (default)
+[    0.366255] sunxi-pinctrl 1c20800.pinctrl: initialized sunXi PIO driver
+[    0.415350] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+drivers/tty/serial/8250/8250_dw.c:276:dw8250_probe: enter
+[    0.428551] drivers/tty/serial/8250/8250_dw.c:276:dw8250_probe: enter
+addr<f1c28008>: c1
+[    0.437452] addr<f1c28008>: c1
+addr<f1c28008>: c1
+[    0.442599] addr<f1c28008>: c1
+[    0.466543] 1c28000.serial: ttyS0 at MMIO 0x1c28000 (irq = 32) is a U6_16550A
+[    0.473806] console [ttyS0] enabled, bootconsole disabled
+[    0.473806] console [ttyS0] enabled, bootconsole disabled
+drivers/tty/serial/8250/8250_dw.c:349:dw8250_probe: exit
+[    0.490401] drivers/tty/serial/8250/8250_dw.c:349:dw8250_probe: exit
+[    0.496890] serial: Freescale lpuart driver
+[    0.501254] [drm] Initialized drm 1.1.0 20060810
+[    0.511550] brd: module loaded
+[    0.515119] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    0.521639] ehci-platform: EHCI generic platform driver
+[    0.527024] usbcore: registered new interface driver usb-storage
+[    0.533581] mousedev: PS/2 mouse device common for all mice
+[    0.539448] sdhci: Secure Digital Host Controller Interface driver
+[    0.545646] sdhci: Copyright(c) Pierre Ossman
+[    0.549998] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.556056] usbcore: registered new interface driver usbhid
+[    0.561619] usbhid: USB HID core driver
+[    0.565675] TCP: cubic registered
+[    0.569511] NET: Registered protocol family 10
+[    0.574632] sit: IPv6 over IPv4 tunneling driver
+[    0.579876] Key type dns_resolver registered
+[    0.584242] VFP support v0.3: implementor 41 architecture 2 part 30 variant 7 rev 3
+[    0.591921] Registering SWP/SWPB emulation handler
+[    0.597343] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+rd_load_image:194.
+[    0.605946] rd_load_image:194.
+rd_load_image:295: out
+[    0.611143] rd_load_image:295: out
+[    0.614687] VFS: Cannot open root device "(null)" or unknown-block(0,0): error -6
+[    0.622158] Please append a correct "root=" boot option; here are the available partitions:
+[    0.630524] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[    0.638782] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 3.11.0-rc4-12838-gcc5d8a7-dirty #54
+[    0.646985] [<c0014568>] (unwind_backtrace+0x0/0xf4) from [<c00114c0>] (show_stack+0x10/0x14)
+[    0.655508] [<c00114c0>] (show_stack+0x10/0x14) from [<c0422d68>] (dump_stack+0x84/0x94)
+[    0.663597] [<c0422d68>] (dump_stack+0x84/0x94) from [<c0420680>] (panic+0xa4/0x1f4)
+[    0.671338] [<c0420680>] (panic+0xa4/0x1f4) from [<c053607c>] (mount_block_root+0x1a0/0x230)
+[    0.679769] [<c053607c>] (mount_block_root+0x1a0/0x230) from [<c0536300>] (mount_root+0x108/0x110)
+[    0.688719] [<c0536300>] (mount_root+0x108/0x110) from [<c0536498>] (prepare_namespace+0x190/0x1d4)
+[    0.697756] [<c0536498>] (prepare_namespace+0x190/0x1d4) from [<c0535d38>] (kernel_init_freeable+0x1cc/0x1dc)
+[    0.707662] [<c0535d38>] (kernel_init_freeable+0x1cc/0x1dc) from [<c041fa30>] (kernel_init+0xc/0x160)
+[    0.716874] [<c041fa30>] (kernel_init+0xc/0x160) from [<c000e138>] (ret_from_fork+0x14/0x3c)
+
+2), boot with append fdt, fail at mount rootfs.
+U-Boot 2011.09-rc1-00009-g2a396c4-dirty (Sep 10 2013 - 12:21:15) Allwinner Technology 
+
+CPU:   SUNXI Family
+Board: SUN6I
+DRAM:  2 GiB
+MMC:   SUNXI SD/MMC: 0
+*** Warning - bad CRC, using default environment
+
+In:    serial
+Out:   serial
+Err:   serial
+MMC: block number 0x72a004 exceeds max(0x3af000)
+bootcmd set setargs_mmc
+Hit any key to stop autoboot:  0 
+sun6i#fatload mmc 0:2 45000000 linux/uImage_dtb
+reading linux/uImage_dtb
+
+2987723 bytes read
+sun6i#fatload mmc 0:2 46000000 uInitrd
+reading uInitrd
+
+2980928 bytes read
+sun6i#bootm 45000000 46000000
+## Booting kernel from Legacy Image at 45000000 ...
+   Image Name:   
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    2987659 Bytes = 2.8 MiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+## Loading init Ramdisk from Legacy Image at 46000000 ...
+   Image Name:   uInitrd
+   Image Type:   ARM Linux RAMDisk Image (uncompressed)
+   Data Size:    2980864 Bytes = 2.8 MiB
+   Load Address: 00000000
+   Entry Point:  00000000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+WARNING: ignoring attempt to set core boot address bff64934 on core -1
+WARNING: Not kicking secondary CPUs
+[      56.135]
+
+Starting kernel ...
+
+Uncompressing Linux... done, booting the kernel.
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 3.11.0-rc4-12838-gcc5d8a7-dirty (bamvor@linux-rd.site) (gcc version 4.8.1 20130401 (prerelease) (crosstool-NG linaro-1.13.1-4.8-2013.04-20130417 - Linaro GCC 2013.04) ) #54 SMP Tue Sep 10 10:46:27 CST 2013
+[    0.000000] CPU: ARMv7 Processor [410fc073] revision 3 (ARMv7), cr=10c5387d
+[    0.000000] CPU: PIPT / VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] Machine: Allwinner A1X (Device Tree), model: WITS A31 Colombus Evaluation Board
+[    0.000000] bootconsole [earlycon0] enabled
+[    0.000000] Memory policy: ECC disabled, Data cache writealloc
+[    0.000000] call hyp_mode_check
+[    0.000000] CPU: All CPU(s) started in HYP mode.
+[    0.000000] CPU: Virtualization extensions available.
+[    0.000000] PERCPU: Embedded 5 pages/cpu @c1882000 s7104 r0 d13376 u32768
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 522768
+[    0.000000] Kernel command line: earlyprintk console=ttyS0,115200
+[    0.000000] PID hash table entries: 4096 (order: 2, 16384 bytes)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 7, 524288 bytes)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 6, 262144 bytes)
+[    0.000000] Memory: 2070932K/2097152K available (4368K kernel code, 202K rwdata, 928K rodata, 198K init, 243K bss, 26220K reserved, 1318912K highmem)
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]     vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+[    0.000000]     fixmap  : 0xfff00000 - 0xfffe0000   ( 896 kB)
+[    0.000000]     vmalloc : 0xf0000000 - 0xff000000   ( 240 MB)
+[    0.000000]     lowmem  : 0xc0000000 - 0xef800000   ( 760 MB)
+[    0.000000]     pkmap   : 0xbfe00000 - 0xc0000000   (   2 MB)
+[    0.000000]       .text : 0xc0008000 - 0xc05342dc   (5297 kB)
+[    0.000000]       .init : 0xc0535000 - 0xc0566bc0   ( 199 kB)
+[    0.000000]       .data : 0xc0568000 - 0xc059a9a0   ( 203 kB)
+[    0.000000]        .bss : 0xc059a9a0 - 0xc05d77d4   ( 244 kB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] Hierarchical RCU implementation.
+[    0.000000] NR_IRQS:16 nr_irqs:16 16
+[    0.000000] sched_clock: 32 bits at 24MHz, resolution 41ns, wraps every 178956ms
+[    0.000000] Console: colour dummy device 80x30
+[    0.004719] Calibrating delay loop... 2007.04 BogoMIPS (lpj=10035200)
+[    0.062978] pid_max: default: 32768 minimum: 301
+[    0.068254] Mount-cache hash table entries: 512
+[    0.074092] CPU: Testing write buffer coherency: ok
+[    0.079345] /cpus/cpu@0 missing clock-frequency property
+[    0.084760] /cpus/cpu@1 missing clock-frequency property
+[    0.090662] /cpus/cpu@2 missing clock-frequency property
+[    0.096053] /cpus/cpu@3 missing clock-frequency property
+[    0.101457] CPU0: thread -1, cpu 0, socket 0, mpidr 80000000
+[    0.107767] Setting up static identity map for 0xc0426fc0 - 0xc0427018
+[    0.115239] CPU1: failed to boot: -38
+[    0.119229] CPU2: failed to boot: -38
+[    0.123574] CPU3: failed to boot: -38
+[    0.127326] Brought up 1 CPUs
+[    0.130650] SMP: Total of 1 processors activated (2007.04 BogoMIPS).
+[    0.137079] CPU: All CPU(s) started in HYP mode.
+[    0.142215] CPU: Virtualization extensions available.
+[    0.147918] devtmpfs: initialized
+[    0.155246] pinctrl core: initialized pinctrl subsystem
+[    0.160854] regulator-dummy: no parameters
+[    0.165638] NET: Registered protocol family 16
+[    0.170821] DMA: preallocated 256 KiB pool for atomic coherent allocations
+[    0.182761] bio: create slab <bio-0> at 0
+[    0.188082] SCSI subsystem initialized
+[    0.192232] usbcore: registered new interface driver usbfs
+[    0.198341] usbcore: registered new interface driver hub
+[    0.203815] usbcore: registered new device driver usb
+[    0.209622] pps_core: LinuxPPS API ver. 1 registered
+[    0.214682] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.224799] PTP clock support registered
+[    0.229200] EDAC MC: Ver: 3.0.0
+[    0.233440] Switched to clocksource timer
+[    0.244612] NET: Registered protocol family 2
+[    0.249541] TCP established hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.256815] TCP bind hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.263453] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.269940] TCP: reno registered
+[    0.273257] UDP hash table entries: 512 (order: 2, 16384 bytes)
+[    0.279324] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes)
+[    0.286009] NET: Registered protocol family 1
+[    0.291177] RPC: Registered named UNIX socket transport module.
+[    0.297764] RPC: Registered udp transport module.
+[    0.302546] RPC: Registered tcp transport module.
+[    0.307339] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.314644] Trying to unpack rootfs image as initramfs...
+[    0.349105] Freeing initrd memory: 2904K (c6001000 - c62d7000)
+[    0.356750] bounce pool size: 64 pages
+[    0.368398] NFS: Registering the id_resolver key type
+[    0.373646] Key type id_resolver registered
+[    0.377910] Key type id_legacy registered
+[    0.382233] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    0.390435] io scheduler noop registered
+[    0.394456] io scheduler deadline registered
+[    0.398949] io scheduler cfq registered (default)
+[    0.405558] sunxi-pinctrl 1c20800.pinctrl: initialized sunXi PIO driver
+[    0.454853] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+drivers/tty/serial/8250/8250_dw.c:276:dw8250_probe: enter
+[    0.467365] drivers/tty/serial/8250/8250_dw.c:276:dw8250_probe: enter
+addr<f1c28008>: c1
+[    0.475643] addr<f1c28008>: c1
+addr<f1c28008>: c1
+[    0.480521] addr<f1c28008>: c1
+[    0.504491] 1c28000.serial: ttyS0 at MMIO 0x1c28000 (irq = 32) is a U6_16550A
+[    0.512409] console [ttyS0] enabled, bootconsole disabled
+[    0.512409] console [ttyS0] enabled, bootconsole disabled
+drivers/tty/serial/8250/8250_dw.c:349:dw8250_probe: exit
+[    0.528523] drivers/tty/serial/8250/8250_dw.c:349:dw8250_probe: exit
+[    0.535003] serial: Freescale lpuart driver
+[    0.539365] [drm] Initialized drm 1.1.0 20060810
+[    0.549656] brd: module loaded
+[    0.553184] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    0.559743] ehci-platform: EHCI generic platform driver
+[    0.565124] usbcore: registered new interface driver usb-storage
+[    0.571656] mousedev: PS/2 mouse device common for all mice
+[    0.577557] sdhci: Secure Digital Host Controller Interface driver
+[    0.583751] sdhci: Copyright(c) Pierre Ossman
+[    0.588102] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.594162] usbcore: registered new interface driver usbhid
+[    0.599727] usbhid: USB HID core driver
+[    0.603790] TCP: cubic registered
+[    0.607634] NET: Registered protocol family 10
+[    0.612743] sit: IPv6 over IPv4 tunneling driver
+[    0.618017] Key type dns_resolver registered
+[    0.622356] VFP support v0.3: implementor 41 architecture 2 part 30 variant 7 rev 3
+[    0.630058] Registering SWP/SWPB emulation handler
+[    0.635489] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+[    0.642589] Freeing unused kernel memory: 196K (c0535000 - c0566000)
+Starting logging: OK
+Initializing random number generator... done.
+Starting network...
+
+Welcome to Buildroot
+buildroot login: 
+
+3), xen boot fail. ref josh mail
+U-Boot 2011.09-rc1-00009-g2a396c4-dirty (Sep 10 2013 - 12:21:15) Allwinner Technology 
+
+CPU:   SUNXI Family
+Board: SUN6I
+DRAM:  2 GiB
+MMC:   SUNXI SD/MMC: 0
+*** Warning - bad CRC, using default environment
+
+In:    serial
+Out:   serial
+Err:   serial
+MMC: block number 0x72a004 exceeds max(0x3af000)
+bootcmd set setargs_mmc
+Hit any key to stop autoboot:  0 
+sun6i#fatload mmc 0:2 50000000 xen-uImage
+reading xen-uImage
+
+** Unable to read "xen-uImage" from mmc 0:2 **
+sun6i#fatload mmc 0:2 50000000 linux/xen-uImage
+reading linux/xen-uImage
+
+884118 bytes read
+sun6i#fatload mmc 0:2 60000000 linux/zImage
+reading linux/zImage
+
+2984496 bytes read
+sun6i#bootm 50000000
+## Booting kernel from Legacy Image at 50000000 ...
+   Image Name:   
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    884054 Bytes = 863.3 KiB
+   Load Address: 40200000
+   Entry Point:  40200000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+WARNING: ignoring attempt to set core boot address bff64934 on core -1
+WARNING: Not kicking secondary CPUs
+[      65.876]
+
+Starting kernel ...
+
+- UART enabled -
+- CPU 00000000 booting -
+- Machine ID 00000f34 -
+- Started in Hyp mode -
+- Zero BSS -
+- Setting up control registers -
+- Turning on paging -
+- Ready -
+RAM: 0000000040000000 - 00000000bfffffff
+
+MODULE[1]: 0000000060000000 - 0000000060400000 
+Placing Xen at 0x00000000bfe00000-0x00000000c0000000
+Xen heap: 65536 pages  Dom heap: 458752 pages
+<3> -> unflatten_device_tree()
+<3>Unflattening device tree:
+<3>magic: 0xd00dfeed
+<3>size: 0x000656
+<3>version: 0x000011
+<3>  size is 0x6e4 allocating...
+<3>  unflattening 40003008...
+<3>fixed up name for  -> 
+<3>fixed up name for chosen -> chosen
+<3>fixed up name for modules -> modules
+<3>fixed up name for module@0 -> module
+<3>fixed up name for hypervisor -> hypervisor
+<3>fixed up name for aliases -> aliases
+<3>fixed up name for cpus -> cpus
+<3>fixed up name for cpu@0 -> cpu
+<3>fixed up name for memory -> memory
+<3>fixed up name for timer -> timer
+<3>fixed up name for interrupt-controller@01C81000 -> interrupt-controller
+<3>fixed up name for serial@01C28000 -> serial
+<3>fixed up name for fixed-rate-clocks -> fixed-rate-clocks
+<3>fixed up name for xxti -> xxti
+<3> <- unflatten_device_tree()
+<3>adding DT alias:serial0: stem=serial id=0 node=/serial@01C28000
+Looking for UART console serial0
+ns16550_uart_dt_init
+<3>DT: ** translation for device /serial@01C28000 **
+<3>DT: bus is default (na=1, ns=1) on /
+<3>DT: translating address:<3> 01c28000<3>
+<3>DT: reached root node
+ns16550 at 1c28000-1c28100
+<3>dt_device_get_raw_irq: dev=/serial@01C28000, index=0
+<3> intspec=0 intlen=3
+<3> intsize=3 intlen=3
+<3>dt_irq_map_raw: par=/interrupt-controller@01C81000,intspec=[0x00000000 0x00000000...],ointsize=3
+<3>dt_irq_map_raw: ipar=/interrupt-controller@01C81000, size=3
+<3> -> addrsize=1
+<3> -> got it !
+console done?
+UART mapped at 10007000
+ __  __            _  _   _  _                      _        _     _      
+ \ \/ /___ _ __   | || | | || |     _   _ _ __  ___| |_ __ _| |__ | | ___ 
+  \  // _ \ '_ \  | || |_| || |_ __| | | | '_ \/ __| __/ _` | '_ \| |/ _ \
+  /  \  __/ | | | |__   _|__   _|__| |_| | | | \__ \ || (_| | |_) | |  __/
+ /_/\_\___|_| |_|    |_|(_) |_|     \__,_|_| |_|___/\__\__,_|_.__/|_|\___|
+                                                                          
+(XEN) Xen version 4.4-unstable (bamvor@(none)) (arm-linux-gnueabihf-gcc (crosstool-NG linaro-1.13.1-4.8-2013.04-20130417 - Linaro GCC 2013.04) 4.8.1 20130401 (prerelease)) debug=y Thu Aug 29 18:00:06 CST 2013
+(XEN) Latest ChangeSet: Mon Aug 26 12:40:44 2013 +0200 git:8a7769b-dirty
+(XEN) Console output is synchronous.
+(XEN) Processor: "ARM Limited", variant: 0x0, part 0xc07, rev 0x3
+(XEN) 32-bit Execution:
+(XEN)   Processor Features: 00001131:00011011
+(XEN)     Instruction Sets: AArch32 Thumb Thumb-2 ThumbEE Jazelle
+(XEN)     Extensions: GenericTimer Security
+(XEN)   Debug Features: 02010555
+(XEN)   Auxiliary Features: 00000000
+(XEN)   Memory Model Features: 10101105 40000000 01240000 02102211
+(XEN)  ISA Features: 02101110 13112111 21232041 11112131 10011142 00000000
+(XEN) WARNING: Unrecognized/unsupported device tree compatible list
+(XEN) Available platform support:
+(XEN)     - VERSATILE EXPRESS
+(XEN)     - SAMSUNG EXYNOS5
+(XEN)     - CALXEDA MIDWAY
+(XEN)     - TI OMAP5
+(XEN) dt_device_get_raw_irq: dev=/timer, index=0
+(XEN)  intspec=1 intlen=12
+(XEN)  intsize=3 intlen=12
+(XEN) dt_irq_map_raw: par=/interrupt-controller@01C81000,intspec=[0x00000001 0x0000000d...],ointsize=3
+(XEN) dt_irq_map_raw: ipar=/interrupt-controller@01C81000, size=3
+(XEN)  -> addrsize=1
+(XEN)  -> got it !
+(XEN) dt_device_get_raw_irq: dev=/timer, index=1
+(XEN)  intspec=1 intlen=12
+(XEN)  intsize=3 intlen=12
+(XEN) dt_irq_map_raw: par=/interrupt-controller@01C81000,intspec=[0x00000001 0x0000000e...],ointsize=3
+(XEN) dt_irq_map_raw: ipar=/interrupt-controller@01C81000, size=3
+(XEN)  -> addrsize=1
+(XEN)  -> got it !
+(XEN) dt_device_get_raw_irq: dev=/timer, index=2
+(XEN)  intspec=1 intlen=12
+(XEN)  intsize=3 intlen=12
+(XEN) dt_irq_map_raw: par=/interrupt-controller@01C81000,intspec=[0x00000001 0x0000000b...],ointsize=3
+(XEN) dt_irq_map_raw: ipar=/interrupt-controller@01C81000, size=3
+(XEN)  -> addrsize=1
+(XEN)  -> got it !
+(XEN) dt_device_get_raw_irq: dev=/timer, index=3
+(XEN)  intspec=1 intlen=12
+(XEN)  intsize=3 intlen=12
+(XEN) dt_irq_map_raw: par=/interrupt-controller@01C81000,intspec=[0x00000001 0x0000000a...],ointsize=3
+(XEN) dt_irq_map_raw: ipar=/interrupt-controller@01C81000, size=3
+(XEN)  -> addrsize=1
+(XEN)  -> got it !
+(XEN) Generic Timer IRQ: phys=30 hyp=26 virt=27
+(XEN) Using generic timer at 0 KHz
+(XEN) DT: ** translation for device /interrupt-controller@01C81000 **
+(XEN) DT: bus is default (na=1, ns=1) on /
+(XEN) DT: translating address:<3> 01c81000<3>
+(XEN) DT: reached root node
+(XEN) DT: ** translation for device /interrupt-controller@01C81000 **
+(XEN) DT: bus is default (na=1, ns=1) on /
+(XEN) DT: translating address:<3> 01c82000<3>
+(XEN) DT: reached root node
+(XEN) DT: ** translation for device /interrupt-controller@01C81000 **
+(XEN) DT: bus is default (na=1, ns=1) on /
+(XEN) DT: translating address:<3> 01c84000<3>
+(XEN) DT: reached root node
+(XEN) DT: ** translation for device /interrupt-controller@01C81000 **
+(XEN) DT: bus is default (na=1, ns=1) on /
+(XEN) DT: translating address:<3> 01c86000<3>
+(XEN) DT: reached root node
+(XEN) dt_device_get_raw_irq: dev=/interrupt-controller@01C81000, index=0
+(XEN)  intspec=1 intlen=3
+(XEN)  intsize=3 intlen=3
+(XEN) dt_irq_map_raw: par=/interrupt-controller@01C81000,intspec=[0x00000001 0x00000009...],ointsize=3
+(XEN) dt_irq_map_raw: ipar=/interrupt-controller@01C81000, size=3
+(XEN)  -> addrsize=1
+(XEN)  -> got it !
+(XEN) GIC initialization:
+(XEN)         gic_dist_addr=0000000001c81000
+(XEN)         gic_cpu_addr=0000000001c82000
+(XEN)         gic_hyp_addr=0000000001c84000
+(XEN)         gic_vcpu_addr=0000000001c86000
+(XEN)         gic_maintenance_irq=25
+(XEN) GIC: 160 lines, 4 cpus, secure (IID 0100043b).
+(XEN) GICD_IIDR<16778299>
+(XEN) i<32> GICD_ICFGR<1431655765>
+(XEN) i<48> GICD_ICFGR<1431655765>
+(XEN) i<64> GICD_ICFGR<1431655765>
+(XEN) i<80> GICD_ICFGR<1431655765>
+(XEN) i<96> GICD_ICFGR<1431655765>
+(XEN) i<112> GICD_ICFGR<1431655765>
+(XEN) i<128> GICD_ICFGR<1431655765>
+(XEN) i<144> GICD_ICFGR<1431655765>
+(XEN) i<32> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<36> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<40> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<44> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<48> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<52> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<56> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<60> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<64> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<68> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<72> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<76> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<80> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<84> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<88> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<92> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<96> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<100> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<104> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<108> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<112> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<116> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<120> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<124> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<128> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<132> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<136> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<140> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<144> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<148> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<152> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<156> GGICD_ITARGETSR<16843009>. cpumask: 16843009
+(XEN) i<32> GICD_IPRIORITYR<2694881440>
+(XEN) i<36> GICD_IPRIORITYR<2694881440>
+(XEN) i<40> GICD_IPRIORITYR<2694881440>
+(XEN) i<44> GICD_IPRIORITYR<2694881440>
+(XEN) i<48> GICD_IPRIORITYR<2694881440>
+(XEN) i<52> GICD_IPRIORITYR<2694881440>
+(XEN) i<56> GICD_IPRIORITYR<2694881440>
+(XEN) i<60> GICD_IPRIORITYR<2694881440>
+(XEN) i<64> GICD_IPRIORITYR<2694881440>
+(XEN) i<68> GICD_IPRIORITYR<2694881440>
+(XEN) i<72> GICD_IPRIORITYR<2694881440>
+(XEN) i<76> GICD_IPRIORITYR<2694881440>
+(XEN) i<80> GICD_IPRIORITYR<2694881440>
+(XEN) i<84> GICD_IPRIORITYR<2694881440>
+(XEN) i<88> GICD_IPRIORITYR<2694881440>
+(XEN) i<92> GICD_IPRIORITYR<2694881440>
+(XEN) i<96> GICD_IPRIORITYR<2694881440>
+(XEN) i<100> GICD_IPRIORITYR<2694881440>
+(XEN) i<104> GICD_IPRIORITYR<2694881440>
+(XEN) i<108> GICD_IPRIORITYR<2694881440>
+(XEN) i<112> GICD_IPRIORITYR<2694881440>
+(XEN) i<116> GICD_IPRIORITYR<2694881440>
+(XEN) i<120> GICD_IPRIORITYR<2694881440>
+(XEN) i<124> GICD_IPRIORITYR<2694881440>
+(XEN) i<128> GICD_IPRIORITYR<2694881440>
+(XEN) i<132> GICD_IPRIORITYR<2694881440>
+(XEN) i<136> GICD_IPRIORITYR<2694881440>
+(XEN) i<140> GICD_IPRIORITYR<2694881440>
+(XEN) i<144> GICD_IPRIORITYR<2694881440>
+(XEN) i<148> GICD_IPRIORITYR<2694881440>
+(XEN) i<152> GICD_IPRIORITYR<2694881440>
+(XEN) i<156> GICD_IPRIORITYR<2694881440>
+(XEN) i<32> GICD_ICENABLER<0>
+(XEN) i<64> GICD_ICENABLER<0>
+(XEN) i<96> GICD_ICENABLER<0>
+(XEN) i<128> GICD_ICENABLER<0>
+(XEN) i<160> GICD_CTLR<1>
+(XEN) GICD_ICENABLER<65535>
+(XEN) GICD_ISENABLER<65535>
+(XEN) GICD_ICENABLER<65535>
+(XEN) GICD_ISENABLER<65535>
+(XEN) i<0> GICD_IPRIORITYR<2694881440>
+(XEN) i<4> GICD_IPRIORITYR<2694881440>
+(XEN) i<8> GICD_IPRIORITYR<2694881440>
+(XEN) i<12> GICD_IPRIORITYR<2694881440>
+(XEN) i<16> GICD_IPRIORITYR<0>
+(XEN) i<20> GICD_IPRIORITYR<0>
+(XEN) i<24> GICD_IPRIORITYR<2694881280>
+(XEN) i<28> GICD_IPRIORITYR<2694881440>
+(XEN) GICC_PMR<240>
+(XEN) GICC_BPR<3>
+(XEN) GICC_CTLR<513>
+(XEN) vtr<2415919107>, nr_lrs<4>, GICH_MISR<0>, lr_mask<0>
+(XEN) Waiting for 0 other CPUs to be ready
+(XEN) setup.c:563:start_xen
+(XEN) Using scheduler: SMP Credit Scheduler (credit)
+(XEN) setup.c:566:start_xen
+(XEN) setup.c:569:start_xen
+(XEN) setup.c:572:start_xen: print GICD ISENABLER
+(XEN) i: 0: 2694881440
+(XEN) i: 1: 2694881440
+(XEN) i: 2: 2694881440
+(XEN) i: 3: 2694881440
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 2694881280
+(XEN) i: 7: 2694881440
+(XEN) i: 8: 2694881440
+(XEN) i: 9: 2694881440
+(XEN) i: 10: 2694881440
+(XEN) i: 11: 2694881440
+(XEN) i: 12: 2694881440
+(XEN) i: 13: 2694881440
+(XEN) i: 14: 2694881440
+(XEN) i: 15: 2694881440
+(XEN) i: 16: 2694881440
+(XEN) i: 17: 2694881440
+(XEN) i: 18: 2694881440
+(XEN) i: 19: 2694881440
+(XEN) i: 20: 2694881440
+(XEN) i: 21: 2694881440
+(XEN) i: 22: 2694881440
+(XEN) i: 23: 2694881440
+(XEN) i: 24: 2694881440
+(XEN) i: 25: 2694881440
+(XEN) i: 26: 2694881440
+(XEN) i: 27: 2694881440
+(XEN) i: 28: 2694881440
+(XEN) i: 29: 2694881440
+(XEN) i: 30: 2694881440
+(XEN) i: 31: 2694881440
+(XEN) i: 0: 1308688383
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 0
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) i: 0: 1308688383
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 0
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) i: 0: 0
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 4194304
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) i: 0: 0
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 4194304
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) i: 0: 0
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 0
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) i: 0: 0
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 0
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) i: 0: 0
+(XEN) i: 1: 0
+(XEN) i: 2: 0
+(XEN) i: 3: 0
+(XEN) i: 4: 0
+(XEN) i: 5: 0
+(XEN) i: 6: 0
+(XEN) i: 7: 0
+(XEN) i: 8: 0
+(XEN) i: 9: 0
+(XEN) i: 10: 0
+(XEN) i: 11: 0
+(XEN) i: 12: 0
+(XEN) i: 13: 0
+(XEN) i: 14: 0
+(XEN) i: 15: 0
+(XEN) i: 16: 0
+(XEN) i: 17: 0
+(XEN) i: 18: 0
+(XEN) i: 19: 0
+(XEN) i: 20: 0
+(XEN) i: 21: 0
+(XEN) i: 22: 0
+(XEN) i: 23: 0
+(XEN) i: 24: 0
+(XEN) i: 25: 0
+(XEN) i: 26: 0
+(XEN) i: 27: 0
+(XEN) i: 28: 0
+(XEN) i: 29: 0
+(XEN) i: 30: 0
+(XEN) i: 31: 0
+(XEN) setup.c:574:start_xen
+(XEN) setup.c:576:start_xen
+(XEN) setup.c:579:start_xen
+(XEN) setup.c:582:start_xen
+(XEN) setup.c:585:start_xen
+(XEN) Allocated console ring of 16 KiB.
+(XEN) setup.c:588:start_xen
+(XEN) VFP implementer 0x41 architecture 2 part 0x30 variant 0x7 rev 0x3
+(XEN) setup.c:591:start_xen
+(XEN) Brought up 1 CPUs
+(XEN) *** LOADING DOMAIN 0 ***
+(XEN) Device-tree contains "xen,xen" node. Ignoring.
+(XEN) Populate P2M 0x40000000->0x50000000
+(XEN) Loading kernel from boot module 1
+(XEN) dt_irq_number: dev=/
+(XEN) dt_irq_number: dev=/aliases
+(XEN) dt_irq_number: dev=/cpus
+(XEN) dt_irq_number: dev=/cpus/cpu@0
+(XEN) dt_irq_number: dev=/fixed-rate-clocks
+(XEN) dt_irq_number: dev=/fixed-rate-clocks/xxti
+(XEN) Loading zImage from 0000000060000000 to 0000000040008000-00000000402e0a30
+(XEN) Loading dom0 DTB to 0x000000004fe00000-0x000000004fe005a8
+(XEN) CPU0: Unexpected Trap: Data Abort
+(XEN) ----[ Xen-4.4-unstable  arm32  debug=y  Tainted:    C ]----
+(XEN) CPU:    0
+(XEN) PC:     0021517c free_heap_pages+0x224/0x408
+(XEN) CPSR:   8000005a MODE:Hypervisor
+(XEN)      R0: 002d200c R1: 00263dcc R2: 00000000 R3: 01800000
+(XEN)      R4: 00000012 R5: 02000000 R6: 00000012 R7: 00100100
+(XEN)      R8: 00000001 R9: 000c0000 R10:02600000 R11:0028fa14 R12:00200200
+(XEN) HYP: SP: 0028f9ec LR: 00000000
+(XEN) 
+(XEN)   VTCR_EL2: 80002558
+(XEN)  VTTBR_EL2: 00010000bfdfc000
+(XEN) 
+(XEN)  SCTLR_EL2: 30cd187f
+(XEN)    HCR_EL2: 0000000000282835
+(XEN)  TTBR0_EL2: 00000000bfed1000
+(XEN) 
+(XEN)    ESR_EL2: 94000006
+(XEN)  HPFAR_EL2: 0000000002200020
+(XEN)      HDFAR: 01800008
+(XEN)      HIFAR: 45357164
+(XEN) 
+(XEN) Xen stack trace from sp=0028f9ec:
+(XEN)    00214fe8 0029a3a0 000003ff 02407fe0 00299118 00000000 00000400 00000070
+(XEN)    00000000 0028fa44 00215e58 002a210c 00299140 0028fa34 00000fff 00000000
+(XEN)    00000001 00000000 00270010 00000548 00000000 0028fa54 00216134 60000000
+(XEN)    00000000 0028fa74 0026e080 00000040 4fe00000 00000000 00000001 0028fb28
+(XEN)    00000002 0028fee4 002455f4 4fe005a8 00000000 00020000 00000000 4ffeff58
+(XEN)    40014000 00000000 00000000 00000000 00000000 000002c8 000002e8 4ffff5dc
+(XEN)    4ffff000 00258f90 00258f80 fffffd18 00270010 0026033c 00000001 00000001
+(XEN)    00000008 002602c8 00263dcc 00278200 00258e68 00000000 4fff6000 00260320
+(XEN)    00000000 00000008 00258e28 00258f1c 00000002 0026027c 00000000 00000000
+(XEN)    4ffff334 40015f08 00000000 0028fb30 01000000 0f000000 080f0000 000000b0
+(XEN)    00000200 00000000 00000000 2c6e6578 2d6e6578 00342e34 2c6e6578 006e6578
+(XEN)    00000000 00000001 00000001 00000001 00000000 00000000 00000000 00000000
+(XEN)    00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+(XEN)    00000000 00000001 00000001 00000001 00000000 00000000 00000000 00000000
+(XEN)    00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+(XEN)    00000000 40017300 00000000 00000000 00000000 00000001 00000000 40000000
+(XEN)    00000000 10000000 00000000 00000000 00000000 00000000 00000000 00000000
+(XEN)    00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+(XEN)    00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+(XEN)    00000000 00000000 00000000 00000000 00000000 00000000 00000000 4fe00000
+(XEN) Xen call trace:
+(XEN)    [<0021517c>] free_heap_pages+0x224/0x408 (PC)
+(XEN)    [<00000000>] ??? (LR)
+(XEN)    [<00215e58>] init_heap_pages+0x11c/0x138
+(XEN)    [<00216134>] init_domheap_pages+0xa4/0xa8
+(XEN)    [<0026e080>] discard_initial_modules+0x74/0x9c
+(XEN)    [<002455f4>] construct_dom0+0xc68/0xe50
+(XEN)    [<0026eb50>] start_xen+0xa6c/0xc6c
+(XEN)    [<00200480>] paging+0xc/0x94
+(XEN)    
+
+4), try lastest xen which including Julien ceb93c7 "xen/arm: add lower-bound check in mfn_valid"
+make dist-xen XEN_TARGET_ARCH=arm32 CROSS_COMPILE=arm-linux-gnueabihf- CONFIG_EARLY_PRINTK=sun6i CONFIG_DTB_FILE=/home/bamvor/Downloads_new/arm/samsung_exynos/linux/arch/arm/boot/dts/sun6i.dtb
+mkimage -A arm -T kernel -a 0x40200000 -e 0x40200000 -C none -d "xen/xen" xen-uImage
+hang at
+(XEN) *** LOADING DOMAIN 0 ***
+(XEN) Device-tree contains "xen,xen" node. Ignoring.
+(XEN) Populate P2M 0x40000000->0x50000000
+(XEN) Loading kernel from boot module 1
+(XEN) dt_compat_cmp: cp<mele,M9>, compat<xen,xen>
+(XEN) dt_compat_cmp: cp<allwinner,sun6i>, compat<xen,xen>
+(XEN) dt_irq_number: dev=/
+(XEN) dt_compat_cmp: cp<xen,xen-4.2>, compat<xen,xen>
+(XEN) dt_irq_number: dev=/aliases
+(XEN) dt_irq_number: dev=/cpus
+(XEN) dt_compat_cmp: cp<arm,cortex-a15>, compat<xen,xen>
+(XEN) dt_irq_number: dev=/cpus/cpu@0
+(XEN) dt_compat_cmp: cp<arm,armv7-timer>, compat<xen,xen>
+(XEN) dt_compat_cmp: cp<arm,cortex-a15-gic>, compat<xen,xen>
+(XEN) dt_compat_cmp: cp<arm,cortex-a9-gic>, compat<xen,xen>
+(XEN) dt_compat_cmp: cp<snps,dw-apb-uart>, compat<xen,xen>
+(XEN) dt_irq_number: dev=/fixed-rate-clocks
+(XEN) dt_compat_cmp: cp<allwinner,clock-xxti>, compat<xen,xen>
+(XEN) dt_irq_number: dev=/fixed-rate-clocks/xxti
+(XEN) Loading zImage from 0000000060000000 to 0000000040008000-00000000402e0a30
+(XEN) Loading dom0 DTB to 0x000000004fe00000-0x000000004fe005a8
+(XEN) Std. Loglevel: All
+(XEN) Guest Loglevel: All
+(XEN) **********************************************
+(XEN) ******* WARNING: CONSOLE OUTPUT IS SYNCHRONOUS
+(XEN) ******* This option is intended to aid debugging of Xen by ensuring
+(XEN) ******* that all output is synchronously delivered on the serial line.
+(XEN) ******* However it can introduce SIGNIFICANT latencies and affect
+(XEN) ******* timekeeping. It is NOT recommended for production use!
+(XEN) **********************************************
+(XEN) 3... 
 
 
+09:21 2013-09-10
+GTD
+0, 9:10-14:07
+
+1, today
+1), sun6i u-boot with hypmode from Andre Przywara(aprzywara). see"17:51 2013-09-09"4
+2), try u-boot instead of preinstalled u-boot.
+2), write a doc about how to make a bootable sd card for sun6i.
+
+10:05 2013-09-10
+Arokux X <arokux@gmail.com>
+20:21 (13 小时前)
+
+发送至 我 
+Hi,
+
+I have created page about Mele M9 on the linux-sunxi wiki. You may want to improve it similar to http://linux-sunxi.org/Mele_A1000
+
+Thanks,
+Arokux
+
+Bamvor Zhang <bamv2005@gmail.com>
+10:05 (0 分钟前)
+
+发送至 Arokux 
+hi, arokux
+
+yeah, i saw http://linux-sunxi.org/Mele_M9.
+i'd like to improve it. currently, i am trying to boot xen and dom0 on M9. 
+hope i will do it soon. 
+
+BTW, i saw u work on usb for sunxi.[1]
+it is great for me having a usb storage for sun6i. i could put a distribution(e.g. opensuse) on it. it is more convenience than build root. 
+do u have some patches i could try? 
+
+regards
+
+bamvor
+
+
+[1]: http://linux-sunxi.org/Mainlining_Effort
 
