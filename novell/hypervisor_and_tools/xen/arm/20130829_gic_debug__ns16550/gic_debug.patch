@@ -1,0 +1,269 @@
+diff --git a/xen/arch/arm/arm32/mode_switch.S b/xen/arch/arm/arm32/mode_switch.S
+index 3500eb0..09188df 100644
+--- a/xen/arch/arm/arm32/mode_switch.S
++++ b/xen/arch/arm/arm32/mode_switch.S
+@@ -21,6 +21,7 @@
+ #include <asm/page.h>
+ #include <asm/platforms/vexpress.h>
+ #include <asm/platforms/exynos5.h>
++#include <asm/platforms/sun6i.h>
+ #include <asm/asm_defns.h>
+ #include <asm/gic.h>
+ 
+@@ -90,15 +91,23 @@ enter_hyp_mode:
+         bic   r0, r0, #0xe           /* Clear EA, FIQ and IRQ */
+         mcr   CP32(r0, SCR)
+ 
+-        ldr   r2, =MACH_TYPE_SMDK5250   /* r4 := Arndale machine ID */
+         /* By default load Arndale defaults values */
++        ldr   r2, =MACH_TYPE_SMDK5250   /* r4 := Arndale machine ID */
+         ldr   r0, =EXYNOS5_TIMER_FREQUENCY  /* r0 := timer's frequency */
+         ldr   r1, =EXYNOS5_GIC_BASE_ADDRESS /* r1 := GIC base address */
+-        /* If it's not the Arndale machine ID, load VE values */
+         teq   r5, r2
++        beq   board_set_done
++        /* If it's not the Arndale machine ID, try sun6i */
++        ldr   r2, =MACH_TYPE_SUN6I          /* r2 := sun6i machine ID */
++        ldr   r0, =SUN6I_TIMER_FREQUENCY    /* r0 := timer's frequency */
++        ldr   r1, =SUN6I_GIC_BASE_ADDRESS   /* r1 := GIC base address */
++        teq   r5, r2
++        beq   board_set_done
++        /* If it's not the sun6i machine ID, load VE values */
+         ldrne r0, =V2M_TIMER_FREQUENCY
+         ldrne r1, =V2M_GIC_BASE_ADDRESS
+ 
++board_set_done:
+         /* Ugly: the system timer's frequency register is only
+          * programmable in Secure state.  Since we don't know where its
+          * memory-mapped control registers live, we can't find out the
+diff --git a/xen/arch/arm/gic.c b/xen/arch/arm/gic.c
+index 7c24811..5673c9c 100644
+--- a/xen/arch/arm/gic.c
++++ b/xen/arch/arm/gic.c
+@@ -33,6 +33,8 @@
+ 
+ #include <asm/gic.h>
+ 
++#include <asm/early_printk.h>
++
+ /* Access to the GIC Distributor registers through the fixmap */
+ #define GICD ((volatile uint32_t *) FIXMAP_ADDR(FIXMAP_GICD))
+ #define GICC ((volatile uint32_t *) FIXMAP_ADDR(FIXMAP_GICC1))
+@@ -272,24 +274,35 @@ static void __init gic_dist_init(void)
+            (type & GICD_TYPE_SEC) ? ", secure" : "",
+            GICD[GICD_IIDR]);
+ 
++    printk("GICD_IIDR<%u>\n", GICD[GICD_IIDR]);
++
+     /* Default all global IRQs to level, active low */
+-    for ( i = 32; i < gic.lines; i += 16 )
++    for ( i = 32; i < gic.lines; i += 16 ) {
+         GICD[GICD_ICFGR + i / 16] = 0x0;
++        printk("i<%d> GICD_ICFGR<%u>\n", i, GICD[GICD_ICFGR + i / 16]);
++    }
+ 
+     /* Route all global IRQs to this CPU */
+-    for ( i = 32; i < gic.lines; i += 4 )
++    for ( i = 32; i < gic.lines; i += 4 ) {
+         GICD[GICD_ITARGETSR + i / 4] = cpumask;
++        printk("i<%d> GGICD_ITARGETSR<%u>. cpumask: %u\n", i, GICD[GICD_ITARGETSR + i / 4], cpumask);
++    }
+ 
+     /* Default priority for global interrupts */
+-    for ( i = 32; i < gic.lines; i += 4 )
++    for ( i = 32; i < gic.lines; i += 4 ) {
+         GICD[GICD_IPRIORITYR + i / 4] = 0xa0a0a0a0;
++        printk("i<%d> GICD_IPRIORITYR<%u>\n", i, GICD[GICD_IPRIORITYR + i / 4]);
++    }
+ 
+     /* Disable all global interrupts */
+-    for ( i = 32; i < gic.lines; i += 32 )
++    for ( i = 32; i < gic.lines; i += 32 ) {
+         GICD[GICD_ICENABLER + i / 32] = (uint32_t)~0ul;
++        printk("i<%d> GICD_ICENABLER<%u>\n", i, GICD[GICD_ICENABLER + i / 32]);
++    }
+ 
+     /* Turn on the distributor */
+     GICD[GICD_CTLR] = GICD_CTL_ENABLE;
++    printk("i<%d> GICD_CTLR<%u>\n", i, GICD[GICD_CTLR]);
+ }
+ 
+ static void __cpuinit gic_cpu_init(void)
+@@ -299,16 +312,26 @@ static void __cpuinit gic_cpu_init(void)
+     /* The first 32 interrupts (PPI and SGI) are banked per-cpu, so
+      * even though they are controlled with GICD registers, they must
+      * be set up here with the other per-cpu state. */
++    printk("GICD_ICENABLER<%u>\n", GICD[GICD_ICENABLER]);
++    printk("GICD_ISENABLER<%u>\n", GICD[GICD_ISENABLER]);
+     GICD[GICD_ICENABLER] = 0xffff0000; /* Disable all PPI */
++    printk("GICD_ICENABLER<%u>\n", GICD[GICD_ICENABLER]);
+     GICD[GICD_ISENABLER] = 0x0000ffff; /* Enable all SGI */
++    printk("GICD_ISENABLER<%u>\n", GICD[GICD_ISENABLER]);
+     /* Set PPI and SGI priorities */
+-    for (i = 0; i < 32; i += 4)
++    for (i = 0; i < 32; i += 4) {
+         GICD[GICD_IPRIORITYR + i / 4] = 0xa0a0a0a0;
++        printk("i<%d> GICD_IPRIORITYR<%u>\n", i, GICD[GICD_IPRIORITYR + i / 4]);
++    }
+ 
+     /* Local settings: interface controller */
+     GICC[GICC_PMR] = 0xff;                /* Don't mask by priority */
++    printk("GICC_PMR<%u>\n", GICC[GICC_PMR]);
+     GICC[GICC_BPR] = 0;                   /* Finest granularity of priority */
++    printk("GICC_BPR<%u>\n", GICC[GICC_BPR]);
+     GICC[GICC_CTLR] = GICC_CTL_ENABLE|GICC_CTL_EOI;    /* Turn on delivery */
++    printk("GICC_CTLR<%u>\n", GICC[GICC_CTLR]);
++
+ }
+ 
+ static void gic_cpu_disable(void)
+@@ -325,6 +348,7 @@ static void __cpuinit gic_hyp_init(void)
+ 
+     GICH[GICH_MISR] = GICH_MISR_EOI;
+     this_cpu(lr_mask) = 0ULL;
++    printk("vtr<%u>, nr_lrs<%u>, GICH_MISR<%u>, lr_mask<%lu>\n", vtr, nr_lrs, GICH[GICH_MISR], (long unsigned int)this_cpu(lr_mask));
+ }
+ 
+ static void __cpuinit gic_hyp_disable(void)
+@@ -762,10 +786,16 @@ void gic_interrupt(struct cpu_user_regs *regs, int is_fiq)
+     do  {
+         intack = GICC[GICC_IAR];
+         irq = intack & GICC_IA_IRQ;
++//        early_printk("1");
+ 
++//        if ( irq == 1023 ) {
++//            GICD[GICD_ICENABLER + irq / 32] = (1u << (irq % 32));
++//            early_printk("2");
++//        }
+         if ( likely(irq >= 16 && irq < 1021) )
+         {
+             local_irq_enable();
++//            early_printk("3");
+             do_IRQ(regs, irq, is_fiq);
+             local_irq_disable();
+         }
+@@ -776,6 +806,7 @@ void gic_interrupt(struct cpu_user_regs *regs, int is_fiq)
+         }
+         else
+         {
++//            early_printk("4");
+             local_irq_disable();
+             break;
+         }
+@@ -896,6 +927,35 @@ void __cpuinit init_maintenance_interrupt(void)
+                    "irq-maintenance", NULL);
+ }
+ 
++void print_gic_isenabler(void)
++{
++    int i;
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_IPRIORITYR + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_ISENABLER + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_ICENABLER + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_ISPENDR + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_ICPENDR + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_ISACTIVER + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_ICACTIVER + i]); 
++    }
++    for (i = 0; i < 32; i++) {
++        printk("i: %d: %u\n", i, GICD[GICD_SPENDSGIR + i]); 
++    }
++}
++
+ /*
+  * Local variables:
+  * mode: C
+diff --git a/xen/arch/arm/irq.c b/xen/arch/arm/irq.c
+index 3e326b0..bd38b87 100644
+--- a/xen/arch/arm/irq.c
++++ b/xen/arch/arm/irq.c
+@@ -26,6 +26,7 @@
+ #include <xen/sched.h>
+ 
+ #include <asm/gic.h>
++#include <asm/early_printk.h>
+ 
+ static void enable_none(struct irq_desc *irq) { }
+ static unsigned int startup_none(struct irq_desc *irq) { return 0; }
+@@ -133,13 +134,20 @@ void do_IRQ(struct cpu_user_regs *regs, unsigned int irq, int is_fiq)
+     struct irq_desc *desc = irq_to_desc(irq);
+     struct irqaction *action = desc->action;
+ 
++//    early_printk("21");
+     /* TODO: perfc_incr(irqs); */
+ 
+     /* TODO: this_cpu(irq_count)++; */
+ 
++//    early_printk("22");
+     irq_enter();
+ 
+     spin_lock(&desc->lock);
++//    if ( 1023 == irq ) {
++//        early_printk("23");
++//        desc->handler->shutdown(desc);
++//        return;
++//    }
+     desc->handler->ack(desc);
+ 
+     if ( action == NULL )
+diff --git a/xen/arch/arm/setup.c b/xen/arch/arm/setup.c
+index f8a3d04..2b9f21a 100644
+--- a/xen/arch/arm/setup.c
++++ b/xen/arch/arm/setup.c
+@@ -495,6 +495,7 @@ void __init setup_cache(void)
+     cacheline_bytes = 1U << (4 + (ccsid & 0x7));
+ }
+ 
++extern void print_gic_isenabler(void);
+ /* C entry point for boot CPU */
+ void __init start_xen(unsigned long boot_phys_offset,
+                       unsigned long fdt_paddr,
+@@ -559,23 +560,35 @@ void __init start_xen(unsigned long boot_phys_offset,
+ 
+     timer_init();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     init_idle_domain();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     rcu_init();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     arch_init_memory();
+ 
++    printk("%s:%d:%s: print GICD ISENABLER\n", __FILE__, __LINE__, __FUNCTION__);
++    print_gic_isenabler();
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     local_irq_enable();
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     local_abort_enable();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     smp_prepare_cpus(cpus);
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     initialize_keytable();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     console_init_postirq();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     do_presmp_initcalls();
+ 
++    printk("%s:%d:%s\n", __FILE__, __LINE__, __FUNCTION__);
+     for_each_present_cpu ( i )
+     {
+         if ( (num_online_cpus() < cpus) && !cpu_online(i) )
