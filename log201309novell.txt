@@ -1924,10 +1924,6 @@ GTD
 1, today
 1), 20' subscribe mailing list. see"10:59 2013-09-12"
 2), 12:50-13:47 read AArch64. see"12:54 2013-09-12"
-1), write a doc about how to make a bootable sd card for sun6i.
-(1), try u-boot instead of preinstalled u-boot.
-2), request cubietruck.
-3), reply to Ian cb2 mail.
 
 10:59 2013-09-12
 1, subscribe the following list from my company email. and put these into rules.
@@ -2060,3 +2056,306 @@ ERROR! NOT find the head of Boot1.
      424:       e3500000        cmp     r0, #0
      428:       128f0e15        addne   r0, pc, #336    ; 0x150
 
+09:39 2013-09-13
+mailing list, virtualization, xen, performance turning
+1, "Dario Faggioli <dario.faggioli@citrix.com>"
+If you (also) mean that you want the one vcpu of such guest to be the
+only thing that runs on one of the physical cores, the answer is again
+yes.
+
+From this respect, Xen sees a core, or even a hypertrhead, as a
+processor, not much differently than a single core non-hyperthreaded
+cpu, so you can "assign" stuff to those pretty much in he way you
+prefer. Then there are differences, when it comes to the internal
+implementation and behavior of the Xen scheduler, but that's a different
+story.
+
+In order to make the above happen, you should look at how vcpu to (p)cpu
+pinning works.
+
+This wiki page, for instance, contains some info about that.
+
+http://wiki.xen.org/wiki/Tuning_Xen_for_Performance
+
+09:43 2013-09-13
+company, server team
+1, "Olaf Kirch <okir@suse.com>"_email_"China Server Team - Going Forward"_20130912_1638
+Dear all,
+
+Today is Jia Ju's last working day, so let me start by thanking him for
+his good work, both as a developer and as a manager. Jia Ju, thank you
+very much - I wish you good luck in your next job in the future.
+
+I would also like to give the team an update on where we are, and what's
+happening right now.
+
+I assume the question on everybody's mind is - when will we have a new
+manager? Well, we're working on this, we are interviewing candidates, but
+we are not done yet and have not made a decision so far. So please stay
+tuned for more information.
+
+For the time being, we need to make sure the team can continue to work
+on the features for SLE12 and the bugs in HA and virtualization. To
+ensure continuity, and to create a bit of High Availability here, I want
+to introduce two Technical Coordinators. Li Xia has agreed to help with the
+coordination of all things around HA and Storage, and Liu Chun Yan has
+agreed to help with coordinating Virtualization related tasks.
+
+The coordinators will work closely with the remote managers (Lars and Anja
+for HA, Jason and Jim for Virtualization), to prioritize tasks, to resolve
+open questions, and to track progress and keep the project managers informed
+about progress.
+
+To make this very clear: these roles do not include people management.
+But: they represent the project management to the local team, so they will
+discuss your work priorities with you - and may request that you give this
+or that feature a higher priority. They will also ask you about your progress,
+and about the problems you have run into.
+
+You are a team of great engineers - please keep up the great work, and
+keep our SLE 12 efforts on track by supporting Chun Yan and Li Xia in
+steering the team's work.
+
+
+With kind regards,
+Olaf
+-- 
+Neo didn't bring down the Matrix. SOA did. (soafacts.com)
+--------------------------------------------
+Olaf Kirch - Director SUSE Linux Enterprise; R&D (okir@suse.com)
+SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, Germany
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg) 
+
+10:03 2013-09-13
+1, Jim_20130913_0830
+Again had some time today to work on the job stuff.  I don't think patch
+1 has changed much, but I added JOB_MODIFY support to all the "modify"
+APIs and JOB_DESTROY to the destroy API in patch 2.  I did some testing
+with one script running save/restore in a loop and another running a
+bunch of query stuff (dominfo, domstate, dumpxml, etc) in a loop. 
+Didn't notice any problems with this testing.
+
+Adding a second domain to the mix caused some problems though.  After
+some experimenting, it seems trying to do a start or save of two domains
+at the same time results in an assert in libxl:
+
+libvirtd: libxl_fork.c:203: libxl__sigchld_installhandler: Assertion
+`!sigchld_owner' failed.
+
+Program received signal SIGABRT, Aborted.
+[Switching to Thread 0x7ffff260f700 (LWP 28588)]
+0x00007ffff41d73d5 in raise () from /lib64/libc.so.6
+(gdb) bt
+#0  0x00007ffff41d73d5 in raise () from /lib64/libc.so.6
+#1  0x00007ffff41d8858 in abort () from /lib64/libc.so.6
+#2  0x00007ffff41d02e2 in __assert_fail_base () from /lib64/libc.so.6
+#3  0x00007ffff41d0392 in __assert_fail () from /lib64/libc.so.6
+#4  0x00007fffeb50e25b in libxl__sigchld_installhandler () from
+/usr/lib64/libxenlight.so.4.3
+#5  0x00007fffeb50e64d in ?? () from /usr/lib64/libxenlight.so.4.3
+#6  0x00007fffeb506503 in libxl__openptys () from
+/usr/lib64/libxenlight.so.4.3
+#7  0x00007fffeb50eee8 in ?? () from /usr/lib64/libxenlight.so.4.3
+#8  0x00007fffeb4e88c6 in ?? () from /usr/lib64/libxenlight.so.4.3
+#9  0x00007fffeb5100d4 in ?? () from /usr/lib64/libxenlight.so.4.3
+#10 0x00007fffeb4f27c1 in ?? () from /usr/lib64/libxenlight.so.4.3
+#11 0x00007fffeb4f2834 in libxl_domain_create_new () from
+/usr/lib64/libxenlight.so.4.3
+#12 0x00007fffeb7466fe in libxlVmStart (driver=0x7fffe0094d30,
+vm=0x7fffe00b4740, start_paused=false,
+    restore_fd=-1) at libxl/libxl_driver.c:626
+#13 0x00007fffeb74d156 in libxlDomainCreateWithFlags
+(dom=0x7fffcc0008c0, flags=0)
+    at libxl/libxl_driver.c:2753
+#14 0x00007fffeb74d1b7 in libxlDomainCreate (dom=0x7fffcc0008c0) at
+libxl/libxl_driver.c:2764
+...
+
+Having looked around the async code in libxl, do you have any thoughts
+on this assert?
+
+Also, what do you think about my comment of not needing to support the
+async versions of libxl functions and instead just control access to a
+VM's libxl_ctx using jobs, as these patches currently do?
+
+Thanks.
+
+2, 
+i guess this is because sigchld_owner do not work if we call the api for different domains. if we do not want to change the relative code in libxl. we could use ao_how to avoid this: 
+in libxl__ev_child_fork libxl__sigchld_installhandler is not called if 
+    ctx->childproc_hooks->chldowner != libxl_sigchld_owner_libxl;
+we could use libxl_sigchld_owner_mainloop by pass the childproc_hooks to libxl_childproc_setmode. as i do in my ao_how patches.
+
+> Also, what do you think about my comment of not needing to support the
+> async versions of libxl functions and instead just control access to a
+> VM's libxl_ctx using jobs, as these patches currently do?
+besides the seg fault above. i agree that we do not need the ao_how.
+but, as i mention in the previous email(6 Sep,"Re: about my work in libxl driver", there are some issue while using the ao_how(e.g. the self pipe handle, the childproc handle).
+do u think it is possible to contribute the relative patches to xen?
+
+
+10:10 2013-09-13
+GTD
+0, 9:30-14:50
+
+1, today
+1), check the mail.
+2), 1h write a doc about how to make a bootable sd card for sun6i. see"10:54 2013-09-13"
+3), trainning: Yifan Jiang. sikuli.
+4), reply Jim email.
+
+(1), try u-boot instead of preinstalled u-boot.
+(2), try mripard patch.
+2), request cubietruck.
+3), reply to Ian cb2 mail.
+
+10:54 2013-09-13
+doc, arm, sunxi, A31, PhoenixCard
+http://linux-sunxi.org/PhoenixCard
+http://linux-sunxi.org/PhoenixCard#PhoenixCard for A31
+== PhoenixCard for A31 ==
+i try the '''PhoenixCard 3.09''' for [[Mele M9]] STB. there are some differences between above description.
+
+=== Make bootable sd card ===
+* press '''DiskCheck''' button for scaning the removable disk.
+* select your sdcard in ''disk''
+* select image from '''Img File'''
+* if you want to write a bootable, check ''Startup''.
+* '''Burn''' Sd card
+
+=== Resulting Card ===
+
+boot1 will found the fat partition at 73728. but this partition is broken. i delete all other partition and re-create the fat start from 73728, size 50M.
+
+=== make a bootable sd card without PhoenixCard(fail) ===
+according to [http://linux-sunxi.org/Boot#A31 A31 boot progress], i want to make a bootable sd card by myself. but i do not success, here is my tring:
+
+repack the image through image imgrepacker, i could get boot0_sdcard.fex, boot1_sdcard.fex, sunxi_mbr.fex and sys_config.fex. convert sys_config.fex to sys_config.bin through [https://github.com/linux-sunxi/sunxi-tools fex2bin]
+
+* boot0 locate at 8k
+    dd if=boot0_sdcard.fex of=/dev/sdd seek=8 bs=1024
+* boot1 locate at 19096k
+    dd if=boot1_sdcard.fex of=/dev/sdd seek=19096 bs=1024
+after this, boot1 will boot successfull and found sd card. but boot into burning nand.
+
+    [       0.210] boot1 version : 2.0.0
+    [       0.215] script installed ok
+    [       0.216] PMU: AXP221
+    [       0.216] bat ratio = 100
+    [       0.218] dcdc3 1260
+    [       0.264] pll1 1008
+    [       0.320] power finish
+    [       0.325] dcdc1 3300
+    [       0.325] dcdc2 1200
+    [       0.325] dcdc4 1200
+    [       0.326] dcdc5 1500
+    [       0.329] flash init start
+    [       0.585] [mmc]: init mmc pll6clk 600000000, clk 25000000, mclkbase 0x8151030b
+    [       0.587] [mmc]: SD/MMC Card: 4bit, capacity: 968MB
+    [       0.592] [mmc]: vendor: Man 0x00035344 Snr 0x00ba5beb
+    [       0.598] [mmc]: product: SD01G
+    [       0.601] [mmc]: revision: 8.0
+    [       0.604] flash init finish
+    [       0.641] fs init ok
+    [       0.642] fattype FAT16
+    [       0.642] fs mount ok
+    [       0.649] dram_para_set start
+    [       0.652] dram_para_set end
+    [       0.652] type=1
+    [       0.719] Sprite start
+    [       0.719] 0
+    [       0.719] card sprite begin
+    [       0.723] display init
+    [       0.885] lcd 0 timeout=50
+    [       0.939] try gpio config
+    [       0.939] gpio start
+    [       0.939] mbr fetch
+    [       0.989] lcd 1 timeout=200
+    [       1.189] lcd 2 timeout=100
+    [       1.289] lcd 3 timeout=0
+    [       1.289] lcd 4 timeout=0
+    [       1.300] erase flag=1
+    [       1.301] storage type = 1
+    [       1.305] burn nand
+    [       1.305] dram ch=0
+    [       1.305] nand ch=2
+    [       1.307] nand init
+compare with the right log:
+    [       0.215] boot1 version : 2.0.0
+    [       0.220] script installed ok
+    [       0.221] PMU: AXP221
+    [       0.221] bat ratio = 100
+    [       0.223] dcdc3 1260
+    [       0.269] pll1 1008
+    [       0.325] power finish
+    [       0.330] dcdc1 3300
+    [       0.330] dcdc2 1200
+    [       0.330] dcdc4 1200
+    [       0.331] dcdc5 1500
+    [       0.334] flash init start
+    [       0.590] [mmc]: init mmc pll6clk 600000000, clk 25000000, mclkbase 0x8151030b
+    [       0.592] [mmc]: SD/MMC Card: 4bit, capacity: 1886MB
+    [       0.597] [mmc]: vendor: Man 0x00035344 Snr 0x5049ccd1
+    [       0.602] [mmc]: product: SD02G
+    [       0.606] [mmc]: revision: 8.0
+    [       0.609] flash init finish
+    [       0.647] fs init ok
+    [       0.648] fattype FAT16
+    [       0.649] fs mount ok
+    [       0.655] dram_para_set start
+    [       0.658] dram_para_set end
+    [       0.658] type=1
+    [       0.689] 0
+    [       0.855] boot_disp.output_type=3
+    [       0.855] boot_disp.output_mode=5
+    [       0.857] boot_disp.auto_hpd=1
+    [       0.860] hdmi open
+    [       0.862] DRV_hdmi_set_display_mode,mode:5
+    [       0.867] DRV_hdmi_open
+    [       0.990] ERR: Parse_Pic_BMP failed
+    [       0.991] key 0
+    [       0.991] cant find rcvy value
+    [       0.994] cant find fstbt value
+    [       0.999] try to boot
+    [       1.000] load kernel start
+    [       1.036] load kernel successed
+    [       1.036] start address = 0x4a000000
+
+* i also the try the following things accoring the hexdump the bootable sd card. but no more luck.
+    dd if=sunxi_mbr.fex of=/dev/sdd seek=20480 bs=1024
+    dd if=sys_config.bin of=/dev/sdd seek=19848 bs=1024
+* boot1 will load the boot.axt, and boot.axf will load u-boot according to linux/linux.ini
+
+11:38 2013-09-13
+Allwinner A31, boot rom
+http://linux-sunxi.org/EGON#eGON.BRM
+https://github.com/hno/Allwinner-Info/tree/master/BROM
+
+12:39 2013-09-13
+training, QA, Yifan Jiang, sikuli, opensikuli
+recognize the screen through opencv(user should provide the picture, e.g. the close button picture you want to close the window.
+input through java awt and local windows system(X on linux; microsoft windows)
+
+13:53 2013-09-13
+doc, arm, sunxi, A31, upstream kernel
+=== For A20, A31 SoCs, worked but still in development ===
+ git clone git://github.com/mripard/linux.git -b sunxi-next-a20-cubie2
+ git clone git://github.com/mripard/linux.git -b sunxi-next-a31
+
+14:06 2013-09-13
+Hi, Benn
+
+
+i also contribute patch and doc for A31:
+http://lists.xen.org/archives/html/xen-devel/2013-07/msg01233.html
+http://linux-sunxi.org/Mele_M9
+http://linux-sunxi.org/PhoenixCard
+
+diff --git a/log201309novell.txt b/log201309novell.txt
+index b51fc50..ef5b422 100644
+--- a/log201309novell.txt
++++ b/log201309novell.txt
+@@ -2060,3 +2060,7 @@ ERROR! NOT find the head of Boot1.
+      424:       e3500000        cmp     r0, #0
+      428:       128f0e15        addne   r0, pc, #336    ; 0x150
+ 
