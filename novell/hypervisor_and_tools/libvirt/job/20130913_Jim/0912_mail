@@ -1,0 +1,145 @@
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+>
+> there are two way to using ao_how: with callback and without callback. and there are two way to handle the libxl child exit: libxl_sigchld_owner_mainloop, libxl_sigchld_owner_libxl_always. want to choice a better way for job support patches.
+>   
+
+I was able to spend some time today playing with a patch to implement
+job support along with a patch that uses the new job functions in long
+running operations.  I'll send you those patches for review.
+
+After experimenting with ao_how, I wonder if we even need to use the
+asynchronous variants of the libxl functions?  Adding the job functions
+to libxl allows us to unlock the virDomainObj during long running ops
+without the worry of some other operation interfering.  E.g. once a
+modify job starts, no other modify jobs can run but query jobs can run
+since they are not modifying any state.
+
+Maybe you can review/test my patches to see if this makes sense or I'm
+totally losing my mind :).  I haven't converted all the libxl driver
+funcs to use the job functions, but I think you will get the idea.  E.g.
+look at the changes in libxlVmStart() and libxlDoDomainSave().  With
+these patches I'm able to list domains while a save or restore is in
+progress, but e.g. libxlDomainSetMemoryFlags() will block until the save
+or restore is finished.
+
+Let me know what you think.
+
+>
+> 1), ao_how
+> (1), without callback
+> according to the libxl doc, when use ao_how without callback, user could call libxl_event_wait/check to wait or check the event. but because libxl driver register the event handler(libxlEventHandler), the event will send to it.
+> for this choice, we do not need to change the code in libxl.
+> (2), with callback.
+> if i register the callback, it should be called when event occurred. the callback is inserted into list in libxl__ao_complete_check_progress_reports which is same as without ao and ao without callback. but, currently, only egc_run_callbacks will iteration these callbacks. in fact, it will call other callback at the same time. So, the egc_run_callbacks is not a choice for us.
+> right now, i just call the callback in libxl__ao_complete_check_progress_reports for test. it works. 
+>
+>
+> Index: xen-4.3.0-testing/tools/libxl/libxl_event.c
+> ===================================================================
+> --- xen-4.3.0-testing.orig/tools/libxl/libxl_event.c
+> +++ xen-4.3.0-testing/tools/libxl/libxl_event.c
+> @@ -1575,6 +1575,23 @@ void libxl__ao_complete(libxl__egc *egc,
+>      libxl__ao_complete_check_progress_reports(egc, ao);
+>  }
+>  
+> +void libxl__ao_occurred(libxl__egc *egc)
+> +{
+> +    EGC_GC;
+> +    libxl__ao *ao, *ao_tmp;
+> +    LIBXL_TAILQ_FOREACH_SAFE(ao, &egc->aos_for_callback,
+> +                             entry_for_callback, ao_tmp) {
+> +        LIBXL_TAILQ_REMOVE(&egc->aos_for_callback, ao, entry_for_callback);
+> +        LOG(DEBUG,"ao %p: completion callback", ao);
+> +        ao->how.callback(CTX, ao->rc, ao->how.u.for_callback);
+> +        CTX_LOCK;
+> +        ao->notified = 1;
+> +        if (!ao->in_initiator)
+> +            libxl__ao__destroy(CTX, ao);
+> +        CTX_UNLOCK;
+> +    }
+> +}
+> +
+>  void libxl__ao_complete_check_progress_reports(libxl__egc *egc, libxl__ao *ao)
+>  {
+>      /*
+> @@ -1598,6 +1615,7 @@ void libxl__ao_complete_check_progress_r
+>      } else if (ao->how.callback) {
+>          LIBXL__LOG(ctx, XTL_DEBUG, "ao %p: complete for callback",ao);
+>          LIBXL_TAILQ_INSERT_TAIL(&egc->aos_for_callback, ao, entry_for_callback);
+> +        libxl__ao_occurred(egc);
+>      } else {
+>          libxl_event *ev;
+>          ev = NEW_EVENT(egc, OPERATION_COMPLETE, ao->domid, ao->how.u.for_event);
+> Index: xen-4.3.0-testing/tools/libxl/libxl_internal.h
+> ===================================================================
+> --- xen-4.3.0-testing.orig/tools/libxl/libxl_internal.h
+> +++ xen-4.3.0-testing/tools/libxl/libxl_internal.h
+> @@ -1758,6 +1758,7 @@ _hidden int libxl__ao_inprogress(libxl__
+>         const char *file, int line, const char *func); /* temporarily unlocks */
+>  _hidden void libxl__ao_abort(libxl__ao *ao);
+>  _hidden void libxl__ao_complete(libxl__egc *egc, libxl__ao *ao, int rc);
+> +_hidden void libxl__ao_occurred(libxl__egc *egc);
+>  _hidden libxl__gc *libxl__ao_inprogress_gc(libxl__ao *ao);
+>  
+>  /* Can be called at any time.  Use is essential for any aop user. */
+>
+>
+> (3), compare
+>   
+>> Cool.  One thing to keep in mind is which approach will work better with
+>> the job support patches you worked on a while back.  The qemu job
+>> support centers around interacting with the qemu monitor.  For job
+>> support in the libxl driver, would it be easier to implement against
+>> events or callbacks?
+>>     
+> maybe i do not fully understand how qemu jobs works. if talk about quering result while save/migration in progress in qemu daemon. both could set the flag, then i know the status in the loop(done or not).
+>
+>
+> 2), child handler
+> (1), libxl_sigchld_owner_mainloop
+> doc saids user will got event when the child exit.
+> there are two problems. firstly, i need to add the libxl_get_pipe_handle for get the fd and then register this fd to libvirt event loop. after doing this i could know the child exit. secondly, i do not know which child exit. it is important because i will call libxl_childproc_reaped with the pid and exit status.
+>
+>
+> diff --git a/tools/libxl/libxl.h b/tools/libxl/libxl.h
+> index 37e4d82..99b98ef 100644
+> --- a/tools/libxl/libxl.h
+> +++ b/tools/libxl/libxl.h
+> @@ -1016,6 +1016,8 @@ int libxl_flask_loadpolicy(libxl_ctx *ctx, void *policy, uint32_t size);
+>  int libxl_fd_set_cloexec(libxl_ctx *ctx, int fd, int cloexec);
+>  int libxl_fd_set_nonblock(libxl_ctx *ctx, int fd, int nonblock);
+>  
+> +int libxl_get_pipe_handle(libxl_ctx *ctx, int num);
+> +
+>  #include <libxl_event.h>
+>  
+>  #endif /* LIBXL_H */
+> diff --git a/tools/libxl/libxl_fork.c b/tools/libxl/libxl_fork.c
+> index 044ddad..1989258 100644
+> --- a/tools/libxl/libxl_fork.c
+> +++ b/tools/libxl/libxl_fork.c
+> @@ -418,6 +418,11 @@ int libxl__ev_child_xenstore_reopen(libxl__gc *gc, const char *what) {
+>      return rc;
+>  }
+>  
+> +int libxl_get_pipe_handle(libxl_ctx *ctx, int num)
+> +{
+> +    return ctx->sigchld_selfpipe[num];
+> +}
+> +
+>  /*
+>   * Local variables:
+>   * mode: C
+>
+>
+> (2), libxl_sigchld_owner_libxl_always
+> in this way, libvirt libxl driver handler the SIGCHLD. i do not need to change the libxl code.
+>
+>
+>
+> bamvor
+>
+>   
+

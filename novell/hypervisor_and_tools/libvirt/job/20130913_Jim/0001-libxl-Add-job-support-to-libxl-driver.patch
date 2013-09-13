@@ -1,0 +1,248 @@
+From 3909c8a3ba4c9118064c88201b50ecb83883d8cb Mon Sep 17 00:00:00 2001
+From: Jim Fehlig <jfehlig@suse.com>
+Date: Wed, 11 Sep 2013 20:14:18 -0600
+Subject: [PATCH 1/2] libxl: Add job support to libxl driver
+
+
+Signed-off-by: Jim Fehlig <jfehlig@suse.com>
+---
+ src/libxl/libxl_domain.c | 129 +++++++++++++++++++++++++++++++++++++++++++++++
+ src/libxl/libxl_domain.h |  38 ++++++++++++++
+ 2 files changed, 167 insertions(+)
+
+diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
+index 0abf80b..cbe9cc3 100644
+--- a/src/libxl/libxl_domain.c
++++ b/src/libxl/libxl_domain.c
+@@ -23,6 +23,7 @@
+ 
+ #include <config.h>
+ 
++#include "libxl_conf.h"
+ #include "libxl_domain.h"
+ 
+ #include "viralloc.h"
+@@ -30,10 +31,18 @@
+ #include "virerror.h"
+ #include "virlog.h"
+ #include "virstring.h"
++#include "virtime.h"
+ 
+ #define VIR_FROM_THIS VIR_FROM_LIBXL
+ 
+ 
++VIR_ENUM_IMPL(libxlDomainJob, LIBXL_JOB_LAST,
++              "none",
++              "query",
++              "destroy",
++              "modify",
++);
++
+ /* Append an event registration to the list of registrations */
+ #define LIBXL_EV_REG_APPEND(head, add)                 \
+     do {                                               \
+@@ -326,6 +335,119 @@ static const libxl_osevent_hooks libxl_event_callbacks = {
+     .timeout_deregister = libxlDomainObjTimeoutDeregisterEventHook,
+ };
+ 
++static int
++libxlDomainObjInitJob(libxlDomainObjPrivatePtr priv)
++{
++    memset(&priv->job, 0, sizeof(priv->job));
++
++    if (virCondInit(&priv->job.cond) < 0)
++        return -1;
++
++    return 0;
++}
++
++static void
++libxlDomainObjResetJob(libxlDomainObjPrivatePtr priv)
++{
++    struct libxlDomainJobObj *job = &priv->job;
++
++    job->active = LIBXL_JOB_NONE;
++    job->owner = 0;
++}
++
++static void
++libxlDomainObjFreeJob(libxlDomainObjPrivatePtr priv)
++{
++    ignore_value(virCondDestroy(&priv->job.cond));
++}
++
++/* Give up waiting for mutex after 30 seconds */
++#define LIBXL_JOB_WAIT_TIME (1000ull * 30)
++
++/*
++ * obj must be locked before calling, libxlDriverPrivatePtr must NOT be locked
++ *
++ * This must be called by anything that will change the VM state
++ * in any way
++ *
++ * Upon successful return, the object will have its ref count increased,
++ * successful calls must be followed by EndJob eventually
++ */
++int
++libxlDomainObjBeginJob(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED,
++                       virDomainObjPtr obj,
++                       enum libxlDomainJob job)
++{
++    libxlDomainObjPrivatePtr priv = obj->privateData;
++    unsigned long long now;
++    unsigned long long then;
++
++    if (virTimeMillisNow(&now) < 0)
++        return -1;
++    then = now + LIBXL_JOB_WAIT_TIME;
++
++    virObjectRef(obj);
++
++    while (priv->job.active) {
++        VIR_DEBUG("Wait normal job condition for starting job: %s",
++                  libxlDomainJobTypeToString(job));
++        if (virCondWaitUntil(&priv->job.cond, &obj->parent.lock, then) < 0)
++            goto error;
++    }
++
++    libxlDomainObjResetJob(priv);
++
++    VIR_DEBUG("Starting job: %s", libxlDomainJobTypeToString(job));
++    priv->job.active = job;
++    priv->job.owner = virThreadSelfID();
++
++    return 0;
++
++error:
++    VIR_WARN("Cannot start job (%s) for domain %s;"
++             " current job is (%s) owned by (%d)",
++             libxlDomainJobTypeToString(job),
++             obj->def->name,
++             libxlDomainJobTypeToString(priv->job.active),
++             priv->job.owner);
++
++    if (errno == ETIMEDOUT)
++        virReportError(VIR_ERR_OPERATION_TIMEOUT,
++                       "%s", _("cannot acquire state change lock"));
++    else
++        virReportSystemError(errno,
++                             "%s", _("cannot acquire job mutex"));
++
++    virObjectUnref(obj);
++    return -1;
++}
++
++/*
++ * obj must be locked before calling, libxlDriverPrivatePtr does not matter
++ *
++ * To be called after completing the work associated with the
++ * earlier libxlDomainBeginJob() call
++ *
++ * Returns true if the remaining reference count on obj is
++ * non-zero, false if the reference count has dropped to zero
++ * and obj is disposed.
++ */
++bool
++libxlDomainObjEndJob(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED,
++                     virDomainObjPtr obj)
++{
++    libxlDomainObjPrivatePtr priv = obj->privateData;
++    enum libxlDomainJob job = priv->job.active;
++
++    VIR_DEBUG("Stopping job: %s",
++              libxlDomainJobTypeToString(job));
++
++    libxlDomainObjResetJob(priv);
++    virCondSignal(&priv->job.cond);
++
++    return virObjectUnref(obj);
++}
++
+ static void *
+ libxlDomainObjPrivateAlloc(void)
+ {
+@@ -342,6 +464,12 @@ libxlDomainObjPrivateAlloc(void)
+         return NULL;
+     }
+ 
++    if (libxlDomainObjInitJob(priv) < 0) {
++        virChrdevFree(priv->devs);
++        virObjectUnref(priv);
++        return NULL;
++    }
++
+     return priv;
+ }
+ 
+@@ -353,6 +481,7 @@ libxlDomainObjPrivateDispose(void *obj)
+     if (priv->deathW)
+         libxl_evdisable_domain_death(priv->ctx, priv->deathW);
+ 
++    libxlDomainObjFreeJob(priv);
+     virChrdevFree(priv->devs);
+ 
+     xtl_logger_destroy(priv->logger);
+diff --git a/src/libxl/libxl_domain.h b/src/libxl/libxl_domain.h
+index e4695ef..e6495fc 100644
+--- a/src/libxl/libxl_domain.h
++++ b/src/libxl/libxl_domain.h
+@@ -30,6 +30,31 @@
+ # include "libxl_conf.h"
+ # include "virchrdev.h"
+ 
++# define JOB_MASK(job)                  (1 << (job - 1))
++# define DEFAULT_JOB_MASK               \
++    (JOB_MASK(LIBXL_JOB_DESTROY) |      \
++     JOB_MASK(LIBXL_JOB_ABORT))
++
++/* Only 1 job is allowed at any time
++ * A job includes *all* libxl.so api, even those just querying
++ * information, not merely actions */
++enum libxlDomainJob {
++    LIBXL_JOB_NONE = 0,      /* Always set to 0 for easy if (jobActive) conditions */
++    LIBXL_JOB_QUERY,         /* Doesn't change any state */
++    LIBXL_JOB_DESTROY,       /* Destroys the domain (cannot be masked out) */
++    LIBXL_JOB_MODIFY,        /* May change state */
++
++    LIBXL_JOB_LAST
++};
++VIR_ENUM_DECL(libxlDomainJob)
++
++
++struct libxlDomainJobObj {
++    virCond cond;                       /* Use to coordinate jobs */
++    enum libxlDomainJob active;         /* Currently running job */
++    int owner;                          /* Thread which set current job */
++};
++
+ typedef struct _libxlDomainObjPrivate libxlDomainObjPrivate;
+ typedef libxlDomainObjPrivate *libxlDomainObjPrivatePtr;
+ struct _libxlDomainObjPrivate {
+@@ -46,6 +71,8 @@ struct _libxlDomainObjPrivate {
+ 
+     /* list of libxl timeout registrations */
+     libxlEventHookInfoPtr timerRegistrations;
++
++    struct libxlDomainJobObj job;
+ };
+ 
+ 
+@@ -59,4 +86,15 @@ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm);
+ void
+ libxlDomainObjRegisteredTimeoutsCleanup(libxlDomainObjPrivatePtr priv);
+ 
++int
++libxlDomainObjBeginJob(libxlDriverPrivatePtr driver,
++                       virDomainObjPtr obj,
++                       enum libxlDomainJob job)
++    ATTRIBUTE_RETURN_CHECK;
++
++bool
++libxlDomainObjEndJob(libxlDriverPrivatePtr driver,
++                     virDomainObjPtr obj)
++    ATTRIBUTE_RETURN_CHECK;
++
+ #endif /* LIBXL_DOMAIN_H */
+-- 
+1.8.1.4
+

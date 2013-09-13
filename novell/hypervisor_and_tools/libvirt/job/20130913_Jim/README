@@ -1,0 +1,53 @@
+Again had some time today to work on the job stuff.  I don't think patch
+1 has changed much, but I added JOB_MODIFY support to all the "modify"
+APIs and JOB_DESTROY to the destroy API in patch 2.  I did some testing
+with one script running save/restore in a loop and another running a
+bunch of query stuff (dominfo, domstate, dumpxml, etc) in a loop. 
+Didn't notice any problems with this testing.
+
+Adding a second domain to the mix caused some problems though.  After
+some experimenting, it seems trying to do a start or save of two domains
+at the same time results in an assert in libxl:
+
+libvirtd: libxl_fork.c:203: libxl__sigchld_installhandler: Assertion
+`!sigchld_owner' failed.
+
+Program received signal SIGABRT, Aborted.
+[Switching to Thread 0x7ffff260f700 (LWP 28588)]
+0x00007ffff41d73d5 in raise () from /lib64/libc.so.6
+(gdb) bt
+#0  0x00007ffff41d73d5 in raise () from /lib64/libc.so.6
+#1  0x00007ffff41d8858 in abort () from /lib64/libc.so.6
+#2  0x00007ffff41d02e2 in __assert_fail_base () from /lib64/libc.so.6
+#3  0x00007ffff41d0392 in __assert_fail () from /lib64/libc.so.6
+#4  0x00007fffeb50e25b in libxl__sigchld_installhandler () from
+/usr/lib64/libxenlight.so.4.3
+#5  0x00007fffeb50e64d in ?? () from /usr/lib64/libxenlight.so.4.3
+#6  0x00007fffeb506503 in libxl__openptys () from
+/usr/lib64/libxenlight.so.4.3
+#7  0x00007fffeb50eee8 in ?? () from /usr/lib64/libxenlight.so.4.3
+#8  0x00007fffeb4e88c6 in ?? () from /usr/lib64/libxenlight.so.4.3
+#9  0x00007fffeb5100d4 in ?? () from /usr/lib64/libxenlight.so.4.3
+#10 0x00007fffeb4f27c1 in ?? () from /usr/lib64/libxenlight.so.4.3
+#11 0x00007fffeb4f2834 in libxl_domain_create_new () from
+/usr/lib64/libxenlight.so.4.3
+#12 0x00007fffeb7466fe in libxlVmStart (driver=0x7fffe0094d30,
+vm=0x7fffe00b4740, start_paused=false,
+    restore_fd=-1) at libxl/libxl_driver.c:626
+#13 0x00007fffeb74d156 in libxlDomainCreateWithFlags
+(dom=0x7fffcc0008c0, flags=0)
+    at libxl/libxl_driver.c:2753
+#14 0x00007fffeb74d1b7 in libxlDomainCreate (dom=0x7fffcc0008c0) at
+libxl/libxl_driver.c:2764
+...
+
+Having looked around the async code in libxl, do you have any thoughts
+on this assert?
+
+Also, what do you think about my comment of not needing to support the
+async versions of libxl functions and instead just control access to a
+VM's libxl_ctx using jobs, as these patches currently do?
+
+Thanks.
+
+
