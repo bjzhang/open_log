@@ -999,3 +999,170 @@ software skill, network, wireless, iwconfig
 使用rtl8188cus无线芯片连接wifi的方法
 http://forum.cubietech.com/forum.php?mod=viewthread&tid=314&extra=page%3D1
 
+13:44 2013-09-22
+os, rt-thread, cortex-m3, stm32f103c8t6
+1, rt-thread boot fail
+ \ | /
+- RT -     Thread Operating System
+ / | \     1.2.0 build Sep 22 2013
+ 2006 - 2013 Copyright by rt-thread team
+init memory system
+psr: 0x01000000
+r00: 0x00000001
+r01: 0x20010000
+r02: 0x00001ea0
+r03: 0x200006a4
+r04: 0x200006a4
+r05: 0xefffffdd
+r06: 0x20000188
+r07: 0x200001cc
+r08: 0x2000018c
+r09: 0x200001cc
+r10: 0x080001db
+r11: 0xfffffff9
+r12: 0x7dffffe7
+ lr: 0x0800368d
+ pc: 0x080036f6
+hard fault on handler
+
+bus fault:
+SCB_CFSR_BFSR:0x04 IMPRECISERR 
+
+2, get lots of burn fail. maybe because i open ttyUSB twice?
+CAUTION: 如果串口接了有两个screen打开，可能会有乱码或奇怪的问题。
+Wrote and verified address 0x08002800 (16.73%) stm32flash: stm32.c:210: stm32_read_memory: Assertion `serial_read(stm->serial, data, len) == SERIAL_ERR_OK' failed.
+
+3, the previous fault is because the sram too large.
+diff --git a/bsp/stm32f10x/drivers/board.h b/bsp/stm32f10x/drivers/board.h
+index dc84db9..2bb601f 100644
+--- a/bsp/stm32f10x/drivers/board.h
++++ b/bsp/stm32f10x/drivers/board.h
+@@ -34,7 +34,7 @@
+ 
+ // <o> Internal SRAM memory size[Kbytes] <8-64>
+ //     <i>Default: 64
+-#define STM32_SRAM_SIZE         64
++#define STM32_SRAM_SIZE         20
+ #define STM32_SRAM_END          (0x20000000 + STM32_SRAM_SIZE * 1024)
+ 
+ /* USART driver select. */
+
+2), log
+ \ | /
+- RT -     Thread Operating System
+ / | \     1.2.0 build Sep 22 2013
+ 2006 - 2013 Copyright by rt-thread team
+init memory system: __bss_end<0x2000171c>, STM32_SRAM_END<0x20005000>
+/home/bamvor/Downloads_new/arm/rt_thread/code/git/rt-thread/src/mem.c: rt_system_heap_init
+mem init, heap begin address 0x2000171c, size 14540
+heap_end<0x20004ff4>heap_end<0x20004ff4>, magic<0xaa2a>, used<0x8beb>, next<0x7c8a26ac>, prev<0x782f04c6>init scheduler system
+init timer thread
+init application
+malloc size 128
+allocate memory at 0x20001728, size: 140
+malloc size 2048
+allocate memory at 0x200017b4, size: 2060
+3), this is because led gpio pin set fail
+(1), patch for STM32F103C8T6 base on 47c152ee. the led.c need to change according the board, there is only one user in my board. changing for mem.c only for debug.
+diff --git a/bsp/stm32f10x/drivers/board.h b/bsp/stm32f10x/drivers/board.h
+index dc84db9..2bb601f 100644
+--- a/bsp/stm32f10x/drivers/board.h
++++ b/bsp/stm32f10x/drivers/board.h
+@@ -34,7 +34,7 @@
+ 
+ // <o> Internal SRAM memory size[Kbytes] <8-64>
+ //	<i>Default: 64
+-#define STM32_SRAM_SIZE         64
++#define STM32_SRAM_SIZE         20
+ #define STM32_SRAM_END          (0x20000000 + STM32_SRAM_SIZE * 1024)
+ 
+ /* USART driver select. */
+diff --git a/bsp/stm32f10x/drivers/led.c b/bsp/stm32f10x/drivers/led.c
+index 2a25fc1..afc6604 100644
+--- a/bsp/stm32f10x/drivers/led.c
++++ b/bsp/stm32f10x/drivers/led.c
+@@ -26,13 +26,13 @@
+ 
+ #else
+ 
+-#define led1_rcc                    RCC_APB2Periph_GPIOE
+-#define led1_gpio                   GPIOE
+-#define led1_pin                    (GPIO_Pin_2)
++#define led1_rcc                    RCC_APB2Periph_GPIOC
++#define led1_gpio                   GPIOC
++#define led1_pin                    (GPIO_Pin_13)
+ 
+-#define led2_rcc                    RCC_APB2Periph_GPIOE
+-#define led2_gpio                   GPIOE
+-#define led2_pin                    (GPIO_Pin_3)
++#define led2_rcc                    RCC_APB2Periph_GPIOC
++#define led2_gpio                   GPIOC
++#define led2_pin                    (GPIO_Pin_13)
+ 
+ #endif // led define #ifdef STM32_SIMULATOR
+ 
+diff --git a/bsp/stm32f10x/rtconfig.py b/bsp/stm32f10x/rtconfig.py
+index 20a843b..822cf09 100644
+--- a/bsp/stm32f10x/rtconfig.py
++++ b/bsp/stm32f10x/rtconfig.py
+@@ -3,7 +3,7 @@ import os
+ # toolchains options
+ ARCH='arm'
+ CPU='cortex-m3'
+-CROSS_TOOL='keil'
++CROSS_TOOL='gcc'
+ 
+ if os.getenv('RTT_CC'):
+ 	CROSS_TOOL = os.getenv('RTT_CC')
+@@ -14,18 +14,18 @@ if os.getenv('RTT_CC'):
+ # 'STM32F10X_MD','STM32F10X_MD_VL',
+ # 'STM32F10X_HD','STM32F10X_HD_VL',
+ # 'STM32F10X_XL','STM32F10X_CL'
+-STM32_TYPE = 'STM32F10X_HD'
++STM32_TYPE = 'STM32F10X_MD'
+ 
+ # lcd panel options
+ # 'FMT0371','ILI932X', 'SSD1289'
+-RT_USING_LCD_TYPE = 'SSD1289'
++#RT_USING_LCD_TYPE = 'SSD1289'
+ 
+ # cross_tool provides the cross compiler
+ # EXEC_PATH is the compiler execute path, for example, CodeSourcery, Keil MDK, IAR
+ 
+ if  CROSS_TOOL == 'gcc':
+ 	PLATFORM 	= 'gcc'
+-	EXEC_PATH 	= 'D:/SourceryGCC/bin'
++	EXEC_PATH 	= '/home/bamvor/Downloads_new/arm/arm_linux/toolchain/arm-2012.09_eabi/bin'
+ elif CROSS_TOOL == 'keil':
+ 	PLATFORM 	= 'armcc'
+ 	EXEC_PATH 	= 'C:/Keil'
+diff --git a/src/mem.c b/src/mem.c
+index e8aae72..7f57887 100644
+--- a/src/mem.c
++++ b/src/mem.c
+@@ -219,6 +219,7 @@ void rt_system_heap_init(void *begin_addr, void *end_addr)
+ 
+     /* initialize the end of the heap */
+     heap_end        = (struct heap_mem *)&heap_ptr[mem->next];
++    RT_DEBUG_LOG(RT_DEBUG_MEM, ("heap_end<0x%x>, magic<0x%x>, used<0x%x>, next<0x%x>, prev<0x%x>\n", heap_end, heap_end->magic, heap_end->used, heap_end->next, heap_end->prev));
+     heap_end->magic = HEAP_MAGIC;
+     heap_end->used  = 1;
+     heap_end->next  = mem_size_aligned + SIZEOF_STRUCT_MEM;
+
+(2), ref: 如何移植RT-thread官方的系统源码到STM32F10x特定的MCU平台中
+http://www.rt-thread.org/dokuwiki/doku.php?id=%E5%A6%82%E4%BD%95%E7%A7%BB%E6%A4%8Drt-thread%E5%AE%98%E6%96%B9%E7%9A%84%E7%B3%BB%E7%BB%9F%E6%BA%90%E7%A0%81%E5%88%B0stm32f10x%E7%89%B9%E5%AE%9A%E7%9A%84mcu%E5%B9%B3%E5%8F%B0%E4%B8%AD 
+
+17:29 2013-09-22
+1, 如果使用电池和大电流
+http://www.amobbs.com/thread-1327005-1-1.html
+1), bowen 
+最好能并连一个100Uf的电容，我家的电子钟我在电池两端并联了一个470Uf的铝电解电容，电池可以使用很长时间，到9月12日就使用3年了，不接电容时只能使用大约1年，利用电容提供瞬态大电流输出是可以的。
+2), snow2006
+经过实验，CR2032纽扣电池可以提供30mA的负载电流，不讨论使用时间。
+
+2, cheap lcd
+http://www.amobbs.com/thread-5536287-1-1.html
+lcw_swust 发表于 2013-5-29 09:10 
+淘宝找NOKIA5110
+或 COG 12864
+
