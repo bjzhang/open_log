@@ -2487,4 +2487,169 @@ ao_how
 i could the sigchild to per-domain value if i want to iterate the domain after child exit. but i think it is too heavy.
 2, 果然是上午最适合写代码.
 3, 用virHashAddEntry把每次fork出来的sigchild info都添加进去，如果遇到signal，从表里面查。
+4, (15:38 2013-09-23)
+和春艳讨论这个问题。总感觉上面的方法比较复杂。
+决定直接fork一个进程再做实际的操作，这样waitpid就只会能到自己的进程了。
+但是libvirt里面没有driver用fork(除了lxc).
+
+11:34 2013-09-23
+software skill, suse, fate
+http://download.opensuse.org/repositories/FATE/openSUSE_12.3/
+
+11:37 2013-09-23
+GTD
+0, 10:50-18:20
+
+1, today
+1), modify interrupt for sun6i usb. 
+2), install fate.
+3), 15:38-17:12 ao_how.
+4), after ao_how patch. discuss with jim about fate#315157 virtlockd.
+
+18:06 2013-09-23
+sun6i, usb
+1, 
+[    0.549359] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    0.555955] platform 1c14000.ehci0: Driver sunxi-ehci requests probe deferral
+[    0.563121] sunxi-ehci: Allwinner sunXi EHCI driver
+[    0.568008] Error: Driver 'sunxi-ehci' is already registered, aborting...
+[    0.574786] ehci-platform: EHCI generic platform driver
+[    0.580183] usbcore: registered new interface driver usb-storage
+
+[    0.646490] sunxi-ehci 1c14000.ehci0: failed to get ahb_ehci clock
+[    0.652769] sunxi-ehci: probe of 1c14000.ehci0 failed with error -2
+
+2, 
+fail in ehci_setup, full log:
+Uncompressing Linux... done, booting the kernel.
+[    0.000000] Booting Linux on physical CPU 0x0
+[    0.000000] Linux version 3.12.0-rc1-00026-gf06e157-dirty (bamvor@linux-rd.site) (gcc version 4.8.1 20130401 (prerelease) (crosstool-NG linaro-1.13.1-4.8-2013.04-20130417 - Linaro GCC 2013.04) ) #1 SMP Mon Sep 23 17:52:23 CST 2013
+[    0.000000] CPU: ARMv7 Processor [410fc073] revision 3 (ARMv7), cr=10c5387d
+[    0.000000] CPU: PIPT / VIPT nonaliasing data cache, VIPT aliasing instruction cache
+[    0.000000] Machine: Allwinner A1X (Device Tree), model: Mele M9 STB
+[    0.000000] bootconsole [earlycon0] enabled
+[    0.000000] Memory policy: ECC disabled, Data cache writealloc
+[    0.000000] PERCPU: Embedded 5 pages/cpu @c18a2000 s6912 r0 d13568 u32768
+[    0.000000] Built 1 zonelists in Zone order, mobility grouping on.  Total pages: 522768
+[    0.000000] Kernel command line: earlyprintk console=ttyS0,115200
+[    0.000000] PID hash table entries: 4096 (order: 2, 16384 bytes)
+[    0.000000] Dentry cache hash table entries: 131072 (order: 7, 524288 bytes)
+[    0.000000] Inode-cache hash table entries: 65536 (order: 6, 262144 bytes)
+[    0.000000] Memory: 2070840K/2097152K available (4417K kernel code, 212K rwdata, 948K rodata, 206K init, 244K bss, 26312K reserved, 1318912K highmem)
+[    0.000000] Virtual kernel memory layout:
+[    0.000000]     vector  : 0xffff0000 - 0xffff1000   (   4 kB)
+[    0.000000]     fixmap  : 0xfff00000 - 0xfffe0000   ( 896 kB)
+[    0.000000]     vmalloc : 0xf0000000 - 0xff000000   ( 240 MB)
+[    0.000000]     lowmem  : 0xc0000000 - 0xef800000   ( 760 MB)
+[    0.000000]     pkmap   : 0xbfe00000 - 0xc0000000   (   2 MB)
+[    0.000000]       .text : 0xc0008000 - 0xc05459fc   (5367 kB)
+[    0.000000]       .init : 0xc0546000 - 0xc0579b00   ( 207 kB)
+[    0.000000]       .data : 0xc057a000 - 0xc05af260   ( 213 kB)
+[    0.000000]        .bss : 0xc05af268 - 0xc05ec3f4   ( 245 kB)
+[    0.000000] SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=4, Nodes=1
+[    0.000000] Hierarchical RCU implementation.
+[    0.000000] NR_IRQS:16 nr_irqs:16 16
+[    0.000000] /clocks/ahb1_mux@01c20054: arguments longer than property
+[    0.000000] sched_clock: 32 bits at 24MHz, resolution 41ns, wraps every 178956ms
+[    0.000000] Console: colour dummy device 80x30
+[    0.005162] Calibrating delay loop... 2007.04 BogoMIPS (lpj=10035200)
+[    0.063222] pid_max: default: 32768 minimum: 301
+[    0.068511] Mount-cache hash table entries: 512
+[    0.074929] CPU: Testing write buffer coherency: ok
+[    0.080643] /cpus/cpu@0 missing clock-frequency property
+[    0.086038] /cpus/cpu@1 missing clock-frequency property
+[    0.091444] /cpus/cpu@2 missing clock-frequency property
+[    0.096837] /cpus/cpu@3 missing clock-frequency property
+[    0.102752] CPU0: thread -1, cpu 0, socket 0, mpidr 80000000
+[    0.109059] Setting up static identity map for 0xc0432630 - 0xc0432688
+[    0.117166] CPU1: failed to boot: -38
+[    0.121519] CPU2: failed to boot: -38
+[    0.125852] CPU3: failed to boot: -38
+[    0.129960] Brought up 1 CPUs
+[    0.133025] SMP: Total of 1 processors activated.
+[    0.138266] CPU: All CPU(s) started in SVC mode.
+[    0.143420] devtmpfs: initialized
+[    0.150507] VFP support v0.3: implementor 41 architecture 2 part 30 variant 7 rev 3
+[    0.158693] pinctrl core: initialized pinctrl subsystem
+[    0.164806] regulator-dummy: no parameters
+[    0.170257] NET: Registered protocol family 16
+[    0.175421] DMA: preallocated 256 KiB pool for atomic coherent allocations
+[    0.187636] bio: create slab <bio-0> at 0
+[    0.192583] reg-fixed-voltage usb1-vbus.2: could not find pctldev for node /soc@01c00000/pinctrl@01c20800/usb1_vbus_pin@0, deferring probe
+[    0.206341] platform usb1-vbus.2: Driver reg-fixed-voltage requests probe deferral
+[    0.214495] SCSI subsystem initialized
+[    0.218582] usbcore: registered new interface driver usbfs
+[    0.224185] usbcore: registered new interface driver hub
+[    0.229646] usbcore: registered new device driver usb
+[    0.234955] pps_core: LinuxPPS API ver. 1 registered
+[    0.239998] pps_core: Software ver. 5.3.6 - Copyright 2005-2007 Rodolfo Giometti <giometti@linux.it>
+[    0.249224] PTP clock support registered
+[    0.253616] EDAC MC: Ver: 3.0.0
+[    0.257835] Switched to clocksource timer
+[    0.268639] NET: Registered protocol family 2
+[    0.273571] TCP established hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.281511] TCP bind hash table entries: 8192 (order: 4, 65536 bytes)
+[    0.288755] TCP: Hash tables configured (established 8192 bind 8192)
+[    0.295844] TCP: reno registered
+[    0.299475] UDP hash table entries: 512 (order: 2, 16384 bytes)
+[    0.306091] UDP-Lite hash table entries: 512 (order: 2, 16384 bytes)
+[    0.313384] NET: Registered protocol family 1
+[    0.318552] RPC: Registered named UNIX socket transport module.
+[    0.324548] RPC: Registered udp transport module.
+[    0.329799] RPC: Registered tcp transport module.
+[    0.334581] RPC: Registered tcp NFSv4.1 backchannel transport module.
+[    0.341869] Trying to unpack rootfs image as initramfs...
+[    0.374907] Freeing initrd memory: 2904K (c8001000 - c82d7000)
+[    0.383130] bounce pool size: 64 pages
+[    0.394637] NFS: Registering the id_resolver key type
+[    0.399871] Key type id_resolver registered
+[    0.404135] Key type id_legacy registered
+[    0.408464] Block layer SCSI generic (bsg) driver version 0.4 loaded (major 251)
+[    0.416657] io scheduler noop registered
+[    0.421030] io scheduler deadline registered
+[    0.425525] io scheduler cfq registered (default)
+[    0.432129] sunxi-pinctrl 1c20800.pinctrl: initialized sunXi PIO driver
+[    0.481020] Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+[    0.509026] 1c28000.serial: ttyS0 at MMIO 0x1c28000 (irq = 32, base_baud = 1500000) is a U6_16550A
+[    0.518114] console [ttyS0] enabled, bootconsole disabled
+[    0.518114] console [ttyS0] enabled, bootconsole disabled
+[    0.529819] serial: Freescale lpuart driver
+[    0.534156] [drm] Initialized drm 1.1.0 20060810
+[    0.544481] brd: module loaded
+[    0.548077] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
+[    0.554636] sunxi_ehci_probe
+[    0.557552] platform 1c14000.ehci0: Driver sunxi-ehci requests probe deferral
+[    0.564715] sunxi-ehci: Allwinner sunXi EHCI driver
+[    0.569604] Error: Driver 'sunxi-ehci' is already registered, aborting...
+[    0.576382] ehci-platform: EHCI generic platform driver
+[    0.581777] usbcore: registered new interface driver usb-storage
+[    0.588294] mousedev: PS/2 mouse device common for all mice
+[    0.594186] sdhci: Secure Digital Host Controller Interface driver
+[    0.600379] sdhci: Copyright(c) Pierre Ossman
+[    0.604730] sdhci-pltfm: SDHCI platform and OF driver helper
+[    0.610781] usbcore: registered new interface driver usbhid
+[    0.616345] usbhid: USB HID core driver
+[    0.620410] TCP: cubic registered
+[    0.624270] NET: Registered protocol family 10
+[    0.629394] sit: IPv6 over IPv4 tunneling driver
+[    0.634645] Key type dns_resolver registered
+[    0.639022] Registering SWP/SWPB emulation handler
+[    0.644650] usb1-vbus: 5000 mV 
+[    0.647988] sunxi_ehci_probe
+[    0.650965] sunxi-ehci 1c14000.ehci0: failed to get ahb_ehci clock, try ahb1_ehci
+[    0.658487] sunxi-ehci 1c14000.ehci0: Allwinner sunXi EHCI controller
+[    0.664939] sunxi-ehci 1c14000.ehci0: new USB bus registered, assigned bus number 1
+[    0.675144] sunxi-ehci 1c14000.ehci0: can't setup: -110
+[    0.680381] sunxi-ehci 1c14000.ehci0: USB bus 1 deregistered
+[    0.686038] sunxi-ehci 1c14000.ehci0: failed to add USB HCD
+[    0.691681] sunxi-ehci: probe of 1c14000.ehci0 failed with error -110
+[    0.698186] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+[    0.705311] Freeing unused kernel memory: 204K (c0546000 - c0579000)
+Starting logging: OK
+Initializing random number generator... done.
+Starting network...
+
+Welcome to Buildroot
+buildroot login: 
+
 
