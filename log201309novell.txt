@@ -2491,6 +2491,75 @@ i could the sigchild to per-domain value if i want to iterate the domain after c
 和春艳讨论这个问题。总感觉上面的方法比较复杂。
 决定直接fork一个进程再做实际的操作，这样waitpid就只会能到自己的进程了。
 但是libvirt里面没有driver用fork(除了lxc).
+5, (10:35 2013-09-24)
+using the method in 22 Sep.
+1), using hash save ctx and info.
+struct _virDomainObjList {
+    virObjectLockable parent;
+
+    /* uuid string -> virDomainObj  mapping
+     * for O(1), lockless lookup-by-uuid */
+    virHashTable *objs;
+};
+
+doms->objs = virHashCreate(50, virDomainObjListDataFree)
+
+virHashAddEntry(doms->objs, uuidstr, vm), < 0: fail
+virHashRemoveEntry(doms->objs, uuidstr);
+obj = virHashLookup(doms->objs, uuidstr)
+
+virHashFree(doms->objs);
+
+(2), details
+static int virDomainObjOnceInit(void)
+{
+    if (!(virDomainObjListClass = virClassNew(virClassForObjectLockable(),
+                                              "virDomainObjList",
+                                              sizeof(virDomainObjList),
+                                              virDomainObjListDispose)))
+        return -1;
+    return 0;
+}
+
+VIR_ONCE_GLOBAL_INIT(virDomainObj)
+
+static void virDomainObjListDispose(void *obj)
+{
+    virDomainObjListPtr doms = obj;
+
+    virHashFree(doms->objs);
+}
+
+virDomainObjListPtr virDomainObjListNew(void)
+{
+    virDomainObjListPtr doms;
+
+    if (virDomainObjInitialize() < 0)
+        return NULL;
+
+    if (!(doms = virObjectLockableNew(virDomainObjListClass)))
+        return NULL;
+
+    if (!(doms->objs = virHashCreate(50, virDomainObjListDataFree))) {
+        virObjectUnref(doms);
+        return NULL;
+    }
+
+    return doms;
+}
+
+static void
+virDomainObjListDataFree(void *payload, const void *name ATTRIBUTE_UNUSED)
+{
+    virDomainObjPtr obj = payload;
+    virObjectUnref(obj);
+}
+
+(3), there is driver ctx and domain ctx in libvirt libxl driver. i do not know the driver ctx before.
+
+6, coding finish.
+ao_how_callback could not work. because the ao_how_callback could not get priv->ao.complete. 
+\TODO: using complete for ao complete
 
 11:34 2013-09-23
 software skill, suse, fate
@@ -2504,10 +2573,10 @@ GTD
 1), modify interrupt for sun6i usb. 
 2), install fate.
 3), 15:38-17:12 ao_how.
-4), after ao_how patch. discuss with jim about fate#315157 virtlockd.
+4), try sun6i usb ehci.
 
 18:06 2013-09-23
-sun6i, usb
+sun6i, usb, ehci
 1, 
 [    0.549359] ehci_hcd: USB 2.0 'Enhanced' Host Controller (EHCI) Driver
 [    0.555955] platform 1c14000.ehci0: Driver sunxi-ehci requests probe deferral
@@ -2652,4 +2721,18 @@ Starting network...
 Welcome to Buildroot
 buildroot login: 
 
+10:31 2013-09-24
+GTD
+0, 10:20
+
+1, today
+1), 15' (on subway). mailing list.
+2), 10:30-11:30 13:04-13:30 14:06-17:45 ao_how. see"19:49 2013-09-22"5.
+3), 20' mcu
+
+2, next
+1), send hackweek project to junwei.
+2), after ao_how patch
+(1), discuss with jim about fate#315157 virtlockd.
+(2), review chunyan patch.
 
