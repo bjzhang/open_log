@@ -2868,3 +2868,74 @@ Uncompressing Linux... done, booting the kernel.
 [    0.640683] sunxi-ehci 1c14000.ehci0: ehci->regs<f006c000>
 [    0.646161] sunxi-ehci 1c14000.ehci0: ehci_readl<0>
 
+13:34 2013-09-25
+GTD
+0, 10:30
+
+1, today
+1), 13:40- sun6i usb.
+
+14:09 2013-09-25
+i found that the ehci_readl always got zero. so the module do not work properly.
+and the i check the pll6 register definition in downstream code, there are some differences, especially the lock bit.
+
+diff -urN sun4i_pll6 sun6i_pll6 
+--- sun4i_pll6  2013-09-25 14:07:35.762646175 +0800
++++ sun6i_pll6  2013-09-25 14:07:37.242662375 +0800
+@@ -1,18 +1,16 @@
+-typedef struct __CCMU_PLL6_REG0028
++typedef struct __CCMU_PLL6_SATA_REG0028
+ {
+     __u32   FactorM:2;          //bit0,  PLL6 factor M
+     __u32   reserved0:2;        //bit2,  reserved
+     __u32   FactorK:2;          //bit4,  PLL6 factor K
+-    __u32   reserved1:2;        //bit6,  reserved
++    __u32   DampFactor:2;       //bit6,  PLL6 damping factor control
+     __u32   FactorN:5;          //bit8,  PLL6 factor N
+-    __u32   reserved2:3;        //bit13, reserved
+-    __u32   Pll24MPdiv:2;       //bit16, PLL 24M output clock post divider
+-    __u32   Pll24MOutEn:1;      //bit18, PLL 24M output enable
+-    __u32   reserved3:5;        //bit19, reserved
+-    __u32   PllClkOutEn:1;      //bit24, pll clock output enable
+-    __u32   PLLBypass:1;        //bit25, PLL6 output bypass enable
+-    __u32   reserved4:2;        //bit26, reserved
+-    __u32   Lock:1;             //bit28, lock flag
+-    __u32   reserved5:2;        //bit29, reserved
++    __u32   reserved1:1;        //bit13, reserved
++    __u32   OutputEn:1;         //bit14, sata clock output enable
++    __u32   BandWidth:1;        //bit15, PLL6 band width control
++    __u32   reserved2:4;        //bit16, reserved
++    __u32   PLLBias:5;          //bit20, PLL6 bias current control
++    __u32   VCOBias:5;          //bit25, PLL6 VCO bias
++    __u32   PLLBypass:1;        //bit30, PLL6 output bypass enable
+     __u32   PLLEn:1;            //bit31, PLL6 enable
+-} __ccmu_pll6_reg0028_t;
++} __ccmu_pll6_sata_reg0028_t;
+
+the usb gate register is also different
+diff -urN 4i 6i
+--- 4i  2013-09-25 17:15:17.945648678 +0800
++++ 6i  2013-09-25 17:15:25.961735290 +0800
+@@ -3,11 +3,14 @@
+     __u32   UsbPhy0Rst:1;       //bit0,  USB PHY0 reset control, 0-reset valid, 1-reset invalid
+     __u32   UsbPhy1Rst:1;       //bit1,  USB PHY1 reset control, 0-reset valid, 1-reset invalid
+     __u32   UsbPhy2Rst:1;       //bit2,  USB PHY2 reset control, 0-reset valid, 1-reset invalid
+-    __u32   reserved0:1;        //bit3,  reserved
+-    __u32   OHCIClkSrc:1;       //bit4,  0-(PLL6)/25, 1-PLL6 sample 24Mhz to generate 48Mhz
+-    __u32   ClkSwich:1;         //bit5,  usb clock switch
+-    __u32   OHCI0SpecClkGate:1; //bit6,  gating special clock for OHCI0, 0-CLOCK OFF, 1-CLOCK ON
+-    __u32   OHCI1SpecClkGate:1; //bit7,  gating special clock for OHCI1, 0-CLOCK OFF, 1-CLOCK ON
+-    __u32   PhySpecClkGate:1;   //bit8,  gating special clock for USB PHY0/1/2, 0-CLOCK OFF, 1-CLOCK ON
+-    __u32   reserved2:23;       //bit9,  reserved
++    __u32   reserved0:5;        //bit3,  reserved
++    __u32   Phy0Gate:1;         //bit8,  gating special clock for USBPHY0, 0-CLOCK OFF, 1-CLOCK ON
++    __u32   Phy1Gate:1;         //bit9,  gating special clock for USBPHY1, 0-CLOCK OFF, 1-CLOCK ON
++    __u32   Phy2Gate:1;         //bit10, gating special clock for USBPHY2, 0-CLOCK OFF, 1-CLOCK ON
++    __u32   reserved1:5;        //bit11, reserved
++    __u32   Ohci0Gate:1;        //bit16, gating special clock for OHCI0, 0-CLOCK OFF, 1-CLOCK ON
++    __u32   Ohci1Gate:1;        //bit17, gating special clock for OHCI1, 0-CLOCK OFF, 1-CLOCK ON
++    __u32   Ohci2Gate:1;        //bit18, gating special clock for OHCI2, 0-CLOCK OFF, 1-CLOCK ON
++    __u32   reserved2:13;       //bit19,  reserved
+ } __ccmu_usb_clk_reg00cc_t;
++
+
