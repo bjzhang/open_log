@@ -1,0 +1,423 @@
+.LOG
+11:29 2013-10-09
+1, compile A20 kernel
+ref: http://linux-sunxi.org/Mainline_Kernel_Howto
+ARCH=arm CROSS_COMPILE=<toolchain-prefix> LOADADDR=0x40008000 make uImage dtbs
+
+log.sh make LOADADDR=0x40008000 uImage dtbs
+
+2, u-boot spl boot fail
+U-Boot SPL 2013.10-rc2-08390-g3d2fc4e (Oct 03 2013 - 10:06:48)
+Board: Cubieboard2
+DRAM: 1024 MiB
+CPU: 960000000Hz, AXI/AHB/APB: 3/2/2
+spl: not an uImage at 1600
+spl: not an uImage at 80
+### ERROR ### Please RESET the board ###
+
+1), this is because i use the wrong u-boot binary and offset
+ref: http://linux-sunxi.org/Bootable_SD_card 
+Bootloader
+1 dd if=spl/sunxi-spl.bin of=$card bs=1024 seek=8
+2 dd if=u-boot.img of=$card bs=1024 seek=40
+If using u-boot v2013.07 or earlier then the procedure is slightly different
+1 dd if=spl/sunxi-spl.bin of=$card bs=1024 seek=8
+2 dd if=u-boot.bin of=$card bs=1024 seek=32
+
+3, 
+http://linux-sunxi.org/Mainline_Kernel_Howto
+Warning: Before giving control to the kernel the U-Boot will move the loaded binaries to some different addresses and ignore the fact, the kernel needs much more space for extracting itselt. This causes a dtb to be overwritten and failure to boot. This of course should be fixed in U-Boot but a workaround for now is to set fdt_high:
+env set fdt_high ffffffff
+
+4, try xen
+U-Boot SPL 2013.10-rc2-08390-g3d2fc4e (Oct 03 2013 - 10:06:48)
+Board: Cubieboard2
+DRAM: 1024 MiB
+CPU: 960000000Hz, AXI/AHB/APB: 3/2/2
+spl: not an uImage at 1600
+
+
+U-Boot 2013.10-rc2-00585-gb5a4ae8 (Oct 09 2013 - 16:31:44) Allwinner Technology
+
+CPU:   Allwinner A20 (SUN7I)
+Board: Cubieboard2
+I2C:   ready
+DRAM:  1 GiB
+MMC:   SUNXI SD/MMC: 0
+*** Warning - bad CRC, using default environment
+
+In:    serial
+Out:   serial
+Err:   serial
+Net:   emac
+Hit any key to stop autoboot:  0 
+sun7i# fatload mmc 0 45000000 xen<INTERRUPT>
+sun7i# fatload mmc 0 50000000 xen-uImage        
+reading xen-uImage
+956136 bytes read in 88 ms (10.4 MiB/s)
+sun7i# bootm 5000000
+Wrong Image Format for bootm command
+ERROR: can't get kernel image!
+sun7i# bootm 50000000
+## Booting kernel from Legacy Image at 50000000 ...
+   Image Name:   
+   Created:      2013-10-09   8:42:13 UTC
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    956072 Bytes = 933.7 KiB
+   Load Address: 40200000
+   Entry Point:  40200000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+WARNING: ignoring attempt to set core boot address 7ff88454 on core -1
+WARNING: Not kicking secondary CPUs
+
+Starting kernel ...
+
+- UART enabled -
+- CPU 00000000 booting -
+- Xen starting in Hyp mode -
+- Zero BSS -
+- Setting up control registers -
+- Turning on paging -
+- Ready -
+RAM: 0000000040000000 - 00000000bfffffff
+
+MODULE[1]: 00000000402e7700 - 00000000402e96a8 
+MODULE[2]: 0000000060000000 - 0000000060600000 
+Placing Xen at 0x00000000bfe00000-0x00000000c0000000
+Xen heap: 00000000ae000000-00000000be000000 (65536 pages)
+Dom heap: 458752 pages
+Looking for UART console serial0
+ __  __            _  _   _  _                      _        _     _      
+ \ \/ /___ _ __   | || | | || |     _   _ _ __  ___| |_ __ _| |__ | | ___ 
+  \  // _ \ '_ \  | || |_| || |_ __| | | | '_ \/ __| __/ _` | '_ \| |/ _ \
+  /  \  __/ | | | |__   _|__   _|__| |_| | | | \__ \ || (_| | |_) | |  __/
+ /_/\_\___|_| |_|    |_|(_) |_|     \__,_|_| |_|___/\__\__,_|_.__/|_|\___|
+                                                                          
+(XEN) Xen version 4.4-unstable (bamvor@(none)) (arm-linux-gnueabihf-gcc (crosstool-NG linaro-1.13.1-4.8-2013.04-20130417 - Linaro GCC 2013.04) 4.8.1 20130401 (prerelease)) debug=y Wed Oct  9 16:40:45 CST 2013
+(XEN) Latest ChangeSet: Mon Oct 7 09:42:51 2013 +0200 git:84f04d8
+(XEN) Console output is synchronous.
+(XEN) Processor: 410fc074: "ARM Limited", variant: 0x0, part 0xc07, rev 0x4
+(XEN) 32-bit Execution:
+(XEN)   Processor Features: 00001131:00011011
+(XEN)     Instruction Sets: AArch32 Thumb Thumb-2 ThumbEE Jazelle
+(XEN)     Extensions: GenericTimer Security
+(XEN)   Debug Features: 02010555
+(XEN)   Auxiliary Features: 00000000
+(XEN)   Memory Model Features: 10101105 40000000 01240000 02102211
+(XEN)  ISA Features: 02101110 13112111 21232041 11112131 10011142 00000000
+(XEN) WARNING: Unrecognized/unsupported device tree compatible list
+(XEN) Available platform support:
+(XEN)     - VERSATILE EXPRESS
+(XEN)     - SAMSUNG EXYNOS5
+(XEN)     - CALXEDA MIDWAY
+(XEN)     - TI OMAP5
+(XEN) 
+(XEN) ****************************************
+(XEN) Panic on CPU 0:
+(XEN) Unable to find a compatible timer in the device tree
+(XEN) ****************************************
+(XEN) 
+(XEN) Reboot in five seconds...
+
+5, hang after
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b544>
+[    7.972417] init/main.c:755<do_initcall_level>: fn<c056b544>
+[    7.978012] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b548>
+[    7.989537] init/main.c:755<do_initcall_level>: fn<c056b548>
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b54c>
+[    8.000455] init/main.c:755<do_initcall_level>: fn<c056b54c>
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b550>
+[    8.011389] init/main.c:755<do_initcall_level>: fn<c056b550>
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b554>
+�    8.022318] init/main.c:755<do_initcall_level>: fn<c056b554>
+
+c056b554 t __initcall_clk_disable_unused7s
+it may be the same reasone why the native kernel boot fail. but it could not expain why there is no output. unless the console init is after the clk_disable_unused. 
+using boot parameter clk_ignore_unused ignore this function.
+(later, when i want to add clk_ignore_unused in native kernel, i found that there is no bootargs in sun7i dts, so no uart is set for printk, \TODO: a patch for linux-sunxi?)
+
+6, xen: fail at mount fs
+[    7.979703] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b548>
+[    7.991228] init/main.c:755<do_initcall_level>: fn<c056b548>
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b54c>
+[    8.002144] init/main.c:755<do_initcall_level>: fn<c056b54c>
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b550>
+[    8.013077] init/main.c:755<do_initcall_level>: fn<c056b550>
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b554>
+[    8.024007] init/main.c:755<do_initcall_level>: fn<c056b554>
+[    8.029586] clk: Not disabling unused clocks
+(XEN) DOM0: init/main.c:755<do_initcall_level>: fn<c056b558>
+[    8.039141] init/main.c:755<do_initcall_level>: fn<c056b558>
+(XEN) DOM0: init/main.c:794<do_basic_setup>
+[    8.048608] init/main.c:794<do_basic_setup>
+(XEN) DOM0: init/main.c:911<kernel_init_freeable>
+[    8.057161] init/main.c:911<kernel_init_freeable>
+(XEN) DOM0: init/main.c:918<kernel_init_freeable>
+[    8.066756] init/main.c:918<kernel_init_freeable>
+(XEN) DOM0: init/main.c:920<kernel_init_freeable>
+[    8.075790] init/main.c:920<kernel_init_freeable>
+(XEN) DOM0: init/main.c:930<kernel_init_freeable>
+[    8.084856] init/main.c:930<kernel_init_freeable>
+[    8.089589] Waiting for root device ...
+
+7, try usb storage.
+
+8, partition sdcard
+dd if=/dev/zero of=$card bs=1M count=1
+sfdisk -R $card
+cat <<EOT | sfdisk --in-order -uM $card
+1,100,c
+,,L
+EOT
+mkfs.vfat ${card}1
+mkfs.ext4 ${card}2
+
+9, native kernel fail at load initrd
+[    0.438615] Unpacking initramfs...
+[    0.442118] Unable to handle kernel paging request at virtual address ffb90000
+[    0.449414] pgd = c0004000
+[    0.452203] [ffb90000] *pgd=00000000
+[    0.455876] Internal error: Oops: 5 [#1] SMP ARM
+[    0.460577] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 3.12.0-rc1-00021-g086e532-dirty #13
+[    0.468827] task: ef05c000 ti: ef056000 task.ti: ef056000
+[    0.474313] PC is at unpack_to_rootfs+0xc8/0x2a0
+[    0.479011] LR is at unpack_to_rootfs+0x54/0x2a0
+[    0.483709] pc : [<c051eb94>]    lr : [<c051eb20>]    psr: 20000153
+[    0.483709] sp : ef057e90  ip : 00000000  fp : c051e778
+[    0.495340] r10: c0585240  r9 : c0544378  r8 : c0544378
+[    0.500642] r7 : ffb90000  r6 : 002d7c00  r5 : c05aa7f0  r4 : c0544378
+[    0.507245] r3 : ef1b8000  r2 : c051eb20  r1 : 00000000  r0 : ef026000
+[    0.513849] Flags: nzCv  IRQs on  FIQs off  Mode SVC_32  ISA ARM  Segment kernel
+[    0.521318] Control: 10c5387d  Table: 4000406a  DAC: 00000015
+[    0.527140] Process swapper/0 (pid: 1, stack limit = 0xef056240)
+[    0.533223] Stack: (0xef057e90 to 0xef058000)
+[    0.537662] 7e80:                                     c05442ec c058523c c0585200 ef056028
+[    0.545915] 7ea0: 00000000 00000000 00000000 c0408064 c04a34e8 c0585238 c0585238 c058523c
+[    0.554169] 7ec0: c0585200 ef056028 c051f234 c05442fc 00000000 c051f29c 00000005 c05442ec
+[    0.562422] 7ee0: c0585200 c051db18 ef011900 c04a99dc ef0ab480 c04113fc 00000000 00000001
+[    0.570675] 7f00: 00000000 c055de60 60000153 00000001 00000003 00000000 c0dca5e1 c041fb24
+[    0.578928] 7f20: 000000b1 c0034e50 c04f793c 00000005 c0dca5f2 00000005 c055de50 00000005
+[    0.587182] 7f40: c05442ec c0585200 c0585200 c051d4dc 000000b1 c05442fc c054c800 c051de94
+[    0.595435] 7f60: 00000005 00000005 c051d4dc ffffffff ffffffff ffffffff ffffffff 00000000
+[    0.603688] 7f80: c0585200 00000000 00000000 00000000 00000000 00000000 00000000 c0406db8
+[    0.611942] 7fa0: 00000000 00000000 c0406d8c c000e138 00000000 00000000 00000000 00000000
+[    0.620195] 7fc0: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[    0.628448] 7fe0: 00000000 00000000 00000000 00000000 00000013 00000000 ffffffff ffffffff
+[    0.636719] [<c051eb94>] (unpack_to_rootfs+0xc8/0x2a0) from [<c051f29c>] (populate_rootfs+0x68/0xb4)
+[    0.645930] [<c051f29c>] (populate_rootfs+0x68/0xb4) from [<c051db18>] (do_one_initcall+0x9c/0x13c)
+[    0.655055] [<c051db18>] (do_one_initcall+0x9c/0x13c) from [<c051de94>] (kernel_init_freeable+0x2dc/0x45c)
+[    0.664787] [<c051de94>] (kernel_init_freeable+0x2dc/0x45c) from [<c0406db8>] (kernel_init+0x2c/0x268)
+[    0.674175] [<c0406db8>] (kernel_init+0x2c/0x268) from [<c000e138>] (ret_from_fork+0x14/0x3c)
+[    0.682778] Code: e35c0000 1a000052 e3560000 0a000050 (e5d73000) 
+[    0.688980] ---[ end trace b5ab4f577dfa413b ]---
+[    0.693750] Kernel panic - not syncing: Attempted to kill init! exitcode=0x0000000b
+[    0.693750] 
+
+10, try xen with initrd in dt.
+1), enable arch timer in sun7i.h
+#define CONFIG_SYS_CLK_FREQ     24000000
+2), add initrd in dt
+3), fail after free memory
+[    4.557412] Freeing unused kernel memory: 204K (c053a000 - c056d000)
+[    4.563608] Internal error: Oops - undefined instruction: 0 [#1] SMP ARM
+[    4.570245] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 3.12.0-rc1-00021-g086e532-dirty #14
+[    4.578327] task: cf85a000 ti: cf85c000 task.ti: cf85c000
+[    4.583709] PC is at early_print+0x0/0x50
+[    4.587712] LR is at kernel_init+0x88/0x268
+[    4.591899] pc : [<c053cc44>]    lr : [<c041e040>]    psr: 60000153
+[    4.591899] sp : cf85dfa0  ip : 00000001  fp : 00000000
+[    4.603312] r10: 00000000  r9 : 00000000  r8 : 00000000
+[    4.608514] r7 : 00000000  r6 : 00000000  r5 : c05a3dc0  r4 : 00000000
+[    4.614998] r3 : c0427038  r2 : 00000342  r1 : c04bcd34  r0 : c04bce68
+[    4.621479] Flags: nZCv  IRQs on  FIQs off  Mode SVC_32  ISA ARM  Segment kernel
+[    4.628812] Control: 10c5387d  Table: 4000406a  DAC: 00000015
+[    4.634525] Process swapper/0 (pid: 1, stack limit = 0xcf85c240)
+[    4.640495] Stack: (0xcf85dfa0 to 0xcf85e000)
+[    4.644849] dfa0: 00000000 00000000 c041dfb8 c000e4b8 00000000 00000000 00000000 00000000
+[    4.652949] dfc0: 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[    4.661051] dfe0: 00000000 00000000 00000000 00000000 00000013 00000000 ffffffff ffffffff
+[    4.669162] Code: e7fddef0 e7fddef0 e7fddef0 e7fddef0 (e7fddef0) 
+[    4.675208] ---[ end trace a4e43cf9d0a5cb21 ]---
+[    4.679999] Kernel panic - not syncing: Attempted to kill init! exitcode=0x0000000b
+[    4.679999] 
+
+11, \TODO
+1), contact Josh and try to get him image.
+or i should use the same version with Josh and Ian C.
+2), try usb storage device as root.
+
+13:27 2013-10-09
+买来测试了视频播放等功能，很流畅，无线信号也不错。
+其实买来主要是为了自己开发用，已经引出了串口。正在实验Linux kernel和xen。
+总的来说是一款性价比很高的盒子。
+
+14:01 2013-10-09
+GTD
+0, 10:40
+
+1, today
+1), 30' discuss kiwi with Lidong zhong.
+
+16:10 2013-10-09
+yast里面读网卡应该是读的"/etc/sysconfig/network/if-xxx", 即使无效配置文件也会显示。但是ifconfig是从内核读取的信息，所以不会现实不存在的网卡。
+
+17:43 2013-10-09
+[PATCH RFC 0/8] xen/arm: very initial cubieboard2 support.
+The following patches are a very early set of cubieboard patches, based 
+on latest staging, eb786f709249666e1f7364706f94be1a6c4e04da 
+
+Several are not to be applied because they can be done better using 
+infrastructure from Julien's "Allow Xen to boot with a raw Device Tree" 
+patch. They are included for completeness. 
+
+With this I can boot up until dom0 panics due to lack of a root 
+filesystem. This is because upstream Linux currently lacks any useful 
+storage drivers (SATA, USB host, MMC). Hopefully this will resolve 
+itself soon! 
+
+The bulk of this is the hacking around of the ns16550 driver to support 
+ARM platforms and DTB. 
+
+It's currently a bit of a faff to get going. Hopefully the following is 
+helpful: 
+
+u-boot 
+====== 
+
+https://github.com/linux-sunxi/u-boot-sunxi.git linux-sunxi/sunxi 
+commit e94cff93c273b0825bea135e0f559f5580156fa6 
+
+Plus git://git.linaro.org/people/aprzywara/u-boot.git hypmode_v4 
+commit 5068b337518617586f2e51b6d616c54dbec4fa62 
+
+Plus patches for hypmode on sunxi and to initialise CNTFRQ. 
+
+All of which can be found in 
+git://xenbits.xen.org/people/ianc/u-boot.git devel/cubieboard2 
+
+Built with: 
+make Cubieboard2_FEL CROSS_COMPILE=arm-linux-gnueabihf- 
+
+Linux 
+===== 
+
+Linux tree: 
+https://github.com/mripard/linux.git sunxi/dt-for-3.12 
+commit 82abe5294aeadc42508c7944f3a9aec0eece214c 
+
+Using in tree DTS arch/arm/boot/dts/sun7i-a20-cubieboard2.dts with the 
+following patch. 
+
+Build Image and dtbs in the usual way 
+
+Xen 
+=== 
+
+Build in the usual way. 
+
+Xen can use CONFIG_EARLY_PRINTK=sun7i. 
+
+Booting 
+======= 
+
+I am using FEL boot per http://linux-sunxi.org/FEL/USBBoot and 
+http://linux-sunxi.org/FEL using the fel-sdboot.sunxi on MMC 
+mechanism. 
+
+linux-sunxi tools from git://github.com/linux-sunxi/sunxi-tools.git 
+commit b398456630b310dbf31c7515e8d6af37903c4975 and: 
+
+./usb-boot ~/devel/u-boot.git/spl/u-boot-spl.bin ~/devel/u-boot.git/u-boot.bin \ 
+bootxen.scr ~/devel/xen.git/xen/xen \ 
+~/devel/linux.git/arch/arm/boot/dts/sun7i-a20-cubieboard2.dtb 
+~/devel/linux.git/arch/arm/boot/zImage 
+
+bootxen.scr is: 
+$ cat bootxen 
+setenv bootargs dtuart=serial0 earlyprint loglvl=all conswitch=x 
+bootz 0x44000000 - 0x43000000 
+$ mkimage -T script -A arm -d bootxen bootxen.scr 
+
+DTS patch 
+========= 
+
+
+diff --git a/arch/arm/boot/dts/sun7i-a20-cubieboard2.dts b/arch/arm/boot/dts/sun7i-a20-cubieboard2.dts 
+31b76f0..6c0c387 100644 
+--- a/arch/arm/boot/dts/sun7i-a20-cubieboard2.dts 
++++ b/arch/arm/boot/dts/sun7i-a20-cubieboard2.dts 
+@@ -18,6 +18,21 @@ 
+model = "Cubietech Cubieboard2"; 
+compatible = "cubietech,cubieboard2", "allwinner,sun7i-a20"; 
+
++ chosen { 
++ #address-cells = <1>; 
++ #size-cells = <1>; 
++ 
++ module@0 { 
++ compatible = "xen,linux-zimage", "xen,multiboot-module"; 
++ bootargs = "console=hvc0 earlyprintk "; 
++ reg = <0x50000000 0x800000>; 
++ }; 
++ }; 
++ 
++ aliases { 
++ serial0 = &uart0; 
++ }; 
++ 
+soc [at] 01c0000 { 
+pinctrl [at] 01c2080 { 
+led_pins_cubieboard2: led_pins@0 { 
+diff --git a/arch/arm/boot/dts/sun7i-a20.dtsi b/arch/arm/boot/dts/sun7i-a20.dtsi 
+index f4e4524..bfc5dc2 100644 
+--- a/arch/arm/boot/dts/sun7i-a20.dtsi 
++++ b/arch/arm/boot/dts/sun7i-a20.dtsi 
+@@ -26,11 +26,6 @@ 
+reg = <0>; 
+}; 
+
+- cpu@1 { 
+- compatible = "arm,cortex-a7"; 
+- device_type = "cpu"; 
+- reg = <1>; 
+- }; 
+}; 
+
+memory { 
+@@ -55,6 +55,14 @@ 
+}; 
+}; 
+
++ timer { 
++ compatible = "arm,armv7-timer"; 
++ interrupts = <1 13 0xf08>, 
++ <1 14 0xf08>, 
++ <1 11 0xf08>, 
++ <1 10 0xf08>; 
++ }; 
++ 
+soc [at] 01c0000 { 
+compatible = "simple-bus"; 
+#address-cells = <1>; 
+@@ -94,17 +102,6 @@ 
+}; 
+}; 
+
+- timer [at] 01c20c0 { 
+- compatible = "allwinner,sun4i-timer"; 
+- reg = <0x01c20c00 0x90>; 
+- interrupts = <0 22 1>, 
+- <0 23 1>, 
+- <0 24 1>, 
+- <0 25 1>, 
+- <0 67 1>, 
+- <0 68 1>; 
+- clocks = <&osc24M>; 
+- }; 
+
+wdt: watchdog [at] 01c20c9 { 
+compatible = "allwinner,sun4i-wdt"; 
+
