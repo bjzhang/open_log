@@ -1,0 +1,128 @@
+From b5a4ae8d4fbb72a259cb25a2d350e6966cd79b7d Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Wed, 9 Oct 2013 16:30:21 +0800
+Subject: [PATCH 1/1] get Ian C patch from
+ http://lists.xen.org/archives/html/xen-devel/2013-08/msg03040.html
+
+---
+ arch/arm/cpu/armv7/virt-v7.c |  2 ++
+ board/sunxi/Makefile         |  8 ++++++--
+ board/sunxi/board.c          | 14 ++++++++++++++
+ board/sunxi/smp.S            | 33 +++++++++++++++++++++++++++++++++
+ include/configs/sun7i.h      |  2 ++
+ 5 files changed, 57 insertions(+), 2 deletions(-)
+ create mode 100644 board/sunxi/smp.S
+
+diff --git a/arch/arm/cpu/armv7/virt-v7.c b/arch/arm/cpu/armv7/virt-v7.c
+index 4dc8c45..a76dcf7 100644
+--- a/arch/arm/cpu/armv7/virt-v7.c
++++ b/arch/arm/cpu/armv7/virt-v7.c
+@@ -132,6 +132,8 @@ int armv7_switch_nonsec(void)
+ 	unsigned int reg;
+ 	unsigned itlinesnr, i;
+ 
++	cleanup_before_linux();
++
+ 	/* check whether the CPU supports the security extensions */
+ 	reg = read_id_pfr1();
+ 	if ((reg & 0xF0) == 0) {
+diff --git a/board/sunxi/Makefile b/board/sunxi/Makefile
+index 4780c99..8c14eb0 100644
+--- a/board/sunxi/Makefile
++++ b/board/sunxi/Makefile
+@@ -76,9 +76,13 @@ COBJS-$(CONFIG_UHOST_U1A)	+= dram_sun4i_360_1024_iow8.o
+ COBJS-$(CONFIG_WOBO_I5)		+= dram_wobo_i5.o
+ COBJS-$(CONFIG_XZPAD700)	+= dram_xzpad700.o
+ 
++ifneq ($(CONFIG_ARMV7_NONSEC)$(CONFIG_ARMV7_VIRT),)
++SOBJS                           := smp.o
++endif
++
+ COBJS	:= $(COBJS-y)
+-SRCS	:= $(COBJS:.o=.c)
+-OBJS	:= $(addprefix $(obj),$(COBJS))
++SRCS   := $(COBJS:.o=.c) $(SOBJS:.o=.S)
++OBJS   := $(addprefix $(obj),$(COBJS) $(SOBJS))
+ 
+ all:	$(LIB)
+ 
+diff --git a/board/sunxi/board.c b/board/sunxi/board.c
+index 0b10f1a..db7f8b7 100755
+--- a/board/sunxi/board.c
++++ b/board/sunxi/board.c
+@@ -40,6 +40,20 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++/* Setting the address at which secondary cores start from.
++ * SMP currently unsupported.
++ */
++void smp_set_core_boot_addr(unsigned long addr, int corenr)
++{
++       printf("WARNING: ignoring attempt to set core boot address %lx on core %d\n",
++              addr, corenr);
++}
++
++void smp_kick_all_cpus(void)
++{
++       printf("WARNING: Not kicking secondary CPUs\n");
++}
++
+ /* add board specific code here */
+ int board_init(void)
+ {
+diff --git a/board/sunxi/smp.S b/board/sunxi/smp.S
+new file mode 100644
+index 0000000..096f9bc
+--- /dev/null
++++ b/board/sunxi/smp.S
+@@ -0,0 +1,33 @@
++/*
++ * code for redirecting secondary cores to their start address
++ *
++ * Copyright (c) 2013  Andre Przywara <andre.przywara@xxxxxxxxxx>
++ *
++ * See file CREDITS for list of people who contributed to this
++ * project.
++ *
++ * This program is free software; you can redistribute it and/or
++ * modify it under the terms of the GNU General Public License as
++ * published by the Free Software Foundation; either version 2 of
++ * the License, or (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.         See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
++ * MA 02111-1307 USA
++ */
++
++#include <config.h>
++#include <linux/linkage.h>
++
++/* void _smp_waitloop(unsigned previous_address); */
++ENTRY(smp_waitloop)
++       /* SMP currently unsupported */
++1:     wfi
++       b 1b
++ENDPROC(smp_waitloop)
+diff --git a/include/configs/sun7i.h b/include/configs/sun7i.h
+index a6ede2a..f0d9222 100644
+--- a/include/configs/sun7i.h
++++ b/include/configs/sun7i.h
+@@ -34,6 +34,8 @@
+ #define CONFIG_SYS_PROMPT		"sun7i# "
+ #define CONFIG_MACH_TYPE		4283
+ 
++#define CONFIG_ARMV7_VIRT
++
+ #if defined(CONFIG_SYS_SECONDARY_ON)
+ #define CONFIG_BOARD_POSTCLK_INIT 1
+ #endif
+-- 
+1.8.1.4
+
