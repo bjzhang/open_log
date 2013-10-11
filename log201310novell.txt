@@ -666,3 +666,129 @@ suggest add this in linux-sunxi.
 7, nfs server, not reponsing. maybe solved by using tcp instead udp protocol and limit the package size(?) when a embedded board communcate with pc.
 there is no this problem in office.
 
+10:25 2013-10-11
+GTD
+0, 9:50
+
+1, today
+1), Shawn. FM, GSM抓包.
+2), 10:25-11:54 xen: arm: sun7i. see"10:25 2013-10-11"
+
+10:25 2013-10-11
+xen, arm, sun7i
+1, try xen tools on sun7i.
+1), 
+# /usr/local/sbin/xenstored --pid-file /var/run/xenstored.pid
+/usr/local/sbin/xenstored: error while loading shared libraries: libxenctrl.so.4.3: cannot open shared object file: No such file or directory
+
+# echo $LD_LIBRARY_PATH
+# export LD_LIBRARY_PATH=/usr/local/lib
+2), 
+# /etc/init.d/xencommons start
+Starting C xenstored....WARNING: Failed to open connection to gnttab
+FATAL: Failed to open evtchn device: No such file or directory
+
+3), 昨天换了kernel编译还不行，要针对当前版本kernel编译才可以.
+我又错了，ko肯定是编译kernel时生成的，拷过来就行了。 
+但是昨天编译的时候没有开module:
+Enable loadable module support
+
+4), if i do not mount nfs as root, lots of sript will not run. 
+
+2, mount nfs not work when rootfs included in kernel.
+1), remove the rootfs, retry, fail, the log
+[    0.000000] Kernel command line: noinitrd rootfstype=nfs console=hvc0,115200n8 debug ignore_loglevel rw rootwait earlyprintk=xen clk_ignore_unused root=/dev/nfs nfsroot=147.2.207.160:/mnt/opensuse_root,no_lock,tcp ip=147.2.207.79:147.2.207.160:147.2.207.254:255.255.255.0
+
+[    4.597655] IPv6: ADDRCONF(NETDEV_UP): eth0: link is not ready
+[    4.833771] usb 1-1: new high-speed USB device number 2 using sunxi-ehci
+[    6.703354] libphy: 1c0b080.mdio-mii:01 - Link is Up - 100/Full
+[    6.709128] IPv6: ADDRCONF(NETDEV_CHANGE): eth0: link becomes ready
+[    6.723386] IP-Config: Complete:
+[    6.726495]      device=eth0, hwaddr=16:46:82:0c:ee:f4, ipaddr=147.2.207.79, mask=255.255.255.0, gw=147.2.207.254
+[    6.736775]      host=147.2.207.79, domain=, nis-domain=(none)
+[    6.742439]      bootserver=147.2.207.160, rootserver=147.2.207.160, rootpath=
+
+2), using result while mount nfs after boot.
+147.2.207.160:/mnt/opensuse_root on /mnt type nfs (rw,relatime,vers=3,rsize=1048576,wsize=1048576,namlen=255,hard,nolock,proto=tcp,port=2049,timeo=70,retrans=3,sec=sys,local_lock=all,addr=147.2.207.160)
+2), using result while mount nfs after boot.
+147.2.207.160:/mnt/opensuse_root on /mnt type nfs (rw,relatime,vers=3,rsize=1048576,wsize=1048576,namlen=255,hard,nolock,proto=tcp,port=2049,timeo=70,retrans=3,sec=sys,local_lock=all,addr=147.2.207.160)
+
+3, 
+FATAL: Failed to initialize dom0 state: Inappropriate ioctl for device
+
+4, 似乎超近路不行，try to use opensuse initrd and opensuse nfs root fs.
+and later try compile xen module instead of compile into kernel.
+1), 
+[    5.055580] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+[    5.061782] clk: Not disabling unused clocks
+[    5.066672] RAMDISK: gzip image found at block 0
+[    5.192861] RAMDISK: incomplete write (1199 != 7747)
+[    5.197693] write error
+[    5.200354] Waiting for root device ...
+
+2), enlarge the ramdisk size in kernel, got another error
+[    5.066717] init/main.c:906<kernel_init_freeable>: sys_access fail
+[    5.072513] init/do_mounts.c:575<prepare_namespace>: call initrd_loadinit/do_mounts_initrd.c:127<initrd_load>
+[    5.082284] init/do_mounts_initrd.c:129<initrd_load>: noinitrd not setinit/do_mounts_rd.c:198<rd_load_image>
+[    5.092114] RAMDISK: gzip image found at block 0
+[    5.096853] init/do_mounts_rd.c:352<crd_load>[    5.317456] usb 1-1: new high-speed USB device number 2 using sunxi-ehci
+
+[    6.334657] uncompression error
+[    6.338047] init/do_mounts_initrd.c:144<initrd_load>
+[    6.342709] Waiting for root device ...
+
+3), try to use the no compress image.
+fail because i do not use the ext4 format. in current kernel, ext2 and ext3 is not supported:
+[    5.420060] drivers/rtc/hctosys.c: unable to open rtc device (rtc0)
+[    5.426264] clk: Not disabling unused clocks
+[    5.431056] init/main.c:906<kernel_init_freeable>: sys_access fail
+[    5.437108] init/do_mounts.c:575<prepare_namespace>: call initrd_load
+[    5.443455] init/do_mounts_initrd.c:127<initrd_load>
+[    5.448417] init/do_mounts_initrd.c:129<initrd_load>: noinitrd not set
+[    5.454940] init/do_mounts_rd.c:198<rd_load_image>
+[    5.459750] RAMDISK: ext2 filesystem found at block 0
+[    5.464747] RAMDISK: Loading 98304KiB [1 disk] into ram disk... [    5.681270] usb 1-1: new high-speed USB device number 2 using sunxi-ehci
+done.
+[    7.058015] init/do_mounts_initrd.c:138<initrd_load>
+[    7.251267] EXT4-fs (ram0): couldn't mount as ext3 due to feature incompatibilities
+[    7.259373] EXT4-fs (ram0): mounting ext2 file system using the ext4 subsystem
+[    7.267550] EXT4-fs (ram0): mounted filesystem without journal. Opts: (null)
+[    7.274474] VFS: Mounted root (ext2 filesystem) on device 1:0.
+[    7.280942] EXT4-fs error (device ram0): ext4_get_branch:169: inode #19: block 1734439765: comm kworker/u2:1: invalid block
+[    7.292670] VFS: Cannot open root device "(null)" or unknown-block(0,0): error -6
+[    7.300009] Please append a correct "root=" boot option; here are the available partitions:
+[    7.308313] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[    7.316422] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 3.12.0-rc1-00024-g31f10b1-dirty #20
+[    7.324555] [<c0020100>] (unwind_backtrace+0x0/0xf4) from [<c001b9a8>] (show_stack+0x10/0x14)
+[    7.332975] [<c001b9a8>] (show_stack+0x10/0x14) from [<c04e37cc>] (dump_stack+0x84/0x94)
+[    7.341005] [<c04e37cc>] (dump_stack+0x84/0x94) from [<c04e1240>] (panic+0xa4/0x1f0)
+[    7.348662] [<c04e1240>] (panic+0xa4/0x1f0) from [<c06e1fc8>] (mount_block_root+0x1a0/0x230)
+[    7.357018] [<c06e1fc8>] (mount_block_root+0x1a0/0x230) from [<c06e224c>] (mount_root+0x108/0x110)
+[    7.365887] [<c06e224c>] (mount_root+0x108/0x110) from [<c06e2f74>] (initrd_load+0x278/0x388)
+[    7.374329] [<c06e2f74>] (initrd_load+0x278/0x388) from [<c06e235c>] (prepare_namespace+0x108/0x1f4)
+[    7.383380] [<c06e235c>] (prepare_namespace+0x108/0x1f4) from [<c06e1c84>] (kernel_init_freeable+0x1ec/0x1fc)
+[    7.393177] [<c06e1c84>] (kernel_init_freeable+0x1ec/0x1fc) from [<c04dedc8>] (kernel_init+0xc/0x160)
+[    7.402302] [<c04dedc8>] (kernel_init+0xc/0x160) from [<c0018538>] (ret_from_fork+0x14/0x3c)
+
+2), fail again, why?
+[    7.224151] EXT3-fs (ram0): error: couldn't mount because of unsupported optional features (240)
+[    7.233171] EXT2-fs (ram0): error: couldn't mount because of unsupported optional features (240)
+[    7.243357] EXT4-fs (ram0): mounted filesystem with ordered data mode. Opts: (null)
+[    7.250891] VFS: Mounted root (ext4 filesystem) on device 1:0.
+[    7.269919] VFS: Cannot open root device "(null)" or unknown-block(0,0): error -6
+[    7.277295] Please append a correct "root=" boot option; here are the available partitions:
+[    7.285522] Kernel panic - not syncing: VFS: Unable to mount root fs on unknown-block(0,0)
+[    7.293693] CPU: 0 PID: 1 Comm: swapper/0 Not tainted 3.12.0-rc1-00024-g31f10b1-dirty #21
+[    7.301811] [<c0020100>] (unwind_backtrace+0x0/0xf4) from [<c001b9a8>] (show_stack+0x10/0x14)
+[    7.310233] [<c001b9a8>] (show_stack+0x10/0x14) from [<c050f84c>] (dump_stack+0x84/0x94)
+[    7.318247] [<c050f84c>] (dump_stack+0x84/0x94) from [<c050d080>] (panic+0xa4/0x1f0)
+[    7.325934] [<c050d080>] (panic+0xa4/0x1f0) from [<c0717fc8>] (mount_block_root+0x1a0/0x230)
+[    7.334276] [<c0717fc8>] (mount_block_root+0x1a0/0x230) from [<c071824c>] (mount_root+0x108/0x110)
+[    7.343144] [<c071824c>] (mount_root+0x108/0x110) from [<c0718f74>] (initrd_load+0x278/0x388)
+[    7.351587] [<c0718f74>] (initrd_load+0x278/0x388) from [<c071835c>] (prepare_namespace+0x108/0x1f4)
+[    7.360628] [<c071835c>] (prepare_namespace+0x108/0x1f4) from [<c0717c84>] (kernel_init_freeable+0x1ec/0x1fc)
+[    7.370436] [<c0717c84>] (kernel_init_freeable+0x1ec/0x1fc) from [<c050ac08>] (kernel_init+0xc/0x160)
+[    7.379571] [<c050ac08>] (kernel_init+0xc/0x160) from [<c0018538>] (ret_from_fork+0x14/0x3c)
+
+3), need limit the block
+mkfs.ext3 -vm0 initrd.ext3 97280
