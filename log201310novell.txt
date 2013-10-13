@@ -832,3 +832,208 @@ openbrd.org
 shawn:
 fflush, fsync后才能保证写到硬盘.
 
+21:31 2013-10-12
+1, discuss nfs root mount fail with Boyang, got 2 suggests:
+1), permission, mount as root need rw, ro will fail.
+2), capture the package check where it fails.
+2, for 1-1):
+i was mount it in /mnt/opensuse_root which is owned by root. no sure if it will affect the nfs client as ro. 
+mount it under /home/bamvor and try it again.
+
+fail with the same error:
+# chroot . /sbin/init
+Couldn't find an alternative telinit implementation to spawn.
+
+2), 
+# ps aux|grep xenstore
+missing btime in /proc/stat
+
+the reason is because btime is empty. 
+
+# date -s 20131012
+Sat Oct 12 00:00:00 CEST 2013
+# date -s 21:52
+Sat Oct 12 21:52:00 CEST 2013
+
+it will ok after set the date.
+
+# ps aux|grep xenstored
+root       111  0.0  0.1   2332   564 /initrd/dev/hvc0 S+ 21:53   0:00 grep xenstored
+# 
+
+2), try xen tools
+(1), 
+# xenstore-ls
+xenstore-ls: error while loading shared libraries: libxenstore.so.3.0: cannot open shared object file: No such file or directory
+# export LD_LIBRARY_PATH=/usr/local/lib
+# xenstore-ls
+xenstore-ls: xs_open: No such file or directory
+
+(2), 
+# /usr/local/sbin/xenstored --pid-file /var/run/xenstored.pid
+# FATAL: Opening pid file /var/run/xenstored.pid: Permission denied
+
+i fount that i could not create anything except the "/", according to 
+http://yupianer.iteye.com/blog/815071
+should use no_root_squash instead of root_squash in /etc/export
+
+mount -t nfs -o nolock,tcp,rsize=10240,wsize=10240 192.168.1.104:/home/bamvor/opensuse_root /mnt
+
+error not change
+# pivot_root /mnt/ /mnt/initrd/
+# cd /
+# ls
+bin                             etc     kiwi-hooks  opt   run      sys
+boot                            home    lib         proc  sbin     tmp
+bootincluded_archives.filelist  image   media       qemu  selinux  usr
+dev                             initrd  mnt         root  srv      var
+# ls initrd/
+bin   dev  home  lib      lost+found  opt   root  sys  usr
+boot  etc  init  linuxrc  mnt         proc  sbin  tmp  var
+# chroot . /sbin/init
+Couldn't find an alternative telinit implementation to spawn.
+# 
+
+(3), try xen-tools
+# /usr/local/sbin/xenstored --pid-file /var/run/xenstored.pid
+# xc: error: Could not obtain handle on privileged command interface (2 = No such file or directory): Internal error
+FATAL: Failed to open connection to hypervisor: No such file or directory
+
+this is because missing /proc/xen/privcmd(and /proc/xen) in proc. 
+and i miss the important step, before start xenstored.
+mount -t xenfs xenfs /proc/xen
+
+# mkdir /proc/xen
+# mount -t xenfs xenfs /proc/xen
+# ls /proc/xen/
+capabilities  privcmd  xenbus  xsd_kva  xsd_port
+
+(4), another failure
+# /usr/local/sbin/xenstored --pid-file /var/run/xenstored.pid
+# FATAL: Failed to initialize dom0 state: Invalid argument
+
+great, i finally got the same result in the company in yestoday.
+
+(5), using gdb to debug it.
+(gdb) n
+292             rc = xc_evtchn_bind_interdomain(xce_handle, domid, port);
+(gdb) s
+
+Program received signal SIGSEGV, Segmentation fault.
+0xe7f001f0 in ?? ()
+
+((1)), re-run it
+(gdb) s
+101         return xce->ops->u.evtchn.bind_interdomain(xce, xce->ops_handle, domid, remote_port);
+(gdb) p xce
+$1 = (xc_evtchn *) 0x343c8
+(gdb) p xce->ops_handle
+$2 = 15
+(gdb) p domid
+$3 = 0
+(gdb) p remote_port
+$4 = 1
+(gdb) s
+linux_evtchn_bind_interdomain (xce=0x343c8, h=15, domid=domid@entry=0, 
+    remote_port=remote_port@entry=1) at xc_linux_osdep.c:486
+486         bind.remote_domain = domid;
+(gdb) 
+
+failed in 
+    return ioctl(fd, IOCTL_EVTCHN_BIND_INTERDOMAIN, &bind);
+
+the errno is 22.
+
+    #define EINVAL      22  /* Invalid argument */
+
+the fd is point to the 
+lrwx------ 1 root root 64 Oct 12 23:15 15 -> /dev/xen/evtchn
+
+is it because the device node is created by hand?
+
+(6), yes, the device number is changes.
+# ls /dev/xen -l
+total 0
+crw-------    1 root     root       10,  61 Jan  1 00:00 evtchn
+crw-------    1 root     root       10,  59 Jan  1 00:00 gntalloc
+crw-------    1 root     root       10,  60 Jan  1 00:00 gntdev
+crw-------    1 root     root       10,  58 Jan  1 00:00 privcmd
+crw-------    1 root     root       10,  63 Jan  1 00:00 xenbus
+crw-------    1 root     root       10,  62 Jan  1 00:00 xenbus_backend
+
+((1)), cmd list: init
+ifconfig eth0 192.168.1.105 netmask 255.255.255.0 up
+sleep 1
+route add default 192.168.1.1
+sleep 1
+mount -t nfs -o nolock,tcp,rsize=10240,wsize=10240 192.168.1.104:/home/bamvor/opensuse_root /mnt
+pivot_root /mnt /mnt/initrd
+chroot /mnt
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+export LD_LIBRARY_PATH=/usr/local/lib
+
+((2)), xen device 
+cd /dev/xen
+mknod evtchn c 10 61
+mknod gntalloc c 10 59
+mknod gntdev c 10 60
+mknod privcmd c 10 58
+mknod xenbus c 10 63
+mknod xenbus_backend c 10 62
+
+((3)), xenfs
+mount -t xenfs xenfs /proc/xen
+
+((4)), xenstored start successful
+# /usr/local/sbin/xenstored --pid-file /var/run/xenstored.pid
+# xenstore-ls
+tool = ""
+ xenstored = ""
+local = "
+
+7), 
+# /etc/init.d/xencommons start
+Starting xenconsoled...
+Starting QEMU as disk backend for dom0
+/etc/init.d/xencommons: line 120: /usr/local/lib/xen/bin/qemu-system-i386: No such file or directory
+
+# ps aux|grep xen
+root        14  0.0  0.0      0     0 ?        S    23:49   0:00 [xenwatch]
+root        15  0.0  0.0      0     0 ?        S    23:49   0:00 [xenbus]
+root        19  0.0  0.0      0     0 ?        S<   23:49   0:00 [xenbus_frontend]
+root        78  0.0  0.0      0     0 ?        Zs   23:51   0:00 [xenstored] <defunct>
+root        79  0.0  0.1   2380   600 ?        S    23:51   0:00 /usr/local/sbin/xenstored --pid-file /var/run/xenstored.pid
+root       103  0.0  0.0      0     0 ?        Zs   23:52   0:00 [xenconsoled] <defunct>
+root       105  0.0  0.1   3416   524 ?        SLl  23:52   0:00 /usr/local/sbin/xenconsoled --pid-file=/var/run/xenconsoled.pid
+root       111  0.0  0.1   2332   564 /initrd/dev/hvc0 S+ 23:53   0:00 grep xen
+# 
+
+8), xl list successful
+# /usr/local/sbin/xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+(null)                                       0   384     1     r-----       4.9
+# 
+
+3, \TODO
+1), try nfs root
+192.168.1.104:/home/bamvor/opensuse_root on / type nfs (rw,relatime,vers=3,rsize=1024,wsize=1024,namlen=255,hard,nolock,proto=tcp,port=2049,timeo=70,retrans=3,sec=sys,local_lock=all,addr=192.168.1.104)
+
+i need update the xen device tree. get it from company.
+
+2), i found that i could login only after i enable the autologin:
+hvc0::respawn:/sbin/getty -n -l/bin/autologin -L hvc0 115200 vt100
+why?
+
+21:56 2013-10-13
+1, check the dom0 config
+remove the followings
+CONFIG_XEN_XENBUS_FRONTEND=y
+CONFIG_HVC_XEN_FRONTEND=y
+CONFIG_XEN_FBDEV_FRONTEND=y
+CONFIG_XEN_BLKDEV_FRONTEND=y
+CONFIG_XEN_NETDEV_FRONTEND=y
+2, \TODO
+1), compile dom0 kernel base on julieng arndale kernel.
+
+
