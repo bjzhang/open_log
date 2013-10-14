@@ -966,9 +966,10 @@ ifconfig eth0 192.168.1.105 netmask 255.255.255.0 up
 sleep 1
 route add default 192.168.1.1
 sleep 1
-mount -t nfs -o nolock,tcp,rsize=10240,wsize=10240 192.168.1.104:/home/bamvor/opensuse_root /mnt
+export server_ip=192.168.1.104
+mount -t nfs -o nolock,tcp,rsize=10240,wsize=10240 ${server_ip}:/mnt/opensuse_root /mnt
 pivot_root /mnt /mnt/initrd
-chroot /mnt
+chroot /
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 export LD_LIBRARY_PATH=/usr/local/lib
@@ -981,6 +982,13 @@ mknod gntdev c 10 60
 mknod privcmd c 10 58
 mknod xenbus c 10 63
 mknod xenbus_backend c 10 62
+
+(15:54 2013-10-14)
+follow the initrd mount result, i found that after i mount devtmpfs, the device will appear in /dev, i also mount devpts and tmpfs:
+mount -t devtmpfs devtmpfs /dev
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmps /tmp/
+"15:54 2013-10-14"end
 
 ((3)), xenfs
 mount -t xenfs xenfs /proc/xen
@@ -1009,6 +1017,26 @@ root       105  0.0  0.1   3416   524 ?        SLl  23:52   0:00 /usr/local/sbin
 root       111  0.0  0.1   2332   564 /initrd/dev/hvc0 S+ 23:53   0:00 grep xen
 # 
 
+(15:57 2013-10-14)
+after set domain name in xenstored, xl list will show the dom0 name as "Domain-0"
+    echo Setting domain 0 name...
+    ${BINDIR}/xenstore-write "/local/domain/0/name" "Domain-0"
+# xenstore-ls
+tool = ""
+ xenstored = ""
+local = ""
+ domain = ""
+  0 = ""
+   name = "Domain-0"
+# xl list
+sh: xl: command not found
+# export PATH=$PATH:/usr/local/bin
+# export PATH=$PATH:/usr/local/sbin
+# xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0   384     1     r-----       9.2
+"15:57 2013-10-14"end
+
 8), xl list successful
 # /usr/local/sbin/xl list
 Name                                        ID   Mem VCPUs      State   Time(s)
@@ -1026,6 +1054,7 @@ hvc0::respawn:/sbin/getty -n -l/bin/autologin -L hvc0 115200 vt100
 why?
 
 21:56 2013-10-13
+xen, arm, sun7i, compile domU kernel
 1, check the dom0 config
 remove the followings
 CONFIG_XEN_XENBUS_FRONTEND=y
@@ -1033,7 +1062,681 @@ CONFIG_HVC_XEN_FRONTEND=y
 CONFIG_XEN_FBDEV_FRONTEND=y
 CONFIG_XEN_BLKDEV_FRONTEND=y
 CONFIG_XEN_NETDEV_FRONTEND=y
+
+
+--- .config	2013-10-11 18:04:07.369842503 +0800
++++ arch/arm/configs/sun7i_dom0_defconfig	2013-10-14 11:26:42.483325824 +0800
+@@ -853,13 +689,13 @@
+ # CONFIG_BLK_DEV_NBD is not set
+ CONFIG_BLK_DEV_RAM=y
+ CONFIG_BLK_DEV_RAM_COUNT=2
+ CONFIG_BLK_DEV_RAM_SIZE=262144
+ # CONFIG_BLK_DEV_XIP is not set
+ # CONFIG_CDROM_PKTCDVD is not set
+ # CONFIG_ATA_OVER_ETH is not set
+ # CONFIG_MG_DISK is not set
+-CONFIG_XEN_BLKDEV_FRONTEND=y
+-# CONFIG_XEN_BLKDEV_BACKEND is not set
++# CONFIG_XEN_BLKDEV_FRONTEND is not set
++CONFIG_XEN_BLKDEV_BACKEND=y
+ # CONFIG_BLK_DEV_RBD is not set
+ 
+ #
+@@ -882,7 +718,6 @@
+ # CONFIG_HMC6352 is not set
+ # CONFIG_DS1682 is not set
+ # CONFIG_TI_DAC7512 is not set
+-# CONFIG_ARM_CHARLCD is not set
+ # CONFIG_BMP085_I2C is not set
+ # CONFIG_BMP085_SPI is not set
+ # CONFIG_USB_SWITCH_FSA9480 is not set
+@@ -955,7 +790,6 @@
+ # CONFIG_SCSI_DEBUG is not set
+ # CONFIG_SCSI_DH is not set
+ # CONFIG_SCSI_OSD_INITIATOR is not set
+-CONFIG_HAVE_PATA_PLATFORM=y
+ CONFIG_ATA=y
+ # CONFIG_ATA_NONSTANDARD is not set
+ CONFIG_ATA_VERBOSE_ERROR=y
+@@ -984,12 +818,10 @@
+ # PATA SFF controllers with BMDMA
+ #
+ # CONFIG_PATA_ARASAN_CF is not set
+-# CONFIG_PATA_IMX is not set
+ 
+ #
+ # PIO-only SFF controllers
+ #
+-# CONFIG_PATA_PLATFORM is not set
+ 
+ #
+ # Generic fallback / legacy drivers
+@@ -1042,14 +874,10 @@
+ CONFIG_NET_VENDOR_FARADAY=y
+ # CONFIG_FTMAC100 is not set
+ # CONFIG_FTGMAC100 is not set
+-CONFIG_NET_VENDOR_FREESCALE=y
+-CONFIG_FEC=y
+ CONFIG_NET_VENDOR_INTEL=y
+ CONFIG_NET_VENDOR_I825XX=y
+ CONFIG_NET_VENDOR_MARVELL=y
+-# CONFIG_MV643XX_ETH is not set
+ # CONFIG_MVMDIO is not set
+-# CONFIG_MVNETA is not set
+ CONFIG_NET_VENDOR_MICREL=y
+ # CONFIG_KS8842 is not set
+ CONFIG_KS8851=y
+@@ -1072,18 +900,11 @@
+ CONFIG_STMMAC_PLATFORM=y
+ # CONFIG_STMMAC_DEBUG_FS is not set
+ # CONFIG_STMMAC_DA is not set
+-CONFIG_NET_VENDOR_TI=y
+-# CONFIG_TI_DAVINCI_EMAC is not set
+-# CONFIG_TI_DAVINCI_MDIO is not set
+-# CONFIG_TI_DAVINCI_CPDMA is not set
+-# CONFIG_TI_CPSW is not set
+ CONFIG_NET_VENDOR_VIA=y
+ # CONFIG_VIA_VELOCITY is not set
+ CONFIG_NET_VENDOR_WIZNET=y
+ # CONFIG_WIZNET_W5100 is not set
+ # CONFIG_WIZNET_W5300 is not set
+-CONFIG_NET_VENDOR_XILINX=y
+-# CONFIG_XILINX_EMACLITE is not set
+ CONFIG_PHYLIB=y
+ 
+ #
+@@ -1134,8 +955,8 @@
+ # Enable WiMAX (Networking options) to see the WiMAX drivers
+ #
+ # CONFIG_WAN is not set
+-CONFIG_XEN_NETDEV_FRONTEND=y
+-# CONFIG_XEN_NETDEV_BACKEND is not set
++# CONFIG_XEN_NETDEV_FRONTEND is not set
++CONFIG_XEN_NETDEV_BACKEND=y
+ # CONFIG_ISDN is not set
+ 
+ #
+@@ -1293,12 +1095,12 @@
+ CONFIG_HVC_DRIVER=y
+ CONFIG_HVC_IRQ=y
+ CONFIG_HVC_XEN=y
+-CONFIG_HVC_XEN_FRONTEND=y
++# CONFIG_HVC_XEN_FRONTEND is not set
+ # CONFIG_HVC_DCC is not set
+ # CONFIG_IPMI_HANDLER is not set
+ CONFIG_HW_RANDOM=y
+ # CONFIG_HW_RANDOM_TIMERIOMEM is not set
+ # CONFIG_HW_RANDOM_ATMEL is not set
+ # CONFIG_HW_RANDOM_EXYNOS is not set
+ # CONFIG_R3964 is not set
+ # CONFIG_RAW_DRIVER is not set
+@@ -1831,16 +1567,16 @@
+ #
+ # Frame buffer hardware drivers
+ #
+ # CONFIG_FB_S1D13XXX is not set
+ # CONFIG_FB_SMSCUFX is not set
+ # CONFIG_FB_UDL is not set
+ # CONFIG_FB_GOLDFISH is not set
+ # CONFIG_FB_VIRTUAL is not set
+-CONFIG_XEN_FBDEV_FRONTEND=y
++# CONFIG_XEN_FBDEV_FRONTEND is not set
+ # CONFIG_FB_METRONOME is not set
+ # CONFIG_FB_BROADSHEET is not set
+ # CONFIG_FB_AUO_K190X is not set
+ CONFIG_FB_SIMPLE=y
+ # CONFIG_EXYNOS_VIDEO is not set
+ # CONFIG_BACKLIGHT_LCD_SUPPORT is not set
+ 
+@@ -1946,7 +1673,6 @@
+ #
+ # CONFIG_I2C_HID is not set
+ CONFIG_USB_OHCI_LITTLE_ENDIAN=y
+-CONFIG_USB_ARCH_HAS_EHCI=y
+ CONFIG_USB_SUPPORT=y
+ CONFIG_USB_COMMON=y
+ CONFIG_USB_ARCH_HAS_HCD=y
+@@ -1971,8 +1697,8 @@
+ CONFIG_USB_EHCI_HCD=y
+ CONFIG_USB_EHCI_ROOT_HUB_TT=y
+ CONFIG_USB_EHCI_TT_NEWSCHED=y
+ CONFIG_USB_EHCI_HCD_PLATFORM=y
+-# CONFIG_USB_SUNXI_EHCI is not set
++CONFIG_USB_SUNXI_EHCI=y
+ # CONFIG_USB_OXU210HP_HCD is not set
+ # CONFIG_USB_ISP116X_HCD is not set
+ CONFIG_USB_ISP1760_HCD=y
+@@ -2279,7 +1950,6 @@
+ CONFIG_XENFS=y
+ CONFIG_XEN_COMPAT_XENFS=y
+ CONFIG_XEN_SYS_HYPERVISOR=y
+-CONFIG_XEN_XENBUS_FRONTEND=y
+ CONFIG_XEN_GNTDEV=y
+ CONFIG_XEN_GRANT_DEV_ALLOC=y
+ CONFIG_XEN_PRIVCMD=y
+
 2, \TODO
 1), compile dom0 kernel base on julieng arndale kernel.
 
+10:07 2013-10-14
+GTD
+0, 9:50-18:38
+
+1, today
+1), 30' hackweek: about the power of watch, i should do this in next week.
+2), 30' personal stuff.
+3), 11:19-11:40 14:00-18:37 xen: arm: sun7i: domU. see"11:18 2013-10-14"
+1h: personal stuff.
+4), \TODO:
+(1), send email to xen-devel for help.
+
+10:08 2013-10-14
+GTD, week plan
+1, week plan
+1), hackweek
+(1), Monday as hackweek project.
+(2), in the rest day of this week, i could only use the night as my hackweek.
+(3), i hope i could get the watch prototype works this week.
+2), libvirt: finish ao_how with job patch.
+3), send the xen-devel about ao_how patch.
+
+10:31 2013-10-14
+hackweek, watch
+1, power
+1), CR2032 or other button cell battery.
+2), 2/3 F6 or other F6 battery
+2/3 F6 about 30mm length. it could provide the more output current. but it is less safe than CR2032, because no big vendor.
+
+11:18 2013-10-14
+xen, arm, sun7i, domU
+1, ref: 
+Problems when creating domU on OMAP5
+http://www.gossamer-threads.com/lists/xen/devel/298167
+
+2, check the dom0 config. finished in "21:56 2013-10-13"1.
+
+3, check the domU config.
+\TODO: question. why CONFIG_XEN_BACKEND=y is in xen_domU_arndale_defconfig, comment it for now.
+
+4, change the xenvm dst
+1), ref: chen in OMAP5:
+--- a/arch/arm/boot/dts/xenvm-4.2.dts
++++ b/arch/arm/boot/dts/xenvm-4.2.dts
+@@ -49,13 +49,13 @@
+                reg = <0 0x80000000 0 0x08000000>;
+        };
+
+-       gic: interrupt-controller@2c001000 {
++       gic: interrupt-controller@48211000 {
+                compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
+                #interrupt-cells = <3>;
+                #address-cells = <0>;
+                interrupt-controller;
+-               reg = <0 0x10481000 0 0x1000>,
+-                     <0 0x10482000 0 0x100>;
++               reg = <0 0x48211000 0 0x1000>,
++                     <0 0x48212000 0 0x1000>;
+        };
+
+        timer {
+
+2), diff
+i update the cpu, gic, memory base and remove motherboard.
+does the gic should have the same address for hardware. i found the old gic combine with vexpress(0x2c001000) and exynos5250(0x10481000) base address, is it a typo?
+	gic: interrupt-controller@2c001000 {
+		compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
+ 		#interrupt-cells = <3>;
+ 		#address-cells = <0>;
+ 		interrupt-controller;
+		reg = <0 0x10481000 0 0x1000>,
+		      <0 0x10482000 0 0x100>;
+ 	};
+
+diff --git a/arch/arm/boot/dts/xenvm-4.2.dts b/arch/arm/boot/dts/xenvm-4.2.dts
+index 2f4136b..db12d20 100644
+--- a/arch/arm/boot/dts/xenvm-4.2.dts
++++ b/arch/arm/boot/dts/xenvm-4.2.dts
+@@ -26,36 +26,30 @@
+ 
+ 		cpu@0 {
+ 			device_type = "cpu";
+-			compatible = "arm,cortex-a15";
++			compatible = "arm,cortex-a7";
+ 			reg = <0>;
+ 		};
+-
+-		cpu@1 {
+-			device_type = "cpu";
+-			compatible = "arm,cortex-a15";
+-			reg = <1>;
+-		};
+ 	};
+ 
+ 	psci {
+ 		compatible      = "arm,psci";
+ 		method          = "hvc";
+-		cpu_on          = <2>;
++		cpu_on          = <1>;
+ 	};
+ 
+-	memory@80000000 {
++	memory@40000000 {
+ 		device_type = "memory";
+ 		/* this field is going to be adjusted by the hypervisor */
+-		reg = <0 0x80000000 0 0x08000000>;
++		reg = <0 0x40000000 0 0x08000000>;
+ 	};
+ 
+-	gic: interrupt-controller@2c001000 {
+-		compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
++	gic: interrupt-controller@1c481000 {
++		compatible = "arm,cortex-a7-gic", "arm,cortex-a15-gic";
+ 		#interrupt-cells = <3>;
+ 		#address-cells = <0>;
+ 		interrupt-controller;
+-		reg = <0 0x10481000 0 0x1000>,
+-		      <0 0x10482000 0 0x100>;
++		reg = <0 0x1c481000 0 0x1000>,
++		      <0 0x1c482000 0 0x1000>;
+ 	};
+ 
+ 	timer {
+@@ -73,8 +67,4 @@
+ 		/* this field is going to be adjusted by the hypervisor */
+ 		interrupts = <1 15 0xf08>;
+ 	};
+-
+-	motherboard {
+-		arm,v2m-memory-map = "rs1";
+-	};
+ };
+
+5, i need enable loop in dom0 kernel. othervise i could not use the disk.
+\TODO how to use initrd in xen domU?
+1), domU boot successful, but i do not know how to connect to it.
+# xl create domU_test -d
+Parsing config from domU_test
+unable to format domain config as JSON (YAJL:1)
+
+[ 1357.167915] Failed to unmap pfn:4c61d rc:-2
+[ 1357.172804] Failed to unmap pfn:4bf33 rc:-2
+[ 1357.177537] Failed to unmap pfn:4c61d rc:-2
+[ 1357.182305] Failed to unmap pfn:4bf33 rc:-2
+[ 1357.186930] Failed to unmap pfn:4c61b rc:-2
+[ 1357.194761] Failed to unmap pfn:4c61a rc:-2
+Daemon running with PID 151
+# 
+# xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0   383     1     r-----      13.0
+domU                                         1   128     1     ------       3.5
+# xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0   383     1     r-----      13.1
+domU                                         1   128     1     ------       6.2
+
+2), xenstore-ls
+# xenstore-ls
+tool = ""
+ xenstored = ""
+local = ""
+ domain = ""
+  0 = ""
+   name = "Domain-0"
+   libxl = ""
+    disable_udev = "1"
+   backend = ""
+    console = ""
+     1 = ""
+      0 = ""
+       frontend = "/local/domain/1/console"
+       frontend-id = "1"
+       online = "1"
+       state = "1"
+       domain = "domU"
+       protocol = "vt100"
+  1 = ""
+   vm = "/vm/9a65f38d-7e40-4491-9179-47eec5a5d54c"
+   name = "domU"
+   cpu = ""
+    0 = ""
+     availability = "online"
+   memory = ""
+    static-max = "131072"
+    target = "131073"
+    videoram = "-1"
+   device = ""
+    suspend = ""
+     event-channel = ""
+   control = ""
+    shutdown = ""
+    platform-feature-multiprocessor-suspend = "1"
+    platform-feature-xs_reset_watches = "1"
+   data = ""
+   domid = "1"
+   store = ""
+    port = "1"
+    ring-ref = "557057"
+   console = ""
+    backend = "/local/domain/0/backend/console/1/0"
+    backend-id = "0"
+    limit = "1048576"
+    type = "xenconsoled"
+    output = "pty"
+    tty = "/dev/pts/0"
+    port = "2"
+    ring-ref = "557056"
+vm = ""
+ 9a65f38d-7e40-4491-9179-47eec5a5d54c = ""
+  uuid = "9a65f38d-7e40-4491-9179-47eec5a5d54c"
+  name = "domU"
+  image = ""
+   ostype = "linux"
+   kernel = "/root/zImage_dtb"
+   cmdline = ""
+  start_time = "1374.92"
+libxl = ""
+ 1 = ""
+  dm-version = "qemu_xen_traditional"
+# 
+
+(1), \TODO: why there is a qqemu_xen_traditional in dm-version?
+
+3), destroy warning:
+# xl destroy 1
+(XEN) mm.c:1250:d0 gnttab_mark_dirty not implemented yet
+
+13:43 2013-10-14
+software skill, how to know the hostname from ip
+http://stackoverflow.com/questions/657482/how-to-find-host-name-from-ip-with-out-login-to-the-host
+but i do not successful.
+
+4), add console="pty", but xl console still hang:
+# xl -v create domU_test -d       
+Parsing config from domU_test
+unable to format domain config as JSON (YAJL:1)
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 1 cpus and 1629 KB free selected
+domainbuilder: detail: xc_dom_allocate: cmdline="", features="(null)"
+domainbuilder: detail: xc_dom_kernel_file: filename="/root/zImage_dtb"
+domainbuilder: detail: xc_dom_malloc_filemap    : 2029 kB
+domainbuilder: detail: xc_dom_boot_xen_init: ver 4.4, caps xen-3.0-armv7l 
+domainbuilder: detail: xc_dom_parse_image: called
+domainbuilder: detail: xc_dom_find_loader: trying multiboot-binary loader ... 
+domainbuilder: detail: loader probe failed
+domainbuilder: detail: xc_dom_find_loader: trying Linux zImage (ARM) loader ... 
+domainbuilder: detail: xc_dom_probe_zimage_kernel: found an appended DTB
+domainbuilder: detail: loader probe OK
+domainbuilder: detail: xc_dom_parse_zimage_kernel: called
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: RAM starts at 80000
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: 0x80008000 -> 0x80203487
+domainbuilder: detail: xc_dom_mem_init: mem 128 MB, pages 0x8000 pages, 4k each
+domainbuilder: detail: xc_dom_mem_init: 0x8000 pages
+domainbuilder: detail: xc_dom_boot_mem_init: called
+domainbuilder: detail: xc_dom_malloc            : 256 kB
+domainbuilder: detail: xc_dom_build_image: called
+domainbuilder: detail: xc_dom_alloc_segment:   kernel       : 0x80008000 -> 0x80204000  (pfn 0x80008 + 0x1fc pages)
+domainbuilder: detail: xc_dom_pfn_to_ptr_retcount: domU mapping: pfn 0x80008+0x1fc at 0xb680a000
+domainbuilder: detail: xc_dom_load_zimage_kernel: called
+domainbuilder: detail: xc_dom_load_zimage_kernel: kernel sed 0x80008000-0x80204000
+domainbuilder: detail: xc_dom_load_zimage_kernel: copy 2077831 bytes from blob 0xb6a47000 to dst 0xb680a000
+domainbuilder: detail: alloc_magic_pages: called
+[ 4828.469153] Failed to unmap pfn:4c12e rc:-2
+[ 4828.473412] Failed to unmap pfn:4c60e rc:-2
+domainbuilder: detail: count_pgtables_arm: called
+domainbuilder: detail: xc_dom_build_image  : virt_alloc_end : 0x80204000
+domainbuilder: detail: xc_dom_build_image  : virt_pgtab_end : 0x0
+domainbuilder: detail: xc_dom_boot_image: called
+domainbuilder: detail: arch_setup_bootearly: doing nothing
+domainbuilder: detail: xc_dom_compat_check: supported guest type: xen-3.0-armv7l <= matches
+domainbuilder: detail: setup_pgtables_arm: called
+domainbuilder: detail: clear_page: pfn 0x88000, mfn 0x88000
+[ 4828.522835] Failed to unmap pfn:4c12e rc:-2
+domainbuilder: detail: clear_page: pfn 0x88001, mfn 0x88001
+[ 4828.532799] Failed to unmap pfn:4c60e rc:-2
+domainbuilder: detail: start_info_arm: called
+domainbuilder: detail: domain builder memory footprint
+domainbuilder: detail:    allocated
+domainbuilder: detail:       malloc             : 269 kB
+domainbuilder: detail:       anon mmap          : 0 bytes
+domainbuilder: detail:    mapped
+domainbuilder: detail:       file mmap          : 2029 kB
+domainbuilder: detail:       domU mmap          : 2032 kB
+domainbuilder: detail: vcpu_arm: called
+domainbuilder: detail: Initial state CPSR 0x1d3 PC 0x80008000
+[ 4828.582532] Failed to unmap pfn:4c12c rc:-2
+domainbuilder: detail: launch_vm: called, ctxt=0xb6f18004
+[ 4828.594749] Failed to unmap pfn:4c12b rc:-2
+domainbuilder: detail: xc_dom_release: called
+Daemon running with PID 197
+# 
+# xl list
+Name                                        ID   Mem VCPUs      State   Time(s)
+Domain-0                                     0   383     1     r-----      28.8
+domU                                         2   128     1     ------       6.3
+# xl console 2
+# 
+
+5), shoud i change the memory address according to the following output?
+domainbuilder: detail: Initial state CPSR 0x1d3 PC 0x80008000
+
+6), add disk in vm:
+    losetup /dev/loop0 /root/domU/rootfs.ext3 
+
+add disk in cfg:
+    disk = [ 'phy:/dev/loop0,xvda,w' ]
+
+7), i want to use ifup manage the network. but i could not change this in yast.
+(1), change /etc/sysconfig/network
+cubiebox:/etc/sysconfig/network # cat ifcfg-br0
+BOOTPROTO='dhcp'
+BRIDGE='yes'
+BRIDGE_FORWARDDELAY='0'
+BRIDGE_PORTS='eth0'
+BRIDGE_STP='off'
+BROADCAST=''
+ETHTOOL_OPTIONS=''
+IPADDR=''
+MTU=''
+NAME=''
+NETMASK=''
+NETWORK=''
+REMOTE_IPADDR=''
+STARTMODE='auto'
+USERCONTROL='no'
+cubiebox:/etc/sysconfig/network # diff -urN ifcfg-eth0.old1014 ifcfg-eth0
+--- ifcfg-eth0.old1014  2013-03-27 01:22:00.610595001 +0100
++++ ifcfg-eth0  2013-10-14 11:33:43.391320148 +0200
+@@ -1,4 +1,5 @@
+-BOOTPROTO='dhcp'
++BOOTPROTO='static'
+ MTU=''
++IPADDR='0.0.0.0/32'
+ REMOTE_IPADDR=''
+ STARTMODE='onboot'
+
+(2), but when i try to down and up the eth0, the nfs will hang. how should i do this?
+or could i create the br0 in initrd?
+
+# brctl addbr virbr0
+add bridge failed: Package not installed
+
+cubiebox:/etc/xen/vm # gunzip < /proc/config.gz | grep BRIDGE
+# CONFIG_ARCH_FOOTBRIDGE is not set
+# CONFIG_BRIDGE is not set
+
+
+8), 
+(1), xl log
+cubiebox:/etc/xen/vm # xl -v create domU_test -d 
+Parsing config from domU_test
+unable to format domain config as JSON (YAJL:1)
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 1 cpus and 1629 KB free selected
+domainbuilder: detail: xc_dom_allocate: cmdline="", features="(null)"
+domainbuilder: detail: xc_dom_kernel_file: filename="/root/domU/zImage_dtb"
+domainbuilder: detail: xc_dom_malloc_filemap    : 2029 kB
+domainbuilder: detail: xc_dom_boot_xen_init: ver 4.4, caps xen-3.0-armv7l 
+domainbuilder: detail: xc_dom_parse_image: called
+domainbuilder: detail: xc_dom_find_loader: trying multiboot-binary loader ... 
+domainbuilder: detail: loader probe failed
+domainbuilder: detail: xc_dom_find_loader: trying Linux zImage (ARM) loader ... 
+domainbuilder: detail: xc_dom_probe_zimage_kernel: found an appended DTB
+domainbuilder: detail: loader probe OK
+domainbuilder: detail: xc_dom_parse_zimage_kernel: called
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: RAM starts at 80000
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: 0x80008000 -> 0x80203487
+domainbuilder: detail: xc_dom_mem_init: mem 128 MB, pages 0x8000 pages, 4k each
+domainbuilder: detail: xc_dom_mem_init: 0x8000 pages
+domainbuilder: detail: xc_dom_boot_mem_init: called
+domainbuilder: detail: xc_dom_malloc            : 256 kB
+domainbuilder: detail: xc_dom_build_image: called
+domainbuilder: detail: xc_dom_alloc_segment:   kernel       : 0x80008000 -> 0x80204000  (pfn 0x80008 + 0x1fc pages)
+domainbuilder: detail: xc_dom_pfn_to_ptr_retcount: domU mapping: pfn 0x80008+0x1fc at 0xb6873000
+domainbuilder: detail: xc_dom_load_zimage_kernel: called
+domainbuilder: detail: xc_dom_load_zimage_kernel: kernel sed 0x80008000-0x80204000
+domainbuilder: detail: xc_dom_load_zimage_kernel: copy 2077831 bytes from blob 0xb6ab0000 to dst 0xb6873000
+domainbuilder: detail: alloc_magic_pages: called
+domainbuilder: detail: count_pgtables_arm: called
+domainbuilder: detail: xc_dom_build_image  : virt_alloc_end : 0x80204000
+domainbuilder: detail: xc_dom_build_image  : virt_pgtab_end : 0x0
+domainbuilder: detail: xc_dom_boot_image: called
+domainbuilder: detail: arch_setup_bootearly: doing nothing
+domainbuilder: detail: xc_dom_compat_check: supported guest type: xen-3.0-armv7l <= matches
+domainbuilder: detail: setup_pgtables_arm: called
+domainbuilder: detail: clear_page: pfn 0x88000, mfn 0x88000
+domainbuilder: detail: clear_page: pfn 0x88001, mfn 0x88001
+domainbuilder: detail: start_info_arm: called
+domainbuilder: detail: domain builder memory footprint
+domainbuilder: detail:    allocated
+domainbuilder: detail:       malloc             : 269 kB
+domainbuilder: detail:       anon mmap          : 0 bytes
+domainbuilder: detail:    mapped
+domainbuilder: detail:       file mmap          : 2029 kB
+domainbuilder: detail:       domU mmap          : 2032 kB
+domainbuilder: detail: vcpu_arm: called
+domainbuilder: detail: Initial state CPSR 0x1d3 PC 0x80008000
+domainbuilder: detail: launch_vm: called, ctxt=0xb6f81004
+domainbuilder: detail: xc_dom_release: called
+Daemon running with PID 231
+
+(2), kernel message duing xl create:
+# [  540.202580] Failed to unmap pfn:4c025 rc:-2
+[  540.208174] Failed to unmap pfn:4c024 rc:-2
+[  540.220047] Failed to unmap pfn:4c025 rc:-2
+[  540.225907] Failed to unmap pfn:4c024 rc:-2
+[  540.236635] Failed to unmap pfn:4c022 rc:-2
+[  540.245590] Failed to unmap pfn:4c021 rc:-2
+
+(3), 
+cubiebox:/etc/xen/vm # xenstore-ls
+tool = ""
+ xenstored = ""
+local = ""
+ domain = ""
+  0 = ""
+   name = "Domain-0"
+   libxl = ""
+    disable_udev = "1"
+   backend = ""
+    vbd = ""
+     1 = ""
+      51712 = ""
+       frontend = "/local/domain/1/device/vbd/51712"
+       params = "/dev/loop0"
+       script = "/etc/xen/scripts/block"
+       physical-device = "7:0"
+       frontend-id = "1"
+       online = "1"
+       removable = "0"
+       bootable = "1"
+       state = "2"
+       dev = "xvda"
+       type = "phy"
+       mode = "w"
+       device-type = "disk"
+    console = ""
+     1 = ""
+      0 = ""
+       frontend = "/local/domain/1/console"
+       frontend-id = "1"
+       online = "1"
+       state = "1"
+       domain = "domU"
+       protocol = "vt100"
+  1 = ""
+   vm = "/vm/d03ecd47-3359-4f7b-9077-7a3f0f293cfa"
+   name = "domU"
+   cpu = ""
+    0 = ""
+     availability = "online"
+   memory = ""
+    static-max = "131072"
+    target = "131073"
+    videoram = "-1"
+   device = ""
+    suspend = ""
+     event-channel = ""
+    vbd = ""
+     51712 = ""
+      backend = "/local/domain/0/backend/vbd/1/51712"
+      backend-id = "0"
+      state = "1"
+      virtual-device = "51712"
+      device-type = "disk"
+      protocol = "arm-abi"
+   control = ""
+    shutdown = ""
+    platform-feature-multiprocessor-suspend = "1"
+    platform-feature-xs_reset_watches = "1"
+   data = ""
+   domid = "1"
+   store = ""
+    port = "1"
+    ring-ref = "557057"
+   console = ""
+    backend = "/local/domain/0/backend/console/1/0"
+    backend-id = "0"
+    limit = "1048576"
+    type = "xenconsoled"
+    output = "pty"
+    tty = "/dev/pts/1"
+    port = "2"
+    ring-ref = "557056"
+vm = ""
+ d03ecd47-3359-4f7b-9077-7a3f0f293cfa = ""
+  uuid = "d03ecd47-3359-4f7b-9077-7a3f0f293cfa"
+  name = "domU"
+  image = ""
+   ostype = "linux"
+   kernel = "/root/domU/zImage_dtb"
+   cmdline = ""
+  start_time = "544.66"
+libxl = ""
+ 1 = ""
+  dm-version = "qemu_xen_traditional"
+cubiebox:/etc/xen/vm # 
+
+9), try this one:
+ref: http://blog.csdn.net/starshine/article/details/6990599
+   修改后的配置文件内容如下：
+
+   1）ifcfg-eth0
+
+      DEVICE=eth0
+      ONBOOT=yes
+      BRIDGE=virbr0
+      BOOTPROTO=dhcp
+      TYPE=Ethernet
+
+   2）ifcfg-virbr0
+      
+      DEVICE=virbr0
+      TYPE=Bridge 
+      ONBOOT=yes
+      DELAY=0
+      BOOTPROTO=none
+      IPADDR=10.100.0.3
+      NETMASK=255.255.255.0
+      GATEWAY=10.100.0.254     
+
+10), \TODO: try libvirt?
 
