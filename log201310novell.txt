@@ -1740,3 +1740,316 @@ ref: http://blog.csdn.net/starshine/article/details/6990599
 
 10), \TODO: try libvirt?
 
+21:58 2013-10-14
+1, about xen debug tools
+http://www-archive.xenproject.org/files/xensummit_intel09/xen-debugging.pdf
+1), console
+2), xentrace
+3), gdbsx
+
+2, debug why no console
+ref: http://www.gossamer-threads.com/lists/xen/devel/301400 
+
+3, error when compile staging.
+diff --git a/xen/common/event_fifo.c b/xen/common/event_fifo.c
+index eb0b97c..f2a28e4 100644
+--- a/xen/common/event_fifo.c
++++ b/xen/common/event_fifo.c
+@@ -17,6 +17,7 @@
+ #include <xen/paging.h>
+ #include <xen/mm.h>
+ 
++#include <xen/domain_page.h>
+ #include <public/event_channel.h>
+ 
+ static inline event_word_t *evtchn_fifo_word_from_port(struct domain *d,
+diff --git a/xen/include/xen/sched.h b/xen/include/xen/sched.h
+index c2588a5..25bf637 100644
+--- a/xen/include/xen/sched.h
++++ b/xen/include/xen/sched.h
+@@ -24,6 +24,7 @@
+ #include <public/sysctl.h>
+ #include <public/vcpu.h>
+ #include <public/mem_event.h>
++#include <public/event_channel.h>
+ 
+ #ifdef CONFIG_COMPAT
+ #include <compat/vcpu.h>
+
+4, guest crash
+# xl -v create -d -c domU_test 
+Parsing config from domU_test
+unable to format domain config as JSON (YAJL:1)
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 1 cpus and 1629 KB free selected
+domainbuilder: detail: xc_dom_allocate: cmdline="", features="(null)"
+domainbuilder: detail: xc_dom_kernel_file: filename="/root/domU/zImage_dtb"
+domainbuilder: detail: xc_dom_malloc_filemap: failed (on file `/root/domU/zImage_dtb')
+libxl: error: libxl_dom.c:353:libxl__build_pv: xc_dom_kernel_file failed: No such file or directory
+domainbuilder: detail: xc_dom_release: called
+libxl: error: libxl_create.c:903:domcreate_rebuild_done: cannot (re-)build domain: -3
+# xl -v create -d -c domU_test
+Parsing config from domU_test
+unable to format domain config as JSON (YAJL:1)
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 1 cpus and 1629 KB free selected
+domainbuilder: detail: xc_dom_allocate: cmdline="", features="(null)"
+domainbuilder: detail: xc_dom_kernel_file: filename="/root/domU/zImage_dtb"
+domainbuilder: detail: xc_dom_malloc_filemap    : 2030 kB
+domainbuilder: detail: xc_dom_boot_xen_init: ver 4.4, caps xen-3.0-armv7l 
+domainbuilder: detail: xc_dom_parse_image: called
+domainbuilder: detail: xc_dom_find_loader: trying multiboot-binary loader ... 
+domainbuilder: detail: loader probe failed
+domainbuilder: detail: xc_dom_find_loader: trying Linux zImage (ARM) loader ... 
+domainbuilder: detail: xc_dom_probe_zimage_kernel: found an appended DTB
+domainbuilder: detail: loader probe OK
+domainbuilder: detail: xc_dom_parse_zimage_kernel: called
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: RAM starts at 80000
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: 0x80008000 -> 0x80203933
+domainbuilder: detail: xc_dom_mem_init: mem 128 MB, pages 0x8000 pages, 4k each
+domainbuilder: detail: xc_dom_mem_init: 0x8000 pages
+domainbuilder: detail: xc_dom_boot_mem_init: called
+domainbuilder: detail: xc_dom_malloc            : 256 kB
+domainbuilder: detail: xc_dom_build_image: called
+domainbuilder: detail: xc_dom_alloc_segment:   kernel       : 0x80008000 -> 0x80204000  (pfn 0x80008 + 0x1fc pages)
+domainbuilder: detail: xc_dom_pfn_to_ptr_retcount: domU mapping: pfn 0x80008+0x1fc at 0xb68da000
+domainbuilder: detail: xc_dom_load_zimage_kernel: called
+domainbuilder: detail: xc_dom_load_zimage_kernel: kernel sed 0x80008000-0x80204000
+domainbuilder: detail: xc_dom_load_zimage_kernel: copy 2079027 bytes from blob 0xb6b17000 to dst 0xb68da000
+domainbuilder: detail: alloc_magic_pages: called
+[  374.672591] Failed to unmap pfn:4c607 rc:-2
+[  374.677774] Failed to unmap pfn:4c606 rc:-2
+domainbuilder: detail: count_pgtables_arm: called
+domainbuilder: detail: xc_dom_build_image  : virt_alloc_end : 0x80204000
+domainbuilder: detail: xc_dom_build_image  : virt_pgtab_end : 0x0
+domainbuilder: detail: xc_dom_boot_image: called
+domainbuilder: detail: arch_setup_bootearly: doing nothing
+domainbuilder: detail: xc_dom_compat_check: supported guest type: xen-3.0-armv7l <= matches
+domainbuilder: detail: setup_pgtables_arm: called
+domainbuilder: detail: clear_page: pfn 0x88000, mfn 0x88000
+[  374.726799] Failed to unmap pfn:4c607 rc:-2
+domainbuilder: detail: clear_page: pfn 0x88001, mfn 0x88001
+[  374.736408] Failed to unmap pfn:4c606 rc:-2
+domainbuilder: detail: start_info_arm: called
+domainbuilder: detail: domain builder memory footprint
+domainbuilder: detail:    allocated
+domainbuilder: detail:       malloc             : 269 kB
+domainbuilder: detail:       anon mmap          : 0 bytes
+domainbuilder: detail:    mapped
+domainbuilder: detail:       file mmap          : 2030 kB
+domainbuilder: detail:       domU mmap          : 2032 kB
+domainbuilder: detail: vcpu_arm: called
+domainbuilder: detail: Initial state CPSR 0x1d3 PC 0x80008000
+[  374.785408] Failed to unmap pfn:4c604 rc:-2
+domainbuilder: detail: launch_vm: called, ctxt=0xb6fe8004
+[  374.797618] Failed to unmap pfn:4c603 rc:-2
+domainbuilder: detail: xc_dom_release: called
+Daemon running with PID 143
+(XEN) Guest data abort: Translation fault at level 2
+(XEN)     gva=c8800004
+(XEN)     gpa=000000001c481004
+(XEN)     size=2 sign=0 write=0 reg=3
+(XEN)     eat=0 cm=0 s1ptw=0 dfsc=6
+(XEN) dom2 IPA 0x000000001c481004
+(XEN) P2M @ 02ffcdc0 mfn:0xbfe6e
+(XEN) 1ST[0x0] = 0x0000000095d386ff
+(XEN) 2ND[0xe2] = 0x0000000000000000
+(XEN) ----[ Xen-4.4-unstable  arm32  debug=y  Tainted:    C ]----
+(XEN) CPU:    0
+(XEN) PC:     c03ab098
+(XEN) CPSR:   600001d3 MODE:32-bit Guest SVC
+(XEN)      R0: 00000000 R1: ffffffff R2: c03ccd84 R3: 00000008
+(XEN)      R4: ffffffff R5: c03cc7f0 R6: 00000010 R7: c8800000
+(XEN)      R8: c050da38 R9: 00100100 R10:00200200 R11:c03c5f90 R12:00000063
+(XEN) USR: SP: 00000000 LR: 00000000
+(XEN) SVC: SP: c03c5f48 LR: c03ab34c SPSR:000001d3
+(XEN) ABT: SP: c03e750c LR: c03e750c SPSR:00000000
+(XEN) UND: SP: c03e7518 LR: c03e7518 SPSR:00000000
+(XEN) IRQ: SP: c03e7500 LR: c03e7500 SPSR:00000000
+(XEN) FIQ: SP: 00000000 LR: ffffffff SPSR:00000000
+(XEN) FIQ: R8: 00000000 R9: 00000000 R10:00000000 R11:00000000 R12:00000000
+(XEN) 
+(XEN)      SCTLR: 10c53c7d
+(XEN)        TCR: 00000000
+(XEN)      TTBR0: 000000008000406a
+(XEN)      TTBR1: 000000008000406a
+(XEN)       IFAR: 00000000, IFSR: 00000000
+(XEN)       DFAR: 00000000, DFSR: 00000000
+(XEN) 
+(XEN)   VTCR_EL2: 80002558
+(XEN)  VTTBR_EL2: 00020000bfe6e000
+(XEN) 
+(XEN)  SCTLR_EL2: 30cd187f
+(XEN)    HCR_EL2: 0000000000282835
+(XEN)  TTBR0_EL2: 00000000bfedf000
+(XEN) 
+(XEN)    ESR_EL2: 93830006
+(XEN)  HPFAR_EL2: 00000000001c4810
+(XEN)      HDFAR: c8800004
+(XEN)      HIFAR: 3fe752e0
+(XEN) 
+(XEN) No stack trace for 32-bit guest kernel-mode
+(XEN) domain_crash_sync called from traps.c:1385
+(XEN) Domain 2 (vcpu#0) crashed on cpu#0:
+(XEN) ----[ Xen-4.4-unstable  arm32  debug=y  Tainted:    C ]----
+(XEN) CPU:    0
+(XEN) PC:     c03ab098
+(XEN) CPSR:   600001d3 MODE:32-bit Guest SVC
+(XEN)      R0: 00000000 R1: ffffffff R2: c03ccd84 R3: 00000008
+(XEN)      R4: ffffffff R5: c03cc7f0 R6: 00000010 R7: c8800000
+(XEN)      R8: c050da38 R9: 00100100 R10:00200200 R11:c03c5f90 R12:00000063
+(XEN) USR: SP: 00000000 LR: 00000000
+(XEN) SVC: SP: c03c5f48 LR: c03ab34c SPSR:000001d3
+(XEN) ABT: SP: c03e750c LR: c03e750c SPSR:00000000
+(XEN) UND: SP: c03e7518 LR: c03e7518 SPSR:00000000
+(XEN) IRQ: SP: c03e7500 LR: c03e7500 SPSR:00000000
+(XEN) FIQ: SP: 00000000 LR: ffffffff SPSR:00000000
+(XEN) FIQ: R8: 00000000 R9: 00000000 R10:00000000 R11:00000000 R12:00000000
+(XEN) 
+(XEN)      SCTLR: 10c53c7d
+(XEN)        TCR: 00000000
+(XEN)      TTBR0: 000000008000406a
+(XEN)      TTBR1: 000000008000406a
+(XEN)       IFAR: 00000000, IFSR: 00000000
+(XEN)       DFAR: 00000000, DFSR: 00000000
+(XEN) 
+(XEN)   VTCR_EL2: 80002558
+(XEN)  VTTBR_EL2: 00020000bfe6e000
+(XEN) 
+(XEN)  SCTLR_EL2: 30cd187f
+(XEN)    HCR_EL2: 0000000000282835
+(XEN)  TTBR0_EL2: 00000000bfedf000
+(XEN) 
+(XEN)    ESR_EL2: 93830006
+(XEN)  HPFAR_EL2: 00000000001c4810
+(XEN)      HDFAR: c8800004
+(XEN)      HIFAR: 3fe752e0
+(XEN) 
+(XEN) No stack trace for 32-bit guest kernel-mode
+# (XEN) mm.c:1250:d0 gnttab_mark_dirty not implemented yet
+
+1), it is only fail with the kernel i compile at home, for the company version, it create without error but no console output
+# xl -vvv create -d -c domU_test
+Parsing config from domU_test
+unable to format domain config as JSON (YAJL:1)
+libxl: debug: libxl_create.c:1233:do_domain_create: ao 0x3cd50: create: how=(nil) callback=(nil) poller=0x3cd98
+libxl: verbose: libxl_create.c:130:libxl__domain_build_info_setdefault: qemu-xen is unavailable, use qemu-xen-traditional instead: No such file or directory
+libxl: debug: libxl_device.c:257:libxl__device_disk_set_backend: Disk vdev=xvda spec.backend=unknown
+libxl: debug: libxl_device.c:296:libxl__device_disk_set_backend: Disk vdev=xvda, using backend phy
+libxl: debug: libxl_create.c:678:initiate_domain_create: running bootloader
+libxl: debug: libxl_bootloader.c:327:libxl__bootloader_run: no bootloader configured, using user supplied kernel
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x36f30: deregister unregistered
+libxl: debug: libxl_numa.c:475:libxl__get_numa_candidate: New best NUMA placement candidate found: nr_nodes=1, nr_cpus=1, nr_vcpus=2, free_memkb=1629
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 1 cpus and 1629 KB free selected
+domainbuilder: detail: xc_dom_allocate: cmdline="", features="(null)"
+libxl: debug: libxl_dom.c:341:libxl__build_pv: pv kernel mapped 0 path /root/domU/zImage_dtb
+
+domainbuilder: detail: xc_dom_kernel_file: filename="/root/domU/zImage_dtb"
+domainbuilder: detail: xc_dom_malloc_filemap    : 2029 kB
+domainbuilder: detail: xc_dom_boot_xen_init: ver 4.4, caps xen-3.0-armv7l 
+domainbuilder: detail: xc_dom_parse_image: called
+domainbuilder: detail: xc_dom_find_loader: trying multiboot-binary loader ... 
+domainbuilder: detail: loader probe failed
+domainbuilder: detail: xc_dom_find_loader: trying Linux zImage (ARM) loader ... 
+domainbuilder: detail: xc_dom_probe_zimage_kernel: found an appended DTB
+domainbuilder: detail: loader probe OK
+domainbuilder: detail: xc_dom_parse_zimage_kernel: called
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: RAM starts at 80000
+domainbuilder: detail: xc_dom_parse_zimage_kernel: xen-3.0-armv7l: 0x80008000 -> 0x80203487
+domainbuilder: detail: xc_dom_mem_init: mem 128 MB, pages 0x8000 pages, 4k each
+domainbuilder: detail: xc_dom_mem_init: 0x8000 pages
+domainbuilder: detail: xc_dom_boot_mem_init: called
+domainbuilder: detail: xc_dom_malloc            : 256 kB
+domainbuilder: detail: xc_dom_build_image: called
+domainbuilder: detail: xc_dom_alloc_segment:   kernel       : 0x80008000 -> 0x80204000  (pfn 0x80008 + 0x1fc pages)
+domainbuilder: detail: xc_dom_pfn_to_ptr_retcount: domU mapping: pfn 0x80008+0x1fc at 0xb683c000
+domainbuilder: detail: xc_dom_load_zimage_kernel: called
+domainbuilder: detail: xc_dom_load_zimage_kernel: kernel sed 0x80008000-0x80204000
+domainbuilder: detail: xc_dom_load_zimage_kernel: copy 2077831 bytes from blob 0xb6a79000 to dst 0xb683c000
+domainbuilder: detail: alloc_magic_pages: called
+[  706.135013] Failed to unmap pfn:4bcb7 rc:-2
+[  706.140190] Failed to unmap pfn:4c64d rc:-2
+domainbuilder: detail: count_pgtables_arm: called
+domainbuilder: detail: xc_dom_build_image  : virt_alloc_end : 0x80204000
+domainbuilder: detail: xc_dom_build_image  : virt_pgtab_end : 0x0
+domainbuilder: detail: xc_dom_boot_image: called
+domainbuilder: detail: arch_setup_bootearly: doing nothing
+domainbuilder: detail: xc_dom_compat_check: supported guest type: xen-3.0-armv7l <= matches
+domainbuilder: detail: setup_pgtables_arm: called
+domainbuilder: detail: clear_page: pfn 0x88000, mfn 0x88000
+[  706.189320] Failed to unmap pfn:4bcb7 rc:-2
+domainbuilder: detail: clear_page: pfn 0x88001, mfn 0x88001
+[  706.198941] Failed to unmap pfn:4c64d rc:-2
+domainbuilder: detail: start_info_arm: called
+domainbuilder: detail: domain builder memory footprint
+domainbuilder: detail:    allocated
+domainbuilder: detail:       malloc             : 269 kB
+domainbuilder: detail:       anon mmap          : 0 bytes
+domainbuilder: detail:    mapped
+domainbuilder: detail:       file mmap          : 2029 kB
+domainbuilder: detail:       domU mmap          : 2032 kB
+domainbuilder: detail: vcpu_arm: called
+domainbuilder: detail: Initial state CPSR 0x1d3 PC 0x80008000
+[  706.247923] Failed to unmap pfn:4bcb5 rc:-2
+domainbuilder: detail: launch_vm: called, ctxt=0xb6f4a004
+[  706.260095] Failed to unmap pfn:4bcb4 rc:-2
+domainbuilder: detail: xc_dom_release: called
+libxl: debug: libxl_device.c:257:libxl__device_disk_set_backend: Disk vdev=xvda spec.backend=phy
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x377e0 wpath=/local/domain/0/backend/vbd/3/51712/state token=3/0: register slotnum=3
+libxl: debug: libxl_create.c:1246:do_domain_create: ao 0x3cd50: inprogress: poller=0x3cd98, flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x377e0 wpath=/local/domain/0/backend/vbd/3/51712/state token=3/0: event epath=/local/domain/0/backend/vbd/3/51712/state
+libxl: debug: libxl_event.c:647:devstate_watch_callback: backend /local/domain/0/backend/vbd/3/51712/state wanted state 2 still waiting state 1
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x377e0 wpath=/local/domain/0/backend/vbd/3/51712/state token=3/0: event epath=/local/domain/0/backend/vbd/3/51712/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/3/51712/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x377e0 wpath=/local/domain/0/backend/vbd/3/51712/state token=3/0: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x377e0: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_event.c:1748:libxl__ao_progress_report: ao 0x3cd50: progress report: callback queued aop=0x38948
+libxl: debug: libxl_event.c:1570:libxl__ao_complete: ao 0x3cd50: complete, rc=0
+libxl: debug: libxl_event.c:1160:egc_run_callbacks: ao 0x3cd50: progress report: callback aop=0x38948
+libxl: debug: libxl_event.c:1542:libxl__ao__destroy: ao 0x3cd50: destroy
+Daemon running with PID 186
+xc: debug: hypercall buffer: total allocations:98 total releases:98
+xc: debug: hypercall buffer: current allocations:0 maximum allocations:4
+xc: debug: hypercall buffer: cache current size:4
+xc: debug: hypercall buffer: cache hits:90 misses:4 toobig:4
+
+5, xentrace fail
+# ls -l  trace.raw 
+-rw-r--r-- 1 root root 0 Oct 14  2013 trace.raw
+# xentrace -S 256 -T 1 trace.raw
+[  945.495447] Failed to map pfn to mfn rc:0:-3 pfn:4c180 mfn:ae03d
+[  945.501336] Failed to unmap pfn:4c180 rc:-2
+ERROR: Failed to mmap trace buffers (14 = Bad address)
+
+6, gdbsx need patch
+cubiebox:~/work/source/virtualization/xen/upstream/xen/tools/debugger/gdbsx # ./gdbsx -a 3 32 9999
+ERROR:_check_hyp:Hyp is NOT enabled for gdbsx
+ERROR: failed to attach to domain:3 errno:38
+
+7, \TODO
+try patch console_io then send email to xen. 
+diff --git a/xen/drivers/char/console.c b/xen/drivers/char/console.c
+index 508f845..15501b6 100644
+--- a/xen/drivers/char/console.c
++++ b/xen/drivers/char/console.c
+@@ -425,6 +425,7 @@ static long guest_console_write(XEN_GUEST_HANDLE_PARAM(char) buffer, int count)
+             {
+                 kcount = kin - kbuf;
+                 cd->pbuf[cd->pbuf_idx] = '\0';
++                printk("%s%s\n", cd->pbuf, kbuf);
+                 guest_printk(cd, XENLOG_G_DEBUG "%s%s\n", cd->pbuf, kbuf);
+                 cd->pbuf_idx = 0;
+             }
+@@ -437,6 +438,7 @@ static long guest_console_write(XEN_GUEST_HANDLE_PARAM(char) buffer, int count)
+             else
+             {
+                 cd->pbuf[cd->pbuf_idx] = '\0';
++                printk("%s%s\n", cd->pbuf, kbuf);
+                 guest_printk(cd, XENLOG_G_DEBUG "%s%s\n", cd->pbuf, kbuf);
+                 cd->pbuf_idx = 0;
+             }
+
+should finish before noon.
+
+send work report.
+
+
