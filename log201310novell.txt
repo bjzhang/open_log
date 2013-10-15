@@ -968,7 +968,7 @@ crw-------    1 root     root       10,  62 Jan  1 00:00 xenbus_backend
 ((1)), cmd list: init
 ifconfig eth0 192.168.1.105 netmask 255.255.255.0 up
 sleep 1
-route add default 192.168.1.1
+route add default 192.168.1.1export LD_LIBRARY_PATH=/usr/local/lib
 sleep 1
 export server_ip=192.168.1.104
 mount -t nfs -o nolock,tcp,rsize=10240,wsize=10240 ${server_ip}:/mnt/opensuse_root /mnt
@@ -2059,10 +2059,11 @@ GTD
 0, 10:10-18:06
 
 1, today
-1), 10:15-11:40 12:56-14:42 16:46-18:06 xen: arm: sun7i: domU console. see"10:28 2013-10-15"
+1), 10:15-11:40 12:56-14:42 16:46-19:18 xen: arm: sun7i: domU console. see"10:28 2013-10-15"
 interruptted by "2)".
 2), 50' reply to bnc#820873. discuss with Chunyan.
-3), \TODO send patch to linux-arm about a20 only include 1G memory.
+3), \TODO: send patch to linux-arm about a20 only include 1G memory.
+4), \TODO: ianc said that the upstream kernel for domU is works too. i could try it later.
 
 send work report.
 
@@ -3176,8 +3177,137 @@ disable all the device driver except for block and network for xen frontend driv
 (XEN) mm.c:1250:d0 gnttab_mark_dirty not implemented yet
 
 (1), lr in:
+(XEN) SVC: SP: c0345f40 LR: c032d0d0 SPSR:000001d3
+
 c032d028 T gic_of_init
 c032d11c t gpiolib_debugfs_init
+
+(2), 
+actual crash in 37c:
+ 374:   e1a03008        mov     r3, r8
+ 378:   ebfffffe        bl      48 <gic_init_bases>
+                        378: R_ARM_CALL gic_init_bases
+
+        if (parent) {
+ 37c:   e3570000        cmp     r7, #0
+ 380:   0a000005        beq     39c <gic_of_init+0xc8>
+
+so, it fail in gic_init_bases.
+
+(3), add hypercall console_io for debug
+
+diff --git a/kernel/printk.c b/kernel/printk.c
+index 0b31715..826c2a9 100644
+--- a/kernel/printk.c
++++ b/kernel/printk.c
+@@ -1674,10 +1674,13 @@ EXPORT_SYMBOL(printk_emit);
+  *
+  * See the vsnprintf() documentation for format string extensions over C99.
+  */
++#include <xen/interface/xen.h> // for CONSOLEIO_write
++#include <asm/xen/hypercall.h>
+ asmlinkage int printk(const char *fmt, ...)
+ {
+ 	va_list args;
+ 	int r;
++	char buf[256];
+ 
+ #ifdef CONFIG_KGDB_KDB
+ 	if (unlikely(kdb_trap_printk)) {
+@@ -1688,6 +1691,11 @@ asmlinkage int printk(const char *fmt, ...)
+ 	}
+ #endif
+ 	va_start(args, fmt);
++	vsnprintf(buf, sizeof(buf), fmt, args);
++	va_end(args);
++	HYPERVISOR_console_io(CONSOLEIO_write, sizeof(buf), buf);
++
++	va_start(args, fmt);
+ 	r = vprintk_emit(0, -1, NULL, 0, fmt, args);
+ 	va_end(args);
+ 
+(XEN) Guest data abort: Translation fault at level 2
+(XEN)     gva=c8800004
+(XEN)     gpa=000000001c481004
+(XEN)     size=2 sign=0 write=0 reg=3
+(XEN)     eat=0 cm=0 s1ptw=0 dfsc=6
+(XEN) dom2 IPA 0x000000001c481004
+(XEN) P2M @ 02338e00 mfn:0x59c70
+(XEN) 1ST[0x0] = 0x00000000719c66ff
+(XEN) 2ND[0xe2] = 0x0000000000000000
+(XEN) ----[ Xen-4.4-unstable  arm32  debug=y  Tainted:    C ]----
+(XEN) CPU:    0
+(XEN) PC:     c032ce1c
+(XEN) CPSR:   600001d3 MODE:32-bit Guest SVC
+(XEN)      R0: 00000000 R1: ffffffff R2: c034cd84 R3: 00000008
+(XEN)      R4: ffffffff R5: c034c7f0 R6: 00000010 R7: c8800000
+(XEN)      R8: c0487a38 R9: 00100100 R10:00200200 R11:c0345f88 R12:00000063
+(XEN) USR: SP: 00000000 LR: 00000000
+(19:07 2013-10-15XEN) SVC: SP: c0345f40 LR: c032d0d0 SPSR:000001d3
+(XEN) ABT: SP: c036508c LR: c036508c SPSR:00000000
+(XEN) UND: SP: c0365098 LR: c0365098 SPSR:00000000
+(XEN) IRQ: SP: c0365080 LR: c0365080 SPSR:00000000
+(XEN) FIQ: SP: 00000000 LR: ffffffff SPSR:00000000
+(XEN) FIQ: R8: 00000000 R9: 00000000 R10:00000000 R11:00000000 R12:00000000
+(XEN) 
+(XEN)      SCTLR: 10c53c7d
+(XEN)        TCR: 00000000
+(XEN)      TTBR0: 000000008000406a
+(XEN)      TTBR1: 000000008000406a
+(XEN)       IFAR: 00000000, IFSR: 00000000
+(XEN)       DFAR: 00000000, DFSR: 00000000
+(XEN) 
+(XEN)   VTCR_EL2: 80002558
+(XEN)  VTTBR_EL2: 0002000059c70000
+(XEN) 
+(XEN)  SCTLR_EL2: 30cd187f
+(XEN)    HCR_EL2: 0000000000282835
+(XEN)  TTBR0_EL2: 000000007fedf000
+(XEN) 
+(XEN)    ESR_EL2: 93830006
+(XEN)  HPFAR_EL2: 00000000001c4810
+(XEN)      HDFAR: c8800004
+(XEN)      HIFAR: 9f7ffee6
+(XEN) 
+(XEN) No stack trace for 32-bit guest kernel-mode
+(XEN) domain_crash_sync called from traps.c:1385
+(XEN) Domain 2 (vcpu#0) crashed on cpu#0:
+(XEN) ----[ Xen-4.4-unstable  arm32  debug=y  Tainted:    C ]----
+(XEN) CPU:    0
+(XEN) PC:     c032ce1c
+(XEN) CPSR:   600001d3 MODE:32-bit Guest SVC
+(XEN)      R0: 00000000 R1: ffffffff R2: c034cd84 R3: 00000008
+(XEN)      R4: ffffffff R5: c034c7f0 R6: 00000010 R7: c8800000
+(XEN)      R8: c0487a38 R9: 00100100 R10:00200200 R11:c0345f88 R12:00000063
+(XEN) USR: SP: 00000000 LR: 00000000
+(XEN) SVC: SP: c0345f40 LR: c032d0d0 SPSR:000001d3
+(XEN) ABT: SP: c036508c LR: c036508c SPSR:00000000
+(XEN) UND: SP: c0365098 LR: c0365098 SPSR:00000000
+(XEN) IRQ: SP: c0365080 LR: c0365080 SPSR:00000000
+(XEN) FIQ: SP: 00000000 LR: ffffffff SPSR:00000000
+(XEN) FIQ: R8: 00000000 R9: 00000000 R10:00000000 R11:00000000 R12:00000000
+(XEN) 
+(XEN)      SCTLR: 10c53c7d
+(XEN)        TCR: 00000000
+(XEN)      TTBR0: 000000008000406a
+(XEN)      TTBR1: 000000008000406a
+(XEN)       IFAR: 00000000, IFSR: 00000000
+(XEN)       DFAR: 00000000, DFSR: 00000000
+(XEN) 
+(XEN)   VTCR_EL2: 80002558
+(XEN)  VTTBR_EL2: 0002000059c70000
+(XEN) 
+(XEN)  SCTLR_EL2: 30cd187f
+(XEN)    HCR_EL2: 0000000000282835
+(XEN)  TTBR0_EL2: 000000007fedf000
+(XEN) 
+(XEN)    ESR_EL2: 93830006
+(XEN)  HPFAR_EL2: 00000000001c4810
+(XEN)      HDFAR: c8800004
+(XEN)      HIFAR: 9f7ffee6
+(XEN) 
+(XEN) No stack trace for 32-bit guest kernel-mode
+
 
 14:19 2013-10-15
 virtualization, domain configuration, libvirt, xl
