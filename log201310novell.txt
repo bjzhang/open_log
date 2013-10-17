@@ -3851,3 +3851,245 @@ ian c did it but not post.
 <ijc> If you like you could also look at the two "Cannot handle..." in dump_guest_s1_walk...
 <ijc> Or perhaps look at enabling LPAE in your dom0 kernel to see if that works.
 
+11:36 2013-10-17
+xen, arm, allwinner, A20, sun7i; document, summary
+http://wiki.xen.org/wiki?title=Xen_ARMv7_with_Virtualization_Extensions/Allwinner
+
+this wiki talks about xen on [http://linux-sunxi.org/A20 A20](Cortex-A7 dual core, code name sun7i). [http://linux-sunxi.org/A31 A31](Cortex-A7 quad core, code name sun6i) should work as well.
+
+== Compile u-boot ==
+as described in [http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions#Firmware_Requirements Firmware_Requirements], xen need boot from non-secure hyper mode.
+
+=== get the code ===
+a worked branch is here:
+    https://github.com/bjzhang/u-boot-sunxi/tree/sunxi_hyp
+
+here is the details:
+; merge the hypmode branch
+    git://git.linaro.org/people/aprzywara/u-boot.git hypmode_v4
+branch into
+    git://github.com/linux-sunxi/u-boot-sunxi.git u-boot-sunxi
+i tested hypmode_v4 with commit 3d2fc4e8 in u-boot-sunxi. hypmode_v5 should work as well.
+; add [http://lists.xen.org/archives/html/xen-devel/2013-08/msg03040.html Ian Campbell patches] on it. 
+; enable arm generic timer for sunxi, xen dom0 kernel need this:
+    diff --git a/include/configs/sun7i.h b/include/configs/sun7i.h
+    index f0d9222..473d1eb 100644
+    --- a/include/configs/sun7i.h
+    +++ b/include/configs/sun7i.h
+    @@ -36,6 +36,8 @@
+     
+     #define CONFIG_ARMV7_VIRT
+     
+    +#define CONFIG_SYS_CLK_FREQ     24000000
+    +
+     #if defined(CONFIG_SYS_SECONDARY_ON)
+     #define CONFIG_BOARD_POSTCLK_INIT 1
+     #endif
+
+refernce: [http://lists.xen.org/archives/html/xen-devel/2013-08/msg03040.html bootwrapper can't be compiled for cubieboard2]
+
+=== Compile ===
+for sd card
+    make Cubieboard2 CROSS_COMPILE=arm-linux-gnueabihf- -j8
+for usb boot
+    make Cubieboard2_FEL CROSS_COMPILE=arm-linux-gnueabihf- -j8
+
+== Building Linux Dom0 ==
+
+First, we will build Linux for dom0 to have a device tree to provide to Xen.
+
+You can get a tree from [https://github.com/bjzhang/linux-allwinner/tree/sun7i-xen-dom0 sun7i-xen-dom0] which is based on arokux sunxi usb branch.
+the emac patch in this tree is needed for enable network in dom0.
+note that we need check the corresponding backend driver if we want to use it in domU. 
+
+  git clone -b sun7i-xen-dom0 https://github.com/bjzhang/linux-allwinner.git sun7i-xen-dom0
+  cd sun7i-xen-dom0
+  make sun7i_dom0_defconfig
+  make zImage
+  make dtbs
+
+The device tree is located in arch/arm/boot/dts/sun7i-a20-cubieboard2-xen.dtb
+
+== Building Xen ==
+
+the lastest xen should work. reference [[Xen_ARMv7_with_Virtualization_Extensions#Building_Xen_on_ARM|Build Xen on ARM]] and [[Xen_ARMv7_with_Virtualization_Extensions#Building Xen and Linux Dom0|Building Xen and Linux Dom0]] for building xen and generating the xen-uImage.
+i test pass on xen commit 720f45ad: Julien Grall, xen/evtchn: Fix build on ARM
+
+use the following build command for enable early printk for a20:
+    make dist-xen XEN_TARGET_ARCH=arm32 CROSS_COMPILE=arm-linux-gnueabihf- CONFIG_EARLY_PRINTK=sun7i CONFIG_DTB_FILE=/path/to/sun7i-a20-cubieboard2-xen.dtb
+
+== Building linux DomU ==
+
+xen domU kernel is supported by upstream. and remember that domU guest do not aware of which hardware it running on, it only know about the mach-virt.
+
+check the frontend driver in the config file. 
+
+currenly, xen directly use the dom0 gic dist base and cpu base as domU gic dist and cpu base. reference gicv_setup() in xen/arch/arm/gic.c for details.
+for sunxi, need chances the followings: (this patch is included in my branch)
+
+    diff --git a/arch/arm/boot/dts/xenvm-4.2.dts b/arch/arm/boot/dts/xenvm-4.2.dts
+    index 3369151..5d5689e 100644
+    --- a/arch/arm/boot/dts/xenvm-4.2.dts
+    +++ b/arch/arm/boot/dts/xenvm-4.2.dts
+    @@ -50,13 +50,13 @@
+            reg = <0 0x80000000 0 0x08000000>;
+        };
+     
+    -	gic: interrupt-controller@2c001000 {
+    +	gic: interrupt-controller@1c81000{
+            compatible = "arm,cortex-a15-gic", "arm,cortex-a9-gic";
+            #interrupt-cells = <3>;
+            #address-cells = <0>;
+            interrupt-controller;
+    -		reg = <0 0x2c001000 0 0x1000>,
+    -		      <0 0x2c002000 0 0x100>;
+    +		reg = <0 0x01c81000 0 0x1000>,
+    +		      <0 0x01c82000 0 0x1000>;
+        };
+     
+        timer {
+
+it should not need to change after ian auto-generate dts patch upstreamed.
+
+  git clone -b sun7i_xen_domU https://github.com/bjzhang/linux-allwinner.git sun7i_xen_domU
+  cd sun7i_xen_domU
+  make sun7i_domU_defconfig
+  make zImage
+  make dtbs
+
+== Booting Xen and Dom0 ==
+
+To boot Xen and Dom0, you can use USB boot or sd boot.
+
+=== Booting via PXE ===
+TODO
+
+=== Booting via USBBoot(FEL) ===
+reference: http://linux-sunxi.org/FEL/USBBoot 
+
+=== Booting directly on the SD card ===
+reference [http://linux-sunxi.org/Bootable_SD_card] for how to make a bootable sdcard.
+
+* Copy xen-uImage, zImage and the initrd the root directory of you SD card.
+* save the bootcmd
+  setenv bootcmd "fatload mmc 0 45000000 xen-uImage; fatload mmc 0 50000000 zImage; fatload mmc 0 60000000 initrd; bootm 45000000"
+  savenv
+* boot
+  boot
+
+Assume the SD card has only 1 partition with '''fat''' filesystem.
+
+== Mount NFS after initrd boot ==
+Using a [http://download.opensuse.org/repositories/devel:/ARM:/12.3:/Contrib:/sunxi/images/openSUSE-12.3-ARM-JeOS-rootfs.armv7l-1.12.1-Build71.1.tbz distrbution] is easily to compile xen tools. i use opensuse arm 12.3 rootfs for it. other distribution which support armhf is ok too.
+
+== Create domU ==
+
+;setup the harddisk
+    losetup /dev/loop0 /root/domU/rootfs.ext3 
+
+;domU config example
+    > cat domU_test
+    kernel = "/root/domU/zImage_dtb" 
+    memory = "128" 
+    name = "domU" 
+    vcpus = 1 
+    serial="pty"
+    disk = [ 'phy:/dev/loop0,xvda,w' ]
+    vif=[ 'mac=00:16:3e:56:af:69,bridge=virbr0,type=netfront', ]
+
+;create
+    xl create domU_test
+or enable all the debug message
+    xl -vvv create -d domU_testa
+
+;connect to console
+xl console domU_test
+
+== DomU kernel debug ==
+xen support varity debug method. you could use xl debug-keys for dumping information. use xen_raw_console_write for output DomU kernel output.
+but gdbsx is not work for arm right now.
+
+    diff --git a/kernel/printk/printk.c b/kernel/printk/printk.c
+    index b4e8500..060c163 100644
+    --- a/kernel/printk/printk.c
+    +++ b/kernel/printk/printk.c
+    @@ -1488,6 +1488,7 @@ static size_t cont_print_text(char *text, size_t size)
+        return textlen;
+     }
+     
+    +#include <xen/hvc-console.h>
+     asmlinkage int vprintk_emit(int facility, int level,
+                    const char *dict, size_t dictlen,
+                    const char *fmt, va_list args)
+    @@ -1546,6 +1547,7 @@ asmlinkage int vprintk_emit(int facility, int level,
+         * prefix which might be passed-in as a parameter.
+         */
+        text_len = vscnprintf(text, sizeof(textbuf), fmt, args);
+    +    xen_raw_console_write(text);
+     
+        /* mark and strip a trailing newline */
+        if (text_len && text[text_len-1] == '\n') {
+
+== Resources ==
+[http://linux-sunxi.org/ allwinner sunxi resources]
+[http://lists.xen.org/archives/html/xen-devel/2013-08/msg03040.html]
+
+[[Category:XenARM]]
+[[Category:Developers]]
+[[Category:Xen 4.4]]
+
+13:33 2013-10-17
+GTD
+0, 10:50-19:30
+
+1, today
+1), 14:58-19:30 write doc for xen on sunxi. see"11:36 2013-10-17".
+
+2, next
+1), write xl list --long patch.
+2), investigate the backstrace on xen arm.
+3), discuss with Chunyan about snapshot.
+
+15:02 2013-10-17
+\TODO:
+1, do i need ian c patch?
+http://lists.xen.org/archives/html/xen-devel/2013-09/msg01471.html
+maybe 6, 7, 8.
+
+yes, do it later.
+send email to Ian
+
+15:36 2013-10-17
+xen, arm, sun7i
+1, \TODO: 
+1), linux: dom0/domU: the kernel config is not good.
+need manual changes.
+2), linux: dom0: need clk_ignore_unused boot dom0.
+
+2, unused patch
+1), try to enable nfs on a20. FAIL
+From 31f10b169936533d6ecb64f057759f51f6855d57 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Fri, 11 Oct 2013 14:53:33 +0800
+Subject: [PATCH 3/7] try to enable nfs on a20. FAIL
+
+---
+ arch/arm/boot/dts/sun7i-a20-cubieboard2-xen.dts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/sun7i-a20-cubieboard2-xen.dts b/arch/arm/boot/dts/sun7i-a20-cubieboard2-xen.dts
+index 5bb1886..516844c 100644
+--- a/arch/arm/boot/dts/sun7i-a20-cubieboard2-xen.dts
++++ b/arch/arm/boot/dts/sun7i-a20-cubieboard2-xen.dts
+@@ -20,7 +20,7 @@
+ 
+     chosen {
+         bootargs = "dom0_mem=256M sync_console console=dtuart dtuart=serial0";
+-        xen,dom0-bootargs = "console=hvc0,115200n8 debug ignore_loglevel rw rootwait earlyprintk=xen clk_ignore_unused";
++        xen,dom0-bootargs = "noinitrd rootfstype=nfs console=hvc0,115200n8 debug ignore_loglevel rw rootwait earlyprintk=xen clk_ignore_unused root=/dev/nfs nfsroot=147.2.207.160:/mnt/opensuse_root,rw,relatime,vers=3,rsize=1048576,wsize=1048576,namlen=255,hard,nolock,proto=tcp,port=2049,timeo=70,retrans=3,sec=sys,local_lock=all,addr=147.2.207.160 ip=147.2.207.79:147.2.207.160:147.2.207.254:255.255.255.0";
+         modules {
+             module@0 {
+                 compatible = "xen,linux-zimage", "xen,multiboot-module";
+-- 
+1.8.1.4
+
