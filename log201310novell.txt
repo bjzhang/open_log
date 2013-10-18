@@ -2065,9 +2065,8 @@ GTD
 interruptted by "2)".
 2), 50' reply to bnc#820873. discuss with Chunyan.
 3), \TODO: send patch to linux-arm about a20 only include 1G memory.
-4), \TODO: ianc said that the upstream kernel for domU is works too. i could try it later.
-
-send work report.
+4), \FINISH: ianc said that the upstream kernel for domU is works too. i could try it later.
+yes.
 
 10:28 2013-10-15
 xen, arm, sun7i, domU console
@@ -3902,8 +3901,12 @@ First, we will build Linux for dom0 to have a device tree to provide to Xen.
 
 You can get a tree from [https://github.com/bjzhang/linux-allwinner/tree/sun7i-xen-dom0 sun7i-xen-dom0] which is based on arokux sunxi usb branch.
 the emac patch in this tree is needed for enable network in dom0.
-note that we need check the corresponding backend driver if we want to use it in domU. 
+i am confuse about what does "CONFIG XEN" mean. it  will check the kernel features for dom0 and domU kernel.
+if you want to a dom0 kernel, you need to uncheck all the FRONTEND config, check CONFIG_XEN_BACKEND, and check the BACKEND config as you need:
+  CONFIG_XEN_BLKDEV_BACKEND=y
+  CONFIG_XEN_NETDEV_BACKEND=y
 
+or use sunxi dom0 kernel directly
   git clone -b sun7i-xen-dom0 https://github.com/bjzhang/linux-allwinner.git sun7i-xen-dom0
   cd sun7i-xen-dom0
   make sun7i_dom0_defconfig
@@ -3923,8 +3926,12 @@ use the following build command for enable early printk for a20:
 == Building linux DomU ==
 
 xen domU kernel is supported by upstream. and remember that domU guest do not aware of which hardware it running on, it only know about the mach-virt.
-
-check the frontend driver in the config file. 
+if you want to a domU kernel, you need to ucheck all the BACKEND config  and check the FRONTEND config as you need: 
+  CONFIG_XEN_BLKDEV_FRONTEND=y
+  CONFIG_XEN_NETDEV_FRONTEND=y
+  CONFIG_HVC_XEN_FRONTEND=y
+  CONFIG_XEN_FBDEV_FRONTEND=y
+note that '''CONFIG_XEN_XENBUS_FRONTEND''' will be automatically checked by any FRONTEND driver.
 
 currenly, xen directly use the dom0 gic dist base and cpu base as domU gic dist and cpu base. reference gicv_setup() in xen/arch/arm/gic.c for details.
 for sunxi, need chances the followings: (this patch is included in my branch)
@@ -4036,6 +4043,15 @@ but gdbsx is not work for arm right now.
 [http://linux-sunxi.org/ allwinner sunxi resources]
 [http://lists.xen.org/archives/html/xen-devel/2013-08/msg03040.html]
 
+== Known Issue ==
+without [http://lists.xen.org/archives/html/xen-devel/2013-09/msg02232.html sunxi platform patch], there is a warning during xen boot:
+  (XEN) WARNING: Unrecognized/unsupported device tree compatible list
+  (XEN) Available platform support:
+  (XEN)     - VERSATILE EXPRESS
+  (XEN)     - SAMSUNG EXYNOS5
+  (XEN)     - CALXEDA MIDWAY
+  (XEN)     - TI OMAP5
+
 [[Category:XenARM]]
 [[Category:Developers]]
 [[Category:Xen 4.4]]
@@ -4052,23 +4068,27 @@ GTD
 2), investigate the backstrace on xen arm.
 3), discuss with Chunyan about snapshot.
 
-15:02 2013-10-17
-\TODO:
-1, do i need ian c patch?
-http://lists.xen.org/archives/html/xen-devel/2013-09/msg01471.html
-maybe 6, 7, 8.
-
-yes, do it later.
-send email to Ian
-
 15:36 2013-10-17
-xen, arm, sun7i
-1, \TODO: 
-1), linux: dom0/domU: the kernel config is not good.
-need manual changes.
-2), linux: dom0: need clk_ignore_unused boot dom0.
+(16:38 2013-10-18)
+xen, arm, sun7i, know issues
+1, linux: dom0: i am confuse about what does "CONFIG XEN" mean. it  will check the kernel features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
+if you want to a dom0 kernel, you need to uncheck all the FRONTEND config, check CONFIG_XEN_BACKEND, and check the BACKEND config as you need:
+CONFIG_XEN_BLKDEV_BACKEND=y
+CONFIG_XEN_NETDEV_BACKEND=y
 
-2, unused patch
+if you want to a domU kernel, you need to ucheck all the BACKEND config  and check the FRONTEND config as you need: 
+CONFIG_XEN_BLKDEV_FRONTEND=y
+CONFIG_XEN_NETDEV_FRONTEND=y
+CONFIG_HVC_XEN_FRONTEND=y
+CONFIG_XEN_FBDEV_FRONTEND=y
+note that CONFIG_XEN_XENBUS_FRONTEND will be automatically checked by any FRONTEND driver.
+
+2, without Ian sunxi platform support patch, there is a warning during xen boot, ref "11:36 2013-10-17"Know Issue.
+http://lists.xen.org/archives/html/xen-devel/2013-09/msg01471.html
+
+3, linux: dom0: need clk_ignore_unused boot dom0. \TODO: report a bug?
+
+4, unused patch
 1), try to enable nfs on a20. FAIL
 From 31f10b169936533d6ecb64f057759f51f6855d57 Mon Sep 17 00:00:00 2001
 From: Bamvor Jian Zhang <bjzhang@suse.com>
@@ -4096,7 +4116,7 @@ index 5bb1886..516844c 100644
 1.8.1.4
 
 01:01 2013-10-18
-bnc, xen, xl list
+bnc#820873 , xen, xl list
 1, improve the error message in "xl list --long"
 
 with this patch, xl will raise a proper error when execute "xl list --long"
@@ -4138,3 +4158,175 @@ raising this message could let user know the circumstances.
 > libxl and I think the manipulation should be allowed by default.
 > 
 > Ian.
+
+3, (13:52 2013-10-18)
+reply to Ian J:
+Bamvor Jian Zhang writes ("Re: [Xen-devel] [PATCH RFC] improve the error 
+message in "xl list --long""):
+> considering this case, the user use virt-manager for management the virtual
+> machine, he would not aware of xm, xl or virsh is used by virt-manager and
+> vm-install. and it is safe to use the xm with virt-manager because the vm
+> info is only stored in xend not in libvirt. after user migrate from xm to
+> xl, he probably use the similar way. Acctually, our customer report this
+> bug because libvirt libxl driver still missing some apis compare with xl.
+> raising this message could let user know the circumstances.
+
+Thanks for the explanation.  I'm not sure I entirely follow, so I'm
+going to try to explain in my own words what I think you're saying:
+
+virt-manager users are used to using both xm and virsh to manage
+guests.  After moving to libxl this is even more relevant because of
+missing functionality in the libvirt libxl driver.  However, when a
+user uses xl on domains managed by virsh, things go wrong.  You want
+this to produce a better error message.
+
+Is this right ?  If so I think some more details would be helpful to
+know what goes wrong.  It might be possible to make more of this work
+better, or to improve error messages some other way.
+
+It would be possible in principle to make xl produce a warning when
+operating on a domain not created with xl, by looking for the missing
+userdata.  All modern versions of xl create the userdata.
+
+Ian.
+
+4, Jim reply to Ian J
+Ian Jackson wrote:
+> Bamvor Jian Zhang writes ("Re: [Xen-devel] [PATCH RFC] improve the error 
+> message in "xl list --long""):
+>   
+>> considering this case, the user use virt-manager for management the virtual
+>> machine, he would not aware of xm, xl or virsh is used by virt-manager and
+>> vm-install. and it is safe to use the xm with virt-manager because the vm
+>> info is only stored in xend not in libvirt. after user migrate from xm to
+>> xl, he probably use the similar way. Acctually, our customer report this
+>> bug because libvirt libxl driver still missing some apis compare with xl.
+>> raising this message could let user know the circumstances.
+>>     
+>
+> Thanks for the explanation.  I'm not sure I entirely follow, so I'm
+> going to try to explain in my own words what I think you're saying:
+>
+> virt-manager users are used to using both xm and virsh to manage
+> guests.  After moving to libxl this is even more relevant because of
+> missing functionality in the libvirt libxl driver.  However, when a
+> user uses xl on domains managed by virsh, things go wrong.  You want
+> this to produce a better error message.
+>   
+
+I think that is a good summary, as I understand it.
+
+> Is this right ?  If so I think some more details would be helpful to
+> know what goes wrong.  It might be possible to make more of this work
+> better, or to improve error messages some other way.
+>   
+
+A user reported the following when doing a xl long list of a domain
+created by libvirt
+
+homevhst01:~ # xl list smt
+Name ID Mem VCPUs State Time(s)
+smt 1 512 1 -b---- 861.4
+homevhst01:~ # xl list --long smt
+Domain name must be specified.
+
+Hmm, user did provide a domain name.  This is the error Bamvor is trying
+to improve.
+
+> It would be possible in principle to make xl produce a warning when
+> operating on a domain not created with xl, by looking for the missing
+> userdata.
+
+Yep, sounds reasonable to me.
+
+Regards
+Jim
+
+5, Andrew reply to me, about patch format.
+On 17/10/13 17:21, Bamvor Jian Zhang wrote:
+> with this patch, xl will raise a proper error when execute "xl list --long"
+> for existed domain but no domain configuration found. it would encounter
+> if other toolstack(like libvirt) create the vm, xl could saw the domain
+> name but could not get the domain configuration.
+>
+> there is a commit a76377f1 check the return value of
+> libxl_read_file_contents in libxl_userdata_retrieve. but skip the ENOENT.
+> it is almost three years before. i do not know the senario about that
+> commit. it seems that it is not safe to simplely remove the ENOENT.
+>
+> Signed-off-by: Bamvor Jian Zhang <bjzhang@xxxxxxxx>
+> ---
+>  tools/libxl/libxl_dom.c | 6 ++++++
+>  1 file changed, 6 insertions(+)
+>
+> diff --git a/tools/libxl/libxl_dom.c b/tools/libxl/libxl_dom.c
+> index 356f920..8daf51a 100644
+> --- a/tools/libxl/libxl_dom.c
+> +++ b/tools/libxl/libxl_dom.c
+> @@ -1655,6 +1655,12 @@ int libxl_userdata_retrieve(libxl_ctx *ctx, uint32_t 
+> domid,
+>          goto out;
+>      }
+>  
+> +    if (access(filename, F_OK) != 0) {
+> +        LIBXL__LOG(ctx, LIBXL__LOG_ERROR, "Unknown domain configuration. Is 
+> domain id '%u' owned by another libxl toolstack?", domid);
+
+This line is too long,  perhaps putting the start of the string on a new
+line, and splitting again at the %u so the grepable parts of the string
+stay contiguous.
+
+Finally, "another libxl toolstack" is too specific (XAPI domains being a
+prime example which would fall over here).  I would suggest just
+"another toolstack".
+
+~Andrew
+
+> +        rc = ERROR_INVAL;
+> +        goto out;
+> +    }
+> +
+>      e = libxl_read_file_contents(ctx, filename, data_r ? &data : 0, 
+> &datalen);
+>      if (e && errno != ENOENT) {
+>          rc = ERROR_FAIL;
+
+6, base on the discuss, i should be great if i add a generic warning in xl command.
+should i seperate the cmd with or without using user data?
+
+13:42 2013-10-18
+software skill, Linux, kill
+1, Mastering the “Kill” Command in Linux
+cn: http://www.linuxeden.com/plus/view.php?aid=144699
+en: http://www.maketecheasier.com/kill-command-in-linux/
+
+13:52 2013-10-18
+GTD
+0, -17:40
+
+1, today
+1), 13:40-14:18 bnc#820873 see"01:01 2013-10-18"3.
+2), 15' finish hackweek project. xen on sun7i SOC. see"14:34 2013-09-30"3.
+3), 14:49-15:06 work report. see"14:49 2013-10-18"
+4), 16:24-17:38 deal with \TODO in this month. mainly for xen arm.
+
+14:49 2013-10-18
+work report - week 40, 41, 42
+1, hack week:run xen on Cortex-A7 powered STB.
+The A20(Dual Cortex-A7)/A31(Quad Cortex-A7) SOC came from allwinner, whose source code is upstreamed. and a community (linux-sunxi.org) work on allwinner series SOC.
+i successful boot dom0 with opensuse 12.3 for arm(NFS mounted) and create guest with xen virtual block and network device. it is the forth arm32 SOC successful running xen.
+reference my wiki for details: http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner.
+
+2, bnc#820873: discuss this bug this Jim and upstream. will write a patch to prompt proper warning/error in xl.
+
+3, one week: National Holiday. 
+
+15:06 2013-10-18
+GTD, week plan
+1, next week
+1), finish patch for bnc#820873.
+2), discuss about snapshot.
+3), xen: arm: domU trace.
+(1), try:  Support for the Large Physical Address Extension
+4), xen: arm: improve sunxi platform support.
+
