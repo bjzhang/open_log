@@ -970,7 +970,7 @@ crw-------    1 root     root       10,  62 Jan  1 00:00 xenbus_backend
 ((1)), cmd list: init
 ifconfig eth0 192.168.1.105 netmask 255.255.255.0 up
 sleep 1
-route add default 192.168.1.1export LD_LIBRARY_PATH=/usr/local/lib
+route add default gw 192.168.1.1
 sleep 1
 export server_ip=192.168.1.104
 mount -t nfs -o nolock,tcp,rsize=10240,wsize=10240 ${server_ip}:/mnt/opensuse_root /mnt
@@ -4558,4 +4558,86 @@ GTD
 1), -11:42 send email discuss with Jim about libxl api changes. see"15:26 2013-10-24"3.
 2), read code about snapshot.
 
+23:09 2013-10-25
+1, 
+diff --git a/xen/arch/arm/traps.c b/xen/arch/arm/traps.c
+index 4c0fc32..287dd7b 100644
+--- a/xen/arch/arm/traps.c
++++ b/xen/arch/arm/traps.c
+@@ -629,12 +629,20 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
+         return;
+ 
+     case PSR_MODE_FIQ:
++        sp = regs->sp_fiq;
++        break;
+     case PSR_MODE_IRQ:
++        sp = regs->sp_irq;
++        break;
+     case PSR_MODE_SVC:
++        sp = regs->sp_svc;
++        break;
+     case PSR_MODE_ABT:
++        sp = regs->sp_abt;
++        break;
+     case PSR_MODE_UND:
+-        printk("No stack trace for 32-bit guest kernel-mode\n");
+-        return;
++        sp = regs->sp_und;
++        break;
+ 
+ #ifdef CONFIG_ARM_64
+     case PSR_MODE_EL1t:
+
+2, always get dom0 dump, how to get domU dump?
+from the code, IMO, it is possible to dump domU kernel.
+
+(XEN) 'd' pressed -> dumping registers
+(XEN) 
+(XEN) *** Dumping CPU0 guest state (d0:v0): ***
+(XEN) ----[ Xen-4.4-unstable  arm32  debug=y  Tainted:    C ]----
+(XEN) CPU:    0
+(XEN) PC:     c000e220
+(XEN) CPSR:   60000013 MODE:32-bit Guest SVC
+(XEN)      R0: b6f3d004 R1: 00000000 R2: 00000001 R3: b6f43b50
+(XEN)      R4: b6f43b50 R5: dfb8c600 R6: 00000000 R7: bebd02e8
+(XEN)      R8: dfb8c600 R9: db7c8000 R10:df44f988 R11:bebd02e8 R12:00000023
+(XEN) USR: SP: bebd02b4 LR: b6ea024c
+(XEN) SVC: SP: db7c9ea4 LR: c0215444 SPSR:60000010
+(XEN) ABT: SP: c058998c LR: c00126a0 SPSR:60000193
+(XEN) UND: SP: c0589998 LR: c0012520 SPSR:a0000093
+(XEN) IRQ: SP: c0589980 LR: c00124c0 SPSR:20000193
+(XEN) FIQ: SP: 00000000 LR: 00000000 SPSR:00000000
+(XEN) FIQ: R8: 00000000 R9: 00000000 R10:00000000 R11:00000000 R12:00000000
+(XEN) 
+(XEN)      SCTLR: 10c5387d
+(XEN)        TCR: 00000000
+(XEN)      TTBR0: 000000005b7d006a
+(XEN)      TTBR1: 000000004000406a
+(XEN)       IFAR: b6e9636c, IFSR: 00000007
+(XEN)       DFAR: 00025568, DFSR: 00000017
+(XEN) 
+(XEN)   VTCR_EL2: 80002558
+(XEN)  VTTBR_EL2: 00010000402ec000
+(XEN) 
+(XEN)  SCTLR_EL2: 30cd187f
+(XEN)    HCR_EL2: 0000000000282835
+(XEN)  TTBR0_EL2: 000000007fee7000
+(XEN) 
+(XEN)    ESR_EL2: 4a000ea1
+(XEN)  HPFAR_EL2: 000000000001c810
+(XEN)      HDFAR: c8800100
+(XEN)      HIFAR: b1859020
+(XEN) 
+(XEN) Guest stack trace from sp=db7c9ea4:
+(XEN)    00305000 b6f43b50 b6f43b50 b6f3d000 cd409900 db7c9f44 c055f884 c05c3780
+(XEN)    c0091b44 00000023 00000000 b6f3d004 00000000 00000000 00000000 00000001
+(XEN)    00000000 b6f43b50 00000000 b6f43b50 f15aea17 0000000a 00305000 dfb8c600
+(XEN)    00000000 bebd02e8 dfb8c600 db7c8000 c00bd05c 00000000 00000000 00000000
+(XEN)    cd409900 dfb80210 b6f3e000 b6f3e000 c00934ac db7c8008 c008d2fc db7c9f4c
+(XEN)    00000001 dfb80210 91827364 db7c9f50 db7c9f50 db7c9f58 db7c9f58 00001000
+(XEN)    00305000 00000005 00000000 bebd02e8 dfb8c600 db7c8000 00000000 bebd02bc
+(XEN)    c00bd260 b6f3d000 00000000 00036158 bebd0789 00000001 00000036 c000e548
+(XEN)    c000e3a0 00036158 bebd0789 00000005 00305000 bebd02e8 00000000 00036158
+(XEN)    bebd0789 00000001 00000036 00027de4 00034000 00000002 bebd02bc b6eac0d0
+(XEN)    bebd02b4 b6ea024c b6da9a7c 60000010 00000005 00000000 00000000
 
