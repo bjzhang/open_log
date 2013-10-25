@@ -4491,6 +4491,7 @@ list_domain_details.
 git send-email --no-chain-reply-to --annotate --to xen-devel@lists.xen.org --cc jfehlig@suse.com --cc ian.jackson@eu.citrix.com 0001*.patch
 
 15:26 2013-10-24
+virtualization, libvirt, xen, libxl, libxl api changes
 1, search how does "virsh version" know the xen version.
 it is get by hyper call.
 
@@ -4500,5 +4501,61 @@ add a configure flags in configure.
 or should libvirt always use the lastest api?
 but it seems that it only used in migrate_receive. i do not know whether libvirt is need for this or not.
 
-send a email discuss with Jim?
+3, (11:30 2013-10-25)
+send a email discuss with Jim:
+Hi, Jim
+
+there is an libxl API changes in the following commit: 
+commit 7051d5c872e3e708b2d4b2088215d6ab1b33de1b
+Author: Andrew Cooper <andrew.cooper3@citrix.com>
+Date:   Thu Oct 10 12:23:10 2013 +0100
+
+    tools/migrate: Fix regression when migrating from older version of Xen
+
+it add a parameter for libxl_domain_create_restore(see below), if libvirt
+want to remains this api changed, it need add
+#define LIBXL_API_VERSION 0x040300
+or 
+#define LIBXL_API_VERSION 0x040200
+which lower than xen-4.4-unstable.
+
+#if defined(LIBXL_API_VERSION) && LIBXL_API_VERSION < 0x040400
+
+int static inline libxl_domain_create_restore_0x040200(
+    libxl_ctx *ctx, libxl_domain_config *d_config,
+    uint32_t *domid, int restore_fd,
+    const libxl_asyncop_how *ao_how,
+    const libxl_asyncprogress_how *aop_console_how)
+    LIBXL_EXTERNAL_CALLERS_ONLY
+{
+    libxl_domain_restore_params params;
+    params.checkpointed_stream = 0;
+
+    return libxl_domain_create_restore(
+        ctx, d_config, domid, restore_fd, &params, ao_how, aop_console_how);
+}
+
+#define libxl_domain_create_restore libxl_domain_create_restore_0x040200
+
+#endif
+
+meanwhile, there are three libxl API versions: 0x040200, 0x040300, 0x040400, 
+should we add something like "--libxl-version" in configure.ac and define it
+in config.h?
+
+IMO, libvirt should define one of them in order to avoid direct use the lastest 
+api version. or api will not compatible.
+
+thanks
+
+bamvor
+
+11:42 2013-10-25
+GTD
+0, 11:00
+
+1, today
+1), -11:42 send email discuss with Jim about libxl api changes. see"15:26 2013-10-24"3.
+2), read code about snapshot.
+
 
