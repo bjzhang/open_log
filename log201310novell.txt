@@ -5245,10 +5245,14 @@ GTD, week
 
 15:03 2013-11-01
 GTD
+0, -19:40
+
 1, today
 1), 30' libvirt libxl: send patch. see"14:30 2013-11-01".
-2), 40' xen: arm: send question finally. see"14:42 2013-11-01"
+2), 40' 19:00-19:39 xen: arm: send question finally. see"14:42 2013-11-01", "19:13 2013-11-01"
 3), 16:07-16:40 snapshot: discuss with Chunyan. see"16:32 2013-11-01"
+4), 30' msp430.
+5), xen: arm: send guest stack trace patch.
 
 16:32 2013-11-01
 fate, snapshot
@@ -5271,4 +5275,105 @@ There are many disk types, could all these disk types be managed by qemu?
 (should have a check)
 
 -Chunyan
+
+19:13 2013-11-01
+xen, arm, question
+1, Ian C reply to me
+On Fri, 2013-11-01 at 04:34 -0600, Bamvor Jian Zhang wrote:
+> 
+>  >>>Ian Campbell <Ian.Campbell@citrix.com> wrote: 
+> > On Fri, 2013-11-01 at 01:54 -0600, Bamvor Jian Zhang wrote: 
+> > > fix destination.  
+> > > sorry, i sent it to the wrong address.  
+> > >  
+> > >  >>>Bamvor Jian Zhang wrote:  
+> > > > hi,  
+> > > >    
+> > > > recently, i got xen running on allwinner A20 successful[1], and i  
+> > > > have two questions:  
+> > > >   
+> > > > 1, how to get guest stack trace?  
+> > > > i could get the guest stack trace with the following patch, is it  
+> > > > make sense? 
+> >  
+> > The only issue would be that it prints 8-byte words for a 32-on-64 
+> > guest. That as it is much better than nothing, we can live with it for 
+> > sure. 
+> >  
+> > >  and i could only get the dom0 kernel trace, how could  
+> > > > i get the domU kernel trace?   
+> >  
+> > This code should work equally well for any guest AFAICT, what issue are 
+> > you seeing? 
+> i mean if i have booted a domU, could i get such specific domain stack trace? 
+> i only get the dom0 stack trace throught "xl debug-keys d" every time, even if
+> domU crash(user maybe want 
+> the domU stack at that time). or should i use other tools for it? 
+
+"xl debug-keys d" makes a hypercall which necessarily ensures that the
+domain making the call (dom0) is scheduled at the time and 'd' only
+prints the currently running vcpus. If you use the 'd' key from the
+debug console (Ctrl-A three times) while the guest is running you should
+occasionally see the guest too.
+
+But I don't think the d key will ever show a crashed domain, since it
+isn't ever going to be scheduled. You probably want to use the xenctx
+tool for this case.
+
+> >  
+> > > >    
+> > > >  #ifdef CONFIG_ARM_64  
+> > > >      case PSR_MODE_EL1t:  
+> > > >   
+> > > > 2, xen kernel config  
+> > > > i am confuse about what does "CONFIG XEN" mean. it  will check the kernel   
+> >  
+> > > > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)  
+> > > > should we define XEN_DOM0 and XEN_DOMU configs respectively?   
+> >  
+> > I'm not sure what you mean, but yes, if you want to run Xen you should 
+> > enable the relevant CONFIG options, including CONFIG_XEN and I think 
+> > CONFIG_XEN_DOM0. 
+> i mean when i select the CONFIG_XEN in kernel config, both XEN_BACKEND and
+> XEN_xxx_FRONTEND will be selected. 
+> i think backend and frontend should not select at the same time, isn't it? 
+
+I think (but I'm not sure) that these are just umbrella options which
+don't add any code themselves but just make the other more specific e.g.
+netback) options.
+
+In any case, I think anyone enabling CONFIG_XEN would expect to get the
+rest of the Xen stuff by default. Or at least a basic working subset.
+
+Is this causing you problems?
+
+Ian.
+
+2, reply
+1), 
+thanks for explanation. i will try it.
+i just read the code: xenctx support arm and aarch64, but set the
+wrong default value of kernel_start in 32bit arm, do we need this:
+diff --git a/tools/xentrace/xenctx.c b/tools/xentrace/xenctx.c
+index 1214185..a749e93 100644
+--- a/tools/xentrace/xenctx.c
++++ b/tools/xentrace/xenctx.c
+@@ -69,7 +69,7 @@ struct symbol {
+ 
+ guest_word_t kernel_stext, kernel_etext, kernel_sinittext, kernel_einittext, kernel_hypercallpage;
+ 
+-#if defined (__i386__)
++#if defined (__i386__) || defined (__arm__) 
+ unsigned long long kernel_start = 0xc0000000;
+ #else
+ unsigned long long kernel_start = 0xffffffff80000000UL;
+
+2), 
+it is compiled into kernel, but it might be no harm?
+CONFIG_XEN_BACKEND will select xenbus_probe_backend.c and
+xenbus_dev_backend.c, xenbus_probe_backend.c will register the
+"xen-backend" bus. is it unused until the xen backend device
+registered? 
+and xenbus_backend_init(xenbus_dev_backend.c) will fail if it
+is not the initial domain.
 
