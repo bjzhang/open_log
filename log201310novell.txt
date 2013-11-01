@@ -4073,7 +4073,7 @@ GTD
 
 15:36 2013-10-17
 (16:38 2013-10-18)
-xen, arm, sun7i, know issues
+xen, arm, sun7i, known issues
 1, linux: dom0: i am confuse about what does "CONFIG XEN" mean. it  will check the kernel features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
 if you want to a dom0 kernel, you need to uncheck all the FRONTEND config, check CONFIG_XEN_BACKEND, and check the BACKEND config as you need:
 CONFIG_XEN_BLKDEV_BACKEND=y
@@ -5071,4 +5071,191 @@ i will add this to wiki later.
 
 15:36 2013-10-31
 公共保额30万，感觉很少啊。如果有同事得大病，根本不够。
+
+14:42 2013-11-01
+xen, arm, sun7i, known issues, cont1, send email to xen-devel
+hi, 
+ 
+recently, i got xen running on allwinner A20 successful[1], and i
+have two questions:
+
+1, how to get guest stack trace?
+i could get the guest stack trace with the following patch, is it
+make sense? and i could only get the dom0 kernel trace, how could
+i get the domU kernel trace? 
+
+diff --git a/xen/arch/arm/traps.c b/xen/arch/arm/traps.c
+index 4c0fc32..287dd7b 100644
+--- a/xen/arch/arm/traps.c
++++ b/xen/arch/arm/traps.c
+@@ -629,12 +629,20 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
+         return;
+ 
+     case PSR_MODE_FIQ:
++        sp = regs->sp_fiq;
++        break;
+     case PSR_MODE_IRQ:
++        sp = regs->sp_irq;
++        break;
+     case PSR_MODE_SVC:
++        sp = regs->sp_svc;
++        break;
+     case PSR_MODE_ABT:
++        sp = regs->sp_abt;
++        break;
+     case PSR_MODE_UND:
+-        printk("No stack trace for 32-bit guest kernel-mode\n");
+-        return;
++        sp = regs->sp_und;
++        break;
+ 
+ #ifdef CONFIG_ARM_64
+     case PSR_MODE_EL1t:
+
+2, xen kernel config
+i am confuse about what does "CONFIG XEN" mean. it  will check the kernel features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
+should we define XEN_DOM0 and XEN_DOMU configs respectively? 
+
+--- .config	2013-11-01 14:57:28.489573665 +0800
++++ xen_config	2013-11-01 14:57:00.781238549 +0800
+@@ -579,6 +579,7 @@
+ # CONFIG_PHYS_ADDR_T_64BIT is not set
+ CONFIG_ZONE_DMA_FLAG=1
+ CONFIG_BOUNCE=y
++CONFIG_MMU_NOTIFIER=y
+ # CONFIG_KSM is not set
+ CONFIG_DEFAULT_MMAP_MIN_ADDR=4096
+ CONFIG_CROSS_MEMORY_ATTACH=y
+@@ -591,7 +592,8 @@
+ # CONFIG_UACCESS_WITH_MEMCPY is not set
+ # CONFIG_SECCOMP is not set
+ # CONFIG_CC_STACKPROTECTOR is not set
+-# CONFIG_XEN is not set
++CONFIG_XEN_DOM0=y
++CONFIG_XEN=y
+ 
+ #
+ # Boot options
+@@ -810,7 +812,7 @@
+ CONFIG_FW_LOADER_USER_HELPER=y
+ # CONFIG_DEBUG_DRIVER is not set
+ # CONFIG_DEBUG_DEVRES is not set
+-# CONFIG_SYS_HYPERVISOR is not set
++CONFIG_SYS_HYPERVISOR=y
+ # CONFIG_GENERIC_CPU_DEVICES is not set
+ CONFIG_SOC_BUS=y
+ CONFIG_REGMAP=y
+@@ -853,6 +855,8 @@
+ # CONFIG_CDROM_PKTCDVD is not set
+ # CONFIG_ATA_OVER_ETH is not set
+ # CONFIG_MG_DISK is not set
++CONFIG_XEN_BLKDEV_FRONTEND=y
++# CONFIG_XEN_BLKDEV_BACKEND is not set
+ # CONFIG_BLK_DEV_RBD is not set
+ 
+ #
+@@ -1127,6 +1131,8 @@
+ # Enable WiMAX (Networking options) to see the WiMAX drivers
+ #
+ # CONFIG_WAN is not set
++CONFIG_XEN_NETDEV_FRONTEND=y
++# CONFIG_XEN_NETDEV_BACKEND is not set
+ # CONFIG_ISDN is not set
+ 
+ #
+@@ -1281,6 +1287,10 @@
+ CONFIG_SERIAL_FSL_LPUART=y
+ CONFIG_SERIAL_FSL_LPUART_CONSOLE=y
+ # CONFIG_SERIAL_ST_ASC is not set
++CONFIG_HVC_DRIVER=y
++CONFIG_HVC_IRQ=y
++CONFIG_HVC_XEN=y
++CONFIG_HVC_XEN_FRONTEND=y
+ # CONFIG_HVC_DCC is not set
+ # CONFIG_IPMI_HANDLER is not set
+ CONFIG_HW_RANDOM=y
+@@ -1807,7 +1817,8 @@
+ CONFIG_FB_SYS_COPYAREA=y
+ CONFIG_FB_SYS_IMAGEBLIT=y
+ # CONFIG_FB_FOREIGN_ENDIAN is not set
+-# CONFIG_FB_SYS_FOPS is not set
++CONFIG_FB_SYS_FOPS=y
++CONFIG_FB_DEFERRED_IO=y
+ # CONFIG_FB_SVGALIB is not set
+ # CONFIG_FB_MACMODES is not set
+ # CONFIG_FB_BACKLIGHT is not set
+@@ -1829,6 +1840,7 @@
+ # CONFIG_FB_GOLDFISH is not set
+ # CONFIG_FB_DA8XX is not set
+ # CONFIG_FB_VIRTUAL is not set
++CONFIG_XEN_FBDEV_FRONTEND=y
+ # CONFIG_FB_METRONOME is not set
+ CONFIG_FB_MX3=y
+ # CONFIG_FB_BROADSHEET is not set
+@@ -2255,6 +2267,19 @@
+ #
+ # Microsoft Hyper-V guest support
+ #
++
++#
++# Xen driver support
++#
++CONFIG_XEN_DEV_EVTCHN=y
++CONFIG_XEN_BACKEND=y
++CONFIG_XENFS=y
++CONFIG_XEN_COMPAT_XENFS=y
++CONFIG_XEN_SYS_HYPERVISOR=y
++CONFIG_XEN_XENBUS_FRONTEND=y
++CONFIG_XEN_GNTDEV=y
++CONFIG_XEN_GRANT_DEV_ALLOC=y
++CONFIG_XEN_PRIVCMD=y
+ # CONFIG_STAGING is not set
+ CONFIG_CLKDEV_LOOKUP=y
+ CONFIG_HAVE_CLK_PREPARE=y
+
+[1] http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner
+
+best regards
+
+bamvor
+
+14:30 2013-11-01
+libvirt, fix api changes in xen restore
+
+in recently xen commit: 7051d5c8, there is a api changes in
+libxl_domain_create_restore. 
+Author: Andrew Cooper <andrew.cooper3@citrix.com>
+Date:   Thu Oct 10 12:23:10 2013 +0100
+
+    tools/migrate: Fix regression when migrating from older version of Xen
+
+use the macro LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS in libxl.h
+in order to make libvirt could compile with old and new xen. 
+
+the params checkpointed_stream is useful if libvirt libxl driver
+support migration. for new, set it as zero.
+
+15:00 2013-11-01
+GTD, week
+1, next week
+1), main work: debug ao.
+2), discuss snapshot.
+3), write code for my watch.
+4), sunxi smp patch in xen?
+
+15:03 2013-11-01
+GTD
+1, today
+1), 30' libvirt libxl: send patch. see"14:30 2013-11-01".
+2), 40' xen: arm: send question finally. see"14:42 2013-11-01"
+3), 16:07-16:40 snapshot: discuss with Chunyan. see"16:32 2013-11-01"
+
+16:32 2013-11-01
+fate, snapshot
+1, qemu have savevm for save memory and disk snapshot. 
+for xen hvm, we could use this.
+but for xen pv?
+1), if use qemu as backend, it could be.
+2), if do not use qemu as backend, it could not.
+
 
