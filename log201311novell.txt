@@ -1,0 +1,418 @@
+.LOG
+14:42 2013-11-01
+xen, arm, sun7i, known issues, cont1, send email to xen-devel
+hi, 
+ 
+recently, i got xen running on allwinner A20 successful[1], and i
+have two questions:
+
+1, how to get guest stack trace?
+i could get the guest stack trace with the following patch, is it
+make sense? and i could only get the dom0 kernel trace, how could
+i get the domU kernel trace? 
+
+diff --git a/xen/arch/arm/traps.c b/xen/arch/arm/traps.c
+index 4c0fc32..287dd7b 100644
+--- a/xen/arch/arm/traps.c
++++ b/xen/arch/arm/traps.c
+@@ -629,12 +629,20 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
+         return;
+ 
+     case PSR_MODE_FIQ:
++        sp = regs->sp_fiq;
++        break;
+     case PSR_MODE_IRQ:
++        sp = regs->sp_irq;
++        break;
+     case PSR_MODE_SVC:
++        sp = regs->sp_svc;
++        break;
+     case PSR_MODE_ABT:
++        sp = regs->sp_abt;
++        break;
+     case PSR_MODE_UND:
+-        printk("No stack trace for 32-bit guest kernel-mode\n");
+-        return;
++        sp = regs->sp_und;
++        break;
+ 
+ #ifdef CONFIG_ARM_64
+     case PSR_MODE_EL1t:
+
+2, xen kernel config
+i am confuse about what does "CONFIG XEN" mean. it  will check the kernel features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
+should we define XEN_DOM0 and XEN_DOMU configs respectively? 
+
+--- .config	2013-11-01 14:57:28.489573665 +0800
++++ xen_config	2013-11-01 14:57:00.781238549 +0800
+@@ -579,6 +579,7 @@
+ # CONFIG_PHYS_ADDR_T_64BIT is not set
+ CONFIG_ZONE_DMA_FLAG=1
+ CONFIG_BOUNCE=y
++CONFIG_MMU_NOTIFIER=y
+ # CONFIG_KSM is not set
+ CONFIG_DEFAULT_MMAP_MIN_ADDR=4096
+ CONFIG_CROSS_MEMORY_ATTACH=y
+@@ -591,7 +592,8 @@
+ # CONFIG_UACCESS_WITH_MEMCPY is not set
+ # CONFIG_SECCOMP is not set
+ # CONFIG_CC_STACKPROTECTOR is not set
+-# CONFIG_XEN is not set
++CONFIG_XEN_DOM0=y
++CONFIG_XEN=y
+ 
+ #
+ # Boot options
+@@ -810,7 +812,7 @@
+ CONFIG_FW_LOADER_USER_HELPER=y
+ # CONFIG_DEBUG_DRIVER is not set
+ # CONFIG_DEBUG_DEVRES is not set
+-# CONFIG_SYS_HYPERVISOR is not set
++CONFIG_SYS_HYPERVISOR=y
+ # CONFIG_GENERIC_CPU_DEVICES is not set
+ CONFIG_SOC_BUS=y
+ CONFIG_REGMAP=y
+@@ -853,6 +855,8 @@
+ # CONFIG_CDROM_PKTCDVD is not set
+ # CONFIG_ATA_OVER_ETH is not set
+ # CONFIG_MG_DISK is not set
++CONFIG_XEN_BLKDEV_FRONTEND=y
++# CONFIG_XEN_BLKDEV_BACKEND is not set
+ # CONFIG_BLK_DEV_RBD is not set
+ 
+ #
+@@ -1127,6 +1131,8 @@
+ # Enable WiMAX (Networking options) to see the WiMAX drivers
+ #
+ # CONFIG_WAN is not set
++CONFIG_XEN_NETDEV_FRONTEND=y
++# CONFIG_XEN_NETDEV_BACKEND is not set
+ # CONFIG_ISDN is not set
+ 
+ #
+@@ -1281,6 +1287,10 @@
+ CONFIG_SERIAL_FSL_LPUART=y
+ CONFIG_SERIAL_FSL_LPUART_CONSOLE=y
+ # CONFIG_SERIAL_ST_ASC is not set
++CONFIG_HVC_DRIVER=y
++CONFIG_HVC_IRQ=y
++CONFIG_HVC_XEN=y
++CONFIG_HVC_XEN_FRONTEND=y
+ # CONFIG_HVC_DCC is not set
+ # CONFIG_IPMI_HANDLER is not set
+ CONFIG_HW_RANDOM=y
+@@ -1807,7 +1817,8 @@
+ CONFIG_FB_SYS_COPYAREA=y
+ CONFIG_FB_SYS_IMAGEBLIT=y
+ # CONFIG_FB_FOREIGN_ENDIAN is not set
+-# CONFIG_FB_SYS_FOPS is not set
++CONFIG_FB_SYS_FOPS=y
++CONFIG_FB_DEFERRED_IO=y
+ # CONFIG_FB_SVGALIB is not set
+ # CONFIG_FB_MACMODES is not set
+ # CONFIG_FB_BACKLIGHT is not set
+@@ -1829,6 +1840,7 @@
+ # CONFIG_FB_GOLDFISH is not set
+ # CONFIG_FB_DA8XX is not set
+ # CONFIG_FB_VIRTUAL is not set
++CONFIG_XEN_FBDEV_FRONTEND=y
+ # CONFIG_FB_METRONOME is not set
+ CONFIG_FB_MX3=y
+ # CONFIG_FB_BROADSHEET is not set
+@@ -2255,6 +2267,19 @@
+ #
+ # Microsoft Hyper-V guest support
+ #
++
++#
++# Xen driver support
++#
++CONFIG_XEN_DEV_EVTCHN=y
++CONFIG_XEN_BACKEND=y
++CONFIG_XENFS=y
++CONFIG_XEN_COMPAT_XENFS=y
++CONFIG_XEN_SYS_HYPERVISOR=y
++CONFIG_XEN_XENBUS_FRONTEND=y
++CONFIG_XEN_GNTDEV=y
++CONFIG_XEN_GRANT_DEV_ALLOC=y
++CONFIG_XEN_PRIVCMD=y
+ # CONFIG_STAGING is not set
+ CONFIG_CLKDEV_LOOKUP=y
+ CONFIG_HAVE_CLK_PREPARE=y
+
+[1] http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner
+
+best regards
+
+bamvor
+
+14:30 2013-11-01
+libvirt, fix api changes in xen restore
+
+in recently xen commit: 7051d5c8, there is a api changes in
+libxl_domain_create_restore. 
+Author: Andrew Cooper <andrew.cooper3@citrix.com>
+Date:   Thu Oct 10 12:23:10 2013 +0100
+
+    tools/migrate: Fix regression when migrating from older version of Xen
+
+use the macro LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS in libxl.h
+in order to make libvirt could compile with old and new xen. 
+
+the params checkpointed_stream is useful if libvirt libxl driver
+support migration. for new, set it as zero.
+
+15:00 2013-11-01
+GTD, week
+1, next week
+1), main work: debug ao.
+2), discuss snapshot.
+3), write code for my watch.
+4), sunxi smp patch in xen?
+
+15:03 2013-11-01
+GTD
+0, -19:40
+
+1, today
+1), 30' libvirt libxl: send patch. see"14:30 2013-11-01".
+2), 40' 19:00-19:39 xen: arm: send question finally. see"14:42 2013-11-01", "19:13 2013-11-01"
+3), 16:07-16:40 snapshot: discuss with Chunyan. see"16:32 2013-11-01"
+4), 30' msp430.
+5), xen: arm: send guest stack trace patch.
+
+16:32 2013-11-01
+fate, snapshot
+1, qemu have savevm for save memory and disk snapshot. 
+for xen hvm, we could use this.
+but for xen pv?
+1), if use qemu as backend, it could be.
+2), if do not use qemu as backend, it could not.
+
+2, Chunyan version: 
+PV:
+1. if PV does't use fb, qemu may be not started at all, then no way to call
+qemu monitor command to do disk snapshot.
+2. qemu monitor 'do_savevm', will save qemu state and then do disk
+snapshot, for PV, save qemu state is not needed (? according to
+domain_save), then could we use do_savevm directly for both PV and HVM?
+
+HVM:
+There are many disk types, could all these disk types be managed by qemu?
+(should have a check)
+
+-Chunyan
+
+19:13 2013-11-01
+xen, arm, question
+1, Ian C reply to me
+On Fri, 2013-11-01 at 04:34 -0600, Bamvor Jian Zhang wrote:
+> 
+>  >>>Ian Campbell <Ian.Campbell@citrix.com> wrote: 
+> > On Fri, 2013-11-01 at 01:54 -0600, Bamvor Jian Zhang wrote: 
+> > > fix destination.  
+> > > sorry, i sent it to the wrong address.  
+> > >  
+> > >  >>>Bamvor Jian Zhang wrote:  
+> > > > hi,  
+> > > >    
+> > > > recently, i got xen running on allwinner A20 successful[1], and i  
+> > > > have two questions:  
+> > > >   
+> > > > 1, how to get guest stack trace?  
+> > > > i could get the guest stack trace with the following patch, is it  
+> > > > make sense? 
+> >  
+> > The only issue would be that it prints 8-byte words for a 32-on-64 
+> > guest. That as it is much better than nothing, we can live with it for 
+> > sure. 
+> >  
+> > >  and i could only get the dom0 kernel trace, how could  
+> > > > i get the domU kernel trace?   
+> >  
+> > This code should work equally well for any guest AFAICT, what issue are 
+> > you seeing? 
+> i mean if i have booted a domU, could i get such specific domain stack trace? 
+> i only get the dom0 stack trace throught "xl debug-keys d" every time, even if
+> domU crash(user maybe want 
+> the domU stack at that time). or should i use other tools for it? 
+
+"xl debug-keys d" makes a hypercall which necessarily ensures that the
+domain making the call (dom0) is scheduled at the time and 'd' only
+prints the currently running vcpus. If you use the 'd' key from the
+debug console (Ctrl-A three times) while the guest is running you should
+occasionally see the guest too.
+
+But I don't think the d key will ever show a crashed domain, since it
+isn't ever going to be scheduled. You probably want to use the xenctx
+tool for this case.
+
+> >  
+> > > >    
+> > > >  #ifdef CONFIG_ARM_64  
+> > > >      case PSR_MODE_EL1t:  
+> > > >   
+> > > > 2, xen kernel config  
+> > > > i am confuse about what does "CONFIG XEN" mean. it  will check the kernel   
+> >  
+> > > > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)  
+> > > > should we define XEN_DOM0 and XEN_DOMU configs respectively?   
+> >  
+> > I'm not sure what you mean, but yes, if you want to run Xen you should 
+> > enable the relevant CONFIG options, including CONFIG_XEN and I think 
+> > CONFIG_XEN_DOM0. 
+> i mean when i select the CONFIG_XEN in kernel config, both XEN_BACKEND and
+> XEN_xxx_FRONTEND will be selected. 
+> i think backend and frontend should not select at the same time, isn't it? 
+
+I think (but I'm not sure) that these are just umbrella options which
+don't add any code themselves but just make the other more specific e.g.
+netback) options.
+
+In any case, I think anyone enabling CONFIG_XEN would expect to get the
+rest of the Xen stuff by default. Or at least a basic working subset.
+
+Is this causing you problems?
+
+Ian.
+
+2, reply
+1), 
+thanks for explanation. i will try it.
+i just read the code: xenctx support arm and aarch64, but set the
+wrong default value of kernel_start in 32bit arm, do we need this:
+diff --git a/tools/xentrace/xenctx.c b/tools/xentrace/xenctx.c
+index 1214185..a749e93 100644
+--- a/tools/xentrace/xenctx.c
++++ b/tools/xentrace/xenctx.c
+@@ -69,7 +69,7 @@ struct symbol {
+ 
+ guest_word_t kernel_stext, kernel_etext, kernel_sinittext, kernel_einittext, kernel_hypercallpage;
+ 
+-#if defined (__i386__)
++#if defined (__i386__) || defined (__arm__) 
+ unsigned long long kernel_start = 0xc0000000;
+ #else
+ unsigned long long kernel_start = 0xffffffff80000000UL;
+
+2), 
+it is compiled into kernel, but it might be no harm?
+CONFIG_XEN_BACKEND will select xenbus_probe_backend.c and
+xenbus_dev_backend.c, xenbus_probe_backend.c will register the
+"xen-backend" bus. is it unused until the xen backend device
+registered? 
+and xenbus_backend_init(xenbus_dev_backend.c) will fail if it
+is not the initial domain.
+
+10:58 2013-11-04
+GTD
+0, 10:30-18:26
+
+1, today
+1), 14:54- xen arm patch. see"15:03 2013-11-04"
+
+2, todo
+2), debug ao.
+3), work report? 
+
+3, next
+1), migration my smart watch to Energia.
+
+11:01 2013-11-04
+msp430, development under linux
+1, ref: http://processors.wiki.ti.com/index.php/Open_Source_Projects_-_MSP430#Energia_-_Open_source_development_environment 
+2, Energia
+https://github.com/energia/Energia/wiki/Getting-Started
+http://forum.43oh.com/forum/28-energia/
+
+15:03 2013-11-04
+1, Ian C
+1), 
+On Fri, 2013-11-01 at 01:54 -0600, Bamvor Jian Zhang wrote:
+> fix destination. 
+> sorry, i sent it to the wrong address. 
+> 
+>  >>>Bamvor Jian Zhang wrote: 
+> > hi, 
+> >   
+> > recently, i got xen running on allwinner A20 successful[1], and i 
+> > have two questions: 
+> >  
+> > 1, how to get guest stack trace? 
+> > i could get the guest stack trace with the following patch, is it 
+> > make sense?
+
+The only issue would be that it prints 8-byte words for a 32-on-64
+guest. That as it is much better than nothing, we can live with it for
+sure.
+
+>  and i could only get the dom0 kernel trace, how could 
+> > i get the domU kernel trace?  
+
+This code should work equally well for any guest AFAICT, what issue are
+you seeing?
+
+> >   
+> >  #ifdef CONFIG_ARM_64 
+> >      case PSR_MODE_EL1t: 
+> >  
+> > 2, xen kernel config 
+> > i am confuse about what does "CONFIG XEN" mean. it  will check the kernel  
+> > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND) 
+> > should we define XEN_DOM0 and XEN_DOMU configs respectively?  
+
+I'm not sure what you mean, but yes, if you want to run Xen you should
+enable the relevant CONFIG options, including CONFIG_XEN and I think
+CONFIG_XEN_DOM0.
+
+Ian.
+
+2, git send-email
+git send-email --no-chain-reply-to --annotate --to xen-devel@lists.xen.org --cc ian.campbell@citrix.com --cc stefano.stabellini@citrix.com --cc tim@xen.org
+
+17:21 2013-11-04
+fate, snapshot, OPW project
+http://wiki.xen.org/wiki/OutreachProgramForWomen/Round7#VM_Snapshots
+VM Snapshots
+Date of insert: 16/01/2013
+Mentor: Anthony Perard <anthony.perard@citrix.com>
+Difficulty: Medium
+Skills Needed: C programming
+Description: Although xl is capable of saving and restoring a running VM, it is not currently possible to create a snapshot of the disk together with the rest of the VM.
+QEMU is capable of creating, listing and deleting disk snapshots on QCOW2 and QED files, so even today, issuing the right commands via the QEMU monitor, it is possible to create disk snapshots of a running Xen VM. xl and libxl don't have any knowledge of these snapshots, don't know how to create, list or delete them.
+This project is about implementing disk snapshots support in libxl, using the QMP protocol to issue commands to QEMU. Users should be able to manage the entire life-cycle of their disk snapshots via xl.
+The candidate should also explore ways to integrate QEMU disk snapshots and disk mirroring into the regular Xen save/restore mechanisms and provide a solid implementation for xl/libxl.
+Outcomes:  
+Basic goal: disk snapshots can be handled entirely by xl.
+Stretch goals: xl can automatically save a disk snapshot at the time of saving a VM. xl can also mirror the disk of a VM between two hosts and can do that automatically at the time of VM migration.
+Steps:  
+Basic steps:
+Study libxl APIs for storage
+Study QEMU QMP commands for VM snapshots
+Implement support for QMP snapshots commands in libxl
+Implement VM snapshots functionalities in libxl using the QMP functions previously written
+Add VM snapshot commands to XL
+Stretch goals:
+Add VM snapshot functionalities to libxl save/restore and migration functions
+Evaluate QEMU QMP disk mirroring capabilities (QMP command "drive-mirror")
+Implement support for QMP drive-mirror command in libxl
+Hook disk mirroring into libxl VM save/restore and migration functions (migrating a VM from one host to another is also capable of migrating the VM disk from the two hosts).
+References: XL, QEMU
+Peer Review Comments
+(delete as addressed)
+ Ijc 10:05, 11 February 2013 (UTC): Although this project is specifically targeting the QEMU snapshot mechanism we should require that the libxl API which is exposed is general enough to be applied to other disk backends (blktap3, lvm snapshot, btrfs, etc)
+
+18:01 2013-11-04
+1, try usb boot fail on mele A100 dual. no bootlog. why???
+here is my u-boot command:
+fatload mmc 0 46000000 uImage
+fatload mmc 0 47000000 sun7i-a20-cubieboard2.dtb
+fatload mmc 0 48000000 uInitrd
+setenv bootargs "console=ttyS0,115200 loglevel=8 clk_ignore_unused"
+bootm 46000000 48000000 47000000
+
+18:25 2013-11-04
+opensuse
+1, Miska work on msp430 and cubieboard.
+https://build.opensuse.org/project/show/home:-miska-:arm
+
