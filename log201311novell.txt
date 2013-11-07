@@ -801,7 +801,7 @@ Neo didn't bring down the Matrix. SOA did. (soafacts.com)
 --------------------------------------------
 Olaf Kirch - Director SUSE Linux Enterprise; R&D (okir@suse.com)
 SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, Germany
-GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg) 
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg)
 
 11:00 2013-11-06
 GTD
@@ -826,14 +826,14 @@ GTD, week plan
 11:03 2013-11-06
 xen, libxl, ao improve, cont1
 1, Ian J
-1), 
+1),
 Bamvor Jian Zhang writes ("[PATCH 0/2] question on libxl ao"):
 > there are four choices for using ao_how in libvirt.
 > (a), ao without callback and set libxl_sigchld_owner_mainloop
 > (b), ao without callback and set libxl_sigchld_owner_libxl_always
 > (c), ao with callback and set libxl_sigchld_owner_mainloop
 > (d), ao with callback and set libxl_sigchld_owner_libxl_always
-> 
+>
 > i got some trouble when i try (b) and (c).
 > i still not decided which one is better choice for implement in
 > libvirt. it would be easier if i could try above four choice.
@@ -844,7 +844,7 @@ I'm assuming that libvirt has something for handling children
 already.  But I haven't looked.  If it doesn't then
 libxl_sigchld_owner_always would probably be best.
 
-Bamvor Jian Zhang writes ("[PATCH 1/2] expose child fd in order to handle child 
+Bamvor Jian Zhang writes ("[PATCH 1/2] expose child fd in order to handle child
 exit in libvirt"):
 > libvirt could handle fd and timeout event through
 > libxl_osevent_hooks. either of these will not inform the child
@@ -873,5 +873,175 @@ Thanks,
 Ian.
 
 (1), reply
-no child handle at this time.
+> I'm not sure I follow.  I think the right answer for libvirt is
+> probably aos specifying callback, and libxl_sigchld_owner_mainloop.
+> I'm assuming that libvirt has something for handling children
+> already.  But I haven't looked.  If it doesn't then
+> libxl_sigchld_owner_always would probably be best.
+AFAICS, no child handle in libvirt. i will try your patches.
+thanks.
+
+2), (11:06 2013-11-07)
+Bamvor Jian Zhang writes ("[PATCH 2/2] call ao_how callback explicitly"):
+> ao_how callback is not called after inserted into list.
+> in my test, i directly call it in
+> libxl__ao_complete_check_progress_reports. i know it should not
+> work like this. Could you give some suggestion about it?
+
+I'm not sure what you mean.  Under what conditions do you not see the
+callback happen ?  The existing machinery is supposed to take care of
+that.  Specifically, in the patch you're changing,
+libxl__ao_complete_check_progress_reports puts the ao onto
+egc->aos_for_callback.  On the return path from the libxl event
+function back to the application, we are supposed to call
+libxl__egc_cleanup, which in turn calls egc_run_callbacks, which
+should pick up the aos on aos_for_callback.  libxl__egc_cleanup is
+called from the event loops in libxl_event_wait and
+libxl__ao_inprogress and from the macro EGC_FREE.  It should be
+impossible for a path to be missed because inside libxl one needs an
+egc to call libxl__ao_complete.
+
+What kind of an ao_how is your application passing to libxl ?  Is your
+application multithreaded ?
+
+Ian.
+
+(1), test if the libxl__egc_cleanup is called in the event loop.
+reply
+> egc->aos_for_callback.  On the return path from the libxl event
+> function back to the application, we are supposed to call
+> libxl__egc_cleanup, which in turn calls egc_run_callbacks, which
+> should pick up the aos on aos_for_callback.  libxl__egc_cleanup is
+> called from the event loops in libxl_event_wait and
+> libxl__ao_inprogress and from the macro EGC_FREE.  It should be
+> impossible for a path to be missed because inside libxl one needs an
+> egc to call libxl__ao_complete.
+>
+> What kind of an ao_how is your application passing to libxl ?  Is your
+> application multithreaded ?
+
+09:59 2013-11-07
+GTD
+0, 9:40-17:59
+
+1, today
+1), 9:50- reply the email. see"10:24 2013-11-07"
+reply Ian J about nightly build.
+
+10:24 2013-11-07
+1, "Ian Campbell <Ian.Campbell@citrix.com>"_email_"Re: [Xen-devel] pvgrub2 for ARM"_20131106_2126
+On Wed, 2013-11-06 at 14:00 +0100, Vladimir 'φ-coder/phcoder' Serbinenko
+wrote:
+> Hello, all. I've ported grub2 to x86_64-xen and i386-xen (PAE only). How
+> big is the difference between ARM and i386 when seen as pv guest?
+
+Very. Xen on ARM uses hardware functionality for second stage paging, so
+there is far less porting to do.
+
+> I have an ARM here but it's a raspberry pi, so no support for xen. Are there
+> machines for under $100 on which xen runs?
+
+The current platforms are listed on
+http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions. The one
+which is sub $100 is the Allwinner sunxi based stuff. The native Linux
+support is community driven by the linux-sunxi.org folks and is
+progressing nicely.
+
+I've got a cubieboard2 (A20 based, <$100) which is a promising platform.
+I've mostly been trying to get (native) SATA going, so my Xen
+experiments are a bit lightweight, but it does boot. Bamvor has reported
+success with using the MMC and documented it on the wiki. I think he's
+using an A31 based STB of some sort.
+
+> What's with 64-bit ARM?
+
+TBH I thought the GRuB On ARM stuff was mainly targeting 64-bit (at
+least within Linaro). Do you have native grub on 32-bit ARM already
+then?
+
+As far as 64-bit hardware goes you will have a struggle finding any at
+all right now, nevermind for under $100.
+
+We should at some point be able to support the freely (as in beer)
+available Foundation model, but we don't right now.
+
+> Alternatively, I'll probably go for Google HP chromebook 11.
+
+I don;t know about this one, but previous chromebooks have proved a pain
+to get Xen onto, too hard to debug anything on them...
+
+> Or may I have access to some server where I'd be able to run VMs with my
+> kernel (GRUB) and HDD?
+
+I'm afraid we don't here at least.
+
+Ian.
+
+2, reply
+> I've got a cubieboard2 (A20 based, <$100) which is a promising platform.
+How about cubietruck? 2G memory plus 1G network is better than cb2. it is
+about 90$.
+> I've mostly been trying to get (native) SATA going, so my Xen
+> experiments are a bit lightweight, but it does boot. Bamvor has reported
+> success with using the MMC and documented it on the wiki. I think he's
+> using an A31 based STB of some sort.
+i use the NFS as root not the MMC, and the usb storage should work but no
+lucky for me. i test these on A20 STB(mele A100 Dual, only 40$!!)
+successful.
+
+10:55 2013-11-07
+xen, arm, question
+1, "Stefano Stabellini <stefano.stabellini@eu.citrix.com>"_email_"Re: [Xen-devel] two questions about xen on arm"_20131107_0339
+On Fri, 1 Nov 2013, Ian Campbell wrote:
+> > > > > > > 2, xen kernel config
+> > > > > > > i am confuse about what does "CONFIG XEN" mean. it  will check the
+> > > kernel
+> > > > >
+> > > > > > > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
+> > > > > > > should we define XEN_DOM0 and XEN_DOMU configs respectively?
+> > > > >
+> > > > > I'm not sure what you mean, but yes, if you want to run Xen you should
+> > > > > enable the relevant CONFIG options, including CONFIG_XEN and I think
+> > > > > CONFIG_XEN_DOM0.
+> > > > i mean when i select the CONFIG_XEN in kernel config, both XEN_BACKEND and
+> > > > XEN_xxx_FRONTEND will be selected.
+> > > > i think backend and frontend should not select at the same time, isn't it?
+> > >
+> > > I think (but I'm not sure) that these are just umbrella options which
+> > > don't add any code themselves but just make the other more specific e.g.
+> > > netback) options.
+> > it is compiled into kernel, but it might be no harm?
+>
+> If you don't boot under Xen then none of the code will be (should be!)
+> active. If you are booting under Xen then I think it is expected?
+Right, having both the backends and the frontends compiled in should
+cause no troubles.
+If you are really concerned about the size of the kernel it might make
+sense to disable the backends or the frontends depending on whether you
+are running linux in dom0 or another domU.
+> > CONFIG_XEN_BACKEND will select xenbus_probe_backend.c and
+> > xenbus_dev_backend.c, xenbus_probe_backend.c will register the
+> > "xen-backend" bus. is it unused until the xen backend device
+> > registered?
+It is unused until xenbus_backend_init and later xenbus_probe_backend
+are called.
+> > and xenbus_backend_init(xenbus_dev_backend.c) will fail if it
+> > is not the initial domain.
+Yep, but the failure in that case is normal and expected.
+> > > In any case, I think anyone enabling CONFIG_XEN would expect to get the
+> > > rest of the Xen stuff by default. Or at least a basic working subset.
+> > yes, i think so.
+
+2, "Ian Campbell <Ian.Campbell@citrix.com>"_email_"Stefano Stabellini"_20131107_1629
+On Wed, 2013-11-06 at 18:52 +0000, Stefano Stabellini wrote:
+> If you are really concerned about the size of the kernel it might make
+> sense to disable the backends or the frontends depending on whether you
+> are running linux in dom0 or another domU.
+
+Or make them modular, which is what I would expect most distros to do.
+Both front and backends should be autoloaded when necessary these days.
+
+14:19 2013-11-07
+cubietruck material
+http://cubieboard.org/2013/10/30/cubieboard3-cubietruck-is-all-ready/
 
