@@ -570,6 +570,57 @@ changes before 4.4 (where I hope we can declare it frozen).
 
 Ian.
 
+2, (14:01 2013-11-08)
+"Stefano Stabellini <stefano.stabellini@eu.citrix.com>"_email_"Goswin von Brederlow"_20131107_0239
+On Tue, 5 Nov 2013, Goswin von Brederlow wrote:
+> Hi,
+> 
+> this might be an FAQ but I'm looking for the documentation for the xen
+> guest API/ABI exposed to domU kernels on arm. The wiki says it isn't
+> yet set in stone and WIP but I hope someone is already working on
+> documenting it. Any pointers?
+
+Hello Goswin,
+please note that the right list for upstream Xen on ARM discussions is
+xen-devel@lists.xen.org. xen-arm is to discuss the older PV port by
+Samsung. I know this is confusing, sorry.
+
+Unfortunately such a document still needs to be written but it would be
+truly great to have it. I'll offer you an endless supply of beers at the
+next Xen Developer Summit if you write one :-)
+
+We do have a list of exported hypercalls here:
+
+xen/include/public/arch-arm.h
+
+You might also want to give a look at the device tree interface (under
+Linux):
+
+Documentation/devicetree/bindings/arm/xen.txt
+
+And still under Linux:
+
+arch/arm/xen/enlighten.c
+
+>From which is clear that:
+
+- the start_info page is not used;
+
+- the shared_info page is mapped using XENMEM_add_to_physmap(XENMAPSPACE_shared_info);
+
+- all vcpu_info pages are mapped using VCPUOP_register_vcpu_info, even
+  the one for cpu0;
+
+- the grant table is mapped using
+  XENMEM_add_to_physmap(XENMAPSPACE_grant_table) in the memory range
+  specified on the device tree xen node;
+
+- event channel notifications are delivered using the a percpu GIC
+  interrupt.
+
+
+
+
 10:38 2013-11-06
 company, competitor, redhat, RHEL
 "Olaf Kirch <okir@suse.de>"_email_"[slestaff] Fwd: Field Memo: Recent RHEL Subscription Changes"
@@ -920,6 +971,226 @@ reply
 > What kind of an ao_how is your application passing to libxl ?  Is your
 > application multithreaded ?
 
+2, (14:27 2013-11-08)
+Ian J reply 20131108_0104
+Bamvor Jian Zhang writes ("Re: [Xen-devel] [PATCH 2/2] call ao_how callback explicitly"):
+...
+> > I'm not sure what you mean.  Under what conditions do you not see the
+> > callback happen ?  The existing machinery is supposed to take care of
+> > that.  Specifically, in the patch you're changing,
+> > libxl__ao_complete_check_progress_reports puts the ao onto
+> > egc->aos_for_callback.  On the return path from the libxl event
+> > function back to the application, we are supposed to call
+> > libxl__egc_cleanup, which in turn calls egc_run_callbacks, which
+> > should pick up the aos on aos_for_callback.  libxl__egc_cleanup is
+> > called from the event loops in libxl_event_wait and
+> > libxl__ao_inprogress and from the macro EGC_FREE.  It should be
+> > impossible for a path to be missed because inside libxl one needs an
+> > egc to call libxl__ao_complete.
+...
+> the libvirt libxl driver register the event handler through
+> libxl_event_register_callbacks,
+
+Right.
+
+> so the libxl_event_wait could not get the event.
+
+I understand from this that you're calling libxl_event_wait ?  (Rather
+than that you're saying that you're not calling libxl_event_wait, but
+doing so wouldn't help.)
+
+But, as I understand it, you're passing an ao_how which specifies a
+callback, rather than the generation of an event.  So I think
+libxl_event_wait is irrelevant.
+
+> and if the ao_how is used, the libxl__egc_cleanup in
+> "if ( poller )" statement will not be called either.
+> even if i could expose the libxl_egc_cleanup to libvirt, i still do not
+> know when should i call it?
+
+No, you shouldn't need to call it explicitly and doing so won't help.
+
+> i do not know if there is a event triggered
+> before the ao_how callback should be called. (is there a fd event when
+> the async operation complete?).
+
+It's the other way around.  The async operation completes, probably,
+because of an fd event.  So I think the call flow should be:
+
+ 1. Your application notices the fd is readable (say)
+ 2. Your application calls libxl_osevent_occurred_fd.
+ 3. libxl_osevent_occurred_fd allocates an egc on entry.
+ 4. In libxl, libxl_osevent_occurred_fd calls whatever internal
+    functions are supposed to respond to the fd.  If appropriate,
+    this will cause some ao to complete.  All of these calls
+    will receive the same egc as created in step 3.  I.e.:
+ 5. In libxl, something calls libxl__ao_complete.
+ 6. libxl__ao_complete puts the ao on the egc's aos_for_callback
+    list.
+ 7. The call stack unwinds inside libxl, eventually returning
+    to libxl_osevent_occurred_fd.
+ 8. libxl_osevent_occurred_fd uses EGC_FREE on exit, and EGC_FREE
+    contains a call to libxl__egc_cleanup.
+ 9. libxl__egc_cleanup calls egc_run_callbacks which finds the ao
+    on the aos_for_callback list and makes your application
+    callback.
+
+The purpose of the "poller" machinery is so that if at step 5 we
+decide to return an event structure, rather than making a callback, a
+concurrent call to libxl_event_wait (on a different thread) can be
+woken up.
+
+Can you turn on libxl's debugging and send me a trace of it losing the
+event ?
+
+Ian.
+
+1), test
+because the egc is different.
+libxl__ao_complete_check_progress_reports
+(gdb) p egc
+$1 = (libxl__egc *) 0x7fb1fd03f500
+
+watchfd_callback
+(gdb) p egc
+$4 = (libxl__egc *) 0x7ffffb291960
+
+why other case is ok?(rather than aos_for_callback). why libxlEventHandler is worked?
+because if ao_how iss NULL, it only one egc in libxl__ao_inprogress.
+
+2), reply
+> I understand from this that you're calling libxl_event_wait ?  (Rather
+> than that you're saying that you're not calling libxl_event_wait, but
+> doing so wouldn't help.)
+i am talking about why i could not call libxl_event_wait.
+>
+> But, as I understand it, you're passing an ao_how which specifies a
+> callback, rather than the generation of an event.  So I think
+> libxl_event_wait is irrelevant.
+agree.
+...
+
+> It's the other way around.  The async operation completes, probably,
+> because of an fd event.  So I think the call flow should be:
+...
+with log and gdb, i could see above flow except the ao in egc->aops_for_callback is empty.
+and from gdb i could know that the egc is different between libxl__ao_complete_check_progress_reports and fd event(here is watchfd_callback).
+libxl__ao_complete_check_progress_reports
+(gdb) p egc
+$1 = (libxl__egc *) 0x7fb1fd03f500
+
+watchfd_callback
+(gdb) p egc
+$4 = (libxl__egc *) 0x7ffffb291960
+
+after check the code in libxl_osevent_occurred_fd, the egc is created in watchfd_callback. so, EGC_FREE could not handle the ao added by libxl__ao_complete_check_progress_reports. the latter egc is created by AO_CREATE in do_domain_create.
+is it correct? if so, could we use the same egc all the time?
+
+here is the full libxl.log:
+libxl: debug: libxl_create.c:1230:do_domain_create: ao 0x7fb1d0001e50: create: how=0x7fb1f6448e80 callback=0x7fb1f6210fb0 poller=(nil)
+libxl: debug: libxl_device.c:257:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_create.c:675:initiate_domain_create: running bootloader
+libxl: debug: libxl_bootloader.c:321:libxl__bootloader_run: not a PV domain, skipping bootloader
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d0003078: deregister unregistered
+libxl: debug: libxl_numa.c:475:libxl__get_numa_candidate: New best NUMA placement candidate found: nr_nodes=1, nr_cpus=8, nr_vcpus=9, free_memkb=908
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 8 cpus and 908 KB free selected
+xc: detail: elf_parse_binary: phdr: paddr=0x100000 memsz=0x9f0c8
+xc: detail: elf_parse_binary: memory: 0x100000 -> 0x19f0c8
+xc: info: VIRTUAL MEMORY ARRANGEMENT:
+  Loader:        0000000000100000->000000000019f0c8
+  Modules:       0000000000000000->0000000000000000
+  TOTAL:         0000000000000000->000000001f800000
+  ENTRY ADDRESS: 0000000000100000
+xc: info: PHYSICAL MEMORY ALLOCATION:
+  4KB PAGES: 0x0000000000000200
+  2MB PAGES: 0x00000000000000fb
+  1GB PAGES: 0x0000000000000000
+xc: detail: elf_load_binary: phdr 0 at 0x7fb1f2f48000 -> 0x7fb1f2fddf4d
+libxl: debug: libxl_device.c:257:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d0002558 wpath=/local/domain/0/backend/vbd/2/768/state token=3/0: register slotnum=3
+libxl: debug: libxl_create.c:1243:do_domain_create: ao 0x7fb1d0001e50: inprogress: poller=(nil), flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d0002558 wpath=/local/domain/0/backend/vbd/2/768/state token=3/0: event epath=/local/domain/0/backend/vbd/2/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/2/768/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7fb1d0002558 wpath=/local/domain/0/backend/vbd/2/768/state token=3/0: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d0002558: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_dm.c:1218:libxl__spawn_local_dm: Spawning device-model /usr/lib/xen/bin/qemu-system-i386 with arguments:
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   /usr/lib/xen/bin/qemu-system-i386
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -xen-domid
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   2
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -chardev
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-2,server,nowait
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -mon
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   chardev=libxl-cmd,mode=control
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -name
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   bjz_04_sles11_sp2
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -vnc
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   127.0.0.1:0,to=99
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -global
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   isa-fdc.driveA=
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -vga
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   cirrus
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -global
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   vga.vram_size_mb=8
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -boot
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   order=c
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -net
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   none
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -M
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   xenfv
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -m
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   504
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -drive
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   file=/var/lib/xen/images_2/bjz_04_sles11_sp2/disk0.raw,if=ide,index=0,media=disk,format=raw,cache=writeback
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d00032b0 wpath=/local/domain/0/device-model/2/state token=3/1: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d00032b0 wpath=/local/domain/0/device-model/2/state token=3/1: event epath=/local/domain/0/device-model/2/state
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7fb1d00032b0 wpath=/local/domain/0/device-model/2/state token=3/1: deregister slotnum=3
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/device-model/2/state token=3/1: empty slot
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d00032b0: deregister unregistered
+libxl: debug: libxl_qmp.c:707:libxl__qmp_initialize: connected to /var/run/xen/qmp-libxl-2
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: qmp
+libxl: debug: libxl_qmp.c:555:qmp_send_prepare: next qmp command: '{
+    "execute": "qmp_capabilities",
+    "id": 1
+}
+'
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: return
+libxl: debug: libxl_qmp.c:555:qmp_send_prepare: next qmp command: '{
+    "execute": "query-chardev",
+    "id": 2
+}
+'
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: return
+libxl: debug: libxl_qmp.c:555:qmp_send_prepare: next qmp command: '{
+    "execute": "query-vnc",
+    "id": 3
+}
+'
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: return
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d0007b58 wpath=/local/domain/0/backend/vif/2/0/state token=3/2: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d0007b58 wpath=/local/domain/0/backend/vif/2/0/state token=3/2: event epath=/local/domain/0/backend/vif/2/0/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vif/2/0/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7fb1d0007b58 wpath=/local/domain/0/backend/vif/2/0/state token=3/2: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d0007b58: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/vif-bridge online
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/backend/vif/2/0/state token=3/2: empty slot
+libxl: debug: libxl_event.c:1737:libxl__ao_progress_report: ao 0x7fb1d0001e50: progress report: ignored
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7fb1d0001e50: complete, rc=0
+libxl: debug: libxl_event.c:1599:libxl__ao_complete_check_progress_reports: ao 0x7fb1d0001e50: complete for callback
+libxl: debug: libxl_event.c:1173:egc_run_callbacks: ao 0x7fb1d0001e50: completion callback
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7fb1d0001e50: destroy
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d00029b0 wpath=@releaseDomain token=3/3: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d00029b0 wpath=@releaseDomain token=3/3: event epath=@releaseDomain
+libxl: debug: libxl.c:1000:domain_death_xswatch_callback: [evg=0x7fb1d0006330:2] from domid=2 nentries=1 rc=1
+libxl: debug: libxl.c:1011:domain_death_xswatch_callback: [evg=0x7fb1d0006330:2]   got=domaininfos[0] got->domain=2
+libxl: debug: libxl.c:1038:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=ffff0022
+libxl: debug: libxl.c:1004:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1068:domain_death_xswatch_callback: domain death search done
+xc: debug: hypercall buffer: total allocations:0 total releases:0
+xc: debug: hypercall buffer: current allocations:0 maximum allocations:0
+xc: debug: hypercall buffer: cache current size:0
+xc: debug: hypercall buffer: cache hits:0 misses:0 toobig:0
+
 18:59 2013-11-6
 + if ( hvm_save_entry(A15_TIMER, v->vcpu_id, h, &ctxt) != 0 )
 should this affect the vm is A7_TIMER?
@@ -1061,4 +1332,280 @@ Both front and backends should be autoloaded when necessary these days.
 14:19 2013-11-07
 cubietruck material
 http://cubieboard.org/2013/10/30/cubieboard3-cubietruck-is-all-ready/
+
+9:00 2013-11-8
+virtualization, sync meeting
+1, lin
+1), work on xend and xl comparision.
+will finish today.
+forget about the qemu traditional.
+
+2, bamvor
+1), my question.
+why qemu-system-i386 always used for xen? why not qemu-system-x86_64?
+
+3, chun yan
+1), snapshot
+(1), discuss this on xen community call. Jim will talk to Jason.
+
+9:42 2013-11-8
+> >>> Ian Campbell 2013-11-7 23:20 >>>
+> On Wed, 2013-11-06 at 19:48 -0700, Bamvor Jian Zhang wrote:
+> > >>>Ian Campbell wrote:
+> > > On Wed, 2013-11-06 at 14:00 +0100, Vladimir 'φ-coder/phcoder' Serbinenko
+> > > wrote:
+> > > > Hello, all. I've ported grub2 to x86_64-xen and i386-xen (PAE only). How
+> > > > big is the difference between ARM and i386 when seen as pv guest?
+> > >
+> > > Very. Xen on ARM uses hardware functionality for second stage paging, so
+> > > there is far less porting to do.
+> > >
+> > > > I have an ARM here but it's a raspberry pi, so no support for xen. Are
+> > > there
+> > > > machines for under $100 on which xen runs?
+> > >
+> > > The current platforms are listed on
+> > > http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions. The one
+> > > which is sub $100 is the Allwinner sunxi based stuff. The native Linux
+> > > support is community driven by the linux-sunxi.org folks and is
+> > > progressing nicely.
+> > >
+> > > I've got a cubieboard2 (A20 based, <$100) which is a promising platform.
+> > How about cubietruck? 2G memory plus 1G network is better than cb2. it is
+> > about 90$.
+>
+> Ah yes, I forgot about the truck.
+>
+> I suppose from Vladimir's point of view it would be rather new and
+> therefore require more work on the basics to get it going to the point
+> of doing grub development on it.
+>
+> > > I've mostly been trying to get (native) SATA going, so my Xen
+> > > experiments are a bit lightweight, but it does boot. Bamvor has reported
+> > > success with using the MMC and documented it on the wiki. I think he's
+> > > using an A31 based STB of some sort.
+> > i use the NFS as root not the MMC, and the usb storage should work but no
+> > lucky for me. i test these on A20 STB(mele A100 Dual, only 40$!!)
+> > successful.
+>
+> Ah, I thought for some reason you had an A31 based thing?
+yes, i had A31 STB. but the sd socket is broken, usb fel is not work.
+i would try boot from internal flash in future.
+there are lots of guys work on A20, it seems a better choice to do what I
+want.
+> Ian.
+
+13:27 2013-11-08
+libvirt, xen, libxl, send-key, sysrq
+1, lin ma
+ virsh doesn't include sysrq, But virsh send-key KEY_LEFTALT KEY_SYSRQ ... can do the same thing
+
+2, there is a libxl_send_sysrq.
+
+13:36 2013-11-08
+opensuse, multimedia, entertainment, packman
+1, vlc in opensuse.org do not support h264, mp4... decoders.
+i should try the packman version, reference:
+http://forums.opensuse.org/english/get-technical-help-here/multimedia/481503-vlc-no-longer-plays-video-h264-encoding.html
+
+the error message:
+bamvor@bjz-rd2:~> vlc Downloads/kernel-ptesarik-day-1.mp4 &
+[1] 12142
+bamvor@bjz-rd2:~> VLC media player 2.1.0 Rincewind (revision 2.1.0-0-gedd8835)
+[0x1b673e8] main interface error: no suitable interface module
+[0x1aac0b8] main libvlc error: interface "globalhotkeys,none" initialization failed
+[0x1aac0b8] main libvlc: Running vlc with the default interface. Use 'cvlc' to use vlc without interface.
+[0x7f31153918a8] main decoder error: no suitable decoder module for fourcc `h264'. VLC probably does not support this sound or video format.
+[0x7f31153918a8] main decoder error: no suitable decoder module for fourcc `mp4a'. VLC probably does not support this sound or video format.
+
+2, packman
+http://en.opensuse.org/Additional_package_repositories
+Version: 12.3Essentials and Multimedia
+zypper ar -f -n packman-essentials http://packman.inode.at/suse/openSUSE_12.3/Essentials packman-essentials
+zypper ar -f -n packman-multimedia http://packman.inode.at/suse/openSUSE_12.3/Multimedia packman-multimedia
+
+1), remain the same error after "zypper in vlc"
+2), install codecs:
+    zypper in vlc-codecs
+
+13:57 2013-11-08
+GTD
+0, 11:00
+
+1, today
+1), 40' sync meeting. see"9:00 2013-11-8"
+
+
+2, todo
+1), write patch. see"13:27 2013-11-08"
+
+14:04 2013-11-08
+allwinner, sun7i, kvm, arm
+1, "Isa Ansharullah <meriororen@gmail.com>"_email_"[cubieboard] Kernel 3.9 or later on Cubieboard2"_20131108_1303
+Hi all,
+
+I am interested in running kvm/arm on Cubieboard2. Since it's got Dual Core
+Cortex-A7 with HYP mode capability in it, I think it's possible.
+First thing is to get kernel 3.9 or later to run on my CB2, I am curious if
+anyone has tried this before. All I want is to get it to boot the kernel
+and display it via HDMI.
+Next thing I guess I'll think about later.
+
+If anyone has tried this, please let me know.
+Isa
+
+2, reply
+Hi, Isa
+
+> Hi all,
+>
+> I am interested in running kvm/arm on Cubieboard2. Since it's got Dual Core
+> Cortex-A7 with HYP mode capability in it, I think it's possible.
+> First thing is to get kernel 3.9 or later to run on my CB2,
+the kvm support for Cortex-A7 is merged in last month, you could contact the
+linaro guys Christoffer Dall <christoffer.dall@linaro.org> for details.
+or join the #kvm-arm in freenode irc. obviously, the 3.9 kernel is not worked
+for kvm on cb2.
+> I am curious if
+> anyone has tried this before. All I want is to get it to boot the kernel
+> and display it via HDMI.
+IFAIK, emac(network) is work in kernel upstream for cb2. and Ian Campbell have
+been trying the SATA driver. it seems that there is no display driver in
+usptream.  you could get the details in mainline effort[1].
+> Next thing I guess I'll think about later.
+>
+> If anyone has tried this, please let me know.
+i am also interested in it. i just try the xen on A20[2].
+> Isa
+
+best regards
+
+bamvor
+
+[1] http://linux-sunxi.org/Linux_mainlining_effort
+[2] http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner
+
+14:10 2013-11-08
+sun7i
+it seems that Ian C get some progress about sun7i SATA. the reason is power supply?
+
+On Fri, 2013-11-01 at 15:00 +0000, Ian Campbell wrote:
+> Time to check the cabling and investigate a beefier power supply I
+> think.
+
+So, I'm an idiot... I finally thought to look at the spec for the HDD I
+was using and despite it being a 2.5" disk it did in fact need 12V as
+well as 5V. I had gotten the impression that 2.5" disks only ever used
+5V but that's obviously not the case!
+
+I replaced it with one which really does only need 5V and Cubian now
+sees the disk just fine. I'll take a look at the mainline driver in
+Olivers tree tomorrow and see if I can make that work.
+
+At least now I know the hardware is OK...
+
+Ian.
+
+16:26 2013-11-08
+xen on arm image, sun7i(A20)
+1, /home/bamvor/sda5_rd/arm
+
+17:18 2013-11-08
+arm, allwinner, sun6i(A31), smp
+"Maxime Ripard <maxime.ripard@free-electrons.com>"_reply_to_Ian_C_"Re: [linux-sunxi] [PATCH 2/2] ARM: sun6i: Add SMP support for the Allwinner A31"_20131108_1645
+
+Hi Ian,
+
+On Mon, Nov 04, 2013 at 04:53:17PM +0000, Ian Campbell wrote:
+> Not a comment on the patch, or even A31, but a question about how the
+> SMP boot process works on sunxi generally...
+> 
+> On Sun, 2013-11-03 at 10:30 +0100, Maxime Ripard wrote:
+> > The A31 is a quad Cortex-A7. Add the logic to use the IPs used to
+> > control the CPU configuration and the CPU power so that we can bring up
+> > secondary CPUs at boot.
+> > [...]
+> > +	/* Set CPU boot address */
+> > +	writel(virt_to_phys(sun6i_secondary_startup),
+> > +	       cpucfg_membase + CPUCFG_PRIVATE0_REG);
+> 
+> Does the secondary CPU jump straight here from the lowlevel firmware or
+> does it go through the bootloader which reads the reg and does the jump?
+> I can't see any reference to this reg in u-boot so I guess the former?
+
+There's no reference of this either in the A31 datasheet (or at least,
+none I could find), so I assume the former too.
+
+> I'm trying to work out if we can make this work with the requirement
+> which both Xen and KVM have to enter the kernel in NS-HYP mode.
+> 
+> The way this works on e.g. vexpress is (roughly) that u-boot wakes up
+> the secondary CPUs from the lowlevel firmware and places them into its
+> own holding pen, which has the same wake up protocol as the firmware so
+> the kernel can just use the same code. If u-boot never gets to run on
+> secondary CPUs that isn't going to help much. 
+> 
+> My concern is that the sequence here appears to involve resetting the
+> secondary CPU, which I figure will probably defeat that strategy by
+> kicking the CPU back into the lowlevel firmware in the reset state,
+> meaning it can't be done by a u-boot only change.
+
+I think this is where we're headed for the A20, Marc was interested in
+doing that, since we already have pretty much this in u-boot already,
+however, this is not the case for the A31.
+
+As far as I know, the Allwinner's bootloader that we currently use
+isn't bringing up the secondary CPUs, and we don't have any port of
+some sort of u-boot yet that we could work on.
+
+So, I guess we don't really have much choice in that case, even though
+eventually I'd like to have this for the A31 too.
+
+> Hrm, what to do ... perhaps a DT driven selection between this mechanism
+> and sev to kick a wfe loop reading the private register?
+
+We can discuss this whenever we will actually have that choice to
+make, but maybe a kernel parameter would be better?
+
+Thanks,
+Maxime
+
+--
+Maxime Ripard, Free Electrons
+Embedded Linux, Kernel and Android engineering
+http://free-electrons.com
+
+18:27 2013-11-08
+package xen-unstable
+reference: [玛嘎学姐带你学 OBS] (二) OBS 常用命令：以创建一个包为例
+http://forums.opensuse.org/aeae-chinese/aesaeoeeeaezaeaeoe/aa/470403-czazaaaaea-obs-aeoe-obs-acaaeisaeaaaeaeaoeaeae.html
+1, create project:
+osc meta prj -c home:bjzhang:Virtualization
+EDITOR="gvim -f" osc meta prj -e home:bjzhang:Virtualization
+
+paste the project meta from home:bjzhang:branches:Virtualization
+
+2, create package:
+osc meta pkg -c home:bjzhang:Virtualization xen_unstable
+EDITOR="gvim -f" osc meta pkg -e home:bjzhang:Virtualization xen_unstable
+
+paste the project meta from home:bjzhang:branches:Virtualization/xen
+
+3, checkout package
+osc co home:bjzhang:Virtualization xen_unstable
+
+4, packaging source code
+1), cd xen
+tar jcvf qemu-xen-traditional-dir-remote.tar.bz2 tools/qemu-xen-traditional-dir-remote --exclude=.git
+tar jcvf qemu-xen-dir-remote.tar.bz2 tools/qemu-xen-dir-remote --exclude=.git
+2), make distclean #will delete tools/qemu-xxx dir
+tar jcvf  xen-4.4-unstable.tar.bz2 xen-4.4-unstable --exclude=.git --exclude=log
+
+19:03 2013-11-08
+1, openSUSE 升级系统的方法
+https://forum.suse.org.cn/viewtopic.php?f=2&t=173
+2, [已解决]obs中如何在service中设定需要的git commit
+https://forum.suse.org.cn/viewtopic.php?f=15&t=1454
+3, [已解决]请问，在OBS里，如何做Layering？
+https://forum.suse.org.cn/viewtopic.php?f=15&t=1033
 
