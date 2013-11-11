@@ -1,0 +1,1611 @@
+.LOG
+14:42 2013-11-01
+xen, arm, sun7i, known issues, cont1, send email to xen-devel
+hi, 
+ 
+recently, i got xen running on allwinner A20 successful[1], and i
+have two questions:
+
+1, how to get guest stack trace?
+i could get the guest stack trace with the following patch, is it
+make sense? and i could only get the dom0 kernel trace, how could
+i get the domU kernel trace? 
+
+diff --git a/xen/arch/arm/traps.c b/xen/arch/arm/traps.c
+index 4c0fc32..287dd7b 100644
+--- a/xen/arch/arm/traps.c
++++ b/xen/arch/arm/traps.c
+@@ -629,12 +629,20 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
+         return;
+ 
+     case PSR_MODE_FIQ:
++        sp = regs->sp_fiq;
++        break;
+     case PSR_MODE_IRQ:
++        sp = regs->sp_irq;
++        break;
+     case PSR_MODE_SVC:
++        sp = regs->sp_svc;
++        break;
+     case PSR_MODE_ABT:
++        sp = regs->sp_abt;
++        break;
+     case PSR_MODE_UND:
+-        printk("No stack trace for 32-bit guest kernel-mode\n");
+-        return;
++        sp = regs->sp_und;
++        break;
+ 
+ #ifdef CONFIG_ARM_64
+     case PSR_MODE_EL1t:
+
+2, xen kernel config
+i am confuse about what does "CONFIG XEN" mean. it  will check the kernel features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
+should we define XEN_DOM0 and XEN_DOMU configs respectively? 
+
+--- .config	2013-11-01 14:57:28.489573665 +0800
++++ xen_config	2013-11-01 14:57:00.781238549 +0800
+@@ -579,6 +579,7 @@
+ # CONFIG_PHYS_ADDR_T_64BIT is not set
+ CONFIG_ZONE_DMA_FLAG=1
+ CONFIG_BOUNCE=y
++CONFIG_MMU_NOTIFIER=y
+ # CONFIG_KSM is not set
+ CONFIG_DEFAULT_MMAP_MIN_ADDR=4096
+ CONFIG_CROSS_MEMORY_ATTACH=y
+@@ -591,7 +592,8 @@
+ # CONFIG_UACCESS_WITH_MEMCPY is not set
+ # CONFIG_SECCOMP is not set
+ # CONFIG_CC_STACKPROTECTOR is not set
+-# CONFIG_XEN is not set
++CONFIG_XEN_DOM0=y
++CONFIG_XEN=y
+ 
+ #
+ # Boot options
+@@ -810,7 +812,7 @@
+ CONFIG_FW_LOADER_USER_HELPER=y
+ # CONFIG_DEBUG_DRIVER is not set
+ # CONFIG_DEBUG_DEVRES is not set
+-# CONFIG_SYS_HYPERVISOR is not set
++CONFIG_SYS_HYPERVISOR=y
+ # CONFIG_GENERIC_CPU_DEVICES is not set
+ CONFIG_SOC_BUS=y
+ CONFIG_REGMAP=y
+@@ -853,6 +855,8 @@
+ # CONFIG_CDROM_PKTCDVD is not set
+ # CONFIG_ATA_OVER_ETH is not set
+ # CONFIG_MG_DISK is not set
++CONFIG_XEN_BLKDEV_FRONTEND=y
++# CONFIG_XEN_BLKDEV_BACKEND is not set
+ # CONFIG_BLK_DEV_RBD is not set
+ 
+ #
+@@ -1127,6 +1131,8 @@
+ # Enable WiMAX (Networking options) to see the WiMAX drivers
+ #
+ # CONFIG_WAN is not set
++CONFIG_XEN_NETDEV_FRONTEND=y
++# CONFIG_XEN_NETDEV_BACKEND is not set
+ # CONFIG_ISDN is not set
+ 
+ #
+@@ -1281,6 +1287,10 @@
+ CONFIG_SERIAL_FSL_LPUART=y
+ CONFIG_SERIAL_FSL_LPUART_CONSOLE=y
+ # CONFIG_SERIAL_ST_ASC is not set
++CONFIG_HVC_DRIVER=y
++CONFIG_HVC_IRQ=y
++CONFIG_HVC_XEN=y
++CONFIG_HVC_XEN_FRONTEND=y
+ # CONFIG_HVC_DCC is not set
+ # CONFIG_IPMI_HANDLER is not set
+ CONFIG_HW_RANDOM=y
+@@ -1807,7 +1817,8 @@
+ CONFIG_FB_SYS_COPYAREA=y
+ CONFIG_FB_SYS_IMAGEBLIT=y
+ # CONFIG_FB_FOREIGN_ENDIAN is not set
+-# CONFIG_FB_SYS_FOPS is not set
++CONFIG_FB_SYS_FOPS=y
++CONFIG_FB_DEFERRED_IO=y
+ # CONFIG_FB_SVGALIB is not set
+ # CONFIG_FB_MACMODES is not set
+ # CONFIG_FB_BACKLIGHT is not set
+@@ -1829,6 +1840,7 @@
+ # CONFIG_FB_GOLDFISH is not set
+ # CONFIG_FB_DA8XX is not set
+ # CONFIG_FB_VIRTUAL is not set
++CONFIG_XEN_FBDEV_FRONTEND=y
+ # CONFIG_FB_METRONOME is not set
+ CONFIG_FB_MX3=y
+ # CONFIG_FB_BROADSHEET is not set
+@@ -2255,6 +2267,19 @@
+ #
+ # Microsoft Hyper-V guest support
+ #
++
++#
++# Xen driver support
++#
++CONFIG_XEN_DEV_EVTCHN=y
++CONFIG_XEN_BACKEND=y
++CONFIG_XENFS=y
++CONFIG_XEN_COMPAT_XENFS=y
++CONFIG_XEN_SYS_HYPERVISOR=y
++CONFIG_XEN_XENBUS_FRONTEND=y
++CONFIG_XEN_GNTDEV=y
++CONFIG_XEN_GRANT_DEV_ALLOC=y
++CONFIG_XEN_PRIVCMD=y
+ # CONFIG_STAGING is not set
+ CONFIG_CLKDEV_LOOKUP=y
+ CONFIG_HAVE_CLK_PREPARE=y
+
+[1] http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner
+
+best regards
+
+bamvor
+
+14:30 2013-11-01
+libvirt, fix api changes in xen restore
+
+in recently xen commit: 7051d5c8, there is a api changes in
+libxl_domain_create_restore. 
+Author: Andrew Cooper <andrew.cooper3@citrix.com>
+Date:   Thu Oct 10 12:23:10 2013 +0100
+
+    tools/migrate: Fix regression when migrating from older version of Xen
+
+use the macro LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS in libxl.h
+in order to make libvirt could compile with old and new xen. 
+
+the params checkpointed_stream is useful if libvirt libxl driver
+support migration. for new, set it as zero.
+
+15:00 2013-11-01
+GTD, week
+1, next week
+1), main work: debug ao.
+2), discuss snapshot.
+3), write code for my watch.
+4), sunxi smp patch in xen?
+
+15:03 2013-11-01
+GTD
+0, -19:40
+
+1, today
+1), 30' libvirt libxl: send patch. see"14:30 2013-11-01".
+2), 40' 19:00-19:39 xen: arm: send question finally. see"14:42 2013-11-01", "19:13 2013-11-01"
+3), 16:07-16:40 snapshot: discuss with Chunyan. see"16:32 2013-11-01"
+4), 30' msp430.
+5), xen: arm: send guest stack trace patch.
+
+16:32 2013-11-01
+fate, snapshot
+1, qemu have savevm for save memory and disk snapshot. 
+for xen hvm, we could use this.
+but for xen pv?
+1), if use qemu as backend, it could be.
+2), if do not use qemu as backend, it could not.
+
+2, Chunyan version: 
+PV:
+1. if PV does't use fb, qemu may be not started at all, then no way to call
+qemu monitor command to do disk snapshot.
+2. qemu monitor 'do_savevm', will save qemu state and then do disk
+snapshot, for PV, save qemu state is not needed (? according to
+domain_save), then could we use do_savevm directly for both PV and HVM?
+
+HVM:
+There are many disk types, could all these disk types be managed by qemu?
+(should have a check)
+
+-Chunyan
+
+19:13 2013-11-01
+xen, arm, question
+1, Ian C reply to me
+On Fri, 2013-11-01 at 04:34 -0600, Bamvor Jian Zhang wrote:
+> 
+>  >>>Ian Campbell <Ian.Campbell@citrix.com> wrote: 
+> > On Fri, 2013-11-01 at 01:54 -0600, Bamvor Jian Zhang wrote: 
+> > > fix destination.  
+> > > sorry, i sent it to the wrong address.  
+> > >  
+> > >  >>>Bamvor Jian Zhang wrote:  
+> > > > hi,  
+> > > >    
+> > > > recently, i got xen running on allwinner A20 successful[1], and i  
+> > > > have two questions:  
+> > > >   
+> > > > 1, how to get guest stack trace?  
+> > > > i could get the guest stack trace with the following patch, is it  
+> > > > make sense? 
+> >  
+> > The only issue would be that it prints 8-byte words for a 32-on-64 
+> > guest. That as it is much better than nothing, we can live with it for 
+> > sure. 
+> >  
+> > >  and i could only get the dom0 kernel trace, how could  
+> > > > i get the domU kernel trace?   
+> >  
+> > This code should work equally well for any guest AFAICT, what issue are 
+> > you seeing? 
+> i mean if i have booted a domU, could i get such specific domain stack trace? 
+> i only get the dom0 stack trace throught "xl debug-keys d" every time, even if
+> domU crash(user maybe want 
+> the domU stack at that time). or should i use other tools for it? 
+
+"xl debug-keys d" makes a hypercall which necessarily ensures that the
+domain making the call (dom0) is scheduled at the time and 'd' only
+prints the currently running vcpus. If you use the 'd' key from the
+debug console (Ctrl-A three times) while the guest is running you should
+occasionally see the guest too.
+
+But I don't think the d key will ever show a crashed domain, since it
+isn't ever going to be scheduled. You probably want to use the xenctx
+tool for this case.
+
+> >  
+> > > >    
+> > > >  #ifdef CONFIG_ARM_64  
+> > > >      case PSR_MODE_EL1t:  
+> > > >   
+> > > > 2, xen kernel config  
+> > > > i am confuse about what does "CONFIG XEN" mean. it  will check the kernel   
+> >  
+> > > > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)  
+> > > > should we define XEN_DOM0 and XEN_DOMU configs respectively?   
+> >  
+> > I'm not sure what you mean, but yes, if you want to run Xen you should 
+> > enable the relevant CONFIG options, including CONFIG_XEN and I think 
+> > CONFIG_XEN_DOM0. 
+> i mean when i select the CONFIG_XEN in kernel config, both XEN_BACKEND and
+> XEN_xxx_FRONTEND will be selected. 
+> i think backend and frontend should not select at the same time, isn't it? 
+
+I think (but I'm not sure) that these are just umbrella options which
+don't add any code themselves but just make the other more specific e.g.
+netback) options.
+
+In any case, I think anyone enabling CONFIG_XEN would expect to get the
+rest of the Xen stuff by default. Or at least a basic working subset.
+
+Is this causing you problems?
+
+Ian.
+
+2, reply
+1), 
+thanks for explanation. i will try it.
+i just read the code: xenctx support arm and aarch64, but set the
+wrong default value of kernel_start in 32bit arm, do we need this:
+diff --git a/tools/xentrace/xenctx.c b/tools/xentrace/xenctx.c
+index 1214185..a749e93 100644
+--- a/tools/xentrace/xenctx.c
++++ b/tools/xentrace/xenctx.c
+@@ -69,7 +69,7 @@ struct symbol {
+ 
+ guest_word_t kernel_stext, kernel_etext, kernel_sinittext, kernel_einittext, kernel_hypercallpage;
+ 
+-#if defined (__i386__)
++#if defined (__i386__) || defined (__arm__) 
+ unsigned long long kernel_start = 0xc0000000;
+ #else
+ unsigned long long kernel_start = 0xffffffff80000000UL;
+
+2), 
+it is compiled into kernel, but it might be no harm?
+CONFIG_XEN_BACKEND will select xenbus_probe_backend.c and
+xenbus_dev_backend.c, xenbus_probe_backend.c will register the
+"xen-backend" bus. is it unused until the xen backend device
+registered? 
+and xenbus_backend_init(xenbus_dev_backend.c) will fail if it
+is not the initial domain.
+
+10:58 2013-11-04
+GTD
+0, 10:30-18:26
+
+1, today
+1), 14:54- xen arm patch. see"15:03 2013-11-04"
+
+11:01 2013-11-04
+msp430, development under linux
+1, ref: http://processors.wiki.ti.com/index.php/Open_Source_Projects_-_MSP430#Energia_-_Open_source_development_environment 
+2, Energia
+https://github.com/energia/Energia/wiki/Getting-Started
+http://forum.43oh.com/forum/28-energia/
+
+15:03 2013-11-04
+xen, arm, small improvement
+1, Ian C
+1), 
+On Fri, 2013-11-01 at 01:54 -0600, Bamvor Jian Zhang wrote:
+> fix destination. 
+> sorry, i sent it to the wrong address. 
+> 
+>  >>>Bamvor Jian Zhang wrote: 
+> > hi, 
+> >   
+> > recently, i got xen running on allwinner A20 successful[1], and i 
+> > have two questions: 
+> >  
+> > 1, how to get guest stack trace? 
+> > i could get the guest stack trace with the following patch, is it 
+> > make sense?
+
+The only issue would be that it prints 8-byte words for a 32-on-64
+guest. That as it is much better than nothing, we can live with it for
+sure.
+
+>  and i could only get the dom0 kernel trace, how could 
+> > i get the domU kernel trace?  
+
+This code should work equally well for any guest AFAICT, what issue are
+you seeing?
+
+> >   
+> >  #ifdef CONFIG_ARM_64 
+> >      case PSR_MODE_EL1t: 
+> >  
+> > 2, xen kernel config 
+> > i am confuse about what does "CONFIG XEN" mean. it  will check the kernel  
+> > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND) 
+> > should we define XEN_DOM0 and XEN_DOMU configs respectively?  
+
+I'm not sure what you mean, but yes, if you want to run Xen you should
+enable the relevant CONFIG options, including CONFIG_XEN and I think
+CONFIG_XEN_DOM0.
+
+Ian.
+
+2, git send-email
+git send-email --no-chain-reply-to --annotate --to xen-devel@lists.xen.org --cc ian.campbell@citrix.com --cc stefano.stabellini@citrix.com --cc tim@xen.org
+
+3, (10:22 2013-11-05)
+got Ian Ack and pushed.
+
+17:21 2013-11-04
+fate, snapshot, OPW project
+http://wiki.xen.org/wiki/OutreachProgramForWomen/Round7#VM_Snapshots
+VM Snapshots
+Date of insert: 16/01/2013
+Mentor: Anthony Perard <anthony.perard@citrix.com>
+Difficulty: Medium
+Skills Needed: C programming
+Description: Although xl is capable of saving and restoring a running VM, it is not currently possible to create a snapshot of the disk together with the rest of the VM.
+QEMU is capable of creating, listing and deleting disk snapshots on QCOW2 and QED files, so even today, issuing the right commands via the QEMU monitor, it is possible to create disk snapshots of a running Xen VM. xl and libxl don't have any knowledge of these snapshots, don't know how to create, list or delete them.
+This project is about implementing disk snapshots support in libxl, using the QMP protocol to issue commands to QEMU. Users should be able to manage the entire life-cycle of their disk snapshots via xl.
+The candidate should also explore ways to integrate QEMU disk snapshots and disk mirroring into the regular Xen save/restore mechanisms and provide a solid implementation for xl/libxl.
+Outcomes:  
+Basic goal: disk snapshots can be handled entirely by xl.
+Stretch goals: xl can automatically save a disk snapshot at the time of saving a VM. xl can also mirror the disk of a VM between two hosts and can do that automatically at the time of VM migration.
+Steps:  
+Basic steps:
+Study libxl APIs for storage
+Study QEMU QMP commands for VM snapshots
+Implement support for QMP snapshots commands in libxl
+Implement VM snapshots functionalities in libxl using the QMP functions previously written
+Add VM snapshot commands to XL
+Stretch goals:
+Add VM snapshot functionalities to libxl save/restore and migration functions
+Evaluate QEMU QMP disk mirroring capabilities (QMP command "drive-mirror")
+Implement support for QMP drive-mirror command in libxl
+Hook disk mirroring into libxl VM save/restore and migration functions (migrating a VM from one host to another is also capable of migrating the VM disk from the two hosts).
+References: XL, QEMU
+Peer Review Comments
+(delete as addressed)
+ Ijc 10:05, 11 February 2013 (UTC): Although this project is specifically targeting the QEMU snapshot mechanism we should require that the libxl API which is exposed is general enough to be applied to other disk backends (blktap3, lvm snapshot, btrfs, etc)
+
+18:01 2013-11-04
+1, try usb boot fail on mele A100 dual. no bootlog. why???
+here is my u-boot command:
+fatload mmc 0 46000000 uImage
+fatload mmc 0 47000000 sun7i-a20-cubieboard2.dtb
+fatload mmc 0 48000000 uInitrd
+setenv bootargs "console=ttyS0,115200 loglevel=8 clk_ignore_unused"
+bootm 46000000 48000000 47000000
+
+18:25 2013-11-04
+opensuse
+1, Miska work on msp430 and cubieboard.
+https://build.opensuse.org/project/show/home:-miska-:arm
+
+09:36 2013-11-05
+GTD
+0, 9:20-17:47
+
+1, today
+1), xen ao improve. see"10:41 2013-11-05"
+
+09:41 2013-11-05
+company, colleague, Richard Brown
+"Sebastian Vollath <svollath@suse.de>"_email_"[devel] Please welcome Richard Brown"_20131104_1836
+Hi,
+
+it's my pleasure to announce a new team member.
+Richard Brown joined the QA-EMEA team in Nuremberg today.
+Many of you do already know him as a member of the openSUSE board, while
+he was working at the City College in Brighton, UK.
+Now, Richard became a SUSE employee and moved over to Nuremberg.
+Please join me in giving him a warm welcome and support him in getting
+used to SUSE and QA!
+
+Thanks,
+  Sebastian
+
+--
+
+-------------------------------------------------------------------
+  Sebastian Vollath, Teamlead Quality Assurance EMEA
+  Phone +4991174053-438,  Fax +4991174053-483
+  SUSE LINUX Products GmbH,  Maxfeldstr. 5,  D-90409 Nuernberg
+  Geschaeftsfuehrer: Jeff Hawn, Jennifer Guild, Felix Imendoerffer,
+  HRB 16746 (AG Nuernberg)
+-------------------------------------------------------------------
+
+10:41 2013-11-05
+xen, libxl, ao improve
+1, patch
+0), cover letter:
+there are four choices for using ao_how in libvirt.
+(a), ao without callback and set libxl_sigchld_owner_mainloop
+(b), ao without callback and set libxl_sigchld_owner_libxl_always
+(c), ao with callback and set libxl_sigchld_owner_mainloop
+(d), ao with callback and set libxl_sigchld_owner_libxl_always
+
+i got some trouble when i try (b) and (c).
+i still not decided which one is better choice for implement in
+libvirt. it would be easier if i could try above four choice.
+
+1), 01:
+expose child fd in order to handle child exit in libvirt
+
+libvirt could handle fd and timeout event through
+libxl_osevent_hooks. either of these will not inform the child
+exit if libvirt set the libxl_sigchld_owner_libxl_always.
+
+add a function for returning the sigchld_selfpipe in order to
+handle the child exit in libvirt.
+meanwhile, there is only one pipe in ctx, it seems that it is
+not worth to add this to libxl_osevent_hooks.
+
+2), 02:
+call ao_how callback explicitly
+
+ao_how callback is not called after inserted into list.
+in my test, i directly call it in
+libxl__ao_complete_check_progress_reports. i know it should not
+work like this. Could you give some suggestion about it?
+
+2, git send-email
+git send-email --no-chain-reply-to --annotate --to xen-devel@lists.xen.org --cc ian.jackson@eu.citrix.com --cc stefano.stabellini@eu.citrix.com --cc ian.campbell@citrix.com --cc jfehlig@suse.com 000*.patch
+
+22:09 2013-11-05
+software skill, vim, make
+http://easwy.com/blog/archives/advanced-vim-skills-quickfix-mode/
+:make
+":cw": to error message.
+":cn": jump to next error.
+
+9:12 2013-11-6
+xen, arm, sunxi nightly build
+1,
+Alejandro Mery amery@geeks.cl linux-sunxi
+
+On 30/10/13 08:08, Bamvor Jian Zhang wrote:
+> hi, list
+
+> i have successful run xen on a sun7i(A20) STB, it should be work on
+> cb2 and cb3(AKA cubietruck) and sun6i(A31). and i write a wiki here:
+>
+> http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner.
+
+hi, for the nightlies <http://dl.linux-sunxi.org/nightly/> (which are actually hourly, at 42), do you have maintained development branches (u-boot and linux) you would like me to track and build automatically?
+
+cheers,
+Alejandro Mery
+
+2, reply
+add --cc Ian.Campbell@citrix.com
+add --cc arokux@gmail.com
+
+i'd like to.
+arokux's linux-sunxi usb next branch should be ok for both dom0 and
+domU kernel. we only need add dedicated configs.
+
+for u-boot, there is my branch in github[1]. but merge the code into
+u-boot sunxi seems the better choice. most of these patches(from Andre)
+has been merged into u-boot master in Oct. if we could merge these, we
+only need to apply one patch from Ian Campbell[2].
+
+and how about xen? could we build xen for sun6i/sun7i for nightly build?
+
+meanwhile i plan to put u-boot, kernel, xen and xen tools/libs to
+opensuse build service, it is easy for the user use opensuse arm as rootfs.
+
+thanks.
+
+Bamvor
+
+[1] https://github.com/bjzhang/u-boot-sunxi
+[2] http://lists.xen.org/archives/html/xen-devel/2013-08/msg03040.html
+
+10:36 2013-11-06
+xen, arm, Guest ABI
+1, link
+http://xenbits.xen.org/docs/unstable/hypercall/arm/index.html
+xen/include/public
+http://wiki.xenproject.org/wiki?title=Xen_ARM_with_Virtualization_Extensions#Guest_ABI
+
+original from: "Ian C"_email_"Re: [XenARM] probably FAQ: latest xen PV api/abi specs"_20131105_1748
+On Tue, 2013-11-05 at 10:20 +0100, Goswin von Brederlow wrote:
+> Hi,
+>
+> this might be an FAQ but I'm looking for the documentation for the xen
+> guest API/ABI exposed to domU kernels on arm.
+
+Which port are you asking about?
+http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions or
+http://wiki.xen.org/wiki/Xen_ARM_%28PV%29 ? I only know about the former
+and it sounds like this is the one you mean?
+
+Adding xen-devel which is the right venue for virt extensions questions,
+xen-arm@ is for the PV port.
+
+>  The wiki says it isn't
+> yet set in stone and WIP but I hope someone is already working on
+> documenting it. Any pointers?
+
+For the hardware extensions port the interfaces are documented in
+xen.git (xen/include/public/) and exposed via
+http://xenbits.xen.org/docs/unstable/hypercall/arm/index.html
+
+I think it is mostly set in stone right now, although there is a pending
+issue with Linux netfront/back possibly using a broken ABI due to struct
+packing oddities. Other than that I don't expect there to be any further
+changes before 4.4 (where I hope we can declare it frozen).
+
+Ian.
+
+2, (14:01 2013-11-08)
+"Stefano Stabellini <stefano.stabellini@eu.citrix.com>"_email_"Goswin von Brederlow"_20131107_0239
+On Tue, 5 Nov 2013, Goswin von Brederlow wrote:
+> Hi,
+> 
+> this might be an FAQ but I'm looking for the documentation for the xen
+> guest API/ABI exposed to domU kernels on arm. The wiki says it isn't
+> yet set in stone and WIP but I hope someone is already working on
+> documenting it. Any pointers?
+
+Hello Goswin,
+please note that the right list for upstream Xen on ARM discussions is
+xen-devel@lists.xen.org. xen-arm is to discuss the older PV port by
+Samsung. I know this is confusing, sorry.
+
+Unfortunately such a document still needs to be written but it would be
+truly great to have it. I'll offer you an endless supply of beers at the
+next Xen Developer Summit if you write one :-)
+
+We do have a list of exported hypercalls here:
+
+xen/include/public/arch-arm.h
+
+You might also want to give a look at the device tree interface (under
+Linux):
+
+Documentation/devicetree/bindings/arm/xen.txt
+
+And still under Linux:
+
+arch/arm/xen/enlighten.c
+
+>From which is clear that:
+
+- the start_info page is not used;
+
+- the shared_info page is mapped using XENMEM_add_to_physmap(XENMAPSPACE_shared_info);
+
+- all vcpu_info pages are mapped using VCPUOP_register_vcpu_info, even
+  the one for cpu0;
+
+- the grant table is mapped using
+  XENMEM_add_to_physmap(XENMAPSPACE_grant_table) in the memory range
+  specified on the device tree xen node;
+
+- event channel notifications are delivered using the a percpu GIC
+  interrupt.
+
+
+
+
+10:38 2013-11-06
+company, competitor, redhat, RHEL
+"Olaf Kirch <okir@suse.de>"_email_"[slestaff] Fwd: Field Memo: Recent RHEL Subscription Changes"
+FYI. This RHEL change rattled quite a few people's nerves, and kept
+Gerald and his PM team rather busy for several weeks. For thos of you
+going to SUSECon, this is a must-read.
+
+Thanks,
+Olaf
+
+------------  Forwarded Message  ----------
+
+Subject: Field Memo: Recent RHEL Subscription Changes
+Date: Monday 04 November 2013
+From: "SUSE Enablement mailbox" <suse-enablement@suse.com>
+To: DL-SU-Sales-Extended-All@ilist.attachmategroup.com, okir@suse.de
+
+> For internal distribution only:
+> 
+> Recent Red Hat Enterprise Linux Subscription Changes
+> 
+> What Happened?
+> 
+> 
+> 
+> Red Hat recently announced significant changes to the packaging and pricing
+>  of their Red Hat Enterprise Linux (RHEL) subscriptions. Previously, Red
+>  Hat offered one-year and three-year Self-support, Standard and Premium
+>  subscriptions, with list prices that varied depending on the number of
+>  physical CPU sockets (2, 4 or 8) that are on the installed RHEL server. It
+>  was also dependent on how many virtual machines are running on that server
+>  (1, 4 or unlimited). The recent changes reduce the absolute number of SKUs
+>  offered, and introduce additional flexibility to accommodate deployment
+>  uncertainty or change, within a subscription term. The key features of the
+>  new RHEL subscription model include: ·		 Introducing a core set of
+>  stackable "building block" subscriptions based on physical socket pairs or
+>  virtual-instance pairs, and eliminating separate SKUs for 4 and 8-socket
+>  systems: A customer seeking a support subscription for an 8-socket system
+>  would now purchase four 2-socket subscriptions (4 x 2 = 8). ·		 Giving
+>  customers flexibility to recombine these core subscriptions to accommodate
+>  changing physical server requirements, during the term of their
+>  subscription, without proactively notifying Red Hat: Companies can now
+>  independently redeploy the four 2-socket subscriptions being used for
+>  their single 8-socket server in the previous example, to two 4-socket
+>  servers, or four 2-socket servers, within their subscription term. ·		
+>  Giving customers flexibility to redeploy these core subscriptions to
+>  accommodate changing virtualization needs: Companies can repurpose a core
+>  subscription currently being used to support a RHEL 2-socket server, and
+>  instead create two supported RHEL virtual machine (VM) guests to deploy in
+>  a virtual environment, within their subscription term. ·		 Separating 
+the
+>  support for RHEL guest operating systems (those installed in VMs) from
+>  RHEL hosts (those systems that create the virtual environments that VM
+>  guests run on) and limiting the support for these hosts to 4 VMs:
+>  Companies wanting to use RHEL as both virtualization host and guest OS
+>  must now purchase at least two separate subscriptions. To cover the
+>  guests, RHEL (Virtual) or RHEL for Virtual Datacenters is needed; To cover
+>  the host, RHEL (Physical), Red Hat Enterprise Virtualization (RHEV) or Red
+>  Hat cloud offerings are needed ·		 Adding Extended Update Support (EUS) 
+to
+>  their Premium support subscription: Extending the support period of a
+>  specific RHEL minor release for up to 24 months after its general
+>  availability. Also, EUS is offered as an add-on to Standard support
+>  subscriptions for an additional fee. The full announcement can be found at
+>  http://www.redhat.com/about/news/archive/2013/10/red-hat-streamlines-physi
+> cal-virtual-and-cloud-deployment-with-new-subscriptions-for-red-hat-enterpr
+> ise-linux. A detailed description of the RHEL subscription model can be
+>  found in the RHEL Purchasing Guide at
+>  www.redhat.com/resourcelibrary/datasheets/rhel-purchasing-guide. Further
+>  details and comparison pricing can be found in the attached appendix. What
+>  does this mean to SUSE?
+> These changes in their subscription model suggest Red Hat is acknowledging
+>  and attempting to better monetize the shift from physical servers, as the
+>  dominant workload environment, to virtual servers, such as those in
+>  virtualized data centers, private clouds and public clouds. We expect this
+>  news to generate a fair amount of additional questions, and change the
+>  competitive dynamics in certain sales engagements. We recommend using this
+>  opportunity to both understand and communicate the advantages of the SUSE
+>  subscription model, especially in dense virtualization and cloud
+>  scenarios. While these Red Hat subscription changes introduce two new
+>  dimensions of flexibility for their customers ( stacking/unstacking and
+>  physical/virtual repurposing), it's not clear how practical or necessary
+>  this flexibility actually is for customers, espe cially when it comes to
+>  converting physical subscriptions into virtual ones. Most enterprise
+>  customers implementing production VMs follow well defined steps to scope,
+>  design, test and deploy them, often purchasing new hardware (e.g. Intel-VT
+>  and AMD-V servers) specifically for this purpose. This reduces the option
+>  value of being able to repurpose existing physical subscriptions into
+>  virtual ones. However, the new Red Hat option to stack and unstack
+>  2-socket subscriptions into different combinations does benefit customers
+>  seeking to extend the useful life of their existing servers and optimize
+>  the utilization of their entire asset base. SUSE is also considering a
+>  similar change. However, with this additional flexibility comes additional
+>  complexity, as VMs now have to be counted prior to purchase and tracked
+>  throughout the subscription term. Furthermore, separating the support
+>  costs for the hypervisors from the server OSs now makes obtaining complete
+>  virtualization solutions (hypervisor plus OS) from Red Hat more expensive
+>  relative to SUSE, since SUSE Linux Enterprise Server subscriptions include
+>  supported hypervisors. For high-density virtualization and cloud
+>  scenarios, Red Hat is encouraging its customers to use its stand-alone
+>  hypervisor and cloud offerings. By limiting VM support in RHEL
+>  subscriptions (when used as a virtualization host) to a maximum of four
+>  guests regardless of the size of underlying hardware, Red Hat is driving
+>  customers to adopt its RHEV and RHEL cloud offerings. SUSE has a clear
+>  advantage to Red Hat in cloud scenarios as well as most virtualization
+>  scenarios (see appendix). As customers continue to be driven into these
+>  areas, SUSE will have more opportunities to demonstrate its advantages.
+> What you should tell your prospects and customers?
+> 1) The SUSE subscription model is simpler and more cost-effective for most
+>  virtualization scenarios. Red Hat offers paired virtual instance
+>  subscriptions for low density virtualization scenarios, and unlimited
+>  virtualization subscriptions for high density virtualization scenarios.
+>  SUSE offers similar socket-pair based pricing (on the x86 architecture) to
+>  Red Hat, but offers unlimited virtualization subscriptions, which are more
+>  affordable than Red Hat's unlimited virtualization subscriptions, and more
+>  competitive in price to Red Hat's paired virtual instance subscriptions,
+>  without the added complexity of having to maintain virtual instance
+>  counts. Moreover, SUSE doesn’t restrict VM guest support on its
+>  hypervisor. Red Hat does offer a competitive solution in one instance—
+>  when customers with an existing virtual environment want to run two or
+>  fewer supported virtual machines per host in that environment (see
+>  appendix). 2) The SUSE subscription model is more cost effective for cloud
+>  scenarios, and our cloud solution offers less vendor lock-in. Red Hat
+>  customers must also pay for RHEL OpenStack Platform and RHEV subscriptions
+>  if they want to implement a cloud solution. Furthermore, Red Hat's
+>  solution only supports KVM as the hypervisor running on its compute nodes.
+>  In contrast, SUSE Cloud currently supports compute nodes running Xen, KVM
+>  or Microsoft Hyper-V. SUSE has released VMware compute nodes as a
+>  technical preview, and intends to provide full support for VMware compute
+>  nodes in the near future. SUSE Cloud includes an installation framework to
+>  simplify its setup and operation, and is also significantly less expensive
+>  than RHEL OpenStack Platform. For larger cloud deployments, customers can
+>  save even more with SUSE Cloud (see appendix). 3) Red Hat's new
+>  subscription flexibility comes at the expense of added complexity, and
+>  appeals to a limited audience. Offering a base set of 2-socket or virtual
+>  instance pair subscriptions, which can be stacked for larger servers and
+>  more highly virtualized scenarios, now means that customers have to spend
+>  additional time up front sizing their requirements, and then track and
+>  monitor their usage during a subscription. SUSE SKUs are relatively easier
+>  to understand—2, 4 or 8 sockets, no virtualization or unli mited
+>  virtualization.
+> The ability to recombine these base set of subscriptions to accommodate
+>  servers with different socket counts, and shift usage from physical to
+>  virtual and vice versa within a subscription term, does provide customers
+>  additional flexibility. Practically speaking, this flexibility appeals to
+>  a very small group— enterprises that do not know their near term needs, or
+>  have a high degree of uncertainty or changing demand. In today's economy,
+>  most enterprise customers deploying virtual workloads in production must
+>  size and scope their requirements, and justify their investments prior to
+>  deployment. For most enterprises, a one-year subscription term is a
+>  sufficient duration to meet their changing needs, negating the option
+>  value of being able to change configurations within a subscription term.
+>  4) SUSE already offers Red Hat's Extended Update Support (EUS), across a
+>  broader range of products With a Premium support subscription, each RHEL 6
+>  code stream is now supported for 24 months from the availability of the
+>  minor release. But Red Hat's "24 months of support per minor release" is
+>  something you already get from SUSE today—for all subscriptions. Most
+>  service packs are released every 18 months. Combine that with a six month
+>  upgrade window, and you have 24 months of support for any given service
+>  pack. During this period, all active customers can access patches and
+>  updates, and depending on their support subscription, have full access to
+>  our technical support engineers. In addition to this 24 months of general
+>  support, SUSE customers have the option of purchasing Long Term Service
+>  Pack Support, which allows them to remain on a particular service pack, by
+>  extending the support period from three consecutive years, up to five
+>  years of support and maintenance for a service pack. That's three years
+>  more than Red Hat offers. At the same time, our Long Term Service Pack
+>  Support options are available during the full product life cycle. Other
+>  resources
+> ·		 Red Hat Announcement:
+>  http://www.redhat.com/about/news/archive/2013/10/red-hat-streamlines-physi
+> cal-virtual-and-cloud-deployment-with-new-subscriptions-for-red-hat-enterpr
+> ise-linux ·		 Red Hat Purchasing Guide:
+>  http://www.redhat.com/resourcelibrary/articles/articles-red-hat-enterprise
+> -linux-purchasing-guide or
+>  http://www.redhat.com/rhecm/rest-rhecm/jcr/repository/collaboration/jcr:sy
+> stem/jcr:versionStorage/60da8d630a05260153f750af9fa87bfe/1/jcr:frozenNode/r
+> h:resourceFile (
+>  about:../../../Documents/GroupWise/www.redhat.com/rhecm/rest-rhecm/jcr/rep
+> ository/collaboration/jcr:system/jcr:versionStorage/60da8d630a05260153f750a
+> f9fa87bfe/1/jcr:frozenNode/rh:resourceFile)  (you may need to copy this URL
+>  and insert in a browser). ·		 Red Hat SKU List:
+>  http://www.redhat.com/f/html/partners_us_skulist.html (
+>  about:../../../Documents/GroupWise/www.redhat.com/f/html/partners_us_skuli
+> st.html) ·		 Red Hat Lifecycle:
+>  https://access.redhat.com/site/support/policy/updates/errata (
+>  http://access.redhat.com/site/support/policy/updates/errata)
+> ·	   SUSE Linux Enterprise Price List:
+>  https://www.suse.com/products/server/how-to-buy/ (
+>  about:../../../Documents/GroupWise/www.suse.com/products/server/how-to-buy
+> /) For More Information
+> ·		 Pricing questions: pricing@suse.com
+> ·		 George Shi | gshi@suse.com
+> 
+> Special thanks to the following people who helped do research and review
+>  this field memo: Peter Chadwick, Bill Claybrook, Doug Jarvis, Kerry Kim,
+>  Gerald Pfeifer, George Shi.
+> 
+> Good Selling!
+> The SUSE Enablement Team
+> 
+> Questions, comments or requests regarding Field Memos or anything related
+>  to SUSE Enablement? Contact Rich Wiltbank ( mailto:RWiltbank@suse.com) ,
+>  Erin Quill
+> ( mailto:EQuill@novell.com) , Nicole Warner
+> ( mailto:nwarner@novell.com)  or Cyndi Riley
+> ( mailto:CRiley@novell.com) .
+> SUSE Enablement Reference Sites:
+> SUSE Enablement Resources:
+>  https://teaming.innerweb.novell.com/vibe/workspace/suse_enablement Partner
+>  Enablement Central: www.partnernetprogram.com/secure/enablement/ (
+>  https://www.partnernetprogram.com/secure/enab
+> lement/)
+> SalesTalk SUSE: www.novell.com/feeds/salestalk/?cat=109
+> SUSE to Go mobile app: available from the iTunes App Store, Android Market
+>  or at www.suse.com/susetogo
+> 
+> 
+> ########################################################################
+> 
+> To unsubscribe from the DL-SU-SALES-EXTENDED-ALL list, click the following
+>  link:
+>  http://ilist.attachmategroup.com/scripts/wa.exe?TICKET=NzM1MjA2IE9LaXJAU1V
+> TRS5DT00gREwtU1UtU0FMRVMtRVhURU5ERUQtQUxMICSuHumyxHFD&c=SIGNOFF
+> 
+-------------------------------------------------------
+-- 
+Neo didn't bring down the Matrix. SOA did. (soafacts.com)
+--------------------------------------------
+Olaf Kirch - Director SUSE Linux Enterprise; R&D (okir@suse.com)
+SUSE LINUX Products GmbH, Maxfeldstr. 5, 90409 Nürnberg, Germany
+GF: Jeff Hawn, Jennifer Guild, Felix Imendörffer, HRB 16746 (AG Nürnberg)
+
+11:00 2013-11-06
+GTD
+0, 9:50
+
+1, today
+1), reply email about sunxi nightly build. see"9:12 2013-11-6".
+2), reply about libxl ao. see"11:03 2013-11-06"
+
+2, todo
+2), debug ao.
+3), ping about bnc#820873 in irc?
+
+11:01 2013-11-06
+GTD, week plan
+1, plan
+1), build u-boot, linux-sunxi upstream, xen(include libs and tools) on obs.
+
+2, next
+1), migration my smart watch to Energia.
+
+11:03 2013-11-06
+xen, libxl, ao improve, cont1
+1, Ian J
+1),
+Bamvor Jian Zhang writes ("[PATCH 0/2] question on libxl ao"):
+> there are four choices for using ao_how in libvirt.
+> (a), ao without callback and set libxl_sigchld_owner_mainloop
+> (b), ao without callback and set libxl_sigchld_owner_libxl_always
+> (c), ao with callback and set libxl_sigchld_owner_mainloop
+> (d), ao with callback and set libxl_sigchld_owner_libxl_always
+>
+> i got some trouble when i try (b) and (c).
+> i still not decided which one is better choice for implement in
+> libvirt. it would be easier if i could try above four choice.
+
+I'm not sure I follow.  I think the right answer for libvirt is
+probably aos specifying callback, and libxl_sigchld_owner_mainloop.
+I'm assuming that libvirt has something for handling children
+already.  But I haven't looked.  If it doesn't then
+libxl_sigchld_owner_always would probably be best.
+
+Bamvor Jian Zhang writes ("[PATCH 1/2] expose child fd in order to handle child
+exit in libvirt"):
+> libvirt could handle fd and timeout event through
+> libxl_osevent_hooks. either of these will not inform the child
+> exit if libvirt set the libxl_sigchld_owner_libxl_always.
+
+I don't exactly follow, but I think you have found a bug.
+
+If libvirt specifies libxl_sigchld_owner_libxl_always then libxl will
+install a SIGCHLD handler and to the self-pipe trick.  The self-pipe
+fd should be registered with the fd event machinery in the normal way.
+However, this doesn't actually appear to happen.  Instead the
+beforepoll/afterpoll functions handle that fd ad-hoc.  The result is
+that, probably, nothing will notice the selfpipe becoming writable.
+
+I will see about writing a patch to fix this.
+
+> add a function for returning the sigchld_selfpipe in order to
+> handle the child exit in libvirt.
+> meanwhile, there is only one pipe in ctx, it seems that it is
+> not worth to add this to libxl_osevent_hooks.
+
+This approach is not right, though.  There is no need to add
+additional interfaces to libxl.  The bug just needs to be fixed.
+
+Thanks,
+Ian.
+
+(1), reply
+> I'm not sure I follow.  I think the right answer for libvirt is
+> probably aos specifying callback, and libxl_sigchld_owner_mainloop.
+> I'm assuming that libvirt has something for handling children
+> already.  But I haven't looked.  If it doesn't then
+> libxl_sigchld_owner_always would probably be best.
+AFAICS, no child handle in libvirt. i will try your patches.
+thanks.
+
+2), (11:06 2013-11-07)
+Bamvor Jian Zhang writes ("[PATCH 2/2] call ao_how callback explicitly"):
+> ao_how callback is not called after inserted into list.
+> in my test, i directly call it in
+> libxl__ao_complete_check_progress_reports. i know it should not
+> work like this. Could you give some suggestion about it?
+
+I'm not sure what you mean.  Under what conditions do you not see the
+callback happen ?  The existing machinery is supposed to take care of
+that.  Specifically, in the patch you're changing,
+libxl__ao_complete_check_progress_reports puts the ao onto
+egc->aos_for_callback.  On the return path from the libxl event
+function back to the application, we are supposed to call
+libxl__egc_cleanup, which in turn calls egc_run_callbacks, which
+should pick up the aos on aos_for_callback.  libxl__egc_cleanup is
+called from the event loops in libxl_event_wait and
+libxl__ao_inprogress and from the macro EGC_FREE.  It should be
+impossible for a path to be missed because inside libxl one needs an
+egc to call libxl__ao_complete.
+
+What kind of an ao_how is your application passing to libxl ?  Is your
+application multithreaded ?
+
+Ian.
+
+(1), test if the libxl__egc_cleanup is called in the event loop.
+reply
+> egc->aos_for_callback.  On the return path from the libxl event
+> function back to the application, we are supposed to call
+> libxl__egc_cleanup, which in turn calls egc_run_callbacks, which
+> should pick up the aos on aos_for_callback.  libxl__egc_cleanup is
+> called from the event loops in libxl_event_wait and
+> libxl__ao_inprogress and from the macro EGC_FREE.  It should be
+> impossible for a path to be missed because inside libxl one needs an
+> egc to call libxl__ao_complete.
+>
+> What kind of an ao_how is your application passing to libxl ?  Is your
+> application multithreaded ?
+
+2, (14:27 2013-11-08)
+Ian J reply 20131108_0104
+Bamvor Jian Zhang writes ("Re: [Xen-devel] [PATCH 2/2] call ao_how callback explicitly"):
+...
+> > I'm not sure what you mean.  Under what conditions do you not see the
+> > callback happen ?  The existing machinery is supposed to take care of
+> > that.  Specifically, in the patch you're changing,
+> > libxl__ao_complete_check_progress_reports puts the ao onto
+> > egc->aos_for_callback.  On the return path from the libxl event
+> > function back to the application, we are supposed to call
+> > libxl__egc_cleanup, which in turn calls egc_run_callbacks, which
+> > should pick up the aos on aos_for_callback.  libxl__egc_cleanup is
+> > called from the event loops in libxl_event_wait and
+> > libxl__ao_inprogress and from the macro EGC_FREE.  It should be
+> > impossible for a path to be missed because inside libxl one needs an
+> > egc to call libxl__ao_complete.
+...
+> the libvirt libxl driver register the event handler through
+> libxl_event_register_callbacks,
+
+Right.
+
+> so the libxl_event_wait could not get the event.
+
+I understand from this that you're calling libxl_event_wait ?  (Rather
+than that you're saying that you're not calling libxl_event_wait, but
+doing so wouldn't help.)
+
+But, as I understand it, you're passing an ao_how which specifies a
+callback, rather than the generation of an event.  So I think
+libxl_event_wait is irrelevant.
+
+> and if the ao_how is used, the libxl__egc_cleanup in
+> "if ( poller )" statement will not be called either.
+> even if i could expose the libxl_egc_cleanup to libvirt, i still do not
+> know when should i call it?
+
+No, you shouldn't need to call it explicitly and doing so won't help.
+
+> i do not know if there is a event triggered
+> before the ao_how callback should be called. (is there a fd event when
+> the async operation complete?).
+
+It's the other way around.  The async operation completes, probably,
+because of an fd event.  So I think the call flow should be:
+
+ 1. Your application notices the fd is readable (say)
+ 2. Your application calls libxl_osevent_occurred_fd.
+ 3. libxl_osevent_occurred_fd allocates an egc on entry.
+ 4. In libxl, libxl_osevent_occurred_fd calls whatever internal
+    functions are supposed to respond to the fd.  If appropriate,
+    this will cause some ao to complete.  All of these calls
+    will receive the same egc as created in step 3.  I.e.:
+ 5. In libxl, something calls libxl__ao_complete.
+ 6. libxl__ao_complete puts the ao on the egc's aos_for_callback
+    list.
+ 7. The call stack unwinds inside libxl, eventually returning
+    to libxl_osevent_occurred_fd.
+ 8. libxl_osevent_occurred_fd uses EGC_FREE on exit, and EGC_FREE
+    contains a call to libxl__egc_cleanup.
+ 9. libxl__egc_cleanup calls egc_run_callbacks which finds the ao
+    on the aos_for_callback list and makes your application
+    callback.
+
+The purpose of the "poller" machinery is so that if at step 5 we
+decide to return an event structure, rather than making a callback, a
+concurrent call to libxl_event_wait (on a different thread) can be
+woken up.
+
+Can you turn on libxl's debugging and send me a trace of it losing the
+event ?
+
+Ian.
+
+1), test
+because the egc is different.
+libxl__ao_complete_check_progress_reports
+(gdb) p egc
+$1 = (libxl__egc *) 0x7fb1fd03f500
+
+watchfd_callback
+(gdb) p egc
+$4 = (libxl__egc *) 0x7ffffb291960
+
+why other case is ok?(rather than aos_for_callback). why libxlEventHandler is worked?
+because if ao_how iss NULL, it only one egc in libxl__ao_inprogress.
+
+2), reply
+> I understand from this that you're calling libxl_event_wait ?  (Rather
+> than that you're saying that you're not calling libxl_event_wait, but
+> doing so wouldn't help.)
+i am talking about why i could not call libxl_event_wait.
+>
+> But, as I understand it, you're passing an ao_how which specifies a
+> callback, rather than the generation of an event.  So I think
+> libxl_event_wait is irrelevant.
+agree.
+...
+
+> It's the other way around.  The async operation completes, probably,
+> because of an fd event.  So I think the call flow should be:
+...
+with log and gdb, i could see above flow except the ao in egc->aops_for_callback is empty.
+and from gdb i could know that the egc is different between libxl__ao_complete_check_progress_reports and fd event(here is watchfd_callback).
+libxl__ao_complete_check_progress_reports
+(gdb) p egc
+$1 = (libxl__egc *) 0x7fb1fd03f500
+
+watchfd_callback
+(gdb) p egc
+$4 = (libxl__egc *) 0x7ffffb291960
+
+after check the code in libxl_osevent_occurred_fd, the egc is created in watchfd_callback. so, EGC_FREE could not handle the ao added by libxl__ao_complete_check_progress_reports. the latter egc is created by AO_CREATE in do_domain_create.
+is it correct? if so, could we use the same egc all the time?
+
+here is the full libxl.log:
+libxl: debug: libxl_create.c:1230:do_domain_create: ao 0x7fb1d0001e50: create: how=0x7fb1f6448e80 callback=0x7fb1f6210fb0 poller=(nil)
+libxl: debug: libxl_device.c:257:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_create.c:675:initiate_domain_create: running bootloader
+libxl: debug: libxl_bootloader.c:321:libxl__bootloader_run: not a PV domain, skipping bootloader
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d0003078: deregister unregistered
+libxl: debug: libxl_numa.c:475:libxl__get_numa_candidate: New best NUMA placement candidate found: nr_nodes=1, nr_cpus=8, nr_vcpus=9, free_memkb=908
+libxl: detail: libxl_dom.c:195:numa_place_domain: NUMA placement candidate with 1 nodes, 8 cpus and 908 KB free selected
+xc: detail: elf_parse_binary: phdr: paddr=0x100000 memsz=0x9f0c8
+xc: detail: elf_parse_binary: memory: 0x100000 -> 0x19f0c8
+xc: info: VIRTUAL MEMORY ARRANGEMENT:
+  Loader:        0000000000100000->000000000019f0c8
+  Modules:       0000000000000000->0000000000000000
+  TOTAL:         0000000000000000->000000001f800000
+  ENTRY ADDRESS: 0000000000100000
+xc: info: PHYSICAL MEMORY ALLOCATION:
+  4KB PAGES: 0x0000000000000200
+  2MB PAGES: 0x00000000000000fb
+  1GB PAGES: 0x0000000000000000
+xc: detail: elf_load_binary: phdr 0 at 0x7fb1f2f48000 -> 0x7fb1f2fddf4d
+libxl: debug: libxl_device.c:257:libxl__device_disk_set_backend: Disk vdev=hda spec.backend=tap
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d0002558 wpath=/local/domain/0/backend/vbd/2/768/state token=3/0: register slotnum=3
+libxl: debug: libxl_create.c:1243:do_domain_create: ao 0x7fb1d0001e50: inprogress: poller=(nil), flags=i
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d0002558 wpath=/local/domain/0/backend/vbd/2/768/state token=3/0: event epath=/local/domain/0/backend/vbd/2/768/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vbd/2/768/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7fb1d0002558 wpath=/local/domain/0/backend/vbd/2/768/state token=3/0: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d0002558: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/block add
+libxl: debug: libxl_dm.c:1218:libxl__spawn_local_dm: Spawning device-model /usr/lib/xen/bin/qemu-system-i386 with arguments:
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   /usr/lib/xen/bin/qemu-system-i386
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -xen-domid
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   2
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -chardev
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   socket,id=libxl-cmd,path=/var/run/xen/qmp-libxl-2,server,nowait
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -mon
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   chardev=libxl-cmd,mode=control
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -name
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   bjz_04_sles11_sp2
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -vnc
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   127.0.0.1:0,to=99
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -global
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   isa-fdc.driveA=
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -vga
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   cirrus
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -global
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   vga.vram_size_mb=8
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -boot
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   order=c
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -net
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   none
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -M
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   xenfv
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -m
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   504
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   -drive
+libxl: debug: libxl_dm.c:1220:libxl__spawn_local_dm:   file=/var/lib/xen/images_2/bjz_04_sles11_sp2/disk0.raw,if=ide,index=0,media=disk,format=raw,cache=writeback
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d00032b0 wpath=/local/domain/0/device-model/2/state token=3/1: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d00032b0 wpath=/local/domain/0/device-model/2/state token=3/1: event epath=/local/domain/0/device-model/2/state
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7fb1d00032b0 wpath=/local/domain/0/device-model/2/state token=3/1: deregister slotnum=3
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/device-model/2/state token=3/1: empty slot
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d00032b0: deregister unregistered
+libxl: debug: libxl_qmp.c:707:libxl__qmp_initialize: connected to /var/run/xen/qmp-libxl-2
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: qmp
+libxl: debug: libxl_qmp.c:555:qmp_send_prepare: next qmp command: '{
+    "execute": "qmp_capabilities",
+    "id": 1
+}
+'
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: return
+libxl: debug: libxl_qmp.c:555:qmp_send_prepare: next qmp command: '{
+    "execute": "query-chardev",
+    "id": 2
+}
+'
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: return
+libxl: debug: libxl_qmp.c:555:qmp_send_prepare: next qmp command: '{
+    "execute": "query-vnc",
+    "id": 3
+}
+'
+libxl: debug: libxl_qmp.c:299:qmp_handle_response: message type: return
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d0007b58 wpath=/local/domain/0/backend/vif/2/0/state token=3/2: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d0007b58 wpath=/local/domain/0/backend/vif/2/0/state token=3/2: event epath=/local/domain/0/backend/vif/2/0/state
+libxl: debug: libxl_event.c:643:devstate_watch_callback: backend /local/domain/0/backend/vif/2/0/state wanted state 2 ok
+libxl: debug: libxl_event.c:596:libxl__ev_xswatch_deregister: watch w=0x7fb1d0007b58 wpath=/local/domain/0/backend/vif/2/0/state token=3/2: deregister slotnum=3
+libxl: debug: libxl_event.c:608:libxl__ev_xswatch_deregister: watch w=0x7fb1d0007b58: deregister unregistered
+libxl: debug: libxl_device.c:959:device_hotplug: calling hotplug script: /etc/xen/scripts/vif-bridge online
+libxl: debug: libxl_event.c:472:watchfd_callback: watch epath=/local/domain/0/backend/vif/2/0/state token=3/2: empty slot
+libxl: debug: libxl_event.c:1737:libxl__ao_progress_report: ao 0x7fb1d0001e50: progress report: ignored
+libxl: debug: libxl_event.c:1569:libxl__ao_complete: ao 0x7fb1d0001e50: complete, rc=0
+libxl: debug: libxl_event.c:1599:libxl__ao_complete_check_progress_reports: ao 0x7fb1d0001e50: complete for callback
+libxl: debug: libxl_event.c:1173:egc_run_callbacks: ao 0x7fb1d0001e50: completion callback
+libxl: debug: libxl_event.c:1541:libxl__ao__destroy: ao 0x7fb1d0001e50: destroy
+libxl: debug: libxl_event.c:559:libxl__ev_xswatch_register: watch w=0x7fb1d00029b0 wpath=@releaseDomain token=3/3: register slotnum=3
+libxl: debug: libxl_event.c:503:watchfd_callback: watch w=0x7fb1d00029b0 wpath=@releaseDomain token=3/3: event epath=@releaseDomain
+libxl: debug: libxl.c:1000:domain_death_xswatch_callback: [evg=0x7fb1d0006330:2] from domid=2 nentries=1 rc=1
+libxl: debug: libxl.c:1011:domain_death_xswatch_callback: [evg=0x7fb1d0006330:2]   got=domaininfos[0] got->domain=2
+libxl: debug: libxl.c:1038:domain_death_xswatch_callback:  exists shutdown_reported=0 dominf.flags=ffff0022
+libxl: debug: libxl.c:1004:domain_death_xswatch_callback: [evg=0] all reported
+libxl: debug: libxl.c:1068:domain_death_xswatch_callback: domain death search done
+xc: debug: hypercall buffer: total allocations:0 total releases:0
+xc: debug: hypercall buffer: current allocations:0 maximum allocations:0
+xc: debug: hypercall buffer: cache current size:0
+xc: debug: hypercall buffer: cache hits:0 misses:0 toobig:0
+
+18:59 2013-11-6
++ if ( hvm_save_entry(A15_TIMER, v->vcpu_id, h, &ctxt) != 0 )
+should this affect the vm is A7_TIMER?
+
+2, what does mair mean?
++#ifdef CONFIG_ARM_32
+
++ ctxt.mair0 = v->arch.mair0;
+
++ ctxt.mair1 = v->arch.mair1;
+
++#else
+
++ ctxt.mair0 = v->arch.mair;
+
++#endif
+
+09:59 2013-11-07
+GTD
+0, 9:40-17:59
+
+1, today
+1), 9:50- reply the email. see"10:24 2013-11-07"
+reply Ian J about nightly build.
+
+10:24 2013-11-07
+1, "Ian Campbell <Ian.Campbell@citrix.com>"_email_"Re: [Xen-devel] pvgrub2 for ARM"_20131106_2126
+On Wed, 2013-11-06 at 14:00 +0100, Vladimir 'φ-coder/phcoder' Serbinenko
+wrote:
+> Hello, all. I've ported grub2 to x86_64-xen and i386-xen (PAE only). How
+> big is the difference between ARM and i386 when seen as pv guest?
+
+Very. Xen on ARM uses hardware functionality for second stage paging, so
+there is far less porting to do.
+
+> I have an ARM here but it's a raspberry pi, so no support for xen. Are there
+> machines for under $100 on which xen runs?
+
+The current platforms are listed on
+http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions. The one
+which is sub $100 is the Allwinner sunxi based stuff. The native Linux
+support is community driven by the linux-sunxi.org folks and is
+progressing nicely.
+
+I've got a cubieboard2 (A20 based, <$100) which is a promising platform.
+I've mostly been trying to get (native) SATA going, so my Xen
+experiments are a bit lightweight, but it does boot. Bamvor has reported
+success with using the MMC and documented it on the wiki. I think he's
+using an A31 based STB of some sort.
+
+> What's with 64-bit ARM?
+
+TBH I thought the GRuB On ARM stuff was mainly targeting 64-bit (at
+least within Linaro). Do you have native grub on 32-bit ARM already
+then?
+
+As far as 64-bit hardware goes you will have a struggle finding any at
+all right now, nevermind for under $100.
+
+We should at some point be able to support the freely (as in beer)
+available Foundation model, but we don't right now.
+
+> Alternatively, I'll probably go for Google HP chromebook 11.
+
+I don;t know about this one, but previous chromebooks have proved a pain
+to get Xen onto, too hard to debug anything on them...
+
+> Or may I have access to some server where I'd be able to run VMs with my
+> kernel (GRUB) and HDD?
+
+I'm afraid we don't here at least.
+
+Ian.
+
+2, reply
+> I've got a cubieboard2 (A20 based, <$100) which is a promising platform.
+How about cubietruck? 2G memory plus 1G network is better than cb2. it is
+about 90$.
+> I've mostly been trying to get (native) SATA going, so my Xen
+> experiments are a bit lightweight, but it does boot. Bamvor has reported
+> success with using the MMC and documented it on the wiki. I think he's
+> using an A31 based STB of some sort.
+i use the NFS as root not the MMC, and the usb storage should work but no
+lucky for me. i test these on A20 STB(mele A100 Dual, only 40$!!)
+successful.
+
+10:55 2013-11-07
+xen, arm, question
+1, "Stefano Stabellini <stefano.stabellini@eu.citrix.com>"_email_"Re: [Xen-devel] two questions about xen on arm"_20131107_0339
+On Fri, 1 Nov 2013, Ian Campbell wrote:
+> > > > > > > 2, xen kernel config
+> > > > > > > i am confuse about what does "CONFIG XEN" mean. it  will check the
+> > > kernel
+> > > > >
+> > > > > > > features for dom0 and domU kernel(mix XEN_BANDEND and XXX_FRONTEND)
+> > > > > > > should we define XEN_DOM0 and XEN_DOMU configs respectively?
+> > > > >
+> > > > > I'm not sure what you mean, but yes, if you want to run Xen you should
+> > > > > enable the relevant CONFIG options, including CONFIG_XEN and I think
+> > > > > CONFIG_XEN_DOM0.
+> > > > i mean when i select the CONFIG_XEN in kernel config, both XEN_BACKEND and
+> > > > XEN_xxx_FRONTEND will be selected.
+> > > > i think backend and frontend should not select at the same time, isn't it?
+> > >
+> > > I think (but I'm not sure) that these are just umbrella options which
+> > > don't add any code themselves but just make the other more specific e.g.
+> > > netback) options.
+> > it is compiled into kernel, but it might be no harm?
+>
+> If you don't boot under Xen then none of the code will be (should be!)
+> active. If you are booting under Xen then I think it is expected?
+Right, having both the backends and the frontends compiled in should
+cause no troubles.
+If you are really concerned about the size of the kernel it might make
+sense to disable the backends or the frontends depending on whether you
+are running linux in dom0 or another domU.
+> > CONFIG_XEN_BACKEND will select xenbus_probe_backend.c and
+> > xenbus_dev_backend.c, xenbus_probe_backend.c will register the
+> > "xen-backend" bus. is it unused until the xen backend device
+> > registered?
+It is unused until xenbus_backend_init and later xenbus_probe_backend
+are called.
+> > and xenbus_backend_init(xenbus_dev_backend.c) will fail if it
+> > is not the initial domain.
+Yep, but the failure in that case is normal and expected.
+> > > In any case, I think anyone enabling CONFIG_XEN would expect to get the
+> > > rest of the Xen stuff by default. Or at least a basic working subset.
+> > yes, i think so.
+
+2, "Ian Campbell <Ian.Campbell@citrix.com>"_email_"Stefano Stabellini"_20131107_1629
+On Wed, 2013-11-06 at 18:52 +0000, Stefano Stabellini wrote:
+> If you are really concerned about the size of the kernel it might make
+> sense to disable the backends or the frontends depending on whether you
+> are running linux in dom0 or another domU.
+
+Or make them modular, which is what I would expect most distros to do.
+Both front and backends should be autoloaded when necessary these days.
+
+14:19 2013-11-07
+cubietruck material
+http://cubieboard.org/2013/10/30/cubieboard3-cubietruck-is-all-ready/
+
+9:00 2013-11-8
+virtualization, sync meeting
+1, lin
+1), work on xend and xl comparision.
+will finish today.
+forget about the qemu traditional.
+
+2, bamvor
+1), my question.
+why qemu-system-i386 always used for xen? why not qemu-system-x86_64?
+
+3, chun yan
+1), snapshot
+(1), discuss this on xen community call. Jim will talk to Jason.
+
+9:42 2013-11-8
+> >>> Ian Campbell 2013-11-7 23:20 >>>
+> On Wed, 2013-11-06 at 19:48 -0700, Bamvor Jian Zhang wrote:
+> > >>>Ian Campbell wrote:
+> > > On Wed, 2013-11-06 at 14:00 +0100, Vladimir 'φ-coder/phcoder' Serbinenko
+> > > wrote:
+> > > > Hello, all. I've ported grub2 to x86_64-xen and i386-xen (PAE only). How
+> > > > big is the difference between ARM and i386 when seen as pv guest?
+> > >
+> > > Very. Xen on ARM uses hardware functionality for second stage paging, so
+> > > there is far less porting to do.
+> > >
+> > > > I have an ARM here but it's a raspberry pi, so no support for xen. Are
+> > > there
+> > > > machines for under $100 on which xen runs?
+> > >
+> > > The current platforms are listed on
+> > > http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions. The one
+> > > which is sub $100 is the Allwinner sunxi based stuff. The native Linux
+> > > support is community driven by the linux-sunxi.org folks and is
+> > > progressing nicely.
+> > >
+> > > I've got a cubieboard2 (A20 based, <$100) which is a promising platform.
+> > How about cubietruck? 2G memory plus 1G network is better than cb2. it is
+> > about 90$.
+>
+> Ah yes, I forgot about the truck.
+>
+> I suppose from Vladimir's point of view it would be rather new and
+> therefore require more work on the basics to get it going to the point
+> of doing grub development on it.
+>
+> > > I've mostly been trying to get (native) SATA going, so my Xen
+> > > experiments are a bit lightweight, but it does boot. Bamvor has reported
+> > > success with using the MMC and documented it on the wiki. I think he's
+> > > using an A31 based STB of some sort.
+> > i use the NFS as root not the MMC, and the usb storage should work but no
+> > lucky for me. i test these on A20 STB(mele A100 Dual, only 40$!!)
+> > successful.
+>
+> Ah, I thought for some reason you had an A31 based thing?
+yes, i had A31 STB. but the sd socket is broken, usb fel is not work.
+i would try boot from internal flash in future.
+there are lots of guys work on A20, it seems a better choice to do what I
+want.
+> Ian.
+
+13:27 2013-11-08
+libvirt, xen, libxl, send-key, sysrq
+1, lin ma
+ virsh doesn't include sysrq, But virsh send-key KEY_LEFTALT KEY_SYSRQ ... can do the same thing
+
+2, there is a libxl_send_sysrq.
+
+13:36 2013-11-08
+opensuse, multimedia, entertainment, packman
+1, vlc in opensuse.org do not support h264, mp4... decoders.
+i should try the packman version, reference:
+http://forums.opensuse.org/english/get-technical-help-here/multimedia/481503-vlc-no-longer-plays-video-h264-encoding.html
+
+the error message:
+bamvor@bjz-rd2:~> vlc Downloads/kernel-ptesarik-day-1.mp4 &
+[1] 12142
+bamvor@bjz-rd2:~> VLC media player 2.1.0 Rincewind (revision 2.1.0-0-gedd8835)
+[0x1b673e8] main interface error: no suitable interface module
+[0x1aac0b8] main libvlc error: interface "globalhotkeys,none" initialization failed
+[0x1aac0b8] main libvlc: Running vlc with the default interface. Use 'cvlc' to use vlc without interface.
+[0x7f31153918a8] main decoder error: no suitable decoder module for fourcc `h264'. VLC probably does not support this sound or video format.
+[0x7f31153918a8] main decoder error: no suitable decoder module for fourcc `mp4a'. VLC probably does not support this sound or video format.
+
+2, packman
+http://en.opensuse.org/Additional_package_repositories
+Version: 12.3Essentials and Multimedia
+zypper ar -f -n packman-essentials http://packman.inode.at/suse/openSUSE_12.3/Essentials packman-essentials
+zypper ar -f -n packman-multimedia http://packman.inode.at/suse/openSUSE_12.3/Multimedia packman-multimedia
+
+1), remain the same error after "zypper in vlc"
+2), install codecs:
+    zypper in vlc-codecs
+
+13:57 2013-11-08
+GTD
+0, 11:00
+
+1, today
+1), 40' sync meeting. see"9:00 2013-11-8"
+
+
+2, todo
+1), write patch. see"13:27 2013-11-08"
+
+14:04 2013-11-08
+allwinner, sun7i, kvm, arm
+1, "Isa Ansharullah <meriororen@gmail.com>"_email_"[cubieboard] Kernel 3.9 or later on Cubieboard2"_20131108_1303
+Hi all,
+
+I am interested in running kvm/arm on Cubieboard2. Since it's got Dual Core
+Cortex-A7 with HYP mode capability in it, I think it's possible.
+First thing is to get kernel 3.9 or later to run on my CB2, I am curious if
+anyone has tried this before. All I want is to get it to boot the kernel
+and display it via HDMI.
+Next thing I guess I'll think about later.
+
+If anyone has tried this, please let me know.
+Isa
+
+2, reply
+Hi, Isa
+
+> Hi all,
+>
+> I am interested in running kvm/arm on Cubieboard2. Since it's got Dual Core
+> Cortex-A7 with HYP mode capability in it, I think it's possible.
+> First thing is to get kernel 3.9 or later to run on my CB2,
+the kvm support for Cortex-A7 is merged in last month, you could contact the
+linaro guys Christoffer Dall <christoffer.dall@linaro.org> for details.
+or join the #kvm-arm in freenode irc. obviously, the 3.9 kernel is not worked
+for kvm on cb2.
+> I am curious if
+> anyone has tried this before. All I want is to get it to boot the kernel
+> and display it via HDMI.
+IFAIK, emac(network) is work in kernel upstream for cb2. and Ian Campbell have
+been trying the SATA driver. it seems that there is no display driver in
+usptream.  you could get the details in mainline effort[1].
+> Next thing I guess I'll think about later.
+>
+> If anyone has tried this, please let me know.
+i am also interested in it. i just try the xen on A20[2].
+> Isa
+
+best regards
+
+bamvor
+
+[1] http://linux-sunxi.org/Linux_mainlining_effort
+[2] http://wiki.xen.org/wiki/Xen_ARMv7_with_Virtualization_Extensions/Allwinner
+
+14:10 2013-11-08
+sun7i
+it seems that Ian C get some progress about sun7i SATA. the reason is power supply?
+
+On Fri, 2013-11-01 at 15:00 +0000, Ian Campbell wrote:
+> Time to check the cabling and investigate a beefier power supply I
+> think.
+
+So, I'm an idiot... I finally thought to look at the spec for the HDD I
+was using and despite it being a 2.5" disk it did in fact need 12V as
+well as 5V. I had gotten the impression that 2.5" disks only ever used
+5V but that's obviously not the case!
+
+I replaced it with one which really does only need 5V and Cubian now
+sees the disk just fine. I'll take a look at the mainline driver in
+Olivers tree tomorrow and see if I can make that work.
+
+At least now I know the hardware is OK...
+
+Ian.
+
+16:26 2013-11-08
+xen on arm image, sun7i(A20)
+1, /home/bamvor/sda5_rd/arm
+
+17:18 2013-11-08
+arm, allwinner, sun6i(A31), smp
+"Maxime Ripard <maxime.ripard@free-electrons.com>"_reply_to_Ian_C_"Re: [linux-sunxi] [PATCH 2/2] ARM: sun6i: Add SMP support for the Allwinner A31"_20131108_1645
+
+Hi Ian,
+
+On Mon, Nov 04, 2013 at 04:53:17PM +0000, Ian Campbell wrote:
+> Not a comment on the patch, or even A31, but a question about how the
+> SMP boot process works on sunxi generally...
+> 
+> On Sun, 2013-11-03 at 10:30 +0100, Maxime Ripard wrote:
+> > The A31 is a quad Cortex-A7. Add the logic to use the IPs used to
+> > control the CPU configuration and the CPU power so that we can bring up
+> > secondary CPUs at boot.
+> > [...]
+> > +	/* Set CPU boot address */
+> > +	writel(virt_to_phys(sun6i_secondary_startup),
+> > +	       cpucfg_membase + CPUCFG_PRIVATE0_REG);
+> 
+> Does the secondary CPU jump straight here from the lowlevel firmware or
+> does it go through the bootloader which reads the reg and does the jump?
+> I can't see any reference to this reg in u-boot so I guess the former?
+
+There's no reference of this either in the A31 datasheet (or at least,
+none I could find), so I assume the former too.
+
+> I'm trying to work out if we can make this work with the requirement
+> which both Xen and KVM have to enter the kernel in NS-HYP mode.
+> 
+> The way this works on e.g. vexpress is (roughly) that u-boot wakes up
+> the secondary CPUs from the lowlevel firmware and places them into its
+> own holding pen, which has the same wake up protocol as the firmware so
+> the kernel can just use the same code. If u-boot never gets to run on
+> secondary CPUs that isn't going to help much. 
+> 
+> My concern is that the sequence here appears to involve resetting the
+> secondary CPU, which I figure will probably defeat that strategy by
+> kicking the CPU back into the lowlevel firmware in the reset state,
+> meaning it can't be done by a u-boot only change.
+
+I think this is where we're headed for the A20, Marc was interested in
+doing that, since we already have pretty much this in u-boot already,
+however, this is not the case for the A31.
+
+As far as I know, the Allwinner's bootloader that we currently use
+isn't bringing up the secondary CPUs, and we don't have any port of
+some sort of u-boot yet that we could work on.
+
+So, I guess we don't really have much choice in that case, even though
+eventually I'd like to have this for the A31 too.
+
+> Hrm, what to do ... perhaps a DT driven selection between this mechanism
+> and sev to kick a wfe loop reading the private register?
+
+We can discuss this whenever we will actually have that choice to
+make, but maybe a kernel parameter would be better?
+
+Thanks,
+Maxime
+
+--
+Maxime Ripard, Free Electrons
+Embedded Linux, Kernel and Android engineering
+http://free-electrons.com
+
+18:27 2013-11-08
+package xen-unstable
+reference: [玛嘎学姐带你学 OBS] (二) OBS 常用命令：以创建一个包为例
+http://forums.opensuse.org/aeae-chinese/aesaeoeeeaezaeaeoe/aa/470403-czazaaaaea-obs-aeoe-obs-acaaeisaeaaaeaeaoeaeae.html
+1, create project:
+osc meta prj -c home:bjzhang:Virtualization
+EDITOR="gvim -f" osc meta prj -e home:bjzhang:Virtualization
+
+paste the project meta from home:bjzhang:branches:Virtualization
+
+2, create package:
+osc meta pkg -c home:bjzhang:Virtualization xen_unstable
+EDITOR="gvim -f" osc meta pkg -e home:bjzhang:Virtualization xen_unstable
+
+paste the project meta from home:bjzhang:branches:Virtualization/xen
+
+3, checkout package
+osc co home:bjzhang:Virtualization xen_unstable
+
+4, packaging source code
+1), cd xen
+tar jcvf qemu-xen-traditional-dir-remote.tar.bz2 tools/qemu-xen-traditional-dir-remote --exclude=.git
+tar jcvf qemu-xen-dir-remote.tar.bz2 tools/qemu-xen-dir-remote --exclude=.git
+2), make distclean #will delete tools/qemu-xxx dir
+tar jcvf  xen-4.4-unstable.tar.bz2 xen-4.4-unstable --exclude=.git --exclude=log
+
+19:03 2013-11-08
+1, openSUSE 升级系统的方法
+https://forum.suse.org.cn/viewtopic.php?f=2&t=173
+2, [已解决]obs中如何在service中设定需要的git commit
+https://forum.suse.org.cn/viewtopic.php?f=15&t=1454
+3, [已解决]请问，在OBS里，如何做Layering？
+https://forum.suse.org.cn/viewtopic.php?f=15&t=1033
+
