@@ -1635,3 +1635,160 @@ could modify the name through "virsh dumpxml".
 
 virsh managedsave seems do the same thing as "xm suspend".
 
+15:47 2013-11-12
+fate, Discussion: Add API to retrieve migration progress 
+http://lists.xen.org/archives/html/xen-devel/2013-11/msg01090.html
+1, Chunyan
+Hi, list,
+
+One customer requests that we should show migration progress bar in 'xl migrate' or 'virsh migrate', like '-h/--hash' option in 'rpm' command, so that they could see clearly what happened in migration period. To deal with that, we need to have a method to retrieve migration progress. And we hope such stuff could be finally merged to upstream. How do you think?
+
+Besides, currently, there is some debug messages about the transferred pages and remaining dirty pages in libxc xc_domain_save, but that could not be reported to upper layer. We may need a libxl API, which could save the migration status (that could be libxc passed to libxl through pipe or other way); and may need an asyncprogress callback to handle the async thing. Do you have any prefers about how it will be like?
+
+Regards,
+Chunyan
+
+2, Ian C
+On Fri, 2013-11-08 at 16:10 +0800, Chunyan Liu wrote:
+> 
+> 
+> 
+> 
+> 2013/11/8 Chunyan Liu <cyliu@xxxxxxxx>
+>         Hi, list,
+>         
+>         One customer requests that we should show migration progress
+>         bar in 'xl migrate' or 'virsh migrate', like '-h/--hash'
+>         option in 'rpm' command, so that they could see clearly what
+>         happened in migration period. To deal with that, we need to
+>         have a method to retrieve migration progress. And we hope such
+>         stuff could be finally merged to upstream. How do you think?
+
+The current code uses the xtl logging facilities, which IIRC includes
+support for progress reporting. xl by default uses the stdio output
+implementation provided by the library, which I think logs the progress
+as "\rFOO%" but this could be enhanced to use # instead, either by
+enhancing the xtl stdio module of by xl providing a customised version
+(I think I would prefer the first option). It may also be that the
+priority of these messages is not high enough that they are shown by
+default. Have you tried "xl -vvv migrate"? Perhaps --hash just needs to
+adjust the relevant thresholds.
+
+I'm not sure what meaning %age complete has for a live migration,
+doesn't in guest activity make it hard to predict how far through the
+process you actually are?
+
+>         Besides, currently, there is some debug messages about the
+>         transferred pages and remaining dirty pages in libxc
+>         xc_domain_save, but that could not be reported to upper layer.
+
+All this logging should be using the xtl infrastructure and should be
+shown if you use verbose logging (e.g. xl -vvv BLAH). If there are
+message which aren't using the correct mechanism then please send
+patches. Likewise if you think the priority (DEBUG/INFO/WARN etc) given
+to particular messages is incorrect please propose patches.
+
+>          We may need a libxl API, which could save the migration
+>         status (that could be libxc passed to libxl through pipe or
+>         other way); and may need an asyncprogress callback to handle
+>         the async thing. Do you have any prefers about how it will be
+>         like?
+
+Best to investigate improving the existing logging stuff before going
+down this route IMHO.
+
+BTW: there is no need for an IRC ping within an hour of sending the
+email. If you don't hear anything for several days (e.g. up to a week)
+then maybe it would be appropriate to send a ping, perhaps via email.
+Otherwise please just assume that people will read their mail before too
+long.
+
+Ian.
+
+3, Andrew Cooper
+On 08/11/13 08:05, Chunyan Liu wrote:
+> Hi, list,
+>
+> One customer requests that we should show migration progress bar in 'xl migrate' or 'virsh migrate', like '-h/--hash' option in 'rpm' command, so that they could see clearly what happened in migration period. To deal with that, we need to have a method to retrieve migration progress. And we hope such stuff could be finally merged to upstream. How do you think?
+
+There is no sensible way to determine timing here.
+
+A non-live migrate can be approximated based solely %age of ram transmitted.  However, with a live migrate, the actions of the live guest affect how long the following iteration takes, and the longer an iteration takes, the more likely it is that further iterations will be needed later.  Over the timescales required to live migrate a sensibly sized guest, changed in workload in dom0 can make a meaningful difference in time taken to send an iteration, meaning the live guest can dirty more ram and cause a larger next iteration.
+
+~Andrew
+
+>
+> Besides, currently, there is some debug messages about the transferred pages and remaining dirty pages in libxc xc_domain_save, but that could not be reported to upper layer. We may need a libxl API, which could save the migration status (that could be libxc passed to libxl through pipe or other way); and may need an asyncprogress callback to handle the async thing. Do you have any prefers about how it will be like?
+>
+> Regards,
+> Chunyan
+
+4, bamvor reply to Ian C
+Hi, Ian
+> On Fri, 2013-11-08 at 16:10 +0800, Chunyan Liu wrote:
+> > 
+> > 2013/11/8 Chunyan Liu <cyliu@xxxxxxxx>
+> >  Hi, list,
+> >  
+> >  One customer requests that we should show migration progress
+> >  bar in 'xl migrate' or 'virsh migrate', like '-h/--hash'
+> >  option in 'rpm' command, so that they could see clearly what
+> >  happened in migration period. To deal with that, we need to
+> >  have a method to retrieve migration progress. And we hope such
+> >  stuff could be finally merged to upstream. How do you think?
+> 
+> The current code uses the xtl logging facilities, which IIRC includes
+> support for progress reporting. xl by default uses the stdio output
+> implementation provided by the library, which I think logs the progress
+> as "\rFOO%" but this could be enhanced to use # instead, either by
+> enhancing the xtl stdio module of by xl providing a customised version
+> (I think I would prefer the first option). It may also be that the
+> priority of these messages is not high enough that they are shown by
+> default. Have you tried "xl -vvv migrate"? Perhaps --hash just needs to
+> adjust the relevant thresholds.
+yes, "xl -vvv migrate" output lots of logs including migrate progress. it
+is ok for developers, meanwhile it is hard for users to know the step of
+current migration. 
+is there any chance to output the migrate progress alone? it would be
+easier for libvirt or other toolstack to monitoring this progress.
+
+regards
+
+bamvor
+> 
+> I'm not sure what meaning %age complete has for a live migration,
+> doesn't in guest activity make it hard to predict how far through the
+> process you actually are?
+> 
+> >  Besides, currently, there is some debug messages about the
+> >  transferred pages and remaining dirty pages in libxc
+> >  xc_domain_save, but that could not be reported to upper layer.
+> 
+> All this logging should be using the xtl infrastructure and should be
+> shown if you use verbose logging (e.g. xl -vvv BLAH). If there are
+> message which aren't using the correct mechanism then please send
+> patches. Likewise if you think the priority (DEBUG/INFO/WARN etc) given
+> to particular messages is incorrect please propose patches.
+> 
+> >  We may need a libxl API, which could save the migration
+> >  status (that could be libxc passed to libxl through pipe or
+> >  other way); and may need an asyncprogress callback to handle
+> >  the async thing. Do you have any prefers about how it will be
+> >  like?
+> 
+> Best to investigate improving the existing logging stuff before going
+> down this route IMHO.
+> 
+> BTW: there is no need for an IRC ping within an hour of sending the
+> email. If you don't hear anything for several days (e.g. up to a week)
+> then maybe it would be appropriate to send a ping, perhaps via email.
+> Otherwise please just assume that people will read their mail before too
+> long.
+> 
+> Ian.
+
+1), backup
+is there any chance to output the migrate progress alone? for example, 
+maybe a dedicated options("-p"?) for xl migrate. it would be easier for
+libvirt or other toolstack to monitoring this progress.
+
