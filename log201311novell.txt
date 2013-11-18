@@ -916,9 +916,51 @@ reply
 > libxl__ao_inprogress and from the macro EGC_FREE.  It should be
 > impossible for a path to be missed because inside libxl one needs an
 > egc to call libxl__ao_complete.
+the libvirt libxl driver register the event handler through
+libxl_event_register_callbacks, so the libxl_event_wait could not get
+the event. and if the ao_how is used, the libxl__egc_cleanup in
+"if ( poller )" statement will not be called either.
+even if i could expose the libxl_egc_cleanup to libvirt, i still do not
+know when should i call it? i do not know if there is a event triggered
+before the ao_how callback should be called. (is there a fd event when
+the async operation complete?).
+
+diff --git a/tools/libxl/libxl_event.c b/tools/libxl/libxl_event.c
+index b732816..c216651 100644
+--- a/tools/libxl/libxl_event.c
++++ b/tools/libxl/libxl_event.c
+@@ -1743,6 +1743,13 @@ void libxl__ao_progress_report(libxl__egc *egc, libxl__ao *ao,
+     }
+ }
+ 
++void libxl_egc_cleanup(libxl_ctx *ctx)
++{
++    EGC_INIT(ctx);
++    libxl__egc_cleanup(egc);
++    EGC_FREE;
++    return rc;
++}
+ 
+ /*
+  * Local variables:
+diff --git a/tools/libxl/libxl_event.h b/tools/libxl/libxl_event.h
+index 27a65dc..f0f7376 100644
+--- a/tools/libxl/libxl_event.h
++++ b/tools/libxl/libxl_event.h
+@@ -555,6 +555,7 @@ int libxl_childproc_reaped(libxl_ctx *ctx, pid_t, int status)
+  */
+ void libxl_postfork_child_noexec(libxl_ctx *ctx);
+ 
++void libxl_egc_cleanup(libxl_ctx *ctx);
+ 
+ #endif
+ 
 >
-> What kind of an ao_how is your application passing to libxl ?  Is your
+> What kind of an ao_how is your application passing to libxl ?
+ao_how with callback set.
+> Is your
 > application multithreaded ?
+yes.
 
 18:59 2013-11-6
 + if ( hvm_save_entry(A15_TIMER, v->vcpu_id, h, &ctxt) != 0 )
