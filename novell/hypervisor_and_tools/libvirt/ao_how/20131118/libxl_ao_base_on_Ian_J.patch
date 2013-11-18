@@ -1,0 +1,344 @@
+diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
+index 68009db..8ad7e98 100644
+--- a/src/libxl/libxl_domain.c
++++ b/src/libxl/libxl_domain.c
+@@ -72,6 +72,13 @@ struct _libxlEventHookInfo {
+     int id;
+ };
+ 
++sigchild_info child_info;
++
++libxl_asyncop_how ao_how;
++int ao_how_enable;
++int ao_how_enable_cb;
++int ao_complete;
++
+ static virClassPtr libxlDomainObjPrivateClass;
+ 
+ static void
+@@ -401,6 +408,55 @@ virDomainDefParserConfig libxlDomainDefParserConfig = {
+     .devicesPostParseCallback = libxlDomainDeviceDefPostParse,
+ };
+ 
++//static pid_t
++//libxl_fork_replacement(void *user)
++//{
++//    sigchild_info *info = user;
++//    pid_t pid;
++//    size_t i = 0;
++//
++//    pid = fork();
++//    VIR_INFO("libxl_fork_replacement pid is %d", pid);
++//    if (pid > 0) {
++//        while(info->child[i].pid != 0) {
++//            //TODO check overflow
++//            i++;
++//        }
++//        info->child[i].pid = pid;
++//    }
++//    return pid;
++//}
++
++//int
++//libxl_reaped(pid_t pid, int status, void *user)
++//{
++//    sigchild_info *info = user;
++//    size_t i = 0;
++//
++//    //handle child reap in mainloop. because i do not have(or should not have?) ctx here.
++//    while(info->child[i].pid != pid) {
++//        //TODO check overflow
++//        i++;
++//    }
++//    info->child[i].status = status;
++//    info->child[i].pending = 1;
++//    //TODO usng completion?
++//}
++
++static const libxl_childproc_hooks childproc_hooks = {
++    .chldowner = libxl_sigchld_owner_libxl_always,
++//    .fork_replacement = libxl_fork_replacement,
++//    .reaped_callback  = libxl_reaped,
++};
++
++static void
++ao_how_callback(libxl_ctx *ctx ATTRIBUTE_UNUSED, int rc ATTRIBUTE_UNUSED, void *for_callback ATTRIBUTE_UNUSED)
++{
++    VIR_INFO("%s", __FUNCTION__);
++    ao_complete=1;
++    return;
++}
++
+ int
+ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm)
+ {
+@@ -439,6 +495,12 @@ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm)
+ 
+     libxl_osevent_register_hooks(priv->ctx, &libxl_event_callbacks, priv);
+ 
++    if (ao_how_enable) {
++        if (ao_how_enable_cb)
++            ao_how.callback = ao_how_callback;
++
++        libxl_childproc_setmode(priv->ctx, &childproc_hooks, &child_info);
++    }
+     ret = 0;
+ 
+ cleanup:
+diff --git a/src/libxl/libxl_domain.h b/src/libxl/libxl_domain.h
+index e4695ef..4973efd 100644
+--- a/src/libxl/libxl_domain.h
++++ b/src/libxl/libxl_domain.h
+@@ -48,10 +48,29 @@ struct _libxlDomainObjPrivate {
+     libxlEventHookInfoPtr timerRegistrations;
+ };
+ 
++#define MAX_CHILD 100
++typedef struct {
++    pid_t pid;
++    int status;
++    int called;
++    int pending;
++} per_sigchild_info;
++
++typedef struct {
++    libxl_ctx *ctx;
++    int id;
++    per_sigchild_info child[MAX_CHILD];
++} sigchild_info;
++sigchild_info child_info;
+ 
+ extern virDomainXMLPrivateDataCallbacks libxlDomainXMLPrivateDataCallbacks;
+ extern virDomainDefParserConfig libxlDomainDefParserConfig;
+ 
++extern libxl_asyncop_how ao_how;
++extern int ao_how_enable;
++extern sigchild_info child_info;
++extern int ao_how_enable_cb;
++extern int ao_complete;
+ 
+ int
+ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm);
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index f1e500f..4f79f48 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -105,6 +105,41 @@ libxlDomainEventQueue(libxlDriverPrivatePtr driver, virDomainEventPtr event)
+     virDomainEventStateQueue(driver->domainEventState, event);
+ }
+ 
++static void
++ao_how_init(libxlDomainObjPrivatePtr priv ATTRIBUTE_UNUSED, sigchild_info *info ATTRIBUTE_UNUSED)
++{
++    ao_complete = 0;
++}
++
++static void
++ao_how_wait(libxlDriverPrivatePtr driver, virDomainObjPtr vm)
++{
++    VIR_INFO("Waiting for libxl event");
++//    size_t i;
++
++    while (1) {
++        virObjectUnlock(vm);
++        libxlDriverUnlock(driver);
++        sleep(1);
++        libxlDriverLock(driver);
++        virObjectLock(vm);
++        if (ao_complete) {
++            VIR_INFO("got ao_complete, exit");
++            break;
++        }
++
++//        i = 0;
++//        while(child_info.child[i].pid != 0) {
++//            if(child_info.child[i].pending) {
++//                VIR_INFO("Child exit: pid<%d>, status<%d>", child_info.child[i].pid, child_info.child[i].status);
++//                child_info.child[i].pending = 0;
++//            }
++//
++//            i++;
++//        }
++    }
++}
++
+ static int
+ libxlAutostartDomain(virDomainObjPtr vm,
+                      void *opaque)
+@@ -317,6 +352,28 @@ libxlVmCleanup(libxlDriverPrivatePtr driver,
+     virObjectUnref(cfg);
+ }
+ 
++static int
++libxlDoDomainDestroy(libxlDriverPrivatePtr driver, virDomainObjPtr vm)
++{
++    libxlDomainObjPrivatePtr priv = vm->privateData;
++    libxl_asyncop_how *ao_how_p = NULL;
++
++    if (ao_how_enable) {
++        ao_how_init(priv, &child_info);
++        ao_how_p = &ao_how;
++    }
++
++    if (libxl_domain_destroy(priv->ctx, vm->def->id, ao_how_p) < 0) {
++        return -1;
++    }
++
++    if (ao_how_enable) {
++        ao_how_wait(driver, vm);
++    }
++
++    return 0;
++}
++
+ /*
+  * Reap a domain from libxenlight.
+  *
+@@ -327,9 +384,7 @@ libxlVmReap(libxlDriverPrivatePtr driver,
+             virDomainObjPtr vm,
+             virDomainShutoffReason reason)
+ {
+-    libxlDomainObjPrivatePtr priv = vm->privateData;
+-
+-    if (libxl_domain_destroy(priv->ctx, vm->def->id, NULL) < 0) {
++    if (libxlDoDomainDestroy(driver, vm) < 0) {
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+                        _("Unable to cleanup domain %d"), vm->def->id);
+         return -1;
+@@ -364,6 +419,10 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
+ 
+     if (event->type == LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN) {
+         virDomainShutoffReason reason;
++        VIR_INFO("LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN");
++        if (!ao_how_enable_cb) {
++            ao_complete=1;
++        }
+ 
+         /*
+          * Similar to the xl implementation, ignore SUSPEND.  Any actions needed
+@@ -401,6 +460,11 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
+                 VIR_INFO("Unhandled shutdown_reason %d", xl_reason);
+                 break;
+         }
++    } else if ( event->type == LIBXL_EVENT_TYPE_OPERATION_COMPLETE ) {
++        VIR_INFO("LIBXL_EVENT_TYPE_OPERATION_COMPLETE");
++        if (!ao_how_enable_cb) {
++            ao_complete=1;
++        }
+     }
+ 
+ cleanup:
+@@ -558,6 +622,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ #ifdef LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS
+     libxl_domain_restore_params params;
+ #endif
++    libxl_asyncop_how *ao_how_p = NULL;
+ 
+     if (libxlDomainObjPrivateInitCtx(vm) < 0)
+         goto error;
+@@ -618,6 +683,11 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ 
+     /* use as synchronous operations => ao_how = NULL and no intermediate reports => ao_progress = NULL */
+ 
++    if (ao_how_enable) {
++        ao_how_init(priv, &child_info);
++        ao_how_p = &ao_how;
++    }
++
+     if (restore_fd < 0) {
+         ret = libxl_domain_create_new(priv->ctx, &d_config,
+                                       &domid, NULL, NULL);
+@@ -625,13 +695,20 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ #ifdef LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS
+         params.checkpointed_stream = 0;
+         ret = libxl_domain_create_restore(priv->ctx, &d_config, &domid,
+-                                          restore_fd, &params, NULL, NULL);
++                                          restore_fd, &params, ao_how_p, NULL);
+ #else
+         ret = libxl_domain_create_restore(priv->ctx, &d_config, &domid,
+-                                          restore_fd, NULL, NULL);
++                                          restore_fd, ao_how_p, NULL);
++
+ #endif
+     }
+ 
++    if (ao_how_enable) {
++        ao_how_wait(driver, vm);
++    }
++
++    vm->def->id = domid;
++
+     if (ret) {
+         if (restore_fd < 0)
+             virReportError(VIR_ERR_INTERNAL_ERROR,
+@@ -644,7 +721,6 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+         goto error;
+     }
+ 
+-    vm->def->id = domid;
+     if ((dom_xml = virDomainDefFormat(vm->def, 0)) == NULL)
+         goto error;
+ 
+@@ -690,7 +766,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ 
+ error:
+     if (domid > 0) {
+-        libxl_domain_destroy(priv->ctx, domid, NULL);
++        libxlDoDomainDestroy(driver, vm);
+         vm->def->id = -1;
+         virDomainObjSetState(vm, VIR_DOMAIN_SHUTOFF, VIR_DOMAIN_SHUTOFF_FAILED);
+     }
+@@ -929,6 +1005,21 @@ libxlStateInitialize(bool privileged,
+     virDomainObjListForEach(libxl_driver->domains, libxlDomainManagedSaveLoad,
+                             libxl_driver);
+ 
++    if (virFileExists("/var/lib/libvirt/libxl/ao_how")) {
++        VIR_INFO("use ao_how");
++        ao_how_enable = 1;
++        if (virFileExists("/var/lib/libvirt/libxl/ao_how_cb")) {
++            VIR_INFO("use ao_how callback function");
++            ao_how_enable_cb = 1;
++        } else {
++            VIR_INFO("do not use ao_how callback function");
++            ao_how_enable_cb = 0;
++        }
++    } else {
++        VIR_INFO("do not use ao_how");
++        ao_how_enable = 0;
++    }
++
+     return 0;
+ 
+ error:
+@@ -1777,6 +1868,7 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     uint32_t xml_len;
+     int fd = -1;
+     int ret = -1;
++    libxl_asyncop_how *ao_how_p = NULL;
+ 
+     if (virDomainObjGetState(vm, NULL) == VIR_DOMAIN_PAUSED) {
+         virReportError(VIR_ERR_OPERATION_INVALID,
+@@ -1813,13 +1905,22 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+         goto cleanup;
+     }
+ 
+-    if (libxl_domain_suspend(priv->ctx, vm->def->id, fd, 0, NULL) != 0) {
++    if (ao_how_enable) {
++        ao_how_init(priv, &child_info);
++        ao_how_p = &ao_how;
++    }
++
++    if (libxl_domain_suspend(priv->ctx, vm->def->id, fd, 0, ao_how_p) != 0) {
+         virReportError(VIR_ERR_INTERNAL_ERROR,
+                        _("Failed to save domain '%d' with libxenlight"),
+                        vm->def->id);
+         goto cleanup;
+     }
+ 
++    if (ao_how_enable) {
++        ao_how_wait(driver, vm);
++    }
++
+     event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+                                          VIR_DOMAIN_EVENT_STOPPED_SAVED);
+ 
