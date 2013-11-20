@@ -120,10 +120,10 @@ index e4695ef..4973efd 100644
  int
  libxlDomainObjPrivateInitCtx(virDomainObjPtr vm);
 diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
-index f1e500f..4f79f48 100644
+index f1e500f..d83d590 100644
 --- a/src/libxl/libxl_driver.c
 +++ b/src/libxl/libxl_driver.c
-@@ -105,6 +105,41 @@ libxlDomainEventQueue(libxlDriverPrivatePtr driver, virDomainEventPtr event)
+@@ -105,6 +105,39 @@ libxlDomainEventQueue(libxlDriverPrivatePtr driver, virDomainEventPtr event)
      virDomainEventStateQueue(driver->domainEventState, event);
  }
  
@@ -134,16 +134,14 @@ index f1e500f..4f79f48 100644
 +}
 +
 +static void
-+ao_how_wait(libxlDriverPrivatePtr driver, virDomainObjPtr vm)
++ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm)
 +{
 +    VIR_INFO("Waiting for libxl event");
 +//    size_t i;
 +
 +    while (1) {
 +        virObjectUnlock(vm);
-+        libxlDriverUnlock(driver);
 +        sleep(1);
-+        libxlDriverLock(driver);
 +        virObjectLock(vm);
 +        if (ao_complete) {
 +            VIR_INFO("got ao_complete, exit");
@@ -165,7 +163,7 @@ index f1e500f..4f79f48 100644
  static int
  libxlAutostartDomain(virDomainObjPtr vm,
                       void *opaque)
-@@ -317,6 +352,28 @@ libxlVmCleanup(libxlDriverPrivatePtr driver,
+@@ -317,6 +350,28 @@ libxlVmCleanup(libxlDriverPrivatePtr driver,
      virObjectUnref(cfg);
  }
  
@@ -194,7 +192,7 @@ index f1e500f..4f79f48 100644
  /*
   * Reap a domain from libxenlight.
   *
-@@ -327,9 +384,7 @@ libxlVmReap(libxlDriverPrivatePtr driver,
+@@ -327,9 +382,7 @@ libxlVmReap(libxlDriverPrivatePtr driver,
              virDomainObjPtr vm,
              virDomainShutoffReason reason)
  {
@@ -205,7 +203,7 @@ index f1e500f..4f79f48 100644
          virReportError(VIR_ERR_INTERNAL_ERROR,
                         _("Unable to cleanup domain %d"), vm->def->id);
          return -1;
-@@ -364,6 +419,10 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
+@@ -364,6 +417,10 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
  
      if (event->type == LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN) {
          virDomainShutoffReason reason;
@@ -216,7 +214,7 @@ index f1e500f..4f79f48 100644
  
          /*
           * Similar to the xl implementation, ignore SUSPEND.  Any actions needed
-@@ -401,6 +460,11 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
+@@ -401,6 +458,11 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
                  VIR_INFO("Unhandled shutdown_reason %d", xl_reason);
                  break;
          }
@@ -228,7 +226,16 @@ index f1e500f..4f79f48 100644
      }
  
  cleanup:
-@@ -558,6 +622,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+@@ -427,7 +489,7 @@ libxlCreateDomEvents(virDomainObjPtr vm)
+ {
+     libxlDomainObjPrivatePtr priv = vm->privateData;
+ 
+-    libxl_event_register_callbacks(priv->ctx, &ev_hooks, vm);
++//    libxl_event_register_callbacks(priv->ctx, &ev_hooks, vm);
+ 
+     if (libxl_evenable_domain_death(priv->ctx, vm->def->id, 0, &priv->deathW))
+         goto error;
+@@ -558,6 +620,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
  #ifdef LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS
      libxl_domain_restore_params params;
  #endif
@@ -236,8 +243,12 @@ index f1e500f..4f79f48 100644
  
      if (libxlDomainObjPrivateInitCtx(vm) < 0)
          goto error;
-@@ -618,6 +683,11 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+@@ -616,22 +679,36 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+         goto error;
+     }
  
++    libxl_event_register_callbacks(priv->ctx, &ev_hooks, vm);
++
      /* use as synchronous operations => ao_how = NULL and no intermediate reports => ao_progress = NULL */
  
 +    if (ao_how_enable) {
@@ -247,8 +258,9 @@ index f1e500f..4f79f48 100644
 +
      if (restore_fd < 0) {
          ret = libxl_domain_create_new(priv->ctx, &d_config,
-                                       &domid, NULL, NULL);
-@@ -625,13 +695,20 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+-                                      &domid, NULL, NULL);
++                                      &domid, ao_how_p, NULL);
+     } else {
  #ifdef LIBXL_HAVE_DOMAIN_CREATE_RESTORE_PARAMS
          params.checkpointed_stream = 0;
          ret = libxl_domain_create_restore(priv->ctx, &d_config, &domid,
