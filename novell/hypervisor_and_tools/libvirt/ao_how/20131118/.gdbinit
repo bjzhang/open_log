@@ -21,6 +21,14 @@ cont
 end
 
 break libxlEventHandler
+commands
+silent
+shell date +%H%M%S_%N
+printf "libxlEventHandler\n"
+where 3
+cont
+end
+
 
 cont
 
