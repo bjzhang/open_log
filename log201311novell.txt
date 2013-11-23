@@ -1911,3 +1911,521 @@ question: do i really need reaped_callback? what i need is get the child reaped.
 silent after libxl__ao_complete_check_progress_reports.
 TODO: think about the progress.
 
+11:10 2013-11-19
+suse, openQA workshop, video
+147.2.215.197:8000
+http://streaming.nue.suse.com/i/QA-Workshop-2013/
+
+11:39 2013-11-19
+software skill, add user, useradd
+useradd -g users -m your_user_name
+
+10:12 2013-11-20
+QA workshop, lukas: QA Automation
+hamsta -> ctcs-> QADB
+lsb: which framework? a test framework for testing LSB(Linux Standards Base).[1]
+
+hamsta: manage the test machine(hw or vm).
+ctcs: shell tools for test. a standalone test on test machine.
+hamsta sent the test case to ctcs.
+
+proposal: openQA: hamsta and test case
+
+portal.qa.suse.cz
+
+[1] http://www.ibm.com/developerworks/cn/linux/l-lsb-intr/
+
+10:25 2013-11-20
+BQA workshop, ehaviour Driven Development
+
+cucumber: http://cukes.info/
+
+11:26 2013-11-20
+QA workshop, UP
+Unified Process is a process framework
+1,
+roles: who
+activities: how
+arifacts: what
+workflows: when
+
+2, phases:
+inception: vison
+elaboration: stable architecture of the software
+construction: working product
+transition: deployed product and maintenance
+
+interation are small parts within the phases.
+
+1), e.g. interation all the step in each phases.
+business model
+requirement
+analysis and design
+implementation
+test
+deployment
+
+2), collatorate cross teams.
+
+3, discipline
+project management
+requirement
+development
+testing
+
+4, testing achieve
+reboard issue???
+
+5, roles and artifacts
+1), tester
+
+6, technical practices
+concurrent testing
+coninuous integration
+...
+
+7, Q & A
+1), what is the difference between methodology and process framework?
+methodology: what should do.
+process framework: stage
+2),
+
+8, TODO: check agile UP.
+
+13:12 2013-11-20
+QA workshop, use case
+1, use case are not requirement.
+
+2, scrum(user) story?
+As a <user> I want <some functionality> so that <some benifit is realized>
+
+15:10 2013-11-20
+QA workshop, openQA
+1, test installation process.
+
+15:43 2013-11-20
+software skill, qemu
+https://wiki.linaro.org/KenWerner/Sandbox/AndroidQEMU
+qemu-system-arm -M vexpress-a9 -m 1024 -smp 1 -snapshot -serial stdio -no-reboot -kernel vmlinuz -initrd initrd.gz -drive file=vexpress-ics-gcc47-armlt-tracking-open.img,if=sd,cache=writeback --append "console=tty0 console=ttyAMA0,38400n8 rootwait ro init=/init androidboot.console=ttyAMA0"
+
+16:37 2013-11-20
+QA workshop, sed, jerry
+inverse the line:
+sed '1!G;h;$!d' test.txt
+
+17:02 2013-11-20
+QA workshop, kernel test, NIC
+1, mpstat
+2, ethtool
+3, performance tuning
+enable SMP IRQ Affinity.
+tune the ring buffers and interrupt.
+1), tcp windows scale.
+2), MTU
+
+18:02 2013-11-20
+xen, ao
+1, i should not use driver lock in libxl driver in the lastest libvirt.
+currently, after get cfg, there is no need to get driver lock.
+
+2,
+Program received signal SIGABRT, Aborted.
+[Switching to Thread 0x7fc156afc700 (LWP 10801)]
+0x00007fc15b4c33d5 in raise () from /lib64/libc.so.6
+(gdb) where
+#0  0x00007fc15b4c33d5 in raise () from /lib64/libc.so.6
+#1  0x00007fc15b4c4858 in abort () from /lib64/libc.so.6
+#2  0x00007fc15b4bc2e2 in __assert_fail_base () from /lib64/libc.so.6
+#3  0x00007fc15b4bc392 in __assert_fail () from /lib64/libc.so.6
+#4  0x00007fc151286113 in libxl__sigchld_installhandler (
+    gc=gc@entry=0x7fc156afb480) at libxl_fork.c:225
+#5  0x00007fc1512861f4 in perhaps_installhandler (gc=gc@entry=0x7fc156afb480,
+    creating=creating@entry=false) at libxl_fork.c:271
+
+(gdb) frame 4
+#4  0x00007fc151286113 in libxl__sigchld_installhandler (
+    gc=gc@entry=0x7fc156afb480) at libxl_fork.c:225
+225             assert(!sigchld_owner);
+(gdb) p sigchld_owner
+$1 = (libxl_ctx *) 0x7fc1300015d0
+
+1), check the creating and ctx->children in libxl_sigchld_owner_libxl_always.
+
+    case libxl_sigchld_owner_libxl_always:
+        return 1;
+
+static bool chldmode_ours(libxl_ctx *ctx, bool creating)
+{
+    switch (ctx->childproc_hooks->chldowner) {
+    case libxl_sigchld_owner_libxl:
+        return creating || !LIBXL_LIST_EMPTY(&ctx->children);
+    case libxl_sigchld_owner_mainloop:
+        return 0;
+    case libxl_sigchld_owner_libxl_always:
+        return creating || !LIBXL_LIST_EMPTY(&ctx->children);
+    }
+    abort();
+}
+
+because the handle is not remove in perhaps_removehandler with the old code:
+
+static void perhaps_removehandler(libxl__gc *gc)
+{
+    if (!chldmode_ours(CTX, 0))
+        libxl__sigchld_removehandler(gc);
+}
+
+3, there is a dead lock in libxlEventHandler and libxlXmReap when domain shutdown.
+
+Thread 1 (Thread 0x7f33e933d800 (LWP 3506)):
+#0  0x00007f33e553c58d in nanosleep () from /lib64/libc.so.6
+#1  0x00007f33e553c431 in sleep () from /lib64/libc.so.6
+#2  0x00007f33db4b53c2 in ao_how_wait (vm=vm@entry=0x7f33bc001c40,
+    driver=<optimized out>) at libxl/libxl_driver.c:122
+#3  0x00007f33db4b56d8 in libxlDoDomainDestroy (vm=vm@entry=0x7f33bc001c40,
+    driver=<optimized out>) at libxl/libxl_driver.c:369
+#4  0x00007f33db4b6674 in libxlVmReap (driver=0x7f33d40c4320,
+    vm=0x7f33bc001c40, reason=VIR_DOMAIN_SHUTOFF_SHUTDOWN)
+    at libxl/libxl_driver.c:385
+#5  0x00007f33db4b6939 in libxlEventHandler (data=<optimized out>,
+    event=0x7f33ea94cc50) at libxl/libxl_driver.c:447
+#6  0x00007f33db27967e in egc_run_callbacks (egc=0x7fff403b46a0)
+    at libxl_event.c:1142
+#7  libxl__egc_cleanup (egc=egc@entry=0x7fff403b46a0) at libxl_event.c:1173
+#8  0x00007f33db279edd in libxl_osevent_occurred_fd (ctx=<optimized out>,
+    for_libxl=<optimized out>, fd=43, events_ign=<optimized out>,
+    revents_ign=<optimized out>) at libxl_event.c:1077
+
+4, (13:18 2013-11-21)email
+> bamvor
+  Ian J
+
+Bamvor Jian Zhang writes ("çåï Re: [Xen-devel] [PAT CH v2 0/3] libxl: event
+system: SIGCHLD related fixes"):
+> Jim Fehlig  2013-11-20 äå 12:29 >>>
+> > Bamvor, have you reviewed/tested Ian's patches to see if they resolve
+> > the issue you originally raised in this thread?
+>
+> sorry for late response.
+> i write a patch in libvirt in which use ao_how without callback and let libxl
+> manage the child.
+
+Err, OK.  I think, though, that at least some of what you reported was
+a genuine libxl bug.  So perhaps you didn't need to change libvirt.
+
+Thanks,
+Ian.
+
+10:12 2013-11-21
+QA workshop, Toyota
+1, 1950
+
+2, "Standardized work": for the same work, have same flow. this could be a starting point.
+describe -> document -> discuss, talk
+documentation integrated with tools.
+
+3, A3 thinking.
+A3: A3 sized paper.
+
+4, Act -> Plan -> Do -> Check
+
+5, continuous concensual improvement
+
+6, opitmum batch size.
+
+7, queue manangement.
+1), bamvor: google: mm1
+http://en.wikipedia.org/wiki/M/M/1_queue
+
+8, Toyota Product Development
+1), decide low in chain: decide by yourself. not to your leader if possible.
+2), cadence sync.
+TODO: suse bar: half year sync?
+
+10:56 2013-11-21
+QA workshop, QA Dashboard, Holgi
+1, Testopia is a test case management extension for Bugzilla
+
+11:17 2013-11-21
+doc, sle11 sp3, virtualization, xen
+https://www.suse.com/documentation/sles11/singlehtml/book_xen/book_xen.html
+
+12:57 2013-11-21
+virtualization, xen, event calendar
+[Xen-devel] Xen Dev event calendar for 2013 [input needed]
+http://lists.xen.org/archives/html/xen-devel/2013-11/msg02986.html
+Hi all,
+
+I had an action from the last Advisory Board meeting to float some options and
+get community input for developer events. You may need to get back to your
+managers and check how easy/or hard it would be to get travel approval.
+
+We had a discussion earlier this year, with the goal to alternate "continents"
+for Hackathons and Dev Summits and make sure they are not in the same year.
+This year we had both in Europe. Options belowo are:
+
+Xen Project Developer Summit 2014
+
+#1 Co-locate the Xen Project Developer Summit with LinuxCon NA, Chicago, the
+week of  August 20th
+
+My personal vote "+1" goes for this option, on the grounds that this year we
+had the summit in the EU
+
+#2 Co-locate the Xen Project Developer Summit with LinuxCon EU, Düsseldorf, the
+week of  October 13th
+
+Hackathon 2014
+
+#1 We have a tentative offer by GlobalLogic to host a Hackathon in spring.
+Locations could be Jerusalem, Israel or Ukraine
+#1 March is hard, but April or May would work (we would have to work around
+Easter, which would means beginning of April or beginning of May)
+
+I don't have a view. Travelling to Israel may be problematic : from the US east
+coast it is 11h, from the west coast 15h.
+
+#2 I do not have any alternative yet
+
+The alternative would be to look for a vendor who can host the event in Europe.
+We do have a few vendors who have EU sites. Theoretical possibilities based on
+vendors I know would be Germany (a few locations) and UK (a few locations). I
+can raise with the Advisory Board and see whether someone is willing to step
+up. If someone on this list is willing to go back to their managers, that would
+also work. We typically need the vendor to provide space for 35 people (and
+coffee and coffee breaks).
+
+Other big events to keep in mind
+
+# FOSDEM, Feb 1&2
+# Linaro Connect Asia, March 3-7
+# Linux Foundation Collab Summit, March 26-28
+# Automotive Summit, Tokyo, June 2-3 / LinuxCon Japan, Tokyo, June 4-6
+# OSCON, Portland, July 21-25
+# LinuxCon NA, Chicago, August 20-22
+# LinuxCon EU, Dusseldorf, October 13-15
+
+Feel free to add to this list
+
+Regards
+Lars
+
+13:09 2013-11-21
+virtualization, xen, arm, android or embedded
+1, Lars Kurth, Re: [Xen-devel] [XenARM] Status of Xen ARM Project
+http://lists.xen.org/archives/html/xen-devel/2013-11/msg03021.html
+Audun,
+
+I clarified the warning on http://wiki.xenproject.org/wiki/Xen_ARM_(PV) as it was a little confusing.
+
+The original Xen ARM PV port requires a modified Linux kernel, whereas ARM support in mainline Xen does not. Many of the newer mobile platform have newer ARM CPUs and thus ARM support in mainline Xen should just work. We are also seeing pick-up in the mobile and other sectors with the new port. This is happening a lot quicker than we thought and there are activities and discussions going on to make mainline Xen more suitable for various embedded use-cases:
+See
+* http://wiki.xenproject.org/wiki/Category:Android
+* http://wiki.xenproject.org/wiki/Category:Embedded
+* http://lists.xenproject.org/archives/html/xen-devel/2013-11/msg03004.html [Xen Developer Summit BoF Notes : Seeding a Xen + Android / Embedded ecosystem BoF]
+* http://lists.xenproject.org/archives/html/xen-devel/2013-11/msg02536.html [Xen for real-time/embedded/automotive]
+
+Of course the old port is still around, but it is unlikley that much development effort will go into it.
+
+Best Regards
+Lars
+
+1), Ian C: xen on arm is not PVH.
+I see you've used the term PVH several times there. Please can you avoid
+this, PVH is x86 specific and although it has some similarities with how
+guests operate on Xen on ARM with virtualisation extensions they are not
+the same.
+
+2, "Dario Faggioli"_email_"[Xen-devel] Xen for real-time/embedded/automotive"
+http://lists.xenproject.org/archives/html/xen-devel/2013-11/msg02536.html
+Hello everyone,
+
+So, looking at the last Xen Developer Summit, other co-located and
+previous conferences, as well as here on the list, there appears to be a
+booming interest in running Xen on embedded systems of various kind.
+
+This mail to say that:
+ * we're ready to take up the challenge! :-)
+ * in doing that, we really are interested in everyone's collaboration
+   or, at very least, feedback.
+
+So, if you work in embedded/automotive/aerospace/..., what are you
+requirements? How can we improve Xen (on ARM) for your use case?
+
+Personally, I'm mostly interested on the scheduling, latency and, in
+general, real-time angle. So whether it is on and Android phone/tablet,
+an in-car infotinement system, an audio workstation or a rocket that you
+want to run Xen, tell me/us what you need in terms of increased
+determinism and decreased latencies!
+
+For instance, I think it would be nice to start with some measurements:
+http://wiki.xenproject.org/wiki/Xen_Development_Projects#Is_Xen_ready_for_the_Real-Time.2FEmbedded_World.3F
+That would basically mean running some latency oriented benchmarks both
+in Dom0 and in a guest(s), and compare the result with bare metal.
+It would be similar to what Open Source Automation Development Lab
+(OSADL) people do on "latency QA farm". Actually, how could would it be
+to be able to get in touch with them and have Xen run in there? (They
+already do something virt-related, but it's very limited).
+
+https://www.osadl.org/QA-Farm-Realtime.qa-farm-about.0.html
+https://www.osadl.org/Real-time-host-and-kvm-virtualization.qa-farm-rt-host-and-kvm.0.html
+
+Here they are some (more) links:
+
+ - Presentations (from Lovene and Artem) of Xen on some typical embedded
+   systems (Android tablet and in-car infotinement)
+  * http://www.slideshare.net/xen_com_mgr/sruk-xen-presentation2013v7dualandroid
+    http://www.youtube.com/watch?v=Km6gBnIqaWo&feature=youtu.be
+  *
+http://www.slideshare.net/xen_com_mgr/xen-in-oss-based-in-vehicle-infotainment-systems
+    http://www.youtube.com/watch?v=po1IeElg8tg&feature=youtu.be
+
+ - The Real-Time Xen project Sisu is working on:
+  * https://sites.google.com/site/realtimexen/
+
+Looking forward to hearing from you!
+
+Thanks and Regards,
+Dario
+
+13:13 2013-11-21
+GTD, week plan
+1, watch the slide and video about xen on embedded.
+
+13:15 2013-11-21
+GTD
+0, 9:40-18:32
+
+1, today
+1), ao_how.
+1), download xen arm video.
+
+13:20 2013-11-21
+xen, ao
+1, check how does xl deal with shutdown event.
+
+16:12 2013-11-21
+QA workshop, SLE 12: QA relevant changes
+1, QA test from SLE 12 Alpha3.
+2, SLE 12: intrusive changes
+1), architecture
+(1), 64bit only
+(2), "aarch64 ready", but not build the image, not shipping it.
+(3), no Itanium.
+(4), images? s390, ppc64, x86_64, aarch64.
+2), SystemD
+3), Dracut instead of mkinitrd.
+(1), bamvor
+https://www.kernel.org/pub/linux/utils/boot/dracut/dracut.html
+dracut can generate a customized initrams image which contains only whatever is necessary to boot some particular computer, such as ATA, SCSI and filesystem kernel modules (host-only mode).
+dracut can also generate a more generic initramfs image (default mode).
+4), btrFS as default for /
+5), one bootloader: grub2.
+6), Desktop
+(1), GNOME3. no KDE on Server.
+(2), iceWM.
+6), JAVA
+openJDK as TechPreview on SLES
+IBM Java Default
+on SLED only openJDK.
+
+3, TDD
+1), features developed in-house.
+new feature development by suse, should have automated testcase.
+2), Done by engineering. but QA support required.
+
+4, service packs
+11 SP4 GM: March 2015
+11 SP1 GM: Nov 2015
+11 SP5 GM: Q4 2016
+13     GM: Q4 2018.
+
+service pack cadence currently discussed, either 12 or 18 months.
+
+5, Process changes
+1), ECO process is handled completely through FATE.
+
+17:23 2013-11-21
+yfjiang
+1, choices
+Strongwind
+LDTP
+Mozmil
+OpenQA
+Sikuli
+
+18:31 2013-11-21
+python
+1,
+>>> f = open("0603","r")
+>>> txt = f.read()
+
+2, re.findall(pattern, string).
+
+3, HTMLParser
+http://docs.python.org/2/library/htmlparser.html
+from HTMLParser import HTMLParser
+
+# create a subclass and override the handler methods
+class MyHTMLParser(HTMLParser):
+    def handle_starttag(self, tag, attrs):
+        print "Encountered a start tag:", tag
+    def handle_endtag(self, tag):
+        print "Encountered an end tag :", tag
+    def handle_data(self, data):
+        print "Encountered some data  :", data
+
+# instantiate the parser and fed it some HTML
+parser = MyHTMLParser()
+parser.feed('<html><head><title>Test</title></head>'
+            '<body><h1>Parse me!</h1></body></html>')
+
+4, 
+f = open("/mnt/sdcard/bamvor/doc/sample.html","r")
+txt = f.read()
+def = re.findall('.div id=MainTxt.*(.div..*./div.)+.*</div>', txt)
+
+def = re.findall('.div id=MainTxt.*</div>', txt)
+
+5, 
+from HTMLParser import HTMLParser
+from re import re
+class MyHTMLParser(HTMLParser):
+    def handle_starttag(self, tag, attrs):
+        print "Encountered a start tag:", tag
+        print attrs
+        for x in attrs
+            print x
+            if cmp(x, "ds-list")
+                 print “definition start”
+            else if cmp(x, “sds-list”)
+                 print “definition start”
+            else if cmp(x, "illustration”)
+                 print “illustration start”
+
+    def handle_endtag(self, tag):
+        print "Encountered an end tag :", tag
+    def handle_data(self, data):
+        print "Encountered some data  :", data
+
+# instantiate the parser and fed it some HTML
+f = open("/mnt/sdcard/MainTxt.txt", "r")
+txt = f.read()
+parser = MyHTMLParser()
+parser.feed(txt)
+
+22:58 2013-11-22
+issue in libvirt libxl domain shutdown(libxlDomainShutdownFlags)
+
+hi, jim
+
+sorry, i am not get the time write this patch. here is what i am mentioned in today's meeting. i plan to write this patch next week.
+
+libxlDomainShutdownFlags will return after write to xenstore(right?), and libxlEventHandler will get shutdown event and call libxl_domain_destroy. during libxl_domain_destroy execution, virsh shutdown maybe already return.
+it would be a potential race, if libvirt operate the same domain after virsh shutdown return.
+furthermore, there is a dead-lock when we use ao without callback in libxl driver:
+the libxl_domain_destroy is async operation, it called by libxlEventHandler in shutdown flow and it also need to wait the ao complete event which is handled by libxlEventHandler.
+IMO, we should run libxl_domain_destroy in libxlDomainShutdownFlags after libxlEventHandler received shutdown event.
+
+bamvor
+
