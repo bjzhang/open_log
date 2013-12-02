@@ -1,0 +1,202 @@
+diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
+index 8ad7e98..e6978f3 100644
+--- a/src/libxl/libxl_domain.c
++++ b/src/libxl/libxl_domain.c
+@@ -408,24 +408,24 @@ virDomainDefParserConfig libxlDomainDefParserConfig = {
+     .devicesPostParseCallback = libxlDomainDeviceDefPostParse,
+ };
+ 
+-//static pid_t
+-//libxl_fork_replacement(void *user)
+-//{
+-//    sigchild_info *info = user;
+-//    pid_t pid;
+-//    size_t i = 0;
+-//
+-//    pid = fork();
+-//    VIR_INFO("libxl_fork_replacement pid is %d", pid);
+-//    if (pid > 0) {
+-//        while(info->child[i].pid != 0) {
+-//            //TODO check overflow
+-//            i++;
+-//        }
+-//        info->child[i].pid = pid;
+-//    }
+-//    return pid;
+-//}
++static pid_t
++libxl_fork_replacement(void *user)
++{
++    sigchild_info *info = user;
++    pid_t pid;
++    size_t i = 0;
++
++    pid = fork();
++    VIR_INFO("libxl_fork_replacement pid is %d", pid);
++    if (pid > 0) {
++        while(info->child[i].pid != 0) {
++            //TODO check overflow
++            i++;
++        }
++        info->child[i].pid = pid;
++    }
++    return pid;
++}
+ 
+ //int
+ //libxl_reaped(pid_t pid, int status, void *user)
+@@ -444,9 +444,8 @@ virDomainDefParserConfig libxlDomainDefParserConfig = {
+ //}
+ 
+ static const libxl_childproc_hooks childproc_hooks = {
+-    .chldowner = libxl_sigchld_owner_libxl_always,
+-//    .fork_replacement = libxl_fork_replacement,
+-//    .reaped_callback  = libxl_reaped,
++    .chldowner = libxl_sigchld_owner_mainloop,
++    .fork_replacement = libxl_fork_replacement,
+ };
+ 
+ static void
+@@ -499,6 +498,7 @@ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm)
+         if (ao_how_enable_cb)
+             ao_how.callback = ao_how_callback;
+ 
++        child_info.ctx = priv->ctx;
+         libxl_childproc_setmode(priv->ctx, &childproc_hooks, &child_info);
+     }
+     ret = 0;
+diff --git a/src/libxl/libxl_domain.h b/src/libxl/libxl_domain.h
+index 4973efd..5a9c2a3 100644
+--- a/src/libxl/libxl_domain.h
++++ b/src/libxl/libxl_domain.h
+@@ -30,6 +30,13 @@
+ # include "libxl_conf.h"
+ # include "virchrdev.h"
+ 
++//typedef struct _libxlDomainAo libxlDomainAo;
++//typedef libxlDomainAo *libxlDomainAoPtr;
++//struct _libxlDomainAo {
++//    libxl_asyncop_how ao_how;
++//    int ao_complete;
++//};
++
+ typedef struct _libxlDomainObjPrivate libxlDomainObjPrivate;
+ typedef libxlDomainObjPrivate *libxlDomainObjPrivatePtr;
+ struct _libxlDomainObjPrivate {
+@@ -46,6 +53,8 @@ struct _libxlDomainObjPrivate {
+ 
+     /* list of libxl timeout registrations */
+     libxlEventHookInfoPtr timerRegistrations;
++
++//    libxlDomainAo ao;
+ };
+ 
+ #define MAX_CHILD 100
+@@ -61,7 +70,6 @@ typedef struct {
+     int id;
+     per_sigchild_info child[MAX_CHILD];
+ } sigchild_info;
+-sigchild_info child_info;
+ 
+ extern virDomainXMLPrivateDataCallbacks libxlDomainXMLPrivateDataCallbacks;
+ extern virDomainDefParserConfig libxlDomainDefParserConfig;
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index d83d590..ad27dab 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -68,6 +68,7 @@
+ 
+ 
+ static libxlDriverPrivatePtr libxl_driver = NULL;
++static struct sigaction sigchld_saved_action;
+ 
+ /* Function declarations */
+ static int
+@@ -843,12 +844,77 @@ libxlReconnectDomains(libxlDriverPrivatePtr driver)
+     virDomainObjListForEach(driver->domains, libxlReconnectDomain, driver);
+ }
+ 
++static void
++sigchld_handler(int signo)
++{
++    int status;
++    pid_t pid;
++    size_t i = 0;
++
++    if (signo != SIGCHLD) {
++        VIR_ERROR("%s: signo<%d> is not SIGCHLD", __FUNCTION__, signo);
++        return;
++    }
++retry:
++    pid = waitpid(-1, &status, WNOHANG | __WNOTHREAD);
++    if (pid == 0) {
++        VIR_INFO("%s: no child found", __FUNCTION__);
++        return;
++    }
++
++    if (pid == -1) {
++        if (errno == ECHILD) {
++            VIR_INFO("%s: ECHILD", __FUNCTION__);
++            return;
++        }
++        if (errno == EINTR) {
++            VIR_INFO("%s: EINTR: try again", __FUNCTION__);
++            goto retry;
++        }
++        VIR_ERROR("waitpid() failed. error: %d", errno);
++        return;
++    }
++
++    while(child_info.child[i].pid != pid) {
++        i++;
++        if (i == MAX_CHILD) {
++            VIR_ERROR("child info overflow!!! (pid<%d> status<%d>)", pid, status);
++            return;
++        }
++    }
++    libxl_childproc_reaped(child_info.ctx, pid, status);
++    VIR_INFO("libxl_childproc_reaped pid<%d> done. status<%d>", pid, status);
++}
++
++static void
++libxl_sigchld_register(void)
++{
++    struct sigaction ours;
++
++    memset(&ours,0,sizeof(ours));
++    ours.sa_handler = sigchld_handler;
++    sigemptyset(&ours.sa_mask);
++    ours.sa_flags = SA_NOCLDSTOP | SA_RESTART;
++    sigaction(SIGCHLD, &ours, &sigchld_saved_action);
++}
++
++static void
++libxl_sigchld_unregister(void)
++{
++    struct sigaction was;
++
++    sigaction(SIGCHLD, &sigchld_saved_action, &was);
++}
++
+ static int
+ libxlStateCleanup(void)
+ {
+     if (!libxl_driver)
+         return -1;
+ 
++    if ( ao_how_enable )
++        libxl_sigchld_unregister();
++
+     virObjectUnref(libxl_driver->config);
+     virObjectUnref(libxl_driver->xmlopt);
+     virObjectUnref(libxl_driver->domains);
+@@ -1020,6 +1086,9 @@ libxlStateInitialize(bool privileged,
+         ao_how_enable = 0;
+     }
+ 
++    if ( ao_how_enable )
++        libxl_sigchld_register();
++
+     return 0;
+ 
+ error:
