@@ -1,0 +1,69 @@
+.LOG
+13:46 2013-12-02
+GTD
+0, 11:30-19:43
+
+1, today
+1), 13:48- 15:24- write ao_how without callback with Job. see"14:35 2013-12-02"
+16:06- finish coding, try to compile.
+2), ?-? 找lance
+3), 10' 上网看opensuse13.1 release.
+
+2), work report.
+
+13:47 2013-12-02
+GTD, weekplan
+1, this week
+1), finish ao_how patch send it to Jim.
+2), snapshot.
+(1), discuss with Chunyan.
+(2), try to write hvm snapshot code.
+
+14:35 2013-12-02
+1, ref:
+Linux 多线程应用中如何编写安全的信号处理函数
+http://www.ibm.com/developerworks/cn/linux/l-cn-signalsec/
+
+2, consider call libxl_child_reaped in libvirt event handler. for now, call it direct from SIGCHLD handler.
+in order to do this, i need get ctx in fork replacement.
+
+3, add ao in each domain, do i need to add child in to each domain?
+i handle child in order to call libxl_child_reaped. no other operation relative to the child.
+
+4, today, only test SIGCHLD in libvirt. add ao in domain priv later.
+
+5, error
+if i waitpid, it would be influence the virProcessWait.
+2013-12-02T17:26:27.937521+08:00 bjz-rd2 libvirtd[6240]: child info overflow!!! (pid<6758> status<256>)
+2013-12-02T17:26:27.938603+08:00 bjz-rd2 libvirtd[6240]: unable to wait for process 6758: No child processes
+
+1), try
+-    pid = waitpid(-1, &status, WNOHANG);
++    pid = waitpid(0, &status, WNOHANG);
+
+not work.
+
+2), how about fork a new process for libxl?
+is it acceptable in libvirt? at least, it is dangerous.
+
+3), discuss with Gaoyan, his suggestion:
+(1), direct loop. do not register signal action.
+loop {
+    check ao_complete
+    waitpid, waitpid ...
+    sleep(1)
+}
+(2), we do not know the status in BSD.
+       __WNOTHREAD (since Linux 2.4)
+              Do not wait for children of other threads  in  the  same  thread
+              group.  This was the default before Linux 2.4.
+
+(3), wait the specfic process group through setpgid and waitid.
+int waitid(idtype_t idtype, id_t id, siginfo_t *infop, int options);
+       idtype == P_PGID
+              Wait for any child whose process group ID matches id.
+
+6, TODO
+1), try 5-3)-(1), and do others works. deal with it later.
+
+
