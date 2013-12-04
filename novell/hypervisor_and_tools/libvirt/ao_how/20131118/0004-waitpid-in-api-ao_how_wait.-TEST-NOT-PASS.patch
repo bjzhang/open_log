@@ -1,0 +1,112 @@
+From 2b938007630ef9e758b796550bf8d5a946c3c481 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Tue, 3 Dec 2013 22:57:05 +0800
+Subject: [PATCH 4/6] waitpid in api ao_how_wait. TEST NOT PASS.
+
+---
+ src/libxl/libxl_domain.c |  2 ++
+ src/libxl/libxl_driver.c | 38 ++++++++++++++++++++++++++++++++------
+ 2 files changed, 34 insertions(+), 6 deletions(-)
+
+diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
+index e6978f3..2db4497 100644
+--- a/src/libxl/libxl_domain.c
++++ b/src/libxl/libxl_domain.c
+@@ -423,6 +423,8 @@ libxl_fork_replacement(void *user)
+             i++;
+         }
+         info->child[i].pid = pid;
++//        info->child[i].pending = 1;
++        info->child[i].called = 0;
+     }
+     return pid;
+ }
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 7ca3ce4..1be495a 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -116,10 +116,13 @@ ao_how_init(libxlDomainObjPrivatePtr priv ATTRIBUTE_UNUSED, sigchild_info *info
+ }
+ 
+ static void
+-ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm)
++ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm, sigchild_info *info)
+ {
+-    VIR_INFO("Waiting for libxl event");
++    int status;
++    pid_t pid;
++    int i = 0;
+ 
++    VIR_INFO("Waiting for libxl event");
+     while (1) {
+         virObjectUnlock(vm);
+         sleep(1);
+@@ -128,6 +131,28 @@ ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm)
+             VIR_INFO("got ao_complete, exit");
+             break;
+         }
++        i = 0;
++        while(info->child[i].pid != 0) {
++            if ( info->child[i].called )
++                continue;
++
++            pid = waitpid(info->child[i].pid, &status, WNOHANG);
++            switch (pid) {
++                case 0:
++                    VIR_INFO("waitpid return: child <%d> state not changed.", info->child[i].pid);
++                    break;
++                case -1:
++                    VIR_INFO("waitpid fail while waiting<%d>.", info->child[i].pid);
++                    break;
++                default:
++                    libxl_childproc_reaped(info->ctx, pid, status);
++                    VIR_INFO("libxl_childproc_reaped: pid<%d> done. status<%d>", pid, status);
++                    info->child[i].called = 1;
++                    break;
++            }
++
++            i++;
++        }
+     }
+ }
+ 
+@@ -359,7 +384,7 @@ libxlDoDomainDestroy(libxlDriverPrivatePtr driver, virDomainObjPtr vm)
+     }
+ 
+     if (ao_how_enable) {
+-        ao_how_wait(driver, vm);
++        ao_how_wait(driver, vm, &child_info);
+     }
+ 
+     return 0;
+@@ -697,7 +722,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     }
+ 
+     if (ao_how_enable) {
+-        ao_how_wait(driver, vm);
++        ao_how_wait(driver, vm, &child_info);
+     }
+ 
+     vm->def->id = domid;
+@@ -849,7 +874,8 @@ sigchld_handler(int signo)
+         return;
+     }
+ retry:
+-    pid = waitpid(-1, &status, WNOHANG | __WNOTHREAD);
++//    pid = waitpid(-1, &status, WNOHANG | __WNOTHREAD); //FIXME NOT TEST. ONLY FOR LINUX.
++    pid = waitpid(-1, &status, WNOHANG);
+     if (pid == 0) {
+         VIR_INFO("%s: no child found", __FUNCTION__);
+         return;
+@@ -1986,7 +2012,7 @@ libxlDoDomainSave(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+     }
+ 
+     if (ao_how_enable) {
+-        ao_how_wait(driver, vm);
++        ao_how_wait(driver, vm, &child_info);
+     }
+ 
+     event = virDomainEventNewFromObj(vm, VIR_DOMAIN_EVENT_STOPPED,
+-- 
+1.8.1.4
+

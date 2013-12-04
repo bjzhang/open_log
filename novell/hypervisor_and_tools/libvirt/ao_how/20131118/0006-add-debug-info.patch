@@ -1,0 +1,126 @@
+From aeb8231bac4dda2a7d763b0002bdb7373c7a9655 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Wed, 4 Dec 2013 17:55:56 +0800
+Subject: [PATCH 6/6] add debug info
+
+---
+ cfg.mk                   | 10 +++++-----
+ daemon/libvirtd.conf     |  2 +-
+ src/libxl/libxl_domain.c |  1 +
+ src/libxl/libxl_domain.h |  1 +
+ src/libxl/libxl_driver.c | 27 +++++++++++++++++++++++++++
+ 5 files changed, 35 insertions(+), 6 deletions(-)
+
+diff --git a/cfg.mk b/cfg.mk
+index bd3dd48..e3007fd 100644
+--- a/cfg.mk
++++ b/cfg.mk
+@@ -898,11 +898,11 @@ ifeq (0,$(MAKELEVEL))
+       stamp="$$($(_submodule_hash) $(_curr_status) 2>/dev/null)";	\
+       test "$$stamp" = "$$actual"; echo $$?)
+   _clean_requested = $(filter %clean,$(MAKECMDGOALS))
+-  ifeq (1,$(_update_required)$(_clean_requested))
+-    $(info INFO: gnulib update required; running ./autogen.sh first)
+-    $(shell touch $(srcdir)/AUTHORS $(srcdir)/ChangeLog)
+-maint.mk Makefile: _autogen
+-  endif
++#  ifeq (1,$(_update_required)$(_clean_requested))
++#    $(info INFO: gnulib update required; running ./autogen.sh first)
++#    $(shell touch $(srcdir)/AUTHORS $(srcdir)/ChangeLog)
++#maint.mk Makefile: _autogen
++#  endif
+ endif
+ 
+ # It is necessary to call autogen any time gnulib changes.  Autogen
+diff --git a/daemon/libvirtd.conf b/daemon/libvirtd.conf
+index 5353927..3e05a08 100644
+--- a/daemon/libvirtd.conf
++++ b/daemon/libvirtd.conf
+@@ -301,7 +301,7 @@
+ 
+ # Logging level: 4 errors, 3 warnings, 2 information, 1 debug
+ # basically 1 will log everything possible
+-#log_level = 3
++log_level = 2
+ 
+ # Logging filters:
+ # A filter allows to select a different logging level for a given category
+diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
+index 2db4497..e109460 100644
+--- a/src/libxl/libxl_domain.c
++++ b/src/libxl/libxl_domain.c
+@@ -77,6 +77,7 @@ sigchild_info child_info;
+ libxl_asyncop_how ao_how;
+ int ao_how_enable;
+ int ao_how_enable_cb;
++int ao_how_enable_print_status;
+ int ao_complete;
+ 
+ static virClassPtr libxlDomainObjPrivateClass;
+diff --git a/src/libxl/libxl_domain.h b/src/libxl/libxl_domain.h
+index 5a9c2a3..ebee1b0 100644
+--- a/src/libxl/libxl_domain.h
++++ b/src/libxl/libxl_domain.h
+@@ -78,6 +78,7 @@ extern libxl_asyncop_how ao_how;
+ extern int ao_how_enable;
+ extern sigchild_info child_info;
+ extern int ao_how_enable_cb;
++extern int ao_how_enable_print_status;
+ extern int ao_complete;
+ 
+ int
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index e54fb47..f77129f 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -137,6 +137,7 @@ ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm, s
+             if ( !info->child[i].called ) {
+                 VIR_INFO("wait pid <%d>", info->child[i].pid);
+                 pid = waitpid(info->child[i].pid, &status, WNOHANG);
++                VIR_INFO("the waitpid return value<%d>, status<%d>", pid, status);
+                 switch (pid) {
+                     case 0:
+                         VIR_INFO("waitpid return: child <%d> state not changed.", info->child[i].pid);
+@@ -145,6 +146,25 @@ ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm, s
+                         VIR_INFO("waitpid fail while waiting<%d>.", info->child[i].pid);
+                         break;
+                     default:
++                        if ( ao_how_enable_print_status ) {
++                            VIR_INFO("the child<%d> exit status<%d>", pid, WEXITSTATUS(status));
++                            if ( WIFEXITED(status) ) {
++                                VIR_INFO("the child<%d> terminated normally", pid);
++                            }
++                            if ( WIFSIGNALED(status) ) {
++                                VIR_INFO("the child<%d> process was terminated by a signal", pid);
++                                VIR_INFO("the number<%d> of the signal that caused the child<%d> process to terminate.", WTERMSIG(status), pid);
++                            }
++                            if ( WCOREDUMP(status) )
++                                VIR_INFO("the child<%d> produced a core dump.", pid);
++
++                            if ( WIFSTOPPED(status) ) {
++                                VIR_INFO("the child<%d> process was stopped by delivery of a signal.", pid);
++                                VIR_INFO("the number<%d> of the signal which caused the child<%d> to stop.", WSTOPSIG(status), pid);
++                            }
++                            if ( WIFCONTINUED(status) )
++                                VIR_INFO("the child process was resumed by delivery of SIGCONT.");
++                        }
+                         libxl_childproc_reaped(info->ctx, pid, status);
+                         VIR_INFO("libxl_childproc_reaped: pid<%d> done. status<%d>", pid, status);
+                         info->child[i].called = 1;
+@@ -1104,6 +1124,13 @@ libxlStateInitialize(bool privileged,
+             VIR_INFO("do not use ao_how callback function");
+             ao_how_enable_cb = 0;
+         }
++        if (virFileExists("/var/lib/libvirt/libxl/ao_how__print_status")) {
++            VIR_INFO("print child exit status when ao_how used");
++            ao_how_enable_print_status = 1;
++        } else {
++            VIR_INFO("do not print child exit status when ao_how used");
++            ao_how_enable_print_status = 0;
++        }
+     } else {
+         VIR_INFO("do not use ao_how");
+         ao_how_enable = 0;
+-- 
+1.8.1.4
+

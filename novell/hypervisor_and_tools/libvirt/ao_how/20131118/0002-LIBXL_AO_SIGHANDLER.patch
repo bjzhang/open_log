@@ -1,3 +1,14 @@
+From 2ab1d495e88d91b006130e6c00087a7eda91f068 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Tue, 3 Dec 2013 11:05:06 +0800
+Subject: [PATCH 2/6] LIBXL_AO_SIGHANDLER
+
+---
+ src/libxl/libxl_domain.c | 42 +++++++++++------------
+ src/libxl/libxl_domain.h | 10 +++++-
+ src/libxl/libxl_driver.c | 87 ++++++++++++++++++++++++++++++++++++++++++------
+ 3 files changed, 106 insertions(+), 33 deletions(-)
+
 diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
 index 8ad7e98..e6978f3 100644
 --- a/src/libxl/libxl_domain.c
@@ -101,21 +112,50 @@ index 4973efd..5a9c2a3 100644
  extern virDomainXMLPrivateDataCallbacks libxlDomainXMLPrivateDataCallbacks;
  extern virDomainDefParserConfig libxlDomainDefParserConfig;
 diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
-index d83d590..ad27dab 100644
+index 810084f..c0bb8cc 100644
 --- a/src/libxl/libxl_driver.c
 +++ b/src/libxl/libxl_driver.c
-@@ -68,6 +68,7 @@
+@@ -66,8 +66,10 @@
+ /* Number of Xen scheduler parameters */
+ #define XEN_SCHED_CREDIT_NPARAM   2
  
++#define LIBXL_AO_SIGHANDLER
  
  static libxlDriverPrivatePtr libxl_driver = NULL;
 +static struct sigaction sigchld_saved_action;
  
  /* Function declarations */
  static int
-@@ -843,12 +844,77 @@ libxlReconnectDomains(libxlDriverPrivatePtr driver)
+@@ -115,7 +117,6 @@ static void
+ ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm)
+ {
+     VIR_INFO("Waiting for libxl event");
+-//    size_t i;
+ 
+     while (1) {
+         virObjectUnlock(vm);
+@@ -125,16 +126,6 @@ ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm)
+             VIR_INFO("got ao_complete, exit");
+             break;
+         }
+-
+-//        i = 0;
+-//        while(child_info.child[i].pid != 0) {
+-//            if(child_info.child[i].pending) {
+-//                VIR_INFO("Child exit: pid<%d>, status<%d>", child_info.child[i].pid, child_info.child[i].status);
+-//                child_info.child[i].pending = 0;
+-//            }
+-//
+-//            i++;
+-//        }
+     }
+ }
+ 
+@@ -843,12 +834,81 @@ libxlReconnectDomains(libxlDriverPrivatePtr driver)
      virDomainObjListForEach(driver->domains, libxlReconnectDomain, driver);
  }
  
++#ifdef LIBXL_AO_SIGHANDLER
 +static void
 +sigchld_handler(int signo)
 +{
@@ -177,6 +217,7 @@ index d83d590..ad27dab 100644
 +
 +    sigaction(SIGCHLD, &sigchld_saved_action, &was);
 +}
++#endif
 +
  static int
  libxlStateCleanup(void)
@@ -184,19 +225,26 @@ index d83d590..ad27dab 100644
      if (!libxl_driver)
          return -1;
  
++#ifdef LIBXL_AO_SIGHANDLER
 +    if ( ao_how_enable )
 +        libxl_sigchld_unregister();
++#endif
 +
      virObjectUnref(libxl_driver->config);
      virObjectUnref(libxl_driver->xmlopt);
      virObjectUnref(libxl_driver->domains);
-@@ -1020,6 +1086,9 @@ libxlStateInitialize(bool privileged,
+@@ -1021,6 +1081,11 @@ libxlStateInitialize(bool privileged,
          ao_how_enable = 0;
      }
  
++#ifdef LIBXL_AO_SIGHANDLER
 +    if ( ao_how_enable )
 +        libxl_sigchld_register();
++#endif
 +
      return 0;
  
  error:
+-- 
+1.8.1.4
+
