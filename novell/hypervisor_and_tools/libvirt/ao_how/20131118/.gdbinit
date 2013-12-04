@@ -29,6 +29,15 @@ where 3
 cont
 end
 
+#in libxl lib
+break libxl__event_occurred
+commands
+silent
+shell date +%H%M%S_%N
+printf "libxl__event_occurred\n"
+where 3
+cont
+end
 
 cont
 
