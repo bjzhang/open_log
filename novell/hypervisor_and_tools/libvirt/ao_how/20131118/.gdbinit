@@ -39,5 +39,14 @@ where 3
 cont
 end
 
+break childproc_reaped
+commands
+silent
+shell date +%H%M%S_%N
+printf "childproc_reaped: %d\n", pid
+where 3
+cont
+end
+
 cont
 

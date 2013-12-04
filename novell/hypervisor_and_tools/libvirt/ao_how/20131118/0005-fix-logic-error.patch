@@ -1,0 +1,58 @@
+From ed6a4c1c4f014a4587dfab6ff22bdd28ae566e4a Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Wed, 4 Dec 2013 17:06:39 +0800
+Subject: [PATCH 5/6] fix logic error
+
+---
+ src/libxl/libxl_driver.c | 34 +++++++++++++++++-----------------
+ 1 file changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 1be495a..e54fb47 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -133,24 +133,24 @@ ao_how_wait(libxlDriverPrivatePtr driver ATTRIBUTE_UNUSED, virDomainObjPtr vm, s
+         }
+         i = 0;
+         while(info->child[i].pid != 0) {
+-            if ( info->child[i].called )
+-                continue;
+-
+-            pid = waitpid(info->child[i].pid, &status, WNOHANG);
+-            switch (pid) {
+-                case 0:
+-                    VIR_INFO("waitpid return: child <%d> state not changed.", info->child[i].pid);
+-                    break;
+-                case -1:
+-                    VIR_INFO("waitpid fail while waiting<%d>.", info->child[i].pid);
+-                    break;
+-                default:
+-                    libxl_childproc_reaped(info->ctx, pid, status);
+-                    VIR_INFO("libxl_childproc_reaped: pid<%d> done. status<%d>", pid, status);
+-                    info->child[i].called = 1;
+-                    break;
++            VIR_INFO("<%d>:<%d>", i, info->child[i].pid);
++            if ( !info->child[i].called ) {
++                VIR_INFO("wait pid <%d>", info->child[i].pid);
++                pid = waitpid(info->child[i].pid, &status, WNOHANG);
++                switch (pid) {
++                    case 0:
++                        VIR_INFO("waitpid return: child <%d> state not changed.", info->child[i].pid);
++                        break;
++                    case -1:
++                        VIR_INFO("waitpid fail while waiting<%d>.", info->child[i].pid);
++                        break;
++                    default:
++                        libxl_childproc_reaped(info->ctx, pid, status);
++                        VIR_INFO("libxl_childproc_reaped: pid<%d> done. status<%d>", pid, status);
++                        info->child[i].called = 1;
++                        break;
++                }
+             }
+-
+             i++;
+         }
+     }
+-- 
+1.8.1.4
+
