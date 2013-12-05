@@ -2,14 +2,14 @@ set breakpoint pending on
 
 set logging on
 
-break libxl_osevent_occurred_fd
-commands
-silent
-shell date +%H%M%S_%N
-printf "libxl_osevent_occurred_fd\n"
-where 3
-cont
-end
+#break libxl_osevent_occurred_fd
+#commands
+#silent
+#shell date +%H%M%S_%N
+#printf "libxl_osevent_occurred_fd\n"
+#where 3
+#cont
+#end
 
 break libxl__ao_complete_check_progress_reports
 commands
@@ -20,12 +20,30 @@ where 3
 cont
 end
 
-break libxlEventHandler
+break libxl/libxl_driver.c:521
 commands
 silent
 shell date +%H%M%S_%N
-printf "libxlEventHandler\n"
+printf "libxlEventHandler: priv: %x, event: %x\n", priv, event
 where 3
+cont
+end
+
+break libxl/libxl_driver.c:538
+commands
+silent
+shell date +%H%M%S_%N
+printf "libxlEventHandler: priv: %lx, event: %lx\n", priv, cp
+where 3
+cont
+end
+
+break libxl/libxl_driver.c:451
+commands
+silent
+shell date +%H%M%S_%N
+printf "libxlEventHandlerThread: priv: %lx event: %lx\n", priv, event
+#where 3
 cont
 end
 
