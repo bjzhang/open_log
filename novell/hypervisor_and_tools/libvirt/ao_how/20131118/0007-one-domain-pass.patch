@@ -1,0 +1,216 @@
+From 95a80a9f4b24baa671eb762fe3cb8ac7aa8caae6 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Thu, 5 Dec 2013 18:48:38 +0800
+Subject: [PATCH 7/7] one domain pass
+
+test pass: create -> save -> restore -> reboot -> save -> restore -> shutdown -> create -> save -> restore -> destroy
+---
+ src/libxl/libxl_domain.h |  8 +++++
+ src/libxl/libxl_driver.c | 87 +++++++++++++++++++++++++++++++++---------------
+ 2 files changed, 69 insertions(+), 26 deletions(-)
+
+diff --git a/src/libxl/libxl_domain.h b/src/libxl/libxl_domain.h
+index ebee1b0..873200d 100644
+--- a/src/libxl/libxl_domain.h
++++ b/src/libxl/libxl_domain.h
+@@ -71,6 +71,14 @@ typedef struct {
+     per_sigchild_info child[MAX_CHILD];
+ } sigchild_info;
+ 
++typedef struct _libxlDomainEvent libxlDomainEvent;
++typedef libxlDomainEvent *libxlDomainEventPtr;
++struct _libxlDomainEvent {
++    libxlDomainObjPrivatePtr priv;
++    libxl_event             *event;
++};
++
++#define MAX_CHILD 100
+ extern virDomainXMLPrivateDataCallbacks libxlDomainXMLPrivateDataCallbacks;
+ extern virDomainDefParserConfig libxlDomainDefParserConfig;
+ 
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index f77129f..53b7e8c 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -80,7 +80,7 @@ libxlDomainManagedSaveLoad(virDomainObjPtr vm,
+ 
+ static int
+ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+-             bool start_paused, int restore_fd);
++             bool start_paused, int restore_fd, bool async);
+ 
+ 
+ /* Function definitions */
+@@ -188,7 +188,7 @@ libxlAutostartDomain(virDomainObjPtr vm,
+     virResetLastError();
+ 
+     if (vm->autostart && !virDomainObjIsActive(vm) &&
+-        libxlVmStart(driver, vm, false, -1) < 0) {
++        libxlVmStart(driver, vm, false, -1, false) < 0) {
+         err = virGetLastError();
+         VIR_ERROR(_("Failed to autostart VM '%s': %s"),
+                   vm->def->name,
+@@ -437,18 +437,13 @@ libxlVmReap(libxlDriverPrivatePtr driver,
+  * Detect which signature to use based on
+  * LIBXL_HAVE_NONCONST_EVENT_OCCURS_EVENT_ARG.
+  */
+-
+-#ifdef LIBXL_HAVE_NONCONST_EVENT_OCCURS_EVENT_ARG
+-# define VIR_LIBXL_EVENT_CONST /* empty */
+-#else
+-# define VIR_LIBXL_EVENT_CONST const
+-#endif
+-
+ static void
+-libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
++libxlEventHandlerThread(void *opaque)
+ {
++    libxlDomainEventPtr domain_event = opaque;
++    libxlDomainObjPrivatePtr priv = domain_event->priv;
++    libxl_event *event = domain_event->event;
+     libxlDriverPrivatePtr driver = libxl_driver;
+-    libxlDomainObjPrivatePtr priv = ((virDomainObjPtr)data)->privateData;
+     virDomainObjPtr vm = NULL;
+     virDomainEventPtr dom_event = NULL;
+     libxl_shutdown_reason xl_reason = event->u.domain_shutdown.shutdown_reason;
+@@ -456,9 +451,9 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
+     if (event->type == LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN) {
+         virDomainShutoffReason reason;
+         VIR_INFO("LIBXL_EVENT_TYPE_DOMAIN_SHUTDOWN");
+-        if (!ao_how_enable_cb) {
+-            ao_complete=1;
+-        }
++//        if (!ao_how_enable_cb) {
++//            ao_complete=1;
++//        }
+ 
+         /*
+          * Similar to the xl implementation, ignore SUSPEND.  Any actions needed
+@@ -490,17 +485,12 @@ libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
+                 break;
+             case LIBXL_SHUTDOWN_REASON_REBOOT:
+                 libxlVmReap(driver, vm, VIR_DOMAIN_SHUTOFF_SHUTDOWN);
+-                libxlVmStart(driver, vm, 0, -1);
++                libxlVmStart(driver, vm, 0, -1, true);
+                 break;
+             default:
+                 VIR_INFO("Unhandled shutdown_reason %d", xl_reason);
+                 break;
+         }
+-    } else if ( event->type == LIBXL_EVENT_TYPE_OPERATION_COMPLETE ) {
+-        VIR_INFO("LIBXL_EVENT_TYPE_OPERATION_COMPLETE");
+-        if (!ao_how_enable_cb) {
+-            ao_complete=1;
+-        }
+     }
+ 
+ cleanup:
+@@ -510,6 +500,51 @@ cleanup:
+         libxlDomainEventQueue(driver, dom_event);
+     /* Cast away any const */
+     libxl_event_free(priv->ctx, (libxl_event *)event);
++    VIR_FREE(domain_event);
++}
++
++#ifdef LIBXL_HAVE_NONCONST_EVENT_OCCURS_EVENT_ARG
++# define VIR_LIBXL_EVENT_CONST /* empty */
++#else
++# define VIR_LIBXL_EVENT_CONST const
++#endif
++
++static void
++libxlEventHandler(void *data, VIR_LIBXL_EVENT_CONST libxl_event *event)
++{
++    libxlDomainObjPrivatePtr priv = ((virDomainObjPtr)data)->privateData;
++    //FIXME: it will freed when libxlEventHandler exit, it is not safe.
++    virThread thread;
++    libxlDomainEventPtr domain_event = NULL;
++    libxl_event *cp = NULL;
++
++    if ( event->type == LIBXL_EVENT_TYPE_OPERATION_COMPLETE ) {
++        VIR_INFO("LIBXL_EVENT_TYPE_OPERATION_COMPLETE");
++        if (!ao_how_enable_cb) {
++            ao_complete=1;
++            return;
++        }
++    }
++
++    if ( VIR_ALLOC(domain_event) < 0 )
++        goto error;
++
++    if ( VIR_ALLOC(cp) < 0 )
++        goto error;
++
++    memcpy(cp, event, sizeof(libxl_event));
++    domain_event->priv = priv;
++    domain_event->event = cp;
++    if (virThreadCreate(&thread, true, libxlEventHandlerThread, domain_event) < 0) {
++        //TODO error handle
++        goto error;
++    }
++    return;
++
++error:
++    VIR_FREE(domain_event);
++    VIR_FREE(cp);
++    return;
+ }
+ 
+ static const struct libxl_event_hooks ev_hooks = {
+@@ -642,7 +677,7 @@ libxlFreeMem(libxlDomainObjPrivatePtr priv, libxl_domain_config *d_config)
+  */
+ static int
+ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+-             bool start_paused, int restore_fd)
++             bool start_paused, int restore_fd, bool async)
+ {
+     libxl_domain_config d_config;
+     virDomainDefPtr def = NULL;
+@@ -721,7 +756,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ 
+     /* use as synchronous operations => ao_how = NULL and no intermediate reports => ao_progress = NULL */
+ 
+-    if (ao_how_enable) {
++    if (ao_how_enable && async ) {
+         ao_how_init(priv, &child_info);
+         ao_how_p = &ao_how;
+     }
+@@ -741,7 +776,7 @@ libxlVmStart(libxlDriverPrivatePtr driver, virDomainObjPtr vm,
+ #endif
+     }
+ 
+-    if (ao_how_enable) {
++    if (ao_how_enable && async ) {
+         ao_how_wait(driver, vm, &child_info);
+     }
+ 
+@@ -1406,7 +1441,7 @@ libxlDomainCreateXML(virConnectPtr conn, const char *xml,
+     def = NULL;
+ 
+     if (libxlVmStart(driver, vm, (flags & VIR_DOMAIN_START_PAUSED) != 0,
+-                     -1) < 0) {
++                     -1, true) < 0) {
+         virDomainObjListRemove(driver->domains, vm);
+         vm = NULL;
+         goto cleanup;
+@@ -2152,7 +2187,7 @@ libxlDomainRestoreFlags(virConnectPtr conn, const char *from,
+     libxlDriverUnlock(driver);
+     def = NULL;
+ 
+-    ret = libxlVmStart(driver, vm, (flags & VIR_DOMAIN_SAVE_PAUSED) != 0, fd);
++    ret = libxlVmStart(driver, vm, (flags & VIR_DOMAIN_SAVE_PAUSED) != 0, fd, true);
+     if (ret < 0 && !vm->persistent) {
+         virDomainObjListRemove(driver->domains, vm);
+         vm = NULL;
+@@ -2864,7 +2899,7 @@ libxlDomainCreateWithFlags(virDomainPtr dom,
+         goto cleanup;
+     }
+ 
+-    ret = libxlVmStart(driver, vm, (flags & VIR_DOMAIN_START_PAUSED) != 0, -1);
++    ret = libxlVmStart(driver, vm, (flags & VIR_DOMAIN_START_PAUSED) != 0, -1, true);
+ 
+ cleanup:
+     if (vm)
+-- 
+1.8.1.4
+
