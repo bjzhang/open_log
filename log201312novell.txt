@@ -117,4 +117,63 @@ the thread pool seems more clear and easier for event handling.
 for now, do not use thread pool. coding finish, try it tomorrow.
 4), about reconnect? TODO
 
+23:25 2013-12-4
+ralf 1:1 chunyan
+1, sle12 sp1 will not support xen.
+2, btrfs bugs
+3, bug fix is important. primary work?
+
+8:55 2013-12-5
+mailing list, virtualization, xen
+1,
+Ian C
+On Mon, 2013-12-02 at 13:34 +0800, 姚牧阳 wrote:
+
+> This is Muyang Yao from Beijing, recently we have been working on > projects about hacking the xen kernel and reveal vulnerabilities to > arouse awareness.
+
+This sounds like interesting work. Should you discover any security issues I would like to encourage you to please contact security@xen.org in the first instance. The Xen security problem response process is at http://www.xenproject.org/security-policy.html .
+
+> Especially regarding the memory management mechanism. But I stll find > it hard to read through the source code of the hypervisor. > > > I'm wondering if there's any development document of the xen > hypervisor? How do you guys actually get started with xen source code? > are there any suggestions or good wiki pages to refer to? It seems > that the docs in "wiki.xenproject.org" are quite simple and have > limited help to reading the code.
+
+There is a book "The Definitive Guide to the Xen Hypervisor" which I've not read myself but I have heard recommended (it's a bit dated, but still largely relevant I think)
+
+http://www.amazon.com/The-Definitive-Guide-Xen-Hypervisor/dp/013234971X
+
+If you are particularly interesting in memory management then a good understanding of the architectural (e.g. x86) memory management stuff is pretty much a prerequisite. As far as x86 PV memory management goes the basic principals are still those which are outlined in the original "Xen and the Art of Virtualization" paper from SOSP 2003.
+
+Ultimately there isn't much substitute for being able to read and follow the code. Tools like TAGS or cscope, or even just grep, are a useful aid for this.
+
+Ian.
+
+2, grant table in arm, Ian C
+The DT provided to guests (including dom0) includes a Xen node which, among other things, describes an MMIO region which can be safely used for grant table mappings (i.e. it is a hole in the physical address space). For domU we provide a hardcoded values based on our hardcoded guest virtual machine layout. However for dom0 we need to fit in with the underlying platform. Leaving this hardcoded was an oversight which on some platforms could result in the grant table overlaying RAM or MMIO regions which are in use by domain 0.
+
+For the 4.4 release do as we did with the dom0 evtchn PPI and provide a hook for the platform code to supply a suitable hardcoded address for the platform (derived from reading the data sheet). Platforms which do not provide the hook get the existing address as a default.
+
+After 4.4 we should switch to selecting a region of host RAM which is not RAM in the guest address map. This should be more flexible and safer but the patch was looking too complex for 4.4.
+
+Platform Gnttab Address ========
+
+exynos5.c 0xb0000000, confirmed and tested by Julien.
+sunxi.c 0x01d00000, confirmed in data sheet.
+midway.c 0xff800000, confirmed by Andre, boot tested by Ian.
+vexpress.c 0xb0000000, existing hardcoded value was selected for vexpress.
+omap5.c 0x4b000000, confirmed by Baozi 
+xgene-storm.c 0x1f800000, confirmed by Pranavkumar
+
+1), TODO: check 0x01d00000 in sunxi? which module?
+
+3, support more than 4g on arm32
+arm32 currently only makes use of memory which is contiguous with the first bank. On the Midway platform this means that we only use 4GB of the 8GB available.
+
+Change things to make use of non-contiguous memory regions with the restriction that we require that at least half of the total span of the RAM addresses contain RAM. The frametable is currently not sparse and so this restriction avoids problems with allocating enormous amounts of memory for the frametable to cover holes in the address space and exhausting the actual RAM.
+
+50% is arguably too restrictive. 4GB of RAM requires 32MB of frametable on arm32 and 56M on arm64, so we could probably cope with a lower ratio of actual RAM. However half is nice and conservative.
+
+arm64 currently uses all banks without regard for the size of the frametable, which I have observed causing problems on models. Implement that same restriction as arm32 there.
+
+Long term we should look at moving to a pfn compression based scheme similar to x86, which removes the holes from the frametable.
+
+There were some bogus/outdated comments scattered around this code which I have removed.
+
 
