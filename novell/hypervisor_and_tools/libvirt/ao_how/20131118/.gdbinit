@@ -56,6 +56,12 @@ where 3
 cont
 end
 
+break ao_how_init
+
+break libxlVmStart
+
+break libxlDomainObjPrivateAlloc
+
 #in libxl lib
 break libxl__event_occurred
 commands
