@@ -47,6 +47,15 @@ printf "libxlEventHandlerThread: priv: %lx event: %lx\n", priv, event
 cont
 end
 
+break libxlDomainObjPrivateInitCtx
+commands
+silent
+shell date +%H%M%S_%N
+printf "libxlDomainObjPrivateInitCtx\n"
+where 3
+cont
+end
+
 #in libxl lib
 break libxl__event_occurred
 commands
