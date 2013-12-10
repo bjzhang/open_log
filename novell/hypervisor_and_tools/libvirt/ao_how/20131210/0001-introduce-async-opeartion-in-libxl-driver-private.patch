@@ -1,0 +1,220 @@
+From ed3990d32cf5d9ac3d0b5acbf552393b05a0acb3 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Tue, 10 Dec 2013 11:16:33 +0800
+Subject: [PATCH 1/5] introduce async opeartion in libxl driver private
+
+implement the ao relative struct and functions.
+in libxl, there are two child management methods.
+a, libxl lib manage the child exit and inform libvirt.
+b, libvirt manage the child exit.
+
+the first choice could not support pass different ao to libxl[1],
+which conflict with each domain per ao in current libxl driver.
+So, in this patch, i choose the second method.
+as a consequence, i need to add the fork replacement hooks in
+order to get the child pid.
+
+[1]: http://lists.xen.org/archives/html/xen-devel/2013-11/msg03548.html
+
+Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+---
+ src/libxl/libxl_domain.c | 34 +++++++++++++++++++++
+ src/libxl/libxl_domain.h | 26 ++++++++++++++++
+ src/libxl/libxl_driver.c | 79 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 139 insertions(+)
+
+diff --git a/src/libxl/libxl_domain.c b/src/libxl/libxl_domain.c
+index 68009db..d9155c1 100644
+--- a/src/libxl/libxl_domain.c
++++ b/src/libxl/libxl_domain.c
+@@ -72,6 +72,10 @@ struct _libxlEventHookInfo {
+     int id;
+ };
+ 
++int ao_how_enable;
++int ao_how_enable_cb;
++int ao_how_enable_print_status;
++
+ static virClassPtr libxlDomainObjPrivateClass;
+ 
+ static void
+@@ -401,6 +405,36 @@ virDomainDefParserConfig libxlDomainDefParserConfig = {
+     .devicesPostParseCallback = libxlDomainDeviceDefPostParse,
+ };
+ 
++static pid_t
++libxl_fork_replacement(void *user)
++{
++    sigchild_info *info = user;
++    pid_t pid;
++    size_t i = 0;
++
++    pid = fork();
++    VIR_INFO("libxl_fork_replacement pid is %d", pid);
++    if (pid > 0) {
++        while(info->child[i].pid != 0) {
++            if ( i == MAX_CHILD ) {
++                VIR_ERROR("ao, childinfo overflow");
++                while(1);
++            }
++
++            //TODO check overflow
++            i++;
++        }
++        info->child[i].pid = pid;
++        info->child[i].called = 0;
++    }
++    return pid;
++}
++
++static const libxl_childproc_hooks childproc_hooks = {
++    .chldowner = libxl_sigchld_owner_mainloop,
++    .fork_replacement = libxl_fork_replacement,
++};
++
+ int
+ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm)
+ {
+diff --git a/src/libxl/libxl_domain.h b/src/libxl/libxl_domain.h
+index e4695ef..3fa256e 100644
+--- a/src/libxl/libxl_domain.h
++++ b/src/libxl/libxl_domain.h
+@@ -30,6 +30,27 @@
+ # include "libxl_conf.h"
+ # include "virchrdev.h"
+ 
++#define MAX_CHILD 100
++typedef struct {
++    pid_t pid;
++    int status;
++    int called;
++} per_sigchild_info;
++
++typedef struct {
++    libxl_ctx *ctx;
++    per_sigchild_info child[MAX_CHILD];
++} sigchild_info;
++
++//FIXME: about lock: manage by job lock?
++typedef struct _libxlDomainAo libxlDomainAo;
++typedef libxlDomainAo *libxlDomainAoPtr;
++struct _libxlDomainAo {
++    libxl_asyncop_how *ao_how;
++    int ao_complete;
++    sigchild_info child_info;
++};
++
+ typedef struct _libxlDomainObjPrivate libxlDomainObjPrivate;
+ typedef libxlDomainObjPrivate *libxlDomainObjPrivatePtr;
+ struct _libxlDomainObjPrivate {
+@@ -46,12 +67,17 @@ struct _libxlDomainObjPrivate {
+ 
+     /* list of libxl timeout registrations */
+     libxlEventHookInfoPtr timerRegistrations;
++
++    libxlDomainAo ao;
+ };
+ 
+ 
+ extern virDomainXMLPrivateDataCallbacks libxlDomainXMLPrivateDataCallbacks;
+ extern virDomainDefParserConfig libxlDomainDefParserConfig;
+ 
++extern int ao_how_enable;
++extern int ao_how_enable_cb;
++extern int ao_how_enable_print_status;
+ 
+ int
+ libxlDomainObjPrivateInitCtx(virDomainObjPtr vm);
+diff --git a/src/libxl/libxl_driver.c b/src/libxl/libxl_driver.c
+index 1b42f14..59abaf7 100644
+--- a/src/libxl/libxl_driver.c
++++ b/src/libxl/libxl_driver.c
+@@ -105,6 +105,85 @@ libxlDomainEventQueue(libxlDriverPrivatePtr driver, virDomainEventPtr event)
+     virDomainEventStateQueue(driver->domainEventState, event);
+ }
+ 
++static void
++ao_how_init(virDomainObjPtr vm)
++{
++    libxlDomainObjPrivatePtr priv = vm->privateData;
++    priv->ao.ao_complete = 0;
++    if ( VIR_ALLOC(priv->ao.ao_how) < 0 )
++        //FIXME: error handle
++        return;
++
++}
++
++static void
++ao_how_wait(virDomainObjPtr vm)
++{
++    libxlDomainObjPrivatePtr priv = vm->privateData;
++    sigchild_info *info = &(priv->ao.child_info);
++    int status;
++    pid_t pid;
++    int i = 0;
++
++    VIR_INFO("Waiting for libxl event");
++    while (1) {
++        virObjectUnlock(vm);
++        sleep(1);
++        virObjectLock(vm);
++        if (priv->ao.ao_complete) {
++            VIR_INFO("got ao_complete, exit");
++            break;
++        }
++        i = 0;
++        while(info->child[i].pid != 0 && i < MAX_CHILD ) {
++            VIR_INFO("<%d>:<%d>", i, info->child[i].pid);
++            if ( !info->child[i].called ) {
++                VIR_INFO("wait pid <%d>", info->child[i].pid);
++                pid = waitpid(info->child[i].pid, &status, WNOHANG);
++                VIR_INFO("the waitpid return value<%d>, status<%d>", pid, status);
++                switch (pid) {
++                    case 0:
++                        VIR_INFO("waitpid return: child <%d> state not changed.", info->child[i].pid);
++                        break;
++                    case -1:
++                        VIR_INFO("waitpid fail while waiting<%d>.", info->child[i].pid);
++                        break;
++                    default:
++                        if ( ao_how_enable_print_status ) {
++                            VIR_INFO("the child<%d> exit status<%d>", pid, WEXITSTATUS(status));
++                            if ( WIFEXITED(status) ) {
++                                VIR_INFO("the child<%d> terminated normally", pid);
++                            }
++                            if ( WIFSIGNALED(status) ) {
++                                VIR_INFO("the child<%d> process was terminated by a signal", pid);
++                                VIR_INFO("the number<%d> of the signal that caused the child<%d> process to terminate.", WTERMSIG(status), pid);
++                            }
++                            if ( WCOREDUMP(status) )
++                                VIR_INFO("the child<%d> produced a core dump.", pid);
++
++                            if ( WIFSTOPPED(status) ) {
++                                VIR_INFO("the child<%d> process was stopped by delivery of a signal.", pid);
++                                VIR_INFO("the number<%d> of the signal which caused the child<%d> to stop.", WSTOPSIG(status), pid);
++                            }
++                            if ( WIFCONTINUED(status) )
++                                VIR_INFO("the child process was resumed by delivery of SIGCONT.");
++                        }
++                        libxl_childproc_reaped(info->ctx, pid, status);
++                        VIR_INFO("libxl_childproc_reaped: pid<%d> done. status<%d>", pid, status);
++                        info->child[i].called = 1;
++                        break;
++                }
++            }
++            i++;
++            if ( i == MAX_CHILD )
++                VIR_ERROR("ao, childinfo overflow");
++
++        }
++    }
++    VIR_FREE(priv->ao.ao_how);
++
++}
++
+ static int
+ libxlAutostartDomain(virDomainObjPtr vm,
+                      void *opaque)
+-- 
+1.8.1.4
+

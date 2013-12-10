@@ -1,0 +1,42 @@
+From d60d453f607a0edcdc4fd3a44b2291f7f85c75c9 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Tue, 10 Dec 2013 16:33:27 +0800
+Subject: [PATCH 0/5] libxl: support operation different vm at the same time
+
+the following patch use the async operation in libxl. with this patch,
+libvirt could operation the different domain at the same time. and it
+could avoid the assertion error mentioned by Jim in libxl lib.
+
+i will add the job support in it, make it pretect and lock the operation
+to same domain at the same time.
+
+some discussion and TODO
+1, how to deal with SIGCHLD?
+in current libvirt code, the SIGCHLD is used by virNetServerAddSignalHandler
+in src/libxl/lxc_controller.c. so i direct waitpid for all the children.
+
+do i need to improve the code in ao_how_wait?
+i could use the setpgid change the pgid in fork replacement and waitid to
+wait all the children at the same time. but it still need a sleep or
+virCondWaitUntil in the loop of ao_how_wait.
+
+2, i will improve the child_info.
+
+3, add the error handling.
+
+Bamvor Jian Zhang (5):
+  introduce async opeartion in libxl driver private
+  call ao function in create, save, restore and destroy
+  ao improve: avoid use ao in autostart domain
+  improve ao: move libxl_event_register_callbacks before
+    libxl_domain_create_xxx in order to support ao in create
+  improve ao: handle shutdown event in thread
+
+ src/libxl/libxl_domain.c |  40 +++++++++
+ src/libxl/libxl_domain.h |  26 ++++++
+ src/libxl/libxl_driver.c | 227 +++++++++++++++++++++++++++++++++++++++++------
+ 3 files changed, 265 insertions(+), 28 deletions(-)
+
+--
+1.8.1.4
+
