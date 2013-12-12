@@ -19,6 +19,7 @@ wait_started()
 {
     timeout_sec=$1
 
+    count=0
     domain_id=`virsh list | grep $domain_name | cut -d \  -f 2`
     echo domain id is $domain_id
     echo "waiting domain started"
@@ -35,6 +36,9 @@ wait_started()
         last_cpu_time__num=`echo $last_cpu_time | sed "s/s//g"`
         cpu_time__num=`echo $cpu_time | sed "s/s//g"`
         if [ "`echo $cpu_time__num - $last_cpu_time__num - 0.1 | bc`" == "0" ]; then
+            ((count+=1))
+        fi
+        if [ $count -gt 5 ]; then
             echo cpu time is $cpu_time. $domain_name almost fully started.
             break
         fi
