@@ -546,7 +546,7 @@ GTD
 
 1, today
 1), 10' work log.
-2), 11:06-11:45 13:51-14:49 16:51-18:08  ao see"11:37 2013-12-12"
+2), 11:06-11:45 13:51-14:49 16:51-18:08 20:15-22:19 22:33-23:47 ao see"11:37 2013-12-12"
 20' nap
 3), 11:45-12:52 lunch and rest.
 4), 13:41-13:50 保险报销.
@@ -582,7 +582,91 @@ libxl: same as qemu. but libxlVmReap need release the vm lock during sleep.
 
 5, plan: add error handling in ao.
 1), use the return value in libxl__ao.rc;
-2), TODO: test
+
+6, (20:27 2013-12-12)
+test.
+1), create fail test
+report internal error but got segment fault after that.
+(gdb) p *logger
+$19 = {vmessage = 0x0,
+  progress = 0x7fa11a3f2daa <stdiostream_progress>,
+  destroy = 0x7fa11a3f2b72 <stdiostream_destroy>}
+xtl_logger_destroy is called in libxlDomainObjPrivateDispose
+    from virDomainObjDispose
+    from virObjectUnref(dom);
+    from virDomainObjListRemove
+
+but it is used in the libxl_ctx_free later:
+    xtl_logger_destroy(priv->logger);
+    ...
+    libxl_ctx_free(priv->ctx);
+
+modify:
+    put xtl_logger_destroy after libxl_ctx_free.
+
+it works after this.
+
+(1), patch commit message:
+fix segfault when domain create fail
+
+there is segfault in libxl_ctx_free. because the log output handler vmessage
+is empty at that time.
+this situation is caused by xtl_logger_destroy. it free such handler before
+libxl_ctx_free in virDomainObjListRemove.
+move xtl_logger_destroy after libxl_ctx_free could fix this bug.
+
+(2), notes: the full backtrace:
+(gdb) where
+#0  0x0000000000000000 in ?? ()
+#1  0x00007fa11a3f2a2a in xtl_logv (
+    logger=0x7fa0f00013b0, level=XTL_DEBUG,
+    errnoval=-1, context=0x7fa11a3f5b3b "xc",
+    format=0x7fa11a3f5b34 "%s%s%s",
+    al=al@entry=0x7fa11f73c068) at xtl_core.c:50
+#2  0x00007fa11a3f2ab2 in xtl_log (
+    logger=logger@entry=0x7fa0f00013b0,
+    level=level@entry=XTL_DEBUG,
+    errnoval=errnoval@entry=-1,
+    context=context@entry=0x7fa11a3f5b3b "xc",
+    format=format@entry=0x7fa11a3f5b34 "%s%s%s")
+    at xtl_core.c:62
+#3  0x00007fa11a3eb3d4 in xc_reportv (
+    xch=0x7fa0f00017d0, lg=0x7fa0f00013b0,
+    level=XTL_DEBUG, code=0,
+    fmt=0x7fa11a3f63b8 "hypercall buffer: total allocations:%d total releases:%d",
+    args=args@entry=0x7fa11f73c7b8)
+    at xc_private.c:353
+#4  0x00007fa11a3eb463 in xc_report (
+    xch=xch@entry=0x7fa0f00017d0, lg=<optimized out>,
+    level=level@entry=XTL_DEBUG, code=code@entry=0,
+    fmt=fmt@entry=0x7fa11a3f63b8 "hypercall buffer: tot---Type <return> to continue, or q <return> to quit---
+    al allocations:%d total releases:%d")
+    at xc_private.c:364
+#5  0x00007fa11a3f1ca9 in xc__hypercall_buffer_cache_release (xch=xch@entry=0x7fa0f00017d0)
+    at xc_hcall_buf.c:104
+#6  0x00007fa11a3ec3d1 in xc_interface_close_common (
+    xch=0x7fa0f00017d0) at xc_private.c:201
+#7  0x00007fa11a3ec473 in xc_interface_close (
+    xch=<optimized out>) at xc_private.c:240
+#8  0x00007fa11a6128de in libxl_ctx_free (
+    ctx=0x7fa0f00015a0) at libxl.c:150
+#9  0x00007fa127abf2ab in virObjectUnref (
+    anyobj=<optimized out>) at util/virobject.c:262
+#10 0x00007fa127afdded in virDomainObjDispose (
+    obj=0x7fa110021fb0) at conf/domain_conf.c:2095
+#11 0x00007fa127abf2ab in virObjectUnref (
+    anyobj=anyobj@entry=0x7fa110021fb0)
+    at util/virobject.c:262
+#12 0x00007fa127aed278 in virDomainObjListRemove (
+    doms=0x7fa110071950, dom=dom@entry=0x7fa110021fb0)
+    at conf/domain_conf.c:2422
+#13 0x00007fa11a8a6ece in libxlDomainCreateXML (
+    conn=0x7fa10c0022c0, xml=<optimized out>, flags=0)
+    at libxl/libxl_driver.c:1388
+
+2), vnc could not open.
+get the wrong vncport. it should be 5900, but virt-viewer get 5903.
+TODO: it might be the bug in cmdVNCDisplay()(tools/virsh-domain.c).
 
 6, TODO
 add job in cdrom insert.
@@ -602,4 +686,5 @@ git archive --format zip -o $(git log --date=short --pretty=format:"%ad" -1).zip
 git archive --format tar HEAD | gzip foo.tar.gz
 (2), add prefix, very suitable for build service.
 git archive --format tar --prefix=xen-4.4 b18e2d96
+
 
