@@ -712,10 +712,17 @@ GTD
 0, 10:15
 
 1, today
-1), 
+1), 10:15-10:45 check the mail.
+bamvor: it takes so many time.
+2), 11:07-12:25 ao: talk with Jim. see"12:26 2013-12-13"
+3), 12:00-13:00 lunch and learning. see"12:27 2013-12-13"
+4), 30' children books.
+5), 14:14-17:40 snapshot. see"14:14 2013-12-13"
+interrupted by 5).
+6), 10' get guest ip. see"14:35 2013-12-13"
 
 10:18 2013-12-13
-company, suse, sle12, schdule, alpha1
+suse, sle12, schdule, alpha1
 1, bamvor: it seem that alpha1 for package check: whether the package is missing, or should not delivery.
 
 "Stefan Behlert <behlert@suse.de>"_email_"[devel] [ANNOUNCE] SLE 12 Alpha1 is available"_20131212_2310
@@ -777,4 +784,129 @@ for leaf packages:
 Happy testing!
 
 	Your SUSE Linux Enterprise Team
+
+12:26 2013-12-13
+explain why i need async and libxl_sigchld_owner_mainloop
+but if we do not use async. if we only use job. the same api(create, restore. or others) will be called at the same time. which will lead to sighandler_ctx conflict.
+
+Jim Fehlig: even if those are on different domains?
+e.g. create domA, restore domB
+
+yes. it is global varible. because there is only one sighandler.
+reference libxl__sigchld_installhandler
+    if (sigchld_owner != CTX) {
+        struct sigaction ours;
+
+        assert(!sigchld_owner);
+        sigchld_owner = CTX;
+
+i think this segment code lead to the segfault you mentioned in Sep.
+Jim Fehlig: hmm
+and it is only occurred when we have jobs.
+because if we do not have job, the api could only called one by one .
+Jim Fehlig: ok, starting to understand/remember :)
+this is the start point of my async work recently .
+i work on it, because i do not find any other solution about this assertion.
+and when i working on the async, i need to choice the between libxl_sigchld_owner_mainloop and libxl_sigchld_owner_libxl_always.
+at first, i want libxl lib could manage the child exit.
+Jim Fehlig: yes, understood
+but as Ian C mentioned in email. it is depend on only one ctx in the whole libvirt.  which is conflict with libxl driver.
+so, i could only use the mainloop.
+which lead to the SIGCHLD handler in libvirt. and libvirt do not want it.
+it usually use waitpid. so as to me.
+i use the waitpid wait all the child created by the same domain id.
+reference the code in ao_how_wait.
+0002-introduce-async-opeartion-in-libxl-driver-private.patch
+patch 0005-call-ao-functions.patch use the ao thing introduced in patch 0002-introduce-async-opeartion-in-libxl-driver-private..
+around patch 0005, 0003, 0004, 0006 focus on improve the ao things. i seperate these tree patches from patch 0005, it might be ealier to review.
+the last two patch only the rebase of your job patch.
+and from patch 2 to 8 is the whole thing about ao and job.
+patch 0001 is a bug fix. such bug is existed with or without ao and job. i think we could send it seperate and earlier.
+
+12:27 2013-12-13
+lunch and learn, QA, QA Quality & Statistics
+-- presented by Calen and Lance
+
+1, real: user + sys + io
+real: gettimeofday.
+user, sys: getrusage.
+
+2,
+1), wait for port 3019
+> time nc -l localhost 3019
+23
+
+real    0m2.840s
+user    0m0.000s
+sys     0m0.008s
+
+2), send info to 3019
+> echo 23 | nc localhost 3019
+
+3, standard deviation.
+
+13:52 2013-12-13
+children, learning
+sled@147.2.207.136:/home/jamie/ooo-test-repo/misc/others/videos/children_learning/Little_Blue_Truck/
+http://147.2.207.136/repo/misc/others/videos/children_learning/Little_Blue_Truck/
+
+14:14 2013-12-13
+libxl, snapshot
+1, Xen OPW project.
+it is not selected by OPW finally.
+1), VM Snapshots
+http://wiki.xen.org/wiki/OutreachProgramForWomen/Round7#VM_Snapshots
+Date of insert: 16/01/2013
+Mentor: Anthony Perard <anthony.perard@citrix.com>
+Difficulty: Medium
+Skills Needed: C programming
+Description: Although xl is capable of saving and restoring a running VM, it is not currently possible to create a snapshot of the disk together with the rest of the VM.
+QEMU is capable of creating, listing and deleting disk snapshots on QCOW2 and QED files, so even today, issuing the right commands via the QEMU monitor, it is possible to create disk snapshots of a running Xen VM. xl and libxl don't have any knowledge of these snapshots, don't know how to create, list or delete them.
+This project is about implementing disk snapshots support in libxl, using the QMP protocol to issue commands to QEMU. Users should be able to manage the entire life-cycle of their disk snapshots via xl.
+The candidate should also explore ways to integrate QEMU disk snapshots and disk mirroring into the regular Xen save/restore mechanisms and provide a solid implementation for xl/libxl.
+Outcomes:
+Basic goal: disk snapshots can be handled entirely by xl.
+Stretch goals: xl can automatically save a disk snapshot at the time of saving a VM. xl can also mirror the disk of a VM between two hosts and can do that automatically at the time of VM migration.
+Steps:
+Basic steps:
+Study libxl APIs for storage
+Study QEMU QMP commands for VM snapshots
+Implement support for QMP snapshots commands in libxl
+Implement VM snapshots functionalities in libxl using the QMP functions previously written
+Add VM snapshot commands to XL
+Stretch goals:
+Add VM snapshot functionalities to libxl save/restore and migration functions
+Evaluate QEMU QMP disk mirroring capabilities (QMP command "drive-mirror")
+Implement support for QMP drive-mirror command in libxl
+Hook disk mirroring into libxl VM save/restore and migration functions (migrating a VM from one host to another is also capable of migrating the VM disk from the two hosts).
+
+2, plan
+1), follow the steps above, try the basic step.
+
+3, write a test code.
+but qmp test fail.
+libxl: error: libxl_qmp.c:315:qmp_handle_error_response: received an error message from QMP server: The command savevm has not been found
+
+14:35 2013-12-13
+software skill, network, get guest ip address, nmap; arp
+1, nmap, ref"15:13 2012-11-22"1
+SLES11Host:~ # nmap -sP -n 147.2.207.0/24 | grep 93 -B 1
+Host 147.2.207.79 appears to be up.
+MAC Address: 00:19:D1:E8:93:35 (Intel)
+--
+Host 147.2.207.123 appears to be up.
+MAC Address: 52:54:00:42:54:93 (QEMU Virtual NIC)
+--
+Host 147.2.207.134 appears to be up.
+MAC Address: 52:54:00:F6:C0:93 (QEMU Virtual NIC)
+--
+Host 147.2.207.156 appears to be up.
+MAC Address: 00:21:70:93:B7:2D (Dell)
+--
+MAC Address: 78:2B:CB:7F:FD:3B (Unknown)
+Host 147.2.207.193 appears to be up.
+
+2, arp
+SLES11Host:~ # arp -a | grep 93
+? (147.2.207.134) at 52:54:00:f6:c0:93 [ether] on br0
 
