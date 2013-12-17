@@ -996,3 +996,101 @@ GTD
 software skill, suse, tools, fate
 http://download.opensuse.org/repositories/FATE/openSUSE_12.3/
 
+12:47 2013-12-17
+mailing list, virtualization, qemu
+1,
+[Qemu-devel] [PATCH 5/7] hw/arm/boot: Allow easier swapping in of differ
+http://lists.gnu.org/archive/html/qemu-devel/2013-11/msg03741.html
+For AArch64 we will obviously require a different set of
+primary and secondary boot loader code fragments. However currently
+we hardcode the offsets into the loader code where we must write
+the entrypoint and other data into arm_load_kernel(). This makes it
+hard to substitute a different loader fragment, so switch to a more
+flexible scheme where instead of a raw array of instructions we use
+an array of (instruction, fixup-type) pairs that indicate which
+words need special action or data written into them.
+
+Signed-off-by: Peter Maydell <address@hidden>
+---
+hw/arm/boot.c |  152 ++++++++++++++++++++++++++++++++++++++++-----------------
+1 file changed, 107 insertions(+), 45 deletions(-)
+
+diff --git a/hw/arm/boot.c b/hw/arm/boot.c
+index 55d552f..77d29a8 100644
+--- a/hw/arm/boot.c
++++ b/hw/arm/boot.c
+@@ -20,15 +20,33 @@
+#define KERNEL_ARGS_ADDR 0x100
+#define KERNEL_LOAD_ADDR 0x00010000
+
++typedef enum {
++    FIXUP_NONE = 0,   /* do nothing */
++    FIXUP_TERMINATOR, /* end of insns */
++    FIXUP_BOARDID,    /* overwrite with board ID number */
++    FIXUP_ARGPTR,     /* overwrite with pointer to kernel args */
++    FIXUP_ENTRYPOINT, /* overwrite with kernel entry point */
++    FIXUP_GIC_CPU_IF, /* overwrite with GIC CPU interface address */
++    FIXUP_BOOTREG,    /* overwrite with boot register address */
++    FIXUP_DSB,        /* overwrite with correct DSB insn for cpu */
++    FIXUP_MAX,
++} FixupType;
++
++typedef struct ARMInsnFixup {
++    uint32_t insn;
++    FixupType fixup;
++} ARMInsnFixup;
++
+/* The worlds second smallest bootloader.  Set r0-r2, then jump to kernel.  */
+-static uint32_t bootloader[] = {
+-  0xe3a00000, /* mov     r0, #0 */
+-  0xe59f1004, /* ldr     r1, [pc, #4] */
+-  0xe59f2004, /* ldr     r2, [pc, #4] */
+-  0xe59ff004, /* ldr     pc, [pc, #4] */
+-  0, /* Board ID */
+-  0, /* Address of kernel args.  Set by integratorcp_init.  */
+-  0  /* Kernel entry point.  Set by integratorcp_init.  */
++static const ARMInsnFixup bootloader[] = {
++    { 0xe3a00000 }, /* mov     r0, #0 */
++    { 0xe59f1004 }, /* ldr     r1, [pc, #4] */
++    { 0xe59f2004 }, /* ldr     r2, [pc, #4] */
++    { 0xe59ff004 }, /* ldr     pc, [pc, #4] */
++    { 0, FIXUP_BOARDID },
++    { 0, FIXUP_ARGPTR },
++    { 0, FIXUP_ENTRYPOINT },
++    { 0, FIXUP_TERMINATOR }
+ };
+
+12:51 2013-12-17
+GTD
+0, 11:20-17:45
+
+1, today
+1), 20' 15:15-15:52 help Liuhua WANG about git. see"15:48 2013-12-17"
+2), 12:26-12:51 arm. see"12:26 2013-12-17"
+3), 13:00-15:15 English training.
+4), 15:59-17:40 try savevm qmp.
+
+15:48 2013-12-17
+software skill, SCM, git, delete remote branch
+1,
+git push remote_name --delete branch_name
+git push remote_name :branch_name
+2, git push need write pemission, so a ssh git remote url is needed, e.g. if you work in github.
+if use the https://xxx, git push will not reply(git push hang).
+
+16:30 2013-12-17
+qmp
+1, there is no savevm qmp according to libvirt qemu driver.
+2, qmp-commands.hx
+i could use tranaction for block device snapshot.
+-> { "execute": "transaction",
+     "arguments": { "actions": [
+         { 'type': 'blockdev-snapshot-sync', 'data' : { "device": "ide-hd0",
+                                         "snapshot-file": "/some/place/my-image",
+                                         "format": "qcow2" } },
+        { 'type': 'blockdev-snapshot-sync', 'data' : { "device": "ide-hd1",
+                                         "snapshot-file": "/some/place/my-image2",
+                                         "mode": "existing",
+                                         "format": "qcow2" } } ] } }
+<- { "return": {} }
+
