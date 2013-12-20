@@ -832,6 +832,7 @@ Happy testing!
 	Your SUSE Linux Enterprise Team
 
 12:26 2013-12-13
+libxl, ao
 explain why i need async and libxl_sigchld_owner_mainloop
 but if we do not use async. if we only use job. the same api(create, restore. or others) will be called at the same time. which will lead to sighandler_ctx conflict.
 
@@ -1095,10 +1096,15 @@ i could use tranaction for block device snapshot.
 <- { "return": {} }
 
 22:50 2013-12-17
+(12:43 2013-12-19)
+
 arm arch.
 virtualization extension. 32 and 64 bit.
 compare with x86. ept, iommu. pv driver.
 arm special concern: 1:1 work around.
+    dom0 1:1 map and system MMU?
+    is dom0 1:1 map a work around?
+    DMA
 cubietruck practice.
 cpu, device driver.
 demo?
@@ -1396,4 +1402,152 @@ i would like to join:
 https://www.coursera.org/course/algs4partII
 https://www.udacity.com/courses#!/advanced
 https://www.udacity.com/courses#!/intermediate
+
+12:24 2013-12-19
+mailing list, virtualization, xen, debug; howto
+Jin_reply_Simon_"Re: [virtualization-xen] xen hosts hanging"_20131218_1819
+>>> On 18.12.13 at 11:03, Simon Crute <scrute@novell.com> wrote:
+> I've got several xen hosts which I recently upgraded to fully patched
+> sles11-sp3.
+> So far, I've had two of them hang completely, requiring a power cycle to
+> bring them back.
+>
+> There's nothing in the logs indicating why they stop responding.
+>
+> The servers are HP blades, and are remote to me, so there's no easy way
+> of seeing if there are any keyboard lights flashing.
+>
+> Does anyone have any ideas where to start on trouble shooting this if it
+> happens again ?
+
+Attach a serial console and see whether there's anything useful
+being printed there (like for a hypervisor or kernel crash), and if
+not make use of the hypervisor debug keys ('d' and/or '0' are
+going to be your first choice).
+
+Jan
+
+12:42 2013-12-19
+GTD
+0, 11:20
+
+1, today
+1), 30' lunch.
+2), 12:43-13:56 re-send ao patch to Jim.
+3), 14:04- write doc for ouros.
+
+12:46 2013-12-19
+software skill, SCM, git, format-patch, commit range
+1, direct use a commit number mean after that commit to HEAD
+> git format-patch 6732130ccd896
+0001-introduce-async-opeartion-in-libxl-driver-private.patch
+0002-improve-ao-handle-shutdown-event-in-thread.patch
+0003-move-libxl_event_register_callbacks-before-libxl_dom.patch
+0004-call-ao-functions.patch
+0005-avoid-use-ao-in-autostart-domain.patch
+0006-libxl-Add-job-support-to-libxl-driver.patch
+0007-libxl-Use-job-functions-in-long-running-operations.patch
+2, if add a "^" after commit, it means including such commit.
+e.g. commit 6732130ccd896 is fix-segfault-when-domain-create-fail
+> git format-patch 6732130ccd896^
+0001-fix-segfault-when-domain-create-fail.patch
+0002-introduce-async-opeartion-in-libxl-driver-private.patch
+0003-improve-ao-handle-shutdown-event-in-thread.patch
+0004-move-libxl_event_register_callbacks-before-libxl_dom.patch
+0005-call-ao-functions.patch
+0006-avoid-use-ao-in-autostart-domain.patch
+0007-libxl-Add-job-support-to-libxl-driver.patch
+0008-libxl-Use-job-functions-in-long-running-operations.patch
+3, ""2 is the same as the follows:
+> git format-patch 6732130ccd896^..HEAD
+0001-fix-segfault-when-domain-create-fail.patch
+0002-introduce-async-opeartion-in-libxl-driver-private.patch
+0003-improve-ao-handle-shutdown-event-in-thread.patch
+0004-move-libxl_event_register_callbacks-before-libxl_dom.patch
+0005-call-ao-functions.patch
+0006-avoid-use-ao-in-autostart-domain.patch
+0007-libxl-Add-job-support-to-libxl-driver.patch
+0008-libxl-Use-job-functions-in-long-running-operations.patch
+
+12:57 2013-12-19
+libxl, ao, patch, commit message
+1, cover letter
+introduction async operation and job for operation differerent
+domain at the same time
+
+the patch base on the Cédric patches:
+commit a5a484ddfcf5a8c24bc875ce6e5ba577679a11a9
+Author: Cédric Bosdonnat <cbosdonnat@suse.com>
+Date:   Wed Dec 11 11:38:04 2013 +0100
+
+this series patches includes three parts.
+the first part is 0001-fix-segfault-when-domain-create-fail.patch
+it is a bug fix. such bug is existed with or without ao and job.
+i think we could send it seperate and earlier.
+
+the second part is
+0002-introduce-async-opeartion-in-libxl-driver-private.patch
+0003-improve-ao-handle-shutdown-event-in-thread.patch
+0004-move-libxl_event_register_callbacks-before-libxl_dom.patch
+0005-call-ao-functions.patch
+0006-avoid-use-ao-in-autostart-domain.patch
+
+patch 0005 use the ao thing introduced in patch 0002.
+around patch 0005, 0003, 0004, 0006 focus on improve the ao
+things. i seperate these tree patches from patch 0005, it might
+be ealier to review.
+
+the third part is
+0007-libxl-Add-job-support-to-libxl-driver.patch
+0008-libxl-Use-job-functions-in-long-running-operations.patch
+this is the rebase for Jim Job patch.
+
+explain why i need async and libxl_sigchld_owner_mainloop
+if we do not use async. if we only use job. the same api(create,
+restore. or others) will be called at the same time. which
+will lead to libxl__sigchld_installhandler conflict.
+
+even if those are on different domains, because
+libxl__sigchld_installhandler is a global varible.(there is only
+one sighandler). reference libxl__sigchld_installhandler
+    if (sigchld_owner != CTX) {
+        struct sigaction ours;
+
+        assert(!sigchld_owner);
+        sigchld_owner = CTX;
+
+i think this segment code lead to the segfault Jim mentioned in
+Sep. and it is only occurred when we have jobs.
+because if we do not have job, the api would be protected by
+ctx lock.
+
+this is the start point of my async work recently .
+i work on it, because i do not find any other solution about
+this assertion. and when i working on the async, i need to
+choice the between libxl_sigchld_owner_mainloop and
+libxl_sigchld_owner_libxl_always.
+
+at first, i want libxl lib could manage the child exit.
+but as Ian C mentioned in email. it is depend on only one ctx
+in the whole libvirt.  which is conflict with libxl driver. so,
+i could only use the mainloop.
+which lead to add the SIGCHLD handler in libvirt. and libvirt
+do not want it. it usually use waitpid for specific process.
+so as to me. i use the waitpid wait all the child created by
+the its own domain id. reference the code in ao_how_wait.
+
+2, extra explanation for patch 0002
+i am not put the child_info as something like global variable
+because in that case, libvirt need to remember pid and domain
+pair. And if the waitpid wait the pid from other domain, it
+would lead to other ao_how_wait deadloop because do not reaped
+the proper child with the proper ctx(remember such ctx is domain
+ctx not the driver ctx, because we use the domain ctx for domain
+api calls, e.g. create, save...)
+
+and child info does not related to another domain. because each
+domain register its own libxl_childproc_setmode function in
+libxlDomainObjPrivateInitCtx, so as to the libxl_fork_replacement
+function. child_info in each libxlDomainObjPrivate only save the
+pid create from its own libxl_fork_replacement.
 
