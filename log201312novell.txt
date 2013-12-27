@@ -1907,10 +1907,108 @@ bamvor: 我理解是这个管理机器连接到路由器上, 子网mask: 255.255
 
 17:52 2013-12-26
 reference
-1, http://www.linaro.org/documents/download/d7fe510d8eb46775afc3953d217b15224fbb93086598a
+1, ARM Virtualization Extension
+http://www.linaro.org/documents/download/d7fe510d8eb46775afc3953d217b15224fbb93086598a
 2, arm hypervisor
 http://www.xenproject.org/developers/teams/arm-hypervisor.html
 3, xen-on-arm-xen-summit-2013
 http://www.slideshare.net/xen_com_mgr/xen-on-arm-xen-summit-2013-v2?ref=http://www.slideshare.net/slideshow/embed_code/27891570?rel=0
 4, docs/misc/arm/booting.txt
+
+21:01 2013-12-26
+xen, arm, cubietruck
+1, hang if use this patch
+From 3e52e08e7f8f9cb1137f232e3bfa00f89ed27475 Mon Sep 17 00:00:00 2001
+From: Maxime Ripard <maxime.ripard@free-electrons.com>
+Date: Sat, 7 Dec 2013 12:38:32 +0100
+Subject: [PATCH 23/26] ARM: sun7i: dt: Fix interrupt trigger types
+
+The Allwinner A20 uses the ARM GIC as its internal interrupts controller. The
+GIC can work on several interrupt triggers, and the A20 was actually setting it
+up to use a rising edge as a trigger, while it was actually a level high
+trigger, leading to some interrupts that would be completely ignored if the
+edge was missed.
+
+-                   interrupts = <0 1 1>;
++                   interrupts = <0 1 4>;
+
+2, read the code, how domain0 use the memory provided by xen.
+from write_pte(page.h).
+    /* Safely write the entry (STRD is atomic on CPUs that support LPAE) */
+    "strd %0, %H0, [%1];"
+
+TODO
+
+3, Failed to start udev Kernel Device Manager.
+enable systemd debug log according to "man systemd"
+bamvor@laptop-work:systemd> diff -urN system.conf.old system.conf
+--- system.conf.old     2013-02-23 01:02:53.000000000 +0800
++++ system.conf 2013-12-26 21:54:51.625739296 +0800
+@@ -8,7 +8,7 @@
+ # See systemd.conf(5) for details
+
+ [Manager]
+ -#LogLevel=info
+ +LogLevel=debug
+  #LogTarget=journal-or-kmsg
+  #LogColor=yes
+  #LogLocation=no
+
+1), no pemission?
+[^[[1;32m  OK  ^[[0m] Started udev Kernel Device Manager.^M^M
+[    6.013759] systemd[1]: Started udev Kernel Device Manager.^M^M
+[    6.020663] systemd[1]: Child 72 died (code=exited, status=4/NOPERMISSION)^M^M
+[    6.028185] systemd[1]: Child 72 belongs to systemd-udevd.service^M^M
+[    6.034279] systemd[1]: systemd-udevd.service: main process exited, code=exited, status=4/NOPERMISSION^M^M
+
+(1), this may be useful
+Starting udev Kernel Device Manager...^M^M
+[    5.502920] systemd[1]: About to execute /usr/lib/systemd/systemd-udevd^M^M
+[    5.511503] systemd[1]: Forked /usr/lib/systemd/systemd-udevd as 72^M^M
+
+(2), 反复想了想, 应该是我把kernel netlink关了造成的.
+但是对比kernel配置文件, 我只关闭了QUOTA, QUOTA_NETLINK似乎没有影响.
+(3), successful: re-create the .config, copy from work kernel config(without xen hypervior).
+enable xen and backend driver.
+opensuse boot successful, mmc and network works.
+\TODO: check the kernel difference.
+
+13:20 2013-12-27
+sysctrl enable
+
+15:14 2013-12-27
+Boyang help me dig in about the 1G byte network in my laptop.
+the bottleneck is cpu:
+single scp file: 23M
+dual scp file: 20+20.
+each scp use one cpu core.
+
+17:42 2013-12-27
+1, how to use nfs root
+chosen {
+    bootargs = "dom0_mem=512M sync_console console=dtuart dtuart=serial0";
+    xen,dom0-bootargs = "console=hvc0 debug ignore_loglevel rw rootwait earlyprintk=xen clk_ignore_unused root=/dev/mmcblk0p2";
+    modules {
+        module@0 {
+            compatible = "xen,linux-zimage", "xen,multiboot-module";
+            reg = <0x50000000 0xf00000>;
+        };
+    };
+};
+
+1), hang after nfs boot:
+[  OK  ] Reached target Login Prompts.
+Welcome to openSUSE 12.3 "Dartmouth" - Kernel 3.13.0-rc2+ (hvc0).
+linux login:          Starting Authorization Manager...
+[  OK  ] Started Authorization Manager.
+[  OK  ] Started Network Manager.
+         Starting Network Manager Wait Online...
+2), remove network script, it worked:
+/etc/init.d/network
+
+3), re-try boot domU.
+
+18:45 2013-12-27
+GTD
+0, 11:00-18:50
 
