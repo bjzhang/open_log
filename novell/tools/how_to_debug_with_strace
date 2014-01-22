@@ -1,0 +1,59 @@
+from: http://lists.xen.org/archives/html/xen-devel/2014-01/msg01553.html
+
+To check that this was doing roughly the right things, I straced xl.
+
+Here is what it does before the first time libxl wants to fork:
+
+ pipe([17, 18])                          = 0
+ rt_sigaction(SIGCHLD, {0xb76ad507, [], SA_RESTART|SA_NOCLDSTOP}, {SIG_DFL, [], 
+0}, 8) = 0
+ rt_sigaction(SIGCHLD, {0xb76ad150, [], SA_RESTART|SA_NOCLDSTOP}, NULL, 8) = 0
+ rt_sigaction(SIGCHLD, {0xb76ad507, [], SA_RESTART|SA_NOCLDSTOP}, NULL, 8) = 0
+ clone(child_stack=0, flags=CLONE_CHILD_CLEARTID|CLONE_CHILD_SETTID|SIGCHLD, 
+child_tidptr=0xb744a978) = 10033
+
+That seems about right.  (It does leak the self-pipe into the child
+but that is of no consequence.)
+
+
+Here is what is happens in the parent when the child exits:
+
+  --- SIGCHLD (Child exited) @ 0 (0) ---
+  write(18, "\0", 1)                      = 1
+  sigreturn()                             = ? (mask now [])
+  gettimeofday({1389975566, 501125}, NULL) = 0
+  poll([{fd=17, events=POLLIN}, {fd=7, events=POLLIN}, {fd=7, events=POLLIN}], 
+3, -1) = 1 ([{fd=17, revents=POLLIN}])
+  gettimeofday({1389975566, 501571}, NULL) = 0
+  read(17, "\0", 256)                     = 1
+  waitpid(-1, [{WIFEXITED(s) && WEXITSTATUS(s) == 0}], WNOHANG) = 10033
+
+That looks mostly right for the libxl child handling except that there
+are two instances of {fd=7, events=POLLIN}.  I'm going to investigate
+what that is and why it might be happening, starting by trying to
+figure out what fd 7 is.
+
+The trace then continues:
+
+  close(14)                               = 0
+  close(15)                               = 0
+  close(12)                               = 0
+  munmap(0xb766a000, 4096)                = 0
+  close(11)                               = 0
+
+I think that is the migration ao and its fds etc. being torn down.
+
+  write(10, "\0", 1)                      = 1
+
+This is the poller wakeup for ao completion.
+
+  rt_sigaction(SIGCHLD, {0xb76ad150, [], SA_RESTART|SA_NOCLDSTOP}, NULL, 8) = 0
+  rt_sigaction(SIGCHLD, {0xb76ad507, [], SA_RESTART|SA_NOCLDSTOP}, NULL, 8) = 0
+  rt_sigaction(SIGCHLD, {SIG_DFL, [], 0}, {0xb76ad507, [], 
+SA_RESTART|SA_NOCLDSTOP}, 8) = 0
+
+And here libxl removes the ctx from the SIGCHLD users: the first two
+sigaction calls are from the defer and release, and the final one
+restores the application's default handler.
+
+Ian.
