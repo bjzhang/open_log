@@ -509,6 +509,123 @@ Specjbb
 
 CSS: Cloud & systems management
 
+17:45 2014-01-24
+"Andrew Wafaa <awafaa@opensuse.org>"_email_"[opensuse-virtual] Issues building Xen on ARM"_20140123_2245
+1, 
+Hi,
+
+I'm trying to package Xen for both armv7l and aarch64 architectures,
+and have managed to fix a couple of issues (max_cpu differes on ARM to
+x86 and xenalyze is x86 specific). Problem is I'm now stuck at the
+install stage.
+
+The current error I'm getting is:
+[  597s] install -m0644 -p
+/home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen/xen-syms
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/boot/xen-syms-4.4.0_02-0
+[  598s] if [ -r
+/home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen/xen.efi -a -n '' ];
+then \
+[  598s] [ -d /home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm ] ||
+install -d -m0755 -p
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm; \
+[  598s] install -m0644 -p
+/home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen/xen.efi
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/xen-4.4.0_02-0.efi;
+\
+[  598s] ln -sf xen-4.4.0_02-0.efi
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/xen-4.4.efi; \
+[  598s] ln -sf xen-4.4.0_02-0.efi
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/xen-4.efi; \
+[  598s] ln -sf xen-4.4.0_02-0.efi
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/xen.efi; \
+[  598s] if [ -n '/boot/efi' -a -n '' ]; then \
+[  598s] install -m0644 -p
+/home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen/xen.efi
+/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/boot/efi/efi//xen-4.4.0_02-0.efi;
+\
+[  598s] elif [ "/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm" =
+"/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm" ]; then \
+[  598s] echo 'EFI installation only partially done (EFI_VENDOR not set)' >&2; \
+[  598s] fi; \
+[  598s] fi
+[  598s] make[1]: Leaving directory
+'/home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen'
+[  598s] make: Leaving directory
+'/home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen'
+[  598s] + install_xen
+[  598s] + local ext=
+[  598s] + '[' -n '' ']'
+[  598s] + rm /home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/boot/xen-4.4.gz
+[  598s] rm: cannot remove
+'/home/abuild/rpmbuild/BUILDROOT/xen-4.4.0_02-0.arm/boot/xen-4.4.gz':
+No such file or directory
+
+Looking at the spec file, the section in question has:
+%ifarch x86_64 %arm aarch64
+make -C xen install \
+%if %{?with_gcc46}0
+CC=gcc-4.6 \
+%endif
+max_phys_cpus=%{max_cpus} debug=n crash_debug=n
+DESTDIR=$RPM_BUILD_ROOT %{?_smp_mflags}
+make -C xen clean
+install_xen()
+{
+    local ext=""
+    if [ -n "$1" ]; then
+        ext="-$1"
+        mv $RPM_BUILD_ROOT/boot/xen-%{version}-%{release}.gz \
+           $RPM_BUILD_ROOT/boot/xen${ext}-%{version}-%{release}.gz
+        mv $RPM_BUILD_ROOT/boot/xen-syms-%{version}-%{release} \
+           $RPM_BUILD_ROOT/boot/xen-syms${ext}-%{version}-%{release}
+    fi
+    rm $RPM_BUILD_ROOT/boot/xen-%{xvers}.gz
+    rm $RPM_BUILD_ROOT/boot/xen-%{xvermaj}.gz
+    rm $RPM_BUILD_ROOT/boot/xen.gz
+    # Do not link to links; grub cannot follow.
+    ln -s xen${ext}-%{version}-%{release}.gz
+$RPM_BUILD_ROOT/boot/xen${ext}-%{xvers}.gz
+    ln -s xen${ext}-%{version}-%{release}.gz
+$RPM_BUILD_ROOT/boot/xen${ext}-%{xvermaj}.gz
+    ln -s xen${ext}-%{version}-%{release}.gz $RPM_BUILD_ROOT/boot/xen${ext}.gz
+    ln -sf xen-syms${ext}-%{version}-%{release}
+$RPM_BUILD_ROOT/boot/xen-syms${ext}
+}
+
+So the architectures are being specified, but the files don't exist.
+Anyone got any pointers as to what I need to do? For the full build
+log and to see my spec file, see my branch[0].
+
+Many thanks,
+Andy
+
+0 - https://build.opensuse.org/package/show/home:FunkyPenguin:branches:Virtualization/xen
+-- 
+To unsubscribe, e-mail: opensuse-virtual+unsubscribe@opensuse.org
+To contact the owner, e-mail: opensuse-virtual+owner@opensuse.org
+
+2, reply
+Hi, Andrew
+
+
+currently, xen on arm use u-boot for loading itself so as to kernel. but the address is depends on the platform, e.g.
+for arm Vexpress, Arndale
+mkimage -A arm -T kernel -a 0x40200000 -e 0x40200000 -C none -d "xen/xen" xen-uImage
+for allwinner A20/A31:
+mkimage -A arm -T kernel -a 0x40200000 -e 0x40200000 -C none -d "xen/xen" xen-uImage
+
+where xen/xen is build at:
+[ 1623s] objcopy -O binary -S /home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen/xen-syms /home/abuild/rpmbuild/BUILD/xen-4.4.0-testing/xen/xen
+
+so, how about leave the "xen/xen" binary until the actually installation?
+
+reference: http://wiki.xenproject.org/wiki?title=Xen_ARM_with_Virtualization_Extensions
+
+regards
+
+bamvor
+
 10:01 2014-01-26
 software skill, Linux, audio, mp3 infor converter, mid3iconv
 reference: http://wiki.ubuntu.org.cn/Amarok#mp3.E4.BF.A1.E6.81.AF.E4.B9.B1.E7.A0.81
