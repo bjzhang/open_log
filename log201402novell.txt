@@ -463,3 +463,291 @@ GTD
 1), 10:00-11:40 kernel training: basic knowledge.
 2), 14:00-16:40 kernel training: network
 
+10:01 2014-02-18
+kernel training, devices and drivers; summary, doc, useful file and commands
+0, Summary
+1), tools: "lspci -s xx:xx.x -v", modinfo
+2), files: "/proc/interrupts"
+1, driver: translate one layer to another layer.
+e.g. emu 10k1(drivers/input/gameport/emu10k1-gp.c): translate from pci layer to gameport layer.
+2, lspci:
+laptop-work:/home/bamvor # lspci -s 09:00.0 -v
+09:00.0 Ethernet controller: Broadcom Corporation NetXtreme BCM5761e Gigabit Ethernet PCIe (rev 10)
+        Subsystem: Dell Device 0432
+        Flags: bus master, fast devsel, latency 0, IRQ 53
+        Memory at f65e0000 (64-bit, non-prefetchable) [size=64K]
+        Memory at f65f0000 (64-bit, non-prefetchable) [size=64K]
+        Capabilities: [48] Power Management version 3
+        Capabilities: [40] Vital Product Data
+        Capabilities: [60] Vendor Specific Information: Len=6c <?>
+        Capabilities: [50] MSI: Enable+ Count=1/1 Maskable- 64bit+
+        Capabilities: [cc] Express Endpoint, MSI 00
+        Capabilities: [100] Advanced Error Reporting
+        Capabilities: [13c] Virtual Channel
+        Capabilities: [160] Device Serial Number 00-26-b9-ff-fe-69-16-37
+        Capabilities: [16c] Power Budgeting <?>
+        Kernel driver in use: tg3
+3, DMA
+DMA, BM; Scatter-Gather(SG, SGIO).
+4, interrupt
+1), history
+(1), 8259 PIC
+edge triggered.
+(2), APIC
+edge triggered, level triggered, fasteoi.
+(3), MSI, MSI-X.
+delivered as messages over PCI or PCIe bus.
+
+2), list interrupt in my desktop.
+# cat /proc/interrupts
+           CPU0       CPU1       CPU2       CPU3       CPU4       CPU5       CPU6       CPU7
+  0:        122          0          0          0          0          0          0          0  IR-IO-APIC-edge      timer
+  1:          3          0          0          0          0          0          0          0  IR-IO-APIC-edge      i8042
+  8:          1          0          0          0          0          0          0          0  IR-IO-APIC-edge      rtc0
+  9:          0          0          0          0          0          0          0          0  IR-IO-APIC-fasteoi   acpi
+ 12:          4          0          0          0          0          0          0          0  IR-IO-APIC-edge      i8042
+ 16:         28          0          0          0          0          0          0          0  IR-IO-APIC-fasteoi   ehci_hcd:usb1
+ 17:     358734          0          0          0          0          0          0          0  IR-IO-APIC-fasteoi   ehci_hcd:usb2
+ 40:          0          0          0          0          0          0          0          0  DMAR_MSI-edge      dmar0
+ 42:     942635          0          0          0          0          0          0          0  IR-PCI-MSI-edge      ahci
+ 43:    2107729          0          0          0          0          0          0          0  IR-PCI-MSI-edge      radeon
+ 44:         25          0          0          0          0          0          0          0  IR-PCI-MSI-edge      mei
+ 45:    6025751          0          0          0          0          0          0          0  IR-PCI-MSI-edge      em1
+ 46:        733          0          0          0          0          0          0          0  IR-PCI-MSI-edge      snd_hda_intel
+NMI:       1863       1392       1162       1257        373        346        354        454   Non-maskable interrupts
+LOC:    5754690    4714652    4318947    4500641    1405557    1069221    1157511    1121507   Local timer interrupts
+SPU:          0          0          0          0          0          0          0          0   Spurious interrupts
+PMI:       1863       1392       1162       1257        373        346        354        454   Performance monitoring interrupts
+IWI:          0          0          0          0          0          0          0          0   IRQ work interrupts
+RTR:          0          0          0          0          0          0          0          0   APIC ICR read retries
+RES:    2332990     889409      46541      16955      10556       8518       7900       7987   Rescheduling interrupts
+CAL:       2278       7837       8103       7254       7344       8285       8297       8396   Function call interrupts
+TLB:     119932     120889     114599     101929      54884      53147      51631      56574   TLB shootdowns
+TRM:          0          0          0          0          0          0          0          0   Thermal event interrupts
+THR:          0          0          0          0          0          0          0          0   Threshold APIC interrupts
+MCE:          0          0          0          0          0          0          0          0   Machine check exceptions
+MCP:       1149       1149       1149       1149       1149       1149       1149       1149   Machine check polls
+ERR:          0
+MIS:          0
+3), it could be for diagnose. if a hardware works wrong, the interrupt counter will not increase.
+
+5, the difference between PCI and PCIe
+1), PCI is parallel, PCIe is serial.
+2), the lane is given to the specific pcie devices. compare with PCI, the bandwidth is shared.
+
+6, examples: emu 10k1(drivers/input/gameport/emu10k1-gp.c): translate from pci layer to gameport layer.
+
+7, examples: /dev/null(drivers/char/mem.c)
+1), the major number of mem device is 1.
+# cat /proc/devices | head
+Character devices:
+  1 mem
+  4 /dev/vc/0
+  4 tty
+  5 /dev/tty
+  5 /dev/console
+  5 /dev/ptmx
+  7 vcs
+ 10 misc
+ 13 input
+
+8, examples: usb printer
+drivers/usb/class/usblp.c
+1), modinfo usblp
+# modinfo usblp
+filename:       /lib/modules/3.7.10-1.16-xen/kernel/drivers/usb/class/usblp.ko
+license:        GPL
+description:    USB Printer Device Class driver
+author:         Michael Gee, Pavel Machek, Vojtech Pavlik, Randy Dunlap, Pete Zaitcev, David Paschal
+srcversion:     BD8A318D5C286F1E78768B9
+alias:          usb:v04B8p0202d*dc*dsc*dp*ic*isc*ip*in*
+alias:          usb:v*p*d*dc*dsc*dp*ic07isc01ip03in*
+alias:          usb:v*p*d*dc*dsc*dp*ic07isc01ip02in*
+alias:          usb:v*p*d*dc*dsc*dp*ic07isc01ip01in*
+alias:          usb:v*p*d*dc07dsc01dp03ic*isc*ip*in*
+alias:          usb:v*p*d*dc07dsc01dp02ic*isc*ip*in*
+alias:          usb:v*p*d*dc07dsc01dp01ic*isc*ip*in*
+depends:        usbcore
+intree:         Y
+vermagic:       3.7.10-1.16-xen SMP mod_unload modversions Xen
+parm:           proto_bias:Favourite protocol number (int)
+
+2), urb: usb request block.
+
+9, examples: network
+drivers/net/ethernet/dec/tulip/dmfe.c
+DMA_BIT_MASK(32): if the system do not support iommu or software mmu, it will fail.
+
+10, QA
+1), spin_lock_irqsave/spin_lock_irqrestore: save the irq status before the spin_lock_irqsave and restore it after irqrestore.
+
+11:46 2014-02-18
+linux, kernel, how the avoid the useless mismatch check
+/*
+ * modpost check for section mismatches during the kernel build.
+ * A section mismatch happens when there are references from a
+ * code or data section to an init section (both code or data).
+ * The init sections are (for most archs) discarded by the kernel
+ * when early init has completed so all such references are potential bugs.
+ * For exit sections the same issue exists.
+ *
+ * The following markers are used for the cases where the reference to
+ * the *init / *exit section (code or data) is valid and will teach
+ * modpost not to issue a warning.  Intended semantics is that a code or
+ * data tagged __ref* can reference code or data from init section without
+ * producing a warning (of course, no warning does not mean code is
+ * correct, so optimally document why the __ref is needed and why it's OK).
+ *
+ * The markers follow same syntax rules as __init / __initdata.
+ */
+#define __ref            __section(.ref.text) noinline
+#define __refdata        __section(.ref.data)
+#define __refconst       __constsection(.ref.rodata)
+
+13:56 2014-02-18
+ref: https://www.soljerome.com/blog/2011/05/07/using-kpartx-to-read-lvm-volumes/
+https://www.centos.org/docs/5/html/Virtualization-en-US/ch-virt-accessing-data.html
+kpartx
+SLES11Host:~ # vgdisplay
+  Couldn't find device with uuid TYfh5v-TB0B-T3O2-izta-KUfO-n8I7-KPDH3d.
+  Skipping clustered volume group cluster-vg
+  --- Volume group ---
+  VG Name               vg_sdb
+  System ID
+  Format                lvm2
+  Metadata Areas        3
+  Metadata Sequence No  4
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                3
+  Open LV               3
+  Max PV                0
+  Cur PV                3
+  Act PV                3
+  VG Size               299.99 GiB
+  PE Size               4.00 MiB
+  Total PE              76797
+  Alloc PE / Size       7680 / 30.00 GiB
+  Free  PE / Size       69117 / 269.99 GiB
+  VG UUID               2JIYA5-25ne-TX0I-Yjpa-OKsH-3W0K-mLqZcL
+
+  --- Volume group ---
+  VG Name               vg_vm
+  System ID
+  Format                lvm2
+  Metadata Areas        2
+  Metadata Sequence No  24
+  VG Access             read/write
+  VG Status             resizable
+  MAX LV                0
+  Cur LV                14
+  Open LV               3
+  Max PV                0
+  Cur PV                2
+  Act PV                2
+  VG Size               199.99 GiB
+  PE Size               4.00 MiB
+  Total PE              51198
+  Alloc PE / Size       35840 / 140.00 GiB
+  Free  PE / Size       15358 / 59.99 GiB
+  VG UUID               1NynGW-NPcm-io8F-kFnq-Ru9U-6W2b-N34IQ3
+
+# kpartx --help
+kpartx: invalid option -- '-'
+usage : kpartx [-a|-d|-l] [-f] [-v] wholedisk
+        -a add partition devmappings
+        -r devmappings will be readonly
+        -d del partition devmappings
+        -u update partition devmappings
+        -l list partitions devmappings that would be added by -a
+        -p set device name-partition number delimiter
+        -g force GUID partition table (GPT)
+        -f force devmap create
+        -v verbose
+        -s sync mode. Don't return until the partitions are created
+
+# fdisk -l /dev/vg_vm/lv_vm4
+
+Disk /dev/vg_vm/lv_vm4: 10.7 GB, 10737418240 bytes
+255 heads, 63 sectors/track, 1305 cylinders, total 20971520 sectors
+Units = sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disk identifier: 0x00004fe2
+
+             Device Boot      Start         End      Blocks   Id  System
+/dev/vg_vm/lv_vm4p1            2048     2297855     1147904   82  Linux swap / Solaris
+/dev/vg_vm/lv_vm4p2   *     2297856    18745343     8223744   83  Linux
+/dev/vg_vm/lv_vm4p3        18745344    20971519     1113088   83  Linux
+
+# kpartx -a
+# ls /dev/mapper/
+control         vg_sdb-lv_sd3   vg_vm-lv_vm11   vg_vm-lv_vm14   vg_vm-lv_vm4    vg_vm-lv_vm4p3  vg_vm-lv_vm7
+vg_sdb-lv_sd1   vg_vm-lv_vm1    vg_vm-lv_vm12   vg_vm-lv_vm2    vg_vm-lv_vm4p1  vg_vm-lv_vm5    vg_vm-lv_vm8
+vg_sdb-lv_sd2   vg_vm-lv_vm10   vg_vm-lv_vm13   vg_vm-lv_vm3    vg_vm-lv_vm4p2  vg_vm-lv_vm6    vg_vm-lv_vm9
+SLES11Host:~ # mount  /dev/mapper/vg_vm-lv_vm4p1 /mnt/
+/dev/mapper/vg_vm-lv_vm4p1 looks like swapspace - not mounted
+mount: you must specify the filesystem type
+SLES11Host:~ # mount  /dev/mapper/vg_vm-lv_vm4p2 /mnt
+mount: warning: /mnt seems to be mounted read-only.
+SLES11Host:~ # df -h
+Filesystem                  Size  Used Avail Use% Mounted on
+/dev/sda1                    99G   27G   67G  29% /
+devtmpfs                    3.9G  328K  3.9G   1% /dev
+tmpfs                       3.9G  124K  3.9G   1% /dev/shm
+/dev/mapper/vg_vm-lv_vm4p2  7.8G  4.9G  2.5G  67% /mnt
+SLES11Host:~ # mount
+/dev/sda1 on / type ext3 (rw,acl,user_xattr)
+proc on /proc type proc (rw)
+sysfs on /sys type sysfs (rw)
+devtmpfs on /dev type devtmpfs (rw,mode=0755)
+tmpfs on /dev/shm type tmpfs (rw,mode=1777)
+devpts on /dev/pts type devpts (rw,mode=0620,gid=5)
+fusectl on /sys/fs/fuse/connections type fusectl (rw)
+securityfs on /sys/kernel/security type securityfs (rw)
+none on /proc/sys/fs/binfmt_misc type binfmt_misc (rw)
+gvfs-fuse-daemon on /root/.gvfs type fuse.gvfs-fuse-daemon (rw,nosuid,nodev)
+/dev/mapper/vg_vm-lv_vm4p2 on /mnt type ext4 (ro)
+
+14:11 2014-02-18
+kernel training, filesystem
+1, local, network(nfs), cluster, distributed: CEPH, vitual: FUSE.
+ntfs in usespace.
+2, ways to initiate file system I/O
+1), Buffered I/O
+2), Asynchronous I/O
+3), Direct I/O: bypass the cache.
+3, struct super_block: only one in one filesystem.
+inodes: alloc, free, dirty, write, evict
+stafs
+quotas
+cleanup
+4, struct inode.
+5, struct dentry: one per filename on filesystem.
+6, namespace vs file system.
+7, struct mount: one per mount point.
+8, reiserfs
+9, OCFS2.
+10, btrfs.
+11, linux block I/O.
+12, device mapper
+a generic mechanism for mapping a bio to another bio.
+
+16:25 2014-02-18
+GTD
+1, today
+1), kernel training, devices and drivers.
+2), kernel training, filesystem.
+3), work report(no send).
+
+16:51 2014-02-18
+work report
+1, fate#316276: XEN: Bring back the Xen snapshot functionality
+write code and test "create the internel snapshot". it is ok.
+
+16:54 2014-02-18
+snapshot
+1, delete snapshot
+coding finish. test tomorrow.
+
