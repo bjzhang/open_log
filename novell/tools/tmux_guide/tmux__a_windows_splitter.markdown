@@ -64,5 +64,5 @@ Ctl+c, Ctl+v
 tmux里面同样是Ctl+s, 表示suspend当前panel. suspend时就像是当前panel死掉了, 其实用Ctl+q resume就活了.
 
 ## markdown reference
-(Markdown 语法说明 (简体中文版))[http://wowubuntu.com/markdown/]
+[Markdown 语法说明 (简体中文版)](http://wowubuntu.com/markdown/)
 
