@@ -60,6 +60,15 @@ Ctl+c, Ctl+v
 (http://joncairns.com/2013/06/copying-between-tmux-buffers-and-the-system-clipboard/)
 (http://blog.csdn.net/yangzhongxuan/article/details/6890232)
 
+## attach and detach
+tmux有个亮点，就是如果ssh连接断开，tmux session不会关闭。用tmux启动的程序会在后台运行，不会退出。
+如果网络连接断了，可以用tmux ls查看session并用tmux attach连接。
+bamvor@laptop-work:~> tmux ls
+0: 6 windows (created Wed Mar  5 13:00:04 2014) [146x37]
+bamvor@laptop-work:~> tmux attach -t 0
+[detached]
+注：d是detach。如果有多个session，可以自如切换。
+
 ## 小技巧
 tmux里面同样是Ctl+s, 表示suspend当前panel. suspend时就像是当前panel死掉了, 其实用Ctl+q resume就活了.
 
