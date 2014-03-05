@@ -5803,15 +5803,16 @@ libxl__ao_complete_check_progress_reports
 it seems that it hang after domain_suspend_cb. the eventloop_iteration should exit.
 
 17:17 2013-07-30
-software skill, linux, burn cdrom, growisofs
-http://blog.csdn.net/hecssy/article/details/4037464
+(13:14 2014-02-20)
+software skill, linux, burn cdrom, growisofs; extract audio CD; convert wav to mp3; ffmpeg
+1, http://blog.csdn.net/hecssy/article/details/4037464
 the equal mark is very important. if missing it will generate the file to iso image. i mean IT WILL NOT burn your original iso.
 
 compare:
 growisofs -Z /dev/dvdrw4=./boot-repair-disk-64bit.isogc
 growisofs -Z /dev/dvdrw4 boot-repair-disk-64bit.isogc
 
-1, # growisofs -Z /dev/dvdrw4=./boot-repair-disk-64bit.isogc
+1), # growisofs -Z /dev/dvdrw4=./boot-repair-disk-64bit.isogc
 Executing 'builtin_dd if=./boot-repair-disk-64bit.iso of=/dev/dvdrw4 obs=32k seek=0'
 /dev/dvdrw4: "Current Write Speed" is 16.4x1352KBps.gc
           0/532557824 ( 0.0%) @0x, remaining ??:?? RBU 100.0% UBU   0.0%gc
@@ -5828,7 +5829,7 @@ builtin_dd: 260048*2KB out @ average 4.3x1352KBps
 /dev/dvdrw4: closing session
 /dev/dvdrw4: reloading tray
 
-2, growisofs -Z /dev/dvdrw4 boot-repair-disk-64bit.isogc
+2), growisofs -Z /dev/dvdrw4 boot-repair-disk-64bit.isogc
 Executing 'genisoimage boot-repair-disk-64bit.iso | builtin_dd of=/dev/dvdrw4 obs=32k seek=0'gc
 I: -input-charset not specified, using utf-8 (detected in locale settings)gc
 1.92% done, estimate finish Tue Jul 30 17:03:17 2013gc
@@ -5850,6 +5851,105 @@ builtin_dd: 260224*2KB out @ average 3.8x1352KBps
 /dev/dvdrw4: closing track
 /dev/dvdrw4: closing session
 /dev/dvdrw4: reloading tray
+
+2, burn audio CD
+http://www.linuxquestions.org/questions/slackware-14/creating-an-iso-from-an-audio-cd-with-dd-670913/
+1), dd do not work
+niels.horn:
+    I *think* that theoretically it is impossible to copy directly from an audio CD with dd, as there are no data sectors on it. The format of an audio CD is different, like a stream without checksums etc.
+2), how to query the content of audio CD:
+# cdparanoia -vsQ
+cdparanoia III release 10.2 (September 11, 2008)
+
+Using cdda library version: 10.2
+Using paranoia library version: 10.2
+Checking /dev/cdrom for cdrom...
+        Testing /dev/cdrom for SCSI/MMC interface
+                SG_IO device: /dev/sr0
+
+CDROM model sensed sensed: TSSTcorp DVD+-RW SH-216AB D300
+
+Checking for SCSI emulation...
+        Drive is ATAPI (using SG_IO host adaptor emulation)
+
+Checking for MMC style command set...
+        Drive is MMC style
+        DMA scatter/gather table entries: 1
+        table entry size: 524288 bytes
+        maximum theoretical transfer: 222 sectors
+        Setting default read size to 27 sectors (63504 bytes).
+
+Verifying CDDA command set...
+        Expected command set reads OK.
+
+Attempting to set cdrom to full speed...
+        drive returned OK.
+
+Table of contents (audio tracks only):
+track        length               begin        copy pre ch
+===========================================================
+  1.    19789 [04:23.64]        0 [00:00.00]    no   no  2
+  2.    18896 [04:11.71]    19789 [04:23.64]    no   no  2
+  3.    17411 [03:52.11]    38685 [08:35.60]    no   no  2
+  4.    20249 [04:29.74]    56096 [12:27.71]    no   no  2
+  5.    17553 [03:54.03]    76345 [16:57.70]    no   no  2
+  6.    16320 [03:37.45]    93898 [20:51.73]    no   no  2
+  7.    15102 [03:21.27]   110218 [24:29.43]    no   no  2
+  8.    20205 [04:29.30]   125320 [27:50.70]    no   no  2
+  9.    17728 [03:56.28]   145525 [32:20.25]    no   no  2
+ 10.    20695 [04:35.70]   163253 [36:16.53]    no   no  2
+ 11.    17211 [03:49.36]   183948 [40:52.48]    no   no  2
+ 12.    22861 [05:04.61]   201159 [44:42.09]    no   no  2
+ 13.    16397 [03:38.47]   224020 [49:46.70]    no   no  2
+ 14.    23091 [05:07.66]   240417 [53:25.42]    no   no  2
+ 15.    20019 [04:26.69]   263508 [58:33.33]    no   no  2
+TOTAL  283527 [63:00.27]    (audio only)
+
+3), extract all the cd audio to seperately wave file(output format could be selected by --output-xxx parameters)
+# cdparanoia -B
+cdparanoia III release 10.2 (September 11, 2008)
+
+
+Ripping from sector       0 (track  1 [0:00.00])
+          to sector  283526 (track 15 [4:26.68])
+
+outputting to track01.cdda.wav
+
+ (== PROGRESS == [                              | 019788 00 ] == :^D * ==)
+
+...
+outputting to track15.cdda.wav
+
+ (== PROGRESS == [                              | 283526 00 ] == :^D * ==)
+
+Done.
+
+4), convert to mp3 file(trackxx.cdda.wav to trackxx.mp3):
+bamvor@laptop-work:music> for i in `ls --color=none`; do o=`echo $i | sed s/cd
+da.wav/mp3/`; lame -V 2 --id3v2-only -b 192 $i $o; done
+LAME 3.99.5 64bits (http://lame.sf.net)
+Using polyphase lowpass filter, transition band: 18671 Hz - 19205 Hz
+Encoding track01.cdda.wav to track01.mp3
+Encoding as 44.1 kHz j-stereo MPEG-1 Layer III VBR(q=2)
+    Frame          |  CPU time/estim | REAL time/estim | play/CPU |    ETA
+ 10102/10102 (100%)|    0:18/    0:18|    0:18/    0:18|   14.523x|    0:00
+192 [ 9089] %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%******************************
+224 [  659] %%%%*
+256 [  252] %%
+320 [  102] %
+-----------------------------------------------------------------------------
+   kbps        LR    MS  %     long switch short %
+  197.0       55.4  44.6        96.9   1.7   1.4
+Writing LAME Tag...done
+ReplayGain: -7.5dB
+...
+
+5), use ffmpeg convert
+http://www.catswhocode.com/blog/19-ffmpeg-commands-for-all-needs
+
+6), or use the rubyripper, it call cdparanoia for extract CD, call lame for convert to mp3.
+> sudo zypper ar -c -f http://download.opensuse.org/repositories/home:/Lazy_Kent/openSUSE_12.3/ Lazy_Kent__openSUSE_12.3
+> sudo zypper in rubyripper-gui
 
 10:28 2013-07-31
 software skill, shell, calculator, bc
