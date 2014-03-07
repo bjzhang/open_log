@@ -1512,7 +1512,7 @@ SUSE Studio is an online Linux image creation tool by SUSE. Users can develop th
 Users can choose between openSUSE or SUSE Linux Enterprise as a base and pick from a variety of pre-configured images including jeOS, minimal server, GNOME and KDE desktops.
 
 14:53 2014-03-06
-gui do not started.
+suse studio, sles11sp3, gui do not started.
 1, startx say "no screens found".
 BTW: type "Xorg" could get the similar result. there is not useless message after the "no screens found"(Fatal server errors) if run Xorg.
 2, display card driver
@@ -1529,10 +1529,53 @@ filename:       /lib/modules/3.0.101-0.15-xen/kernel/drivers/gpu/drm/radeon/rade
 license:        GPL and additional rights
 description:    ATI Radeon
 
-3, there is no xf86-video-ati rpm packages. install it in suse studio. and try again.
+3, there is no xf86-video-ati rpm packages. install the following package in suse studio. and try again.
+xorg-x11-driver-video
+xorg-x11-driver-video-radeonhd
 
 4, no mouse and keyboard package in xf86.
 TODO report the bug after confirm it.
+
+5, (10:40 2014-03-07)
+there is no xf86-driver-mouse package, the mouse driver is located in xorg-x11-driver-input-7.4-13.44.1.
+# rpm -qf /usr/lib64/xorg/modules/input/mouse_drv.so
+xorg-x11-driver-input-7.4-13.44.1
+
+install it on my machine, xkeyboard-config is missing too:
+linux-ja2p:~ # zypper in xorg-x11-driver-input
+Refreshing service 'SMT-http_147_2_207_56'.
+Loading repository data...
+Reading installed packages...
+Resolving package dependencies...
+
+The following NEW packages are going to be installed:
+  xkeyboard-config xorg-x11-driver-input
+
+after install, it is ok.
+
+6, report a bug
+https://bugzilla.novell.com/show_bug.cgi?id=867277
+X could not started on physical machine because of the missing packages while testdrive is OK
+
+i build a sles11sp3 image on suse studio, test it in testdriver is ok(kde
+start successfully). but when i run it on my physical machine(in a usb mass
+storage, for test). the x is not started. it is because the video and input
+driver is not installed.
+
+at first, Xorg say no screen found.
+i found that the driver(drivers/gpu/drm/radeon/radeon.ko) exists. but no one
+load it. and i found that the following x package is not installed:
+xorg-x11-driver-video
+xorg-x11-driver-video-radeonhd
+
+after install the above two packages, the mouse and keyboard could not be used.
+i found that xorg-x11-driver-input is not installed(xkeyboard-config as well).
+
+after install these four packages, my kde could start successfully.
+
+my sles11sp3 configuration:
+HW: x86-64
+SW: 3.0.101-0.15-xen, kde4
 
 17:46 2014-03-06
 GTD
@@ -1541,3 +1584,74 @@ GTD
 1, today
 1), 30' write pvscsi and sent to Jim and Chunyan.
 
+10:42 2014-03-07
+GTD
+0, 10:20
+
+1, today
+1), sles11sp3 installation issue: "14:53 2014-03-06"5.
+report a bug, bnc#867277.
+
+15:22 2014-03-07
+找bug
+找漏洞。
+找后门。
+
+kvm后端。
+
+17:57 2014-03-07
+                    0x8021140e      8031940e
+19: NS              0               0
+18: 0               0               0
+17: nG(not Global)  0               0
+16: S(sharable)     1               1
+
+15: AP[2]           0               1
+14:12: TEX[2:0]     1               1
+
+11:10: AP[1:0]      1               1
+9:                  0               0
+
+8:5: Domain         0               0
+
+4: XN               0               0
+3: C                1               1
+2: B                1               1
+1:0                 b11             b11
+
+TEX C B
+1   1 1   Outer and Inner Write-Back, Write-Allocate Normal S bit b
+
+0xc0000000 -- 0xc00ffffff: rw. page table: 0xc0004000 -- 0xc0007fff.
+0xc0100000 -- 0xc01ffffff: read only.
+
+https://github.com/mncoppola/suterusu
+
+fault trace
+
+<4>[ 1460.082672] sys_call_table obtained at c000e584
+<4>[ 1460.082763] p1:8021140e, p2:8031940e
+<4>[ 1460.082794] Hooking function 0xc017a3e4 with 0xbf0110e8
+<1>[ 1460.082824] Unable to handle kernel paging request at virtual address c017a3e4
+<1>[ 1460.083251] pgd = d67e0000
+<1>[ 1460.083465] [c017a3e4] *pgd=8021140e(bad)
+    <0>[ 1460.084106] [0:            poc: 4143] Internal error: Oops: 80d [#1] PREEMPT SMP ARM
+    <4>[ 1460.084503] [0:            poc: 4143] Modules linked in: sys_test(O) vpnclient tima_debug_log(P) mckernelapi mcdrvmodule exfat_fs(P) exfat_core(P)
+    <4>[ 1460.086547] [0:            poc: 4143] CPU: 0    Tainted: P        W  O  (3.4.0-812098 #1)
+    <4>[ 1460.086975] [0:            poc: 4143] PC is at memcpy+0xac/0x330
+    <4>[ 1460.087219] [0:            poc: 4143] LR is at sys_test_iterate+0x0/0x4c [sys_test]
+    <4>[ 1460.087615] [0:            poc: 4143] pc : [<c02c3f6c>]    lr : [<bf0110e8>]    psr: 00000013
+    <4>[ 1460.087646] [0:            poc: 4143] sp : da117f3c  ip : 00000014  fp : be9f78ec
+    <4>[ 1460.088226] [0:            poc: 4143] r10: bf012ec4  r9 : dbeab5db  r8 : bf0110e8
+    <4>[ 1460.088653] [0:            poc: 4143] r7 : e59ff000  r6 : dbeab540  r5 : bf0110e8  r4 : c017a3e4
+    <4>[ 1460.089050] [0:            poc: 4143] r3 : bf0110e8  r2 : ffffffec  r1 : da117f74  r0 : c017a3e4
+    <4>[ 1460.089447] [0:            poc: 4143] Flags: nzcv  IRQs on  FIQs on  Mode SVC_32  ISA ARM  Segment user
+    <4>[ 1460.089874] [0:            poc: 4143] Control: 10c5787d  Table: 97be006a  DAC: 00000015
+    <4>[ 1460.090087] [0:            poc: 4143] 
+    <4>[ 1460.090087] [0:            poc: 4143] PC: 0xc02c3eec:
+    <4>[ 1460.090698] [0:            poc: 4143] 3eec  f5d1f000 e2522060 f5d1f01c ba000002 f5d1f03c f5d1f05c f5d1f07c e8b151f8
+    <4>[ 1460.092926] [0:            poc: 4143] 3f0c  e2522020 e8a051f8 aafffffa e3720060 aafffff9 e212c01c e26cc020 108ff00c
+    <4>[ 1460.095153] [0:            poc: 4143] 3f2c  ea000011 e320f000 e4913004 e4914004 e4915004 e4916004 e4917004 e4918004
+    <4>[ 1460.097412] [0:            poc: 4143] 3f4c  e491e004 e08ff0
+
+https://github.com/mncoppola/suterusuvimgmail
