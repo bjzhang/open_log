@@ -1,0 +1,96 @@
+Xen USB Passthrough  
+
+http://wiki.xensource.com/xenwiki/XenUSBPassthrough
+
+Xen supports passthru of USB devices from dom0 to guests using two different methods.
+
+For Xen HVM (fully virtualized) guests:
+
+    * qemu-dm USB passthru using USB 1.1 emulation, by specifying "usb = 1" and "usbdevice = host:xxxx:yyyy" in /etc/xen/<guest> cfgfile. This method is low performance and doesn't support all USB devices, but it's available in all Xen 3.x and newer versions and doesn't require any special drivers in dom0 kernel or in the HVM guest.
+		Usage example in /etc/xen/<guest> cfgfile:
+			usb = 1
+			usbdevice = "host:xxxx:yyyy"
+		You can find out the "xxxx:yyyy" part by using "lsusb" command in dom0.
+		You can also do the USB 1.1 passthru to a running HVM guest from the qemu-dm console (hit ctrl-alt-2 to access the qemu console) by using a command like this:
+			usb_add host:xxxx:yyyy
+		Xen 3.4.3 and Xen 4.0.0 (and newer versions) add support for the HVM guest USB 1.1 add/del also by using "xm" commands:
+		     * xm usb-add
+		     * xm usb-del 
+    * PVUSB support in Xen 4.0 and newer versions. 
+
+For Xen PV (paravirtualized) guests:
+
+    * PVUSB support in Xen 4.0 and newer versions.
+－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－－ 
+usb-add
+->
+xenstore_process_dm_command_event
+->
+do_usb_add
+->
+usb_device_add (vl.c)
+->
+dev = usb_host_device_open(p)  (usb-linux.c)
+	usbdev_find (check if it is already opened)
+	usb_host_device_open_addr
+	-> 打开 /sys/bus/usb/busnum/addr, read fd, ioctl, 用这些信息初始化 dev
+	   dev的handle_packet等function被初始化
+	   如：dev->handle_packet = usb_host_handle_packet.
+usb_device_add_dev
+	-> find free_usb_ports, usb_attach(port, dev)
+	free_usb_ports的next为空，则通过usb_hub_init->qemu_register_usb_port初始化nr-ports个port,attach到这个port上，将free_usb_ports指向nr-ports中的第一个，初始化的时候，port.attach初始化为：usb_hub_attach
+	free_usb_ports：在usb controller初始化时曾调用qemu_register_usb_port初始化几个port,free_usb_ports指向第一个。
+	-> usb_attach ---> port.attach
+	-> usb_hub_attach(port,dev)
+		  USBHubPort->port.dev = dev
+		  usb_send_msg(dev, USB_MSG_ATTACH) (hw/usb.c)
+		  -> dev->handle_packet (usb_host_handle_packet)
+			修改s->state. (hw/usb.c)
+
+-------------------------------------------------------------------------------------------------------	
+usb_host_handle_packet
+	--> 处理命令 （TOKEN_IN, TOKEN_OUT, TOKEN_SETUP)
+	--> 处理其它命令 （USB_MSG_ATTACH， USB_MSG_DETACH,...)
+	由usb_send_msg(...)发出的
+-------------------------------------------------------------------------------------------------------	
+
+i/o处理： 
+pc_init1:
+->
+usb_uhci_piix3_init
+-> 模拟一个usb uhci controller: pci_device
+	-> qemu_register_usb_ports
+	-> s->frame_timer 初始化： uhci_frame_timer
+
+拦截ioport_read/write:
+uhci_ioport_writew
+->
+/* start frame processing*/
+qemu_mod_timer(s->frame_timer, qemu_get_clock(vm_clock));
+  -> uhci_frame_timer
+	-> uhci_process_frame
+		-> uhci_handle_td 
+			->  usb_host_handle_packet
+				-> urb, ioctl 到真实设备
+
+
+
+---------------------------------------------------------------------------------------------------------------------------------------------
+usb-hc-create:
+->device_create:
+ ->device_add
+ ->createDevice
+    /local/domain/0/backend:
+    /local/domain/*/device:
+drivers/xen/xenbus:
+     device/backend watch:
+	device_register
+	->
+	usbback_probe:
+	根据xs里面的参数，初始化usbif:
+	->
+	xenbus_scanf
+	-> xenbus/xenbus_xs.c:
+		-> vsscanf
+		  usbif->usb_ver = usbver (config的"usb-ver"取整数部分）
+
