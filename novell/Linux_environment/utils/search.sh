@@ -31,9 +31,12 @@ fi
 
 echo search \"$keyword\" compare with \"$base\"
 
-current_year=`date +%Y`
-current_month=`date +%m`
-current_day=`date +%d`
+current_year="2012"
+current_month="01"
+current_day="20"
+#current_year=`date +%Y`
+#current_month=`date +%m`
+#current_day=`date +%d`
 new=$base
 end_of_commit=0
 while true; do
