@@ -17,6 +17,33 @@ GTD
 fate#316276: XEN: Bring back the Xen snapshot functionality
 1, write disk snapshot commit
 implement disk snapshot in xenlight
+2, (10:53 2014-04-02)
+git send-email --no-chain-reply-to --annotate 0001-tools-libxl-add-disk-snapshot-support.patch --to xen-devel@lists.xen.org --cc anthony.perard@citrix.com --cc ian.jackson@eu.citrix.com --cc ian.campbell@citrix.com
+3, [RFC] about libxl snapshot
+
+i have sent a patch about implement disk internal snapshot. this is our first
+step about snapshot.
+
+our plan about snapshot is:
+1, basic disk snapshot support(internal snapshot, qdisk as backend).
+ALREADY SENT.
+2, vm snapshot(memory save, snapshot the whole snapshot with transaction qmp
+opeartion, only support internal disk snapshot at this step.
+in this step, we plan to add the vm snapshot record in xenstore in domain in
+order to management the status of vm snapshot.
+
+question:
+in GSOC2013, there is a requirement: "Add VM snapshot functionalities to libxl
+save/restore and migration functions". is it mean add a flag to create snapshot
+in save, revert snapshot in restore besides the dedicated vm snapshot command?
+or just implement the snapshot in save, restore and migration?
+it might be more clear for user if there is a dedicated snapshot command.
+
+3, some "advanced" feature such driver-mirror, support other backend.
+
+when i prepare to send this out, i found that there is a GSOC project during
+community review this week. i am sorry about i do not send this discussion
+eariler. sorry if i break the plan of xen community.
 
 14:19 2014-04-01
 sharkbate
@@ -48,4 +75,114 @@ send it bruce or anderas, they will merge into git. build service has a script w
 1), send patch and doc out.
 2), work on bnc#859701
 3), roger's board.
+
+10:51 2014-04-02
+GTD
+0, 10:00-19:30
+
+1, today
+1), snapshot. see"09:56 2014-04-01"2.
+2), something about virt-manager. see"12:58 2014-04-02"
+3), training for HA. see"16:32 2014-04-02".
+
+12:58 2014-04-02
+software skill, virtualization, virt-manager, storage
+virt-manager call vm-install for virtual machine installation.
+the disk image is created in volume pool. such volume pool is created by virsh volume create.
+
+13:08 2014-04-02
+software skills, useful website
+http://stackoverflow.com for programming question
+http://superuser.com for user question
+
+15:17 2014-04-02
+about gmtime and gmtime_r
+from man pages:
+The  four  functions  asctime(),  ctime(),  gmtime()  and  localtime() return a pointer to static data and hence are not thread-safe.  Thread-safe versions asctime_r(), ctime_r(), gmtime_r() and localtime_r() are specified by SUSv2, and available since libc 5.2.5.
+
+16:32 2014-04-02
+training, HA
+1, overview
+1), pacemaker.
+no limit in theory. 实际还是有限制的。
+2), corosync
+usually do not exceed 16 nodes.
+3), SBD(Storage Based Device, Stonish ... Device?)
+prevents split brain scenarios.
+4), Metro Area Clusters
+still in corosync cluster.
+up to 30Kilometer.
+5), Geo Clustering.
+
+2), cluster aware file system and volume management
+data and meta data, both have cache. it should maintenance the coherence when difference user access it.
+会需要一个全局范围的集群锁(e.g. dlm).
+(1), Oracle Cluster File System(OCFS2)
+(2), Clustered Logical Volume Manager 2(cLVM2)
+保证不同节点中device map的一致性: 例如说修改lv meta, 同时只能有一个激活。active vg：在一个节点active vg, 所有节点都会同时激活。
+
+某个应用场景, it could be:
+OCFS2
+  |
+  |
+cLVM2
+
+lvm都是directIO. lvm suspend和deactive区别: suspend对于文件系统是透明的，不需要umount.
+reference, "10:07 2013-03-20": https://bugzilla.novell.com/show_bug.cgi?id=801663
+
+3), Continuous Data Replication
+(1), DRBD
+可以简单理解是个软件的raid0.
+(2), Node Recovery with ReaR.
+操作系统快速备份和恢复。
+
+2, management tools
+1), Cluster Test Drive.
+
+3, resource agents
+1), type
+anything: 例如就是一个binary, 启动, monitor就是发"kill -0".
+
+4, Maintenance mode for single mode.
+enter maintenance mode for maintenance, e.g. update software.
+re-enter using re-probe.
+
+5, http://www.linbit.com/
+DRBD for cluster solutions for all Linux-based applications.
+现在和linbit合作.
+
+6, 数据库
+瓶颈: cpu, io.
+
+7, cmirrord
+http://linux.die.net/man/8/cmirrord
+cmirrord(8) - Linux man page
+
+cmirrord - cluster mirror log daemon
+
+cmirrord is the daemon that tracks mirror log information in a cluster. It is specific to device-mapper based mirrors (and by extension, LVM cluster mirrors). Cluster mirrors are not possible without this daemon running.
+This daemon relies on the cluster infrastructure provided by the Cluster MANager (CMAN), which must be set up and running in order for cmirrord to function. (The cluster infrastructure is also required for clvmd.)
+
+Output is logged via syslog. The USR1 signal can be issued to cmirrord to gather current status information for debugging purposes.
+
+Once started, cmirrord will run until it is shutdown via INT signal. If there are still active cluster mirrors, however, the signal will be ignored. Active cluster mirrors should be shutdown before stopping the cluster mirror log daemon.
+
+8, cluster fs和distrbuted fs有啥区别？一样么？
+http://en.wikipedia.org/wiki/Clustered_file_system
+A clustered file system is a file system which is shared by being simultaneously mounted on multiple servers.
+Distributed file systems do not share block level access to the same storage but use a network protocol.
+
+17:07 2014-04-02
+software skill, process, monitor process live or not
+http://www.dbafree.net/?p=870
+http://www.linuxjournal.com/content/monitoring-processes-kill-0
+bamvor@laptop-work:~> ps
+  PID TTY          TIME CMD
+ 8834 pts/0    00:00:00 bash
+ 8849 pts/0    00:00:00 ps
+bamvor@laptop-work:~> kill -0 8834 && echo exist || echo non-exist
+exist
+bamvor@laptop-work:~> kill -0 8835 && echo exist || echo non-exist
+-bash: kill: (8835) - No such process
+non-exist
 
