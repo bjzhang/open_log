@@ -732,7 +732,20 @@ device_model_version="qemu-xen"
 
 17:49 2014-04-17
 vm snapshot doc
-cc chunyan roger jim mike(?)
+--to xen-devel@lists.xen.org --cc anthony.perard@citrix.com --cc ian.jackson@eu.citrix.com --cc ian.campbell@citrix.com --cc cyliu@suse.com --jfehlg@suse.com --cc zzhou@suse.com
+
+[RFC v2] vm snapshot documents
+Hi,
+
+here is the second version about vm snapshot documents, the first version is
+here[1]
+
+thanks Ian Jackson suggestion, i write this doc about vm snapshot including new
+command, struct and api. currently, the disk snapshot(create, delete, list)
+worked(patch is already sent[2]), and vm snapshot(create, delete, list) work.
+but i have some questions about snapshot apply(see the last section).
+
+feel free to comment it. thanks.
 
 1, new command
 =head1 SNAPSHOT
@@ -793,7 +806,7 @@ vm snapshot name
 =item B<vm-snapshot-list> I<domain-id>
 
 list vm snapshot for the dedicated domain including snapshot name and creation
-time which stored in the vm snapshot information.
+time which stored in the vm snapshot information file.
 
 =item B<vm-snapshot-apply> [I<OPTIONS>] I<domain-id>
 
@@ -849,7 +862,8 @@ list disk snapshot including snapshot id, tag, vm size, date, vm clock.
 
 2, new struct and new api
 1), new struct
-libxl_snapshot struct store a disk snapshot information, which store in qcow2 imgae.
+(1), libxl_snapshot struct store a disk snapshot information, which get from
+qcow2 image through "query-block" qmp command.
 
 libxl_snapshot = Struct("snapshot",[
     ("device",        string),
@@ -861,7 +875,11 @@ libxl_snapshot = Struct("snapshot",[
     ("vm_clock_sec",  uint64),
     ("vm_clock_nsec", uint64),
 
-libxl_vm_snapshot store vm snapshot information.
+(2), libxl_vm_snapshot store vm snapshot information which store in the path
+shown above. i add some api for create, delete and list these information.
+at first, i want to add these information to xenstore, but it will lose when
+xenstore reboot or dom0 reboot.
+
 libxl_vm_snapshot = Struct("vm_snapshot",[
     ("name",          string),
     ("creation_time", uint64),
@@ -869,44 +887,76 @@ libxl_vm_snapshot = Struct("vm_snapshot",[
     ])
 
 2), new api
-(1), libxl/libxl.h
+(1), in libxl/libxl.h
 /* disk snapshot api
  * support create, delete and list for internal snapshot of a single disk
+ * only support internal snapshot rigt now.
  */
-//create disk snapshot
+/* create disk snapshot according to the device name in snapshot array. nb is
+ * the number of snapshot array.
+ * use the qmp transaction to ensure all snapshot of disk is coherence.
+ */
 int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
-                                libxl_snapshot *snapshot, int nb);
-int libxl__disk_snapshot_delete(libxl_ctx *ctx, int domid,
-                                libxl_snapshot *snapshot);
+                               libxl_snapshot *snapshot, int nb);
+/* delete number of nb disk snapshot describe in snapshot array
+ */
 int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
                                libxl_snapshot *snapshot, int nb);
+int libxl__disk_snapshot_delete(libxl_ctx *ctx, int domid,
+                                libxl_snapshot *snapshot);
+/* apply the disk snapshot by qemu-img command
+ */
 int libxl_disk_snapshot_apply(libxl_ctx *ctx, int domid,
                               libxl_snapshot *snapshot, int nb);
+/* list disk snapshot by qmp query-block command
+ */
 int libxl__disk_snapshot_list(libxl_ctx *ctx, int domid,
                               libxl_snapshot **snapshotp);
 
-/* snapshot */
-int libxl_vm_snapshot_add(libxl_ctx *ctx, uint32_t domid, libxl_vm_snapshot *snapshot,
+/* vm snapshot api
+ */
+/* write vm snapshot information to file
+ */
+int libxl_vm_snapshot_add(libxl_ctx *ctx, uint32_t domid,
+                          libxl_vm_snapshot *snapshot,
                           const libxl_asyncop_how *ao_how)
                           LIBXL_EXTERNAL_CALLERS_ONLY;
-int libxl_vm_snapshot_remove(libxl_ctx *ctx, uint32_t domid, libxl_vm_snapshot *snapshot,
+/* delete vm snapshot information file
+ */
+int libxl_vm_snapshot_remove(libxl_ctx *ctx, uint32_t domid,
+                             libxl_vm_snapshot *snapshot,
                              const libxl_asyncop_how *ao_how)
                              LIBXL_EXTERNAL_CALLERS_ONLY;
-libxl_vm_snapshot *libxl_vm_snapshot_list(libxl_ctx *ctx, uint32_t domid, int *num)
+/* list vm snapshot from file
+ */
+libxl_vm_snapshot *libxl_vm_snapshot_list(libxl_ctx *ctx, uint32_t domid,
+                                          int *num)
                                           LIBXL_EXTERNAL_CALLERS_ONLY;
+/* read vm snapshot information from dedicated file
+ */
 int libxl_vm_snapshot_getinfo(libxl_ctx *ctx, uint32_t domid,
                               libxl_vm_snapshot *snapshot);
+/* delete vm save image */
 int libxl_vm_snapshot_delete_save_image(libxl_ctx *ctx,
                                         libxl_vm_snapshot *snapshot);
 
 (2), libxl/xl_cmdimpl.c
+/* get disk device name (hda, hdc..) and image path through
+ * libxl_device_disk_list and libxl_device_disk_getinfo
+ */
 static int get_disk(uint32_t domid, libxl_snapshot **snapshotp, char *name);
 
 3, question
-1), vm snapshot apply.
-how could i apply disk snapshot. there is not disk snapshot apply qmp. i could do it with qemu-img. is it ok?
-1), vm snapshot apply
-domid changes. is it worth to change restore function?
+1), how to do disk snapshot apply?
+when i apply the vm snapshot, i need to revert the disk snapshot. in qemu, it is
+done by bdrv_snapshot_goto api. this api is only called by loadvm hmp or
+qemu-img commands.
+there is no hmp api in libxl. so the only choice is using qemu-img command.
+i know usually i should call qmp for qemu operation. but there is not qmp at
+the moment, could i call qemu-img in libxl for disk snapshot apply?
+
+[1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00414.html
+[2] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00244.html
 
 21:51 2014-04-17
 Hi,
@@ -936,29 +986,7 @@ Hi,
 basically, i join two activities last year.
 1, arm technology symposia 2013 on 27, Nov in Beijing.
 http://www.arm.com/zh/about/events/arm-technology-symposia-2013-china.php
-here is the notes on that event:
-1), gpu通用计算。
-android 4.2 support renderscipr which use neon:
-Renderscript is a component of the Android operating system for mobile devices. It is an API for intensive computation using heterogeneous computing.
-
-2), 高中低手机芯片的典型手机芯片面积：
-80-100mm2,
-40-80mm2(?),
-25-40mm2.
-
-3), what's the different between amba4 and amba5?
-
-4), fabric
-LSI Axxia 5500 15 CA15 with CCN504.
-ccn500: 1.5GHz+ at 28HPM, cci400需要2分频或3分频。
-CCN508, 8 cpu cluster, 1-32M L3 cache, memory: quad core. performance: 1.6TB/s
-RAS?
-LNG, LEG.
-CCI是hub结构, CCN是ring结构。后者latency小很多。
-有个system spec由(os)硬件产商review确定v8架构上要实现多少。
-
-5), security
-arm trust zone: Discretix.
+here is the notes on that event: "14:03 2013-11-27"
 
 2, ouros activity("开源力量公开课2013年度庆典：我们的开源项目") on 29, Dec.
 news: http://code.csdn.net/news/2818866
@@ -1179,3 +1207,13 @@ bamvor
 > Roger (office#:+86 10 65339283, cellphone# +86 13391978086)
 >
 >
+
+16:37 2014-04-18
+software skill, build service, obs, ibs, maintainer, bugowner; doc, getting startted
+requestmaintainership (reqbs, reqbugownership,  reqmaintainership, reqms, requestbugownership)
+    requests to add user as maintainer or bugowner
+
+18:11 2014-04-18
+GTD
+0, -18:10
+
