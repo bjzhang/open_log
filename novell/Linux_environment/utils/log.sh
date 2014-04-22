@@ -2,7 +2,7 @@
 
 name=$1
 shift
-param=$*
+param="$*"
 current=`date +%Y%m%d_%H%M_%S`
 filename=log_${current}_`echo $name | sed "s/\//_/g"`.txt
 cmdline="$name $param"
