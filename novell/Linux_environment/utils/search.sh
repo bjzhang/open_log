@@ -34,8 +34,7 @@ echo search \"$keyword\" compare with \"$base\"
 current_year=`date +%Y`
 current_month=`date +%m`
 current_day=`date +%d`
-new=$base
-end_of_commit=0
+new=$base end_of_commit=0
 while true; do
     current_year=$((current_year - 1))
     old=`git log --before=${current_year}-${current_month} -n 1 | grep ^commit | cut -d \  -f 2`
@@ -68,6 +67,11 @@ number=$(((number + 1) / 2))
 mid=`git log $new -n $number | grep ^commit | tail -n 1 | cut -d \  -f 2`
 
 while true; do
+#        temp=`git log $old^..$new |grep ^commit | cut -d \  -f 2 | wc -l`
+#        echo -n "current temp is $temp".
+#        temp=$((temp + 1))
+#        temp=$((temp / 2))
+#        echo "half is $temp".
     echo new: $new, mid: $mid, old: $old, number: $number
     new_date=`git log --date=iso -n 1 $new |grep ^Date | sed "s/^Date:\ *//"`
     mid_date=`git log --date=iso -n 1 $mid |grep ^Date | sed "s/^Date:\ *//"`
@@ -82,8 +86,10 @@ while true; do
         fi
         echo got it in $old..$mid
         number=`git log $old^..$mid |grep ^commit | cut -d \  -f 2 | wc -l`
+        echo -n "current number is $number"
         number=$((number + 1))
         number=$((number / 2))
+        echo "half is $number".
         new=$mid
         mid=`git log $new -n $number | grep ^commit | tail -n 1 | cut -d \  -f 2`
         continue
@@ -98,8 +104,10 @@ while true; do
         fi
         echo got it in $mid..$new
         number=`git log $mid^..$new |grep ^commit | cut -d \  -f 2 | wc -l`
+        echo -n "current number is $number".
         number=$((number + 1))
         number=$((number / 2))
+        echo "half is $number".
         old=$mid
         mid=`git log $new -n $number | grep ^commit | tail -n 1 | cut -d \  -f 2`
         continue

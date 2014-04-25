@@ -1689,6 +1689,7 @@ GTD
 3), chaoyang hospital.
 
 12:53 2014-04-24
+bnc#874225
 1, install a system with qcow2.
 2, reference eric reply.
 Chun Yan Liu: https://www.redhat.com/archives/libvirt-users/2013-February/msg00095.html
@@ -1721,4 +1722,121 @@ PS: iosc is the recommend bash alias
 
 alias iosc="osc -A https://api.suse.de"
 
+13:06 2014-04-25
+bnc#865219, usb passthrough
+1, machine
+--- Comment #33 from Flavio Pereira <fpereira@suse.com> 2014-04-24 15:54:53 UTC ---
+*** THIS IS A PRIVATE COMMENT ***
+Yes, you can reboot the host if necessary.
+
+Here are the credentials:
+
+Xen host: 151.155.234.28
+Username: root
+Password: novell
+
+Virtual Machines (You can access using rdesktop):
+
+WIN2K8R2SP1-01: 151.155.232.217
+Username: Administrator
+Password: N0v3ll1234
+
+
+Windows-2003: 151.155.232.135
+Username: Administrator
+Password: N0v3ll1234
+
+
+USB dongle attached to the host server:
+
+# xm usb-list-assignable-devices
+4-2          : ID 0529:0001 AKS HASP HL 3.25
+
+Let me know if you need any other information.
+
+2, log
+0xffffffffffffffff in ?? ()
+(gdb) where
+#0  0xffffffffffffffff in ?? ()
+#1  0x00000000004702d1 in uhci_broadcast_packet (s=<optimized out>,
+    p=0xb24210)
+    at /usr/src/debug/xen-4.2.4-testing/tools/qemu-xen-traditional-dir/hw/usb-uhci.c:662
+#2  0x0000000000470b56 in uhci_handle_td (int_mask=<optimized out>,
+    td=<optimized out>, addr=<optimized out>, s=<optimized out>)
+    at /usr/src/debug/xen-4.2.4-testing/tools/qemu-xen-traditional-dir/hw/usb-uhci.c:822
+#3  uhci_process_frame (s=0xb1bb50)
+    at /usr/src/debug/xen-4.2.4-testing/tools/qemu-xen-traditional-dir/hw/usb-uhci.c:967
+#4  0x0000000000470d80 in uhci_async_complete (packet=<optimized out>,
+    opaque=0xb24210)
+    at /usr/src/debug/xen-4.2.4-testing/tools/qemu-xen-traditional-dir/hw/usb-uhci.c:855
+#5  0x000000000049da85 in usb_packet_complete (p=<optimized out>)
+    at hw/usb.h:224
+#6  async_complete (opaque=<optimized out>) at usb-linux.c:286
+#7  0x000000000040948e in main_loop_wait (timeout=0)
+    at /usr/src/debug/xen-4.2.4-testing/tools/qemu-xen-traditional-dir/vl.c:3810
+#8  0x000000000047fe0a in main_loop () at helper2.c:609
+#9  0x000000000040d689 in main (argc=33, argv=0x7fff44c38928,
+    envp=<optimized out>)
+    at /usr/src/debug/xen-4.2.4-testing/tools/qemu-xen-traditional-dir/vl.c:6195
+
+3,
+Hi, Flavio
+
+i could reproduce the seg fault you mentioned above. this seq fault is led by invalid function handles in dev in uhci_broadcast_packet(qemu-xen-tradition-dir/hw/usb-uhci.c). i am not dig into such code right now, but as a usb2.0 device(see my comment below), only pvusb is supported according to the xen doc[1]. as a pvusb device, we need a driver for xen usb virtual host(created by "xm usb-hc-create"), but i do not found it in vmdp 2.1 and i do not found relative desription in sles11 sp2 release notes. does anyone confirm whether we support pvusb in windows guest or not?
+
+from lsusb result, we could know this is a usb2.0 device(bcdUSB 2.00). and there is no endpoint descriptor for customer device. it might explain why i get difference test result(usb2.0 not work and guest do not crash), i use usbdisk as usb2.0 device(two endpoint list in lsusb).
+
+lsusb -vvv:
+Bus 004 Device 002: ID 0529:0001 Aladdin Knowledge Systems HASP v0.06
+Device Descriptor:
+  bLength                18
+  bDescriptorType         1
+  bcdUSB               2.00
+  bDeviceClass          255 Vendor Specific Class
+  bDeviceSubClass         0
+  bDeviceProtocol         0
+  bMaxPacketSize0         8
+  idVendor           0x0529 Aladdin Knowledge Systems
+  idProduct          0x0001 HASP v0.06
+  bcdDevice            3.25
+  iManufacturer           1 AKS
+  iProduct                2 HASP HL 3.25
+  iSerial                 0
+  bNumConfigurations      1
+  Configuration Descriptor:
+    ...
+    Interface Descriptor:
+      bLength                 9
+      bDescriptorType         4
+      bInterfaceNumber        0
+      bAlternateSetting       0
+      bNumEndpoints           0
+      bInterfaceClass       255 Vendor Specific Class
+      bInterfaceSubClass      0
+      bInterfaceProtocol      0
+      iInterface              0
+      ** UNRECOGNIZED:  02 ff
+
+[1] http://wiki.xen.org/wiki/XL_vs_Xend_Feature_Comparison
+
+4, Jason
+Hi, Jason, kirk
+
+do we support pvusb on windows guest? it need a xen usb virtual host driver in guest, reference my preview reply.
+if not, i guess we could not support customer's usb2.0 device.
+
+reference:
+[1] xen usb passthrough support:
+http://wiki.xen.org/wiki/XL_vs_Xend_Feature_Comparison
+[2] qemu-dm could not support usb2.0 device:
+https://bugs.launchpad.net/qemu/+bug/685096
+
+18:13 2014-04-25
+GTD
+0, -18:15
+
+1, today
+1), help liuhua wang debug clvm bug: memory allocation. "alloca"
+2), 13:06-18:10 bnc#865219, usb passthrough. see"13:06 2014-04-25"
+interrupted by go to bank. 40'
 
