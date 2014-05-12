@@ -1,0 +1,254 @@
+
+10:53 2014-05-12
+snapshot
+
+[RFC v2] vm snapshot documents
+Hi,
+
+here is the third version about vm snapshot documents, the second version and
+the first version is here[1][2].
+
+there are two types of snapshots supported by libxl: disk snapshot and vm
+snapshot. The following subcommands management the snapshot of a domain,
+including create, delete, list and apply.
+a domain snapshot(or a vm snapshot) means save the domain config, memory and
+disk snapshot.
+
+a disk snapshot will only be crash-consistent if the domain is
+running. Disk snapshots can also be internal (qcow2) or external
+(snapshot in one file, delta in another).
+
+Domain snapshots include disk snapshots and domain state, allowing to
+resume the domain from the same state when the snapshot was created.
+This type of snapshot is also referred to as a domain checkpoint or
+system checkpoint.
+
+1, new api and struct
+1), new struct
+(1), libxl_snapshot struct store a disk snapshot information, which get from
+qcow2 image through "query-block" qmp command.
+
+libxl_snapshot = Struct("snapshot",[
+    ("device",        string),
+    ("name",          string),
+    ("id",            string),
+    ("vm_state_size", uint64),
+    ("date_sec",      uint64),
+    ("date_nsec",     uint64),
+    ("vm_clock_sec",  uint64),
+    ("vm_clock_nsec", uint64),
+
+(2), libxl_vm_snapshot store vm snapshot information which store in the path
+shown above. i add some api for create, delete and list these information.
+at first, i want to add these information to xenstore, but it will lose when
+xenstore reboot or dom0 reboot.
+
+libxl_vm_snapshot = Struct("vm_snapshot",[
+    ("name",          string),
+    ("creation_time", uint64),
+    ("save",          string),
+    ])
+
+2), api
+there is no common api like libxl_snapshot_xxx. the reason is that different
+toolstack may need to different event handling machnism(sync or ao).
+
+(1), in libxl/libxl.h
+the implementation will be located in libxl_snapshot.c
+/* disk snapshot api
+ * support create, delete and list for internal snapshot of a single disk
+ * only support internal snapshot rigt now.
+ */
+/* create disk snapshot according to the device name in snapshot array. nb is
+ * the number of snapshot array.
+ * use the qmp transaction to ensure all snapshot of disk is coherence.
+ */
+int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+                               libxl_snapshot *snapshot, int nb);
+/* delete number of nb disk snapshot describe in snapshot array
+ */
+int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+                               libxl_snapshot *snapshot, int nb);
+
+2), xl_cmdimpl.c
+libxl_snapshot_create
+libxl_snapshot_delete
+libxl_snapshot_list
+libxl_snapshot_revert
+
+/* get disk device name (hda, hdc..) and image path through
+ * libxl_device_disk_list and libxl_device_disk_getinfo
+ */
+static int get_disk(uint32_t domid, libxl_snapshot **snapshotp, char *name);
+
+2, snapshot information file
+i will write manpage for this with patch.
+
+the vm snapshot information will store in the follow path:
+/var/lib/xen/snapshots/<domain_uuid>/snapshotdata-<snapshot_name>.xl
+
+here is an example for snapshot information file:
+description="a snapshot after installation"
+name="1397207577"
+creationtime="1397207577"
+save="1397207577.save"
+type="internal"/"external"
+live="no"
+disk_only="no"
+disk=[ 'hda=disk_hda.qcow2,type=qcow2', 'hdc=disk_hdc.qcow2,type=qcow2']
+
+the save and disk image file base on the path of "/var/lib/xen/snapshots/<domain_uuid>"
+
+the user could give a snapshot name when vm snapshot created. if not, the epoch
+seconds will set as name as the above examples.
+
+
+3, new command
+i will write manpage for this with patch.
+1), xl snapshot-create
+Usage: xl snapshot-create <ConfigFile> [options] [Domain]
+
+create domain snapshot with ConfigFile or options
+
+Options:
+-n                snapshot name
+--live            do live snapshot
+--disk-only       only disk snapshot, do not save memory.
+
+2), xl snapshot-list [options] [Domain]
+
+--long            list full snapshot information
+-n                snapshot name
+
+xl snapshot-list
+xl snapshot-delete
+xl snapshot-revert
+
+=item B<vm-snapshot-create> [I<OPTIONS>] I<domain-id>
+
+create vm snapshot.
+it will call the qmp transaction for creating the disk snapshot in order to
+ensure the disk snapshot is coherence.
+vm is paused during snapshot create, and is unpause after take snapshot
+finished.
+
+B<OPTIONS>
+
+=over 4
+
+=item B<-n>
+
+vm snapshot name
+
+=back
+
+=item B<vm-snapshot-delete> [I<OPTIONS>] I<domain-id>
+
+delete vm snapshot.
+delete the saved memory file and snapshot information file created by
+vm-snapshot-create.
+
+B<OPTIONS>
+
+=over 4
+
+=item B<-n>
+
+vm snapshot name
+
+=back
+
+=item B<vm-snapshot-list> I<domain-id>
+
+list vm snapshot for the dedicated domain including snapshot name and creation
+time which stored in the vm snapshot information file.
+
+=item B<vm-snapshot-apply> [I<OPTIONS>] I<domain-id>
+
+apply vm snapshot for the dedicated domain.
+
+B<OPTIONS>
+
+=over 4
+
+=item B<-n>
+
+vm snapshot name
+
+=back
+
+=item B<disk-snapshot-create> [I<OPTIONS>] I<domain-id>
+
+create disk snapshot.
+
+B<OPTIONS>
+
+=over 4
+
+=item B<-n>
+
+disk snapshot name
+
+=back
+
+=item B<disk-snapshot-delete> [I<OPTIONS>] I<domain-id>
+
+delete disk snapshot by snapshot name or snapshot id.
+
+B<OPTIONS>
+
+=over 4
+
+=item B<-i>
+
+disk snapshot id
+
+=item B<-n>
+
+disk snapshot name
+
+=back
+
+=item B<disk-snapshot-list> I<domain-id>
+
+list disk snapshot including snapshot id, tag, vm size, date, vm clock.
+
+=back
+
+
+
+
+
+2), new api
+
+/* vm snapshot api
+ */
+/* write vm snapshot information to file
+ */
+int libxl_vm_snapshot_add(libxl_ctx *ctx, uint32_t domid,
+                          libxl_vm_snapshot *snapshot,
+                          const libxl_asyncop_how *ao_how)
+                          LIBXL_EXTERNAL_CALLERS_ONLY;
+/* delete vm snapshot information file
+ */
+int libxl_vm_snapshot_remove(libxl_ctx *ctx, uint32_t domid,
+                             libxl_vm_snapshot *snapshot,
+                             const libxl_asyncop_how *ao_how)
+                             LIBXL_EXTERNAL_CALLERS_ONLY;
+/* list vm snapshot from file
+ */
+libxl_vm_snapshot *libxl_vm_snapshot_list(libxl_ctx *ctx, uint32_t domid,
+                                          int *num)
+                                          LIBXL_EXTERNAL_CALLERS_ONLY;
+/* read vm snapshot information from dedicated file
+ */
+int libxl_vm_snapshot_getinfo(libxl_ctx *ctx, uint32_t domid,
+                              libxl_vm_snapshot *snapshot);
+/* delete vm save image */
+int libxl_vm_snapshot_delete_save_image(libxl_ctx *ctx,
+                                        libxl_vm_snapshot *snapshot);
+
+[1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00414.html
+    http://lists.xen.org/archives/html/xen-devel/2014-04/msg00244.html
+[2] http://lists.xen.org/archives/html/xen-devel/2014-04/msg02549.html
+
