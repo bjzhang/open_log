@@ -717,11 +717,14 @@ regards
 bamvor
 
 18:00 2014-05-12
+(13:21 2014-05-13)
 virtualization, xen, hvmloader, bios
 1, http://people.cs.nctu.edu.tw/~huangmc/works/web/Boot_x86/Boot_x86.html
 電源正常啟動後，x86 CPU 會先執行 0xFFFF0，也就是 BIOS ROM 的進入點。由於 0xFFFF0 ~ 0xFFFFF 只有少的很可憐的 16 bytes，真正的 BIOS code 勢必要擺到其他位置，此時 0xFFFF0 的作用便是 jmp 到該位置執行 BIOS 程式。
 
 2, xen/tools/firmware/hvmloader/hvmloader.c
+hvmloader start at 0x100000.
+
     /* Enter real mode, reload all segment registers and IDT. */
     "    ljmp $"STR(SEL_CODE16)",$0x0\n"
     "trampoline_start: .code16       \n"
@@ -738,4 +741,91 @@ virtualization, xen, hvmloader, bios
     "trampoline_end:   .code32       \n"
 
 3, So, how and when does hvmloader put bios to ffff0?
+there is a tricky that bios is loaded at the end of 0x100000. and bios set a jump instruction at the fff0. the segment should be f000, so the jump instruction is located at ffff0.
+
+1), seabios
+(1), tools/firmware/seabios-dir/src/romlayout.S
+entry_iret_official:
+        iretw
+
+        ORG 0xff54
+        IRQ_ENTRY_ARG 05
+
+        ORG 0xfff0 // Power-up Entry Point
+        .global reset_vector
+reset_vector:
+        ljmpw $SEG_BIOS, $entry_post
+
+        // 0xfff5 - BiosDate in misc.c
+
+        // 0xfffe - BiosModelId in misc.c
+
+        // 0xffff - BiosChecksum in misc.c
+
+        .end
+
+
+src/config.h:#define SEG_BIOS     0xf000
+and the entry_post is defined in the romlayout.S too:
+/****************************************************************
+ * Fixed position entry points
+ ****************************************************************/
+
+        // Specify a location in the fixed part of bios area.
+        .macro ORG addr
+        .section .fixedaddr.\addr
+        .endm
+
+        ORG 0xe05b
+entry_post:
+        cmpl $0, %cs:HaveRunPost                // Check for resume/reboot
+        jnz entry_resume
+        ENTRY_INTO32 _cfunc32flat_handle_post   // Normal entry point
+
+TODO: where does 0x3630 come from?
+
+(2), check binary and confirm it:
+> objdump -b binary -m i386 -D out/bios.bin  | tail
+   1ffec:       fa                      cli
+   1ffed:       fc                      cld
+   1ffee:       66 c3                   retw 1fff0:       ea 5b e0 00 f0 30 36    ljmp   $0x3630,$0xf000e05b
+   1fff7:       2f                      das
+   1fff8:       32 33                   xor    (%ebx),%dh
+   1fffa:       2f                      das
+   1fffb:       39 39                   cmp    %edi,(%ecx)
+   1fffd:       00 fc                   add    %bh,%ah
+        ...
+
+notes: i could list the architecture with objdump -i. i could see only i386 is supported in binary.
+
+2), rombios
+tools/firmware/rombios/rombios.c
+
+#ifdef HVMTEST
+.org 0xffe0
+  jmp 0xf000:post;
+#endif
+
+.org 0xfff0 ; Power-up Entry Point
+#ifdef HVMTEST
+  jmp 0xd000:0x0003;
+#else
+   jmp 0xf000:post
+#endif
+
+.org 0xfff5 ; ASCII Date ROM was built - 8 characters in MM/DD/YY
+.ascii BIOS_BUILD_DATE
+
+4, "tools/libxc/xc_hvm_build_x86.c"
+
+15:34 2014-05-13
+sync
+1, Lin ma
+1), oss test
+(1), deploy on lvm.
+(2), copy ssh public key from host to guest.
+(3), how to get guest linux ip address.
+
+
+
 
