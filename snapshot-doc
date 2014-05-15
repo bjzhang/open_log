@@ -1,35 +1,64 @@
 
 10:53 2014-05-12
 snapshot
+cc
+David kiarie <davidkiarie4@gmail.com>
+jim, roger, chunyan.
+ian c, ian j, Anthony.perard
 
-[RFC v3] vm snapshot documents
+
+[RFC v3] domain snapshot documents
 Hi,
 
-here is the third version about vm snapshot documents, the second version and
-the first version is here[1][2].
+here is the third version about domain snapshot documents, the second version
+and the first version is here[1][2].
 
-there are two types of snapshots supported by libxl: disk snapshot and vm
-snapshot. The following subcommands management the snapshot of a domain,
-including create, delete, list and apply.
-a domain snapshot(or a vm snapshot) means save the domain config, memory and
-disk snapshot.
+there are lots of potential feature about snapshots. for now, i focus on
+providing the api for libvirt libxl driver in order to support the same
+functionality compare with libvirt qemu driver. and you may already notice
+david is working on libvirt libxl driver. it is a GSoC project[3]. it is
+important for him to know the api in order to start coding in libvirt side.
+i plan to work on other "advanced feature" after my first stage patch ack.
 
-a disk snapshot will only be crash-consistent if the domain is
-running. Disk snapshots can also be internal (qcow2) or external
-(snapshot in one file, delta in another).
+there are two types of snapshots supported by libxl: disk snapshot and domain
+snapshot and four types of operations: create, delete, list and revert.
 
-Domain snapshots include disk snapshots and domain state, allowing to
-resume the domain from the same state when the snapshot was created.
-This type of snapshot is also referred to as a domain checkpoint or
-system checkpoint.
+Disk snapshot will only be crash-consistent if the domain is running. Disk
+snapshots can also be internal (qcow2) or external (snapshot in one file, delta
+in another).
 
-there are live flag in snasphot configuration file, i do not want to implement
-in my first verion of patch.
+Domain snapshots include disk snapshots and domain state, allowing to resume
+the domain from the same state when the snapshot was created. This type of
+snapshot is also referred to as a domain checkpoint or system checkpoint.
 
-1, new api and struct
-1), new struct
-(1), libxl_snapshot struct store a disk snapshot information, for disk snapshot
-create and delete.
+In libvirt, there is a something like resource manager for domain snapshot
+managements. So, in libxl, all these information is transfered through
+libxl_domain_snapshot struct. xl will manage the snapshot by itself.
+
+Domain snapshot create means save domain state and do disk snapshots.
+At the beginning of domain snapshot create, it will check whether it is
+snapshotable. it is snapshotable if all the disk is qdisk backed.
+
+Domain snapshot revert means rollback the current snapshot state. and
+Because the limitation of the qemu qmp, the revert could only support domain
+snapshot with internal disk snapshot. revert the domain snapshot with external
+snapshot doest not support.
+
+there are live flag in snasphot configuration file, it will be save domain
+memory and do external disk snapshot. to make the thing simple, i do not want
+to implement in my first verion of patch.
+
+As Ian Campbell said, the support of non-qdisk snapshot is very useful.
+unfortuntely, i have no idea what it need to do. the only non-qdisk i know is
+blktap. and i do not know does how to do snapshot create, delete, list and
+revert for blktap? does it support internal or external support?
+i treat it as an "advanced" feature, i will not cover it in my first version of
+patch.
+
+the new struct, api and command is as follows:
+1, new struct
+1), libxl_snapshot
+store a disk snapshot information, it is used by disk snapshot create and delete.
 libxl_disk_snapshot = Struct("disk_snapshot",[
     ("device",        string),
     ("name",          string),
@@ -40,12 +69,13 @@ libxl_disk_snapshot = Struct("disk_snapshot",[
 device: device name to snapshot. e.g. sda, hda...
 name: snapshot name given by user. it will the be same name as domain snapshot
 name.
-the following val is only useful for external snapshot.
+the following paramenter is only useful for external snapshot.
 file: external snapshot file.
 format: the format of external snapshot file
 
-(2), libxl_domain_snapshot store domain snapshot information which store in the
-path shown above. i add some api for create, delete and list these information.
+2), libxl_domain_snapshot
+store domain snapshot information which store in the path shown above. i add
+some api for create, delete and list these information.
 libxl_domain_snapshot = Struct("domain_snapshot",[
     ("name",          string),
     ("creation_time", uint64),
@@ -56,16 +86,17 @@ libxl_domain_snapshot = Struct("domain_snapshot",[
 name: snapshot name given by user. if user do not provide the name, it will be
 the epoch seconds.
 creation_time: the epoch seconds.
-save: the memory save file during snapshot.
-disks: disk snapshot assoiate with this domain.
+save: the memory save file for this snapshot.
+disks: store the disk snapshot information assoiate with this domain.
 
-2), new functions
+2, new functions
 there is no common api like libxl_snapshot_xxx. the reason is that different
-toolstack may need to different event handling machnism(sync or ao). and
-obviously, i at least need async handler during create. so i decide to only
-provide the sub api for xl and other toolstack(e.g. libvirt).
+toolstack may need to different event handling machanism(synchronize or
+asynchronize). and obviously, domain snapshot create need async handler. so i
+decide to only provide the sub api for xl and other toolstack(e.g. libvirt).
+it make eailer for toolstack to handle the event by themselves.
 
-(1), in libxl/libxl.h
+1), in libxl/libxl.h
 the implementation will be located in libxl_snapshot.c
 /* disk snapshot api
  * support create for external and internal disks, support delete for internal
@@ -89,34 +120,20 @@ int libxl_snapshot_delete(int domid, libxl_domain_snapshot *snapshot);
 int libxl_snapshot_get(int domid, libxl_domain_snapshot *snapshot, int nb);
 int libxl_snapshot_revert(int domid, libxl_domain_snapshot *snapshot);
 
-support create, delete, list and revert for domain snasphot. because some
-limitation on qemu qmp support. not all api could support internal and external
-domain snapshot.
-
-
-                                create        revert      mem save api
-without external disk snasphot  savevm        loadvm      qemu_save_device_state
-
-with external disk snasphot     save_domain   no support  qemu_savevm_state
-                                +transaction
-
-there is not delete external disk snapshot api in qemu qmp. so, delete could
-only support internal support.
+support create, delete, list and revert for domain snasphot.
 
 libxl_snapshot_get will read the domain snapshot configuration file stored in
 disk and list snapshot information in simple or long format.
 
-there is not revert support for external snapshot file. so only internal
-snapshot is supported.
-
-2, snapshot information file
+3, snapshot information file
 i will write manpage for this with patch.
 
 i found the Wei v5 patch about xl json format.
 http://lists.xen.org/archives/html/xen-devel/2014-05/msg01670.html
-i do not know how could i use it but i will try the use these in my code.
+it seems that i could use these apis for parsing and generating the snapshot
+information file.
 
-the vm snapshot information will store in the follow path:
+the domain snapshot information will store in the follow path:
 /var/lib/xen/snapshots/<domain_uuid>/snapshotdata-<snapshot_name>.xl
 
 here is an example for snapshot information file:
@@ -134,143 +151,51 @@ the save and disk image file base on the path of "/var/lib/xen/snapshots/<domain
 the user could give a snapshot name when vm snapshot created. if not, the epoch
 seconds will set as name as the above examples.
 
-
 3, new command
 i will write manpage for this with patch.
-1), xl snapshot-create
+1), snapshot-create
 Usage: xl snapshot-create <ConfigFile> [options] [Domain]
 
-create domain snapshot with ConfigFile or options
+Create domain snapshot with ConfigFile or options
 
 Options:
 -n                snapshot name
 --live            do live snapshot
 --disk-only       only disk snapshot, do not save memory.
 
-2), xl snapshot-list [options] [Domain]
+2), snapshot-list
+Usage: xl snapshot-list [options] [Domain]
 
---long            list full snapshot information
+List domain snapshot information about all/some snapshot in one domain.
+
+Options:
+-l, --long        Output all domain snapshot details
 -n                snapshot name
 
-xl snapshot-delete
+3), snapshot-delete
+Usage: xl snapshot-delete [options] [Domain]
+
+Delete domain snapshot relative data, including domain state, disk snapshot
+and domain snapshot information file.
+
+Options:
 -n                snapshot name
---disk-only       only disk snapshot, do not save memory.
 
-xl snapshot-revert
+4), snapshot-revert
+Usage: xl snapshot-revert [options] [Domain]
+
+Rollback the domain to snapshot state.
+
+Options:
 -n                snapshot name
-
-=item B<vm-snapshot-create> [I<OPTIONS>] I<domain-id>
-
-create vm snapshot.
-it will call the qmp transaction for creating the disk snapshot in order to
-ensure the disk snapshot is coherence.
-vm is paused during snapshot create, and is unpause after take snapshot
-finished.
-
-B<OPTIONS>
-
-=over 4
-
-=item B<-n>
-
-vm snapshot name
-
-=back
-
-=item B<vm-snapshot-delete> [I<OPTIONS>] I<domain-id>
-
-delete vm snapshot.
-delete the saved memory file and snapshot information file created by
-vm-snapshot-create.
-
-B<OPTIONS>
-
-=over 4
-
-=item B<-n>
-
-vm snapshot name
-
-=back
-
-=item B<vm-snapshot-list> I<domain-id>
-
-list vm snapshot for the dedicated domain including snapshot name and creation
-time which stored in the vm snapshot information file.
-
-=item B<vm-snapshot-apply> [I<OPTIONS>] I<domain-id>
-
-apply vm snapshot for the dedicated domain.
-
-B<OPTIONS>
-
-=over 4
-
-=item B<-n>
-
-vm snapshot name
-
-=back
-
-=item B<disk-snapshot-create> [I<OPTIONS>] I<domain-id>
-
-create disk snapshot.
-
-B<OPTIONS>
-
-=over 4
-
-=item B<-n>
-
-disk snapshot name
-
-=back
-
-=item B<disk-snapshot-delete> [I<OPTIONS>] I<domain-id>
-
-delete disk snapshot by snapshot name or snapshot id.
-
-B<OPTIONS>
-
-=over 4
-
-=item B<-i>
-
-disk snapshot id
-
-=item B<-n>
-
-disk snapshot name
-
-=back
-
-=item B<disk-snapshot-list> I<domain-id>
-
-list disk snapshot including snapshot id, tag, vm size, date, vm clock.
-
-=back
 
 [1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00414.html
     http://lists.xen.org/archives/html/xen-devel/2014-04/msg00244.html
 [2] http://lists.xen.org/archives/html/xen-devel/2014-04/msg02549.html
+[3] http://en.opensuse.org/openSUSE:GSOC_ideas#Add_virtual_machine_snapshot_support_to_libvirt_Xen_driver
 
-===============================================================
-(1), create domain snapshot.
-int libxl_snapshot_create(int domid, libxl_domain_snapshot *snapshot);
-create domain snasphot according to the name, device parameter defined in
-snapshot. the implementation will be:
-prepare libxl_domain_snapshot
-save_domain(leave domain paused after save domain return)
-if internal snapshot
-    call savevm hmp through libxl qmp api.
-else
-    libxl_disk_snapshot_create
-
-(2), delete domain snapshot.
-int libxl_snapshot_delete(int domid, libxl_domain_snapshot *snapshot);
-
-
-(3), list
-int libxl_snapshot_list(int domid, libxl_domain_snapshot *snapshot);
-int libxl_snapshot_revert(int domid, libxl_domain_snapshot *snapshot);
+changes since v2:
+1), reorgnized the whole docments.
+2), do not export the dedicated the disk snapshot commands.
+3), others changes according to Ian and Jim's comment.
 

@@ -628,6 +628,207 @@ install sles12 beta6 candidate.
 2, todo
 work report.
 
+10:53 2014-05-12
+(21:59 2014-05-15)
+snapshot
+cc
+David kiarie <davidkiarie4@gmail.com>
+jim, roger, chunyan.
+ian c, ian j, Anthony.perard
+
+
+[RFC v3] domain snapshot documents
+Hi,
+
+here is the third version about domain snapshot documents, the second version
+and the first version is here[1][2].
+
+there are lots of potential feature about snapshots. for now, i focus on
+providing the api for libvirt libxl driver in order to support the same
+functionality compare with libvirt qemu driver. and you may already notice
+david is working on libvirt libxl driver. it is a GSoC project[3]. it is
+important for him to know the api in order to start coding in libvirt side.
+i plan to work on other "advanced feature" after my first stage patch ack.
+
+there are two types of snapshots supported by libxl: disk snapshot and domain
+snapshot and four types of operations: create, delete, list and revert.
+
+Disk snapshot will only be crash-consistent if the domain is running. Disk
+snapshots can also be internal (qcow2) or external (snapshot in one file, delta
+in another).
+
+Domain snapshots include disk snapshots and domain state, allowing to resume
+the domain from the same state when the snapshot was created. This type of
+snapshot is also referred to as a domain checkpoint or system checkpoint.
+
+In libvirt, there is a something like resource manager for domain snapshot
+managements. So, in libxl, all these information is transfered through
+libxl_domain_snapshot struct. xl will manage the snapshot by itself.
+
+Domain snapshot create means save domain state and do disk snapshots.
+At the beginning of domain snapshot create, it will check whether it is
+snapshotable. it is snapshotable if all the disk is qdisk backed.
+
+Domain snapshot revert means rollback the current snapshot state. and
+Because the limitation of the qemu qmp, the revert could only support domain
+snapshot with internal disk snapshot. revert the domain snapshot with external
+snapshot doest not support.
+
+there are live flag in snasphot configuration file, it will be save domain
+memory and do external disk snapshot. to make the thing simple, i do not want
+to implement in my first verion of patch.
+
+As Ian Campbell said, the support of non-qdisk snapshot is very useful.
+unfortuntely, i have no idea what it need to do. the only non-qdisk i know is
+blktap. and i do not know does how to do snapshot create, delete, list and
+revert for blktap? does it support internal or external support?
+i treat it as an "advanced" feature, i will not cover it in my first version of
+patch.
+
+the new struct, api and command is as follows:
+1, new struct
+1), libxl_snapshot
+store a disk snapshot information, it is used by disk snapshot create and delete.
+libxl_disk_snapshot = Struct("disk_snapshot",[
+    ("device",        string),
+    ("name",          string),
+    ("file",          string),
+    ("format",        string),
+    ])
+
+device: device name to snapshot. e.g. sda, hda...
+name: snapshot name given by user. it will the be same name as domain snapshot
+name.
+the following paramenter is only useful for external snapshot.
+file: external snapshot file.
+format: the format of external snapshot file
+
+2), libxl_domain_snapshot
+store domain snapshot information which store in the path shown above. i add
+some api for create, delete and list these information.
+libxl_domain_snapshot = Struct("domain_snapshot",[
+    ("name",          string),
+    ("creation_time", uint64),
+    ("save",          string),
+    ("disks", Array(libxl_disk_snapshot, "num_disks")),
+    ])
+
+name: snapshot name given by user. if user do not provide the name, it will be
+the epoch seconds.
+creation_time: the epoch seconds.
+save: the memory save file for this snapshot.
+disks: store the disk snapshot information assoiate with this domain.
+
+2, new functions
+there is no common api like libxl_snapshot_xxx. the reason is that different
+toolstack may need to different event handling machanism(synchronize or
+asynchronize). and obviously, domain snapshot create need async handler. so i
+decide to only provide the sub api for xl and other toolstack(e.g. libvirt).
+it make eailer for toolstack to handle the event by themselves.
+
+1), in libxl/libxl.h
+the implementation will be located in libxl_snapshot.c
+/* disk snapshot api
+ * support create for external and internal disks, support delete for internal
+ * snapshot of disks.
+ */
+/* create disk snapshot according to the device name in snapshot array. nb is
+ * the number of snapshot array.
+ * use the qmp transaction to ensure all snapshot of disk is coherence.
+ */
+int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+                               libxl_disk_snapshot *snapshot, int nb,
+                               const libxl_asyncop_how *ao_how);
+/* delete number of nb disk snapshot describe in snapshot array
+ */
+int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+                               libxl_disk_snapshot *snapshot, int nb);
+
+2), xl_cmdimpl.c
+int libxl_snapshot_create(int domid, libxl_domain_snapshot *snapshot);
+int libxl_snapshot_delete(int domid, libxl_domain_snapshot *snapshot);
+int libxl_snapshot_get(int domid, libxl_domain_snapshot *snapshot, int nb);
+int libxl_snapshot_revert(int domid, libxl_domain_snapshot *snapshot);
+
+support create, delete, list and revert for domain snasphot.
+
+libxl_snapshot_get will read the domain snapshot configuration file stored in
+disk and list snapshot information in simple or long format.
+
+3, snapshot information file
+i will write manpage for this with patch.
+
+i found the Wei v5 patch about xl json format.
+http://lists.xen.org/archives/html/xen-devel/2014-05/msg01670.html
+it seems that i could use these apis for parsing and generating the snapshot
+information file.
+
+the domain snapshot information will store in the follow path:
+/var/lib/xen/snapshots/<domain_uuid>/snapshotdata-<snapshot_name>.xl
+
+here is an example for snapshot information file:
+description="a snapshot after installation"
+name="1397207577"
+creationtime="1397207577"
+save="1397207577.save"
+type="internal"/"external"
+live="no"
+disk_only="no"
+disk=[ 'hda=disk_hda.qcow2,type=qcow2', 'hdc=disk_hdc.qcow2,type=qcow2']
+
+the save and disk image file base on the path of "/var/lib/xen/snapshots/<domain_uuid>"
+
+the user could give a snapshot name when vm snapshot created. if not, the epoch
+seconds will set as name as the above examples.
+
+3, new command
+i will write manpage for this with patch.
+1), snapshot-create
+Usage: xl snapshot-create <ConfigFile> [options] [Domain]
+
+Create domain snapshot with ConfigFile or options
+
+Options:
+-n                snapshot name
+--live            do live snapshot
+--disk-only       only disk snapshot, do not save memory.
+
+2), snapshot-list
+Usage: xl snapshot-list [options] [Domain]
+
+List domain snapshot information about all/some snapshot in one domain.
+
+Options:
+-l, --long        Output all domain snapshot details
+-n                snapshot name
+
+3), snapshot-delete
+Usage: xl snapshot-delete [options] [Domain]
+
+Delete domain snapshot relative data, including domain state, disk snapshot
+and domain snapshot information file.
+
+Options:
+-n                snapshot name
+
+4), snapshot-revert
+Usage: xl snapshot-revert [options] [Domain]
+
+Rollback the domain to snapshot state.
+
+Options:
+-n                snapshot name
+
+[1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00414.html
+    http://lists.xen.org/archives/html/xen-devel/2014-04/msg00244.html
+[2] http://lists.xen.org/archives/html/xen-devel/2014-04/msg02549.html
+[3] http://en.opensuse.org/openSUSE:GSOC_ideas#Add_virtual_machine_snapshot_support_to_libvirt_Xen_driver
+
+changes since v2:
+1), reorgnized the whole docments.
+2), do not export the dedicated the disk snapshot commands.
+3), others changes according to Ian and Jim's comment.
+
 14:09 2014-05-12
 snapshot, gsoc, xen
 Hi, david
@@ -845,6 +1046,131 @@ GTD
 1, today
 1), write snapshot doc.
 -17:21 finish basic doc.
-TODO: review and consider Ian C comments.
 
+11:32 2014-05-15
+1, today
+1), snapshot doc: review and consider Ian C comments.
+
+17:30 2014-05-15
+1, reply to roger
+Hi, roger
+> Bamvor,
+>
+> Very honestly speaking, you know what (even I repeat it again), when I
+> met Jason and Olaf we talked about you. I told them there is no issue on
+> your functional/Technical Skills competency, and your knowledge sharing
+> habit is really good things. I am confident you could generate very good
+> business result. I do hope, and like to work with you to make it, together.
+thanks. meanwhile if you could join the discussion about snapshot on the
+technique side. i will appreciate your real help.
+>
+> For that reason, I have to point out WFH without reason and approval
+> ahead of time is not a professional approach.
+i sent the email before the core time. i could send it early next time. or you
+could give me your definition of ahead of time. and it just a WFH not a FTO,
+that means i will do the normal work. and for WFH, obviously there is something
+personal issue. for me, our gas water heater broken and need replacement today.
+and it will waste time if i came to company. i mean came to company, leave
+company, replace heater, and came to company afternoon. obviously, the better
+solution is WFH or it takes me 4 hours on my road.
+> In addition to that, you
+> already took Tuesday morning off. If it keeps happening, it does give me
+> doubt on what I believe. That is really not what we want.
+it is a 20-30min late compare with core time. what is the better solution for
+this case?
+>
+> Let's have a 1on1 next Monday.
+the reason is above. email discussion is enough for now.
+>
+> The other thing, I don't think I talked to you in 1on1 even though we
+> talked in the team when you are there. There are some organizational
+> policy in regarding to 8 hours working policy when Olaf was here in Feb.
+> Company respects flexibility, but 11AM~4PM should be the core working
+> hours we must be in office in respect the whole team. Other than that,
+> it need be approved by the manager. The same WFH. We need balance
+> between flexibility and discipline.
+i am not sure what you really mean. if you mean i need send a email to you
+alone and after you approve it and i need cc to others. it make sense to me.
+>
+> Anyway, don't be too much upset for my email. I am still confident like
+> I said in the first paragraph. Life, the world, the company, and all of
+> us is just about to CHANGE. You can have some proposal how we change
+> etc. I will do the same like Planning and Driving for Results.
+>
+> ps. I do aware that you reply email on Saturday, and have dinner in
+> office yesterday. Your current snapshot feature is a good task to make
+> change, and to make it part of real success, and keep going! BTW,
+> normally there will be pains or challenges before we success.
+thanks to your observation. it is enough to fill the 30 min late for core time
+on Tuesday i guess.
+>
+> have a good day,
+> Roger
+>
+>
+> On 05/15/2014 10:48 AM, Bamvor Jian Zhang wrote:
+>
+> --
+> regards,
+> Roger (office#:+86 10 65339283, cellphone# +86 13391978086)
+
+2, reply to roger about documents review.
+Hi, roger
+
+here is the v3 documents for snapshot. it is important for me to confirm the
+scoping and api from xen-devel. could you please review and reply in the
+xen-devel?
+
+http://lists.xen.org/archives/html/xen-devel/2014-05/msg01977.html
+
+regards
+
+bamvor
+
+17:53 2014-05-15
+Hi, David
+
+ >>>David kiarie <davidkiarie4@gmail.com> wrote:
+> On Wed, Apr 2, 2014 at 2:21 PM, Bamvor Jian Zhang <bjzhang@suse.com> wrote:
+>
+> > add internal disk snapshot support through qemu qmp, including create,
+> > delete and list.
+> >
+> > Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> > ---
+> >  tools/libxl/libxl.c          |  29 ++++++++++
+> >  tools/libxl/libxl.h          |   9 +++
+> >  tools/libxl/libxl_internal.h |  15 +++++
+> >  tools/libxl/libxl_qmp.c      | 132
+> > +++++++++++++++++++++++++++++++++++++++++++
+> >  tools/libxl/libxl_types.idl  |  12 ++++
+> >  tools/libxl/xl.h             |   3 +
+> >  tools/libxl/xl_cmdimpl.c     | 114 +++++++++++++++++++++++++++++++++++++
+> >  tools/libxl/xl_cmdtable.c    |  18 ++++++
+> >  8 files changed, 332 insertions(+)
+> >
+>
+> What qemu are you using?
+>
+> IIUC the block-snapshot-<operation>-internal-sync commands have not being
+> implemented here.Well they are not synchronized.I can only see
+> block-snapshot-<operation>- ones; no sync
+it is upstream qemu, it maybe takes a long time for discussion and reviewing
+the snapshot feature and code. i guess xen will update the qemu before our
+snasphot patch get ack.
+
+regards
+
+bamvor
+
+19:40 2014-05-15
+snapshot
+1,
+do i need update domain configuration after external snapshot?
+
+21:11 2014-05-15
+claudia
+question about sick leave
+1, how many days do i have the sick leave?
+2, does sick leave acc?
 
