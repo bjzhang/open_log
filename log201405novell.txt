@@ -611,7 +611,7 @@ Albrecht Dürer
 1), SLEPOS
 https://wiki.innerweb.novell.com/index.php/SLEPOS
 
-10:28 2014-05-12
+11:28 2014-05-12
 GTD
 0, 10:00-18:40
 
@@ -1033,11 +1033,15 @@ beijing, sync
 US, sync
 
 14:14 2014-05-14
+(15:53 2014-05-16)
 1,
 qemu: hw/core/loader.c
     rom_add_option -> rom_add_file: genroms
 seabios: src/optionroms.c
     run_file_roms("genroms/", 0, sources);
+
+2, fw_cfg_machine_ready
+3,  vmstate_register_ram_global
 
 17:21 2014-05-14
 GTD
@@ -1173,4 +1177,249 @@ claudia
 question about sick leave
 1, how many days do i have the sick leave?
 2, does sick leave acc?
+
+09:12 2014-05-16
+GTD
+0, 9:09-16:15
+
+1, today
+1), 9:12-11:30 12:36-13:05 13:47-14:02 snapshot. patch wei.liu2 and coding. see"09:13 2014-05-16"
+2), 11:30-12:20 lunch
+3), 12:20-12:36 reply to roger. see"12:22 2014-05-16"
+4), 13:05-13:47 sleep
+5), 14:00-14:30 1:1 with roger. see"14:41 2014-05-16".
+6), 30' discuss with Chunyan about optionrom. see"14:14 2014-05-14"
+
+09:13 2014-05-16
+fate#316276, snapshot
+snapshot
+1, get wei liu libxl json patch
+1), get wei liu libxl json patch, ref"09:28 2014-05-16".
+2), how it works.
+libxl_store_domain_configuration -> libxl_domain_config_to_json -> libxl__object_to_json
+libxl_domain_config_gen_json is the handler
+libxl_load_domain_configuration -> libxl_domain_config_from_json -> libxl_domain_config_init
+                                                                 -> libxl__object_from_json
+libxl_domain_config_parse_json is the handler
+
+at first, i though there is nothing i need to do. but i eventually found that i need to write libxl_domain_config_gen_json and libxl_domain_config_parse_json.
+
+it seems that i should use json format as the initial file format. it may simple the code compare with the following code in main_create:
+    if (config_in_json) {
+        char *config_c = config_data;
+        if (config_c[config_len-1] != '\0') {
+            config_c = xrealloc(config_c, config_len + 1);
+            config_c[config_len] = '\0';
+        }
+        libxl_domain_config_from_json(ctx, &d_config,
+                                      (const char *)config_data);
+    } else {
+        parse_config_data(config_source, config_data, config_len, &d_config);
+    }
+
+2, reply to v3
+1),
+Hi, Philipp
+
+thanks for reviewing.
+> Hello,
+>
+> On 15.05.2014 15:58, Bamvor Jian Zhang wrote:
+> > Disk snapshot will only be crash-consistent if the domain is running.
+>                                                                ^not?
+what i mean is that there are three types of consistent, inconsistent,
+crash-consistent, and application-consistent(e.g. a database).
+when the domain is running, we could not ensure the application-consistent,
+if application do not aware of snapshot. so, we only get crash-consistent.
+when the domain is not running. we could get the application-consistent.
+
+regards
+
+bamvor
+>
+> Sincerely
+> Philipp
+
+2),
+Hi, david
+
+> On Thu, May 15, 2014 at 4:58 PM, Bamvor Jian Zhang <bjzhang@suse.com> wrote:
+>
+> > Hi,
+> >
+> > here is the third version about domain snapshot documents, the second
+> > version
+> > and the first version is here[1][2].
+...
+> > 2, new functions
+> > there is no common api like libxl_snapshot_xxx. the reason is that
+> > different
+> > toolstack may need to different event handling machanism(synchronize or
+> > asynchronize). and obviously, domain snapshot create need async handler.
+> > so i
+> > decide to only provide the sub api for xl and other toolstack(e.g.
+> > libvirt).
+> > it make eailer for toolstack to handle the event by themselves.
+> >
+> > 1), in libxl/libxl.h
+> > the implementation will be located in libxl_snapshot.c
+> > /* disk snapshot api
+> >  * support create for external and internal disks, support delete for
+> > internal
+> >  * snapshot of disks.
+> >  */
+> > /* create disk snapshot according to the device name in snapshot array. nb
+> > is
+> >  * the number of snapshot array.
+> >  * use the qmp transaction to ensure all snapshot of disk is coherence.
+> >  */
+> > int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+> >                                libxl_disk_snapshot *snapshot, int nb,
+> >                                const libxl_asyncop_how *ao_how);
+> > /* delete number of nb disk snapshot describe in snapshot array
+> >  */
+> > int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+> >                                libxl_disk_snapshot *snapshot, int nb);
+> >
+> >
+> I think we also need revert libxl_disk_snapshot_revert() here.
+there are two methods for revert disk snapshot state in qemu: call "loadvm" hmp
+and "qemu-img snapshot -a". and i will call loadvm for reverting the qemu state
+and disk state in libxl_snapshot_create.
+user could revert the dedicate disk snapshot with qemu-img when domain is not
+running.it seems not a good idea wrap the qemu-img command in libxl.
+
+regards
+
+bamvor
+
+09:28 2014-05-16
+software skill,SCM, git, patch, mailing list.
+how to apply the patch from mailing list?
+1, http://unix.stackexchange.com/questions/80519/how-do-i-get-a-linux-kernel-patch-set-from-the-mailing-list
+1),
+http://marc.info/ has a link for each message to get the raw body, and https://lkml.org/ has (in the sidebar) links to download any contained diffs.
+2), ketchup
+https://rt.wiki.kernel.org/index.php/Ketchup
+
+2, git newbie
+https://home.regit.org/technical-articles/git-for-the-newbie/
+2), Using git in VIM
+I highly recommend to use fugitive which is a great wrapper to Git. Once installed, you can run command like
+
+:Gdiff HEAD^
+
+http://psomas.wordpress.com/2011/07/15/ketchup-or-how-to-manage-your-kernel-sources-more-efficiently/
+
+3, with the help above, i found that i could use "git am" to apply the patch saved by groupwise.
+> head ~/\[Xen-devel\]\ \[PATCH\ V5\ 01_32\]\ libxl\:\ make\ cpupool_qualifie
+From: upWei Liu <wei.liu2@citrix.com>xt
+To:     <xen-devel@lists.xen.org>
+CC:     Wei Liu <wei.liu2@citrix.com>, <ian.jackson@eu.citrix.com>, <ian.campbell@citrix.com>
+Date:   5/14/2014 5:58 AM
+Subject:        [Xen-devel] [PATCH V5 01/32] libxl: make cpupool_qualifier_to_cpupoolid a library function
+
+Signed-off-by: Wei Liu <wei.liu2@citrix.com>
+---
+ tools/libxl/libxl_utils.c |   31 ++++++++++++++++++++++++++++
+ tools/libxl/libxl_utils.h |    3 +++
+
+> git am ~/\[Xen-devel\]\ \[PATCH\ V5\ 01_32\]\ libxl\:\ make\ cpupool_qualif
+Applying: libxl: make cpupool_qualifier_to_cpupoolid a library function
+
+> git log | head
+commit 50efbab387f38328be4065d21aebe50772ec118d
+Author: Wei Liu <wei.liu2@citrix.com>
+Date:   Wed May 14 05:58:00 2014 +0800
+
+    libxl: make cpupool_qualifier_to_cpupoolid a library function
+
+    Signed-off-by: Wei Liu <wei.liu2@citrix.com>
+
+commit 11dba84796d852123da9d47f63b06aedaf9eeb01
+Author: Andrew Cooper <andrew.cooper3@citrix.com>
+
+4, and the most eaiser way is pull the git repo.
+e.g.  git://xenbits.xen.org/people/liuw/xen.git
+bamvor@laptop-work:upstream> git remote add wei.liu2 git://xenbits.xen.org/people/liuw/xen.git
+bamvor@laptop-work:upstream> git pull wei.liu2
+remote: Counting objects: 608, done.
+remote: Compressing objects: 100% (197/197), done.
+remote: Total 536 (delta 484), reused 375 (delta 339)
+Receiving objects: 100% (536/536), 92.03 KiB | 110 KiB/s, done.
+Resolving deltas: 100% (484/484), completed with 46 local objects.
+From git://xenbits.xen.org/people/liuw/xen
+ * [new branch]      for-dario  -> wei.liu2/for-dario
+ * [new branch]      master     -> wei.liu2/master
+ * [new branch]      staging    -> wei.liu2/staging
+ * [new branch]      wip.save-restore-new -> wei.liu2/wip.save-restore-new
+ * [new branch]      wip.save-restore-new3 -> wei.liu2/wip.save-restore-new3
+ * [new branch]      wip.save-restore-new4 -> wei.liu2/wip.save-restore-new4
+ * [new branch]      wip.save-restore-overhaul7 -> wei.liu2/wip.save-restore-overhaul7
+You asked to pull from the remote 'wei.liu2', but did not specify
+a branch. Because this is not the default configured remote
+for your current branch, you must specify a branch on the command line.
+
+12:22 2014-05-16
+Hi, roger
+> Bamvor,
+>
+> This is in response to your several emails late in the evening, thank you!
+>
+> First of all, I like to see your V3 email last night. Thanks for your
+> dedication. You delivered in-time as you told in the global team Jason
+> hosted. This is really good. To have your work time bound is part of
+> Planning competency toward success. It is the way to go. Keep going!
+>
+> I think I respect flexibility. Now, I understand why you have to WFH,
+> make sense. The key missing part in your initial email is no reason. It
+> is just blank. There are some examples similarly like this particularly
+> when you communicate with the management team. However, I do see you
+> communicate well with peers in the office. I am confident you can
+> improve this area (Communication) toward success.
+ok, i feel good about the flow and your understanding.
+i a very simple technique engineer. it would be very clear that you just
+told me what you want instead of talking lots of things.
+>
+> I tend to have 1on1 with everyone monthly or so. It just coincidentally
+> run together with this email thread. Since Xia is off today. We can do
+> today, say 2PM.
+i agree about monthly 1:1.
+>
+> My impression is the team is too flexible at some degree, and we need
+> balance with *discipline* particularly toward Business Results.
+>
+> I am very happy you invite me as reviewer, but I am not libvirt expert
+> and could not give you effective comments currently. However, we are the
+> team work, I can help to convey your message to Jim to help.
+currently, my work is focus on xen side which jim do not focus on. Jim is
+willing to focus on cloud or move to something level high leve things compare
+with xen.
+and we know jim is willing to help. and meanwhile there are lots of work
+waiting for jim. usually, if i ask more question to jim, jim will complain it
+to Jason euphemistically. it happened twice in the past two years.
+of cource, we could ask help from Jim. and it would be great we have more
+locally discussion. Chunyan have helped a lots about snapshot and other
+feature. and you are the last one i could ask for help locally.
+
+regards
+
+bamvor
+>
+> regards,
+> Roger
+
+14:41 2014-05-16
+1:1 roger
+1, request from roger
+1), need send email with reason when apply WFH.
+2), send email if i could not arrive at company before core time.
+my response: i could do it if you want. but i do not think it is necessary.
+WFH means that i still work at home, it should be ok unless it happens frequently.
+2, roger: 之前的team太自由(too freedom).
+my response: what i know is that nothing is affectted by that freedom. and i emphasize what he know is wrong.
+3, bamvor: request technique support for my snapshot fate.
+roger: he could not. he suggest discuss on fate.
+bamvor:
+i really want to ask him: if my manager could not help me about my technique, why i need him?
 
