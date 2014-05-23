@@ -1519,9 +1519,16 @@ ibus, fcitx, scim
 add China pinyin to gnome.
 
 14:20 2014-05-19
+(13:10 2014-05-23)
 software skill, network, ip, ss
 1, ip
 replace all the ifconfig and route command.
+1), set ip address and up interface, note that i could set more than one address for one interface.
+ip addr add 147.2.207.195/24 dev eth0
+ip link set eth0 up
+#delete ip address from eth0
+ip addr del 147.2.207.195/24 dev eth0
+2), set route
 ip route add default 147.2.207.254 via dev br0
 ip use the same syntax as the "ip addr".
 > ip route
@@ -1531,6 +1538,37 @@ default via 147.2.207.254 dev eth0  proto static
 
 2, ss
 replacement for network status
+
+3, how to write configuration file for network
+1), without bridge
+/etc/sysconfig/network # cat ifcfg-eth1
+BOOTPROTO='dhcp'
+BROADCAST=''
+ETHTOOL_OPTIONS=''
+IPADDR=''
+MTU=''
+NAME='Virtual Ethernet Card 0'
+NETMASK=''
+NETWORK=''
+REMOTE_IPADDR=''
+STARTMODE='auto'
+USERCONTROL='no'
+2), with bridge
+/etc/sysconfig/network # cat ifcfg-br1
+BOOTPROTO='dhcp4'
+BRIDGE='yes'
+BRIDGE_FORWARDDELAY='0'
+BRIDGE_PORTS='eth0'
+BRIDGE_STP='off'
+STARTMODE='auto'
+/etc/sysconfig/network # cat ifcfg-eth0
+BOOTPROTO='static'
+STARTMODE='auto'
+NAME='NetXtreme BCM5761e Gigabit Ethernet PCIe'
+IPADDR='0.0.0.0/32'
+PREFIXLEN=''
+
+
 
 12:11 2014-05-20
 1, yast2 qt interface Seqmentation fault
@@ -2162,15 +2200,100 @@ GTD
 
 1, today
 1), 11:04-11:37 13:50-14:30 15:17-17:19 snapshot.
-tomorrow: re-check xl_cmdimpl.c and finish other functions.
 2), 11:37-12:23 lunch
 3), 12:23-13:49 i should go back to work earier. it is necessary to excise before go back to work.
 4), 14:30-14:50 nap. 14:50-15:02 excise. 15:02-15:16 check dictionary and others.
 
-2, next
-1), send arm doc to kindle. share doc to Shawn.
-
 12:49 2014-05-22
 Android Hackers Handbook
 Pratical ARM Exploitation
+
+10:23 2014-05-23
+GTD
+0, 10:05
+
+1, today
+1), 10:24-11:38 15:20-18:00 snapshot. see"10:24 2014-05-23"
+2), 11:38-12:15 lunch
+3), 12:15-15:14 misc study: how to add a bridge, see"12:50 2014-05-23"; how to resise qcow2, see"13:41 2014-05-23", how to play sound over network(failed), see"14:49 2014-05-23".
+
+2, next
+1), send arm doc to kindle
+2), check osstest: how to check memory leak for domU?
+
+10:24 2014-05-23
+snapshot
+1, plan
+hope finish internal snapshot today.
+1), re-check xl_cmdimpl.c and finish other functions.
+2, TODO
+1), disk array: external snapshot.
+
+12:50 2014-05-23
+software skill, network, bridge, how to add a bridge
+reference the following link for for full information: http://www.tldp.org/HOWTO/BRIDGE-STP-HOWTO/set-up-the-bridge.html
+brctl addbr virbr0
+#network will unreachable after this operation
+brctl addif virbr0 eth0
+#set proper ip address
+ifconfig virbr0 147.2.207.195 netmask 255.255.255.0 up
+ifconfig eth0 0.0.0.0
+
+13:41 2014-05-23
+software skill, filesystem, resize, qcow2, resize qcow2 with back file
+1, power down vm
+1), info
+# qemu-img info disk0.qcow2
+image: disk0.qcow2
+file format: qcow2
+virtual size: 2.0G (2147483648 bytes)
+disk size: 265M
+cluster_size: 65536
+backing file: disk0.raw
+Snapshot list:
+ID        TAG                 VM SIZE                DATE       VM CLOCK
+2         20140319_1642             0 2014-03-19 16:43:34   00:00:56.729
+3         1396334371                0 2014-04-01 14:39:31   00:25:12.406
+6         1396334969                0 2014-04-01 14:49:29   00:01:25.721
+7         1397014607                0 2014-04-09 11:37:04   00:27:44.184
+8         1397120013                0 2014-04-10 16:53:46   00:04:42.743
+9         1397136690                0 2014-04-10 21:31:43   00:01:49.528
+10        1397136724                0 2014-04-10 21:32:21   00:02:09.933
+11        1397137941                0 2014-04-10 21:52:34   00:00:52.990
+12        1397138069                0 2014-04-10 21:54:42   00:02:47.851
+14        1397138809                0 2014-04-10 22:07:02   00:02:29.020
+15        1397138886                0 2014-04-10 22:08:20   00:03:33.070
+16        1397138961                0 2014-04-10 22:09:34   00:04:34.408
+17        20140411                  0 2014-04-11 13:52:51   00:00:00.000
+18        1397207577                0 2014-04-11 17:13:11   00:01:25.993
+
+2), resize failed because of including snapshot
+# qemu-img resize disk0.qcow2 +2G
+qemu-img: Can't resize an image which has snapshots
+qemu-img: This image does not support resize
+
+3), delete snapshot one by one
+# qemu-img snapshot -d 2 disk0.qcow2
+
+4), resize successful
+laptop-work:/home/bamvor/laptop/images/bjz_04_sles11_sp2 # qemu-img resize disk0.qcow2 +2G
+Image resized.
+laptop-work:/home/bamvor/laptop/images/bjz_04_sles11_sp2 # qemu-img info disk0.qcow2
+image: disk0.qcow2
+file format: qcow2
+virtual size: 4.0G (4294967296 bytes)
+disk size: 265M
+cluster_size: 65536
+backing file: disk0.raw
+
+2, after vm power up, the disk size grow up from 2G to 4G.
+
+14:49 2014-05-23
+audio, pulseaudio
+try to play sound over network. but failed.
+reference:
+http://superuser.com/questions/231920/forwarding-audio-like-x-in-ssh
+https://wiki.archlinux.org/index.php/PulseAudio
+
+http://unix.stackexchange.com/questions/116919/redirect-sound-microphone-via-ssh-how-to-telephone-via-ssh
 
