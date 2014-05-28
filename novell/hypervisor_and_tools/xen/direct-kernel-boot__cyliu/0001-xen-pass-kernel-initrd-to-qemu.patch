@@ -1,0 +1,118 @@
+From 4067e58a9e2fe8a9887a5a67e9235dddedd03c16 Mon Sep 17 00:00:00 2001
+From: Chunyan Liu <cyliu@suse.com>
+Date: Wed, 28 May 2014 14:36:54 +0800
+Subject: [PATCH] xen: pass kernel initrd to qemu
+
+---
+ tools/libxl/libxl_dm.c      | 20 ++++++++++++++++++++
+ tools/libxl/libxl_types.idl |  3 +++
+ tools/libxl/xl_cmdimpl.c    | 27 +++++++++++++++++++++------
+ 3 files changed, 44 insertions(+), 6 deletions(-)
+
+diff --git a/tools/libxl/libxl_dm.c b/tools/libxl/libxl_dm.c
+index 51ab2bf..133bb56 100644
+--- a/tools/libxl/libxl_dm.c
++++ b/tools/libxl/libxl_dm.c
+@@ -196,6 +196,16 @@ static char ** libxl__build_device_model_args_old(libxl__gc *gc,
+         int nr_set_cpus = 0;
+         char *s;
+ 
++        if (b_info->u.hvm.kernel) {
++            flexarray_vappend(dm_args, "-kernel", b_info->u.hvm.kernel, NULL);
++        }
++        if (b_info->u.hvm.ramdisk) {
++            flexarray_vappend(dm_args, "-initrd", b_info->u.hvm.ramdisk, NULL);
++        }
++        if (b_info->u.hvm.cmdline) {
++            flexarray_vappend(dm_args, "-append", b_info->u.hvm.cmdline, NULL);
++        }
++
+         if (b_info->u.hvm.serial) {
+             flexarray_vappend(dm_args, "-serial", b_info->u.hvm.serial, NULL);
+         }
+@@ -479,6 +489,16 @@ static char ** libxl__build_device_model_args_new(libxl__gc *gc,
+     if (b_info->type == LIBXL_DOMAIN_TYPE_HVM) {
+         int ioemu_nics = 0;
+ 
++        if (b_info->u.hvm.kernel) {
++            flexarray_vappend(dm_args, "-kernel", b_info->u.hvm.kernel, NULL);
++        }
++        if (b_info->u.hvm.ramdisk) {
++            flexarray_vappend(dm_args, "-initrd", b_info->u.hvm.ramdisk, NULL);
++        }
++        if (b_info->u.hvm.cmdline) {
++            flexarray_vappend(dm_args, "-append", b_info->u.hvm.cmdline, NULL);
++        }
++
+         if (b_info->u.hvm.serial) {
+             flexarray_vappend(dm_args, "-serial", b_info->u.hvm.serial, NULL);
+         }
+diff --git a/tools/libxl/libxl_types.idl b/tools/libxl/libxl_types.idl
+index 52f1aa9..b8b973b 100644
+--- a/tools/libxl/libxl_types.idl
++++ b/tools/libxl/libxl_types.idl
+@@ -336,6 +336,9 @@ libxl_domain_build_info = Struct("domain_build_info",[
+     ("event_channels",   uint32),
+     ("u", KeyedUnion(None, libxl_domain_type, "type",
+                 [("hvm", Struct(None, [("firmware",         string),
++                                       ("kernel", string),
++                                       ("cmdline", string),
++                                       ("ramdisk", string),
+                                        ("bios",             libxl_bios_type),
+                                        ("pae",              libxl_defbool),
+                                        ("apic",             libxl_defbool),
+diff --git a/tools/libxl/xl_cmdimpl.c b/tools/libxl/xl_cmdimpl.c
+index 5195914..aa00f6f 100644
+--- a/tools/libxl/xl_cmdimpl.c
++++ b/tools/libxl/xl_cmdimpl.c
+@@ -743,6 +743,8 @@ static void parse_config_data(const char *config_source,
+     int pci_permissive = 0;
+     int pci_seize = 0;
+     int i, e;
++    char *cmdline = NULL;
++    const char *root = NULL, *extra = "";
+ 
+     libxl_domain_create_info *c_info = &d_config->c_info;
+     libxl_domain_build_info *b_info = &d_config->b_info;
+@@ -1007,9 +1009,25 @@ static void parse_config_data(const char *config_source,
+ 
+     switch(b_info->type) {
+     case LIBXL_DOMAIN_TYPE_HVM:
+-        if (!xlu_cfg_get_string (config, "kernel", &buf, 0))
+-            fprintf(stderr, "WARNING: ignoring \"kernel\" directive for HVM guest. "
+-                    "Use \"firmware_override\" instead if you really want a non-default firmware\n");
++        xlu_cfg_replace_string (config, "kernel", &b_info->u.hvm.kernel, 0);
++
++        xlu_cfg_get_string (config, "root", &root, 0);
++        xlu_cfg_get_string (config, "extra", &extra, 0);
++
++        if (root) {
++            if (asprintf(&cmdline, "root=%s %s", root, extra) == -1)
++                cmdline = NULL;
++        } else {
++            cmdline = strdup(extra);
++        }
++
++        if ((root || extra) && !cmdline) {
++            fprintf(stderr, "Failed to allocate memory for cmdline\n");
++            exit(1);
++        }
++
++        b_info->u.hvm.cmdline = cmdline;
++        xlu_cfg_replace_string (config, "ramdisk", &b_info->u.hvm.ramdisk, 0);
+ 
+         xlu_cfg_replace_string (config, "firmware_override",
+                                 &b_info->u.hvm.firmware, 0);
+@@ -1061,9 +1079,6 @@ static void parse_config_data(const char *config_source,
+         break;
+     case LIBXL_DOMAIN_TYPE_PV:
+     {
+-        char *cmdline = NULL;
+-        const char *root = NULL, *extra = "";
+-
+         xlu_cfg_replace_string (config, "kernel", &b_info->u.pv.kernel, 0);
+ 
+         xlu_cfg_get_string (config, "root", &root, 0);
+-- 
+1.8.4.5
+
