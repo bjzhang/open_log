@@ -2394,3 +2394,149 @@ GTD
 1), 20' review chunyan direct kernel boot patch.
 2), 15:44-16:19 snapshot coding.
 
+14:51 2014-05-29
+software skill, console, serial, serial for grub2, serial for xen, serial for kernel
+1, https://wiki.archlinux.org/index.php/working_with_the_serial_console
+GRUB2 and systemd
+
+If you configure the serial console in GRUB2 systemd will create a getty listener on the same serial device as GRUB2 by default. So, this is the only configuration needed for Arch running with systemd.
+
+Edit /etc/default/grub
+
+1. Edit the GRUB_CMDLINE_DEFAULT="" line to start the console on /dev/ttyS0
+GRUB_CMDLINE_LINUX_DEFAULT="console=tty0 console=ttyS0,38400n8"
+
+2. Add a serial console section
+# Serial console
+GRUB_TERMINAL=serial
+GRUB_SERIAL_COMMAND="serial --speed=38400 --unit=0 --word=8 --parity=no --stop=1"
+
+3. Rebuild the grub.cfg file
+grub-mkconfig > /boot/grub/grub.cfg
+
+Now you are done. After reboot getty will be listening on device /dev/ttyS0 with settings 38400 8N1 and systemd will automatically start a getty session to listen on the same device with the same settings.
+
+2, xen
+http://flymanhi.blog.51cto.com/1011558/770814
+kernel /boot/xen-dbg.gz com1=115200,8n1 console=com1,vga
+
+3, switch between xen hypervisor and dom0 linux.
+Ctrl+a three times.
+for screen: it should be "Ctrl+a, a" three times.
+
+16:52 2014-05-29
+GTD
+0, -18:45
+
+1, today
+1), 40' support lance wang. see"16:53 2014-05-29"
+2), 30' how to use stub domain. see"17:05 2014-05-29"
+3), udev. see"17:17 2014-05-29"
+4), kvm memory balloon, see"17:27 2014-05-29".
+
+16:53 2014-05-29
+issue, xen hang sometimes, lance wang
+1, lance: hang after "Dom0 has maximum x VCPUs", the following log is retrieved from my sles11sp2(xen4.3), it is NOT get from lance. just for reference.
+(XEN) Brought up 4 CPUs
+(XEN) *** LOADING DOMAIN 0 ***
+(XEN)  Xen  kernel: 64-bit, lsb, compat32
+(XEN)  Dom0 kernel: 64-bit, lsb, paddr 0x2000 -> 0x87f000
+(XEN) PHYSICAL MEMORY ARRANGEMENT:
+(XEN)  Dom0 alloc.:   0000000115000000->0000000116000000 (957840 pages to be allocated)
+(XEN)  Init. ramdisk: 000000011aa14000->000000011bfff200
+(XEN) VIRTUAL MEMORY ARRANGEMENT:
+(XEN)  Loaded kernel: ffffffff80002000->ffffffff8087f000
+(XEN)  Init. ramdisk: 0000000000000000->0000000000000000
+(XEN)  Phys-Mach map: ffffea0000000000->ffffea0000761be0
+(XEN)  Start info:    ffffffff8087f000->ffffffff8087f4b4
+(XEN)  Page tables:   ffffffff80880000->ffffffff80889000
+(XEN)  Boot stack:    ffffffff80889000->ffffffff8088a000
+(XEN)  TOTAL:         ffffffff80000000->ffffffff80c00000
+(XEN)  ENTRY ADDRESS: ffffffff80002000
+(XEN) Dom0 has maximum 4 VCPUs
+(XEN) Scrubbing Free RAM: .done.
+(XEN) Initial low memory virq threshold set at 0x4000 pages.
+(XEN) Std. Loglevel: Errors and warnings
+(XEN) Guest Loglevel: Nothing (Rate-limited: Errors and warnings)
+(XEN) Xen is relinquishing VGA console.
+(XEN) *** Serial input -> DOM0 (type 'CTRL-a' three times to switch input to Xen)
+(XEN) Freed 280kB init memory.
+
+2, how to use serial. see"14:51 2014-05-29"
+
+17:05 2014-05-29
+how to use stub domain
+1, device_model_stubdomain_override=1
+it seems that should unset device_model and device_model_override
+
+17:17 2014-05-29
+software skill, udev, test rules
+1, udevadm
+  test         test an event run
+2, TEST rules
+SUBSYSTEM=="net", KERNEL=="vif*-emu", ACTION=="add", ENV{UDEV_CALL}="1", TEST=="/proc/xen" RUN+="/etc/xen/scripts/vif-setup $env{ACTION} type_if=tap"
+
+17:27 2014-05-29
+virtualization, kvm, memory, balloon, reportted by Xia li
+1, dynamic memory management for guest
+http://www.linux-kvm.org/page/FAQ#Is_dynamic_memory_management_for_guests_supported.3F
+This is a broad topic covering a few areas.
+
+A. KVM only allocates memory as the guest tries to use it. Once it's allocated, KVM keeps it. Some guests (namely Microsoft guests) zero all memory at boot time. So they will use all memory.
+
+B. Certain guests (only Linux at the moment) have a balloon driver, so the host can have the guest allocate a certain amount of memory which the guest won't be able to use anymore and it can then be freed on the host. Ballooning is controlled in the host via the balloon monitor command.
+
+C. Some hosts (presently only RHEL5.4 / CentOS 5.4) have a feature called KSM (Kernel Sharedpage Merging), which collapses together identical pages; this requires kernel support on the hos
+
+2, http://www.linux-kvm.org/page/Projects/auto-ballooning
+
+3, there is a virtio balloon driver.
+> pwd
+/lib/modules/3.7.10-1.11-desktop/kernel/drivers/virtio
+> ls
+virtio_balloon.ko  virtio.ko  virtio_mmio.ko  virtio_pci.ko  virtio_ring.ko
+
+but both sles11sp3 and sles11sp3 not install virtio_balloon driver. and after i manually load it, it still do not work for sles11sp2.
+maybe something is done in libvirt before launch qemu?
+
+# cat 512_768_raw 768_768_raw
+/usr/bin/qemu-kvm -S -M pc-0.15 -enable-kvm -m 768 -smp 4,sockets=4,cores=1,threads=1 -name sles12b7-1 -uuid 9f103228-b160-7324-1803-51d776c9aeae -nodefconfig -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/sles12b7-1.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-reboot -no-shutdown -drive file=/mnt/vm/sles12/sles12b7-1/disk0.raw,if=none,id=drive-virtio-disk0,format=raw -device virtio-blk-pci,bus=pci.0,multifunction=on,addr=0x4.0x0,drive=drive-virtio-disk0,id=virtio-disk0 -netdev tap,fd=20,id=hostnet0,vhost=on,vhostfd=24 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:54:00:02:15:4a,bus=pci.0,multifunction=on,addr=0x3.0x0,bootindex=1 -usb -vnc 127.0.0.1:2 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,multifunction=on,addr=0x5.0x0
+/usr/bin/qemu-kvm -S -M pc-0.15 -enable-kvm -m 768 -smp 4,sockets=4,cores=1,threads=1 -name sles12b7-2 -uuid 791f7158-1f9b-46dc-d292-15f3004c4670 -nodefconfig -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/sles12b7-2.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-reboot -no-shutdown -drive file=/mnt/vm/sles12/sles12b7-2/disk0.raw,if=none,id=drive-virtio-disk0,format=raw -device virtio-blk-pci,bus=pci.0,multifunction=on,addr=0x4.0x0,drive=drive-virtio-disk0,id=virtio-disk0 -netdev tap,fd=20,id=hostnet0,vhost=on,vhostfd=24 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:54:00:2e:e3:ce,bus=pci.0,multifunction=on,addr=0x3.0x0,bootindex=1 -usb -vnc 127.0.0.1:2 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,multifunction=on,addr=0x5.0x0
+
+4, check libvirt code:
+1), we could know that -m will definitly use max balloon.
+    /* Set '-m MB' based on maxmem, because the lower 'memory' limit
+     * is set post-startup using the balloon driver. If balloon driver
+     * is not supported, then they're out of luck anyway.  Update the
+     * XML to reflect our rounding.
+     */
+    virCommandAddArg(cmd, "-m");
+    def->mem.max_balloon = VIR_DIV_UP(def->mem.max_balloon, 1024) * 1024;
+    virCommandAddArgFormat(cmd, "%llu", def->mem.max_balloon / 1024);
+
+2), skill: check type
+    cur_balloon = vm->def->mem.cur_balloon;
+    if (cur_balloon != vm->def->mem.cur_balloon) {
+        virReportError(VIR_ERR_OVERFLOW,
+                       _("unable to set balloon to %lld"),
+                       vm->def->mem.cur_balloon);
+        goto cleanup;
+    }
+
+it is cast from unsigned long long to unsigned long:
+    struct {
+        ...
+        unsigned long long cur_balloon; /* in kibibytes */
+        ...
+    } mem;
+
+    unsigned long cur_balloon;
+
+3), there is a logic about set memory balloon:
+    if (qemuMonitorSetBalloon(priv->mon, cur_balloon) < 0) {
+        qemuDomainObjExitMonitor(driver, vm);
+        goto cleanup;
+    }
+
+so, it is make sense to say that the root cause is memory balloon driver.
+
