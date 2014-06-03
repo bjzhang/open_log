@@ -1,0 +1,119 @@
+.LOG
+12:31 2014-06-03
+mailing list, virtualization
+"Wei Liu"_email_"Discussion on libxl domain configuration synchronization"
+
+Ian and Ian
+
+There are many open questions regarding the design and implementation of this
+new feature so I think it's worthwhile having a dedicated email thread to
+discuss this before I write any new code.
+
+The new mechanism will use the new JSON infrastructure so that application can
+easily consume domain configuration.
+
+### Exposed API
+
+From API design point of view, what API should we expose to applications? We
+seem to have agreed that a "retrieve" API is certainly necessary (let's name it
+libxl_retrieve_domain_configuration for ease of discussion), while a "store" /
+"save" is debatable.
+
+If we set the rule that libxl application is not allowed to manipulate domain
+configuration then "store" is not necessary.
+
+### Implementation
+
+Further more, how should we implement the new API?
+
+My original thought is that the JSON version of domain configuration always
+contains the up to date domain configuration, so that we can get hold of that
+information even without the help of our library.
+
+Ian J pointed out that this design is bogus. If I understand correctly,
+he was referring to the fact that the most up to date information is
+actually stored in xenstore. So his suggestion was that we make
+libxl_retrieve_domain_configuration a) use JSON version as template, b)
+pull in xenstore knob values to fill in the things that need to be
+updated. I think this approach is appealing, if we agree on the design
+"libxl-json" is completely private to libxl, that application should not
+poke at it at all. I am now keen on taking this approach.
+
+What knobs should libxl_retrieve_domain_configuration be looking at, domain
+name, memory targets and devices etc. Memory targets are easy as they are only
+some integer values.
+
+As for devices, see next session.
+
+### Device hotplug / unplug and half-baked state
+
+When we build a domain, the devices presented in config file (later transform
+into JSON) and the devices presented in xenstore (backend entries) are
+consistent, otherwise we would have failed when building a domain.
+
+Device hotplug and unplug are a bit trickier to handle.
+
+Hotplug steps:
+1. libxl__get_domain_configuration (this reads libxl-json file and parse
+   it into libxl_domain_config struct).
+2. add new device to JSON config
+3. hotplug device
+4. if hotplug success, libx__set_domain_configuration
+
+If 3 fails, we may end up in a situation that some xenstore entries have been
+written, but that device is not presented in JSON version of configuration. 4
+can also fail when libxl tries to write libxl-json file. The steps and analyse
+for device unplug are similar.
+
+Later when we do libxl_retrieve_domain_configuration, the xenstore entries and
+JSON config don't agree with each other. What should we do here? We cannot say
+one view is more acurate then the other, given the fact that either 3 or 4 can
+fail. Ian J suggested merging the two views, I agree with him.
+
+### Summary
+
+1. libxl_retrieve_domain_configuration is the only public API.
+2. libxl_retrieve_domain_configuration should retrieve JSON version of
+   domain configuration as template and update it according to xenstore
+   entries.
+3. libxl_retrieve_domain_configuration should be able to merge xenstore
+   view and JSON config view of a domain.
+4. JSON version gets saved when creating a domain.
+5. JSON version gets updated when we do device hotplug / unplug. Other
+   libxl functionalities will not touch it, unless they need to save
+   some user provided values as template.
+
+Thoughts?
+
+Wei.
+
+14:35 2014-06-03
+software skill, network, ssh, ssh-add; github, error
+"Error: Agent admitted failure to sign"
+
+     ssh-add — adds private key identities to the authentication agent
+
+DESCRIPTION
+     ssh-add adds private key identities to the authentication agent, ssh-agent(1).  When run without
+     arguments, it adds the files ~/.ssh/id_rsa, ~/.ssh/id_dsa, ~/.ssh/id_ecdsa and ~/.ssh/identity.
+     After loading a private key, ssh-add will try to load corresponding certificate information from
+     the filename obtained by appending -cert.pub to the name of the private key file.  Alternative
+     file names can be given on the command line.
+
+reference: https://help.github.com/articles/error-agent-admitted-failure-to-sign
+
+15:06 2014-06-03
+software skill, network, ssh, commands
+1, http://blog.urfix.com/25-ssh-commands-tricks/
+Chinese Translation: http://blog.csdn.net/moubenmao_jun/article/details/10392061
+2, ssh port
+http://zhumeng8337797.blog.163.com/blog/static/100768914201172125444948/
+
+15:38 2014-06-03
+1, Chunyan
+1), budget 4000$. 30$/day.
+
+17:43 2014-06-03
+xen aarch64
+http://community.arm.com/groups/processors/blog/2014/03/28/virtualization-on-arm-with-xen
+
