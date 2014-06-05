@@ -1,7 +1,7 @@
 .LOG
 12:31 2014-06-03
 mailing list, virtualization
-"Wei Liu"_email_"Discussion on libxl domain configuration synchronization"
+1, "Wei Liu"_email_"Discussion on libxl domain configuration synchronization"
 
 Ian and Ian
 
@@ -87,6 +87,234 @@ Thoughts?
 
 Wei.
 
+2, (09:45 2014-06-05)
+Ian Jaskson
+Re: [Xen-devel] Discussion on libxl domain configuration synchronization
+
+    To: Wei Liu <wei.liu2@xxxxxxxxxx>
+    From: Ian Jackson <Ian.Jackson@xxxxxxxxxxxxx>
+    Date: Wed, 4 Jun 2014 16:36:47 +0100
+    Cc: Ian Campbell <ian.campbell@xxxxxxxxxx>, xen-devel@xxxxxxxxxxxxx
+    Delivery-date: Wed, 04 Jun 2014 15:37:44 +0000
+    List-id: Xen developer discussion <xen-devel.lists.xen.org>
+
+Wei Liu writes ("Discussion on libxl domain configuration synchronization"):
+> ### Exposed API
+> 
+> From API design point of view, what API should we expose to
+> applications? We seem to have agreed that a "retrieve" API is
+> certainly necessary (let's name it
+> libxl_retrieve_domain_configuration for ease of discussion), while a
+> "store" / "save" is debatable.
+
+Right.
+
+> If we set the rule that libxl application is not allowed to manipulate domain
+> configuration then "store" is not necessary.
+
+Indeed.  If the libxl application wants to change the domain's setup
+they must make individual calls to add and remove devices, increase
+and decrease memory, etc.
+
+
+> ### Summary
+> 
+> 1. libxl_retrieve_domain_configuration is the only public API.
+> 2. libxl_retrieve_domain_configuration should retrieve JSON version of
+>    domain configuration as template and update it according to xenstore
+>    entries.
+> 3. libxl_retrieve_domain_configuration should be able to merge xenstore
+>    view and JSON config view of a domain.
+> 4. JSON version gets saved when creating a domain.
+> 5. JSON version gets updated when we do device hotplug / unplug. Other
+>    libxl functionalities will not touch it, unless they need to save
+>    some user provided values as template.
+
+Right.
+
+
+> ### Implementation
+> 
+> Further more, how should we implement the new API?
+...
+> Ian J pointed out that this design is bogus. If I understand
+> correctly, he was referring to the fact that the most up to date
+> information is actually stored in xenstore. So his suggestion was
+> that we make libxl_retrieve_domain_configuration a) use JSON version
+> as template, b) pull in xenstore knob values to fill in the things
+> that need to be updated. I think this approach is appealing, if we
+> agree on the design "libxl-json" is completely private to libxl,
+> that application should not poke at it at all. I am now keen on
+> taking this approach.
+
+Exactly.  Yes, the JSON template would be completely private to libxl.
+
+> What knobs should libxl_retrieve_domain_configuration be looking at,
+> domain name, memory targets and devices etc. Memory targets are easy
+> as they are only some integer values.
+
+I think it should be sufficient to consider every function like
+  libxl_do_something_to_existing_domain
+
+Most (but not all) of these will do something which ought to be
+reflected in the results from libxl_retrieve_domain_configuration.
+
+There should be nothing else that modifies anything that shows up in
+libxl_retrieve_domain_configuration.
+
+> ### Device hotplug / unplug and half-baked state
+...
+> Device hotplug and unplug are a bit trickier to handle.
+> 
+> Hotplug steps:
+> 1. libxl__get_domain_configuration (this reads libxl-json file and parse
+>    it into libxl_domain_config struct).
+> 2. add new device to JSON config
+> 3. hotplug device
+> 4. if hotplug success, libx__set_domain_configuration
+> 
+> If 3 fails, we may end up in a situation that some xenstore entries
+> have been written, but that device is not presented in JSON version
+> of configuration. 4 can also fail when libxl tries to write
+> libxl-json file. The steps and analyse for device unplug are
+> similar.
+
+
+There are two ways to do this:
+
+
+--------------------------------------------------
+
+[ADD] JSON FIRST
+
+This is what you have.
+
+You tolerate as follows:
+
+ * Devices present in xenstore may not be present in the JSON.
+
+   Such devices cannot be reported properly by retrieve because
+   in general it is not possible to synthesize a libxl device
+   backend configuration out of what appears in xenstore.
+
+   So such devices (which may or may not be working as far
+   as the guest is concerned) must be reported with some kind
+   of degraded information in retreive.
+
+Conversely you add the new invariants:
+
+ * Any device present in the JSON is also present in xenstore.
+
+ * Any device which has any resources allocated to it in the host or
+   guest has an entry in the JSON.
+
+In retrieve, you can use the JSON as the primary reference.
+
+I think the degraded reporting is undesirable.  Also there is a
+locking problem - see below.
+
+--------------------------------------------------
+
+[ADD] XENSTORE FIRST
+
+This is what I would suggest instead.
+
+We establish the new invariant:
+
+ * Any device which is present in xenstore has a corresponding entry
+   in the JSON (where "corresponding" relates to the virtual device
+   index - ie the guest-visible "name" - not the backend info).
+
+I believe we already have this invariant:
+
+ * Any device which has any resources allocated to it in the host or
+   guest has an entry in the xenstore.
+
+(There is a corrollary of these two which is that a device with
+resources allocated must appear in the JSON.)
+
+Conversely, we tolerate this:
+
+ * Devices present in JSON may not be present in xenstore.
+   Such a device is to be regarded as "not present" for all purposes.
+
+To implement this, it is necessary to write out the new JSON before
+updating xenstore.
+
+In retrieve, you use xenstore as the primary reference.  The retrieve
+function would look at xenstore and simply elide any entries which
+were listed in the JSON but not in xenstore.
+
+This also avoids having to take out the lock (there has to be a lock
+on the stored JSON to prevent erronous concurrent updates) across the
+actual device addition.
+
+I think the retrieval merging algorithm works a bit like this:
+
+  * Read JSON with list of stored device configs
+
+  * Iterate over actual devices a la libxl_device_disk_list
+    * For each device, look for corresponding configuration in
+      JSON.
+      * If no such configuration, print a warning and make one up
+        along the lines of libxl_device_disk_getinfo
+      * If there is such a configuration, use the JSON information
+        except:
+      * Check whether the backing device is empty, and if so
+        delete the backing device from the JSON.
+        (This is for cdroms; see below.)
+    * Add resulting device config to new list of device configs
+
+  * Replace stored list of device configs with new one
+
+The effect is that the pre-libxl-defaulted configuration takes
+precedence but that it is safe to write a JSON configuration
+containing devices which are about to be added.
+
+--------------------------------------------------
+
+
+And now some loose ends:
+
+For hot unplug, do the operations in the reverse order.  (The reverse
+of whichever order we picked above, according to which design we have
+chosen.)
+
+
+CDROM insert/eject presents a problem.  I think it is not possible to
+reliably convert the xenstore information back into the original
+backend specification.  So we have a difficulty: if we switch straight
+from cdrom-has-image-A to cdrom-has-image-B, we might end up with JSON
+showing image X (= A or B) and xenstore implementing image Y (= B or
+A).  Retrieve wouldn't know what to return.
+
+I propose to solve this by adding a new invariant:
+
+ * The actual disk backend device (in xenstore) for an "ejectable"
+   device (currently, only cdroms) is always the same as the JSON;
+ * EXCEPT that it is permissible for the JSON to specify a
+   nonempty image while the xenstore information specifies "empty".
+
+That allows us to always return correct data: if the xenstore backend
+is empty, retrieve says empty.  Otherwise we use the JSON info.
+
+To maintain this invariant we need to change libxl_cdrom_insert.  A
+"swap", ie replacement of one image with another, has to be
+implemented as first an eject and then an insert.  That way we never
+have a situation where xenstore contains one set of non-empty
+information and JSON another.
+
+
+Thanks,
+Ian.
+
+_______________________________________________
+Xen-devel mailing list
+Xen-devel@xxxxxxxxxxxxx
+http://lists.xen.org/xen-devel
+
+
+
 14:35 2014-06-03
 software skill, network, ssh, ssh-add; github, error
 "Error: Agent admitted failure to sign"
@@ -128,9 +356,6 @@ GTD
 4), 40' nap
 5), 40' personal stuff
 6), 16:29-17:52 coding excise: assert
-
-2, next
-1), study about exit and wait.
 
 13:10 2014-06-04
 #if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 1)
@@ -322,4 +547,96 @@ check-TESTS: $(TESTS)
 	  echo "$${col}$$dashes$${std}"; \
 	  test "$$failed" -eq 0; \
 	else :; fi
+
+09:26 2014-06-05
+Jason_email_"[devel] Welcome Juergen Gross"
+
+Hi everyone,
+
+I'm pleased to announce that Juergen Gross has joined SUSE this week as
+a member of the Virtualization Team. Juergen will be working with the kernel and xen communities to add features to and increase the stability
+of the PVOPS xen kernel.
+
+I'd ask each of you to welcome Juergen to the company and to offer a
+helping hand to him whenever possible. Thanks!
+
+Jason
+
+
+--
+Jason Douglas
+Sr. Engineering Manager
+Virtualization Team
+SUSE
+jdouglas@suse.com
++1-801-861-1649
+
+09:31 2014-06-05
+
+Hi there,
+
+I am confused about something here.
+We have this structs.
+
+1), libxl_snapshot
+store a disk snapshot information, it is used by disk snapshot create
+and delete.
+libxl_disk_snapshot = Struct("disk_snapshot",[
+    ("device",        string),
+    ("name",          string),
+    ("file",          string),
+    ("format",        string),
+    ])
+
+device: device name to snapshot. e.g. sda, hda...
+name: snapshot name given by user. it will the be same name as domain snapshot
+name.
+                                         <---HERE (1
+the following parameter is only useful for external snapshot.
+file: external snapshot file.
+format: the format of external snapshot file
+
+2), libxl_domain_snapshot
+store domain snapshot information which store in the path shown above. i add
+some api for create, delete and list these information.
+libxl_domain_snapshot = Struct("domain_snapshot",[
+    ("name",          string),
+    ("creation_time", uint64),
+    ("save",          string),
+    ("disks", Array(libxl_disk_snapshot, "num_disks")),
+                       <---HERE (2
+    ])
+name: snapshot name given by user. if user do not provide the name, it will be
+the epoch seconds.
+creation_time: the epoch seconds.
+save: the memory save file for this snapshot.
+disks: store the disk snapshot information associate with this domain
+
+question
+--------------
+How should I deal with domains with multiple disks?Could I assume that
+there is only one disk?
+Just some clarification because in the libxl_domain_snapshot we have
+an array of libxl_disk_snapshot
+which somehow suggest you are taking care of domains with multiple disks.
+
+Regards,
+David.
+
+09:32 2014-06-05
+GTD
+0, 9:10
+
+1, today
+1), 9:32- snapshot testing.
+2), reply David kiarie email.
+
+2, next
+1), study about exit and wait.
+2), study about socket.
+
+09:32 2014-06-05
+snapshot
+
+
 
