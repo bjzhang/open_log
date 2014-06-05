@@ -88,16 +88,7 @@ Thoughts?
 Wei.
 
 2, (09:45 2014-06-05)
-Ian Jaskson
-Re: [Xen-devel] Discussion on libxl domain configuration synchronization
-
-    To: Wei Liu <wei.liu2@xxxxxxxxxx>
-    From: Ian Jackson <Ian.Jackson@xxxxxxxxxxxxx>
-    Date: Wed, 4 Jun 2014 16:36:47 +0100
-    Cc: Ian Campbell <ian.campbell@xxxxxxxxxx>, xen-devel@xxxxxxxxxxxxx
-    Delivery-date: Wed, 04 Jun 2014 15:37:44 +0000
-    List-id: Xen developer discussion <xen-devel.lists.xen.org>
-
+"Ian Jaskson"_email_"Re: [Xen-devel] Discussion on libxl domain configuration synchronization"
 Wei Liu writes ("Discussion on libxl domain configuration synchronization"):
 > ### Exposed API
 > 
@@ -308,11 +299,34 @@ information and JSON another.
 Thanks,
 Ian.
 
-_______________________________________________
-Xen-devel mailing list
-Xen-devel@xxxxxxxxxxxxx
-http://lists.xen.org/xen-devel
+3, (19:00 2014-06-05)
+Hi, Wei and Ian
 
+sorry if i am offtopic.
+i am working on add snapshot support for libxl. currently, i write my code base
+on Wei's lastest libxl json patch series. i could call
+libxl_domain_snapshot_from_json and libxl_domain_snapshot_to_json during
+retrieve and store domain snapshot configuration. it is very useful for me.
+> "Ian Jaskson"_email_"Re: [Xen-devel] Discussion on libxl domain configuration synchronization"
+> Wei Liu writes ("Discussion on libxl domain configuration synchronization"):
+> > ### Exposed API
+> >
+> > From API design point of view, what API should we expose to
+> > applications? We seem to have agreed that a "retrieve" API is
+> > certainly necessary (let's name it
+> > libxl_retrieve_domain_configuration for ease of discussion), while a
+> > "store" / "save" is debatable.
+>
+> Right.
+>
+> > If we set the rule that libxl application is not allowed to manipulate domain
+> > configuration then "store" is not necessary.
+>
+> Indeed.  If the libxl application wants to change the domain's setup
+> they must make individual calls to add and remove devices, increase
+> and decrease memory, etc.
+doing the domain snasphot operation is something like "change the domain's setup",
+it seems not a good idea to add snapshot infor into domain configuation.
 
 
 14:35 2014-06-03
@@ -391,6 +405,7 @@ software skill, man page
 /usr/lib64/mpi/gcc/openmpi/share/man:/usr/local/man:/usr/local/share/man:/usr/share/man:/opt/novell/man:/opt/novell/man
 
 15:40 2014-06-04
+(16:41 2014-06-05)
 mailing list, forum, virtualization
 1, xen
 http://www.gossamer-threads.com/lists/xen/devel/
@@ -398,6 +413,8 @@ http://www.gossamer-threads.com/lists/xen/devel/
 http://www.mail-archive.com/qemu-devel@nongnu.org/
 3, libvirt
 http://www.mail-archive.com/libvir-list@redhat.com/
+4, easy to search
+markmail.org
 
 17:07 2014-06-04
 software skill, editor, vim, insert TAB
@@ -583,68 +600,143 @@ jdouglas@suse.com
 +1-801-861-1649
 
 09:31 2014-06-05
+virtualization, snapshot, GSoC
+> Hi there,
+>
+> I am confused about something here.
+> We have this structs.
+>
+> 1), libxl_snapshot
+> store a disk snapshot information, it is used by disk snapshot create
+> and delete.
+> libxl_disk_snapshot = Struct("disk_snapshot",[
+>     ("device",        string),
+>     ("name",          string),
+>     ("file",          string),
+>     ("format",        string),
+>     ])
+>
+> device: device name to snapshot. e.g. sda, hda...
+> name: snapshot name given by user. it will the be same name as domain snapshot
+> name.
+>                                          <---HERE (1
+> the following parameter is only useful for external snapshot.
+> file: external snapshot file.
+> format: the format of external snapshot file
+>
+> 2), libxl_domain_snapshot
+> store domain snapshot information which store in the path shown above. i add
+> some api for create, delete and list these information.
+> libxl_domain_snapshot = Struct("domain_snapshot",[
+>     ("name",          string),
+>     ("creation_time", uint64),
+>     ("save",          string),
+>     ("disks", Array(libxl_disk_snapshot, "num_disks")),
+>                        <---HERE (2
+>     ])
+> name: snapshot name given by user. if user do not provide the name, it will be
+> the epoch seconds.
+> creation_time: the epoch seconds.
+> save: the memory save file for this snapshot.
+> disks: store the disk snapshot information associate with this domain
+>
+> question
+> --------------
+> How should I deal with domains with multiple disks?Could I assume that
+> there is only one disk?
+no.
+for domain snapshot with internal disk snapshot: savevm/delvm/loadvm will also
+do disk snapshot.
+for domain snapshot with external disk, the follow api will take disk snapshot
+while libvirt will provide the disk list from snapshot.
+reference libvirt qemu driver qemuDomainSnapshotCreateDiskActive for how it
+works in libxl driver, and qemuMonitorJSONDiskSnapshot show add the disk into
+qmp transaction.s
 
-Hi there,
+/* create disk snapshot with qmp transaction
+ */
+int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+                               libxl_disk_snapshot *snapshot, int nb);
 
-I am confused about something here.
-We have this structs.
+/* delete disk snapshot with qmp delete(TODO) one by one
+ */
+int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+                               libxl_disk_snapshot *snapshot, int nb);
 
-1), libxl_snapshot
-store a disk snapshot information, it is used by disk snapshot create
-and delete.
-libxl_disk_snapshot = Struct("disk_snapshot",[
-    ("device",        string),
-    ("name",          string),
-    ("file",          string),
-    ("format",        string),
-    ])
-
-device: device name to snapshot. e.g. sda, hda...
-name: snapshot name given by user. it will the be same name as domain snapshot
-name.
-                                         <---HERE (1
-the following parameter is only useful for external snapshot.
-file: external snapshot file.
-format: the format of external snapshot file
-
-2), libxl_domain_snapshot
-store domain snapshot information which store in the path shown above. i add
-some api for create, delete and list these information.
-libxl_domain_snapshot = Struct("domain_snapshot",[
-    ("name",          string),
-    ("creation_time", uint64),
-    ("save",          string),
-    ("disks", Array(libxl_disk_snapshot, "num_disks")),
-                       <---HERE (2
-    ])
-name: snapshot name given by user. if user do not provide the name, it will be
-the epoch seconds.
-creation_time: the epoch seconds.
-save: the memory save file for this snapshot.
-disks: store the disk snapshot information associate with this domain
-
-question
---------------
-How should I deal with domains with multiple disks?Could I assume that
-there is only one disk?
-Just some clarification because in the libxl_domain_snapshot we have
-an array of libxl_disk_snapshot
-which somehow suggest you are taking care of domains with multiple disks.
-
-Regards,
-David.
+> Just some clarification because in the libxl_domain_snapshot we have
+> an array of libxl_disk_snapshot
+> which somehow suggest you are taking care of domains with multiple disks.
+yes, see my comments above.
+> 
+> Regards,
+> David.
 
 09:32 2014-06-05
 GTD
-0, 9:10
+0, 9:10-19:20
 
 1, today
-1), 9:32- snapshot testing.
-2), reply David kiarie email.
+1), 9:32-11:35 16:01-17:20 snapshot testing.
+2), 11:35-12:30 lunch
+3), 12:54-15:42 nap 20' read LWN weekly edition.
+4), 15:42 16:01 virsh network command. see"16:01 2014-06-05"
+5), 18:29-18:57 reply David kiarie email. see"09:31 2014-06-05"
+6), 19:00-19:13 try to write email to Wei Liu and Ian Jackson. i am not sure whether i need it or not. see"12:31 2014-06-03"3.
 
 2, next
+1), study daemon
 1), study about exit and wait.
 2), study about socket.
 
 09:32 2014-06-05
 snapshot
+1, plan
+1), test snapshot with script.
+2), write code for external disk snapshot.
+3), TODO
+(1), only support snapshot all disks?
+it will easy to implement but is different from libvirt.
+(2), do i need "info snapshots"?
+i would be useful for checking before snapshot operations.
+
+2, do
+1), done: recheck create and delete function.
+2), done: recheck list and revert function.
+
+12:53 2014-06-05
+software skill, vnc, openstack, noVNC
+http://www.vpsee.com/2013/07/integrating-novnc-with-our-vm-control-panel/
+使用 noVNC 开发 Web 虚拟机控制台
+
+http://kanaka.github.io/noVNC/noVNC/vnc.html
+http://kanaka.github.io/noVNC/
+
+16:01 2014-06-05
+software skill, network, virsh, net
+# virsh net-dumpxml nat
+<network>
+  <name>nat</name>
+  <uuid>cb7b045a-3cd2-459e-8625-a754b7a60e5a</uuid>
+  <forward mode='nat'>
+    <nat>
+      <port start='1024' end='65535'/>
+    </nat>
+  </forward>
+  <bridge name='virbr0' stp='on' delay='0'/>
+  <mac address='52:54:00:5c:aa:2d'/>
+  <domain name='nat'/>
+  <ip address='192.168.100.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.100.128' end='192.168.100.254'/>
+    </dhcp>
+  </ip>
+</network>
+
+# virsh net-info nat
+Name:           nat
+UUID:           cb7b045a-3cd2-459e-8625-a754b7a60e5a
+Active:         yes
+Persistent:     yes
+Autostart:      yes
+Bridge:         virbr0
+
