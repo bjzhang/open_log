@@ -667,7 +667,7 @@ int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
 > an array of libxl_disk_snapshot
 > which somehow suggest you are taking care of domains with multiple disks.
 yes, see my comments above.
-> 
+>
 > Regards,
 > David.
 
@@ -676,7 +676,7 @@ GTD
 0, 9:10-19:20
 
 1, today
-1), 9:32-11:35 16:01-17:20 snapshot testing.
+1), 9:32-11:35 16:01-17:20 snapshot code review.
 2), 11:35-12:30 lunch
 3), 12:54-15:42 nap 20' read LWN weekly edition.
 4), 15:42 16:01 virsh network command. see"16:01 2014-06-05"
@@ -739,4 +739,454 @@ Active:         yes
 Persistent:     yes
 Autostart:      yes
 Bridge:         virbr0
+
+09:46 2014-06-06
+GTD
+0, 9:30
+
+1, today
+1), 9:50-10:04 mailing list: arm. see"10:00 2014-06-06"
+2), 10:04-11:34 14:32- snapshot. see"10:04 2014-06-06"
+3), 11:34-12:14 lunch.
+4), 13:52-14:32 nap.
+
+2, next
+1), try opensuse aarch64. http://en.opensuse.org/openSUSE:AArch64
+1), study daemon
+1), study about exit and wait.
+2), study about socket.
+
+10:00 2014-06-06
+mailing list, virtualization, xen, arm, aarch64
+1, http://lists.xen.org/archives/html/xen-devel/2014-06/msg00606.html
+[Xen-devel] [PATCH] xen: arm: implement generic multiboot compatibility strings (Was: Re: [Linaro-uefi] The GRUB multiboot support patch for aarch64(V3.1))
+
+This causes Xen to accept the more generic names originally proposed by
+Andre in http://thread.gmane.org/gmane.linux.linaro.announce.boot/326 and
+incorporated into the proposal in
+http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions/Multiboot
+
+2, details
+http://thread.gmane.org/gmane.linux.linaro.announce.boot/326
+From: Andre Przywara <andre.przywara@...>
+Subject: [PROPOSAL] ARM/FDT: passing multiple binaries to a kernel
+Newsgroups: gmane.linux.linaro.announce.boot, gmane.linux.drivers.devicetree, gmane.linux.ports.arm.kernel
+Date: 2013-09-03 15:53:44 GMT (39 weeks, 2 days, 9 hours and 55 minutes ago)
+
+Hi,
+
+a normal Linux kernel currently supports reading the start and end
+address of a single binary blob via the FDT's /chosen node.
+This will be interpreted as the location of an initial RAM disk.
+
+The Xen hypervisor itself is a kernel, but needs up to _two_ binaries
+for proper operation: a Dom0 Linux kernel and it's associated initrd.
+On x86 this is solved via the multiboot protocol used by the Grub
+bootloader, which supports to pass an arbitrary number of binary modules
+to any kernel.
+
+Since in the ARM world we have the versatile device tree, we don't need
+to implement the mulitboot protocol.
+
+So I'd like to propose a new binding which denotes binary modules a
+kernel can use at it's own discretion.
+The need is triggered by the Xen hypervisor (which already uses a very
+similar scheme), but the approach is deliberately chosen to be as
+generic as possible to allow future uses (like passing firmware blobs
+for devices or the like).
+Credits for this go to Ian Campbell, who started something very similar
+[1] for the Xen hypervisor. The intention of this proposal is to make
+this generic and publicly documented.
+
+Looking forward to any comments!
+
+Thanks,
+Andre.
+
+[1]
+http://xenbits.xen.org/gitweb/?p=xen.git;a=blob;f=docs/misc/arm/device-tree/booting.txt;h=94cd3f18a4e1317a35e1255bf5c6e1e091001d1a;hb=HEAD
+----------------------------
+* Multiple boot modules device tree bindings
+
+Boot loaders wanting to pass multiple additional binaries to a kernel
+shall add a node "module" for each binary blob under the /chosen node
+with the following properties:
+
+- compatible:
+     compatible = "boot,module";
+   A bootloader may add names to more specifically describe the module,
+   e.g. Xen may use "xen,dom0-kernel" or "xen,dom0-ramdisk".
+   If possible a kernel should be able to use modules even without a
+   descriptive naming, by enumerating them in order and using hard-coded
+   meanings for each module (e.g. first is kernel, second is initrd).
+
+- reg: specifies the base physical address and size of a region in
+   memory where the bootloader loaded the respective binary data to.
+
+- bootargs:
+   An optional property describing arguments to use for this module.
+   Could be a command line or configuration data.
+
+Example:
+/chosen {
+     #size-cells = <0x1>;
+     #address-cells = <0x1>;
+     module <at> 0 {
+         compatible = "xen,linux-zimage", "xen,multiboot-module",
+"boot,module";
+         reg = <0x80000000 0x003dcff8>;
+         bootargs = "console=hvc0 earlyprintk ro root=/dev/sda1 nosmp";
+     };
+     module <at> 1 {
+         compatible = "xen,linux-initrd", "xen,multiboot-module",
+"boot,module";
+         reg = <0x08000000 0x00123456>;
+     };
+...
+
+10:04 2014-06-06
+1, Jim
+1),
+> Bamvor Jian Zhang wrote:
+> > Hi,
+> >
+> > here is the third version about domain snapshot documents, the second version
+> > and the first version is here[1][2].
+> >
+> > there are lots of potential feature about snapshots. for now, i focus on
+> > providing the api for libvirt libxl driver in order to support the same
+> > functionality compare with libvirt qemu driver. and you may already notice
+> > david is working on libvirt libxl driver. it is a GSoC project[3]. it is
+> > important for him to know the api in order to start coding in libvirt side.
+> >
+>
+> Right.  We can't do much on the libvirt side without libxl APIs :-).
+>
+> > i plan to work on other "advanced feature" after my first stage patch ack.
+> >
+> > there are two types of snapshots supported by libxl: disk snapshot and domain
+> > snapshot and four types of operations: create, delete, list and revert.
+> >
+>
+> Should the operations also include 'info', to get name, creation time,
+> disks, etc. on a particular snapshot?
+list with --long options will do this: list details of the snapshot information.
+reference our discuss here[1].
+>
+> > Disk snapshot will only be crash-consistent if the domain is running. Disk
+> > snapshots can also be internal (qcow2) or external (snapshot in one file,
+> > delta
+> > in another).
+> >
+> > Domain snapshots include disk snapshots and domain state, allowing to resume
+> > the domain from the same state when the snapshot was created. This type of
+> > snapshot is also referred to as a domain checkpoint or system checkpoint.
+> >
+> > In libvirt, there is a something like resource manager for domain snapshot
+> > managements. So, in libxl, all these information is transfered through
+> > libxl_domain_snapshot struct. xl will manage the snapshot by itself.
+> >
+> > Domain snapshot create means save domain state and do disk snapshots.
+> > At the beginning of domain snapshot create, it will check whether it is
+> > snapshotable. it is snapshotable if all the disk is qdisk backed.
+> >
+> > Domain snapshot revert means rollback the current snapshot state. and
+> > Because the limitation of the qemu qmp, the revert could only support domain
+> > snapshot with internal disk snapshot. revert the domain snapshot with external
+> > snapshot doest not support.
+> >
+> > there are live flag in snasphot configuration file, it will be save domain
+> > memory and do external disk snapshot. to make the thing simple, i do not want
+> > to implement in my first verion of patch.
+> >
+> > As Ian Campbell said, the support of non-qdisk snapshot is very useful.
+> > unfortuntely, i have no idea what it need to do. the only non-qdisk i know is
+> > blktap. and i do not know does how to do snapshot create, delete, list and
+> > revert for blktap? does it support internal or external support?
+> >
+>
+> Looking in tools/blktap2, it seems only external snapshots are supported
+> via td-util or vhd-util.  I suppose lvm would also be considered an
+> external disk snapshot.
+thanks. do you mean call these utils in libxl__exec? it seems that only a few
+binary called by this functions: bootloader, libxl-save-helper, qemu-dm,
+qemu-system-i386.
+the core function of vhd_util snapshot is vhd_snashot which defined in
+(tools/blktap2/include/libvhd.h, /usr/lib64/libvhd.so). it included in
+xen-devel package in opensuse12.3. maybe it is a better choice?
+>
+> > i treat it as an "advanced" feature, i will not cover it in my first version
+> > of
+> > patch.
+> >
+> > the new struct, api and command is as follows:
+> > 1, new struct
+> > 1), libxl_snapshot
+> > store a disk snapshot information, it is used by disk snapshot create and
+> > delete.
+> > libxl_disk_snapshot = Struct("disk_snapshot",[
+> >     ("device",        string),
+> >     ("name",          string),
+> >     ("file",          string),
+> >     ("format",        string),
+> >
+>
+> Should format be an enum?
+yeah, i should be. i will update it.
+>
+> >     ])
+> >
+> > device: device name to snapshot. e.g. sda, hda...
+> > name: snapshot name given by user. it will the be same name as domain snapshot
+> > name.
+> > the following paramenter is only useful for external snapshot.
+> > file: external snapshot file.
+> > format: the format of external snapshot file
+> >
+> > 2), libxl_domain_snapshot
+> > store domain snapshot information which store in the path shown above. i add
+> > some api for create, delete and list these information.
+> > libxl_domain_snapshot = Struct("domain_snapshot",[
+> >     ("name",          string),
+> >     ("creation_time", uint64),
+> >     ("save",          string),
+> >     ("disks", Array(libxl_disk_snapshot, "num_disks")),
+> >     ])
+> >
+>
+> I think 'description' and 'state' would be useful fields, the latter
+> being the state of the domain when the snapshot was created.
+>
+> > name: snapshot name given by user. if user do not provide the name, it will be
+> > the epoch seconds.
+> > creation_time: the epoch seconds.
+> > save: the memory save file for this snapshot.
+> > disks: store the disk snapshot information assoiate with this domain.
+> >
+> > 2, new functions
+> > there is no common api like libxl_snapshot_xxx. the reason is that different
+> > toolstack may need to different event handling machanism(synchronize or
+> > asynchronize). and obviously, domain snapshot create need async handler. so i
+> > decide to only provide the sub api for xl and other toolstack(e.g. libvirt).
+> > it make eailer for toolstack to handle the event by themselves.
+> >
+>
+> What is the domain_snapshot struct used for then?  Seems it is unneeded
+> if not exposed in the API, something to be declared by the app.  I'd
+> like to hear what the Xen tools devs think about this approach.  Ian J,
+> Ian C, Anthony?
+>
+> > 1), in libxl/libxl.h
+> > the implementation will be located in libxl_snapshot.c
+> > /* disk snapshot api
+> >  * support create for external and internal disks, support delete for internal
+> >  * snapshot of disks.
+> >  */
+> > /* create disk snapshot according to the device name in snapshot array. nb is
+> >  * the number of snapshot array.
+> >  * use the qmp transaction to ensure all snapshot of disk is coherence.
+> >  */
+> > int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+> >                                libxl_disk_snapshot *snapshot, int nb,
+> >                                const libxl_asyncop_how *ao_how);
+> > /* delete number of nb disk snapshot describe in snapshot array
+> >  */
+> > int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+> >                                libxl_disk_snapshot *snapshot, int nb);
+> >
+>
+> As David mentioned in his reply, there should be a revert as well.  Is
+> list (and info if added) handled by the app (xl, libvirt, etc)?
+>
+> > 2), xl_cmdimpl.c
+> > int libxl_snapshot_create(int domid, libxl_domain_snapshot *snapshot);
+> > int libxl_snapshot_delete(int domid, libxl_domain_snapshot *snapshot);
+> > int libxl_snapshot_get(int domid, libxl_domain_snapshot *snapshot, int nb);
+> > int libxl_snapshot_revert(int domid, libxl_domain_snapshot *snapshot);
+> >
+> > support create, delete, list and revert for domain snasphot.
+> >
+> > libxl_snapshot_get will read the domain snapshot configuration file stored in
+> > disk and list snapshot information in simple or long format.
+> >
+> > 3, snapshot information file
+> > i will write manpage for this with patch.
+> >
+> > i found the Wei v5 patch about xl json format.
+> > http://lists.xen.org/archives/html/xen-devel/2014-05/msg01670.html
+> > it seems that i could use these apis for parsing and generating the snapshot
+> > information file.
+> >
+>
+> Yeah, with all of this work, seems json would be a better way to go.
+>
+> Regards,
+> Jim
+>
+> > the domain snapshot information will store in the follow path:
+> > /var/lib/xen/snapshots/<domain_uuid>/snapshotdata-<snapshot_name>.xl
+> >
+> > here is an example for snapshot information file:
+> > description="a snapshot after installation"
+> > name="1397207577"
+> > creationtime="1397207577"
+> > save="1397207577.save"
+> > type="internal"/"external"
+> > live="no"
+> > disk_only="no"
+> > disk=[ 'hda=disk_hda.qcow2,type=qcow2', 'hdc=disk_hdc.qcow2,type=qcow2']
+> >
+> > the save and disk image file base on the path of
+> > "/var/lib/xen/snapshots/<domain_uuid>"
+> >
+> > the user could give a snapshot name when vm snapshot created. if not, the
+> > epoch
+> > seconds will set as name as the above examples.
+> >
+> > 3, new command
+> > i will write manpage for this with patch.
+> > 1), snapshot-create
+> > Usage: xl snapshot-create <ConfigFile> [options] [Domain]
+> >
+> > Create domain snapshot with ConfigFile or options
+> >
+> > Options:
+> > -n                snapshot name
+> > --live            do live snapshot
+> > --disk-only       only disk snapshot, do not save memory.
+> >
+> > 2), snapshot-list
+> > Usage: xl snapshot-list [options] [Domain]
+> >
+> > List domain snapshot information about all/some snapshot in one domain.
+> >
+> > Options:
+> > -l, --long        Output all domain snapshot details
+> > -n                snapshot name
+> >
+> > 3), snapshot-delete
+> > Usage: xl snapshot-delete [options] [Domain]
+> >
+> > Delete domain snapshot relative data, including domain state, disk snapshot
+> > and domain snapshot information file.
+> >
+> > Options:
+> > -n                snapshot name
+> >
+> > 4), snapshot-revert
+> > Usage: xl snapshot-revert [options] [Domain]
+> >
+> > Rollback the domain to snapshot state.
+> >
+> > Options:
+> > -n                snapshot name
+> >
+> > [1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00414.html
+> >     http://lists.xen.org/archives/html/xen-devel/2014-04/msg00244.html
+> > [2] http://lists.xen.org/archives/html/xen-devel/2014-04/msg02549.html
+> > [3]
+> > http://en.opensuse.org/openSUSE:GSOC_ideas#Add_virtual_machine_snapshot_support_to_libvirt_Xen_driver
+> >
+> > changes since v2:
+> > 1), reorgnized the whole docments.
+> > 2), do not export the dedicated the disk snapshot commands.
+> > 3), others changes according to Ian and Jim's comment.
+> >
+> > regards
+> >
+> > bamvor
+> >
+> >
+[1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg02904.html
+
+2),
+> Bamvor Jian Zhang wrote:
+> > Hi, David
+> >
+> >> On Fri, May 16, 2014 at 6:00 PM, Bamvor Jian Zhang <bjzhang@xxxxxxxx> wrote:
+> >>
+> >>
+> >>> Hi, david
+> >>>
+> >>>
+> >>>> On Thu, May 15, 2014 at 4:58 PM, Bamvor Jian Zhang <bjzhang@xxxxxxxx>
+> >>>>
+> >>> wrote:
+> >>>
+> >>>>> Hi,
+> >>>>>
+> >>>>> here is the third version about domain snapshot documents, the second
+> >>>>> version
+> >>>>> and the first version is here[1][2].
+> >>>>>
+> >>> ...
+> >>>
+> >>>>> 2, new functions
+> >>>>> there is no common api like libxl_snapshot_xxx. the reason is that
+> >>>>> different
+> >>>>> toolstack may need to different event handling machanism(synchronize or
+> >>>>> asynchronize). and obviously, domain snapshot create need async
+> >>>>>
+> >>> handler.
+> >>>
+> >>>>> so i
+> >>>>> decide to only provide the sub api for xl and other toolstack(e.g.
+> >>>>> libvirt).
+> >>>>> it make eailer for toolstack to handle the event by themselves.
+> >>>>>
+> >>>>> 1), in libxl/libxl.h
+> >>>>> the implementation will be located in libxl_snapshot.c
+> >>>>> /* disk snapshot api
+> >>>>>  * support create for external and internal disks, support delete for
+> >>>>> internal
+> >>>>>  * snapshot of disks.
+> >>>>>  */
+> >>>>> /* create disk snapshot according to the device name in snapshot
+> >>>>>
+> >>> array. nb
+> >>>
+> >>>>> is
+> >>>>>  * the number of snapshot array.
+> >>>>>  * use the qmp transaction to ensure all snapshot of disk is coherence.
+> >>>>>  */
+> >>>>> int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+> >>>>>                                libxl_disk_snapshot *snapshot, int nb,
+> >>>>>                                const libxl_asyncop_how *ao_how);
+> >>>>> /* delete number of nb disk snapshot describe in snapshot array
+> >>>>>  */
+> >>>>> int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+> >>>>>                                libxl_disk_snapshot *snapshot, int nb);
+> >>>>>
+> >> Are this the only two functions you are exposing?I mean the API?or am I
+> >> getting something wrong?
+> >>
+> >>
+> > there are functions libxl_qmp_loadvm, libxl_qmp_savevm which is called by
+> > domain internal snapshot create/revert. currently, they are internal
+> > functions.
+> > (libxl_intenal.h). but i should expose them, e.g. look like:
+> > int libxl_loadvm(libxl_ctx *ctx, int domid, libxl_domain_snapshot *snapshot,
+> >                  const libxl_asyncop_how *ao_how);
+> > int libxl_savevm(libxl_ctx *ctx, int domid, libxl_domain_snapshot *snapshot,
+> >                  const libxl_asyncop_how *ao_how);
+> >
+>
+> IMO, would be better to have libxl_disk_snapshot_create() and
+> libxl_disk_snapshot_delete() exposed, and keep these as internal.
+i am not sure if i could follow you. i guess you mean we should expose unique
+api for dedicate operations. this is what i want.
+but the issue is there is no single revert disk snapshot qmp or hmp in qemu.
+so, in libvirt qemu driver, internal or external disk snapshot call different
+qemu qmp or hmp.
+
+
+>
+> Regards,
+> Jim
+>
+
+13:27 2014-06-06
+software skill, build sercie, obs, maintenance
+http://doc.opensuse.org/products/draft/OBS/obs-reference-guide_draft/cha.obs.maintenance_setup.html
+osc maintenancerequest(mr)
 
