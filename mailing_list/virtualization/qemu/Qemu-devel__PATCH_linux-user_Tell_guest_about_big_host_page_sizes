@@ -1,0 +1,40 @@
+[Qemu-devel] [PATCH] linux-user: Tell guest about big host page sizes
+Alexander Graf “nongnu.org” 20140606_1743
+to qemu-ppc、 Riku、 qemu-devel
+
+1, notes:
+bamvor: it is usefull when the page size of guest is smaller than host.
+
+2, original email
+
+We tell the guest its page size via AUX vectors. The guest process then uses
+this page size as information on which boundaries it can mmap() things.
+
+However, if the host has a bigger page size granularity than the guest, it can
+not fulfill these mmap() requests - which falls apart when MAP_FIXED is passed
+to mmap.
+
+So in that case, let the guest know that we're running on a bigger page size
+granularity than the target would require.
+
+This fixes running qemu-ppc (TARGET_PAGE_SIZE=4k) on a 64k page size ppc64 host
+for me.
+
+Signed-off-by: Alexander Graf <agraf@suse.de>
+---
+ linux-user/elfload.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/linux-user/elfload.c b/linux-user/elfload.c
+index 0af6292..127c565 100644
+--- a/linux-user/elfload.c
++++ b/linux-user/elfload.c
+@@ -1545,7 +1545,7 @@ static abi_ulong create_elf_tables(abi_ulong p, int argc, int envc,
+     NEW_AUX_ENT(AT_PHDR, (abi_ulong)(info->load_addr + exec->e_phoff));
+     NEW_AUX_ENT(AT_PHENT, (abi_ulong)(sizeof (struct elf_phdr)));
+     NEW_AUX_ENT(AT_PHNUM, (abi_ulong)(exec->e_phnum));
+-    NEW_AUX_ENT(AT_PAGESZ, (abi_ulong)(TARGET_PAGE_SIZE));
++    NEW_AUX_ENT(AT_PAGESZ, (abi_ulong)(MAX(TARGET_PAGE_SIZE, getpagesize())));
+     NEW_AUX_ENT(AT_BASE, (abi_ulong)(interp_info ? interp_info->load_addr : 0));
+     NEW_AUX_ENT(AT_FLAGS, (abi_ulong)0);
+     NEW_AUX_ENT(AT_ENTRY, info->entry);
