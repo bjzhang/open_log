@@ -1300,9 +1300,6 @@ GTD
 4), 11:40-12:43 lunch.
 5), 15:03- sync.
 
-2, next
-1), TODO test snasphot create fail. where is the log?
-
 10:15 2014-06-10
 mailing list, virtualization, xen; bootloader, uefi
 1, ijc at hellion
@@ -1397,4 +1394,109 @@ on a sles 12 host. The different values cause the balloon driver to balloon
 memory.  Then when the crash dump happens, the dump tries to access the
 ballooned pages which causes the vm to hang.
 
+11:41 2014-06-11
+GTD
+1, today
+1), 11:40-11:53 lunch.
+2), 10' mailing list. see"12:00 2014-06-11".
+3), kindle rss.
+4), 14:14-14:39 nap.
+
+2, next
+1), TODO test snasphot create fail. where is the log?
+
+12:00 2014-06-11
+mailing list, virtualization, xen, qemu for dom0
+"Ian Campbell"_reply_"Steven Haigh <netwiz@xxxxxxxxx>"_email_"Re: [Xen-devel] Starting QEMU as disk backend for dom0"_20140606
+On Fri, 2014-06-06 at 15:55 +1000, Steven Haigh wrote:
+> Hi guys,
+>
+> I'm just picking through the xencommons initscript provided with the Xen
+> 4.4 source tarball...
+>
+> I notice this section starting at line 119:
+>         echo Starting QEMU as disk backend for dom0
+>         test -z "$QEMU_XEN" && QEMU_XEN="${LIBEXEC}/qemu-system-i386"
+>         $QEMU_XEN -xen-domid 0 -xen-attach -name dom0 -nographic -M
+> xenpv -daemonize \
+>                 -monitor /dev/null -serial /dev/null -parallel /dev/null \
+>                 -pidfile $QEMU_PIDFILE
+>
+> Can anyone tell me the purpose of this?
+
+It is used if dom0 needs to be able to access a virtual disk in a
+non-trivial form, i.e. qcow or vhd. In this case a vbd is attached to
+dom0 which is backed by qdisk in this qemu process. For trivial disk
+formats like raw files or block partitions dom0 can just access them
+directly.
+
+This comes into play when you are using pygrub, since dom0 needs to be
+able to read guest disks. I'm not sure if their are other places. I
+suppose you can also do "xl block-attach 0 <spec>" if you like e.g. in
+order to mount a qcow image in dom0 for some reason.
+
+Ian.
+
+15:07 2014-06-11
+software skill, debugger, gdb
+1, condition breakpoints on return value
+1), http://stackoverflow.com/questions/4498965/how-to-set-conditional-breakpoint-if-malloc-returns-null-via-gdb
+2), http://stackoverflow.com/questions/1378594/is-it-possible-to-set-a-conditional-breakpoint-at-the-end-of-a-function-based-on
+Agree with previous commenter that this is probably something you don't want to do, but for me, setting a conditional breakpoint at the last instruction on $eax (or $rax if you are on 64-bit x86) works just fine.
+
+For the code
+
+unsigned int foo(void) { return 1; }
+unsigned int bar(void) { return 4; }
+unsigned int myFunc(void) { return foo()+bar(); }
+
+using gdb ..
+
+(gdb) disass myFunc
+Dump of assembler code for function myFunc:
+0x080483d8 <myFunc+0>:  push   %ebp
+0x080483d9 <myFunc+1>:  mov    %esp,%ebp
+0x080483db <myFunc+3>:  push   %ebx
+0x080483dc <myFunc+4>:  call   0x80483c4 <foo>
+0x080483e1 <myFunc+9>:  mov    %eax,%ebx
+0x080483e3 <myFunc+11>: call   0x80483ce <bar>
+0x080483e8 <myFunc+16>: lea    (%ebx,%eax,1),%eax
+0x080483eb <myFunc+19>: pop    %ebx
+0x080483ec <myFunc+20>: pop    %ebp
+0x080483ed <myFunc+21>: ret
+End of assembler dump.
+(gdb) b *0x080483ed if $eax==5
+Breakpoint 1 at 0x80483ed
+(gdb) run
+Starting program: /tmp/x
+Breakpoint 1, 0x080483ed in myFunc ()
+(gdb)
+
+2, using gdb variable for function calling counter comparasion.
+http://blog.timac.org/?p=118
+
+17:01 2014-06-11
+qemu disk
+  <devices>
+    <emulator>/usr/lib/xen/bin/qemu-system-i386</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/home/bamvor/vm/xen/images/disk0.qcow2'/>
+      <target dev='hda' bus='ide'/>
+      <address type='drive' controller='0' bus='0' target='0' unit='0'/>
+    </disk>
+    <disk type='file' device='cdrom'>
+      <driver name='qemu' type='raw'/>
+      <source file='/home/bamvor/vm/iso/win-7-fcs-64-auto.iso'/>
+      <target dev='hdb' bus='ide'/>
+      <readonly/>
+      <address type='drive' controller='0' bus='0' target='0' unit='1'/>
+    </disk>
+    ...
+  </devices>
+
+17:48 2014-06-11
+software skill, virtualization, xen, hypervisor, debug, log level
+grub2
+multiboot /boot/xen.gz loglvl=all guest_loglvl=all watchdog=true watchdog_timeout=10
 
