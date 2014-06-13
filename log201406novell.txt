@@ -407,7 +407,9 @@ software skill, man page
 15:40 2014-06-04
 (16:41 2014-06-05)
 mailing list, forum, virtualization
+dir.gmane.org is a very good archieve for mailing list and very good rss source. better than gossamer-threads.com
 1, xen
+http://dir.gmane.org/gmane.comp.emulators.xen.devel
 http://www.gossamer-threads.com/lists/xen/devel/
 2, qemu
 http://www.mail-archive.com/qemu-devel@nongnu.org/
@@ -1499,4 +1501,132 @@ qemu disk
 software skill, virtualization, xen, hypervisor, debug, log level
 grub2
 multiboot /boot/xen.gz loglvl=all guest_loglvl=all watchdog=true watchdog_timeout=10
+
+10:55 2014-06-12
+software skill, virtualization, vnc, remote
+1, libvirt do not allow remote vnc connection by default. after update the following vnc_listen line you need to restart libvirtd and reboot virtual machine.
+1), /etc/libvirt/qemu.conf
+# VNC is configured to listen on 127.0.0.1 by default.
+# To make it listen on all public interfaces, uncomment
+# this next option.
+#
+# NB, strong recommendation to enable TLS + x509 certificate
+# verification when allowing public access
+#
+vnc_listen = "0.0.0.0"
+
+2), qemu command before and after reboot "-vnc 127.0.0.1:8" to "-vnc 0.0.0.0:8"
+note that the following command line do not come from same vm(look at the -name parameter). it is just a example for comparasion vnc listen port.
+before:
+root     26449     1  1 May12 ?        09:16:09 /usr/bin/qemu-kvm -name cl1_n1_sles12 -S -machine pc-i440fx-1.4,accel=kvm,usb=off -m 768 -smp 4,sockets=4,cores=1,threads=1 -uuid b887a3be-7939-510f-d0bb-0213176bfad1 -no-user-config -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/cl1_n1_sles12.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-shutdown -device piix3-usb-uhci,id=usb,bus=pci.0,addr=0x1.0x2 -drive file=/mnt/vm/cl1_n1_sles12/disk0.raw,if=none,id=drive-virtio-disk0,format=raw -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x4,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1 -netdev tap,fd=24,id=hostnet0 -device rtl8139,netdev=hostnet0,id=net0,mac=52:54:00:98:10:7f,bus=pci.0,addr=0x3 -chardev socket,id=charserial0,host=127.0.0.1,port=4555,server,nowait -device isa-serial,chardev=charserial0,id=serial0 -vnc 127.0.0.1:0 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x5
+after:
+root     16220     1  8 10:55 ?        00:00:16 /usr/bin/qemu-kvm -name cldmzhang_ttestlifecycle -S -machine pc-i440fx-1.4,accel=kvm,usb=off -m 512 -smp 4,sockets=4,cores=1,threads=1 -uuid 6af9b2a7-db85-72b2-62a6-3f8c9c92f613 -no-user-config -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/cldmzhang_ttestlifecycle.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-shutdown -device piix3-usb-uhci,id=usb,bus=pci.0,addr=0x1.0x2 -drive file=/var/lib/kvm/images/cldmzhang_ttestlifecycle/disk0.raw,if=none,id=drive-virtio-disk0,format=raw -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x4,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1 -netdev tap,fd=28,id=hostnet0,vhost=on,vhostfd=29 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:54:00:6c:aa:2d,bus=pci.0,addr=0x3 -vnc 0.0.0.0:8 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x5
+
+11:13 2014-06-12
+GTD
+0, 9:45
+
+1, today
+1), 10' support Yu Zou for libvirt snapshot.
+2), 12:53-13:12 taobao.
+3), 13:12-13:26 news.
+4), 13:26-14:00 send libvirt patch.
+5), 15:41- snapshot.
+
+10:02 2014-06-13
+GTD
+0, 9:50-17:10
+
+1, today
+1), 10:02-11:06 kindle rss.
+2), 11:06-11:30 libvirt patch test.
+3), 11:30-12:20 lunch.
+4), 12:48-13:15 block device: virio-blk-data-plane
+5), 13:20-14:02 talk with Jim: about domxml-to-native and snapshot work. Jim will send me a email about snapshot.
+6), 14:02-14:40 nap.
+7), 15:15-17:07 snapshot.
+
+12:48 2014-06-13
+virtualization, kvm, virtio, block device, virio-blk-data-plane
+1, The Key Performance Challenges
+1), Low throughput / high latencies (compared to bare metal)
+Generally less than 30% of bare metal → configuration issue(s)
+Between 30% and 60% of bare metal → performance tuning
+With proper configuration + performance tuning → 90% or more
+2), Low I/O rates (IOPS)
+Some enterprise workloads require 100Ks I/Os Per Second (IOPS)
+Most difficult challenge for I/O virtualization!
+Current KVM tops out at ~147,000 IOPS
+VMware claimed vSphere v5.1 could achieve 1.06 million IOPS for a single guest
+
+2, approach
+1), Vhost-blk
+– Initially coded by Liu Yuan, new prototype by Asias He
+– Submits guest I/Os directly to host via kernel threads (similar to vhost_net for network)
+– Drawbacks:
+• Involves the kernel (ring 0 privilege, etc.)
+• Cannot take advantage of QEMU features (e.g. image formats, etc.)
+• Cannot support live migration
+2), “Data-Plane” QEMU
+– Coded by Stefan Hajnoczi (~1500 LOC)
+– Submits guest I/Os directly to host in user space (one user-space thread per virtual
+        block device)
+– Will become default mode of operations – eventually
+– No kernel change is required
+
+3, how to use data plane
+Libvirt Domain XML
+<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+...
+<disk type='file' device='disk'>
+<driver name='qemu' type='raw' cache='none' io='native'/>
+<source file='path/to/disk.img'/>
+<target dev='vda' bus='virtio'/>
+<address type='pci' domain='0x0000' bus='0x00' slot='0x06' function='0x0'/>
+</disk>
+...
+<qemu:commandline>
+<qemu:arg value='-set'/>
+<qemu:arg value='device.virtio-disk0.scsi=off'/>
+</qemu:commandline>
+<!-- config-wce=off is not needed in RHEL 6.4 -->
+<qemu:commandline>
+<qemu:arg value='-set'/>
+<qemu:arg value='device.virtio-disk0.config-wce=off'/>
+</qemu:commandline>
+<qemu:commandline>
+<qemu:arg value='-set'/>
+<qemu:arg value='device.virtio-disk0.x-data-plane=on'/>
+</qemu:commandline>
+<domain>
+QEMU command-line
+qemu -drive if=none,id=drive0,cache=none,aio=native,format=raw,file=path/to/disk.img \
+-device virtio-blk,drive=drive0,scsi=off,config-wce=off,x-data-plane=on
+
+4, Current limitations
+– Only raw image format is supported
+• Other image formats depend on QEMU block layer
+–
+ Live migration is not supported
+–
+ Hot unplug and block jobs are not supported
+–
+ I/O throttling limits are ignored
+–
+ Only Linux hosts are supported (due to Linux AIO usage)
+
+5, On-going work (for upcoming QEMU releases)
+– Patches have recently been submitted upstream to convert virtio-net to use
+“data-plane”
+– Reduce the scope of big QEMU lock → moving to RCU (Read Copy Update)
+
+15:56 2014-06-13
+software skill, shell, cat
+> cat > test.sh << EOF
+adf
+d
+d
+EOF
+
+notes: EOF could be any string.
 
