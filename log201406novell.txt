@@ -702,6 +702,12 @@ it will easy to implement but is different from libvirt.
 (2), do i need "info snapshots"?
 i would be useful for checking before snapshot operations.
 (3), i do not know how to write libxlu_disk_l.l, temperary use the libxl_device_disks format.
+(4), (21:50 2014-06-13)
+readonly device do not need to snapshot.
+"21:50 2014-06-13"end
+(5), (21:17 2014-06-15)
+sort before show snapshot list?
+"21:17 2014-06-15"end
 4), TODO current
 (1), support domain state?
 TODO: discuss with Jim.
@@ -1629,4 +1635,97 @@ d
 EOF
 
 notes: EOF could be any string.
+
+19:27 2014-06-13
+snapshot
+1, there is a timeout in libxl qmp?
+# xl hmp bjz_04_sles11_sp2 info version "return: 2.0.0"
+domid<2> hmp<info>, hmp_arg<version>, expect<return: 2.0.0>
+run info version hmp command through qmp interface
+hmp_callback enter
+return: 2.0.0
+
+# xl hmp bjz_04_sles11_sp2 savevm 1926 1
+domid<2> hmp<savevm>, hmp_arg<1926>, expect<1>
+run savevm 1926 hmp command through qmp interface
+libxl: error: libxl_qmp.c:450:qmp_next: Socket read error: Connection reset by peer
+
+2, it is bus error
+(gdb) where
+#0  buffer_find_nonzero_offset (buf=buf@entry=0x7fdaa5f9c000, len=len@entry=4096) at util/cutils.c:200
+#1  0x00007fdb07c3057d in is_zero_range (size=4096, p=
+    0x7fdaa5f9c000 <Address 0x7fdaa5f9c000 out of bounds>) at /usr/src/debug/qemu-2.0.0/arch_init.c:157
+#2  ram_save_block (f=f@entry=0x7fdb0c14c550, last_stage=last_stage@entry=false)
+    at /usr/src/debug/qemu-2.0.0/arch_init.c:590
+#3  0x00007fdb07c30a95 in ram_save_iterate (f=0x7fdb0c14c550, opaque=<optimized out>)
+    at /usr/src/debug/qemu-2.0.0/arch_init.c:815
+#4  0x00007fdb07ca78a6 in qemu_savevm_state_iterate (f=f@entry=0x7fdb0c14c550)
+    at /usr/src/debug/qemu-2.0.0/savevm.c:540
+#5  0x00007fdb07ca82f4 in qemu_savevm_state (f=0x7fdb0c14c550)
+    at /usr/src/debug/qemu-2.0.0/savevm.c:663
+#6  do_savevm (mon=0x7fffa7aba500, qdict=<optimized out>) at /usr/src/debug/qemu-2.0.0/savevm.c:975
+#7  0x00007fdb07ca4f89 in handle_user_command (mon=mon@entry=0x7fffa7aba500, cmdline=cmdline@entry=
+    0x7fdb09ee0490 "savevm 2012") at /usr/src/debug/qemu-2.0.0/monitor.c:4167
+#8  0x00007fdb07ca514c in qmp_human_monitor_command (command_line=0x7fdb09ee0490 "savevm 2012",
+    has_cpu_index=false, cpu_index=0, errp=errp@entry=0x7fffa7aba5d8)
+    at /usr/src/debug/qemu-2.0.0/monitor.c:725
+#9  0x00007fdb07be7289 in qmp_marshal_input_human_monitor_command (mon=<optimized out>,
+    qdict=<optimized out>, ret=0x7fffa7aba660) at qmp-marshal.c:1935
+#10 0x00007fdb07c9f978 in qmp_call_cmd (params=0x7fdb0c14a510, mon=0x7fdb09b994a0, cmd=<optimized out>)
+    at /usr/src/debug/qemu-2.0.0/monitor.c:4760
+#11 handle_qmp_command (parser=<optimized out>, tokens=<optimized out>)
+    at /usr/src/debug/qemu-2.0.0/monitor.c:4826
+#12 0x00007fdb07d2a99a in json_message_process_token (lexer=0x7fdb09b98fe0, token=0x7fdb09e24fe0, type=
+    JSON_OPERATOR, x=1, y=11) at qobject/json-streamer.c:87
+
+3, maybe qemu savevm does not work for xen?
+try to comment the memory side
+./configure --enable-xen --target-list=i386-softmmu --enable-debug --enable-trace-backend=stderr --prefix=/usr --localstatedir=/var
+
+4, write to Jim
+Hi, Jim
+
+here is some update about libxl snapshot. the main issue is
+a, revert of domain snapshot is destroy and restore domain. it sucks for me. is it ok for community?
+b, how do i revert domain snapshot.
+c, ao(async)
+
+#######################################
+for b:
+my current snapshot implementation will call savevm/loadvm/delvm for domain internal snapshot. but now i realize that i could not rely on these hmp commands. let me take savevm as example:
+1), savevm will save qemu memory, but it fail in my test. i guess the reasone is that qemu_savevm_state in savevm could not live with qemu xen memory.
+of course, i could bypass the qemu_savevm_state. but then there is no significant differece between savevm hmp and transaction qmp. the latter one is only deal with disk snapshot.
+2), savevm will do the disk snapshot for all disks from qemu point of view, e.g. the vm include two disks(hda, hdc), qemu think that there are four disks.
+(qemu) info block 1
+ide0-hd0: /var/lib/xen/images/bjz_04_sles11_sp2/disk0.qcow2 (qcow2)
+    Backing file:     /var/lib/xen/images/bjz_04_sles11_sp2/disk0.raw (chain depth: 1)
+
+ide1-hd0: /var/lib/xen/images/opensuse12_3_01/disk0.qcow2 (qcow2)
+
+hda: /var/lib/xen/images/bjz_04_sles11_sp2/disk0.qcow2 (qcow2)
+    Backing file:     /var/lib/xen/images/bjz_04_sles11_sp2/disk0.raw (chain depth: 1)
+
+hdc: /var/lib/xen/images/opensuse12_3_01/disk0.qcow2 (qcow2)
+
+so, the disk snapshot part is also fail in my test. i guess the reason is that qemu fail on snapshot on the same disk with the same name.
+
+so, now, the question is how should i revert snapshot if i do not call xxxvm hmp?
+as we discussed, i need to call bdrv_snapshot_goto in qemu for disk snapshot revert. i could call qemu-img directly in libxl or create a new qmp in qemu.
+
+if i use "qemu-img" command. whether it is a good idea if i call qemu-img like libxl call libxl-save-helper(libxl__exec way).
+
+#######################################
+for c
+if we want async for disk snasphot, my idea is create a dedicated thread/process for transaction qmp.
+or run qemu-img through libxl__exec.
+
+regards
+
+bamvor
+
+21:34 2014-06-15
+snapshot
+1, create, list, delete basic test pass.
+2, TODO
+call qemu-img through libxl__exec
 
