@@ -1729,3 +1729,31 @@ snapshot
 2, TODO
 call qemu-img through libxl__exec
 
+9:24 2014-6-16
+mailing list, virtualization, xen, irq
+Stefano Stabellini | 13 Jun 13:58 2014
+Re: [PATCH 0/2] xen/arm: make accesses to desc->status flags atomic On Fri, 13 Jun 2014, Jan Beulich wrote:
+> >>> Stefano Stabellini <stefano.stabellini <at> eu.citrix.com> 06/13/14 1:26 PM >>>
+> >The IRQ line status flags are stored as bits in the status field of
+> >struct irq_desc. Accesses to the status flags could be atomic but at the
+> >moment they are not.
+> >
+> >Make them atomic on ARM. This allows us to avoid taking the desc
+> >lock when clearing the IRQ_INPROGRESS flag for irqs routed to the guest.
+> 
+> So patch 2 doesn't drop any acquire/release pair of a lock - was it a bug then
+> that the lock wasn't taken before?
+
+Yes: after clearing an LR register (after the guest EOIs an irq), we
+clear IRQ_INPROGRESS without taking the irq_desc lock.
+
+In practice is not much of an issue because:
+
+- at that point irqs are disabled so the same irq can only be received
+  simultaneously if it is routed to another pcpu;
+
+- when we receive an irq to be routed to a guest the only thing we do
+  with IRQ_INPROGRESS is:
+
+  desc->status |= IRQ_INPROGRESS;
+
