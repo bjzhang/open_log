@@ -91,7 +91,7 @@ Wei.
 "Ian Jaskson"_email_"Re: [Xen-devel] Discussion on libxl domain configuration synchronization"
 Wei Liu writes ("Discussion on libxl domain configuration synchronization"):
 > ### Exposed API
-> 
+>
 > From API design point of view, what API should we expose to
 > applications? We seem to have agreed that a "retrieve" API is
 > certainly necessary (let's name it
@@ -109,7 +109,7 @@ and decrease memory, etc.
 
 
 > ### Summary
-> 
+>
 > 1. libxl_retrieve_domain_configuration is the only public API.
 > 2. libxl_retrieve_domain_configuration should retrieve JSON version of
 >    domain configuration as template and update it according to xenstore
@@ -125,7 +125,7 @@ Right.
 
 
 > ### Implementation
-> 
+>
 > Further more, how should we implement the new API?
 ...
 > Ian J pointed out that this design is bogus. If I understand
@@ -156,14 +156,14 @@ libxl_retrieve_domain_configuration.
 > ### Device hotplug / unplug and half-baked state
 ...
 > Device hotplug and unplug are a bit trickier to handle.
-> 
+>
 > Hotplug steps:
 > 1. libxl__get_domain_configuration (this reads libxl-json file and parse
 >    it into libxl_domain_config struct).
 > 2. add new device to JSON config
 > 3. hotplug device
 > 4. if hotplug success, libx__set_domain_configuration
-> 
+>
 > If 3 fails, we may end up in a situation that some xenstore entries
 > have been written, but that device is not presented in JSON version
 > of configuration. 4 can also fail when libxl tries to write
@@ -399,10 +399,14 @@ libxl_domain_snapshot = Struct("domain_snapshot",[
     ])
 
 15:26 2014-06-04
+(13:49 2014-06-17)
 software skill, man page
-1, list man page path
+1, list man page search path
 # echo $MANPATH
 /usr/lib64/mpi/gcc/openmpi/share/man:/usr/local/man:/usr/local/share/man:/usr/share/man:/opt/novell/man:/opt/novell/man
+2, list man page path
+# man -w bash
+/usr/share/man/man1/bash.1.gz
 
 15:40 2014-06-04
 (16:41 2014-06-05)
@@ -1773,4 +1777,205 @@ snapshot
 it is because there is no NULL at the end of char **args.
 2, revert basic test ok.
 
+10:25 2014-06-17
+GTD
+0, 10:10-17:40
+
+1, today
+1), 10:35-11:36 snapshot, reply to Jim. see"10:35 2014-06-17"
+2), 11:36-12:59 lunch.
+3), 12:59-13:34 personal/chat.
+4), 14:05-14:24 guest vnc display. see"14:10 2014-06-17"
+5), 15:00-16:40 Jason introducion virtualization.
+
+10:35 2014-06-17
+snapshot, reply to Jim
+Hi, Jim
+> Bamvor Jian Zhang wrote:
+> > Hi, Jim
+> >
+> > here is some update about libxl snapshot. the main issue is
+> > a, revert of domain snapshot is destroy and restore domain. it sucks for me. is it ok for community?
+> >
+>
+> The old xend snapshot patch required the domain to be in halted state
+> before applying (or reverting to) a snapshot.  But that patch was never
+> upstreamed so I'm not sure is such an approach is acceptable to the
+> community.
+>
+> > b, how do i revert domain snapshot.
+> > c, ao(async)
+> >
+> > #######################################
+> > for b:
+> > my current snapshot implementation will call savevm/loadvm/delvm for domain internal snapshot. but now i realize that i could not rely on these hmp commands. let me take savevm as example:
+> > 1), savevm will save qemu memory, but it fail in my test. i guess the reasone is that qemu_savevm_state in savevm could not live with qemu xen memory.
+> > of course, i could bypass the qemu_savevm_state. but then there is no significant differece between savevm hmp and transaction qmp. the latter one is only deal with disk snapshot.
+> >
+>
+> The xend snapshot patch used xc_save to save memory state of the domain,
+> added a 'snapshot-name' setting to the domain config stored stored as
+> part of the saved memory image, and then signaled qemu (via xenstore) to
+> snapshot the disks .  When applying or reverting to a snapshot, xend
+> would call xc_restore to start the domain from the saved memory image.
+> The 'snapshot-name' setting would be written to xenstore, allowing qemu
+> to know what snapshot to use in the qcow2 file.
+>
+> You are right that savevm/loadvm will not work for the memory state
+> since that is handled by Xen, not qemu.
+>
+> > 2), savevm will do the disk snapshot for all disks from qemu point of view, e.g. the vm include two disks(hda, hdc), qemu think that there are four disks.
+> > (qemu) info block 1
+> > ide0-hd0: /var/lib/xen/images/bjz_04_sles11_sp2/disk0.qcow2 (qcow2)
+> >     Backing file:     /var/lib/xen/images/bjz_04_sles11_sp2/disk0.raw (chain depth: 1)
+> >
+> > ide1-hd0: /var/lib/xen/images/opensuse12_3_01/disk0.qcow2 (qcow2)
+> >
+> > hda: /var/lib/xen/images/bjz_04_sles11_sp2/disk0.qcow2 (qcow2)
+> >     Backing file:     /var/lib/xen/images/bjz_04_sles11_sp2/disk0.raw (chain depth: 1)
+> >
+> > hdc: /var/lib/xen/images/opensuse12_3_01/disk0.qcow2 (qcow2)
+> >
+> > so, the disk snapshot part is also fail in my test. i guess the reason is that qemu fail on snapshot on the same disk with the same name.
+> >
+> > so, now, the question is how should i revert snapshot if i do not call xxxvm hmp?
+> >
+>
+> I  think you will need to do something similar to the old xend snapshot
+> patch.  Use Xen's xc_save and xc_restore tools to handle the memory, and
+> qemu's block drivers to handle the disk snapshot.
+yes, this is what i want. considering the libxl-save-helper for ao stuff. the
+implementation may  be
+snapshot create: libxl__xc_domain_save + "qmp transaction".
+snapshot revert: libxl__xc_domain_restore/(destroy+create_domain)  + "qemu-img snapshot apply".
+currently, for revert, i will destroy the domain and then restore the domain
+state through create_domain. after think about your suggestion, i guess that
+libxl__xc_domain_restore should work if no device change. if there is some
+device changes between current state and previous snapshot state, destroy and
+restore domain will work but too heavy. a lightweight method would be better.
+>
+> > as we discussed, i need to call bdrv_snapshot_goto in qemu for disk snapshot revert. i could call qemu-img directly in libxl or create a new qmp in qemu.
+> >
+> > if i use "qemu-img" command. whether it is a good idea if i call qemu-img like libxl call libxl-save-helper(libxl__exec way).
+> >
+> > #######################################
+> > for c
+> > if we want async for disk snasphot, my idea is create a dedicated thread/process for transaction qmp.
+> > or run qemu-img through libxl__exec.
+> >
+>
+> Sounds reasonable to me, but ultimately needs agreement with the Xen
+> community.
+yesterday, i wrote a patch to call qemu-img in revert and it works.
+>
+> That brings me to the topic of discussing this work on last week's Xen
+> community call.  I asked Ian Campbell if the community could help move
+> this work along.  He said yes, but confessed that he (and Ian Jackson
+> IIRC) is a bit confused about the current proposal.  I think it would be
+> best to submit another iteration of your proposal, focusing on
+> documentation and the libxl interface for snapshots.
+>
+> I think you did a good job of describing the general concepts of
+> snapshots (disk snapshots, vm snapshots, system checkpoints, etc.) in
+> your V2
+>
+> http://lists.xen.org/archives/html/xen-devel/2014-04/msg02549.html
+>
+> In your next iteration, I'd include all the generic info about snapshots
+> in a cover letter, along with some user stories that describe how
+> snapshots work.  After the cover letter, provide a patch to the libxl
+> interface that clearly describe the semantics of each new structure and
+> API, and a patch to xl.pod describing the syntax and semantics of the xl
+> snapshot commands.  For the libxl APIs, provide detailed information
+> about the API.  Put yourself in a developer's seat that is trying to use
+> these APIs in her libxl App.  Is there enough information on the API to
+> consume it in an application?  As a reference, look at the API
+> documentation for virDomainSnapshotCreateXML
+>
+> http://libvirt.org/html/libvirt-libvirt.html#virDomainSnapshotCreateXML
+>
+> I think the community will help answer the types of questions you asked
+> in this mail once they understand proposed semantics.  I don't think we
+> should get bogged down in implementation detail until there is some
+> agreement on the interface.
+i will write the V4 snapshot. as you said, the series would be:
+0000: cover letter: some user stories that describe how snapshots work.
+0001: libxl API: it will include two parts: domain snapshot configuration file
+      operation(load, store, delete, it will base on Wei Liu's libxl-json api)
+      and disk snapshot operation(create, delete, revert, including
+      implementation details, why choose qmp or qemu-img command).
+0002: patch for docs/man/xl.pod.1: describe the xl snapshot command, including
+      create, list, delete, revert.
+0003: xl snapshot command details. Ian Jackson/Campbell is confused about
+      discuss implementation details in xl.pod.1 because the latter one is
+      user manual in my V2 doc. here i would like to mention which api will be
+      called in xl snapshot command. and discuss the revert one we discuss
+      above: libxl__xc_domain_restore/(destroy+create_domain)  +
+      "qemu-img snapshot apply".
+0004: patch for xl.snapshot.pod.5: xl snapshot configuration file syntax.
+
+regards
+
+bamvor
+>
+> Regards,
+> Jim
+
+14:10 2014-06-17
+virtualization, virt-manager, virt-viewer, vncviewer, -shared vs -noshared
+1, if the user use virt-manager or virt-viewer connect to guest. then vncviewer could not be opened and exit without error:
+> vncviewer 147.2.207.233:5900
+Connected to RFB server, using protocol version 3.8
+No authentication needed
+Authentication successful
+vncviewer: VNC server closed connection
+
+if start vncviewer with "-noshared", it will be opened by vncviewer.
+> vncviewer -noshared 147.2.207.233:5900
+
+and even if vncviewer start with "-noshared", virt-viewer/virt-manager could connect to guest either. the former one maybe close the vncviewer connection before connect to guest.
+
+14:29 2014-06-17
+suse, colleague, Luis R. Rodriguez, xen systemd support
+From: Luis R. Rodriguez <mcgrof <at> do-not-panic.com>
+Subject: [PATCH v6 00/13] xen: add systemd support
+Newsgroups: gmane.comp.emulators.xen.devel
+Date: 2014-06-13 01:18:38 GMT (4 days, 5 hours and 11 minutes ago)
+
+From: "Luis R. Rodriguez" <mcgrof <at> suse.com>
+http://article.gmane.org/gmane.comp.emulators.xen.devel/203208/match=systemd
+
+14:30 2014-06-17
+Jason, question
+1, what about hyper-V?
+2, who is "Luis R. Rodriguez" <mcgrof <at> suse.com>
+
+15:11 2014-06-17
+1, Jason 2005 join virtualization. manager in 2009?
+2, drop 32bit support for xen on sle11sp3.
+3, KVM at SUSE
+1), SUSE Studio uses KVM exclusively.
+4, limited support for SPICE
+http://www.spice-space.org/
+5, lxc
+http://docs.oracle.com/cd/E37670_01/E37355/html/ol_app_containers.html
+Running Application Containers
+You can use the lxc-execute command to create a temporary application container in which you can run a command that is effectively isolated from the rest of the system. For example, the following command creates an application container named guest that runs sleep for 100 seconds.
+6, about "best effort"
+it depend on whether suse could coorperation with guest provider.
+7, virt-v2v
+support it in virt-manager?
+migration from xen guest on host A to kvm guest on host B.
+8, SPECvirt.
+
+16:32 2014-06-17
+virtualization, docker
+systemctl start docker
+https://registry.hub.docker.com/
+http://segmentfault.com/a/1190000000366923
+http://flavio.castelli.name/2013/04/12/docker-and-opensuse/
+
+17:22 2014-06-17
+sles12
+http://docserv.suse.de/documents/SLES12/
 
