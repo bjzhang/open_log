@@ -1948,7 +1948,8 @@ http://article.gmane.org/gmane.comp.emulators.xen.devel/203208/match=systemd
 14:30 2014-06-17
 Jason, question
 1, what about hyper-V?
-2, who is "Luis R. Rodriguez" <mcgrof <at> suse.com>
+2, "Luis R. Rodriguez" <mcgrof <at> suse.com> send a systemd for xen.
+how do we work with suse lab?
 
 15:11 2014-06-17
 1, Jason 2005 join virtualization. manager in 2009?
@@ -1969,13 +1970,402 @@ migration from xen guest on host A to kvm guest on host B.
 8, SPECvirt.
 
 16:32 2014-06-17
-virtualization, docker
+virtualization, docker, doc; lxc overview
 systemctl start docker
+1, docker hub
 https://registry.hub.docker.com/
+2, doc:
+1), docker入门教程
 http://segmentfault.com/a/1190000000366923
+2), docker and opensuse
 http://flavio.castelli.name/2013/04/12/docker-and-opensuse/
+3, basic command
+1), run a new command in specific container
+(1), add "-t -i" for open a tty console
+# docker run -t -i  ubuntu:14.04 /bin/bash
+root@8806e715ff6d:/# cat /etc/issue
+Ubuntu 14.04 LTS \n \l
+
+root@8806e715ff6d:/# exit
+exit
+# docker ps -a
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS                       PORTS                   NAMES
+8806e715ff6d        ubuntu:14.04        /bin/bash              25 seconds ago      Exited (130) 2 seconds ago                           clever_pasteur
+679b0b53b85c        wordpress:3         /usr/src/wordpress/d   2 hours ago         Up 2 hours                   0.0.0.0:49153->80/tcp   bamvor_wordpress
+dd1f25fbf5b4        mysql:5             /entrypoint.sh mysql   3 hours ago         Up 3 hours                   3306/tcp                bamvor_wordpress/mysql,wordpress_mysql
+
+# docker run --help 2>&1 |grep "\-[tip]"
+  -i, --interactive=false    Keep stdin open even if not attached
+  -p, --publish=[]           Publish a container's port to the host
+  -P, --publish-all=false    Publish all exposed ports to the host interfaces
+  -t, --tty=false            Allocate a pseudo-tty
+
+2), limit the memory in container
+https://www.digitalocean.com/community/tutorials/docker-explained-how-to-create-docker-containers-running-memcached
+To run a container with memory limited to 256 MBs:
+
+# Example: sudo docker run -name [name] -m [Memory (int)][memory unit (b, k, m or g)] -d (to run not to attach) -p (to set access and expose ports) [image ID]
+sudo docker run -name memcached_ins -m 256m -d -p 45001:11211 memcached_img
+
+To confirm the memory limit, you can inspect the container:
+
+# Example: docker inspect [container ID] | grep Memory
+sudo docker inspect memcached_ins | grep Memory
+
+4, about lxc
+https://linuxcontainers.org/
+Current LXC uses the following kernel features to contain processes:
+
+    Kernel namespaces (ipc, uts, mount, pid, network and user)
+    Apparmor and SELinux profiles
+    Seccomp policies
+    Chroots (using pivot_root)
+    Kernel capabilities
+    Control groups (cgroups)
+
+As such, LXC is often considered as something in the middle between a chroot on steroids and a full fledged virtual machine. The goal of LXC is to create an environment as close as possible as a standard Linux installation but without the need for a separate kernel.
+
+5, docker doc
+https://www.digitalocean.com/community/tutorials/docker-explained-how-to-create-docker-containers-running-memcached
+including how to build docker image from dockerfile.
+
+further reading
+https://www.digitalocean.com/community/tutorials/how-to-install-and-use-docker-getting-started
+https://www.digitalocean.com/community/tutorials/docker-explained-using-dockerfiles-to-automate-building-of-images
 
 17:22 2014-06-17
 sles12
 http://docserv.suse.de/documents/SLES12/
+
+10:22 2014-06-18
+virtualization, lxc, docker, set up a wordpress server
+1, reference"16:32 2014-06-17" for docker basic usage.
+2, docker hub
+https://registry.hub.docker.com/_/mysql/
+https://registry.hub.docker.com/_/wordpress/
+3, pull
+# docker pull mysql
+# docker pull wordpress
+# docker images
+REPOSITORY          TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
+wordpress           3                   c3fe87f1b6dd        13 days ago         374.2 MB
+wordpress           3.9                 c3fe87f1b6dd        13 days ago         374.2 MB
+wordpress           3.9.1               c3fe87f1b6dd        13 days ago         374.2 MB
+wordpress           latest              c3fe87f1b6dd        13 days ago         374.2 MB
+ubuntu              precise             ae8682f4ff20        13 days ago         209.9 MB
+mysql               5                   01e690393148        13 days ago         3.621 GB
+mysql               5.6                 01e690393148        13 days ago         3.621 GB
+mysql               5.6.17              01e690393148        13 days ago         3.621 GB
+mysql               latest              01e690393148        13 days ago         3.621 GB
+base                latest              b750fe79269d        15 months ago       175.3 MB
+base                ubuntu-12.10        b750fe79269d        15 months ago       175.3 MB
+base                ubuntu-quantal      b750fe79269d        15 months ago       175.3 MB
+base                ubuntu-quantl       b750fe79269d        15 months ago       175.3 MB
+
+4, start mysql and wordpress
+# docker run --name wordpress_mysql -e MYSQL_ROOT_PASSWORD=suse -d mysql
+# docker run -p 80 --name bamvor_wordpress --link wordpress_mysql:mysql -d wordpress
+679b0b53b85ccbbe9890f6a29cf179e6e83af9761167bdba2b8367652521e00b
+
+notes that when you need public the port to outside word(i mean your host and network). you need add "-p portnum" for publishing speicific port. e.g. port 80 in wordpress is mapped to 49153 in my host.
+# docker ps
+CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS                   NAMES
+679b0b53b85c        wordpress:3         /usr/src/wordpress/d   3 seconds ago       Up 1 seconds        0.0.0.0:49153->80/tcp   bamvor_wordpress
+dd1f25fbf5b4        mysql:5             /entrypoint.sh mysql   26 minutes ago      Up 26 minutes       3306/tcp                bamvor_wordpress/mysql,wordpress_mysql
+
+now:
+"127.0.0.1:49153" will display "Apache2 Debian Default Page"
+
+http://127.0.0.1:49153/wp-admin/
+will rediect to the following page for install:
+http://127.0.0.1:49153/wp-admin/install.php
+
+5, the ip configuration right now
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+2: em1: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master br0 state UP group default qlen 1000
+    link/ether d4:be:d9:a3:31:ed brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::d6be:d9ff:fea3:31ed/64 scope link
+       valid_lft forever preferred_lft forever
+3: br0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default
+    link/ether d4:be:d9:a3:31:ed brd ff:ff:ff:ff:ff:ff
+    inet 147.2.207.193/24 brd 147.2.207.255 scope global br0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::d6be:d9ff:fea3:31ed/64 scope link
+       valid_lft forever preferred_lft forever
+4: virbr0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default
+    link/ether 52:54:00:5c:aa:2d brd ff:ff:ff:ff:ff:ff
+    inet 192.168.100.1/24 brd 192.168.100.255 scope global virbr0
+       valid_lft forever preferred_lft forever
+5: virbr0-nic: <BROADCAST,MULTICAST> mtu 1500 qdisc pfifo_fast master virbr0 state DOWN group default qlen 500
+    link/ether 52:54:00:5c:aa:2d brd ff:ff:ff:ff:ff:ff
+7: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default
+    link/ether 56:84:7a:fe:97:99 brd ff:ff:ff:ff:ff:ff
+    inet 172.17.42.1/16 scope global docker0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::5484:7aff:fefe:9799/64 scope link
+       valid_lft forever preferred_lft forever
+21: veth9c32: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master docker0 state UP group default qlen 1000
+    link/ether 96:77:5d:2b:8f:9b brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::9477:5dff:fe2b:8f9b/64 scope link
+       valid_lft forever preferred_lft forever
+37: veth1197: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast master docker0 state UP group default qlen 1000
+    link/ether 86:19:45:46:b4:ba brd ff:ff:ff:ff:ff:ff
+    inet6 fe80::8419:45ff:fe46:b4ba/64 scope link
+       valid_lft forever preferred_lft forever
+
+10:52 2014-06-18
+GTD
+0, 9:10-18:05
+
+1, today
+PLAN: send snapshot doc out.
+1), 20' chat with Yu Zou.
+2), 10:00-10:40 try docker.
+3), 10:52-11:37 snapshot. see"10:55 2014-06-18"
+50' discuss with chunyan
+4), 11:37-12:20 lunch.
+5), 30' 20' docker. see"16:32 2014-06-17" and "10:22 2014-06-18".
+6), 14:12-17:00 Jason provo and some discussion. see"14:13 2014-06-18"
+
+10:55 2014-06-18
+snapshot
+1, Jim email
+Bamvor Jian Zhang wrote:
+> Hi, Jim
+>
+>> Bamvor Jian Zhang wrote:
+>>
+>>> Hi, Jim
+>>>
+>>> here is some update about libxl snapshot. the main issue is
+>>> a, revert of domain snapshot is destroy and restore domain. it sucks for me. is it ok for community?
+>>>
+>>>
+>> The old xend snapshot patch required the domain to be in halted state
+>> before applying (or reverting to) a snapshot.  But that patch was never
+>> upstreamed so I'm not sure is such an approach is acceptable to the
+>> community.
+>>
+>>
+>>> b, how do i revert domain snapshot.
+>>> c, ao(async)
+>>>
+>>> #######################################
+>>> for b:
+>>> my current snapshot implementation will call savevm/loadvm/delvm for domain internal snapshot. but now i realize that i could not rely on these hmp commands. let me take savevm as example:
+>>> 1), savevm will save qemu memory, but it fail in my test. i guess the reasone is that qemu_savevm_state in savevm could not live with qemu xen memory.
+>>> of course, i could bypass the qemu_savevm_state. but then there is no significant differece between savevm hmp and transaction qmp. the latter one is only deal with disk snapshot.
+>>>
+>>>
+>> The xend snapshot patch used xc_save to save memory state of the domain,
+>> added a 'snapshot-name' setting to the domain config stored stored as
+>> part of the saved memory image, and then signaled qemu (via xenstore) to
+>> snapshot the disks .  When applying or reverting to a snapshot, xend
+>> would call xc_restore to start the domain from the saved memory image.
+>> The 'snapshot-name' setting would be written to xenstore, allowing qemu
+>> to know what snapshot to use in the qcow2 file.
+>>
+>> You are right that savevm/loadvm will not work for the memory state
+>> since that is handled by Xen, not qemu.
+>>
+>>
+>>> 2), savevm will do the disk snapshot for all disks from qemu point of view, e.g. the vm include two disks(hda, hdc), qemu think that there are four disks.
+>>> (qemu) info block 1
+>>> ide0-hd0: /var/lib/xen/images/bjz_04_sles11_sp2/disk0.qcow2 (qcow2)
+>>>     Backing file:     /var/lib/xen/images/bjz_04_sles11_sp2/disk0.raw (chain depth: 1)
+>>>
+>>> ide1-hd0: /var/lib/xen/images/opensuse12_3_01/disk0.qcow2 (qcow2)
+>>>
+>>> hda: /var/lib/xen/images/bjz_04_sles11_sp2/disk0.qcow2 (qcow2)
+>>>     Backing file:     /var/lib/xen/images/bjz_04_sles11_sp2/disk0.raw (chain depth: 1)
+>>>
+>>> hdc: /var/lib/xen/images/opensuse12_3_01/disk0.qcow2 (qcow2)
+>>>
+>>> so, the disk snapshot part is also fail in my test. i guess the reason is that qemu fail on snapshot on the same disk with the same name.
+>>>
+>>> so, now, the question is how should i revert snapshot if i do not call xxxvm hmp?
+>>>
+>>>
+>> I  think you will need to do something similar to the old xend snapshot
+>> patch.  Use Xen's xc_save and xc_restore tools to handle the memory, and
+>> qemu's block drivers to handle the disk snapshot.
+>>
+> yes, this is what i want. considering the libxl-save-helper for ao stuff. the
+> implementation may  be
+> snapshot create: libxl__xc_domain_save + "qmp transaction".
+> snapshot revert: libxl__xc_domain_restore/(destroy+create_domain)  + "qemu-img snapshot apply".
+> currently, for revert, i will destroy the domain and then restore the domain
+> state through create_domain. after think about your suggestion, i guess that
+> libxl__xc_domain_restore should work if no device change. if there is some
+> device changes between current state and previous snapshot state, destroy and
+> restore domain will work but too heavy. a lightweight method would be better.
+>
+
+I don't think this would be an issue If snapshot-create includes
+stashing the domain config, right?  The stashed config could then be
+used when reverting to the snapshot.
+
+>>> as we discussed, i need to call bdrv_snapshot_goto in qemu for disk snapshot revert. i could call qemu-img directly in libxl or create a new qmp in qemu.
+>>>
+>>> if i use "qemu-img" command. whether it is a good idea if i call qemu-img like libxl call libxl-save-helper(libxl__exec way).
+>>>
+>>> #######################################
+>>> for c
+>>> if we want async for disk snasphot, my idea is create a dedicated thread/process for transaction qmp.
+>>> or run qemu-img through libxl__exec.
+>>>
+>>>
+>> Sounds reasonable to me, but ultimately needs agreement with the Xen
+>> community.
+>>
+> yesterday, i wrote a patch to call qemu-img in revert and it works.
+>
+>> That brings me to the topic of discussing this work on last week's Xen
+>> community call.  I asked Ian Campbell if the community could help move
+>> this work along.  He said yes, but confessed that he (and Ian Jackson
+>> IIRC) is a bit confused about the current proposal.  I think it would be
+>> best to submit another iteration of your proposal, focusing on
+>> documentation and the libxl interface for snapshots.
+>>
+>> I think you did a good job of describing the general concepts of
+>> snapshots (disk snapshots, vm snapshots, system checkpoints, etc.) in
+>> your V2
+>>
+>> http://lists.xen.org/archives/html/xen-devel/2014-04/msg02549.html
+>>
+>> In your next iteration, I'd include all the generic info about snapshots
+>> in a cover letter, along with some user stories that describe how
+>> snapshots work.  After the cover letter, provide a patch to the libxl
+>> interface that clearly describe the semantics of each new structure and
+>> API, and a patch to xl.pod describing the syntax and semantics of the xl
+>> snapshot commands.  For the libxl APIs, provide detailed information
+>> about the API.  Put yourself in a developer's seat that is trying to use
+>> these APIs in her libxl App.  Is there enough information on the API to
+>> consume it in an application?  As a reference, look at the API
+>> documentation for virDomainSnapshotCreateXML
+>>
+>> http://libvirt.org/html/libvirt-libvirt.html#virDomainSnapshotCreateXML
+>>
+>> I think the community will help answer the types of questions you asked
+>> in this mail once they understand proposed semantics.  I don't think we
+>> should get bogged down in implementation detail until there is some
+>> agreement on the interface.
+>>
+> i will write the V4 snapshot. as you said, the series would be:
+> 0000: cover letter: some user stories that describe how snapshots work.
+> 0001: libxl API: it will include two parts: domain snapshot configuration file
+>       operation(load, store, delete, it will base on Wei Liu's libxl-json api)
+>       and disk snapshot operation(create, delete, revert, including
+>       implementation details, why choose qmp or qemu-img command).
+> 0002: patch for docs/man/xl.pod.1: describe the xl snapshot command, including
+>       create, list, delete, revert.
+> 0003: xl snapshot command details. Ian Jackson/Campbell is confused about
+>       discuss implementation details in xl.pod.1 because the latter one is
+>       user manual in my V2 doc. here i would like to mention which api will be
+>       called in xl snapshot command. and discuss the revert one we discuss
+>       above: libxl__xc_domain_restore/(destroy+create_domain)  +
+>       "qemu-img snapshot apply".
+> 0004: patch for xl.snapshot.pod.5: xl snapshot configuration file syntax.
+>
+
+This sounds good to me.
+
+Thanks!
+Jim
+
+2, write doc base on previous discussion
+
+11:16 2014-06-18
+maybe we are not talking about the same thing.
+there are several qemu function will touch the domain snapshot configuration
+directory and its file: qemuDomainSnapshotWriteMetadata,
+qemuDomainSnapshotLoad(called by qemuStateInitialize), qemuDomainSnapshotDiscard,
+qemuDomainRemoveInactive.
+
+and these functions will call the libvirt snapshot parser.
+
+my question is what will you do when libxl driver init or reloading? do you read
+the libxl snapshot configuration files or only read the libvirt xml format?
+if you will consider the libxl snapshot configuration file, will you update it
+after libvirt update the domain snapshot configuration files?
+
+it would be simple, when user want to migrate between difference toolstack
+(libxl, libvirt).
+
+and it will not affect the user experience, because we do not need to change
+
+    .domainSnapshotCreateXML = qemuDomainSnapshotCreateXML, /* 0.8.0 */
+    .domainSnapshotGetXMLDesc = qemuDomainSnapshotGetXMLDesc, /* 0.8.0 */
+
+14:13 2014-06-18
+1, Jason
+1, Jeffrey(kirk's son)
+1), lab hardware maintenance.
+2), duplicate issue.
+2, kirk
+2003
+vmdp.
+3, Charles
+4, Juergen
+in nug
+5, Mike
+more than 20 year in novell/suse.
+join several month. before join virtualization, NTS, doing great job in NTS.
+v2v
+6, bruce
+adopt a Shanghai girl when her 2 or 3.
+from 1989.
+7, Jim
+40 year old. from 1999.
+
+2, other
+1), Bob Flynn
+2), Sccot Reeves. was(?) Desktop manager.
+3), Carlg Gardner: set up the autobuild in provo.
+4), John Jolly. IBM mainframe(?)
+5), David Mair: L3 maintenance.
+6), Mike miller
+equal to ralf.
+marketing
+7), maure baker
+8), darren davis
+ISV: certified the vendor's application on suse enterprise linux.
+9), alan clark(Chairman of openstack)
+report to mike miller.
+
+3, other in virtualization team
+1), Jan B from 1992.
+2), Cedric Bosdonnat
+France Lyon
+3), Andreas Faerber
+4), olaf hering.
+very good experience in powerPC.
+
+4, hamsta.virt.lab.novell.com
+xenXXX mean 151.155.144.XXX
+root: novell or susetesting
+
+add search domain: virt.lab.novell.com
+hamsta user name and password is both email id.
+
+5, orthos.arch.suse.de
+bjzhang, bjzhang-pass
+
+16:01 2014-06-18
+virtualization
+
+17:38 2014-06-18
+software skill, Linux, X11, copy and paste
+1, xclip
+# echo 111 | xclip -i --sel clip
+# xclip -o --sel clip
+111
+
+2, Gnome-terminal
+Ctrl+C, Ctrl+V.
 
