@@ -20,11 +20,12 @@ snapshot is also referred to as a domain checkpoint or system checkpoint.
 
 In libvirt, there is a something like resource manager for domain snapshot
 managements. So, in libxl, all these information is transfered through
-libxl_domain_snapshot struct. xl will manage the snapshot by itself.
+libxl_domain_snapshot struct. xl will manage the snapshot by itself based on
+Liu Wei libxl-json apis.
 
 Domain snapshot create means save domain state and do disk snapshots.
 At the beginning of domain snapshot create, it will check whether it is
-snapshotable. it is snapshotable if all the disk is qdisk backed.
+snapshotable.
 
 Domain snapshot revert means rollback the current snapshot state. and
 Because the limitation of the qemu qmp, the revert could only support domain
@@ -35,22 +36,28 @@ there are live flag in snasphot configuration file, it will be save domain
 memory and do external disk snapshot. to make the thing simple, i do not want
 to implement in my first verion of patch.
 
-about non-qdisk backend.
->
-> Looking in tools/blktap2, it seems only external snapshots are supported
-> via td-util or vhd-util.  I suppose lvm would also be considered an
-> external disk snapshot.
-thanks. do you mean call these utils in libxl__exec? it seems that only a few
-binary called by this functions: bootloader, libxl-save-helper, qemu-dm,
-qemu-system-i386.
-the core function of vhd_util snapshot is vhd_snashot which defined in
-(tools/blktap2/include/libvhd.h, /usr/lib64/libvhd.so). although it included in
-xen-devel package in opensuse12.3. maybe it is a better choice?
-TODO: reference libxl_snapshot_helper for details about calling binary.
+the domain snapshot information will store in the follow path:
+/var/lib/xen/snapshots/<domain_uuid>/snapshotdata-<snapshot_name>.xl
+reference patch 0004 for details.
+
+about xl and libvirt cooperation. currently, libvirt use xml for description
+domain snapshot for both user interface and store the snapshot information
+on disks. it would be easier for the user who may be switch xl and libvirt
+if libvirt libxl driver could use libxl-json format in load/store domain
+configuration. this will not affect the libvirt user experience.
+
+discussion about some feature i do not implement in my first version code:
+
+about non-qdisk backend, after some discussion with Jim, it seems that the
+snapshot of these device could be done by difference utils.
+for tap/tap2, td-util or vhd-util.
+for lvm, snapshot create, delete, revert could be done by lvcreate, lvremove,
+lvconvert respectively.
 
 live snapshot.
-i do not know the exact how it should work.
-TODO sync with live memory save and disk transaction.
+i do not know how it should work exactly. if we talk about live memory save,
+i guess it is simialr to live migration. but i how to sync with live memory
+save and disk transaction.
 
 [1] http://lists.xen.org/archives/html/xen-devel/2014-04/msg00414.html
     http://lists.xen.org/archives/html/xen-devel/2014-04/msg00244.html
@@ -58,12 +65,13 @@ TODO sync with live memory save and disk transaction.
 [3] http://lists.xen.org/archives/html/xen-devel/2014-05/msg01977.html
 
 changes since v3:
+split one document into difference document, hope it will be easier to review and
+discuss.
 
 changes since v2:
 1), reorgnized the whole docments.
 2), do not export the dedicated the disk snapshot commands.
 3), others changes according to Ian and Jim's comment.
-
 
 0000: cover letter: this one.
 0001: libxl API: it includes two parts: domain snapshot configuration file
@@ -76,4 +84,6 @@ changes since v2:
       man doc to avoid some confuse. here i would like to mention which api will be
       called in xl snapshot command. and especially how should revert works.
 0004: patch for xl.snapshot.pod.5: xl snapshot configuration file syntax.
+0005: example for internal domain snapshot.
+0006: example for external domain snapshot.
 
