@@ -1,0 +1,72 @@
+From 5b2ba56c9ae0d69b60594090e21f2597604761d4 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Mon, 23 Jun 2014 18:34:48 +0800
+Subject: [PATCH v4 1/5] define snapshot API
+
+it includes two parts APIs: domain snapshot configuration file operation
+(load, store, delete, it base on Wei Liu's libxl-json api) and disk
+snapshot operation(create, delete, revert, including implementation
+details: choose qmp or qemu-img command).
+
+about xl and libvirt cooperation. currently, libvirt use xml for description
+domain snapshot for both user interface and store the snapshot information
+on disks. if libvirt libxl driver could use libxl-json format in load/store
+domain snapshot configuration, it would be easier for the user who may be
+switch xl and libvirt. this will not affect the libvirt user experience.
+
+Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+---
+ tools/libxl/libxl.h | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/tools/libxl/libxl.h b/tools/libxl/libxl.h
+index be722b6..8106f4b 100644
+--- a/tools/libxl/libxl.h
++++ b/tools/libxl/libxl.h
+@@ -1261,6 +1261,43 @@ int libxl_load_domain_configuration(libxl_ctx *ctx, uint32_t domid,
+ int libxl_store_domain_configuration(libxl_ctx *ctx, uint32_t domid,
+                                      libxl_domain_config *d_config);
+ 
++/* snapshot relative APIs */
++
++/* management functions for domain snapshot configuration */
++
++/* Load, save, delete domain snapshot configuration file. */
++int libxl_load_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
++                                    libxl_domain_snapshot *snapshot);
++int libxl_store_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
++                                     libxl_domain_snapshot *snapshot);
++int libxl_delete_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
++                                   libxl_domain_snapshot *snapshot);
++
++/* retrieve all the snapshot information from disk, put the number of it to num.
++ * caller is responsible for free the libxl_domain_snapshot array.
++ */
++libxl_domain_snapshot *libxl_domain_snapshot_list(libxl_ctx *ctx,
++                                                  uint32_t domid, int *num);
++
++/* functions for disk snapshot operations */
++/* create disk snapshot through qmp transaction */
++int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
++                               libxl_disk_snapshot *snapshot, int nb);
++
++/* delete disk snapshot through qmp delete */
++int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
++                               libxl_disk_snapshot *snapshot, int nb);
++
++/* revert disk snapshot through qemu-img snapshot apply command */
++int libxl_disk_snapshot_revert(libxl_ctx *ctx, uint32_t domid,
++                               libxl_disk_snapshot *snapshot, int nb);
++
++/* create libxl_disk_snapshot from libxl_device_disk
++ * will alloc disks if disks empty
++ */
++int libxl_disk_to_snapshot(libxl_ctx *ctx, uint32_t domid,
++                           libxl_domain_snapshot *snapshot);
++
+ #include <libxl_event.h>
+ 
+ #endif /* LIBXL_H */
+-- 
+1.8.1.4
+
