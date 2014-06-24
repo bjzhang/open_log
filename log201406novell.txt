@@ -2034,8 +2034,9 @@ https://www.digitalocean.com/community/tutorials/how-to-install-and-use-docker-g
 https://www.digitalocean.com/community/tutorials/docker-explained-using-dockerfiles-to-automate-building-of-images
 
 17:22 2014-06-17
-sles12
+doc, sles12, virtualization
 http://docserv.suse.de/documents/SLES12/
+http://docserv.suse.de/documents/SLES12/SLES-virtualization
 
 10:22 2014-06-18
 virtualization, lxc, docker, set up a wordpress server
@@ -2589,6 +2590,7 @@ GTD
 20' nap
 
 15:12 2014-06-23
+snapshot, TODO
 1, need to write parse_domain_snapshot_data and libxl_disk_to_snapshot. consideration:
 1), which disk type is allowed for internal snapshot or external snapshot respectively.
 internal: qcow2?
@@ -2599,6 +2601,9 @@ internal or external.
 need add code in parse_domain_snapshot_data and relative functions.
 without type, i could know whether snapshot is internal or external.
 does the user need the mix internal and external snapshot? i hope not.
+3, (11:06 2014-06-24)
+try if i could set vdev without target and format?
+add dry run to test the parser.
 
 18:04 2014-06-23
 virtualization, how to transfer file between libvirt daemon
@@ -2619,4 +2624,255 @@ int daemonAddClientStream(virNetServerClientPtr client,
 
 virStreamXxx description:
 log/novell/hypervisor_and_tools/libvirt/stream/stream_api__libvirt.c
+
+10:30 2014-06-24
+GTD
+0, 9:50
+
+1, today
+1), 20' rest and eat lychee.
+2), 20' discuss with Chunyan direct kernel boot.
+http://lists.xen.org/archives/html/xen-devel/2014-06/msg02738.html
+3), 11:02-11:39 improve snapshot code. see"15:12 2014-06-23"
+
+3), try aarch64 code.
+4), send kernel training reference doc to kindle.
+2), 中午：体检预约，买东西。
+
+21:12 2014-06-24
+1, reply to chunyan
+Hi, Chunyan
+> >>> On 6/23/2014 at 07:25 PM, in message
+> <1403522755-6894-2-git-send-email-bjzhang@suse.com>, Bamvor Jian Zhang
+> <bjzhang@suse.com> wrote:
+> > it includes two parts APIs: domain snapshot configuration file operation
+> > (load, store, delete, it base on Wei Liu's libxl-json api) and disk
+> > snapshot operation(create, delete, revert, including implementation
+> > details: choose qmp or qemu-img command).
+> >
+> > about xl and libvirt cooperation. currently, libvirt use xml for description
+> > domain snapshot for both user interface and store the snapshot information
+> > on disks. if libvirt libxl driver could use libxl-json format in load/store
+> > domain snapshot configuration, it would be easier for the user who may be
+> > switch xl and libvirt. this will not affect the libvirt user experience.
+> >
+> > Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> > ---
+> >  tools/libxl/libxl.h | 37 +++++++++++++++++++++++++++++++++++++
+> >  1 file changed, 37 insertions(+)
+> >
+> > diff --git a/tools/libxl/libxl.h b/tools/libxl/libxl.h
+> > index be722b6..8106f4b 100644
+> > --- a/tools/libxl/libxl.h
+> > +++ b/tools/libxl/libxl.h
+> > @@ -1261,6 +1261,43 @@ int libxl_load_domain_configuration(libxl_ctx *ctx,
+> > uint32_t domid,
+> >  int libxl_store_domain_configuration(libxl_ctx *ctx, uint32_t domid,
+> >                                       libxl_domain_config *d_config);
+> >
+> > +/* snapshot relative APIs */
+> > +
+> > +/* management functions for domain snapshot configuration */
+> > +
+> > +/* Load, save, delete domain snapshot configuration file. */
+> > +int libxl_load_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
+> > +                                    libxl_domain_snapshot *snapshot);
+> > +int libxl_store_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
+> > +                                     libxl_domain_snapshot *snapshot);
+> > +int libxl_delete_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
+> > +                                   libxl_domain_snapshot *snapshot);
+>
+> Do we need libxl_domain_snapshot as parameter here? Why not
+> 'ctx, domid, snapshot-name'?
+yes, i only need the name of snapshot for deleting. i put libxl_domain_snapshot
+here in order to consistent with load and store functions above.
+>
+> > +
+> > +/* retrieve all the snapshot information from disk, put the number of it to
+> > num.
+>
+> Typo  here. Is it to retrieve the snapshot info of the domain?
+> If  domain has 2 snapshots, return the 2 snapshots' info and set num=2.
+yes. thanks.
+>
+> > + * caller is responsible for free the libxl_domain_snapshot array.
+> > + */
+> > +libxl_domain_snapshot *libxl_domain_snapshot_list(libxl_ctx *ctx,
+> > +                                                  uint32_t domid, int
+> > *num);
+> > +
+> > +/* functions for disk snapshot operations */
+> > +/* create disk snapshot through qmp transaction */
+> > +int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+> > +                               libxl_disk_snapshot *snapshot, int nb);
+> > +
+> > +/* delete disk snapshot through qmp delete */
+> > +int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+> > +                               libxl_disk_snapshot *snapshot, int nb);
+> > +
+> > +/* revert disk snapshot through qemu-img snapshot apply command */
+> > +int libxl_disk_snapshot_revert(libxl_ctx *ctx, uint32_t domid,
+> > +                               libxl_disk_snapshot *snapshot, int nb);
+> > +
+> > +/* create libxl_disk_snapshot from libxl_device_disk
+> > + * will alloc disks if disks empty
+> > + */
+> > +int libxl_disk_to_snapshot(libxl_ctx *ctx, uint32_t domid,
+> > +                           libxl_domain_snapshot *snapshot);
+>
+> What is this function for? And how would we use it? It's better to have some
+> explanation to the functionality and the parameters.
+sorry for confuse. this function will save disk parameter to libxl_disk_snapshot
+from libxl_diskinfo. reference my next reply for structure definition.
+libxl_disk_to_snapshot will get disk list through libxl_device_disk_list, and
+get libxl_diskinfo through libxl_device_disk_getinfo. and it will only process
+the disk support snapshot in current implementaiton. e.g.
+for internal snapshot: only qcow2 is supported.
+for external snapshot: raw and qcow2 is supported.
+
+regards
+
+bamvor
+>
+> Regards,
+> Chunyan
+>
+> > +
+> >  #include <libxl_event.h>
+> >
+> >  #endif /* LIBXL_H */
+
+2,
+> >>> On 6/23/2014 at 07:25 PM, in message
+> <1403522755-6894-2-git-send-email-bjzhang@suse.com>, Bamvor Jian Zhang
+> <bjzhang@suse.com> wrote:
+> > it includes two parts APIs: domain snapshot configuration file operation
+> > (load, store, delete, it base on Wei Liu's libxl-json api) and disk
+> > snapshot operation(create, delete, revert, including implementation
+> > details: choose qmp or qemu-img command).
+> >
+> > about xl and libvirt cooperation. currently, libvirt use xml for description
+> > domain snapshot for both user interface and store the snapshot information
+> > on disks. if libvirt libxl driver could use libxl-json format in load/store
+> > domain snapshot configuration, it would be easier for the user who may be
+> > switch xl and libvirt. this will not affect the libvirt user experience.
+> >
+> > Signed-off-by: Bamvor Jian Zhang <bjzhang@suse.com>
+> > ---
+> >  tools/libxl/libxl.h | 37 +++++++++++++++++++++++++++++++++++++
+> >  1 file changed, 37 insertions(+)
+> >
+> > diff --git a/tools/libxl/libxl.h b/tools/libxl/libxl.h
+> > index be722b6..8106f4b 100644
+> > --- a/tools/libxl/libxl.h
+> > +++ b/tools/libxl/libxl.h
+> > @@ -1261,6 +1261,43 @@ int libxl_load_domain_configuration(libxl_ctx *ctx,
+> > uint32_t domid,
+> >  int libxl_store_domain_configuration(libxl_ctx *ctx, uint32_t domid,
+> >                                       libxl_domain_config *d_config);
+> >
+> > +/* snapshot relative APIs */
+> > +
+> > +/* management functions for domain snapshot configuration */
+> > +
+> > +/* Load, save, delete domain snapshot configuration file. */
+> > +int libxl_load_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
+> > +                                    libxl_domain_snapshot *snapshot);
+> > +int libxl_store_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
+> > +                                     libxl_domain_snapshot *snapshot);
+> > +int libxl_delete_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
+> > +                                   libxl_domain_snapshot *snapshot);
+> > +
+> > +/* retrieve all the snapshot information from disk, put the number of it to
+> > num.
+> > + * caller is responsible for free the libxl_domain_snapshot array.
+> > + */
+> > +libxl_domain_snapshot *libxl_domain_snapshot_list(libxl_ctx *ctx,
+> > +                                                  uint32_t domid, int
+> > *num);
+> > +
+> > +/* functions for disk snapshot operations */
+> > +/* create disk snapshot through qmp transaction */
+> > +int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+> > +                               libxl_disk_snapshot *snapshot, int nb);
+> > +
+> > +/* delete disk snapshot through qmp delete */
+> > +int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
+> > +                               libxl_disk_snapshot *snapshot, int nb);
+> > +
+> > +/* revert disk snapshot through qemu-img snapshot apply command */
+> > +int libxl_disk_snapshot_revert(libxl_ctx *ctx, uint32_t domid,
+> > +                               libxl_disk_snapshot *snapshot, int nb);
+> > +
+> > +/* create libxl_disk_snapshot from libxl_device_disk
+> > + * will alloc disks if disks empty
+> > + */
+> > +int libxl_disk_to_snapshot(libxl_ctx *ctx, uint32_t domid,
+> > +                           libxl_domain_snapshot *snapshot);
+> > +
+> >  #include <libxl_event.h>
+> >
+> >  #endif /* LIBXL_H */
+>
+> I didn't see the details of structure libxl_disk_snapshot. Miss it?
+sorry, here is the struct, it is defined in libxl_types.idl. this get the benefit
+from Liu wei's libxl-json, e.g. libxl_domain_snapshot_to_json and
+libxl_domain_snapshot_from_json will be used by libxl_load_dom_snapshot_conf
+and libxl_store_dom_snapshot_conf respectively.
+
+the definition and usecase of libxl_disk_snapshot and libxl_domain_snapshot
+is coherent with patch 0003-add-xl-snapshot-configuration-syntax-file.patch
+
+libxl_disk_snapshot = Struct("disk_snapshot",[
+    ("device",        string),              //name of disk: hda, hdc
+    ("name",          string),              //name of this disk snapshot,
+                                            //usually it is inherit from
+                                            //libxl_domain_snapshot
+    ("file",          string),              //the external snapshot file.
+                                            //empty in internal snapshot.
+    ("format",        libxl_disk_format),   //the external snapshot format
+                                            //for internal snapshot, it will be
+                                            //ignored and it should be
+                                            //LIBXL_DISK_FORMAT_UNKNOWN
+    ("path",          string),              //path for disk backend. it always
+                                            //get from libxl_device_disk_getinfo.
+                                            //it will be empty string when store
+                                            //domain snapshot configuration in
+                                            //order to hide this from users.
+    ])
+
+libxl_domain_snapshot = Struct("domain_snapshot",[
+    ("name",          string),              //name of domain snapshot
+    ("description",   string),              //description of domain snapshot
+    ("creation_time", uint64),              //the creation time of domain
+                                            //snapshot which is the epoch
+                                            //second from 1, Jan 1970.
+    ("memory",        string),              //path for domain memory save.
+                                            //empty mean it is a disk-only
+                                            //snapshot.
+    //the following state get from libxl_domain_info.
+    ("running",       bool),
+    ("blocked",       bool),
+    ("paused",        bool),
+    ("shutdown",      bool),
+    ("dying",         bool),
+    ("disks", Array(libxl_disk_snapshot, "num_disks")),//each disk snapshot
+                                            //information belong to this
+                                            //domain snapshot.
+    ])
+
+>
+> And generally, I think it would be helpful to roughly introduce your ideas in
+> this patch, like:
+> a) User interface, how would you expect user to use vm snapshot functionality?
+>      xl snapshot-create xxx xxx xxx
+>      xl snapshot-delete xxx xxx xxx
+> b) To each operation, rough ideas on how you would implement. That may help
+>     to understand why you introduce new structures and new APIs.
+> c) New structures
+> d) New APIs (would be helpful if there is description on function, parameters,
+>      return value.)
+>
+> Thanks,
+> Chunyan
 
