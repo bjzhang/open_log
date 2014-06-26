@@ -2918,4 +2918,123 @@ thanks.
 
 bamvor
 
+16:56 2014-06-26
+virtualization, libvirt, storage, storage pool
+1, how to use
+pool.xml
+
+```xml
+<pool type="dir">
+  <name>default</name>
+  <target>
+    <path>/var/lib/libvirt/images</path>
+    <format type='qcow2' />
+  </target>
+</pool>
+```
+
+`virsh pool-define pool.xml && virsh pool-autostart default && virsh pool-start
+default`
+
+pool afterwards reported as persistent
+
+Name:           default
+UUID:           b4f7b74f-0738-4178-a3b7-0b0e9079ec37
+State:          running
+Persistent:     yes
+Autostart:      yes
+Capacity:       8.91 GiB
+Allocation:     1.52 GiB
+Available:      7.40 GiB
+
+i am not sure when need pool-build.
+
+http://docserv.suse.de/documents/SLES12/SLES-storage/pdf/stor_admin_remarks_color_draft_meta_en.pdf
+https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Virtualization_Administration_Guide/chap-Virtualization_Administration_Guide-Storage_Pools-Storage_Pools.html
+
+2, storage pool could be managed by root or normal users. the configuration directory will be different:
+for root: /etc/libvirt/storage.
+for normal users: /home/username/.config/libvirt/storage.
+
+reference the code below:
+storageStateInitialize("src/storage/storage_driver.c"):
+    if (privileged) {
+        if (VIR_STRDUP(base, SYSCONFDIR "/libvirt") < 0)
+            goto error;
+    } else {
+        base = virGetUserConfigDirectory();
+        if (!base)
+            goto error;
+    }
+    driverState->privileged = privileged;
+
+    /* Configuration paths are either $USER_CONFIG_HOME/libvirt/storage/... (session) or
+     * /etc/libvirt/storage/... (system).
+     */
+    if (virAsprintf(&driverState->configDir,
+                    "%s/storage", base) == -1)
+        goto error;
+
+    if (virAsprintf(&driverState->autostartDir,
+                    "%s/storage/autostart", base) == -1)
+        goto error;
+
+
+
+static char *virGetXDGDirectory(const char *xdgenvname, const char *xdgdefdir)
+{
+    const char *path = virGetEnvBlockSUID(xdgenvname);
+    char *ret = NULL;
+    char *home = NULL;
+
+    if (path && path[0]) {
+        ignore_value(virAsprintf(&ret, "%s/libvirt", path));
+    } else {
+        home = virGetUserDirectory();
+        if (home)
+            ignore_value(virAsprintf(&ret, "%s/%s/libvirt", home, xdgdefdir));
+    }
+
+    VIR_FREE(home);
+    return ret;
+}
+
+char *virGetUserConfigDirectory(void)
+{
+    return virGetXDGDirectory("XDG_CONFIG_HOME", ".config");
+}
+
+3, storage is a driver in libvirt. this allow hypervisor driver share the same storage driver(e.g. xen, kvm, lxc) or use the dedicated storage
+driver, such as esx, hyperv, vbox, storage_driver(for linux).
+difference driver could support difference backend, it will get backend from virStorageBackendForType and then call backend callback.
+
+17:29 2014-06-26
+virtualization, libvirt, storage, pool, bnc#859701
+1, reference "16:56 2014-06-26" for technique details.
+summary: at first(maybe one month before), i feel that i do not know whether libvirt support create storage pool with normal user.
+today, i solved this issue after i acctually think about how should the storage pool used. i mean i found that virsh vol-creae works for the storage pool created by normal user.
+and then i start to read the libvirt storage relative code, i found that the configuration directory will be different.
+
+17:35 2014-06-26
+GTD
+0, -17:55
+
+1, today
+1), 30' 1:1 with roger.
+2), 16:00-17:35 bnc#859701. see"17:29 2014-06-26"
+
+17:35 2014-06-26
+virtualization, memory, kvm, overcommit
+1, concept and how to calculate swap size in host.
+https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Virtualization_Administration_Guide/chap-Virtualization-Tips_and_tricks-Overcommitting_with_KVM.html
+http://docs.fedoraproject.org/en-US/Fedora/13/html/Virtualization_Guide/sect-Virtualization-Tips_and_tricks-Overcommitting_with_KVM.html
+http://www.linux-kvm.org/wiki/images/f/ff/2011-forum-memory-overcommit.pdf
+
+17:46 2014-06-26
+kernel, memory, tmem
+https://oss.oracle.com/projects/tmem/
+http://lwn.net/Articles/454795/
+http://lwn.net/Articles/340080/
+http://www-archive.xenproject.org/files/xensummit_oracle09/xensummit_transmemory.pdf
+http://www.linux-kvm.org/wiki/images/d/d7/TmemNotVirt-Linuxcon2011-Final.pdf
 
