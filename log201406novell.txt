@@ -2400,7 +2400,7 @@ jason: product manager
 a: project manager.
 
 10:29 2014-06-22
-kernel training, Li Yong
+liyong, kernel training, 内核加载
 1, BIOS加载引导扇区，引导山区加载NTLOADER, LILO等。
 2, GRUB支持三种
 1), multiboot spec
@@ -2464,7 +2464,7 @@ SECTIONS
 }
 
 4, 线性地址和物理地址
-虚拟地址经过段+段偏移量转成的地址是线性地址。
+虚拟地址经过段+段偏移量转成的地址是线性地址。所以说线性地址就是我平时理解的虚拟地址.
 
 5, 代码段，数据段和BSS.
 x86里面代码段和数据段访问方式不同？
@@ -2532,7 +2532,7 @@ lvm页表都在lvm meta data中（相当于在硬盘的superblock）。第一次
 https://access.redhat.com/site/documentation/en-US/Red_Hat_Enterprise_Linux/6/html/Logical_Volume_Manager_Administration/thinprovisioned_volumes.html
 
 14:00 2014-06-22
-kernel, 保护模式
+liyong, kernel training, 保护模式
 1, RPL, DPL, CS和SS段寄存器中CPL都是2个bit: ring0-3.
 0: kernel.
 3: userspace.
@@ -2568,13 +2568,17 @@ sleep(0)会做调度么？2.6.32之后不行，因为有了高精度定时器后
 线程模型： 1:1, N:1, N:M.
 
 16:27 2014-06-22
-系统调用
+liyong, kernel training, system call(系统调用)
 1,
 应用程序通常会调用系统库封装的系统调用而非直接通过INT指令调用内核服务
 • open(2), read(2), write(2)
 有个别系统库的功能是不涉及优先级切换的
 • vSysCall, vDSO
 • gettimeofday(2),gettimeofday(3)
+(10:28 2014-06-29)
+vsyscall不是一个真的系统调用, 只是为了读到时间戳. 但是这样可能会有安全风险.
+所有后来有了vDSO, 做成一个真的系统调用, 而且映射地址会随机.
+"10:29 2014-06-29"end
 
 2, sendrec
 SYSVEC:为33号中断 (lib/libc/asm-i386/bits/_ipc.S)
@@ -3037,4 +3041,92 @@ http://lwn.net/Articles/454795/
 http://lwn.net/Articles/340080/
 http://www-archive.xenproject.org/files/xensummit_oracle09/xensummit_transmemory.pdf
 http://www.linux-kvm.org/wiki/images/d/d7/TmemNotVirt-Linuxcon2011-Final.pdf
+
+14:46 2014-06-27
+Chun Yan Liu wrote:
+> I didn't see the details of structure libxl_disk_snapshot. Miss it?
+>
+> And generally, I think it would be helpful to roughly introduce your ideas in
+> this patch, like:
+> a) User interface, how would you expect user to use vm snapshot functionality?
+>      xl snapshot-create xxx xxx xxx
+>      xl snapshot-delete xxx xxx xxx
+>
+
+Agreed.  Here you could also provide some user stories.  E.g. "As an
+admin, I want to snapshot the system before applying the latest kernel
+updates, so I can revert to the known working state if the update
+introduces regressions."  And then describe how this is done with the
+user interface.  IMO, all of this, along with the information in the
+cover letter, should be in a new 'docs/misc/snapshot-HOTOW.txt' or such
+file.
+
+> b) To each operation, rough ideas on how you would implement. That may help
+>     to understand why you introduce new structures and new APIs.
+> c) New structures
+> d) New APIs (would be helpful if there is description on function, parameters,
+>      return value.)
+>
+
+Yep, this sounds like a reasonable approach to me.
+
+Regards,
+Jim
+
+10:17 2014-06-29
+liyong, kernel training, scheduler
+1, bash参数不能超过一个page.
+2, linux调度的两种方式.
+1), lazy schedule. 不移出运行队列. interruptable, uninterruptable. 如果设为interruptable, 就是运行被调度. 如果是un...就是不运行调度, 内核调度时会跳过这个进程.
+2), 进程移出运行队列.
+3, task_struct
+1), io_bitmap: 应用程序能否访问io地址空间的bit map.
+4, mm_struct
+rss: 常驻内存.
+
+13:47 2014-06-29
+liyong, kernel training, physical memory
+1, 通过bios得到内存信息: e802.
+2, total_memory_size.
+total_memory_size是可用物理内存的最高地址. 因为内存中间有空洞, 所有不一定是系统总物理内存大小. 这个变量可以用于计算系统一共需要多少个page frame.
+虚拟内存系统可以使用前, 物理内存使用bitmap管理这些page.
+3, slab
+1), 当内存紧张时, 可以把slabs_free返回给buddy.
+2), 对于大的分配(linux中大于512bytes), slab不在放到buffer所在的page中, 而是单独保存slab.
+3), coloring.
+这是94年提出的概念. 现在内存很大, cache line冲突概率大很多. coloring效果不那么明显.
+memcached也用了coloring的概念.
+4, 物理内存和虚拟内存的联系.
+1), 给用户分配内存, 只能整页分配, 因为权限是按照page设置的.
+5, page cache and buffer cache
+http://www.quora.com/Linux-Kernel/What-is-the-major-difference-between-the-buffer-cache-and-the-page-cache
+http://www.quora.com/What-is-the-difference-between-Buffers-and-Cached-columns-in-proc-meminfo-output
+reference: "log/kernel/memory/page_cache_and_buffer_cache__proc_meminfo.txt"
+> cat /proc/meminfo
+MemTotal:        3937532 kB
+MemFree:          777268 kB
+Buffers:          167496 kB
+Cached:           689480 kB
+SwapCached:           16 kB
+Cached是page cache减去swap cached. 而page cache是Linux系统所有文件IO cache. Buffers是内存中所有block IO cache(从2.4开始不包括文件IO, 也就是包括page cache)
+
+16:06 2014-06-29
+liyong, kernel training, virtual memory
+1,
+Segment Descriptor Cache
+Translate Lookaside Buffer
+2, 映射
+os会除了映射当前的页, 还可能映射下一个页.
+3, vma
+1), Linux中用链表和红黑树(插入删除慢, 查找快)两种方式组织.
+2), cat /proc/<pid>/maps
+4, 大内存页
+主要用于虚拟机, 数据库等应用.
+
+17:23 2014-06-29
+filesystem
+1, btrfs
+文件系统的COW(copy on write)有个好处是所有写都有记录, 便于回滚.
+2, sata? scsi? FUA绕过cache直接写文件系统.
+3, 硬盘厂商有个保证就是掉电后能保证此时写入的block一定成功.
 
