@@ -12,27 +12,41 @@ memory save by waiting the ao complete flag.
 the secondary reason is that i could share more functions in xl command
 with xl snapshot command. share the code mean easy to maintenance.
 
-"xl snapshot-create"
+1, "xl snapshot-create"
 
 1), parse domain snapshot configuration file.
-2), save domain memory through save_domain if it is not a disk only
+2), fill into the libxl_disk_snapshot array in libxl_domain_snapshot
+struct according to options or config file.
+3), save domain memory through save_domain if it is not a disk only
 snapshot.
-3), take disk snapshot by libxl_disk_snapshot_create according to
+4), take disk snapshot by libxl_disk_snapshot_create according to
 libxl_domain_snapshot.
-4), it will save snapshot configuration(libxl-json format) to
+5), save snapshot configuration(libxl-json format) to
 "/var/lib/xen/snapshots/domain_uuid/snapshotdata-<snapshot_name>.libxl-json"
+by libxl_store_dom_snapshot_conf.
 
-"xl snapshot-list"
+2, "xl snapshot-list"
+
 1), read all the domain snapshot configuration file(libxl-json format) from
 "/var/lib/xen/snapshots/domain_uuid". parse each file into
 libxl_domain_snapshot struct.
 2), display short or full information from these libxl_domain_snapshot array.
 
-"xl snapshot-delete"
+3, "xl snapshot-delete"
 
-"xl snapshot-revert"
+1), read snapshot configuration file from
+"/var/lib/xen/snapshots/domain_uuid/snapshotdata-<snapshot_name>.libxl-json"
+2), delete snapshot or image mention in above file.
+(1), delete memory image if it is not a disk only snapshot.
+(2), delete disk snapshot date by libxl_disk_snapshot_delete
+(3), delete domain snapshot configuration by libxl_delete_dom_snapshot_conf
 
-flow: destroy domain -> revert disk snapshot -> restore domain
+4, "xl snapshot-revert"
+
+1), destroy the running domain by libxl_domain_destroy. if domain is not
+running, skip this step.
+2), revert disk snapshot by libxl_disk_snapshot_revert.
+3), restore domain stae through create_domain functions in xl_cmdimpl.c
 
 idealy, i should use libxl__xc_domain_restore for domain memory restore. but i
 will be a issue when the domain configuration is different between current vm
