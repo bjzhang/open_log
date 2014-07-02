@@ -1,0 +1,44 @@
+Some discussion on xl snapshot-xxx implementation
+
+the possible question would be why there is no universe api for domain
+snapshot?
+this is my initial target while working on snapshot. with the common api,
+different toolstack(xl or libvirt) could call the same api for the same
+operation. life would be eaiser compare to the domain create, restore and
+...
+the reason why i could not provide common api is that it is hard to handle
+the ao things in api. e.g. in domain snapshot create, libvirt may wait the
+memory save by waiting the ao complete flag.
+the secondary reason is that i could share more functions in xl command
+with xl snapshot command. share the code mean easy to maintenance.
+
+"xl snapshot-create"
+
+1), parse domain snapshot configuration file.
+2), save domain memory through save_domain if it is not a disk only
+snapshot.
+3), take disk snapshot by libxl_disk_snapshot_create according to
+libxl_domain_snapshot.
+4), it will save snapshot configuration(libxl-json format) to
+"/var/lib/xen/snapshots/domain_uuid/snapshotdata-<snapshot_name>.libxl-json"
+
+"xl snapshot-list"
+1), read all the domain snapshot configuration file(libxl-json format) from
+"/var/lib/xen/snapshots/domain_uuid". parse each file into
+libxl_domain_snapshot struct.
+2), display short or full information from these libxl_domain_snapshot array.
+
+"xl snapshot-delete"
+
+"xl snapshot-revert"
+
+flow: destroy domain -> revert disk snapshot -> restore domain
+
+idealy, i should use libxl__xc_domain_restore for domain memory restore. but i
+will be a issue when the domain configuration is different between current vm
+and snapshot. so, in my current implementation, firstly, i destroy the current
+domain. and after revert disk snapshot, i restore the domain through
+create_domain with proper dom_info. so, the revert is not pull the domain
+status back. it is different from qemu snapshot implementation, qemu is pull
+the domain back to the snapshot point with loadvm hmp.
+

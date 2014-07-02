@@ -23,45 +23,54 @@ snapshotable.
 
 Domain snapshot revert means rollback the current snapshot state.
 
-the domain snapshot information will store in the follow path:
-/var/lib/xen/snapshots/<domain_uuid>/snapshotdata-<snapshot_name>.libxl-json
-reference patch 0004 for details.
+1, Create Snapshot:
+user could create internal or external snapshot with or without config
+file. reference xl.snapshot.5 for(patch 0005) for details of this config
+file.
 
-Usage:
-reference xl man page and xl.snapshot man page.
+1), create an internal snapshot with default name(epoch second from 1, Jan
+1970). only qcow2 is supported for internal snapshot.
+xl snapshot-create your_domain
 
-Examples:
+2), create an internal snapshot with specific snapshot name.
+xl snapshot-create -n domain_snapshot_name your_domain
 
-examples for internal snapshot by options
-xl snapshot-create
-
-examples for xl internal snapshot
+3), create an internal disk snapshot by config file. which mean no memory
+state is saved in this snapshot.
 # cat snapshot_internal
 name = "internal_snapshot_after_installation"
 description="a snapshot after OS installation. internal snapshot example"
 creationtime="1397207580"
-save="/var/lib/xen/snapshots/<domain_uuid>/1397207580.save"
-# xl snapshot-create snapshot_internal
+type="internal"
 
-examples for xl external snapshot
+# xl snapshot-create your_domain snapshot_internal
+
+4), create a external snapshot
+cat snapshot_external
 name = "1397207577"
 description="a snapshot after OS installation. external snapshot example"
 creationtime="1397207577"
-save="/var/lib/xen/snapshots/<domain_uuid>/1397207577.save"
+memory="yes"
 disk=[ 'hda=/var/lib/xen/snapshots/<domain_uuid>/disk_hda.qcow2,type=qcow2', 'hdc=/var/lib/xen/snapshots/<domain_uuid>/disk_hdc.qcow2,type=qcow2']
 
-examples for libxl-json
+2, List snapshot:
+1), list all the domain snapshot short information for specific domain.
+short information include snapshot name, creation time, the domain state
+when create snapshot, whether it is a disk only snapshot.
+xl snapshot-list your_domain
+2), list full information for one domain snapshot for specific domain
+xl snapshot-list -l your_domain domain_snapshot_name
+3), list full information for all domian snapshot for specific domain.
+xl snapshot-list -l your_domain
 
-create disk snapshot through libxl_disk_snapshot_create api.
-internal snapshot example:
-libxl_disk_snapshot snapshot[] =
-{
-    {
-        .device = "hda",
-        .name = "your_disk_snapshot_name",
-    }
-    {
-        .device = "hdc",
-        .name = "your_disk_snapshot_name",
-    }
-};
+3, Delete snapshot:
+1), delete one snapshot for specific domain. this operation will delete
+all the file relative to this snapshot include the disk snapshot state,
+saved memory image, domain snapshot configuraiton in libxl-json format.
+xl snapshot-delete -n domain_snapshot_name your_domain
+
+4, Revert snapshot:
+curently, only internal snapshot revert is supportted. the following
+command will revert the internal disk snapshot and memory state.
+xl snapshot-revert -n domain_snapshot_name your_domain
+
