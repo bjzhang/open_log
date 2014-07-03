@@ -2,60 +2,83 @@ Libxl VM Snapshot API Design
 
 1. New Structures
 
-    introduce the libxl_domain_snapshot for domain snapshot operation.
-    the meaning of each member in libxl_domain_snapshot is same as the
-    xl.snapshot. reference snapshot-HOWTO.txt about how to use.
+    To implement VM snapshot, introduce two new structures:
+    "libxl_domain_snapshot" and "libxl_disk_snapshot".
+    "libxl_domain_snapshot" is to store domain snapshot information, it
+    contains libxl_disk_snapshot, which stores disk snapshot related
+    information.
 
-    the libxl_domain_struct and libxl_disk_snapshot in defined in libxl_types.idl,
-    which will generate the following libxl-json helper functions:
-    char *libxl_domain_snapshot_to_json(libxl_ctx *ctx, libxl_domain_snapshot *p);
-    int libxl_domain_snapshot_from_json(libxl_ctx *ctx, libxl_domain_snapshot *p, const char *s);
-    these functions is useful when load/store domain snapshot configuration file
-    (libxl-json format).
+    Both are defined in libxl_types.idl, which will generate the following
+    libxl-json helper functions:
+
+    char *libxl_domain_snapshot_to_json(libxl_ctx *ctx,
+                                        libxl_domain_snapshot *p);
+    int libxl_domain_snapshot_from_json(libxl_ctx *ctx,
+                                        libxl_domain_snapshot *p, const char *s);
+    char *libxl_disk_snapshot_to_json(libxl_ctx *ctx,
+                                      libxl_disk_snapshot *p);
+    int libxl_disk_snapshot_from_json(libxl_ctx *ctx,
+                                      libxl_disk_snapshot *p, const char *s);
+ 
+    These functions will be used internally, very userful when load/storing
+    domain snapshot configuration file (libxl-json format).
+
+    Sturct Details:
 
     libxl_disk_snapshot = Struct("disk_snapshot",[
-        ("device",        string),              //name of disk: hda, hdc
-        ("name",          string),              //name of this disk snapshot,
-                                                //usually it is inherit from
-                                                //libxl_domain_snapshot
-        ("file",          string),              //the external snapshot file.
-                                                //empty in internal snapshot.
-        ("format",        libxl_disk_format),   //the external snapshot format
-                                                //for internal snapshot, it will be
-                                                //ignored and it should be
-                                                //LIBXL_DISK_FORMAT_UNKNOWN
-        ("path",          string),              //path for disk backend. it always
-                                                //get from libxl_device_disk_getinfo.
-                                                //it will force empty when store
-                                                //domain snapshot configuration in
-                                                //order to hide this from users.
+        ("device",        string),              /* name of disk: hda, hdc */
+        ("name",          string),              /* name of disk snapshot,
+                                                 * usually it is inherit from
+                                                 * libxl_domain_snapshot
+                                                 */
+
+        ("file",          string),              /* external snapshot file.
+                                                 * empty in internal snapshot.
+                                                 */
+
+        ("format",        libxl_disk_format),   /* external snapshot format
+                                                 * for internal snapshot, it's
+                                                 * ignored and it should be
+                                                 * LIBXL_DISK_FORMAT_UNKNOWN
+                                                 */
+
+        ("path",          string),              /* path of disk backend. It
+                                                 * gets from 
+                                                 * libxl_device_disk_getinfo.
+                                                 * it will force empty when
+                                                 * store domain snapshot
+                                                 * configuration in order
+                                                 * to hide this from users.
+                                                 */
         ])
 
     libxl_domain_snapshot = Struct("domain_snapshot",[
-        ("name",          string),              //name of domain snapshot
-        ("description",   string),              //description of domain snapshot
-        ("creation_time", uint64),              //the creation time of domain
-                                                //snapshot which is the epoch
-                                                //second from 1, Jan 1970.
-        ("memory",        string),              //path for domain memory save.
-                                                //empty mean it is a disk-only
-                                                //snapshot.
-        //the following state represent the domain state just before snapshot.
-        //these state get from libxl_domain_info.
+        ("name",          string),              /* name of domain snapshot */
+        ("description",   string),              /* description of snapshot */
+        ("creation_time", uint64),              /* creation time of domain
+                                                 * snapshot which is the epoch
+                                                 * second from 1, Jan 1970.
+                                                 */
+
+        ("memory",        string),              /* path for domain memory save.
+                                                 * 'empty' means it is a
+                                                 * disk-only snapshot.
+
+        /* Following state represents the domain state before snapshot.
+         * These state gets from libxl_domain_info.
+         */
         ("running",       bool),
         ("blocked",       bool),
         ("paused",        bool),
         ("shutdown",      bool),
         ("dying",         bool),
-        ("disks", Array(libxl_disk_snapshot, "num_disks")),//each disk snapshot
-                                                //information belong to this
-                                                //domain snapshot.
+        ("disks", Array(libxl_disk_snapshot, "num_disks")),
         ])
 
 
 2. New Functions
 
-=== Management functions for domain snapshot config file (libxl-json format).
+  2.1 Management functions for domain snapshot config file (libxl-json format).
 
     This file is located in "/var/lib/xen/snapshots/<domain_uuid>/\
     snapshotdata-<snapshot_name>.libxl-json". Only for internal usage, not for
@@ -132,7 +155,7 @@ Libxl VM Snapshot API Design
     libxl_list_dom_snapshot(libxl_ctx *ctx, uint32_t domid, int *num);
 
 
-=== functions for disk snapshot operations 
+  2.1 functions for disk snapshot operations 
 
     /*
      * function:  create disk(s) snapshot according to config in @snapshot
