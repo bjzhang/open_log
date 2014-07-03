@@ -1,0 +1,174 @@
+From d8217b39cc5c3d0cdf3f86b1355e9dc07bb18358 Mon Sep 17 00:00:00 2001
+From: Bamvor Jian Zhang <bjzhang@suse.com>
+Date: Thu, 3 Jul 2014 10:29:45 +0800
+Subject: [PATCH 1/1] delete hmp functions
+
+---
+ tools/libxl/libxl_internal.h |  3 ---
+ tools/libxl/libxl_qmp.c      | 49 --------------------------------------------
+ tools/libxl/libxl_snapshot.c | 43 --------------------------------------
+ tools/libxl/xl_cmdimpl.c     | 20 ------------------
+ 4 files changed, 115 deletions(-)
+
+diff --git a/tools/libxl/libxl_internal.h b/tools/libxl/libxl_internal.h
+index ab91c9c..9fa56e0 100644
+--- a/tools/libxl/libxl_internal.h
++++ b/tools/libxl/libxl_internal.h
+@@ -2844,9 +2844,6 @@ int libxl_domain_snapshot_delete_save(libxl_ctx *ctx,
+ 
+ int libxl_set_disk_snapshot_name(libxl_domain_snapshot *snapshot);
+ 
+-/* hmp test */
+-int libxl_hmp(libxl_ctx *ctx, uint32_t domid, const char *hmp, char *hmp_arg, const char *expect);
+-
+ /*
+  * Convenience macros.
+  */
+diff --git a/tools/libxl/libxl_qmp.c b/tools/libxl/libxl_qmp.c
+index 02e4610..0eaf16f 100644
+--- a/tools/libxl/libxl_qmp.c
++++ b/tools/libxl/libxl_qmp.c
+@@ -1053,55 +1053,6 @@ int libxl__qmp_disk_snapshot_delete_internal(libxl__gc *gc, int domid,
+                            args, NULL, NULL);
+ }
+ 
+-#if 0
+-//-> { "execute": "human-monitor-command", "arguments": { "command-line": "info kvm" } }
+-//<- { "return": "kvm support: enabled\r\n" }
+-static int hmp_callback(libxl__qmp_handler *qmp,
+-                        const libxl__json_object *response,
+-                        void *opaque)
+-{
+-    int ret = -1;
+-    const char *s;
+-    const char *expect = (const char *)opaque;
+-    fprintf(stderr, "hmp_callback enter\n");
+-
+-//    obj = libxl__json_array_get(response, 0);
+-    if (!libxl__json_object_is_string(response))
+-        return ERROR_FAIL;
+-
+-    s = libxl__json_object_get_string(response);
+-    fprintf(stderr, "return: %s\n", s);
+-    if ( !strcmp(s, expect) ) {
+-        ret = 0;
+-    }
+-
+-    return ret;
+-}
+-
+-int libxl_hmp(libxl_ctx *ctx, uint32_t domid, const char *hmp, char *hmp_arg, const char *expect)
+-{
+-    GC_INIT(ctx);
+-    libxl__hmp(gc, domid, hmp, hmp_arg, expect);
+-    GC_FREE;
+-    return 0;
+-}
+-
+-// -> { "execute": "human-monitor-command", "arguments": { "command-line": "info kvm" } }
+-// <- { "return": "kvm support: enabled\r\n" }
+-int libxl__hmp(libxl__gc *gc, uint32_t domid, const char *hmp, char *hmp_arg, const char *expect)
+-{
+-    libxl__json_object *args = NULL;
+-    char *hmp_cmd = NULL;
+-
+-    hmp_cmd = GCSPRINTF("%s %s", hmp, hmp_arg);
+-    qmp_parameters_add_string(gc, &args, "command-line", hmp_cmd);
+-    fprintf(stderr, "run %s hmp command through qmp interface\n", hmp_cmd);
+-
+-    return qmp_run_command(gc, domid, "human-monitor-command",
+-                           args, hmp_callback, (void*)expect);
+-}
+-#endif
+-
+ int libxl__qmp_initializations(libxl__gc *gc, uint32_t domid,
+                                const libxl_domain_config *guest_config)
+ {
+diff --git a/tools/libxl/libxl_snapshot.c b/tools/libxl/libxl_snapshot.c
+index 7e2f803..46ed051 100644
+--- a/tools/libxl/libxl_snapshot.c
++++ b/tools/libxl/libxl_snapshot.c
+@@ -212,49 +212,6 @@ int libxl_domain_snapshot_delete_save(libxl_ctx *ctx,
+     return rc;
+ }
+ 
+-#if 0
+-int libxl_savevm(libxl_ctx *ctx, uint32_t domid, libxl_domain_snapshot *snapshot)
+-{
+-    int rc;
+-
+-    GC_INIT(ctx);
+-    rc = libxl__hmp(gc, domid, "savevm", snapshot->name, "");
+-    if ( rc )
+-        LIBXL__LOG(ctx, LIBXL__LOG_ERROR, "domain snapshot create fail for device model\n");
+-
+-    GC_FREE;
+-    return rc;
+-}
+-
+-int libxl_loadvm(libxl_ctx *ctx, uint32_t domid, libxl_domain_snapshot *snapshot)
+-{
+-    int rc;
+-
+-    GC_INIT(ctx);
+-    rc = libxl__hmp(gc, domid, "loadvm", snapshot->name, "");
+-    if ( rc )
+-        LIBXL__LOG(ctx, LIBXL__LOG_ERROR, "domain snapshot revert fail for device model\n");
+-
+-    GC_FREE;
+-    return rc;
+-}
+-//FIXME??
+-//int libxl__loadvm(char *name);
+-
+-int libxl_delvm(libxl_ctx *ctx, uint32_t domid, libxl_domain_snapshot *snapshot)
+-{
+-    int rc;
+-
+-    GC_INIT(ctx);
+-    rc = libxl__hmp(gc, domid, "delvm", snapshot->name, "");
+-    if ( rc )
+-        LIBXL__LOG(ctx, LIBXL__LOG_ERROR, "domain snapshot delete fail for device model\n");
+-
+-    GC_FREE;
+-    return rc;
+-}
+-#endif
+-
+ int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
+                                libxl_disk_snapshot *snapshot, int nb)
+ {
+diff --git a/tools/libxl/xl_cmdimpl.c b/tools/libxl/xl_cmdimpl.c
+index 789c0df..a3770c3 100644
+--- a/tools/libxl/xl_cmdimpl.c
++++ b/tools/libxl/xl_cmdimpl.c
+@@ -7805,26 +7805,6 @@ out:
+     return rc;
+ }
+ 
+-#if 0
+-int main_hmp(int argc, char **argv)
+-{
+-    int rc = 0;
+-    uint32_t domid;
+-    char *hmp;
+-    char *hmp_arg;
+-    char *expect;
+-
+-
+-    domid = find_domain(argv[optind++]);
+-    hmp = argv[optind++];
+-    hmp_arg = argv[optind++];
+-    expect = argv[optind++];
+-
+-    fprintf(stderr, "domid<%d> hmp<%s>, hmp_arg<%s>, expect<%s>\n", domid, hmp, hmp_arg, expect);
+-    libxl_hmp(ctx, domid, hmp, hmp_arg, expect);
+-    return rc;
+-}
+-#endif
+ /*
+  * Local variables:
+  * mode: C
+-- 
+1.8.1.4
+
