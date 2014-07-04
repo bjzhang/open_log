@@ -1,12 +1,11 @@
-Libxl VM Snapshot API Design
+Libxl Domain Snapshot API Design
 
 1. New Structures
 
-    To implement VM snapshot, introduce two new structures:
-    "libxl_domain_snapshot" and "libxl_disk_snapshot".
-    "libxl_domain_snapshot" is to store domain snapshot information, it
-    contains libxl_disk_snapshot, which stores disk snapshot related
-    information.
+    Domain snapshot introduces two new structures:
+    - "libxl_domain_snapshot" store domain snapshot information, it contains
+       libxl_disk_snapshot array.
+    - "libxl_disk_snapshot" stores disk snapshot related information.
 
     Both are defined in libxl_types.idl, which will generate the following
     libxl-json helper functions:
@@ -19,52 +18,58 @@ Libxl VM Snapshot API Design
                                       libxl_disk_snapshot *p);
     int libxl_disk_snapshot_from_json(libxl_ctx *ctx,
                                       libxl_disk_snapshot *p, const char *s);
- 
-    These functions will be used internally, very userful when load/storing
+
+    These functions will be used internally, and are very userful when load/store
     domain snapshot configuration file (libxl-json format).
 
-    Sturct Details:
+    Struct Details:
 
     libxl_disk_snapshot = Struct("disk_snapshot",[
-        ("device",        string),              /* name of disk: hda, hdc */
-        ("name",          string),              /* name of disk snapshot,
-                                                 * usually it is inherit from
-                                                 * libxl_domain_snapshot
+        ("device",        string),              /* The name of disk: hda, hdc */
+        ("name",          string),              /* The name of disk snapshot.
+                                                 * Usually it is inherited from
+                                                 * libxl_domain_snapshot.
                                                  */
 
-        ("file",          string),              /* external snapshot file.
-                                                 * empty in internal snapshot.
+        ("file",          string),              /* The external snapshot file
+                                                 * name. empty for internal
+                                                 * snapshot.
                                                  */
-
-        ("format",        libxl_disk_format),   /* external snapshot format
-                                                 * for internal snapshot, it's
+("format",        libxl_disk_format),   /* The format of external
+                                                 * snapshot file. For the
+                                                 * internal snapshot, it's
                                                  * ignored and it should be
                                                  * LIBXL_DISK_FORMAT_UNKNOWN
                                                  */
 
-        ("path",          string),              /* path of disk backend. It
-                                                 * gets from 
+        ("path",          string),              /* The path of the disk backend.
+                                                 * It gets from
                                                  * libxl_device_disk_getinfo.
-                                                 * it will force empty when
+                                                 * It will be force-empty when
                                                  * store domain snapshot
-                                                 * configuration in order
-                                                 * to hide this from users.
+                                                 * configuration in order to
+                                                 * hide this from users.
                                                  */
         ])
 
     libxl_domain_snapshot = Struct("domain_snapshot",[
-        ("name",          string),              /* name of domain snapshot */
-        ("description",   string),              /* description of snapshot */
-        ("creation_time", uint64),              /* creation time of domain
+        ("name",          string),              /* The name of the domain
+                                                 * snapshot. It should not be
+                                                 * empty.
+                                                 */
+        ("description",   string),              /* The description of snapshot.
+                                                 * It could be empty.
+                                                 */
+        ("creation_time", uint64),              /* The creation time of domain
                                                  * snapshot which is the epoch
                                                  * second from 1, Jan 1970.
                                                  */
 
-        ("memory",        string),              /* path for domain memory save.
-                                                 * 'empty' means it is a
-                                                 * disk-only snapshot.
+        ("memory",        string),              /* The path to save domain
+                                                 * memory image. 'empty' means
+                                                 * it is a disk-only snapshot.
 
-        /* Following state represents the domain state before snapshot.
+        /* Following state represents the domain state in the beginning of snapshot.
          * These state gets from libxl_domain_info.
          */
         ("running",       bool),
@@ -72,6 +77,8 @@ Libxl VM Snapshot API Design
         ("paused",        bool),
         ("shutdown",      bool),
         ("dying",         bool),
+
+        /* The array of disk snapshot information belong to this domain snapshot. */
         ("disks", Array(libxl_disk_snapshot, "num_disks")),
         ])
 
@@ -80,38 +87,42 @@ Libxl VM Snapshot API Design
 
   2.1 Management functions for domain snapshot config file (libxl-json format).
 
-    This file is located in "/var/lib/xen/snapshots/<domain_uuid>/\
-    snapshotdata-<snapshot_name>.libxl-json". Only for internal usage, not for
-    users. User config file (a=b format) is only for creation. The relation of
-    the two config files are like xl.cfg and libxl-json.
-
+    /* There are two type of config file relative to domain snapshot: user
+     * config file and internal domain snapshot configuration file(libxl-json
+     * format). The relation of the two config files are like xl.cfg and
+     * libxl-json for domain configuration.
+     * The user visiable config file (a=b format) is only used for creation.
+     * The internal domain snapshot config file is located at
+     * "/var/lib/xen/snapshots/<domain_uuid>"\
+     * snapshotdata-<snapshot_name>.libxl-json". This file is only for internal
+     * usage, not for users
+     */
     /*
-     * function:  retrieve domain snapshot configuration file content from
+     * function:  To retrieve domain snapshot configuration file contents from
      *            "/var/lib/xen/snapshots/<domain_uuid>/"snapshotdata-\
      *            <snapshot->name>.libxl-json", and store the information
      *            to @snapshot.
-     * @domid:    domain id. will get domain_uuid from domid.
-     * @snapshot: caller should provide valid @snapshot->name. On return,
-     *            snapshot will hold the domain snapshot information retrieved
-     *            from file.
+     * @domid:    The domain id. It is used to get the uuid of domain.
+     * @snapshot: The caller should provide valid @snapshot->name. On return,
+     *            @snapshot will hold the domain snapshot information retrieved
+     *            from the file.
      * return value:
      *            0:  success
-     *            <0: fail. Config file doesn't exist or file format wrong.
+     *            <0: fail. Config file doesn't exist or the file format is wrong.
      */
 
     int libxl_load_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
                                         libxl_domain_snapshot *snapshot);
 
 
-
     /*
-     * function:  convert @snapshot to libxl-json format and store to
+     * function:  To convert @snapshot to libxl-json format, and save at
      *            /var/lib/xen/snapshots/<domain_uuid>/"snapshotdata-\
      *            <snapshot->name>.libxl-json"
-     * @domid:    domain id. will get domain_uuid from domid.
-     * @snapshot: snapshot->name should be valid name in caller's file system.
-     *            other string in this strcut should not be NULL, for the
-     *            empty item the caller should set as "".
+     * @domid:    The domain id. It is used to get the uuid of domain.
+     * @snapshot: @snapshot->name should be valid name in the caller's file
+     *            system. Other strings in this strcut should not be NULL. For
+     *            the empty item the caller should set as "".
      * return value:
      *            0:  successful
      *            ERROR_INVAL:  snapshot name is empty
@@ -123,12 +134,12 @@ Libxl VM Snapshot API Design
 
 
     /*
-     * function:  delete configuration file of indicated domain snapshot:
+     * function:  To delete configuration file of indicated domain snapshot:
      *            /var/lib/xen/snapshots/<domain_uuid>/"snapshotdata-\
      *            <snapshot->name>.libxl-json"
-     * @domid:    domain id. will get domain_uuid from domid.
-     * @snapshot: caller should provide valid snapshot->name. other value of
-     *            this struct will be ignored in this function.
+     * @domid:    The domain id. It is used to get the uuid of domain.
+     * @snapshot: The caller should provide valid @snapshot->name. other value
+     *            of this struct will be ignored in this function.
      * return value:
      *            0:  successful
      *            <0: fail. file delete fail.
@@ -139,13 +150,13 @@ Libxl VM Snapshot API Design
 
 
     /*
-     * function: retrieve all snapshot info of speicfic domain from
-     *           /var/lib/xen/snapshots/<domain_uuid>" and return the
+     * function: To retrieve all snapshot info of the speicfic domain from
+     *           /var/lib/xen/snapshots/<domain_uuid>", and return the
      *           result to @libxl_domain_snapshot array. Put number of
-     *           snapshot(s) to @num. Caller is responsible for free
+     *           snapshot(s) to @num. The caller is responsible for free
      *           the libxl_domain_snapshot array.
      * @domid:   domain id. will get domain_uuid from domid.
-     * @num:     number of snapshot array.
+     * @num:     hold the number of snapshot(s) as part of the return result.
      * return value:
      *           NULL:     no valid snapshot configuration for such domain.
      *           non-NULL: successful
@@ -155,14 +166,14 @@ Libxl VM Snapshot API Design
     libxl_list_dom_snapshot(libxl_ctx *ctx, uint32_t domid, int *num);
 
 
-  2.1 functions for disk snapshot operations 
+  2.1 functions for disk snapshot operations
 
     /*
-     * function:  create disk(s) snapshot according to config in @snapshot
+     * function:  To create disk(s) snapshot according to config in @snapshot
      *            array. Disk (one or more) snapshot in this operation is
      *            handled by qmp transaction. The transaction operation ensures
      *            that all disks are consistent. This function is used in
-     *            'VM snapshot create'.
+     *            'domain snapshot create'.
      * @domid:    domain id
      * @snapshot: array of disk snapshot
      * @num:      number of disk snapshot struct in above array
@@ -174,9 +185,10 @@ Libxl VM Snapshot API Design
     int libxl_disk_snapshot_create(libxl_ctx *ctx, int domid,
                                    libxl_disk_snapshot *snapshot, int num);
 
+
     /*
-     * function:  delete disk snapshot according to the config in @snapshot
-     *            array. Only internal snapshot is supported currently. It
+     * function:  To delete disk snapshot according to the config in @snapshot
+     *            array. Only the internal snapshot is supported currently. It
      *            will call blockdev-snapshot-delete-internal-sync qmp
      *            command for each disk snapshot delete operation.
      * @domid:    domain id
@@ -184,19 +196,18 @@ Libxl VM Snapshot API Design
      * @num:      number of disk snapshot struct in above array
      * return value:
      *            0:   successful
-     *            <0:  fail. it will exit in when disk snapshot delete
-     *                 fails at the first time.
+     *            <0:  fail.
      */
 
     int libxl_disk_snapshot_delete(libxl_ctx *ctx, int domid,
                                    libxl_disk_snapshot *snapshot, int num);
 
     /*
-     * function:  revert disk snapshot state according to @snapshot array.
-     *            Since there is no qmp command to use and with qemu running
-     *            we cannot resent paramters to inform it about the snapshot
-     *            info, so we will call "qemu-img snapshot -a snapshot_name"
-     *            to do revert operation. (better ideas??)
+     * function:  To revert the disk snapshot state according to @snapshot
+     *            array. Since there is no qmp command to use and we cannot
+     *            re-send paramters to inform it about the snapshot
+     *            info when qemu running, so we will call "qemu-img snapshot\
+     *            -a snapshot_name" to do revert operation. (better ideas??)
      * @domid:    domain id
      * @snapshot: array of disk snapshot
      * @num:      number of disk snapshot struct in above array
