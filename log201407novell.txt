@@ -134,3 +134,133 @@ GTD
 12:33 2014-07-03
 /usr/bin/qemu-kvm -name clmd_n1_sles12 -S -machine pc-i440fx-1.4,accel=kvm,usb=off -m 768 -smp 4,sockets=4,cores=1,threads=1 -uuid a4eb4367-b880-3b11-d1e8-d5d2b2c1a3aa -no-user-config -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/clmd_n1_sles12.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-shutdown -device piix3-usb-uhci,id=usb,bus=pci.0,addr=0x1.0x2 -drive file=/mnt/vm/clmd_n1_sles12/disk0.raw,if=none,id=drive-virtio-disk0,format=raw -device virtio-blk-pci,scsi=off,bus=pci.0,addr=0x4,drive=drive-virtio-disk0,id=virtio-disk0,bootindex=1 -netdev tap,fd=23,id=hostnet0,vhost=on,vhostfd=25 -device virtio-net-pci,netdev=hostnet0,id=net0,mac=52:54:00:0c:78:00,bus=pci.0,addr=0x3 -vnc 0.0.0.0:0 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x5
 
+11:17 2014-07-04
+GTD
+0,
+
+1, today
+1), 13:39-18:19 virtualization summary.
+
+13:16 2014-07-04
+software skill, system, log, rsyslog; mailing list, suse, research
+1, "Marcus Rueckert <mrueckert@suse.de>"_email_"sean <xrfu@novell.com>"_"[Research] Does "syslogd" support encrypted transmission?"_20140630_1540
+On 2014-06-30 09:39, sean wrote:
+>   Does "syslogd" support encrypted transmission?
+> If yes, Could you tell me how to set it?
+
+use rsyslog.
+
+for older distributions you could try TCP syslog via stunnel.
+
+2, http://www.rsyslog.com/
+RSYSLOG is the Rocket-fast SYStem for LOG processing.
+
+It offers high-performance, great security features and a modular design. While it started as a regular syslogd, rsyslog has evolved into a kind of swiss army knife of logging, being able to accept inputs from a wide variety of sources, transform them, and output to the results to diverse destinations.
+
+RSYSLOG can deliver over one million messages per second to local destinations when limited processing is applied (based on v7, December 2013). Even with remote destinations and more elaborate processing the performance is usually considered "stunning".
+
+ RSYSLOG:
+    Multi-threading
+    TCP, SSL, TLS, RELP
+    MySQL, PostgreSQL, Oracle and more
+    Filter any part of syslog message
+    Fully configurable output format
+    Suitable for enterprise-class relay chains
+
+13:47 2014-07-04
+virtualization, docker
+1, start docker daemon
+> systemctl show docker | head -n 12
+Id=docker.service
+Names=docker.service
+Requires=network.target basic.target
+Wants=system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=multi-user.target systemd-journald.socket basic.target system.slice
+Description=Docker
+LoadState=loaded
+ActiveState=inactive
+SubState=dead
+> systemctl start docker
+Failed to issue method call: Access denied
+> sudo systemctl start docker
+root's password:
+> systemctl show docker | head -n 12
+Id=docker.service
+Names=docker.service
+Requires=network.target basic.target
+Wants=system.slice
+Conflicts=shutdown.target
+Before=shutdown.target
+After=multi-user.target systemd-journald.socket basic.target system.slice
+Description=Docker
+LoadState=loaded
+ActiveState=active
+SubState=running
+> ps -ef|grep docker
+root      3554     1  0 13:47 ?        00:00:00 /usr/bin/docker -d
+
+13:58 2014-07-04
+software skill, zypper, non-interactive
+        --non-interactive, -n   Do not ask anything, use default answers
+                                automatically.
+e.g. zypper -n in libvirt
+
+16:06 2014-07-04
+snapshot doc TODO
+1, path: external snapshot file or dev path to new?
+TODO: try it in libvirt qemu.
+it is new. it is not the external snapshot file.
+2, cover letter可以把我们的需求写的更迫切一些，恳切一些。
+
+17:51 2014-07-04
+bj-ha-3:/mnt/vm/bamvor # cat snapshot_ex.xml
+<domainsnapshot>
+  <description>Snapshot external test</description>
+  <memory snapshot='external' file='/mnt/vm/bamvor/memory'/>
+  <disks>
+    <disk name='/mnt/vm/bamvor/disk0.qcow2' snapshot='external'>
+      <driver type='qcow2'/>
+      <source file='/mnt/vm/bamvor/disk0_new.qcow2'/>
+    </disk>
+  </disks>
+</domainsnapshot>
+
+bj-ha-3:/mnt/vm/bamvor # vim snapshot_ex.xml
+bj-ha-3:/mnt/vm/bamvor # virsh snapshot-create cl8_n1_sles12b8_bjz snapshot_ex.xml
+Domain snapshot 1404467157 created from 'snapshot_ex.xml'
+bj-ha-3:/mnt/vm/bamvor # virsh list
+ Id    Name                           State
+----------------------------------------------------
+ 3     cl1_n1_sles12                  running
+ 4     cl8_n1_sles12b8                running
+ 5     clmd_n1_sles12                 running
+ 27    cl8_n1_sles12b8_bjz            running
+
+bj-ha-3:/mnt/vm/bamvor # virsh dumpxml 27 | less
+bj-ha-3:/mnt/vm/bamvor # ps -ef|grep qemu
+root     27085     1  3 17:11 ?        00:01:08 /usr/bin/qemu-kvm -name cl8_n1_sles12b8_bjz -S -machine pc-i440fx-1.4,accel=kvm,usb=off -m 1024 -smp 1,sockets=1,cores=1,threads=1 -uuid 016db229-a046-26a8-3956-85c7fca5f96a -no-user-config -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/cl8_n1_sles12b8_bjz.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc -no-shutdown -device piix3-usb-uhci,id=usb,bus=pci.0,addr=0x1.0x2 -drive file=/mnt/vm/bamvor/disk0.qcow2,if=none,id=drive-ide0-0-0,format=qcow2 -device ide-hd,bus=ide.0,unit=0,drive=drive-ide0-0-0,id=ide0-0-0,bootindex=1 -netdev tap,fd=25,id=hostnet0 -device rtl8139,netdev=hostnet0,id=net0,mac=52:54:00:6f:d6:f1,bus=pci.0,addr=0x3 -netdev tap,fd=26,id=hostnet1 -device rtl8139,netdev=hostnet1,id=net1,mac=52:54:00:82:d4:da,bus=pci.0,addr=0x5 -vnc 0.0.0.0:3 -vga cirrus -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x4
+root     28207 26515  0 17:46 pts/3    00:00:00 grep qemu
+bj-ha-3:/mnt/vm/bamvor # ls
+bjz.xml  disk0_new.qcow2  disk0.qcow2  disk0.raw  memory  snapshot_ex.xml
+bj-ha-3:/mnt/vm/bamvor # qemu-img info disk0.qcow2
+image: disk0.qcow2
+file format: qcow2
+virtual size: 10G (10737418240 bytes)
+disk size: 974M
+cluster_size: 65536
+backing file: disk0.raw
+Snapshot list:
+ID        TAG                 VM SIZE                DATE       VM CLOCK
+1         1404466193             851M 2014-07-04 17:29:53   00:18:08.509
+bj-ha-3:/mnt/vm/bamvor # qemu-img info disk0_new.qcow2
+image: disk0_new.qcow2
+file format: qcow2
+virtual size: 10G (10737418240 bytes)
+disk size: 4.7M
+cluster_size: 65536
+backing file: /mnt/vm/bamvor/disk0.qcow2
+backing file format: qcow2
+bj-ha-3:/mnt/vm/bamvor #
+
