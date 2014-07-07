@@ -47,4 +47,10 @@ libvirt一般会封装系统api。
 ao
 gc
 
+# 虚拟化分模块
+cpu, time/timer, interrupt, memory, device(network, block).
 
+# memory
+live migration, lazy restore 
+
+memory overcommitment
