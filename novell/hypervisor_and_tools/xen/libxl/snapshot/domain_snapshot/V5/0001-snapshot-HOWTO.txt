@@ -1,35 +1,40 @@
-libxl VM Snapshot HOWTO
+libxl Domain Snapshot HOWTO
 --------
 
 Author:
    Bamvor Jian Zhang <bjzhang@suse.com>
 
 * Overview:
-    Two levels of snapshot: disk snapshot and VM snapshot
+    Two levels of snapshot: disk snapshot and domain snapshot
     Four types of snapshot operations: create, delete, list and revert.
 
-    * disk snapshot
+    * Disk snapshot
         Disk snapshot is crash-consistent if the domain is running. It could be
         "internal" (like in qcow2 format, snapshot and delta are both in one
         image file), or "external" (snapshot in one file, delta in another).
 
-    * VM snapshot
-        VM snapshot includes disk snapshots and domain state saving. VM could
-        be resumed to the very state when the snapshot was created. This kind of
-        snapshot is also referred to as a domain checkpoint or system checkpoint.
+    * Domain snapshot
+        Domain snapshot includes disk snapshots and domain state saving. domain
+        could be resumed to the very state when the snapshot was created. This
+        kind of snapshot is also referred to as a domain checkpoint or system
+        checkpoint.
 
-        "VM snapshot create" means saving domain state and doing disk snapshots.
-        Before creating VM snapshot, it will check whether it is snapshotable.
+        "domain snapshot create" means saving domain state and doing disk
+        snapshots. In the beginning of creating domain snapshot, it will check
+        whether it is snapshotable.
 
-        "VM snapshot revert" means rolling back to the state of indicated
+        "domain snapshot revert" means rolling back to the state of indicated
         snapshot.
 
-* VM Snapshot
+* Operations of Snapshot
 
     * Create Snapshot:
 
         User could create internal or external snapshot with or without config
-        file. Refer to xl.snapshot.5 ( RFC Doc 5/5) for details of the config file.
+        file. Refer to xl.snapshot.5 ( RFC Doc 5/5) for details of the config
+        file. The Config file could provide all the features of snapshot, e.g.
+        User could determine which disk will be included in snapshot(one or all
+        disks).
 
         Use Cases:
 
@@ -64,26 +69,31 @@ Author:
                 #xl snapshot-create --disk-only your_domain
 
                 (external)
-                #xl snapshot-create your_domain config_file
-
-            disk-only snapshot can appy to selected disks or all disks.
+                #xl snapshot-create your_domain disk_only_config_file
 
             specific config file (to indicate which disks to be snapshotted).
+            #cat disk_only_config_file
+            name = "1397207577"
+            description="Snapshot after OS installation. External disk-only\
+                         snapsot. Only care about the root file system"
+            disk=['hda=/var/lib/xen/snapshots/<domain_uuid>/disk_hda.qcow2,type=qcow2']
 
     * List Snapshot:
 
         Use Cases:
 
-        1), list short information of all snapshots for the specific domain.
+        1), List short information of all snapshots for the specific domain.
             Short information include snapshot name, creation time, the domain
-            state when create snapshot, whether it is a disk only snapshot.
+            state when create snapshot, whether it is a disk-only snapshot.
 
             e.g.:
                 #xl snapshot-list your_domain
 
-        2), list full information of one snapshot for specific domain
+        2), List full information of one snapshot for specific domain.
+            Full information include short information and all the disk snapshot
+            relative to that domain snapshot.
             e.g.:
-                #xl snapshot-list -l your_domain domain_snapshot_name
+                #xl snapshot-list -l -n domain_snapshot_name your_domain
 
         3), list full information of all snapshots for specific domain.
             e.g.:

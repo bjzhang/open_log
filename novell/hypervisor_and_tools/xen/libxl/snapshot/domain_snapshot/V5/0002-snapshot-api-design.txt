@@ -26,14 +26,17 @@ Libxl Domain Snapshot API Design
 
     libxl_disk_snapshot = Struct("disk_snapshot",[
         ("device",        string),              /* The name of disk: hda, hdc */
+
         ("name",          string),              /* The name of disk snapshot.
                                                  * Usually it is inherited from
                                                  * libxl_domain_snapshot.
                                                  */
+
         ("file",          string),              /* The new disk file after
                                                  * external snapshot. empty for
                                                  * internal snapshot.
                                                  */
+
         ("format",        libxl_disk_format),   /* The format of external
                                                  * snapshot file. For the
                                                  * internal snapshot, it's
@@ -56,9 +59,11 @@ Libxl Domain Snapshot API Design
                                                  * snapshot. It should not be
                                                  * empty.
                                                  */
+
         ("description",   string),              /* The description of snapshot.
                                                  * It could be empty.
                                                  */
+
         ("creation_time", uint64),              /* The creation time of domain
                                                  * snapshot which is the epoch
                                                  * second from 1, Jan 1970.
@@ -67,6 +72,10 @@ Libxl Domain Snapshot API Design
         ("memory",        string),              /* The path to save domain
                                                  * memory image. 'empty' means
                                                  * it is a disk-only snapshot.
+                                                 * note that "yes" or "no" is
+                                                 * not allowed, this is different
+                                                 * from xl.snapshot.pod.5
+                                                 */
 
         /* Following state represents the domain state in the beginning of snapshot.
          * These state gets from libxl_domain_info.
@@ -94,7 +103,15 @@ Libxl Domain Snapshot API Design
      * creation. The internal domain snapshot config file is located at
      * "/var/lib/xen/snapshots/<domain_uuid>"\
      * snapshotdata-<snapshot_name>.libxl-json". This file is only for internal
-     * usage, not for users
+     * usage, not for users. user should not modify the libxl-json format file.
+     *
+     * Currently, libvirt use XML format snapshot configuration file for user
+     * both input(snapshot create) and output(snapshot-dumpxml). And libvirt
+     * qemu driver store with xml format as internal usage as well.
+     * For libxl, if libxl hope it is easy to migrate domain between different
+     * toolstack, then all the toolstack should use the same internal config
+     * file: libxl-json format. it will not affect the user experience. e.g. xl
+     * will use the KEY=VALUE format while libvirt will use the xml format.
      */
     /*
      * function:  To retrieve domain snapshot configuration file contents from
@@ -111,7 +128,7 @@ Libxl Domain Snapshot API Design
      */
 
     int libxl_load_dom_snapshot_conf(libxl_ctx *ctx, uint32_t domid,
-                                        libxl_domain_snapshot *snapshot);
+                                     libxl_domain_snapshot *snapshot);
 
 
     /*
@@ -138,7 +155,7 @@ Libxl Domain Snapshot API Design
      *            <snapshot->name>.libxl-json"
      * @domid:    The domain id. It is used to get the uuid of domain.
      * @snapshot: The caller should provide valid @snapshot->name. other value
-     *            of this struct will be ignored in this function.
+     *            of this struct is ignored in this function.
      * return value:
      *            0:  successful
      *            <0: fail. file delete fail.
@@ -154,6 +171,9 @@ Libxl Domain Snapshot API Design
      *           result to @libxl_domain_snapshot array. Put number of
      *           snapshot(s) to @num. The caller is responsible for free
      *           the libxl_domain_snapshot array.
+     *           This is useful when toolstack want to get all the snapshot
+     *           information relative to the specific domain. e.g. xl
+     *           snapshot-list or libvirt libxl driver load/reload.
      * @domid:   domain id. will get domain_uuid from domid.
      * @num:     hold the number of snapshot(s) as part of the return result.
      * return value:
