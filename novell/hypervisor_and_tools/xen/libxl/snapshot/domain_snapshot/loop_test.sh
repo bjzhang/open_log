@@ -18,7 +18,7 @@ wait_started()
     domain_id=`$LIST | grep $domain_name | sed "s/^\ *//"  | cut -d \  -f 1`
     echo domain id is $domain_id
     echo "waiting domain started"
-    last_cpu_time=`virsh dominfo $domain_name | grep "CPU time" | cut -d : -f 2 | sed s/^\ *//`
+    last_cpu_time=`virsh dominfo $domain_name | grep "CPU time" | cut -d : -f 4 | sed s/^\ *//`
     sleep 1
     echo -n "cpu time is "
     while true; do

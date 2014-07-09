@@ -1,9 +1,9 @@
 
-# 虚拟化技术比较
+# different virtualization technologies 虚拟化技术比较
 xen, kvm/qemu, container(why not lxc?).
 hypervisor位置：xen在kernel下面。
 kvm是ko. lxc利用了内kernel cgroup, namespace.
-
+vmware.
 
 ![xen框图](tmux.jpg)
 from sle12 document(Virtualization Guide SUSE Linux Enterprise Server 12)
@@ -16,18 +16,46 @@ from Khoa IBM[2]
 ![kvm io data plane](kvm_io__data_plane.jpg)
 from Khoa IBM[2]
 
+# virtualization management tools 虚拟化管理工具
 ## xen的toolstack
 xend, xm.
 libxl, xl.
-libvirt.
 
 ## qemu管理工具
 qemu monitor, qemu qmp.
-libvirt.
-插播啥时候说kvm, 啥时候说qemu?
+
+##libvirt
+有了自己的管理工具为什么还需要libvirt?
 
 ## xen. qemu比较
 看起来用libvirt控制xen或kvm虚拟机是一样的. 其实libvirt控制xen经常要通过hypercall到xen hypervisor. 控制qemu多数是直接和qemu进程打交道. 如果有必要qemu或通过kvm fd和kernel kvm module说话.
+
+插播: 啥时候说kvm, 啥时候说qemu?
+
+libvirt如果找到默认hypervisor?
+由于qemu可以没有kvm运行，所以如果先load qemu，必定成功。所以要检查xen。对于xen，没有xend就是libxl， 所以要先查xend。
+    # ifdef WITH_XEN
+        xenRegister();
+    # endif
+    # ifdef WITH_LIBXL
+        libxlRegister();
+    # endif
+    # ifdef WITH_QEMU
+        qemuRegister();
+    # endif
+    # ifdef WITH_LXC
+        lxcRegister();
+    # endif
+    # ifdef WITH_UML
+        umlRegister();
+    # endif
+    # ifdef WITH_VBOX
+        vboxRegister();
+    # endif
+    # ifdef WITH_BHYVE
+        bhyveRegister();
+    # endif
+
 
 ## security
 xen: stubdomain. howto
@@ -35,6 +63,23 @@ xen: stubdomain. howto
 it seems that should unset device_model and device_model_override
 
 kvm: svirt. James Morris Red Hat Security Engineering
+
+# useful libvirt command libvirt常用命令(rpc名称有所不同)
+## 开关
+define/undefine, start
+define+start=create
+destroy
+
+## user interface
+### serial console
+### vnc
+
+## storage
+storage pool: directory, lvm ...
+blockcopy, blockcommit
+
+## network
+bridge, nat...
 
 ## migration
 migration注意事项
@@ -101,44 +146,11 @@ State:          running
 CPU time:       0.4s
 CPU Affinity:   yyyyyyyy
 
+# virtualization packages in sle and opensuse 虚拟化有哪些repo哪些package
+obs: Devel:Virt:xxxx
+ibs: Virtualization:xxxx
 
-
-summay, virtualization, kernel; qemu; management tools
-1, 从虚拟化技术看内核的新feature.
-1), memory relative
-tmem: 最开始为了xen引入.
-ksm: for kvm?
-huge tlb, transparent tlb.
-2), pvops
-
-2, qemu
-multi data pane.
-
-3, management tools
-
-
-由于qemu可以没有kvm运行，所以如果先load qemu，必定成功。所以要检查xen。对于xen，没有xend就是libxl， 所以要先查xend。
-# ifdef WITH_XEN
-    xenRegister();
-# endif
-# ifdef WITH_LIBXL
-    libxlRegister();
-# endif
-# ifdef WITH_QEMU
-    qemuRegister();
-# endif
-# ifdef WITH_LXC
-    lxcRegister();
-# endif
-# ifdef WITH_UML
-    umlRegister();
-# endif
-# ifdef WITH_VBOX
-    vboxRegister();
-# endif
-# ifdef WITH_BHYVE
-    bhyveRegister();
-# endif
+# where is the log? log在哪里?
 
 # libvirt编程
 
@@ -149,6 +161,7 @@ libvirt一般会封装系统api。
 # libxl编程
 ao
 gc
+
 
 # 虚拟化分模块
 cpu, time/timer, interrupt, memory, device(network, block).
@@ -165,6 +178,26 @@ vcpu pin.
 block: qemu data plane：多线程。性能regression, coroutine pool限制。
 
 引出coroutine。进程，线程，coroutine。
+
+
+# 草稿
+
+summay, virtualization, kernel; qemu; management tools
+1, 从虚拟化技术看内核的新feature.
+1), memory relative
+tmem: 最开始为了xen引入.
+ksm: for kvm?
+huge tlb, transparent tlb.
+2), pvops
+
+2, qemu
+multi data pane.
+
+3, management tools
+
+# reference doc
+architectural comparison of virtualization technologies(vmware)
+    http://wenku.it168.com/d_000439248.shtml
 
 [1]
 Copyright © 2006– 2014 SUSE LLC and contributors. All rights reserved.
