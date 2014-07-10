@@ -154,20 +154,103 @@ ibs: Virtualization:xxxx
 
 # libvirt编程
 
+## 编程规范
 .lvimrc
-
-libvirt一般会封装系统api。
+## libvirt一般会封装系统api。
 
 # libxl编程
-ao
-gc
 
+## IDL
+IDL似乎是为了方便binding不同语言时生成不同格式的数据结构？TODO: 确认。
+下面的代码说明了如何定义枚举，结构体；如何设置初始值；如何嵌套数组.
+tools/libxl/libxl\_types.idl
+    libxl_snapshot_type = Enumeration("snapshot_type", [
+        (0, "ANY"),
+        (1, "INTERNAL"),
+        (2, "EXTERNAL"),
+        ], init_val = "LIBXL_SNAPSHOT_TYPE_ANY")
+
+    libxl_disk_snapshot = Struct("disk_snapshot",[
+        ("device",        string),
+        ("name",          string),
+        ("file",          string),
+        ("format",        libxl_disk_format),
+        ("path",          string),
+        ("type",          libxl_snapshot_type),
+        ])
+
+    libxl_domain_snapshot = Struct("domain_snapshot",[
+        ("name",          string),
+        ("description",   string),
+        ("creation_time", uint64),
+        ("memory",        string),
+        ("type",          libxl_snapshot_type),
+        ("running",       bool),
+        ("blocked",       bool),
+        ("paused",        bool),
+        ("shutdown",      bool),
+        ("dying",         bool),
+        ("disks", Array(libxl_disk_snapshot, "num_disks")),
+        ])
+
+结果在 tools/libxl/\_libxl\_types.h/c
+    typedef enum libxl_snapshot_type {
+        LIBXL_SNAPSHOT_TYPE_ANY = 0,
+        LIBXL_SNAPSHOT_TYPE_INTERNAL = 1,
+        LIBXL_SNAPSHOT_TYPE_EXTERNAL = 2,
+    } libxl_snapshot_type;
+    char *libxl_snapshot_type_to_json(libxl_ctx *ctx, libxl_snapshot_type p);
+    int libxl_snapshot_type_from_json(libxl_ctx *ctx, libxl_snapshot_type *p, const char *s);
+    const char *libxl_snapshot_type_to_string(libxl_snapshot_type p);
+    int libxl_snapshot_type_from_string(const char *s, libxl_snapshot_type *e);
+    extern libxl_enum_string_table libxl_snapshot_type_string_table[];
+
+    typedef struct libxl_disk_snapshot {
+        char * device;
+        char * name;
+        char * file;
+        libxl_disk_format format;
+        char * path;
+        libxl_snapshot_type type;
+    } libxl_disk_snapshot;
+    void libxl_disk_snapshot_dispose(libxl_disk_snapshot *p);
+    void libxl_disk_snapshot_copy(libxl_ctx *ctx, libxl_disk_snapshot *dst, libxl_disk_snapshot *src);
+    void libxl_disk_snapshot_init(libxl_disk_snapshot *p);
+    char *libxl_disk_snapshot_to_json(libxl_ctx *ctx, libxl_disk_snapshot *p);
+    int libxl_disk_snapshot_from_json(libxl_ctx *ctx, libxl_disk_snapshot *p, const char *s);
+
+    typedef struct libxl_domain_snapshot {
+        char * name;
+        char * description;
+        uint64_t creation_time;
+        char * memory;
+        libxl_snapshot_type type;
+        bool running;
+        bool blocked;
+        bool paused;
+        bool shutdown;
+        bool dying;
+        int num_disks;
+        libxl_disk_snapshot * disks;
+    } libxl_domain_snapshot;
+    void libxl_domain_snapshot_dispose(libxl_domain_snapshot *p);
+    void libxl_domain_snapshot_copy(libxl_ctx *ctx, libxl_domain_snapshot *dst, libxl_domain_snapshot *src);
+    void libxl_domain_snapshot_init(libxl_domain_snapshot *p);
+    char *libxl_domain_snapshot_to_json(libxl_ctx *ctx, libxl_domain_snapshot *p);
+    int libxl_domain_snapshot_from_json(libxl_ctx *ctx, libxl_domain_snapshot *p, const char *s);
+
+## ao
+## gc
+
+# qemu编程
+## hmp
+## qmp and json
 
 # 虚拟化分模块
 cpu, time/timer, interrupt, memory, device(network, block).
 
 # memory
-live migration, lazy restore 
+live migration, lazy restore
 
 memory overcommitment
 

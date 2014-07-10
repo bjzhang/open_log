@@ -61,3 +61,5 @@ test_ret $?
 #TODO qemu-img command
 echo successful
 
+#xl -N snapshot-create external_snapshot.cfg `xl list | grep bjz | cut -d \  -f 1` 2>&1  | grep \"domid\"\: -B 1 -A 100
+
