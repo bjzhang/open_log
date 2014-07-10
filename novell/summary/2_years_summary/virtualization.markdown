@@ -1,6 +1,6 @@
 
 # different virtualization technologies 虚拟化技术比较
-xen, kvm/qemu, container(why not lxc?).
+xen, kvm/qemu, container(lxc, openvz...).
 hypervisor位置：xen在kernel下面。
 kvm是ko. lxc利用了内kernel cgroup, namespace.
 vmware.
@@ -16,13 +16,20 @@ from Khoa IBM[2]
 ![kvm io data plane](kvm_io__data_plane.jpg)
 from Khoa IBM[2]
 
+container没法换kernel; 记得要export port.
+
 # virtualization management tools 虚拟化管理工具
-## xen的toolstack
-xend, xm.
-libxl, xl.
+## xen的toolstack xend, xm.  libxl, xl.
+libvirt
 
 ## qemu管理工具
 qemu monitor, qemu qmp.
+libvirt
+
+## container
+lxc, openvz...
+docker
+libvirt
 
 ##libvirt
 有了自己的管理工具为什么还需要libvirt?
@@ -151,6 +158,17 @@ obs: Devel:Virt:xxxx
 ibs: Virtualization:xxxx
 
 # where is the log? log在哪里?
+
+# cloud
+IaaS
+
+PaaS: docker, openshift(redhat), cloud foundry(was Vmware).
+
+![docker](docker.jpg "docker")
+![application on openshift](application_on_openshift.jpg "application on openshift")
+www.openshift.com
+
+SaaS
 
 # libvirt编程
 
