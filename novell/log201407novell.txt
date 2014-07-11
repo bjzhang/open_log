@@ -612,3 +612,240 @@ software skill, SCM, git, clone, retrieve submobule when git clone
        does not have a worktree/checkout (i.e. if any of --no-checkout/-n, --bare, or --mirror is
        given)
 
+22:58 2014-07-11
+1, ian C
+> On Mon, 2014-07-07 at 15:46 +0800, Bamvor Jian Zhang wrote:
+> > Libxl Domain Snapshot API Design
+>
+> Thanks for splitting the libxl layer into a separate document. I think
+> it is useful to consider this bit first in isolation before getting hung
+> up on how xl might make use of it.
+>
+> > 1. New Structures
+> >
+> >     Domain snapshot introduces two new structures:
+> >     - "libxl_domain_snapshot" store domain snapshot information, it contains
+> >        libxl_disk_snapshot array.
+> >     - "libxl_disk_snapshot" stores disk snapshot related information.
+>
+> >     Struct Details:
+> >
+> >     libxl_disk_snapshot = Struct("disk_snapshot",[
+>
+> I wonder if this should incorporate a libxl_device_disk (either inline
+> or by reference), or perhaps even simply merged into the disk struct.
+>
+> I think this would remove the need for the device, file, format and path
+> fields and be more logical IMHO.
+>
+> >         ("device",        string),              /* The name of disk: hda, hdc */
+> >
+> >         ("name",          string),              /* The name of disk snapshot.
+> >                                                  * Usually it is inherited from
+> >                                                  * libxl_domain_snapshot.
+> >                                                  */
+> >
+> >         ("file",          string),              /* The new disk file after
+> >                                                  * external snapshot. empty for
+> >                                                  * internal snapshot.
+> >                                                  */
+> >
+> >         ("format",        libxl_disk_format),   /* The format of external
+> >                                                  * snapshot file. For the
+> >                                                  * internal snapshot, it's
+> >                                                  * ignored and it should be
+> >                                                  * LIBXL_DISK_FORMAT_UNKNOWN
+> >                                                  */
+> >
+> >         ("path",          string),              /* The path of current disk
+> >                                                  * backend. It gets from
+> >                                                  * libxl_device_disk_getinfo.
+> >                                                  * It will be force-empty when
+> >                                                  * store domain snapshot
+> >                                                  * configuration in order to
+> >                                                  * hide this from users.
+> >                                                  */
+> >         ])
+> >
+> >     libxl_domain_snapshot = Struct("domain_snapshot",[
+> >         ("name",          string),              /* The name of the domain
+> >                                                  * snapshot. It should not be
+> >                                                  * empty.
+> >                                                  */
+> >
+> >         ("description",   string),              /* The description of snapshot.
+> >                                                  * It could be empty.
+> >                                                  */
+> >
+> >         ("creation_time", uint64),              /* The creation time of domain
+> >                                                  * snapshot which is the epoch
+> >                                                  * second from 1, Jan 1970.
+> >                                                  */
+> >
+> >         ("memory",        string),              /* The path to save domain
+> >                                                  * memory image. 'empty' means
+> >                                                  * it is a disk-only snapshot.
+> >                                                  * note that "yes" or "no" is
+> >                                                  * not allowed, this is different
+> >                                                  * from xl.snapshot.pod.5
+>
+> Encoding all of that into a string with some strings having magic
+> properties isn't the right design.
+>
+> This should be a defbool or a bool indicating whether or not memory is
+> included and a separate string which is the path if it is included.
+>
+> >         /* Following state represents the domain state in the beginning of snapshot.
+> >          * These state gets from libxl_domain_info.
+>
+> What is this used for?
+>
+> >          */
+> >         ("running",       bool),
+> >         ("blocked",       bool),
+> >         ("paused",        bool),
+> >         ("shutdown",      bool),
+> >         ("dying",         bool),
+> >
+> >         /* The array of disk snapshot information belong to this domain snapshot. */
+> >         ("disks", Array(libxl_disk_snapshot, "num_disks")),
+> >         ])
+> >
+> >
+> > 2. New Functions
+> >
+> >   2.1 Management functions for domain snapshot config file (libxl-json format).
+> >
+> >     /* There are two type of config file relative to domain snapshot: user
+> >      * config file and internal domain snapshot configuration file(libxl-json
+> >      * format). The relation of the two config files are like xl.cfg and
+> >      * libxl-json for domain configuration.
+> >      * The user visiable config file (KEY=VALUE format) is only used for
+> >      * creation. The internal domain snapshot config file is located at
+> >      * "/var/lib/xen/snapshots/<domain_uuid>"\
+> >      * snapshotdata-<snapshot_name>.libxl-json". This file is only for internal
+> >      * usage, not for users. user should not modify the libxl-json format file.
+> >      *
+> >      * Currently, libvirt use XML format snapshot configuration file for user
+> >      * both input(snapshot create) and output(snapshot-dumpxml). And libvirt
+> >      * qemu driver store with xml format as internal usage as well.
+> >      * For libxl, if libxl hope it is easy to migrate domain between different
+> >      * toolstack, then all the toolstack should use the same internal config
+> >      * file: libxl-json format. it will not affect the user experience. e.g. xl
+> >      * will use the KEY=VALUE format while libvirt will use the xml format.
+> >      */
+>
+> There is a bunch of stuff here which IMHO does not belong in the libxl
+> API. In general libxl should be providing the mechanisms for doing
+> things but the policies and management (i.e. where to save things,
+> listing, deleting etc) belong in the application.
+>
+> So all of the stuff to do with config file parsing and specification of
+> paths where things should be stored are issues for the toolstack and not
+> libxl. i.e. I'm sure libvirt has its own ideas about these things
+> already, which we should use, and I would expect things like the
+> location for the disk snapshots to be passed to xl snapshot somehow.
+>
+> AFAICT the libxl API should be
+>     libxl_domain_snapshot_save(libxl_ctx *ctx, uint32_t domid,
+>                 const char *name, libxl_domain_snapshot *snapshot)
+>
+> Which should take a snapshot of domain domid using parameters from the
+> snapshot object and update snapshot with the specifics. The caller would
+> have to supply any necessary paths etc in the snapshot object. It might
+> be better to split libxl_domain_snapshot onto two, one representing the
+> parameters for a snapshot and one representing the resulting snapshot.
+>
+> libxl shouldn't be doing anything with parsing json objects, storing
+> snapshot config files or picking/mandating the output paths or anything
+> like that.
+>
+> Of course the application might choose to make use of the very
+> convenient libxl functions for converting libxl structs to/from json.
+> libvirt has an XML config format already, there is no reason not to use
+> it in that context.
+>
+> Likewise on snapshot restore (or revert):
+>     libxl_domain_snapshot_restore(ctx, libxl_domain_snapshot *snapshot,
+>                                   *r_domid)
+> should take the snapshot and make a new domain out of it. (someone would
+> need to specify what happens if another domain exists already in that
+> snapshot chain etc).
+>
+> Any management of sets of snapshots, paths to be saving them in,
+> listing, deleting etc is down to the application.
+>
+>
+> >   2.2 functions for disk snapshot operations
+>
+> Do these need to be exposed separately? You lbixl_domain_snapshot struct
+> already has a mechanism for indicating whether memory should be included
+> in the snapshot, so aren't all these functions equiavalent to the
+> domain_snapshot ones but with memory=no?
+>
+> Anyway, if you think these are necessary then I think the same general
+> comments apply. libxl should be providing a mechanism for taking a
+> snapshot into an application provided location. But the application is
+> responsible for managing them, listing them, deciding where they should
+> live etc.
+>
+> Ian.
+>
+
+2, reply to Ian J
+> Ian Campbell writes ("Re: [RFC V5 2/5] Libxl Domain Snapshot API Design"):
+> > On Mon, 2014-07-07 at 15:46 +0800, Bamvor Jian Zhang wrote:
+> ...
+> > >         ("memory",        string),       /* The path to save domain
+> > >                                           * memory image. 'empty' means
+> > >                                           * it is a disk-only snapshot.
+> > >                                           * note that "yes" or "no" is
+> > >                                           * not allowed, this is different
+> > >                                           * from xl.snapshot.pod.5
+>
+Hi, Ian
+> As I wrote on IRC:
+sorry, i forget logging out my irc when i leave company.
+>
+> I still don't really understand how the distinction between snapshots
+> with memory=yes and memory=no is supposed to operate.  Is it that if
+> you take a snapshot of a running domain with memory=no, and then later
+> resume it, it is as if the guest had crashed at the time of the
+> snapshot ?  (How does this interact with disk IO barriers?)
+yes, as you said, the domain may crash after disk stae resume if
+there is no memory state resume.
+basically, this is compatible with libvirt domain snapshot, ref[1].
+after read the libvirt and qemu code again, i found that there is a cpu
+stop qmp before create disk only snapshot when domain is running. such
+qmp will call bdrv_drain_all and bdrv_flush_all for flush all data to
+disk.
+compare to libxl, in my current code, i call libxl_domain_pause before
+creating disk only snapshot. it seems that libxl_domain_pause cause the
+vcpu stop through hypercall. and i do not see the similar flush date to
+disk operation along with vcpus stop.
+how should i deal with it? could i call stop cpu qmp after
+libxl_domain_pause in order to flush data to disk?
+>
+> I think the semantics should be spelled out somewhere.
+>
+> (Also I assume that a memory snapshot isn't available unless there's a
+> running domain, but that also needs to be specified.)
+yes, definitely. i will add this to the document.
+
+regards
+
+bamvor
+
+[1] http://libvirt.org/formatsnapshot.html
+>
+> Thanks,
+> Ian.
+>
+
+23:19 2014-07-11
+libvirt qemu support revert external snapshot.
+cover letter
+https://www.redhat.com/archives/libvir-list/2012-October/msg01290.html
+revert external snapshot
+https://www.redhat.com/archives/libvir-list/2012-October/msg01310.html
+
