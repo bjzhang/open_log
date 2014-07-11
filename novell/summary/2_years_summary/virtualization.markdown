@@ -1,31 +1,44 @@
 
 # different virtualization technologies 虚拟化技术比较
-xen, kvm/qemu, container(why not lxc?).
+xen, kvm/qemu, container(lxc, openvz...), vmware.
 hypervisor位置：xen在kernel下面。
 kvm是ko. lxc利用了内kernel cgroup, namespace.
-vmware.
 
-![xen框图](tmux.jpg)
+简单来说xen的架构如下
+
+![type 1 hypervisor](hypervisor_based.jpg)
+
+详细如下:
+
+![xen框图](xen_architecture.png)
 from sle12 document(Virtualization Guide SUSE Linux Enterprise Server 12)
 
-缺kvm arch.
+教科书上一般说hypervisor有type 1, type 2两种，kvm是type 2么?
+![type 1 vs type 2](Hyperviseur.png)
 
-![kvm io architecture](kvm_io_architecture.jpg)
-from Khoa IBM[2]
+其实，kvm似乎更接近type 1. kvm架构如下
 
-![kvm io data plane](kvm_io__data_plane.jpg)
-from Khoa IBM[2]
+![kvm architecture](kvm_based_architecture.jpg)
+
+
+container没法换kernel; 记得要export port.
 
 # virtualization management tools 虚拟化管理工具
-## xen的toolstack
-xend, xm.
-libxl, xl.
+## xen的toolstack xend, xm.  libxl, xl.
+libvirt
 
 ## qemu管理工具
 qemu monitor, qemu qmp.
+libvirt
+
+## container
+lxc, openvz...
+docker
+libvirt
 
 ##libvirt
 有了自己的管理工具为什么还需要libvirt?
+没daemon是件痛苦的事情。
 
 ## xen. qemu比较
 看起来用libvirt控制xen或kvm虚拟机是一样的. 其实libvirt控制xen经常要通过hypercall到xen hypervisor. 控制qemu多数是直接和qemu进程打交道. 如果有必要qemu或通过kvm fd和kernel kvm module说话.
@@ -152,6 +165,32 @@ ibs: Virtualization:xxxx
 
 # where is the log? log在哪里?
 
+# 如何提供服务?
+![XaaS](IaaS_PaaS_SaaS.jpg)
+
+IaaS
+
+PaaS: docker, openshift(redhat), cloud foundry(was Vmware).
+
+![docker](docker.jpg "docker")
+![application on openshift](application_on_openshift.jpg "application on openshift")
+www.openshift.com
+
+SaaS
+
+# 值得关注的技术
+## kvm data plane
+
+![kvm io architecture](kvm_io_architecture.jpg)
+from Khoa IBM[2]
+
+![kvm io data plane](kvm_io__data_plane.jpg)
+from Khoa IBM[2]
+block: qemu data plane：多线程。性能regression, coroutine pool限制。
+COLO: COarse-grain LOck-stepping Virtual Machine for Non-stop Service
+
+引出coroutine。进程，线程，coroutine。
+
 # libvirt编程
 
 ## 编程规范
@@ -257,10 +296,6 @@ memory overcommitment
 围绕cpu, timer/time, interrupt, memory, block, network, 介绍virsh和原理。
 
 vcpu pin.
-
-block: qemu data plane：多线程。性能regression, coroutine pool限制。
-
-引出coroutine。进程，线程，coroutine。
 
 
 # 草稿
