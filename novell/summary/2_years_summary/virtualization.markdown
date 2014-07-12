@@ -78,6 +78,7 @@ it seems that should unset device_model and device_model_override
 kvm: svirt. James Morris Red Hat Security Engineering
 
 # useful libvirt command libvirt常用命令(rpc名称有所不同)
+基本的管理功能，相当于对机箱说话。所以什么安装操作系统肯定是没有的。
 ## 开关
 define/undefine, start
 define+start=create
@@ -159,6 +160,14 @@ State:          running
 CPU time:       0.4s
 CPU Affinity:   yyyyyyyy
 
+# 虚拟化的工具说也说不完。virt-xxxx
+virt-manager, virt-install/vm-install, virt-viewer, virt-ls, virt-edit, virt-filesystems, virt-clone, virt-host-validate, virt-viewer virt-convert, virt-image, virt-login-shell, virt-pki-validate, virt-xml-validate.
+
+    virt-viewer -w -r your_domain_id_or_your_domain_name
+
+    -w, --wait            Wait for domain to start
+    -r, --reconnect       Reconnect to domain upon restart
+
 # virtualization packages in sle and opensuse 虚拟化有哪些repo哪些package
 obs: Devel:Virt:xxxx
 ibs: Virtualization:xxxx
@@ -178,7 +187,8 @@ www.openshift.com
 
 SaaS
 
-# 值得关注的技术
+# 值得一试
+libvirt除了支持上面“常规”的管理功能，还有其它不是通过控制libxl，qemu，实现的功能。
 ## kvm data plane
 
 ![kvm io architecture](kvm_io_architecture.jpg)
@@ -190,6 +200,58 @@ block: qemu data plane：多线程。性能regression, coroutine pool限制。
 COLO: COarse-grain LOck-stepping Virtual Machine for Non-stop Service
 
 引出coroutine。进程，线程，coroutine。
+
+## ksm
+
+Documentation/vm/ksm.txt
+    KSM is a memory-saving de-duplication feature, enabled by CONFIG_KSM=y,
+    added to the Linux kernel in 2.6.32.  See mm/ksm.c for its implementation,
+    and http://lwn.net/Articles/306704/ and http://lwn.net/Articles/330589/
+
+    KSM only merges anonymous (private) pages, never pagecache (file) pages.
+    KSM's merged pages were originally locked into kernel memory, but can now
+    be swapped out just like other user pages (but sharing is broken when they
+    are swapped back in: ksmd must rediscover their identity and merge again).
+
+    KSM only operates on those areas of address space which an application
+    has advised to be likely candidates for merging, by using the madvise(2)
+    system call: int madvise(addr, length, MADV_MERGEABLE).
+
+### how to use
+http://itxx.sinaapp.com/blog/content/122
+
+### user experence
+http://blog.chinaunix.net/uid-20794164-id-3601786.html
+
+### Ultra KSM
+http://kerneldedup.org/projects/uksm/introduction/
+http://kerneldedup.org/forum/forum.php?mod=forumdisplay&fid=52
+
+## transcendental memory
+the transcendental memory implementation can try to optimize its management of the memory pools. Guests which are more active (or which have been given a higher priority) might be allowed to allocate more pages from the pools. Duplicate pages can be coalesced; KSM-like techniques could be used, but the use of object IDs could make it easier to detect duplicates in a number of situations.
+
+lwn.net, Transcendent memory. Kindle Edition. loc. on 42-45. Accessed: 6/27/2014
+
+## virlockd
+
+## libguestfs design
+libguestfs C library has been designed to safely and securely create access and modify vir-
+tual machine disk images. It provides also additional language bindings: Perl, Python, PHP, Ruby. libguestfs can access VM disk image without
+needing root and with multiple layers of defense against rogue disk images.
+libguestfs has been designed for accessing and modifying virtual machine (VM) disk images.
+You can use this tool for viewing and editing files inside guests, scripting changes to VMs,
+monitoring disk used/free statistics, creating guests, doing V2V, performing backups, cloning
+VMs, formatting disks, resizing disks.
+from sles virt 12 doc 15.1.2
+
+## VirtFS
+kvm的共享文件夹，没用过。
+
+## nested virtualization
+xen
+kvm
+
+## 看看vhost-net
 
 # libvirt编程
 
@@ -203,10 +265,10 @@ COLO: COarse-grain LOck-stepping Virtual Machine for Non-stop Service
 IDL似乎是为了方便binding不同语言时生成不同格式的数据结构？TODO: 确认。
 下面的代码说明了如何定义枚举，结构体；如何设置初始值；如何嵌套数组.
 tools/libxl/libxl\_types.idl
-    libxl_snapshot_type = Enumeration("snapshot_type", [
-        (0, "ANY"),
-        (1, "INTERNAL"),
-        (2, "EXTERNAL"),
+libxl_snapshot_type = Enumeration("snapshot_type", [
+(0, "ANY"),
+(1, "INTERNAL"),
+(2, "EXTERNAL"),
         ], init_val = "LIBXL_SNAPSHOT_TYPE_ANY")
 
     libxl_disk_snapshot = Struct("disk_snapshot",[
@@ -328,3 +390,5 @@ license UNKNOWN
 it is from LINUXCON2013 CloudOpen. the license should be ok.
 Exploiting The Latest KVM Features For Optimized virtualized Enterprise Storage Performance  CloudOpen2013 Khoa Huynh v3.pdf
 
+[3] suse doc
+https://www.suse.com/de-de/documentation/sles11/
