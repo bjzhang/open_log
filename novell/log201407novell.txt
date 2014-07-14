@@ -613,7 +613,12 @@ software skill, SCM, git, clone, retrieve submobule when git clone
        given)
 
 22:58 2014-07-11
+(22:43 2014-07-14)
 1, ian C
+Hi, Ian
+
+thanks your reply. your suggestion is very important for me. meanwhile i am
+not sure i could follow you all the time. please correct me, thanks.
 > On Mon, 2014-07-07 at 15:46 +0800, Bamvor Jian Zhang wrote:
 > > Libxl Domain Snapshot API Design
 >
@@ -637,6 +642,31 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 >
 > I think this would remove the need for the device, file, format and path
 > fields and be more logical IMHO.
+yes, embedded the libxl_device_disk into libxl_disk_snapshot may be useful
+for some logic, e.g. check whether the disk could snaphot, readonly or cdrom
+do not support snapshot.
+meanwhile for the external snapshot, there are two pdev_path: the one is the
+disk path before snapshot, the other is disk path after external snapshot.
+functions relative to external snapshot may not use the both pdev_path at
+the same time, but it seems more clear if we have two pdev_path.
+and there is a additional format for the new disk path above. So, the
+libxl_disk_snapshot would be:
+     libxl_disk_snapshot = Struct("disk_snapshot",[
+        ("name",          string),                /* The name of disk snapshot. */
+        ("type",          libxl_snapshot_format), /* snapshot type: internal,
+                                                   * external
+                                                   */
+        ("pdev_path_new", string),),              /* The new disk file after
+                                                    * external snapshot. empty for
+                                                   * internal snapshot.
+                                                   */
+        ("format_new",    libxl_disk_format),     /* The format of external
+                                                   * snapshot
+                                                   */
+        ("disk",          libxl_device_disk),
+        ])
+
+>
 >
 > >         ("device",        string),              /* The name of disk: hda, hdc */
 > >
@@ -694,11 +724,18 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 >
 > This should be a defbool or a bool indicating whether or not memory is
 > included and a separate string which is the path if it is included.
+i will change it in docs/man/xl.snapshot.pod.5
+for the libxl_domain_snapshot, the memory attribute only support absolute path
+of memory image.
 >
 > >         /* Following state represents the domain state in the beginning of snapshot.
 > >          * These state gets from libxl_domain_info.
 >
 > What is this used for?
+recording the state of domain while take the snapshot. basically, i add it because
+libvirt need track the domain state: running or paused.
+maybe i should record the above two state directly?
+(running in libvirt means running or blocked in libxl).
 >
 > >          */
 > >         ("running",       bool),
@@ -739,6 +776,7 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 > API. In general libxl should be providing the mechanisms for doing
 > things but the policies and management (i.e. where to save things,
 > listing, deleting etc) belong in the application.
+agree. i should move it the other document.
 >
 > So all of the stuff to do with config file parsing and specification of
 > paths where things should be stored are issues for the toolstack and not
@@ -751,7 +789,23 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 >                 const char *name, libxl_domain_snapshot *snapshot)
 >
 > Which should take a snapshot of domain domid using parameters from the
-> snapshot object and update snapshot with the specifics. The caller would
+> snapshot object and update snapshot with the specifics.
+yes, this is the issue i want to discuss. i write it in 4/5. sorry for
+confuse.
+Q: Why there is no universe API for domain snapshot?
+A: This is my initial target while working on snapshot. with the common API,
+   different toolstack(xl or libvirt) could call the same api for the same
+   operation. life would be eaiser compare to the domain create, restore and
+   ...
+
+   The reason why I could not provide common API is that it is hard to handle
+   the ao things in api. e.g. in domain snapshot create, libvirt may wait the
+   memory save by waiting the ao complete flag.
+
+   Another reason is that I could share more functions in xl command
+   with xl snapshot command if i do not need to provide the common api. share
+   the code mean easy to maintenance.
+> The caller would
 > have to supply any necessary paths etc in the snapshot object. It might
 > be better to split libxl_domain_snapshot onto two, one representing the
 > parameters for a snapshot and one representing the resulting snapshot.
@@ -759,11 +813,21 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 > libxl shouldn't be doing anything with parsing json objects, storing
 > snapshot config files or picking/mandating the output paths or anything
 > like that.
+yes, i agree that libxl should not picking/mandating the output paths. it
+should be determined by application. currently, in my code, all the paths
+is get from user config file or generated by xl not libxl.
 >
 > Of course the application might choose to make use of the very
 > convenient libxl functions for converting libxl structs to/from json.
 > libvirt has an XML config format already, there is no reason not to use
 > it in that context.
+yes, libvirt use the XML config. i provide the load/store json config api
+in order to migrate between xl and libvirt. what i mean is that when libvirt
+libxl driver load/reload, it could get the snapshot created by libxl through
+libxl_list_dom_snapshot.
+if libvirt libxl driver could record the snapshot configuration with both
+XML and libxl-json(through libxl_store_dom_snapshot_conf) format. then xl
+could easily access the snapshot state created by libvirt libxl driver.
 >
 > Likewise on snapshot restore (or revert):
 >     libxl_domain_snapshot_restore(ctx, libxl_domain_snapshot *snapshot,
@@ -771,6 +835,11 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 > should take the snapshot and make a new domain out of it. (someone would
 > need to specify what happens if another domain exists already in that
 > snapshot chain etc).
+i need to think about it. generally, if we add the
+libxl_domain_snapshot_restore api, i need to think about how to expose the
+ao_how to the application for more than one stage. i mean i need ao_complete
+twice: the first is after i call disk_revert(qemu-img). the second is after
+memory restore. is there some existence code or document show me how to do it?
 >
 > Any management of sets of snapshots, paths to be saving them in,
 > listing, deleting etc is down to the application.
@@ -782,12 +851,21 @@ software skill, SCM, git, clone, retrieve submobule when git clone
 > already has a mechanism for indicating whether memory should be included
 > in the snapshot, so aren't all these functions equiavalent to the
 > domain_snapshot ones but with memory=no?
+the reasone why there are disk snapshot opration is there is no domain
+snapshot operation(at least create, revert) in my current design. if we
+could provide the domain snapshot operation, there is no need to expose
+current disk snapshot operation.
 >
 > Anyway, if you think these are necessary then I think the same general
 > comments apply. libxl should be providing a mechanism for taking a
 > snapshot into an application provided location. But the application is
 > responsible for managing them, listing them, deciding where they should
 > live etc.
+understand.
+
+thanks
+
+bamvor
 >
 > Ian.
 >
@@ -855,4 +933,10 @@ cover letter
 https://www.redhat.com/archives/libvir-list/2012-October/msg01290.html
 revert external snapshot
 https://www.redhat.com/archives/libvir-list/2012-October/msg01310.html
+
+22:43 2014-07-14
+GTD
+1, today
+1), 30' write virtualization summary.
+2), 1h snapshot: reply to Ian C. see"22:58 2014-07-11"
 

@@ -1,5 +1,6 @@
 
-估计我写的内容80%大家都知道。基本这个文档就是笔记，希望没装过虚拟机的人也能把虚拟机装起来。
+估计我写的内容80%大家都知道。基本这个文档就是笔记，像virt-manager大家常用软件我就不说了。
+
 # different virtualization technologies 虚拟化技术比较
 xen, kvm/qemu, container(lxc, openvz...), vmware.
 hypervisor位置：xen在kernel下面。
@@ -58,8 +59,7 @@ libvirt如果找到默认hypervisor?
 由于qemu可以没有kvm运行，所以如果先load qemu，必定成功。所以要检查xen。对于xen，没有xend就是libxl， 所以要先查xend。
     # ifdef WITH_XEN
         xenRegister();
-    # endif
-    # ifdef WITH_LIBXL
+    # endif # ifdef WITH_LIBXL
         libxlRegister();
     # endif
     # ifdef WITH_QEMU
@@ -107,11 +107,26 @@ container: kiwi/susestudio.
 
 ## user interface
 ### serial console
-### vnc
+### display
+vnc, spice.
+没有virt-manger的日子，可以用"virt-viewer domain\_name/domain\_id/domain\_uuid"看连接domain.
+可以加上"-w -r"即使domain没启动或重启也不会退出。
+    -w, --wait            Wait for domain to start
+    -r, --reconnect       Reconnect to domain upon restart
+
+如果是vnc, 也可以用vncviewer. 从"virsh vncdisplay"拿到5900+offset.
+opensuse13.1默认用spice?
 
 ## storage
-storage pool: directory, lvm ...
-blockcopy, blockcommit
+###文脉网(文件关系网)
+backing file
+snapshot
+blockcommit
+
+### storage pool
+directory, lvm ...
+
+### blockcopy
 
 ## network
 bridge, nat...
@@ -184,16 +199,45 @@ CPU Affinity:   yyyyyyyy
 # 虚拟化的工具说也说不完。virt-xxxx
 virt-manager, virt-install/vm-install, virt-viewer, virt-ls, virt-edit, virt-filesystems, virt-clone, virt-host-validate, virt-viewer virt-convert, virt-image, virt-login-shell, virt-pki-validate, virt-xml-validate.
 
-    virt-viewer -w -r your_domain_id_or_your_domain_name
-
-    -w, --wait            Wait for domain to start
-    -r, --reconnect       Reconnect to domain upon restart
-
 # virtualization packages in sle and opensuse 虚拟化有哪些repo哪些package
 obs: Devel:Virt:xxxx
 ibs: Virtualization:xxxx
 
 # where is the log? log在哪里?
+## debug log
+### virt-manager
+    virt-manager --debug
+    vm-install --debug
+## libvirtd
+    /var/log/message
+### change debug level
+    # diff -urN libvirtd.conf libvirtd_debug_log.conf
+    --- libvirtd.conf       2014-06-13 12:27:31.073824150 +0800
+    +++ libvirtd_debug_log.conf     2014-07-14 20:55:59.936583327 +0800
+    @@ -309,7 +309,7 @@
+
+     # Logging level: 4 errors, 3 warnings, 2 information, 1 debug
+     # basically 1 will log everything possible
+    -#log_level = 3
+    +log_level = 1
+
+ # Logging filters:
+ # A filter allows to select a different logging level for a given category
+
+### hypervisor log
+    laptop-work:/var/log/libvirt # ls */
+    libxl/:
+    04_sles11_sp2_02.log      05_sles11_sp3.log      libxl.log       ubuntu1210_201404.log
+    04_sles11_sp2.log         libxl-driver.log       opensuse12.log
+    qemu/:
+    01_opensuse_13.1.log  02_opensuse_13.1.log
+
+#### libxl
+    domain log: domain_name.log
+    libxl global log(except driver): libxl.log
+    libxl global driver log: libxl-driver.log
+#### qemu
+    domain log: domain_name.log
 
 # 如何提供服务?
 ![XaaS](IaaS_PaaS_SaaS.jpg)
