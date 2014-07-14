@@ -1,4 +1,5 @@
 
+估计我写的内容80%大家都知道。基本这个文档就是笔记，希望没装过虚拟机的人也能把虚拟机装起来。
 # different virtualization technologies 虚拟化技术比较
 xen, kvm/qemu, container(lxc, openvz...), vmware.
 hypervisor位置：xen在kernel下面。
@@ -40,6 +41,14 @@ libvirt
 有了自己的管理工具为什么还需要libvirt?
 没daemon是件痛苦的事情。
 
+## 居然没有virt-manager?
+![virt-manager](virt-manager.jpg)
+
+virt-manager基本是个大杂烩，虚拟机管理部分通过libvirt的API.
+后面说libvirt时它有时候会出现。
+
+ps: 我都要走了，我才第一次用了screen shot的delay功能。。。
+
 ## xen. qemu比较
 看起来用libvirt控制xen或kvm虚拟机是一样的. 其实libvirt控制xen经常要通过hypercall到xen hypervisor. 控制qemu多数是直接和qemu进程打交道. 如果有必要qemu或通过kvm fd和kernel kvm module说话.
 
@@ -79,10 +88,22 @@ kvm: svirt. James Morris Red Hat Security Engineering
 
 # useful libvirt command libvirt常用命令(rpc名称有所不同)
 基本的管理功能，相当于对机箱说话。所以什么安装操作系统肯定是没有的。
+
 ## 开关
 define/undefine, start
 define+start=create
 destroy
+
+### 如何装OS?
+xen/kvm/qemu: PXE, 光盘; direct kernel boot; kiwi/susestudio.
+container: kiwi/susestudio.
+
+没有网络安装？是的。对于libvirt来说其实只是direct kernel boot. TODO: 列出kernel，initrd在哪里。
+
+### vm-install or virt-install
+从SLE12, opensuse13.1开始，virt-install做为默认。vm-install在旁边的箭头里:
+![vm install](virt-manager__using_vm_install.jpg "how to launch alternative OS installer")
+
 
 ## user interface
 ### serial console
@@ -392,3 +413,4 @@ Exploiting The Latest KVM Features For Optimized virtualized Enterprise Storage 
 
 [3] suse doc
 https://www.suse.com/de-de/documentation/sles11/
+
