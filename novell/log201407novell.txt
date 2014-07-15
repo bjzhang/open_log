@@ -941,3 +941,255 @@ GTD
 1), 30' write virtualization summary.
 2), 1h snapshot: reply to Ian C. see"22:58 2014-07-11"
 
+21:28 2014-07-15
+Hi, Ian
+> On Mon, 2014-07-14 at 08:42 -0600, Bamvor Jian Zhang wrote:
+> > Hi, Ian
+> >
+> > thanks your reply. your suggestion is very important for me. meanwhile i am
+> > not sure i could follow you all the time. please correct me, thanks.
+> > > On Mon, 2014-07-07 at 15:46 +0800, Bamvor Jian Zhang wrote:
+> > > > Libxl Domain Snapshot API Design
+> > >
+> > > Thanks for splitting the libxl layer into a separate document. I think
+> > > it is useful to consider this bit first in isolation before getting hung
+> > > up on how xl might make use of it.
+> > >
+> > > > 1. New Structures
+> > > >
+> > > >     Domain snapshot introduces two new structures:
+> > > >     - "libxl_domain_snapshot" store domain snapshot information, it contains
+> > > >        libxl_disk_snapshot array.
+> > > >     - "libxl_disk_snapshot" stores disk snapshot related information.
+> > >
+> > > >     Struct Details:
+> > > >
+> > > >     libxl_disk_snapshot = Struct("disk_snapshot",[
+> > >
+> > > I wonder if this should incorporate a libxl_device_disk (either inline
+> > > or by reference), or perhaps even simply merged into the disk struct.
+> > >
+> > > I think this would remove the need for the device, file, format and path
+> > > fields and be more logical IMHO.
+> > yes, embedded the libxl_device_disk into libxl_disk_snapshot may be useful
+> > for some logic, e.g. check whether the disk could snaphot, readonly or cdrom
+> > do not support snapshot.
+> > meanwhile for the external snapshot, there are two pdev_path: the one is the
+> > disk path before snapshot, the other is disk path after external snapshot.
+> > functions relative to external snapshot may not use the both pdev_path at
+> > the same time, but it seems more clear if we have two pdev_path.
+> > and there is a additional format for the new disk path above.
+>
+> Perhaps what you want is two libxl_device_disk fields then, parent and
+> child?
+yes.
+>
+> Or looking at it another way the input to a disk snapshot operation
+> would be a libxl_device_disk and some options and the output would be
+> another, different, libxl_device_disk.
+understand. i am just thinking about where to put the options relatively to
+specific disk snapshot operation.
+>
+> > >
+> > >
+> > > >         ("device",        string),              /* The name of disk: hda, hdc */
+> > > >
+> > > >         ("name",          string),              /* The name of disk snapshot.
+> > > >                                                  * Usually it is inherited from
+> > > >                                                  * libxl_domain_snapshot.
+> > > >                                                  */
+> > > >
+> > > >         ("file",          string),              /* The new disk file after
+> > > >                                                  * external snapshot. empty for
+> > > >                                                  * internal snapshot.
+> > > >                                                  */
+> > > >
+> > > >         ("format",        libxl_disk_format),   /* The format of external
+> > > >                                                  * snapshot file. For the
+> > > >                                                  * internal snapshot, it's
+> > > >                                                  * ignored and it should be
+> > > >                                                  * LIBXL_DISK_FORMAT_UNKNOWN
+> > > >                                                  */
+> > > >
+> > > >         ("path",          string),              /* The path of current disk
+> > > >                                                  * backend. It gets from
+> > > >                                                  * libxl_device_disk_getinfo.
+> > > >                                                  * It will be force-empty when
+> > > >                                                  * store domain snapshot
+> > > >                                                  * configuration in order to
+> > > >                                                  * hide this from users.
+> > > >                                                  */
+> > > >         ])
+> > > >
+> > > >     libxl_domain_snapshot = Struct("domain_snapshot",[
+> > > >         ("name",          string),              /* The name of the domain
+> > > >                                                  * snapshot. It should not be
+> > > >                                                  * empty.
+> > > >                                                  */
+> > > >
+> > > >         ("description",   string),              /* The description of snapshot.
+> > > >                                                  * It could be empty.
+> > > >                                                  */
+> > > >
+> > > >         ("creation_time", uint64),              /* The creation time of domain
+> > > >                                                  * snapshot which is the epoch
+> > > >                                                  * second from 1, Jan 1970.
+> > > >                                                  */
+> > > >
+> > > >         ("memory",        string),              /* The path to save domain
+> > > >                                                  * memory image. 'empty' means
+> > > >                                                  * it is a disk-only snapshot.
+> > > >                                                  * note that "yes" or "no" is
+> > > >                                                  * not allowed, this is different
+> > > >                                                  * from xl.snapshot.pod.5
+> > >
+> > > Encoding all of that into a string with some strings having magic
+> > > properties isn't the right design.
+> > >
+> > > This should be a defbool or a bool indicating whether or not memory is
+> > > included and a separate string which is the path if it is included.
+> > i will change it in docs/man/xl.snapshot.pod.5
+>
+> My question was about the libxl interface given here, not xl so I don't
+> think updating xl.snapshot.pod is going to be helpful.
+>
+> (note that I was querying because of the use of "empty" as something
+> magic, not because of the comment about xl.snapshot)
+sorry, i misunderstand. what i am try to say is empty of memory string mean
+skip the memory save/restore/delete operation in domain snapshot. if i skip
+the memory relative operation, such domain snapshot is a disk only snapshot.
+>
+> > >
+> > > >         /* Following state represents the domain state in the beginning of snapshot.
+> > > >          * These state gets from libxl_domain_info.
+> > >
+> > > What is this used for?
+> > recording the state of domain while take the snapshot. basically, i add it because
+> > libvirt need track the domain state: running or paused.
+> > maybe i should record the above two state directly?
+>
+> I think so. I think you also need to state clearly what the expected
+> semantics are. e.g. does "paused" incorporate I/O quiesced?
+understand. i will add it.
+>
+> > >
+> > > So all of the stuff to do with config file parsing and specification of
+> > > paths where things should be stored are issues for the toolstack and not
+> > > libxl. i.e. I'm sure libvirt has its own ideas about these things
+> > > already, which we should use, and I would expect things like the
+> > > location for the disk snapshots to be passed to xl snapshot somehow.
+> > >
+> > > AFAICT the libxl API should be
+> > >     libxl_domain_snapshot_save(libxl_ctx *ctx, uint32_t domid,
+> > >                 const char *name, libxl_domain_snapshot *snapshot)
+> > >
+> > > Which should take a snapshot of domain domid using parameters from the
+> > > snapshot object and update snapshot with the specifics.
+> > yes, this is the issue i want to discuss. i write it in 4/5. sorry for
+> > confuse.
+>
+> I'm afraid I don't understand what you are trying to say with this Q+A.
+>
+> > Q: Why there is no universe API for domain snapshot?
+> > A: This is my initial target while working on snapshot. with the common API,
+> >    different toolstack(xl or libvirt) could call the same api for the same
+> >    operation. life would be eaiser compare to the domain create, restore and
+>
+> easier in what sense?
+>
+> >    ...
+> >
+> >    The reason why I could not provide common API is that it is hard to handle
+> >    the ao things in api. e.g. in domain snapshot create, libvirt may wait the
+> >    memory save by waiting the ao complete flag.
+>
+> The libxl API almost certainly does need to be async and use ao_how etc.
+> That's pretty much unavoidable.
+>
+> I'm also confused because it appeared to me that what I was commenting
+> on was a common API, but here you say you cannot provide that.
+>
+> >    Another reason is that I could share more functions in xl command
+> >    with xl snapshot command if i do not need to provide the common api. share
+> >    the code mean easy to maintenance.
+>
+> share with what?
+>
+> Sorry, I'm totally confused about what you are trying to say in this
+> entire section.
+>
+> > > The caller would
+> > > have to supply any necessary paths etc in the snapshot object. It might
+> > > be better to split libxl_domain_snapshot onto two, one representing the
+> > > parameters for a snapshot and one representing the resulting snapshot.
+> > >
+> > > libxl shouldn't be doing anything with parsing json objects, storing
+> > > snapshot config files or picking/mandating the output paths or anything
+> > > like that.
+> > yes, i agree that libxl should not picking/mandating the output paths. it
+> > should be determined by application. currently, in my code, all the paths
+> > is get from user config file or generated by xl not libxl.
+>
+> If that is the case then I'm afraid that this document does not reflect
+> that reality.
+>
+> > > Of course the application might choose to make use of the very
+> > > convenient libxl functions for converting libxl structs to/from json.
+> > > libvirt has an XML config format already, there is no reason not to use
+> > > it in that context.
+> > yes, libvirt use the XML config. i provide the load/store json config api
+> > in order to migrate between xl and libvirt. what i mean is that when libvirt
+> > libxl driver load/reload, it could get the snapshot created by libxl through
+> > libxl_list_dom_snapshot.
+> > if libvirt libxl driver could record the snapshot configuration with both
+> > XML and libxl-json(through libxl_store_dom_snapshot_conf) format. then xl
+> > could easily access the snapshot state created by libvirt libxl driver.
+>
+> I don't think "portability" of snapshots in this way is required and it
+> is making your API more complex than it needs to be IMHO.
+>
+> It is fine and expected that xl and libvirt snapshots are manageable
+> only by the toolstack which creates them.
+>
+> > > Likewise on snapshot restore (or revert):
+> > >     libxl_domain_snapshot_restore(ctx, libxl_domain_snapshot *snapshot,
+> > >                                   *r_domid)
+> > > should take the snapshot and make a new domain out of it. (someone would
+> > > need to specify what happens if another domain exists already in that
+> > > snapshot chain etc).
+> > i need to think about it. generally, if we add the
+> > libxl_domain_snapshot_restore api, i need to think about how to expose the
+> > ao_how to the application for more than one stage. i mean i need ao_complete
+> > twice: the first is after i call disk_revert(qemu-img). the second is after
+> > memory restore. is there some existence code or document show me how to do it?
+>
+> Why do you need to ao complete twice? The ao should complete once at the
+> end of the aggregate operation.
+>
+> If what you want is a progress indication then perhaps the interface
+> needs to take one or more libxl_asyncprogress_how objects to describe
+> those stages. Domain create uses this to notify when the console is
+> ready for example.
+>
+> > >
+> > > Any management of sets of snapshots, paths to be saving them in,
+> > > listing, deleting etc is down to the application.
+> > >
+> > >
+> > > >   2.2 functions for disk snapshot operations
+> > >
+> > > Do these need to be exposed separately? You lbixl_domain_snapshot struct
+> > > already has a mechanism for indicating whether memory should be included
+> > > in the snapshot, so aren't all these functions equiavalent to the
+> > > domain_snapshot ones but with memory=no?
+> > the reasone why there are disk snapshot opration is there is no domain
+> > snapshot operation(at least create, revert) in my current design. if we
+> > could provide the domain snapshot operation, there is no need to expose
+> > current disk snapshot operation.
+>
+> Why don't you provide a domain snapshot operation? I thought that was
+> the whole point of this new interface.
+>
+> Ian.
+>
+>
