@@ -22,8 +22,15 @@ from sle12 document(Virtualization Guide SUSE Linux Enterprise Server 12)
 
 ![kvm architecture](kvm_based_architecture.jpg)
 
-
+## docker
+container + build service + kiwi
 container没法换kernel; 记得要export port.
+
+docker支持libcontainer, libxc, openvz等container技术，从1.0开始，默认使用自己的libcontainer(go语言).
+docker有版本管理功能。
+docker有自己的build系统，可以继承已有的image。
+docker可以用dockerfile实现自动build。
+这些特点让docker很适合部署，管理应用。
 
 # virtualization management tools 虚拟化管理工具
 ## xen的toolstack xend, xm.  libxl, xl.

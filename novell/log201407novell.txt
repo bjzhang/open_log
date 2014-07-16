@@ -987,8 +987,36 @@ yes.
 > Or looking at it another way the input to a disk snapshot operation
 > would be a libxl_device_disk and some options and the output would be
 > another, different, libxl_device_disk.
-understand. i am just thinking about where to put the options relatively to
-specific disk snapshot operation.
+Understand. There are two issues:
+1. If i use the libxl_device_disk, the old path(before external snapshot)
+is missing. This will be inconvenient if we revert the external snapshot.
+2. When toolstack save the domain snapshot configuration file
+(libxl-json), this configuration is longer than use libxl_disk_snapshot.
+e.g. the libxl_device_disk output:
+    "disks": [
+        {
+            "backend_domid": 0,
+            "backend_domname": null,
+            "pdev_path": "/var/lib/xen/snapshots/5c84adcc-bd59-788a-96d2-195f9b599cfe/disk_hda.qcow2",
+            "vdev": "hda",
+            "format": "qcow2",
+            "script": null,
+            "removable": 0,
+            "readwrite": 1,
+            "is_cdrom": 0,
+            "direct_io_safe": false
+        },
+        ...
+libxl_disk_snapshot output:
+    "disks": [
+        {
+            "device": "hda",
+            "name": "external snapshot 20140710",
+            "file": "/var/lib/xen/snapshots/5c84adcc-bd59-788a-96d2-195f9b599cfe/disk_hda.qcow2",
+            "format": "qcow2",
+            "path": "",
+            "type": "external"
+        },
 >
 > > >
 > > >
@@ -1055,9 +1083,7 @@ specific disk snapshot operation.
 >
 > (note that I was querying because of the use of "empty" as something
 > magic, not because of the comment about xl.snapshot)
-sorry, i misunderstand. what i am try to say is empty of memory string mean
-skip the memory save/restore/delete operation in domain snapshot. if i skip
-the memory relative operation, such domain snapshot is a disk only snapshot.
+got it. i will add bool.
 >
 > > >
 > > > >         /* Following state represents the domain state in the beginning of snapshot.
@@ -1070,8 +1096,15 @@ the memory relative operation, such domain snapshot is a disk only snapshot.
 >
 > I think so. I think you also need to state clearly what the expected
 > semantics are. e.g. does "paused" incorporate I/O quiesced?
-understand. i will add it.
->
+After think about it, at least i need active and inactive state. The active
+allow domain snapshot and disk-only snapshot. The inactive state only allow
+the disk-only snapshot.
+Meanwhile i am not suse if i need the paused state. Libvirt qemu driver record
+this state. I guess it is because qemu will flush all io to disk when domain
+paused. This may be useful for user to know the exactly disk status. e.g., if
+user create a disk snapshot when domain paused, the disk state should be
+coherent.
+But i do not find the libxl do the similar flush operation for pause.
 > > >
 > > > So all of the stuff to do with config file parsing and specification of
 > > > paths where things should be stored are issues for the toolstack and not
@@ -1114,6 +1147,8 @@ understand. i will add it.
 > >    the code mean easy to maintenance.
 >
 > share with what?
+e.g. share the create_domain functions in tools/libxl/xl_cmdimpl.c for domain
+revert.
 >
 > Sorry, I'm totally confused about what you are trying to say in this
 > entire section.
@@ -1132,6 +1167,7 @@ understand. i will add it.
 >
 > If that is the case then I'm afraid that this document does not reflect
 > that reality.
+i will update the document.
 >
 > > > Of course the application might choose to make use of the very
 > > > convenient libxl functions for converting libxl structs to/from json.
@@ -1150,6 +1186,7 @@ understand. i will add it.
 >
 > It is fine and expected that xl and libvirt snapshots are manageable
 > only by the toolstack which creates them.
+ok.
 >
 > > > Likewise on snapshot restore (or revert):
 > > >     libxl_domain_snapshot_restore(ctx, libxl_domain_snapshot *snapshot,
@@ -1165,6 +1202,17 @@ understand. i will add it.
 >
 > Why do you need to ao complete twice? The ao should complete once at the
 > end of the aggregate operation.
+
+When I wrote this version, I though there are two things time consuming,
+one is disk snapshot apply (that may call 'qemu-img' to do the work), the
+other is memory restore. And I thought these two should be one after another,
+so to avoid waiting qemu-img completion, we might need an ao operation,
+and in its ao_complete, call next stage work (memory restore).
+
+Now thinking it again, yes, I think one ao could be OK. The two work should
+be independent, then we can simply do them parallelly, so don't need a separate
+ao operation for qemu-img work completion. In this way, one ao is enough.
+
 >
 > If what you want is a progress indication then perhaps the interface
 > needs to take one or more libxl_asyncprogress_how objects to describe
@@ -1192,4 +1240,14 @@ understand. i will add it.
 >
 > Ian.
 >
->
+
+15:12 2014-07-16
+    /* libxl owns SIGCHLD all the time, but it must only reap its own
+     * children.  The application will reap its own children
+     * synchronously with waitpid, without the assistance of SIGCHLD. */
+    libxl_sigchld_owner_libxl_always_selective_reap,
+} libxl_sigchld_owner;
+
+17:52 2014-07-16
+hvm_save()(common/hvm/save.c)
+
