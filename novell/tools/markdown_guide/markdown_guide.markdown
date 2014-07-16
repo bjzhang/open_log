@@ -11,6 +11,8 @@ retext支持preview和line preview. 其中line preview很适合markdown初学者
 ## 浏览
 chrome浏览器有markdown编辑器和viewer. 例如"Markdown Pretty".
 
+![chrome markdown viewer](chrome_markdown_viewer.jpg "chrome markdown viewer")
+
 呵呵，如果你也不使用chrome浏览器，firefox也有个"Markdown Viewer".
 
 如果遇到中文乱码，可以修改浏览器的字符编码。
