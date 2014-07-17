@@ -100,6 +100,7 @@ kvm: svirt. James Morris Red Hat Security Engineering
 define/undefine, start
 define+start=create
 destroy
+define后，自己的xml就不会更新了，虚拟机xml位置：/etc/libvirt/qemu/*.xml。建议用virsh edit domain_name修改。virsh dumpxml domain_name备份。
 
 ### 如何装OS?
 xen/kvm/qemu: PXE, 光盘; direct kernel boot; kiwi/susestudio.
