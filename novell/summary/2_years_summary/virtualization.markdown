@@ -91,10 +91,12 @@ kvm: svirt. James Morris Red Hat Security Engineering
 基本的管理功能，相当于对机箱说话。所以什么安装操作系统肯定是没有的。
 
 ## 开关
-define/undefine, start
-define+start=create
-destroy
-    /etc/libvirt/qemu/*.xml
+- define/undefine, start
+- define+start=create
+- destroy
+- /etc/libvirt/qemu/\*.xml
+
+define后，自己的xml就不会更新了，虚拟机xml位置：/etc/libvirt/qemu/\*.xml。建议用"virsh edit domain\_name"修改。"virsh dumpxml domain\_name"备份。
 
 ### 如何装OS?
 xen/kvm/qemu: PXE, 光盘; direct kernel boot; kiwi/susestudio.
