@@ -113,8 +113,7 @@ container: kiwi/susestudio.
 >    SLES11Host:~ # nmap -sP -n 147.2.207.0/24 | grep 93 -B 1
 >    Host 147.2.207.79 appears to be up.
 >    MAC Address: 00:19:D1:E8:93:35 (Intel)
->    --
->    Host 147.2.207.123 appears to be up.
+>    -- >    Host 147.2.207.123 appears to be up.
 >    MAC Address: 52:54:00:42:54:93 (QEMU Virtual NIC)
 >    --
 >    Host 147.2.207.134 appears to be up.
@@ -139,7 +138,7 @@ vnc, spice.
     -r, --reconnect       Reconnect to domain upon restart
 
 如果是vnc, 也可以用vncviewer. 从"virsh vncdisplay"拿到5900+offset.
-opensuse13.1默认用spice?
+opensuse13.1默认用spice? vncviewer肯定没法用了，virt-viewer还是可以用的, yeah!
 
 ## storage
 ###文脉网(文件关系网)
@@ -160,65 +159,64 @@ migration注意事项
 如果从较弱的cpu迁移到较强的cpu，没问题。反之不行，因为restore时cpu flag时dst cpu没法支持src cpu的flag.
 
 ## vcpu pin
-16:22 2014-07-08
-linux-bjrd:~ # virsh vcpuinfo 3
-VCPU:           0
-CPU:            2
-State:          running
-CPU time:       0.3s
-CPU Affinity:   yyyyyyyy
-
-VCPU:           1
-CPU:            1
-State:          running
-CPU time:       0.3s
-CPU Affinity:   yyyyyyyy
-
-VCPU:           2
-CPU:            2
-State:          running
-CPU time:       0.3s
-CPU Affinity:   yyyyyyyy
-
-VCPU:           3
-CPU:            0
-State:          running
-CPU time:       0.4s
-CPU Affinity:   yyyyyyyy
-
-linux-bjrd:~ # cat /proc/cpuinfo | less
-linux-bjrd:~ # virsh help|grep vcpu
+0, # virsh help|grep vcpu
     maxvcpus                       connection vcpu maximum
     setvcpus                       change number of virtual CPUs
     vcpucount                      domain vcpu counts
     vcpuinfo                       detailed domain vcpu information
     vcpupin                        control or query domain vcpu affinity
-linux-bjrd:~ # virsh vcpupin 3 0 0
+1, vcpuinfo show per vcpu status including vcpu-pcpu relation.
+>    linux-bjrd:~ # virsh vcpuinfo 3
+>    VCPU:           0
+>    CPU:            2
+>    State:          running
+>    CPU time:       0.3s
+>    CPU Affinity:   yyyyyyyy
+>    
+>    VCPU:           1
+>    CPU:            1
+>    State:          running
+>    CPU time:       0.3s
+>    CPU Affinity:   yyyyyyyy
+>    
+>    VCPU:           2
+>    CPU:            2
+>    State:          running
+>    CPU time:       0.3s
+>    CPU Affinity:   yyyyyyyy
+>    
+>    VCPU:           3
+>    CPU:            0
+>    State:          running
+>    CPU time:       0.4s
+>    CPU Affinity:   yyyyyyyy
 
-linux-bjrd:~ # virsh vcpuinfo 3
-VCPU:           0
-CPU:            0
-State:          running
-CPU time:       0.3s
-CPU Affinity:   y-------
-
-VCPU:           1
-CPU:            1
-State:          running
-CPU time:       0.3s
-CPU Affinity:   yyyyyyyy
-
-VCPU:           2
-CPU:            3
-State:          running
-CPU time:       0.3s
-CPU Affinity:   yyyyyyyy
-
-VCPU:           3
-CPU:            0
-State:          running
-CPU time:       0.4s
-CPU Affinity:   yyyyyyyy
+2, vcpupin examples
+>    # virsh vcpupin 3 0 0
+>    # virsh vcpuinfo 3
+>    VCPU:           0
+>    CPU:            0
+>    State:          running
+>    CPU time:       0.3s
+>    CPU Affinity:   y-------
+>    
+>    VCPU:           1
+>    CPU:            1
+>    State:          running
+>    CPU time:       0.3s
+>    CPU Affinity:   yyyyyyyy
+>    
+>    VCPU:           2
+>    CPU:            3
+>    State:          running
+>    CPU time:       0.3s
+>    CPU Affinity:   yyyyyyyy
+>    
+>    VCPU:           3
+>    CPU:            0
+>    State:          running
+>    CPU time:       0.4s
+>    CPU Affinity:   yyyyyyyy
 
 # 虚拟化的工具说也说不完。virt-xxxx
 virt-manager, virt-install/vm-install, virt-viewer, virt-ls, virt-edit, virt-filesystems, virt-clone, virt-host-validate, virt-viewer virt-convert, virt-image, virt-login-shell, virt-pki-validate, virt-xml-validate.
@@ -262,6 +260,19 @@ ibs: Virtualization:xxxx
     libxl global driver log: libxl-driver.log
 #### qemu
     domain log: domain_name.log
+
+例子
+- 启动时间
+    2014-07-16 14:11:06.317+0000: starting up
+- 带环境变量的qemu命令行参数
+    LC_ALL=C PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin QEMU_AUDIO_DRV=spice /usr/bin/qemu-system-x86_64 -name 01_opensuse_13.1 -S -machine pc-i440fx-2.1,accel=kvm,usb=off -cpu Penryn -m 1024 -realtime mlock=off -smp 1,sockets=1,cores=1,threads=1 -uuid 5d7180cb-9a70-428a-a25d-d9dadd15369d -no-user-config -nodefaults -chardev socket,id=charmonitor,path=/var/lib/libvirt/qemu/01_opensuse_13.1.monitor,server,nowait -mon chardev=charmonitor,id=monitor,mode=control -rtc base=utc,driftfix=slew -global kvm-pit.lost_tick_policy=discard -no-hpet -no-shutdown -global PIIX4_PM.disable_s3=1 -global PIIX4_PM.disable_s4=1 -boot strict=on -device ich9-usb-ehci1,id=usb,bus=pci.0,addr=0x5.0x7 -device ich9-usb-uhci1,masterbus=usb.0,firstport=0,bus=pci.0,multifunction=on,addr=0x5 -device ich9-usb-uhci2,masterbus=usb.0,firstport=2,bus=pci.0,addr=0x5.0x1 -device ich9-usb-uhci3,masterbus=usb.0,firstport=4,bus=pci.0,addr=0x5.0x2 -device virtio-serial-pci,id=virtio-serial0,bus=pci.0,addr=0x6 -drive file=/home/bamvor/laptop/images/kvm/01_opensuse_13.1/disk0.raw,if=none,id=drive-ide0-0-0,format=raw -device ide-hd,bus=ide.0,unit=0,drive=drive-ide0-0-0,id=ide0-0-0 -drive file=/home/bamvor/laptop/kiwi/JeOS_test/LimeJeOS-openSUSE-13.1.x86_64-1.13.1.iso,if=none,id=drive-ide0-0-1,readonly=on,format=raw -device ide-cd,bus=ide.0,unit=1,drive=drive-ide0-0-1,id=ide0-0-1,bootindex=1 -netdev tap,fd=22,id=hostnet0 -device rtl8139,netdev=hostnet0,id=net0,mac=52:54:00:d5:9f:3a,bus=pci.0,addr=0x3 -chardev pty,id=charserial0 -device isa-serial,chardev=charserial0,id=serial0 -chardev spicevmc,id=charchannel0,name=vdagent -device virtserialport,bus=virtio-serial0.0,nr=1,chardev=charchannel0,id=channel0,name=com.redhat.spice.0 -spice port=5900,addr=127.0.0.1,disable-ticketing,seamless-migration=on -device qxl-vga,id=video0,ram_size=67108864,vram_size=67108864,bus=pci.0,addr=0x2 -device intel-hda,id=sound0,bus=pci.0,addr=0x4 -device hda-duplex,id=sound0-codec0,bus=sound0.0,cad=0 -chardev spicevmc,id=charredir0,name=usbredir -device usb-redir,chardev=charredir0,id=redir0 -chardev spicevmc,id=charredir1,name=usbredir -device usb-redir,chardev=charredir1,id=redir1 -chardev spicevmc,id=charredir2,name=usbredir -device usb-redir,chardev=charredir2,id=redir2 -chardev spicevmc,id=charredir3,name=usbredir -device usb-redir,chardev=charredir3,id=redir3 -device virtio-balloon-pci,id=balloon0,bus=pci.0,addr=0x7 -msg timestamp=on
+    ...
+- 虚拟机的串口映射到物理机哪个pts设备。
+    char device redirected to /dev/pts/7 (label charserial0)
+    ...
+- 关机时间
+    2014-07-16 23:50:26.980+0000: shutting down
+
 
 # 如何提供服务?
 ![XaaS](IaaS_PaaS_SaaS.jpg)
