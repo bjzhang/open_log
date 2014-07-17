@@ -4,7 +4,7 @@
 # different virtualization technologies 虚拟化技术比较
 xen, kvm/qemu, container(lxc, openvz...), vmware.
 hypervisor位置：xen在kernel下面。
-kvm是ko. lxc利用了内kernel cgroup, namespace.
+kvm是ko. lxc利用了kernel cgroup, namespace等技术.
 
 简单来说xen的架构如下
 
@@ -13,9 +13,11 @@ kvm是ko. lxc利用了内kernel cgroup, namespace.
 详细如下:
 
 ![xen框图](xen_architecture.png)
+
 from sle12 document(Virtualization Guide SUSE Linux Enterprise Server 12)
 
 教科书上一般说hypervisor有type 1, type 2两种，kvm是type 2么?
+
 ![type 1 vs type 2](Hyperviseur.png)
 
 其实，kvm似乎更接近type 1. kvm架构如下
@@ -24,26 +26,30 @@ from sle12 document(Virtualization Guide SUSE Linux Enterprise Server 12)
 
 ## docker
 container + build service + kiwi
-container没法换kernel; 记得要export port.
 
-docker支持libcontainer, libxc, openvz等container技术，从1.0开始，默认使用自己的libcontainer(go语言).
-docker有版本管理功能。
-docker有自己的build系统，可以继承已有的image。
-docker可以用dockerfile实现自动build。
+- docker支持libcontainer, libxc, openvz等container技术，从1.0开始，默认使用自己的libcontainer(go语言).
+- docker有版本管理功能。
+- docker有自己的build系统，可以继承已有的image。
+- docker可以用dockerfile实现自动build。
+- container没法换kernel
+- 记得要export port.
 这些特点让docker很适合部署，管理应用。
 
 # virtualization management tools 虚拟化管理工具
-## xen的toolstack xend, xm.  libxl, xl.
-libvirt
+## xen的toolstack
+- xend, xm
+- libxl, xl. xen4.2和4.1接口不同，libvirt只支持xen4.2后的libxl，编译时确定libxl具体feature.
+- libvirt
 
 ## qemu管理工具
-qemu monitor, qemu qmp.
-libvirt
+- qemu monitor
+- qemu qmp.
+- libvirt
 
 ## container
-lxc, openvz...
-docker
-libvirt
+- lxc, openvz...
+- docker
+- libvirt
 
 ##libvirt
 有了自己的管理工具为什么还需要libvirt?
@@ -55,8 +61,6 @@ libvirt
 virt-manager基本是个大杂烩，虚拟机管理部分通过libvirt的API.
 后面说libvirt时它有时候会出现。
 
-ps: 我都要走了，我才第一次用了screen shot的delay功能。。。
-
 ## xen. qemu比较
 看起来用libvirt控制xen或kvm虚拟机是一样的. 其实libvirt控制xen经常要通过hypercall到xen hypervisor. 控制qemu多数是直接和qemu进程打交道. 如果有必要qemu或通过kvm fd和kernel kvm module说话.
 
@@ -64,27 +68,17 @@ ps: 我都要走了，我才第一次用了screen shot的delay功能。。。
 
 libvirt如果找到默认hypervisor?
 由于qemu可以没有kvm运行，所以如果先load qemu，必定成功。所以要检查xen。对于xen，没有xend就是libxl， 所以要先查xend。
-    # ifdef WITH_XEN
-        xenRegister();
-    # endif # ifdef WITH_LIBXL
-        libxlRegister();
-    # endif
-    # ifdef WITH_QEMU
-        qemuRegister();
-    # endif
-    # ifdef WITH_LXC
-        lxcRegister();
-    # endif
-    # ifdef WITH_UML
-        umlRegister();
-    # endif
-    # ifdef WITH_VBOX
-        vboxRegister();
-    # endif
-    # ifdef WITH_BHYVE
-        bhyveRegister();
-    # endif
-
+>     # ifdef WITH_XEN
+>         xenRegister();
+>     # endif # ifdef WITH_LIBXL
+>         libxlRegister();
+>     # endif
+>     # ifdef WITH_QEMU
+>         qemuRegister();
+>     # endif
+>     # ifdef WITH_LXC
+>         lxcRegister();
+>     # endif
 
 ## security
 xen: stubdomain. howto
@@ -100,6 +94,7 @@ kvm: svirt. James Morris Red Hat Security Engineering
 define/undefine, start
 define+start=create
 destroy
+    /etc/libvirt/qemu/*.xml
 
 ### 如何装OS?
 xen/kvm/qemu: PXE, 光盘; direct kernel boot; kiwi/susestudio.
@@ -111,6 +106,26 @@ container: kiwi/susestudio.
 从SLE12, opensuse13.1开始，virt-install做为默认。vm-install在旁边的箭头里:
 ![vm install](virt-manager__using_vm_install.jpg "how to launch alternative OS installer")
 
+>    software skill, network, get guest ip address, nmap; arp
+>    1, nmap, ref"15:13 2012-11-22"1
+>    SLES11Host:~ # nmap -sP -n 147.2.207.0/24 | grep 93 -B 1
+>    Host 147.2.207.79 appears to be up.
+>    MAC Address: 00:19:D1:E8:93:35 (Intel)
+>    --
+>    Host 147.2.207.123 appears to be up.
+>    MAC Address: 52:54:00:42:54:93 (QEMU Virtual NIC)
+>    --
+>    Host 147.2.207.134 appears to be up.
+>    MAC Address: 52:54:00:F6:C0:93 (QEMU Virtual NIC)
+>    --
+>    Host 147.2.207.156 appears to be up.
+>    MAC Address: 00:21:70:93:B7:2D (Dell)
+>    --
+>    MAC Address: 78:2B:CB:7F:FD:3B (Unknown)
+>    Host 147.2.207.193 appears to be up.
+>
+>    2, arp
+>    SLES11Host:~ # arp -a | grep 93
 
 ## user interface
 ### serial console
@@ -299,6 +314,17 @@ http://blog.chinaunix.net/uid-20794164-id-3601786.html
 http://kerneldedup.org/projects/uksm/introduction/
 http://kerneldedup.org/forum/forum.php?mod=forumdisplay&fid=52
 
+### test
+>     #top
+>       40 root      25   5       0      0      0 S 4.304 0.000   0:52.31 ksmd
+>     4522 bamvor    20   0 2618368 120284  23768 S 2.980 2.997   1:27.31 virt-manager
+>     5123 qemu      20   0 1751524 739164   6208 S 2.649 18.42   2:32.86 qemu-system-x86
+>     5212 qemu      20   0 1747528 792108   8820 S 1.986 19.73   2:06.89 qemu-system-x86
+>     3583 bamvor    20   0  579304 149080  48228 S 1.655 3.714   1:46.12 groupwise-bin
+
+    #cat: /sys/kernel/mm/ksm/page_sharing
+    239131
+
 ## transcendental memory
 the transcendental memory implementation can try to optimize its management of the memory pools. Guests which are more active (or which have been given a higher priority) might be allowed to allocate more pages from the pools. Duplicate pages can be coalesced; KSM-like techniques could be used, but the use of object IDs could make it easier to detect duplicates in a number of situations.
 
@@ -322,6 +348,10 @@ kvm的共享文件夹，没用过。
 ## nested virtualization
 xen
 kvm
+
+## qemu backfile
+    # qemu-img create -b ../kiwi_images/openSUSE_13.1_KDE_4_desktop.x86_64-0.0.1.raw -f qcow2 disk0.qcow2
+    Formatting 'disk0.qcow2', fmt=qcow2 size=1799356416 backing_file='../kiwi_images/openSUSE_13.1_KDE_4_desktop.x86_64-0.0.1.raw' encryption=off cluster_size=65536 lazy_refcounts=off
 
 ## 看看vhost-net
 

@@ -942,6 +942,7 @@ GTD
 2), 1h snapshot: reply to Ian C. see"22:58 2014-07-11"
 
 21:28 2014-07-15
+1,
 Hi, Ian
 > On Mon, 2014-07-14 at 08:42 -0600, Bamvor Jian Zhang wrote:
 > > Hi, Ian
@@ -1240,6 +1241,127 @@ ao operation for qemu-img work completion. In this way, one ao is enough.
 >
 > Ian.
 >
+2,
+> On Wed, 2014-07-16 at 03:27 -0600, Bamvor Jian Zhang wrote:
+> > > Or looking at it another way the input to a disk snapshot operation
+> > > would be a libxl_device_disk and some options and the output would be
+> > > another, different, libxl_device_disk.
+> > Understand. There are two issues:
+> > 1. If i use the libxl_device_disk, the old path(before external snapshot)
+> > is missing. This will be inconvenient if we revert the external snapshot.
+>
+> I don't follow. Surely the old path is the path of the already existing
+> disk which you are taking a snapshot of?
+>
+> > 2. When toolstack save the domain snapshot configuration file
+> > (libxl-json), this configuration is longer than use libxl_disk_snapshot.
+> > e.g. the libxl_device_disk output:
+>
+> But it fully describes everything you would need to attach it to a
+> guest, doesn't it? Isn't that a good thing?
+>
+> > >
+> > > > >
+> > > > > >         /* Following state represents the domain state in the beginning of snapshot.
+> > > > > >          * These state gets from libxl_domain_info.
+> > > > >
+> > > > > What is this used for?
+> > > > recording the state of domain while take the snapshot. basically, i add it because
+> > > > libvirt need track the domain state: running or paused.
+> > > > maybe i should record the above two state directly?
+> > >
+> > > I think so. I think you also need to state clearly what the expected
+> > > semantics are. e.g. does "paused" incorporate I/O quiesced?
+> > After think about it, at least i need active and inactive state. The active
+> > allow domain snapshot and disk-only snapshot. The inactive state only allow
+> > the disk-only snapshot.
+> 
+> What do active and inactive mean? Paused? I/O Quiesced? Shutdown?
+> 
+> > Meanwhile i am not suse if i need the paused state. Libvirt qemu driver record
+> > this state. I guess it is because qemu will flush all io to disk when domain
+> > paused. This may be useful for user to know the exactly disk status. e.g., if
+> > user create a disk snapshot when domain paused, the disk state should be
+> > coherent.
+> 
+> Not necessarily, if you paused while the guest was halfway through a
+> journal update and do a snapshot with no memory then you would end up
+> recovering the journal when you next mount the filesystem. That's
+> different from quiescing I/O which requires a guest agent AFAIK.
+> 
+> > But i do not find the libxl do the similar flush operation for pause.
+> 
+> Correct, AFAIK.
+> 
+> > > >    ...
+> > > >
+> > > >    The reason why I could not provide common API is that it is hard to handle
+> > > >    the ao things in api. e.g. in domain snapshot create, libvirt may wait the
+> > > >    memory save by waiting the ao complete flag.
+> > >
+> > > The libxl API almost certainly does need to be async and use ao_how etc.
+> > > That's pretty much unavoidable.
+> > >
+> > > I'm also confused because it appeared to me that what I was commenting
+> > > on was a common API, but here you say you cannot provide that.
+> > >
+> > > >    Another reason is that I could share more functions in xl command
+> > > >    with xl snapshot command if i do not need to provide the common api. share
+> > > >    the code mean easy to maintenance.
+> > >
+> > > share with what?
+> > e.g. share the create_domain functions in tools/libxl/xl_cmdimpl.c for domain
+> > revert.
+> 
+> I think this is of secondary concern to having a useful and correct
+> libxl level API.
+> 
+> I'm still not sure what the "common API" you are referring to is. What
+> function exactly are you proposing to make common or conversely which
+> functions do you think it is not possible to make common?
+> 
+> 
+> > > > > Likewise on snapshot restore (or revert):
+> > > > >     libxl_domain_snapshot_restore(ctx, libxl_domain_snapshot *snapshot,
+> > > > >                                   *r_domid)
+> > > > > should take the snapshot and make a new domain out of it. (someone would
+> > > > > need to specify what happens if another domain exists already in that
+> > > > > snapshot chain etc).
+> > > > i need to think about it. generally, if we add the
+> > > > libxl_domain_snapshot_restore api, i need to think about how to expose the
+> > > > ao_how to the application for more than one stage. i mean i need ao_complete
+> > > > twice: the first is after i call disk_revert(qemu-img). the second is after
+> > > > memory restore. is there some existence code or document show me how to do it?
+> > >
+> > > Why do you need to ao complete twice? The ao should complete once at the
+> > > end of the aggregate operation.
+> > 
+> > When I wrote this version, I though there are two things time consuming,
+> > one is disk snapshot apply (that may call 'qemu-img' to do the work), the
+> > other is memory restore. And I thought these two should be one after another,
+> > so to avoid waiting qemu-img completion, we might need an ao operation,
+> > and in its ao_complete, call next stage work (memory restore).
+> > 
+> > Now thinking it again, yes, I think one ao could be OK. The two work should
+> > be independent, then we can simply do them parallelly, so don't need a separate
+> > ao operation for qemu-img work completion. In this way, one ao is enough.
+> > 
+> 
+> I think what you are saying is right, but I would suggest you take a
+> look at "Some libxl operations can take a long time" in libxl.h to make
+> sure.
+> 
+> In general any libxl op which can take a long time can be made async by
+> adding a single ao to it. That op is then treated as one long op,
+> regardless of how many subops it spawns internally.
+> 
+> But if the op you are talking about is actually multiple ops done by the
+> application then multiple ao's are needed.
+> 
+> IOW each libxl_* has a single ao. If an app is calling multiple libxl_*
+> functions then each needs an ao of its own.
+> 
+> Ian.
 
 15:12 2014-07-16
     /* libxl owns SIGCHLD all the time, but it must only reap its own
@@ -1250,4 +1372,17 @@ ao operation for qemu-img work completion. In this way, one ao is enough.
 
 17:52 2014-07-16
 hvm_save()(common/hvm/save.c)
+
+21:45 2014-07-16
+ps: 我都要走了，我才第一次用了screen shot的delay功能。。。
+
+13:55 2014-07-17
+hp convergedsystem 900 for HANA
+
+openSUSE chairman
+Vincent Untz -> Richard Brown
+
+14:30 2014-07-17
+suse calendar
+https://projects.nue.suse.com
 
