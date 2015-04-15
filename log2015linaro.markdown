@@ -33,3 +33,12 @@ amazonaws:
 
 3.  use python and cscope to search the arg relative line. especially copy_from_user.
 
+10:49 2015-04-15
+----------------
+GTD
+---
+1.  today
+    1.  setup my laptop environment.
+        TODO: add vpn.
+    2.  2K38 compat_ioctl
+
