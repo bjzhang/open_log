@@ -41,4 +41,18 @@ GTD
     1.  setup my laptop environment.
         TODO: add vpn.
     2.  2K38 compat_ioctl
+        how do I know if I use the timeval or timespec?
 
+18:07 2015-04-17
+----------------
+[jenkins doc](https://docs.google.com/document/d/151upFEv1fj67TXbzZT06wY4gBltPrEoA5wKAG8Ia2o4/edit)
+<http://blog.mist.io/post/82383668190/move-fast-and-dont-break-things-testing-with>
+
+22:36 2015-04-17
+----------------
+python, IO, redirection
+-----------------------
+1.  根据下文解决了问题
+<http://www.cnblogs.com/turtle-fly/p/3280519.html>
+2.  不知道为什么下面这个不行, 看起来和第一个一行.
+<http://stackoverflow.com/questions/7152762/how-to-redirect-print-output-to-a-file-using-python>
