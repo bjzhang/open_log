@@ -239,3 +239,57 @@ bamvor
     covered in "`input_event_\(from\)\|\(to\)_user`" by
     COMPAT_USE_64BIT_TIME.
 
+10:14 2015-05-03
+----------------
+2K38, compat_ioctl, drivers
+----------------------------
+1.  linux/cyclades.h: "`\(in_use\)\|\(recv_idle\)\|\(xmit_idle\)`" in "`struct cyclades_idle_stats`"
+    1.  drivers/tty/cyclades.c
+        There is no interaction with userspace. So, there is no need to fix.
+    2.  some jiffies in drivers is 32bit. But they do use the time_before, time_after, I guess that I do not need to fix them.
+
+2.  linux/atm_zatm.h
+    zatm_t_hist is not found in kernel code. I guess it is only defined in userspace.
+
+3.  linux/atm_nicstar.h
+    NOT FOUND.
+
+4.  linux/coda.h
+    coda is network filesystem. timespec is defined in coda attr. do not found it is relative to unlock_ioctl.
+    But coda define the timespec by itself for cross platform. I am not if it will involved some issues. Will check it later.
+
+5.  linux/videodev2.h
+    1.  v4l2_buffer: get_v4l2_buffer32, put_v4l2_buffer32
+    ```c
+        #define VIDIOC_QUERYBUF         _IOWR('V',  9, struct v4l2_buffer)
+        #define VIDIOC_QBUF             _IOWR('V', 15, struct v4l2_buffer)
+        #define VIDIOC_DQBUF            _IOWR('V', 17, struct v4l2_buffer)
+        #define VIDIOC_PREPARE_BUF      _IOWR('V', 93, struct v4l2_buffer)
+    ```
+    2.  v4l2_event: put_v4l2_event32
+
+
+6.  drm/msm_drm.h
+    SKIP.
+```c
+        /* timeouts are specified in clock-monotonic absolute times (to simplify
+     * restarting interrupted ioctls).  The following struct is logically the
+     * same as 'struct timespec' but 32/64b ABI safe.
+     */
+    struct drm_msm_timespec {
+            int64_t tv_sec;          /* seconds */
+            int64_t tv_nsec;         /* nanoseconds */
+    };
+```
+
+
+7.  linux/ppdev.h
+    arnd told me.
+
+8.  sound(sound/asound.h, sound/asequencer.h):
+    snd_pcm_status_user
+    snd_pcm_sync_ptr
+    To be continued.
+
+9.  TODO: 'linux/omap3isp.h', 'linux/pps.h', 'linux/dvb/video.h', 'linux/btrfs.h'.
+
