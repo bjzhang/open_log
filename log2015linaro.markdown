@@ -122,7 +122,7 @@ linaro, work, compat_ioctl
 ----------------
 software skill, qemu, aarch64
 -----------------------------
-    qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -m 1024  -kernel /home/bamvor/works/source/kernel/linux/arch/arm64/boot/Image -append "console=ttyAMA0 root=/dev/vda2 rw" -drive if=none,file=/home/bamvor/works/software/opensuse/openSUSE-13.1-ARM-JeOS-vexpress64.aarch64-1.12.1-Build37.15.raw,id=vda -device virtio-blk-device,drive=vda -net user -netdev user.id=net0,net=192.168.76.0/24,dchpstart=192.168.76.0,hostfwd=tcp:2222-:22 -device virtio-net-device,netdev=net0
+    qemu-system-aarch64 -machine virt -cpu cortex-a57 -nographic -m 1024  -kernel /home/bamvor/works/source/kernel/linux/arch/arm64/boot/Image -append "console=ttyAMA0 root=/dev/vda2 rw" -drive if=none,file=/home/bamvor/works/software/opensuse/openSUSE-13.1-ARM-JeOS-vexpress64.aarch64-1.12.1-Build37.15.raw,id=vda -device virtio-blk-device,drive=vda -net user -netdev user.id=net0,net=192.168.76.0/24,dchpstart=192.168.76.0,hostfwd=tcp::2222-:22 -device virtio-net-device,netdev=net0
 
 10:10 2015-04-23
 ----------------
@@ -292,4 +292,51 @@ bamvor
     To be continued.
 
 9.  TODO: 'linux/omap3isp.h', 'linux/pps.h', 'linux/dvb/video.h', 'linux/btrfs.h'.
+
+19:06 2015-05-06
+----------------
+lianro, arm32, meeting
+----------------------
+1.  baolin wang
+    1.  arnd explain the git skill
+        1.  how to split the existing patches.
+        2.  how to reuse the original commit message
+            "`git commit -c HEAD`"
+1.  bamvor
+    1.  2K38
+        working on 2K38 ioctl driver: check the file which include the "`\<time_t\>\|\<timespec\>\|\<timeval\> and _IOxxx definition. Right now, I have checked the following files: 'linux/input.h', 'linux/cyclades.h', 'linux/atm_zatm.h', 'linux/atm_nicstar.h', 'linux/coda.h', 'linux/videodev2.h', 'linux/ppdev.h', 'sound/asound.h', 'sound/asequencer.h'.
+        Some of these driver may need the "#ifdef" as discuss with arnd before.
+        And at the same time, I am reading the 2K38 patches from arnd. I will try to write the ioctl patches base on them. 
+        I will check the other headers('linux/pps.h', 'linux/dvb/video.h', 'linux/btrfs.h') later.
+    2.  ILP32
+        write v3 patches for buildroot.
+
+15:06 2015-05-15
+----------------
+linaro, Y2038, compat_ioctl
+----------------------------
+1.  "y2038: introduce struct __kernel_timespec"
+        A lot of system calls pass a 'struct timespec' from or to user space,
+        and we want to change that type to be based on a 64-bit time_t by
+        default.
+
+        This introduces a new type struct __kernel_timespec, which has the
+        format we want to use eventually, but also has an override so all
+        architectures that do not define CONFIG_COMPAT_TIME yet still get the
+        old behavior.
+        Once all architectures set this, we can remove that override.
+
+        This also introduces a get_timespec64/put_timespec64 set of functions
+        that convert between a __kernel_timespec in user space and a timespec64
+        in kernel space.
+
+        The current behavior of get_timespec64 explicitly zeroes the upper half
+        of the tv_nsec member, to allow user space to define its own 'struct
+        timespec' with some padding in it. Whether this is a good or bad idea
+        is open for discussion.
+
+2.  "y2038: use timespec64 for poll/select/recvmmsg"
+        There may be a small slowdown from using timespec64_sub and
+        timespec64_add_safe instead of the 32-bit variants, so any
+        suggestion for how to avoid that overhead would be welcome.
 
