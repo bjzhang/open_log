@@ -340,3 +340,91 @@ linaro, Y2038, compat_ioctl
         timespec64_add_safe instead of the 32-bit variants, so any
         suggestion for how to avoid that overhead would be welcome.
 
+11:47 2015-06-16
+----------------
+linaro connect, invitation letter, tracking
+-----------------------------------
+1.  <http://www.trackitonline.ru/?service=track> could track the item no matter the vendor.
+2.  <https://www.royalmail.com/track-your-item>
+
+15:48 2015-06-16
+----------------
+kwg, y2038
+----------
+On Thursday 11 June 2015 17:47:48 Bamvor Zhang Jian wrote:
+> Firstly enable ioctl in ppdev and then Keep par_timeout as timeval in
+> compat ioctl in order to use the 64bit time type.
+>
+> Signed-off-by: Bamvor Zhang Jian <bamvor.zhangjian@linaro.org>
+> ---
+> This is my first time to try to upstream some code in kernel. Any commit
+> and feedback is welcome.
+
+I'm officially on parental leave now, but let me try to get you started
+a bit as I still have time to look into things.
+
+First of all, you need to explain in the changelog what the specific problem
+in this driver is and why you picked the solution at hand. This probably
+requires a couple of paragraphs here. Try to think of how someone who
+knows the driver but does not know of how the y2038 problem affects it yet.
+The logic that you add here seems wrong to me: The structure format
+really should not depend on whether you have a compat task or not, but
+only on whether you use PPSETTIME32 or PPSETTIME64.
+
+In particular, we want both 32-bit and 64-bit tasks to use the same
+structures. With your current approach, I don't see how a 32-bit
+task could ever pass a 64-bit time_t value here.
+
+>       default:
+> @@ -744,6 +763,7 @@ static const struct file_operations pp_fops = {
+>       .write          = pp_write,
+>       .poll           = pp_poll,
+>       .unlocked_ioctl = pp_ioctl,
+> +     .compat_ioctl   = pp_ioctl,
+>       .open           = pp_open,
+>       .release        = pp_release,
+>  };
+
+This should be a separate patch, because the implications of this are
+much wider than the rest of the patch. In that patch, explain how
+you verified that all ioctl commands that might get called by 32-bit
+tasks are handled correctly on a 64-bit kernel. If some additional
+commands are handled by pp_ioctl and need conversion, then add another
+patch to handle those.
+This has multiple problems:
+
+- header files in include/uapi/ cannot use CONFIG_* symbols because
+  the program that sees the header is supposed to run on kernels
+  with any configuration.
+
+- compat_timeval is not defined in a uapi header file and is used
+  only internally in the kernel, so you cannot refer to that.
+
+- Introducing new command names in a uapi header is pointless because
+  there is no user space source code that refers to them.
+
+- CONFIG_COMPAT_TIME only exists in a patch set I made that has
+  not been merged yet. Try to define your patch in a way that works
+  independent of my patch set.
+
+We should really treat the two problems as separate issues with
+different fixes:
+
+a) make the driver handle all user space independent of the definition
+   it uses for 'struct timespec', which may not match what the kernel
+   uses internally.
+b) define PPGETTIME/PPSETTIME in the header file in a way that does
+   not refer to timespec at all. We still need to come up with a strategy
+   for how to do this across the uapi headers, and it may take a longer
+   discussion with the libc maintainers. Most importantly, we need to
+   come up with a rule for when to expose the new command number to
+   user space.
+
+15:54 2015-06-16
+----------------
+1.  ppdev compat测试比较苦难, 而且解决了也意义不大.
+    考虑先不解决ppdev的compat驱动问题. 只看arm 32bit的y2038问题.
+2.  或者是先看v4l2. 这个似乎有意义一些.
+
+2.  
+
