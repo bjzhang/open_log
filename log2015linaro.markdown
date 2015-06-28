@@ -426,5 +426,138 @@ b) define PPGETTIME/PPSETTIME in the header file in a way that does
     考虑先不解决ppdev的compat驱动问题. 只看arm 32bit的y2038问题.
 2.  或者是先看v4l2. 这个似乎有意义一些.
 
-2.  
+3.  
+
+18:24 2015-06-17
+----------------
+1.  after discuss with arnd, I guess that I should add something like timeval64, "`__kernel_timeval64`"
+    0001-time64-Add-time64.h-header-and-define-struct-timespe.patch
+    0002-time-More-core-infrastructure-for-timespec64.patch
+    0003-y2038-introduce-struct-__kernel_timespec.patch
+    0004-y2038-use-timespec64-for-poll-select-recvmmsg.patch
+
+2.  compare with ppdev, it seem that sound(alsa) is another good start point.
+    timespec is used by "struct snd_timer_status" in alsa driver.
+
+15:52 2015-06-18
+----------------
+1.  could I send the patches after compile pass before test?
+    It is a little harder to test.
+2.  alsa refacoring.
+3.  linaro hiring.
+4.  Linaro lead project.
+    work on the code and communicate with members.
+
+07:22 2015-06-19
+----------------
+kernel
+1.  I found some file is missing in 'make cscope ARCH=arm64'
+    E.g. <arch/arm64/include/asm/compat.h>
+    Later, I found that it is my mistake that I use the ARCH=arm instead of ARCH=arm64.
+
+10:34 2015-06-19
+----------------
+1.  arnd reply to me(v2):
+```
+This has multiple problems:
+
+- header files in include/uapi/ cannot use CONFIG_* symbols because
+  the program that sees the header is supposed to run on kernels
+  with any configuration.
+
+- compat_timeval is not defined in a uapi header file and is used
+  only internally in the kernel, so you cannot refer to that.
+
+- Introducing new command names in a uapi header is pointless because
+  there is no user space source code that refers to them.
+
+- CONFIG_COMPAT_TIME only exists in a patch set I made that has
+  not been merged yet. Try to define your patch in a way that works
+  independent of my patch set.
+```
+2.  So, I could not use "`CONFIG_XXX`" and "`compat_timeval`"(or other kernel internal definition).
+
+3.  TODO:
+    1.  I need to learn more about the rules in the uapi headers.
+    2.  I need to familar with the kernel headers.
+    3.  PPFCONTROL convert arg to "`char*`" and read twice. I think it is ok.
+```c
+        case PPFCONTROL:
+                if (copy_from_user (&mask, argp,
+                                    sizeof (mask)))
+                        return -EFAULT;
+                if (copy_from_user (&reg, 1 + (unsigned char __user *) arg,
+                                    sizeof (reg)))
+                        return -EFAULT;
+                parport_frob_control (port, mask, reg);
+                return 0;
+```
+
+12:09 2015-06-23
+----------------
+1.
+```c
+struct snd_pcm_status;
+#define SNDRV_PCM_IOCTL_STATUS          _IOR('A', 0x20, struct snd_pcm_status)
+#define SNDRV_PCM_IOCTL_STATUS_EXT      _IOWR('A', 0x24, struct snd_pcm_status)
+
+struct snd_pcm_mmap_status;
+#define SNDRV_PCM_IOCTL_SYNC_PTR        _IOWR('A', 0x23, struct snd_pcm_sync_ptr)
+
+struct snd_rawmidi_status;
+#define SNDRV_RAWMIDI_IOCTL_STATUS      _IOWR('W', 0x20, struct snd_rawmidi_status)
+
+struct snd_timer_status;
+#define SNDRV_TIMER_IOCTL_STATUS        _IOR('T', 0x14, struct snd_timer_status)
+
+struct snd_ctl_elem_value;
+#define SNDRV_CTL_IOCTL_ELEM_READ       _IOWR('U', 0x12, struct snd_ctl_elem_value)
+#define SNDRV_CTL_IOCTL_ELEM_WRITE      _IOWR('U', 0x13, struct snd_ctl_elem_value)
+```
+
+2.  Given the above struct is heavily used in sound subsystem, if I change the above
+struct directly, I will need to change the core of sound subsystem?
+
+3.  There are two approaches to update the sound subsystem to y2038 safe:
+    1.  update all the timespec relative struct to "`__kernel_timespec`", kernel and
+userspace use these structs. This will affect all the code in sound subsystem and alsa lib.
+    2.  only update the timespec reletive struct in sound ioctl thin layer. This method
+affect the minium area in kernel and alsa lib. Only ioctl relative layer is affected. But
+not sure the additional panelty(convert between "`timespec64`" and "`__kernel_timespec`").
+    3.  time.c need to update.
+
+4.  search string
+
+"\(timespec\)\|\(snd_pcm_status\)\|\(snd_pcm_sync_ptr\)\|\(snd_rawmidi_status\)\|\(snd_timer_status\)\|\(snd_ctl_elem_value\)\|\(snd_pcm_mmap_status\)\
+|\(snd_timer_tread\)\|\(snd_timer_user\)"
+
+5.  sound subsystem is complex than I thought.
+
+14:44 2015-06-28
+----------------
+1.  cover letter
+Hi, guys
+
+This is my second attempt to convert ppdev to y2038 safe. The first
+version is here[1].
+
+There are two parts in my patches.
+01/02 introduce timeval relative 64bit time_t types.
+03/04 convert ppdev to y2038 safe in both native 32bit and compat.
+
+My patches try to follow the idea from arnd y2038 syscalls patches[2],
+but my patches not depend on them.
+
+And I do not test it.
+Compile pass on arm and arm64 on each patches.
+
+[1] https://lists.linaro.org/pipermail/y2038/2015-June/000522.html
+[2] http://git.kernel.org/cgit/linux/kernel/git/arnd/playground.git/log/?h=y2038-syscalls
+
+2.  git send-email
+Arnd Bergmann <arnd@arndb.de> (supporter:CHAR and MISC DRIVERS)
+John Stultz <john.stultz@linaro.org> (supporter:TIMEKEEPING, CLOCKSOURCE CORE, NTP,commit_signer:6/5=100%,authored:3/5=60%,added_lines:191/210=91%)
+Thomas Gleixner <tglx@linutronix.de> (supporter:TIMEKEEPING, CLOCKSOURCE CORE, NTP,commit_signer:3/5=60%,commit_signer:1/4=25%,authored:1/4=25%,added_lines:21/44=48%,removed_lines:3/8=38%)
+
+"`git send-email --no-chain-reply-to --annotate --to arnd@arndb.de --to john.stultz@linaro.org --to tglx@linutronix.de --cc y2038@lists.linaro.org --cc linux-kernel@vger.kernel.org *.patch`"
 
