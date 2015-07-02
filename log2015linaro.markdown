@@ -559,5 +559,44 @@ Arnd Bergmann <arnd@arndb.de> (supporter:CHAR and MISC DRIVERS)
 John Stultz <john.stultz@linaro.org> (supporter:TIMEKEEPING, CLOCKSOURCE CORE, NTP,commit_signer:6/5=100%,authored:3/5=60%,added_lines:191/210=91%)
 Thomas Gleixner <tglx@linutronix.de> (supporter:TIMEKEEPING, CLOCKSOURCE CORE, NTP,commit_signer:3/5=60%,commit_signer:1/4=25%,authored:1/4=25%,added_lines:21/44=48%,removed_lines:3/8=38%)
 
-"`git send-email --no-chain-reply-to --annotate --to arnd@arndb.de --to john.stultz@linaro.org --to tglx@linutronix.de --cc y2038@lists.linaro.org --cc linux-kernel@vger.kernel.org *.patch`"
+"`git send-email --no-chain-reply-to --annotate --to arnd@arndb.de --to john.stultz@linaro.org --to tglx@linutronix.de --cc y2039@lists.linaro.org --cc linux-kernel@vger.kernel.org *.patch`"
+
+16:25 2015-07-01
+----------------
+linaro, arm, meeting
+--------------------
+1.  baolin
+    1.  k_clock patch for y2038
+    2.  dm-crypt.
+
+2.  bamvor
+    1.  convert ppdev to y2038 safe.
+        re-write the whole patches according to arnd's suggestion.
+    2.  think about convert sound subsystem to y2038 safe.
+        after read the code, I feel that timer in sound subsystem is a better start point.
+
+10:26 2015-07-02
+----------------
+y2038, sound, timer
+-------------------
+1.  "`snd_timer_tread`":
+    1.  this struct is only used in "`snd_timer_user_read`" by "`copy_to_user`" functions.
+        While in userspace, "`snd_timer_read`" will read both "`snd_timer_tread`" and "`snd_timer_read`". I would suggest alsa lib define the same timespec struct as __kernel_timespec. The code is unchanged although it waste one word on 32bit application.
+
+    2.
+    ```c
+    /*
+     * both count and result is the count for userspace, So, It should be counted by
+     * __kernel_timespec.
+     */
+    static ssize_t snd_timer_user_read(struct file *file, char __user *buffer,
+                                       size_t count, loff_t *offset)
+    ```
+
+2.  ask arnd when sent this patches.
+    1.  why define "`timespec64`" and "`__kernel_timespec`" repectively, for saving the memory in 32bit kernel/application?
+
+3.  TODO
+    1.  add "`__kernel_timespec`" backward compatibility. My patches should not depend on arnd patches.
+        FIXME: right now, my patch depends on "[RFC 08/37] y2038: introduce struct __kernel_timespec".
 
