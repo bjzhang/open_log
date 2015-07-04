@@ -600,3 +600,32 @@ y2038, sound, timer
     1.  add "`__kernel_timespec`" backward compatibility. My patches should not depend on arnd patches.
         FIXME: right now, my patch depends on "[RFC 08/37] y2038: introduce struct __kernel_timespec".
 
+16:01 2015-07-04
+----------------
+linaro, work report
+-------------------
+1.  send y2038 patches for ppdev(v2).
+2.  work on fixing y2038 issue in sound subsystem, I started from timer in sound subsystem. Because it use the time around the ioctl functions, it is easy to convert them.
+    I may need a test environment for 32bit and compat on 64bit system if maintainers ack my idea. I guess that running a x32/x64 vm in qemu could do it for me.
+3.  arm32 meeting.
+4.  1:1 with Mark. I may work on kselftest later.
+
+Does anyone use thinkpad e440. I found that the acpi(suspend/resume, turn of/off the screen) is bad. And the touchpad is not good as windows.
+
+21:31 2015-07-04
+----------------
+kernel, KASan
+-------------
+KASan
+KernelAddressSanitizer (KASan) is a dynamic memory error detector. It provides a fast and comprehensive solution for finding use-after-free and out-of-bounds bugs in Linux kernel.
+
+Currently KASan supports x86_64 architecture and SLUB allocator.
+
+AddressSanitizer for Linux kernel:
+
+Is based on compiler instrumentation (fast)
+Detects OOB for both writes and reads
+Provides strong UAF detection (based on delayed memory reuse)
+Does prompt detection of bad memory accesses
+Prints informative reports
+
