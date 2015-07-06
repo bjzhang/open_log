@@ -629,3 +629,20 @@ Provides strong UAF detection (based on delayed memory reuse)
 Does prompt detection of bad memory accesses
 Prints informative reports
 
+12:04 2015-07-05
+----------------
+=== David Long ===
+
+=== Highlights ===
+I replied to more email on the kprobes64 work.  Powerpc has been regression tested.  No problems yet.
+uprobes32-thumb work continues.
+Interviewed an assignee.
+
+
+=== Plans ==
+
+Address any more kprobes64 patch feedback.
+Finish uprobes32-thumb.
+
+=== Issues ===
+
