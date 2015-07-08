@@ -604,13 +604,24 @@ y2038, sound, timer
 ----------------
 linaro, work report
 -------------------
-1.  send y2038 patches for ppdev(v2).
-2.  work on fixing y2038 issue in sound subsystem, I started from timer in sound subsystem. Because it use the time around the ioctl functions, it is easy to convert them.
-    I may need a test environment for 32bit and compat on 64bit system if maintainers ack my idea. I guess that running a x32/x64 vm in qemu could do it for me.
+[ACTIVITY] (Bamvor Jian Zhang) 2015-06-29 to 2015-07-05
+
+=== Highlights ===
+
+1.  send y2038 patches for ppdev(v2). no one reply to me yet.
+2.  work on fixing y2038 issue in sound subsystem, I started from timer in sound subsystem. Because it use the time_xxx struct directly in ioctl functions, it is easy to fix them.
 3.  arm32 meeting.
 4.  1:1 with Mark. I may work on kselftest later.
 
-Does anyone use thinkpad e440. I found that the acpi(suspend/resume, turn of/off the screen) is bad. And the touchpad is not good as windows.
+=== Plans ==
+
+1.  send the y2038 patch for timer in sound subsys.
+    I may need a test environment for 32bit and compat on 64bit system if maintainers ack my idea. I guess that running a x32/x64 vm in qemu could do it for me.
+2.  kselftest: hope I could understand the task.
+
+=== Issues ===
+
+BTW: Does anyone familar with thinkpad e440? I found that the acpi(suspend/resume, turn of/off the screen) is broken and touchpad is unstable in my openSUSE 13.2(kernel 3.16.7).
 
 21:31 2015-07-04
 ----------------
@@ -645,4 +656,31 @@ Address any more kprobes64 patch feedback.
 Finish uprobes32-thumb.
 
 === Issues ===
+
+15:56 2015-07-07
+----------------
+y2038, sound, timer, TODO
+-------------------------
+1.  check all the EXPORT SYMBOLS. DONE
+2.  all the "`*.c`" outside timer should not be touched. DONE.
+
+11:04 2015-07-08
+----------------
+kernel, arm64, kselftest
+------------------------
+1.  Mark create a card for kselftest
+    <https://cards.linaro.org/browse/CARD-1962>
+
+    from:	Mark Brown <broonie@linaro.org>
+    to:	Serge Broslavsky <serge.broslavsky@linaro.org>,
+    David Griego <david.griego@linaro.org>,
+    Tyler Baker <tyler.baker@linaro.org>,
+    Kevin Hilman <khilman@linaro.org>,
+    Bamvor Zhang Jian <bamvor.zhangjian@linaro.org>
+    cc:	Alan Bennett <alan.bennett@linaro.org>
+
+    1.  Serge Broslavsky: Core Development, Project Manager [irc: ototo]
+    2.  David Griego: Core Development, Engineering Manager [irc: dgriego]
+    3.  Tyler Baker: Product Technology, LAVA Software, Tech Lead [irc: tyler-baker]
+    4.  Kevin Hilman: Product Technology, LKP, Tech Lead [irc: khilman].
 
