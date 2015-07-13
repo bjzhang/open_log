@@ -90,7 +90,7 @@ CONTACT DETAILS
 linaro, work, compat_ioctl
 --------------------------
 1.
-        16:55 <arnd> you can work on these simultaneously, if you get stuck on one, work on the other 
+        16:55 <arnd> you can work on these simultaneously, if you get stuck on one, work on the other
         16:56 <arnd> some some point, we will have to add some infrastructure for handling the harder cases in a consistent way, but you can work on the easier ones first
         16:56 <arnd> the easy ones being the ones where you can tell from the ioctl command number what the layout is
         16:57 <arnd> it's much harder when the same ioctl command number is used for all possible layouts, because then the kernel has no way to find out which layout gets used by a given task, and we have to change the header files so user space gets a different command number at compile time
@@ -107,8 +107,8 @@ linaro, work, compat_ioctl
         17:58 <bamvor> 16:56 <arnd> the easy ones being the ones where you can tell from the ioctl command number what the layout is
         17:58 <bamvor> 16:57 <arnd> it's much harder when the same ioctl command number is used for all possible layouts, because then the kernel has no way to find out which layout gets used by a given task, and we have to change the header files so user space gets a different command number at compile tiem
         17:58 <bamvor> 16:57 <arnd> time"
-        17:58 <bamvor> I could not follow you. 
-        17:59 <arnd> like 'struct foo {int a; time_t b};' would be an example of an incompatible structure, because uses 8 bytes on current 32-bit machines, but 16 bytes (including padding) on 64-bit machines. 
+        17:58 <bamvor> I could not follow you.
+        17:59 <arnd> like 'struct foo {int a; time_t b};' would be an example of an incompatible structure, because uses 8 bytes on current 32-bit machines, but 16 bytes (including padding) on 64-bit machines.
         New messages
         18:01 <arnd> if an ioctl command is defined as '#define FOOIOC1 _IOR('F', 1, struct foo)', then the command will encode this size in the command code
         18:03 <arnd> in this case (2 << (14 + 8 + 8) | sizeof(struct foo) << (14 + 8) | 'F' << 8 | 1)
@@ -128,7 +128,7 @@ software skill, qemu, aarch64
 ----------------
 compat_ioctl
 ------------
-1.  todo: 
+1.  todo:
     1.  add copy_to_user and put_user. Could find the type in these functions too.
 
 2.  driver/md/md.c
@@ -306,7 +306,7 @@ lianro, arm32, meeting
     1.  2K38
         working on 2K38 ioctl driver: check the file which include the "`\<time_t\>\|\<timespec\>\|\<timeval\> and _IOxxx definition. Right now, I have checked the following files: 'linux/input.h', 'linux/cyclades.h', 'linux/atm_zatm.h', 'linux/atm_nicstar.h', 'linux/coda.h', 'linux/videodev2.h', 'linux/ppdev.h', 'sound/asound.h', 'sound/asequencer.h'.
         Some of these driver may need the "#ifdef" as discuss with arnd before.
-        And at the same time, I am reading the 2K38 patches from arnd. I will try to write the ioctl patches base on them. 
+        And at the same time, I am reading the 2K38 patches from arnd. I will try to write the ioctl patches base on them.
         I will check the other headers('linux/pps.h', 'linux/dvb/video.h', 'linux/btrfs.h') later.
     2.  ILP32
         write v3 patches for buildroot.
@@ -426,7 +426,7 @@ b) define PPGETTIME/PPSETTIME in the header file in a way that does
     考虑先不解决ppdev的compat驱动问题. 只看arm 32bit的y2038问题.
 2.  或者是先看v4l2. 这个似乎有意义一些.
 
-3.  
+3.
 
 18:24 2015-06-17
 ----------------
@@ -683,4 +683,255 @@ kernel, arm64, kselftest
     2.  David Griego: Core Development, Engineering Manager [irc: dgriego]
     3.  Tyler Baker: Product Technology, LAVA Software, Tech Lead [irc: tyler-baker]
     4.  Kevin Hilman: Product Technology, LKP, Tech Lead [irc: khilman].
+
+11:15 2015-07-09
+----------------
+time, y2038, ppdev
+------------------
+1.  John Stultz
+    Sorry for not replying yet on y2038 patches. Will look into it today.
+
+2.
+```
+Hi, John
+
+Thanks your reply.
+I realized that it is merge window when I sent the patches. I am not sure
+if I should ping it in LKML.
+
+regards
+
+bamvor
+```
+
+3.  reply to LKML(01)
+    1.  john
+```
+> +       tv->tv_sec = ktv.tv_sec;
+> +       if (!IS_ENABLED(CONFIG_64BIT)
+> +#ifdef CONFIG_COMPAT
+> +          || is_compat_task()
+> +#endif
+
+These sorts of ifdefs are to be avoided inside of functions.
+
+Instead, it seems is_compat_task() should be defined to 0 in the
+!CONFIG_COMPAT case, so you can avoid the ifdefs and the compiler can
+still optimize it out.
+
+Otherwise this looks similar to a patch Baolin (cc'ed) has been working on.
+
+thanks
+```
+
+    2.  reply
+```
+Hi, John
+> These sorts of ifdefs are to be avoided inside of functions.
+
+> Instead, it seems is_compat_task() should be defined to 0 in the
+> !CONFIG_COMPAT case, so you can avoid the ifdefs and the compiler can
+> still optimize it out.
+I add this ifdef because I got compile failure on arm platform. This
+file do not include the <linux/compat.h> directly. And in arm64,
+compat.h is included implicitily.
+So, I am not sure what I should do here. Include <linux/compat.h> in
+this file directly or add this check at the beginning of this file?
+
+#ifndef is_compat_task
+#define is_compat_task() (0)
+#endif
+
+> Otherwise this looks similar to a patch Baolin (cc'ed) has been working on.
+Yes.
+
+```
+
+    3.
+        1.  build log(arm)
+```
+make -f ./scripts/Makefile.build obj=kernel/time
+  arm-linux-gnueabihf-gcc -Wp,-MD,kernel/time/.time.o.d  -nostdinc -isystem /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.3/include -I./arch/arm/include -Iarch/arm/include/generated/uapi -Iarch/arm/include/generated  -Iinclude -I./arch/arm/include/uapi -Iarch/arm/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -mlittle-endian -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -fno-dwarf2-cfi-asm -mabi=aapcs-linux -mno-thumb-interwork -mfpu=vfp -funwind-tables -marm -D__LINUX_ARM_ARCH__=7 -march=armv7-a -msoft-float -Uarm -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -fno-var-tracking-assignments -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -DCC_HAVE_ASM_GOTO    -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(time)"  -D"KBUILD_MODNAME=KBUILD_STR(time)" -c -o kernel/time/time.o kernel/time/time.c
+kernel/time/time.c: In function 'get_timeval64':
+kernel/time/time.c:777:5: error: implicit declaration of function 'is_compat_task' [-Werror=implicit-function-declaration]
+     || is_compat_task()
+     ^
+```
+
+```
+bamvor@linux-j170:~/works/source/kernel/linux_2K38> arm-linux-gnueabihf-gcc -Wp,-MD,kernel/time/.time.o.d  -nostdinc -isystem /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.3/include -I./arch/arm/include -Iarch/arm/include/generated/uapi -Iarch/arm/include/generated  -Iinclude -I./arch/arm/include/uapi -Iarch/arm/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -mlittle-endian -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -fno-dwarf2-cfi-asm -mabi=aapcs-linux -mno-thumb-interwork -mfpu=vfp -funwind-tables -marm -D__LINUX_ARM_ARCH__=7 -march=armv7-a -msoft-float -Uarm -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -Wframe-larger-than=1024 -fno-stack-protector -Wno-unused-but-set-variable -fomit-frame-pointer -fno-var-tracking-assignments -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -DCC_HAVE_ASM_GOTO    -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(time)"  -D"KBUILD_MODNAME=KBUILD_STR(time)" -c -o kernel/time/time.o kernel/time/time.c --verbose
+Using built-in specs.
+COLLECT_GCC=arm-linux-gnueabihf-gcc
+Target: arm-linux-gnueabihf
+Configured with: /home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/snapshots/gcc-linaro-4.9-2014.11/configure SHELL=/bin/bash --with-bugurl=https://bugs.linaro.org --with-mpc=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/_build/builds/destdir/x86_64-unknown-linux-gnu --with-mpfr=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/_build/builds/destdir/x86_64-unknown-linux-gnu --with-gmp=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/_build/builds/destdir/x86_64-unknown-linux-gnu --with-gnu-as --with-gnu-ld --disable-libstdcxx-pch --disable-libmudflap --with-cloog=no --with-ppl=no --with-isl=no --disable-nls --enable-multiarch --disable-multilib --enable-c99 --with-tune=cortex-a9 --with-arch=armv7-a --with-fpu=vfpv3-d16 --with-float=hard --with-mode=thumb --disable-shared --enable-static --with-build-sysroot=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/_build/sysroots/arm-linux-gnueabihf --enable-lto --enable-linker-build-id --enable-long-long --enable-shared --with-sysroot=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/_build/builds/destdir/x86_64-unknown-linux-gnu/libc --enable-languages=c,c++,fortran,lto -enable-fix-cortex-a53-835769 --enable-checking=release --with-bugurl=https://bugs.linaro.org --with-pkgversion='Linaro GCC 2014.11' --build=x86_64-unknown-linux-gnu --host=x86_64-unknown-linux-gnu --target=arm-linux-gnueabihf --prefix=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/arm-linux-gnueabihf/_build/builds/destdir/x86_64-unknown-linux-gnu
+Thread model: posix
+gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11)
+COLLECT_GCC_OPTIONS='-nostdinc' '-isystem' '/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.3/include' '-I' './arch/arm/include' '-I' 'arch/arm/include/generated/uapi' '-I' 'arch/arm/include/generated' '-I' 'include' '-I' './arch/arm/include/uapi' '-I' 'arch/arm/include/generated/uapi' '-I' './include/uapi' '-I' 'include/generated/uapi' '-include' './include/linux/kconfig.h' '-D' '__KERNEL__' '-mlittle-endian' '-Wall' '-Wundef' '-Wstrict-prototypes' '-Wno-trigraphs' '-fno-strict-aliasing' '-fno-common' '-Werror=implicit-function-declaration' '-Wno-format-security' '-std=gnu90' '-fno-dwarf2-cfi-asm' '-mabi=aapcs-linux' '-mno-thumb-interwork' '-mfpu=vfp' '-funwind-tables' '-marm' '-D' '__LINUX_ARM_ARCH__=7' '-march=armv7-a' '-mfloat-abi=soft' '-U' 'arm' '-fno-delete-null-pointer-checks' '-O2' '--param' 'allow-store-data-races=0' '-Wframe-larger-than=1024' '-fno-stack-protector' '-Wno-unused-but-set-variable' '-fomit-frame-pointer' '-fno-var-tracking-assignments' '-Wdeclaration-after-statement' '-Wno-pointer-sign' '-fno-strict-overflow' '-fconserve-stack' '-Werror=implicit-int' '-Werror=strict-prototypes' '-Werror=date-time' '-D' 'CC_HAVE_ASM_GOTO' '-D' 'KBUILD_STR(s)=#s' '-D' 'KBUILD_BASENAME=KBUILD_STR(time)' '-D' 'KBUILD_MODNAME=KBUILD_STR(time)' '-c' '-o' 'kernel/time/time.o' '-v' '-mtune=cortex-a9' '-mtls-dialect=gnu'
+ /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../libexec/gcc/arm-linux-gnueabihf/4.9.3/cc1 -quiet -nostdinc -v -I ./arch/arm/include -I arch/arm/include/generated/uapi -I arch/arm/include/generated -I include -I ./arch/arm/include/uapi -I arch/arm/include/generated/uapi -I ./include/uapi -I include/generated/uapi -imultilib . -imultiarch arm-linux-gnueabihf -iprefix /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.3/ -isysroot /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../libc -D __KERNEL__ -D __LINUX_ARM_ARCH__=7 -U arm -D CC_HAVE_ASM_GOTO -D KBUILD_STR(s)=#s -D KBUILD_BASENAME=KBUILD_STR(time) -D KBUILD_MODNAME=KBUILD_STR(time) -isystem /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.3/include -include ./include/linux/kconfig.h -MD kernel/time/.time.o.d kernel/time/time.c -quiet -dumpbase time.c -mlittle-endian -mabi=aapcs-linux -mno-thumb-interwork -mfpu=vfp -marm -march=armv7-a -mfloat-abi=soft -mtune=cortex-a9 -mtls-dialect=gnu -auxbase-strip kernel/time/time.o -O2 -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -Werror=implicit-function-declaration -Wno-format-security -Wframe-larger-than=1024 -Wno-unused-but-set-variable -Wdeclaration-after-statement -Wno-pointer-sign -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -std=gnu90 -version -fno-strict-aliasing -fno-common -fno-dwarf2-cfi-asm -funwind-tables -fno-delete-null-pointer-checks -fno-stack-protector -fomit-frame-pointer -fno-var-tracking-assignments -fno-strict-overflow -fconserve-stack --param allow-store-data-races=0 -o /tmp/ccnoTReP.s
+GNU C (Linaro GCC 2014.11) version 4.9.3 20141031 (prerelease) (arm-linux-gnueabihf)
+        compiled by GNU C version 4.8.2, GMP version 5.1.3, MPFR version 3.1.2, MPC version 1.0.1
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+ignoring duplicate directory "arch/arm/include/generated/uapi"
+#include "..." search starts here:
+#include <...> search starts here:
+ ./arch/arm/include
+ arch/arm/include/generated/uapi
+ arch/arm/include/generated
+ include
+ ./arch/arm/include/uapi
+ ./include/uapi
+ include/generated/uapi
+ /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_arm-linux-gnueabihf/bin/../lib/gcc/arm-linux-gnueabihf/4.9.3/include
+End of search list.
+GNU C (Linaro GCC 2014.11) version 4.9.3 20141031 (prerelease) (arm-linux-gnueabihf)
+        compiled by GNU C version 4.8.2, GMP version 5.1.3, MPFR version 3.1.2, MPC version 1.0.1
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+Compiler executable checksum: 04ceca25b5cb142ec19ca875fd0015c1
+kernel/time/time.c: In function 'get_timeval64':
+kernel/time/time.c:777:5: error: implicit declaration of function 'is_compat_task' [-Werror=implicit-function-declaration]
+     || is_compat_task()
+     ^
+cc1: some warnings being treated as errors
+```
+        2.  build log(aarch64)
+```
+aarch64-linux-gnu-gcc -Wp,-MD,kernel/time/.time.o.d  -nostdinc -isystem /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include -I./arch/arm64/include -Iarch/arm64/include/generated/uapi -Iarch/arm64/include/generated  -Iinclude -I./arch/arm64/include/uapi -Iarch/arm64/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -mlittle-endian -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -mgeneral-regs-only -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -Wframe-larger-than=2048 -fno-stack-protector -Wno-unused-but-set-variable -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-var-tracking-assignments -g -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -DCC_HAVE_ASM_GOTO    -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(time)"  -D"KBUILD_MODNAME=KBUILD_STR(time)" -c -o kernel/time/time.o kernel/time/time.c
+```
+```
+bamvor@linux-j170:~/works/source/kernel/linux_2K38> aarch64-linux-gnu-gcc -Wp,-MD,kernel/time/.time.o.d  -nostdinc -isystem /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include -I./arch/arm64/include -Iarch/arm64/include/generated/uapi -Iarch/arm64/include/generated  -Iinclude -I./arch/arm64/include/uapi -Iarch/arm64/include/generated/uapi -I./include/uapi -Iinclude/generated/uapi -include ./include/linux/kconfig.h -D__KERNEL__ -mlittle-endian -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration -Wno-format-security -std=gnu89 -mgeneral-regs-only -fno-delete-null-pointer-checks -O2 --param=allow-store-data-races=0 -Wframe-larger-than=2048 -fno-stack-protector -Wno-unused-but-set-variable -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-var-tracking-assignments -g -Wdeclaration-after-statement -Wno-pointer-sign -fno-strict-overflow -fconserve-stack -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -DCC_HAVE_ASM_GOTO    -D"KBUILD_STR(s)=#s" -D"KBUILD_BASENAME=KBUILD_STR(time)"  -D"KBUILD_MODNAME=KBUILD_STR(time)" -c -o kernel/time/time.o kernel/time/time.c --verbose
+Using built-in specs.
+COLLECT_GCC=aarch64-linux-gnu-gcc
+Target: aarch64-linux-gnu
+Configured with: /home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/snapshots/gcc-linaro-4.9-2014.11/configure SHELL=/bin/bash --with-bugurl=https://bugs.linaro.org --with-mpc=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/_build/builds/destdir/x86_64-unknown-linux-gnu --with-mpfr=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/_build/builds/destdir/x86_64-unknown-linux-gnu --with-gmp=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/_build/builds/destdir/x86_64-unknown-linux-gnu --with-gnu-as --with-gnu-ld --disable-libstdcxx-pch --disable-libmudflap --with-cloog=no --with-ppl=no --with-isl=no --disable-nls --enable-multiarch --disable-multilib --enable-c99 --with-arch=armv8-a --disable-shared --enable-static --with-build-sysroot=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/_build/sysroots/aarch64-linux-gnu --enable-lto --enable-linker-build-id --enable-long-long --enable-shared --with-sysroot=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/_build/builds/destdir/x86_64-unknown-linux-gnu/libc --enable-languages=c,c++,fortran,lto -enable-fix-cortex-a53-835769 --enable-checking=release --with-bugurl=https://bugs.linaro.org --with-pkgversion='Linaro GCC 2014.11' --build=x86_64-unknown-linux-gnu --host=x86_64-unknown-linux-gnu --target=aarch64-linux-gnu --prefix=/home/buildslave/workspace/BinaryRelease/label/x86_64/target/aarch64-linux-gnu/_build/builds/destdir/x86_64-unknown-linux-gnu
+Thread model: posix
+gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11)
+COLLECT_GCC_OPTIONS='-nostdinc' '-isystem' '/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include' '-I' './arch/arm64/include' '-I' 'arch/arm64/include/generated/uapi' '-I' 'arch/arm64/include/generated' '-I' 'include' '-I' './arch/arm64/include/uapi' '-I' 'arch/arm64/include/generated/uapi' '-I' './include/uapi' '-I' 'include/generated/uapi' '-include' './include/linux/kconfig.h' '-D' '__KERNEL__' '-mlittle-endian' '-Wall' '-Wundef' '-Wstrict-prototypes' '-Wno-trigraphs' '-fno-strict-aliasing' '-fno-common' '-Werror=implicit-function-declaration' '-Wno-format-security' '-std=gnu90' '-mgeneral-regs-only' '-fno-delete-null-pointer-checks' '-O2' '--param' 'allow-store-data-races=0' '-Wframe-larger-than=2048' '-fno-stack-protector' '-Wno-unused-but-set-variable' '-fno-omit-frame-pointer' '-fno-optimize-sibling-calls' '-fno-var-tracking-assignments' '-g' '-Wdeclaration-after-statement' '-Wno-pointer-sign' '-fno-strict-overflow' '-fconserve-stack' '-Werror=implicit-int' '-Werror=strict-prototypes' '-Werror=date-time' '-D' 'CC_HAVE_ASM_GOTO' '-D' 'KBUILD_STR(s)=#s' '-D' 'KBUILD_BASENAME=KBUILD_STR(time)' '-D' 'KBUILD_MODNAME=KBUILD_STR(time)' '-c' '-o' 'kernel/time/time.o' '-v' '-mabi=lp64'
+ /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/aarch64-linux-gnu/4.9.3/cc1 -quiet -nostdinc -v -I ./arch/arm64/include -I arch/arm64/include/generated/uapi -I arch/arm64/include/generated -I include -I ./arch/arm64/include/uapi -I arch/arm64/include/generated/uapi -I ./include/uapi -I include/generated/uapi -imultiarch aarch64-linux-gnu -iprefix /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/ -isysroot /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc -D __KERNEL__ -D CC_HAVE_ASM_GOTO -D KBUILD_STR(s)=#s -D KBUILD_BASENAME=KBUILD_STR(time) -D KBUILD_MODNAME=KBUILD_STR(time) -isystem /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include -include ./include/linux/kconfig.h -MD kernel/time/.time.o.d kernel/time/time.c -quiet -dumpbase time.c -mlittle-endian -mgeneral-regs-only -mabi=lp64 -auxbase-strip kernel/time/time.o -g -O2 -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -Werror=implicit-function-declaration -Wno-format-security -Wframe-larger-than=2048 -Wno-unused-but-set-variable -Wdeclaration-after-statement -Wno-pointer-sign -Werror=implicit-int -Werror=strict-prototypes -Werror=date-time -std=gnu90 -version -fno-strict-aliasing -fno-common -fno-delete-null-pointer-checks -fno-stack-protector -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-var-tracking-assignments -fno-strict-overflow -fconserve-stack --param allow-store-data-races=0 -o /tmp/ccNOiT6S.s
+GNU C (Linaro GCC 2014.11) version 4.9.3 20141031 (prerelease) (aarch64-linux-gnu)
+        compiled by GNU C version 4.8.2, GMP version 5.1.3, MPFR version 3.1.2, MPC version 1.0.1
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+ignoring duplicate directory "arch/arm64/include/generated/uapi"
+#include "..." search starts here:
+#include <...> search starts here:
+ ./arch/arm64/include
+ arch/arm64/include/generated/uapi
+ arch/arm64/include/generated
+ include
+ ./arch/arm64/include/uapi
+ ./include/uapi
+ include/generated/uapi
+ /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include
+End of search list.
+GNU C (Linaro GCC 2014.11) version 4.9.3 20141031 (prerelease) (aarch64-linux-gnu)
+        compiled by GNU C version 4.8.2, GMP version 5.1.3, MPFR version 3.1.2, MPC version 1.0.1
+GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+Compiler executable checksum: 54b78edc55bb841925a0c35e511e706d
+COLLECT_GCC_OPTIONS='-nostdinc' '-isystem' '/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include' '-I' './arch/arm64/include' '-I' 'arch/arm64/include/generated/uapi' '-I' 'arch/arm64/include/generated' '-I' 'include' '-I' './arch/arm64/include/uapi' '-I' 'arch/arm64/include/generated/uapi' '-I' './include/uapi' '-I' 'include/generated/uapi' '-include' './include/linux/kconfig.h' '-D' '__KERNEL__' '-mlittle-endian' '-Wall' '-Wundef' '-Wstrict-prototypes' '-Wno-trigraphs' '-fno-strict-aliasing' '-fno-common' '-Werror=implicit-function-declaration' '-Wno-format-security' '-std=gnu90' '-mgeneral-regs-only' '-fno-delete-null-pointer-checks' '-O2' '--param' 'allow-store-data-races=0' '-Wframe-larger-than=2048' '-fno-stack-protector' '-Wno-unused-but-set-variable' '-fno-omit-frame-pointer' '-fno-optimize-sibling-calls' '-fno-var-tracking-assignments' '-g' '-Wdeclaration-after-statement' '-Wno-pointer-sign' '-fno-strict-overflow' '-fconserve-stack' '-Werror=implicit-int' '-Werror=strict-prototypes' '-Werror=date-time' '-D' 'CC_HAVE_ASM_GOTO' '-D' 'KBUILD_STR(s)=#s' '-D' 'KBUILD_BASENAME=KBUILD_STR(time)' '-D' 'KBUILD_MODNAME=KBUILD_STR(time)' '-c' '-o' 'kernel/time/time.o' '-v' '-mabi=lp64'
+ /home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/../../../../aarch64-linux-gnu/bin/as -v -I ./arch/arm64/include -I arch/arm64/include/generated/uapi -I arch/arm64/include/generated -I include -I ./arch/arm64/include/uapi -I arch/arm64/include/generated/uapi -I ./include/uapi -I include/generated/uapi -EL -mabi=lp64 -o kernel/time/time.o /tmp/ccNOiT6S.s
+GNU assembler version 2.24.0 (aarch64-linux-gnu) using BFD version (GNU Binutils) Linaro 2014.11-3-git 2.24.0.20141017
+COMPILER_PATH=/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/aarch64-linux-gnu/4.9.3/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/aarch64-linux-gnu/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/../../../../aarch64-linux-gnu/bin/
+LIBRARY_PATH=/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/../../../../aarch64-linux-gnu/lib/../lib64/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/lib/../lib64/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/usr/lib/../lib64/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/../../../../aarch64-linux-gnu/lib/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/lib/:/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/usr/lib/
+COLLECT_GCC_OPTIONS='-nostdinc' '-isystem' '/home/bamvor/works/software/toolchain/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/include' '-I' './arch/arm64/include' '-I' 'arch/arm64/include/generated/uapi' '-I' 'arch/arm64/include/generated' '-I' 'include' '-I' './arch/arm64/include/uapi' '-I' 'arch/arm64/include/generated/uapi' '-I' './include/uapi' '-I' 'include/generated/uapi' '-include' './include/linux/kconfig.h' '-D' '__KERNEL__' '-mlittle-endian' '-Wall' '-Wundef' '-Wstrict-prototypes' '-Wno-trigraphs' '-fno-strict-aliasing' '-fno-common' '-Werror=implicit-function-declaration' '-Wno-format-security' '-std=gnu90' '-mgeneral-regs-only' '-fno-delete-null-pointer-checks' '-O2' '--param' 'allow-store-data-races=0' '-Wframe-larger-than=2048' '-fno-stack-protector' '-Wno-unused-but-set-variable' '-fno-omit-frame-pointer' '-fno-optimize-sibling-calls' '-fno-var-tracking-assignments' '-g' '-Wdeclaration-after-statement' '-Wno-pointer-sign' '-fno-strict-overflow' '-fconserve-stack' '-Werror=implicit-int' '-Werror=strict-prototypes' '-Werror=date-time' '-D' 'CC_HAVE_ASM_GOTO' '-D' 'KBUILD_STR(s)=#s' '-D' 'KBUILD_BASENAME=KBUILD_STR(time)' '-D' 'KBUILD_MODNAME=KBUILD_STR(time)' '-c' '-o' 'kernel/time/time.o' '-v' '-mabi=lp64'
+```
+
+4.  reply to 03
+    1.  John, Arnd
+```
+On Wednesday 08 July 2015 13:17:18 John Stultz wrote:
+> On Mon, Jun 29, 2015 at 7:23 AM, Bamvor Zhang Jian
+> <bamvor.zhangjian@linaro.org> wrote:
+> > Add compat ioctl in ppdev in order to solve the y2038 issue in
+> > later patch.
+> > This patch simply add pp_do_ioctl to compat_ioctl, because I found
+> > that all the ioctl access the arg as a pointer.
+> >
+> > Signed-off-by: Bamvor Zhang Jian <bamvor.zhangjian@linaro.org>
+
+I just saw this mail fly by when you replied, but I guess it would
+have been better to reply when the original mail came.
+
+The description above makes no sense: The problem for compat ioctl
+is not whether the argument is a pointer or not, but rather what
+data structure it points to. In this case, we already know that
+it is /not/ compatible between 32-bit and 64-bit user space, because
+at least two commands need special handling for the timespec
+argument, which gets added in patch 4 of the series.
+
+This means patches 3 and 4 have to be swapped in order to allow
+bisection and not introduce a bug when only this one gets applied
+but patch 4 is missing.
+
+Moreover, all other ioctl commands that are handled in pp_ioctl
+need to be checked regarding what their arguments are, including
+data structures pointed to by the arguments (recursively, if there
+are again pointers in those structures).
+
+> >         unsigned int minor = iminor(inode);
+> > @@ -744,6 +750,9 @@ static const struct file_operations pp_fops = {
+> >         .write          = pp_write,
+> >         .poll           = pp_poll,
+> >         .unlocked_ioctl = pp_ioctl,
+> > +#ifdef CONFIG_COMPAT
+> > +       .compat_ioctl   = pp_compat_ioctl,
+> > +#endif
+
+The #ifdef here is not necessary, but will cause a warning on kernels
+that do not define CONFIG_COMPAT, in particular all 32-bit ones.
+
+> Does adding this patch w/o the following patch break 32bit apps using
+> this on 64bit kernels?
+
+Without the patch, those apps will all get -EINVAL from the ioctl
+handler. With the patch, the kernel actually performs the ioctl
+that was requested, but that may use the wrong data structure.
+```
+
+    2.  reply
+```
+> I just saw this mail fly by when you replied, but I guess it would
+> have been better to reply when the original mail came.
+>
+> The description above makes no sense: The problem for compat ioctl
+> is not whether the argument is a pointer or not, but rather what
+> data structure it points to.
+My original thoughts is that the compat_ioctl could reuse
+unlocked_ioctl function with special code for PP[GS]ETTIME after
+checked all the data structure it points to(the data type is int,
+unsigned int, unsigned char and timeval).
+TODO
+> In this case, we already know that
+> it is /not/ compatible between 32-bit and 64-bit user space, because
+> at least two commands need special handling for the timespec
+> argument, which gets added in patch 4 of the series.
+>
+> This means patches 3 and 4 have to be swapped in order to allow
+> bisection and not introduce a bug when only this one gets applied
+> but patch 4 is missing.
+Ok.
+>
+> Moreover, all other ioctl commands that are handled in pp_ioctl
+> need to be checked regarding what their arguments are, including
+> data structures pointed to by the arguments (recursively, if there
+> are again pointers in those structures).
+>
+> > >         unsigned int minor = iminor(inode);
+> > > @@ -744,6 +750,9 @@ static const struct file_operations pp_fops = {
+> > >         .write          = pp_write,
+> > >         .poll           = pp_poll,
+> > >         .unlocked_ioctl = pp_ioctl,
+> > > +#ifdef CONFIG_COMPAT
+> > > +       .compat_ioctl   = pp_compat_ioctl,
+> > > +#endif
+>
+> The #ifdef here is not necessary, but will cause a warning on kernels
+> that do not define CONFIG_COMPAT, in particular all 32-bit ones.
+When I write there are less than 50% compat_ioctl enclosure
+>
+> > Does adding this patch w/o the following patch break 32bit apps using
+> > this on 64bit kernels?
+>
+> Without the patch, those apps will all get -EINVAL from the ioctl
+> handler. With the patch, the kernel actually performs the ioctl
+> that was requested, but that may use the wrong data structure.
+```
 
