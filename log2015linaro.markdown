@@ -15,7 +15,6 @@ question for 1:1 with Mark
     https://wiki.linaro.org/Internal/hackbox
 
 
-
 16:28 2015-04-08
 ----------------
 1.  use kabi to trace embedded types.
@@ -559,7 +558,7 @@ Arnd Bergmann <arnd@arndb.de> (supporter:CHAR and MISC DRIVERS)
 John Stultz <john.stultz@linaro.org> (supporter:TIMEKEEPING, CLOCKSOURCE CORE, NTP,commit_signer:6/5=100%,authored:3/5=60%,added_lines:191/210=91%)
 Thomas Gleixner <tglx@linutronix.de> (supporter:TIMEKEEPING, CLOCKSOURCE CORE, NTP,commit_signer:3/5=60%,commit_signer:1/4=25%,authored:1/4=25%,added_lines:21/44=48%,removed_lines:3/8=38%)
 
-"`git send-email --no-chain-reply-to --annotate --to arnd@arndb.de --to john.stultz@linaro.org --to tglx@linutronix.de --cc y2039@lists.linaro.org --cc linux-kernel@vger.kernel.org *.patch`"
+"`git send-email --no-chain-reply-to --annotate --to arnd@arndb.de --to john.stultz@linaro.org --to tglx@linutronix.de --cc y2038@lists.linaro.org --cc linux-kernel@vger.kernel.org *.patch`"
 
 16:25 2015-07-01
 ----------------
@@ -925,7 +924,8 @@ Ok.
 >
 > The #ifdef here is not necessary, but will cause a warning on kernels
 > that do not define CONFIG_COMPAT, in particular all 32-bit ones.
-When I write there are less than 50% compat_ioctl enclosure
+When I write this code I found that there are less than 50% compat_ioctl
+defined in "#ifdef CONFIG_COMPAT".
 >
 > > Does adding this patch w/o the following patch break 32bit apps using
 > > this on 64bit kernels?
@@ -935,3 +935,111 @@ When I write there are less than 50% compat_ioctl enclosure
 > that was requested, but that may use the wrong data structure.
 ```
 
+5.  reply to 04
+    ```
+    > As commented before, these definitions should probably not be part of the
+    > user-visible header file.
+    >
+    > The main reason for using an __s64[2] array instead of struct __kernel_timeval
+    > is to avoid adding __kernel_timeval: 'timeval' is thoroughly deprecated
+    > and we don't want to establish new interfaces with that.
+    >
+    > In case of this driver, nobody would ever want to change their user
+    > space to use a 64-bit __kernel_timeval instead of timeval and explicitly
+    > call PPGETTIME64 instead of PPGETTIME, because we are only dealing with
+    > an interval here, and a 32-bit second value is sufficient to represent
+    > that. Instead, the purpose of your patch is to make the kernel cope with
+    > user space that happens to use a 64-bit time_t based definition of
+    > 'struct timeval' and passes that to the ioctl.
+    I define PP[GS]ETTIME as PP[GS]ETTIME64, so I guess the 64bit app will not
+    need to change the code.
+    ```
+
+10:51 2015-07-15
+----------------
+time, y2038, ppdev
+------------------
+1.  1/4 reply to arnd
+    ```
+    > Actually I think we can completely skip this test here: Unlike
+    > timespec, timeval is defined in a way that always lets user space
+    > use a 64-bit type for the microsecond portion (suseconds_t tv_usec).
+    I do not familar with this type. I grep the suseconds_t in glibc, it
+    seems that suseconds_t(__SUSECONDS_T_TYPE) is defined as
+    __SYSCALL_SLONG_TYPE which is __SLONGWORD_TYPE(32bit on 32bit
+    architecture).
+    >
+    > I think we should simplify this case and just assume that user space
+    > does exactly that, and treat a tv_usec value with a nonzero upper
+    > half as an error.
+    >
+    > I would also keep this function local to the ppdev driver, in order
+    > to not proliferate this to generic kernel code, but that is something
+    > we can debate, based on what other drivers need. For core kernel
+    > code, we should not need a get_timeval64 function because all system
+    > calls that pass a timeval structure are obsolete and we don't need
+    > to provide 64-bit time_t variants of them.
+    Got it.
+    ```
+
+15:57 2015-07-15
+----------------
+time, y2038, sound, timer
+-------------------------
+1.  cover letter
+    ```
+    Hi,
+
+    This is my first attempt to convert sound subsystem to year 2038 safe.
+    In these series patches I focus on the timer.
+
+    When check the time relative code in timer of sound subsystem, I
+    feel that I could easy split 64bit time_xxx type in kernel and in
+    userspace (__kernel_time_xxx) according to arnd's approach[1] in
+    comparison with other parts of sound subsys(e.g. pcm). Whether I
+    should follow the same approach in the whole sound subsystem is an
+    open issue for me.
+
+    On the other hand, there are difference approaches for dealing with
+    the code in userspace. It seems that snd_timer_read is the only api
+    for other parts of alsa. It share the same code no matter tread is
+    true or false.
+
+    The fisrt approach is hide __kernel_time_xxx inside snd_timer_read,
+    although the code may be a little bit ugly.
+
+    The second approach is that force userspace migration to 64bit
+    time on all 32bit(including compat) system by re-definition the
+    following types in alsa-lib/include/global.h:
+    typedef struct __kernel_timespec snd_htimestamp_t;
+    This approach will not affect the 64bit application.
+
+    regards
+
+    bamvor
+
+    [1] http://git.kernel.org/cgit/linux/kernel/git/arnd/playground.git/log/?h=y2038-syscalls
+    ```
+
+16:34 2015-07-16
+----------------
+1:1, mark
+---------
+1.  send the patches to y2038 first.
+
+2.  build and run kselftest in upstream kernel.
+    keep in touch with Tylor.
+    only work on upstream kernel. Maybe lsk team will run upstream kselftest on lsk.
+
+3.  move 1:1 to another week.
+
+15:18 2015-07-17
+----------------
+"`git send-email --no-chain-reply-to --annotate --to arnd@arndb.de --to john.stultz@linaro.org --to tglx@linutronix.de --cc y2038@lists.linaro.org --to broonie@linaro.org --cc baolin.wang@linaro.org`"
+
+15:22 2015-07-17
+----------------
+GTD
+---
+1.  today
+    1.  -15:22 y2038: sound: timer.
