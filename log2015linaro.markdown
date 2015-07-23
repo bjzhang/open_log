@@ -601,8 +601,8 @@ y2038, sound, timer
 
 16:01 2015-07-04
 ----------------
-linaro, work report
--------------------
+linaro, work reprot, weekly report
+----------------------------------
 [ACTIVITY] (Bamvor Jian Zhang) 2015-06-29 to 2015-07-05
 
 === Highlights ===
@@ -1025,13 +1025,13 @@ time, y2038, sound, timer
 ----------------
 1:1, mark
 ---------
-1.  send the patches to y2038 first.
+1.  send the patches of sound to y2038 mailing list first.
 
 2.  build and run kselftest in upstream kernel.
     keep in touch with Tylor.
-    only work on upstream kernel. Maybe lsk team will run upstream kselftest on lsk.
+    only work on upstream kernel. Lsk team may run upstream kselftest on lsk.
 
-3.  move 1:1 to another week.
+3.  move 1:1 to difference week(it is same week with arm32 team meeting right now).
 
 15:18 2015-07-17
 ----------------
@@ -1043,3 +1043,341 @@ GTD
 ---
 1.  today
     1.  -15:22 y2038: sound: timer.
+
+11:55 2015-07-21
+----------------
+linaro, work reprot, weekly report
+----------------------------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-07-13 to 2015-07-19
+
+=== Highlights ===
+1.  Send out y2038 patch for sound subsystem. Only timer is in consideration at this time.
+    Arnd and Mark gave me lots of suggestions:
+    1.  headers in uapi should not depends on the kernel config.
+    2.  do not break the existing 32bit code/binary while migrate the 64bit time.
+2.  1:1 with Mark.
+
+=== Plans ==
+1.  kselftest:
+    1.  Build and run kselftest for arm and arm64 on the upstream kernel.
+    2.  Try to fix the issues.
+    3.  Keep in touch with Tylor.
+
+2.  Write new vesion of alsa y2038 patches.
+
+=== Issues ===
+
+19:18 2015-07-21
+----------------
+kernel, y2038, driver, sound
+----------------------------
+1.  1/2 arnd
+```
+> On Friday 17 July 2015 15:21:07 Bamvor Zhang Jian wrote:
+> > diff --git a/include/sound/timer.h b/include/sound/timer.h
+> > index 7990469..2cfee32 100644
+> > --- a/include/sound/timer.h
+> > +++ b/include/sound/timer.h
+> > @@ -120,6 +120,12 @@ struct snd_timer_instance {
+> >      struct snd_timer_instance *master;
+> >  };
+> >
+> > +struct snd_timer_tread {
+> > +    int event;
+> > +    struct timespec64 tstamp;
+> > +    unsigned int val;
+> > +};
+> > +
+> >  /*
+> >   *  Registering
+> >   */
+> > diff --git a/include/uapi/sound/asound.h b/include/uapi/sound/asound.h
+> > index a45be6b..f7e3793 100644
+> > --- a/include/uapi/sound/asound.h
+> > +++ b/include/uapi/sound/asound.h
+> > @@ -29,6 +29,9 @@
+> >  #include <stdlib.h>
+> >  #endif
+> >
+> > +#ifndef CONFIG_COMPAT_TIME
+> > +# define __kernel_timespec timespec
+> > +#endif
+>
+> CONFIG_COMPAT_TIME cannot be used in a uapi header: whether user space uses
+> a 64-bit or 32-bit time_t is independent of what gets implemented in the
+> kernel.
+Oh, sorry for doing this again.
+Originally, I want to follow your approach in "include/linux/time64.h" in
+patch[1] in order to work with(for y2038 safe) and without(for keeping abi
+unchaged) your patch[1].
+On the other hand, when I write this commit, I found that there are some headers
+include the <linux/time.h>(most them are drivers):
+include/uapi/linux/videodev2.h, include/uapi/linux/input.h,
+include/uapi/linux/timex.h, include/uapi/linux/elfcore.h,
+include/uapi/linux/resource.h, include/uapi/linux/dvb/dmx.h,
+include/uapi/linux/dvb/video.h,
+include/uapi/linux/coda.h. CONFIG_COMPAT_TIME is used indirectly in uapi
+files. Do we need to fix these issues?
+>
+> >   *  protocol version
+> >   */
+> > @@ -739,7 +742,7 @@ struct snd_timer_params {
+> >  };
+> >
+> >  struct snd_timer_status {
+> > -    struct timespec tstamp;        /* Timestamp - last update */
+> > +    struct __kernel_timespec tstamp;/* Timestamp - last update */
+> >      unsigned int resolution;    /* current period resolution in ns */
+> >      unsigned int lost;        /* counter of master tick lost */
+> >      unsigned int overrun;        /* count of read queue overruns */
+> > @@ -787,9 +790,9 @@ enum {
+> >      SNDRV_TIMER_EVENT_MRESUME = SNDRV_TIMER_EVENT_RESUME + 10,
+> >  };
+> >
+> > -struct snd_timer_tread {
+> > +struct __kernel_snd_timer_tread {
+> >      int event;
+> > -    struct timespec tstamp;
+> > +    struct __kernel_timespec tstamp;
+> >      unsigned int val;
+> >  };
+>
+> Also, __kernel_timespec is defined to be always 64-bit wide. This means
+> if we do this change (assuming we drop the #define above), then user space
+> will always see the new definition of this structure, and programs
+> compiled against the latest header will no longer work on older kernels.
+>
+> Is this what you had in mind?
+Yes. It was what in my head. But I do not whether it ought to be.
+>
+> We could decide to do it like this, and we have historically done changes
+> to the ioctl interface this way, but I'm not sure if we want to do it
+> for all ioctls.
+>
+> The alternative is to leave the 'timespec' visible here for user space,
+> so user programs will see either the old or the new definition of struct
+> depending on their timespec definition, and only programs built with
+> 64-bit time_t will require new kernels.
+Do you mean we leave snd_timer_tread unchanged and introduce a new struct?
+(assuming we drop the #define above).
+struct snd_timer_tread64 {
+    int event;
+    struct timespec tstamp;
+    struct __kernel_timespec tstamp;
+    unsigned int val;
+};
+
+#if BITS_PER_TIME_T == BITS_PER_LONG
+#define SNDRV_TIMER_IOCTL_TREAD         _IOW('T', 0x02, int)
+#else
+#define SNDRV_TIMER_IOCTL_TREAD64       _IOW('T', 0x15, int)
+#endif
+
+snd_timer_tread64 is used by SNDRV_TIMER_IOCTL_TREAD64.
+
+IIUC, we should define SNDRV_TIMER_IOCTL_TREAD64 instead keep the same name for
+differenct ioctl, otherwise it is hard to support the old and new application
+binary in new kernel.
+
+>
+> >
+> > +void snd_timer_notify(struct snd_timer *timer, int event, struct timespec *tstamp)
+> > +{
+> > +    struct timespec64 tstamp64;
+> > +
+> > +    tstamp64.tv_sec = tstamp->tv_sec;
+> > +    tstamp64.tv_nsec = tstamp->tv_nsec;
+> > +    snd_timer_notify64(timer, event, &tstamp64);
+> > +}
+>
+> This works, but I'd leave it up to Mark if he'd prefer to do the conversion
+> bit by bit and change over all users of snd_timer_notify to use
+> snd_timer_notify64, or to move them all at once and leave the function
+> name unchanged.
+Yes, understand. I want to keep the function name unchanged too. I guess I will
+do it when pcm part of y2038 patches is ready. Otherwise, the sound subsystem
+is broken.
+>
+> I can see six callers of snd_timer_notify, but they are all in the same
+> file, so I'd expect it to be possible to convert them all together,
+> e.g. by adding a patch that changes the prototype in all these
+> callers after changing the ccallback prototype.
+Got you.
+>
+> > @@ -1702,7 +1712,8 @@ static int snd_timer_user_status(struct file *file,
+> >      if (!tu->timeri)
+> >          return -EBADFD;
+> >      memset(&status, 0, sizeof(status));
+> > -    status.tstamp = tu->tstamp;
+> > +    status.tstamp.tv_sec = tu->tstamp.tv_sec;
+> > +    status.tstamp.tv_nsec = tu->tstamp.tv_nsec;
+> >      status.resolution = snd_timer_resolution(tu->timeri);
+> >      status.lost = tu->timeri->lost;
+> >      status.overrun = tu->overrun;
+>
+> With the change to the structure definition, this will now only handle
+> the new structure size on patched kernels, but not work with old
+> user space on native 32-bit kernels any more.
+>
+> Your patch 2 fixes the case of handling both old compat 32-bit user space
+> on 64-bit kernels as well as new compat 32-bit user space with 64-bit
+> time_t, but I think you are missing the case of handling old 32-bit
+> user space.
+>
+> Note that we cannot use compat_ioctl() for native 32-bit kernels, so
+> snd_timer_user_ioctl will now have to be changed to handle both cases.
+Oh, I miss it, I will try to add it in my next version.
+>
+> > @@ -1843,9 +1854,12 @@ static ssize_t snd_timer_user_read(struct file *file, char __user *buffer,
+> >      struct snd_timer_user *tu;
+> >      long result = 0, unit;
+> >      int err = 0;
+> > +    struct __kernel_snd_timer_tread kttr;
+> > +    struct snd_timer_tread *ttrp;
+> >
+> >      tu = file->private_data;
+> > -    unit = tu->tread ? sizeof(struct snd_timer_tread) : sizeof(struct snd_timer_read);
+> > +    unit = tu->tread ? sizeof(struct __kernel_snd_timer_tread) :
+> > +        sizeof(struct snd_timer_read);
+> >      spin_lock_irq(&tu->qlock);
+> >      while ((long)count - result >= unit) {
+> >          while (!tu->qused) {
+>
+> Now this is the part that gets really tricky: Instead of two cases
+> (read and tread), we now have to handle three cases. Any user space
+> that is compiled with 64-bit time_t needs to get the new structure,
+> while old user space needs to get the old structure.
+>
+> It looks like we already get this wrong for existing compat user
+> space: running a 32-bit program on a 64-bit kernel will currently
+> get the 64-bit version of struct snd_timer_tread and misinterpret
+> that. We can probably fix both issues at the same time after
+> introducing turning the tread flag into a three-way enum (or something
+> along that lines).
+It seems that the current tread flag select the read or tread. How about
+choose the following you mentioned to deal with it?
+if (tu->tread)
+    if (BITS_PER_TIME_T == BITS_PER_LONG)
+        unit = sizeof(struct snd_timer_tread);
+    else
+        unit = sizeof(struct snd_timer_tread64);
+else
+    unit = sizeof(struct snd_timer_read);
+
+>
+> I would recommend separating the tread changes from the user_status
+> changes, as both of them are getting more complex now.
+Ok.
+>
+>     Arnd
+
+[1] http://git.kernel.org/cgit/linux/kernel/git/arnd/playground.git/commit/?h=y2038-syscalls&id=9005d4f4a44fc56bd0a1fe7c08e8e3f13eb75de7
+```
+
+2.  Mark
+> I don't think that's going to fly, we can't break all existing ALSA
+> userspace and not have people get angry.
+
+10:44 2015-07-23
+qemu, aarch64
+1.  doc
+    https://en.opensuse.org/openSUSE:AArch64#Foundation_V8_emulator
+    https://www.suse.com/documentation/sles11/book_kvm/data/cha_qemu_running_networking.html
+
+2.  qemu command line
+    qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt --kernel /home/bamvor/works/source/kernel/linux_kselftest_arm_aarch64/arch/arm64/boot/Image --append "console=ttyAMA0 root=/dev/vda2 rw" --serial stdio -device virtio-net-device,vlan=0,id=net0,mac=52:54:00:09:a4:37 -net user,vlan=0,name=hostnet0,hostfwd=tcp::2222-:22 -drive if=none,file=openSUSE-Tumbleweed-ARM-JeOS-efi.aarch64-1.12.1-Build296.1.raw,id=hd0 -device virtio-blk-device,drive=hd0
+
+3.  Add local repo(take nfs and plaindir as example).
+    1.  Ensure mount.nfs is is installed.
+        1.  Otherwise zypper will say
+            ```
+            #zypper ar -c -f -t plaindir nfs://10.0.2.2/home/bamvor/works/software/opensuse/repo/ports/aarch64/tumbleweed/repo/oss openSU SE-Tumbleweed-repo-oss_local
+            Adding repository 'openSUSE-Tumbleweed-repo-oss_local' ----------------------------------------------------------------------------[\]
+            Failed to mount 10.0.2.2:/home/bamvor/works/software/opensuse/repo/ports/aarch64/tumbleweed/repo/oss on /var/tmp/AP_0x4OyaTa: Invalid filesystem on media (       dmesg | tail or so.)
+            ```
+        2.  Or, mount will say:
+            ```
+            # mount -t nfs 10.0.2.2:/home/bamvor/works/software/opensuse/repo/ports/aarch64/tumbleweed/repo/oss /mnt/
+            mount: wrong fs type, bad option, bad superblock on 10.0.2.2:/home/bamvor/works/software/opensuse/repo/ports/aarch64/tumbleweed/repo/oss,
+                   missing codepage or helper program, or other error
+                   (for several filesystems (e.g. nfs, cifs) you might
+                   need a /sbin/mount.<type> helper program)
+
+                   In some cases useful info is found in syslog - try
+                   dmesg | tail or so.
+           ```
+    2.  install mount.nfs
+        ```
+        linux:~ # mount.nfs
+        -bash: mount.nfs: command not found
+        linux:~ # cnf mount.nfs
+        The program 'mount.nfs' can be found in the following package:
+          * nfs-client [ path: /sbin/mount.nfs, repository: zypp (openSUSE-Factory-repo-oss) ]
+
+        Try installing with:
+            zypper install nfs-client
+
+        linux:~ # zypper in nfs-client
+        ```
+
+12:35 2015-07-23
+----------------
+kselftest, aarch64
+-----------------
+    item        |   compile(x86)    |   compile(arm)    |  compile(arm64)   |     test(x86)     |     test(arm)     |    test(arm64)    |
+----------------|-------------------|-------------------|-------------------|-------------------|-------------------|-------------------|
+breakpoints     |   PASS            |                   |   ONLY FOR X86    |   PASS            |                   |   ONLY FOR X86    |
+cpu-hotplug     |                   |                   |                   |   PASS            |                   |   PASS            |
+efivarfs        |                   |                   |                   |   PASS            |                   |   SKIP            |
+exec            |                   |                   |                   |   FAIL            |                   |   FAIL            |
+firmware        |                   |                   |                   |   FAIL            |                   |   FAIL            |
+ftrace          |                   |                   |                   |   PASS            |                   |                   |
+futex           |                   |                   |                   |   PASS            |                   |   PASS            |
+kcmp            |   FAIL            |                   |   PASS            |   FAIL            |                   |   FAIL  PASS      |
+memfd           |   FAIL            |                   |   FAIL            |   FAIL            |                   |   FAIL            |
+memory-hotplug  |                   |                   |                   |   PASS            |                   |   SKIP            |
+mount           |                   |                   |                   |                   |                   |                   |
+mqueue          |   FAIL            |                   |   FAIL            |
+net             |                   |                   |                   |                   |                   |                   |
+powerpc         |                   |                   |                   |                   |                   |                   |
+ptrace          |                   |                   |                   |                   |                   |                   |
+seccomp         |   PASS            |                   |   FAIL            |
+size            |   FAIL            |                   |   FAIL            |
+sysctl          |                   |                   |                   |                   |                   |                   |
+timers          |                   |                   |                   |                   |                   |                   |
+user            |                   |                   |                   |                   |                   |                   |
+vm              |                   |                   |                   |                   |                   |                   |
+x86             |   WARNING         |
+
+1.  todo
+    1.  if the case is fail in x86_64, check why it is fail.
+        1.  "x86"
+            need install glibc-32bit and glibc-devel-32bit
+
+1.  breakpoints:
+    Not an x86 target, can't build breakpoints selftests
+
+1.  breakpoints
+1.  cpu-hotplug
+1.  efivarfs
+    1.  It seems that it is skpped because my qemu do not use the efi boot.
+1.  exec
+1.  firmware
+1.  ftrace
+1.  futex
+1.  kcmp
+1.  memfd
+1.  memory-hotplug
+1.  mount
+1.  mqueue
+1.  net
+1.  powerpc
+1.  ptrace
+1.  seccomp
+1.  size
+1.  sysctl
+1.  timers
+1.  user
+1.  vm
+1.  x86
+
