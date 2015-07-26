@@ -1336,17 +1336,17 @@ futex           |                   |                   |                   |   
 kcmp            |   FAIL            |                   |   PASS            |   FAIL            |                   |   FAIL  PASS      |
 memfd           |   FAIL            |                   |   FAIL            |   FAIL            |                   |   FAIL            |
 memory-hotplug  |                   |                   |                   |   PASS            |                   |   SKIP            |
-mount           |                   |                   |                   |                   |                   |                   |
+mount           |                   |                   |                   |   SKIP            |                   |   SKIP            |
 mqueue          |   FAIL            |                   |   FAIL            |
-net             |                   |                   |                   |                   |                   |                   |
+net             |                   |                   |                   |   FAIL            |                   |   FAIL            |
 powerpc         |                   |                   |                   |                   |                   |                   |
-ptrace          |                   |                   |                   |                   |                   |                   |
-seccomp         |   PASS            |                   |   FAIL            |
+ptrace          |                   |                   |                   |   PASS            |                   |   PASS            |
+seccomp         |   PASS            |                   |   FAIL            |   FAIL            |                   |                   |
 size            |   FAIL            |                   |   FAIL            |
-sysctl          |                   |                   |                   |                   |                   |                   |
-timers          |                   |                   |                   |                   |                   |                   |
-user            |                   |                   |                   |                   |                   |                   |
-vm              |                   |                   |                   |                   |                   |                   |
+sysctl          |                   |                   |                   |   FAIL            |                   |   FAIL            |
+timers          |                   |                   |                   |   PASS            |                   |   FAIL            |
+user            |                   |                   |                   |   FAIL            |                   |   FAIL            |
+vm              |                   |                   |                   |   FAIL            |                   |   FAIL            |
 x86             |   WARNING         |
 
 1.  todo
@@ -1362,6 +1362,17 @@ x86             |   WARNING         |
 1.  efivarfs
     1.  It seems that it is skpped because my qemu do not use the efi boot.
 1.  exec
+    1.  <http://lwn.net/Articles/600344/>
+        > The primary aim of adding an execveat syscall is to allow an
+        > implementation of fexecve(3) that does not rely on the /proc
+        > filesystem.  The current glibc version of fexecve(3) is implemented
+        > via /proc, which causes problems in sandboxed or otherwise restricted
+        > environments.
+    2.  It fails when direct build from kernel top level source tree.
+    3.
+        Check failure of execveat(8, '', 0) with ENOENT... [OK]
+        Check failure of execveat(8, '(null)', 4096) with EFAULT... [OK]
+
 1.  firmware
 1.  ftrace
 1.  futex
@@ -1369,6 +1380,7 @@ x86             |   WARNING         |
 1.  memfd
 1.  memory-hotplug
 1.  mount
+    1.  "/proc/self/uid_map"
 1.  mqueue
 1.  net
 1.  powerpc
@@ -1380,4 +1392,6 @@ x86             |   WARNING         |
 1.  user
 1.  vm
 1.  x86
+    1.  make install fail on arm. TODO: fix this issue.
+
 
