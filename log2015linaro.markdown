@@ -1279,7 +1279,9 @@ Ok.
 > userspace and not have people get angry.
 
 10:44 2015-07-23
+----------------
 qemu, aarch64
+-------------
 1.  doc
     https://en.opensuse.org/openSUSE:AArch64#Foundation_V8_emulator
     https://www.suse.com/documentation/sles11/book_kvm/data/cha_qemu_running_networking.html
@@ -1370,8 +1372,6 @@ x86             |   WARNING         |
         > environments.
     2.  It fails when direct build from kernel top level source tree.
     3.
-        Check failure of execveat(8, '', 0) with ENOENT... [OK]
-        Check failure of execveat(8, '(null)', 4096) with EFAULT... [OK]
 
 1.  firmware
 1.  ftrace
@@ -1394,4 +1394,48 @@ x86             |   WARNING         |
 1.  x86
     1.  make install fail on arm. TODO: fix this issue.
 
+11:24 2015-07-28
+----------------
+kernel, kselftest
+-----------------
+1.  current status
+    I work on the kselftest from last week. And I got some failures on arm64 as we expected. I plan to dig into this failures in this week.
+
+    1.  run kselftest on x86(openSUSE 13.2) and arm64(openSUSE Tumbleweed). Got some failures on x86 and arm64.
+        I guess some of the failures on x86 is because the lower kernel vesion and missing pacakges. Will try to re-build/run these cases when work on the same case on the aarch64.
+
+    2.  Installation is failed on arm64 because install x86 testcase failed.
+        The "x86" testcase should probably add some check like the Makefile in powerpc testcase.
+        Do we need to add the arm/arm64 testcase in kselftest?
+
+    3.  breakpoints:
+        It could not run on arm64.
+        Acctually, it is only support x86, because it use INT 1(for single-stepping) and INT 3(setting breakpoints).
+
+    4.  efivars:
+        I could not test efi test on arm64 because qemu-system-aarch64 crashed when efi is enabled.
+        I will deal with it later. Maybe test it on hardware is easier?
+
+    5.  exec:
+        Test successful when run it from the build directory.
+        Test fail when run it from the install directory.
+        Run failed if running it from top level Makefile.
+        I guess maybe there are some minor issues(build?) in this case.
+
+12:18 2015-07-28
+----------------
+linaro, work reprot, weekly report
+----------------------------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-07-20 to 2015-07-26
+
+=== Highlights ===
+1.  kselftest(it is as same as the comment in https://projects.linaro.org/browse/KWG-23)
+
+2.  reply to arnd and mark about y2038 patches for sound subsystem.
+
+=== Plans ==
+1.  kselftest:
+    1.  Fix the issues I found this week.
+
+2.  Write new vesion of alsa y2038 patches.
 
