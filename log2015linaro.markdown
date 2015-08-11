@@ -1371,7 +1371,8 @@ x86             |   WARNING         |
         > via /proc, which causes problems in sandboxed or otherwise restricted
         > environments.
     2.  It fails when direct build from kernel top level source tree.
-    3.
+    3.  Test failed in when run in the install director because the symbol link
+        is installed as regular file.
 
 1.  firmware
 1.  ftrace
@@ -1438,4 +1439,149 @@ linaro, work reprot, weekly report
     1.  Fix the issues I found this week.
 
 2.  Write new vesion of alsa y2038 patches.
+
+22:49 2015-07-31
+----------------
+1.  email
+Hi, MarK
+> Hi Bamvor,
+>
+> I was just speaking to Tyler and Kevin about kselftest in a meeting earlier today and Tyler was mentioning that there's quite a few ARM issues with kselftest that have been fixed in the latest -next code so it's probably good to make sure you're working on -next for your investigations - it seems it's quite a fast moving area.
+Thanks for you help. I will work on linux-next in future. It might be some duplicated work. I will try to avoid it in future.
+>
+> Can you please coordinate with them on your kselftest work, Tyler has quite a few ideas for improvements which would really help with the integration into kernelci.org.
+Sure.
+And I just have a nice talk with Tylor. According to Tyler's suggestion, I will work on enable cross-compile for kselftest by passing the "--sysroot" to cross-compler. Tylor gave me the rootfs[1] and libraries[2] for cross-compiling kselftest.
+
+Is there any others suggestion for me?
+
+Thanks in advance.
+
+>
+> Thanks,
+> Mark
+
+[1] http://storage.kernelci.org/images/selftests/arm/rootfs.cpio.gz
+[2] http://images.armcloud.us/misc/tyler-kselftest/armel/kselftest-cross-deps-armhf.tar.gz
+
+2.  Tylar
+    The needed libraries are: libpopt-dev and libcap-dev. the mqueue test uses libpopt-dev
+this root file system contains the libs for ARM - http://storage.kernelci.org/images/selftests/arm/rootfs.cpio.gz
+was hoping to be able to use this with sysroot
+here are the cross deps - http://images.armcloud.us/misc/tyler-kselftest/armel/kselftest-cross-deps-armhf.tar.gz
+take some time and review the status. we can chat more next week
+23:57 <bamvor> Thanks. I will try to work on the "--sysroot" in my next move.
+23:58 <tyler-baker> ok great, thanks for the help
+23:58 <bamvor> Last question. Is there something like TODO list for kselftest?
+23:58 <tyler-baker> Not at the moment, but I can put one together for next week
+
+3.  Tylar's command
+make distclean
+make multi_v7_defconfig
+make zImage dtbs -j12
+export INSTALL_HDR_PATH=./usr/include
+make headers_install
+#wget http://storage.kernelci.org/images/selftests/arm/kselftest.tar.gz
+#tar -C . -xaf kselftest.tar.gz (this unpacks the shared libraries to the header install location)
+make -C tools/testing/selftest
+make -C tools/testing/selftest install
+
+20:37 2015-08-02
+----------------
+Hi, Shuah
+
+Sorry for the empty email.
+
+This is Bamvor from linaro kernel working group. We want to improve arm/arm64
+support for kselftest. Maybe I could discuss with you before I really dig into
+it.
+
+The first thing we want to do it improve the cross-compile support. Although
+kselftest support cross compiler, the build may fail because of lacking
+libpopt-dev, libcap-dev. We propose add something like
+"SYSROOT=/path/to/your/root" as a parameter for make. User could put the rootfs
+which include the library above to cross compiling.
+
+The second thing for us is that fix the bugs for arm/arm64. I found that there
+are four branches in your git.kernel.org: devel fixes master next. Which one
+should I used for testing and devopment?
+
+Besides, which mailing list is suitable for discussion? It seems that the wiki
+is a little bit out-of-date. And there is no kselftest relative discussion
+around ksubmit mailing list and kernel api mailing list.
+
+regards
+
+bamvor
+
+15:36 2015-08-06
+----------------
+kselftest
+---------
+1.
+
+Hi, Tyler
+
+About add "--sysroot" to the kselftest.
+The rootfs you gave me[1] lack the sufficient header(e.g. stdio.h) for building
+kselftest when I set "--sysroot /path/to/Tyler/rootfs". Of courses, we
+could add the missing headers to these rootfs. I just not sure if it is
+necessary.
+
+Compare with add sysroot to kselftest, we could also add something like
+CFLAGS_EXTRA for passing the additional flags:
+
+diff --git a/tools/testing/selftests/lib.mk b/tools/testing/selftests/lib.mk
+index ee412ba..1acfd02 100644
+--- a/tools/testing/selftests/lib.mk
++++ b/tools/testing/selftests/lib.mk
+@@ -2,6 +2,8 @@
+ # Makefile can operate with or without the kbuild infrastructure.
+ CC := $(CROSS_COMPILE)gcc
+
++CFLAGS += $(CFLAGS_EXTRA)
++
+ define RUN_TESTS
+        @for TEST in $(TEST_PROGS); do \
+                (./$$TEST && echo "selftests: $$TEST [PASS]") || echo "selftests: $$TEST [FAIL]"; \
+
+
+Then, we could build kselftest with the following comand:
+make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -C tools/testing/selftests/ CFLAGS_EXTRA="-I /path/to/kselftest-cross-deps-armhf -L /path/to/kselftest-cross-deps-armhf"
+
+What do you think about it?
+
+BTW, where could I find the kselftest test result in LAVA or the list of cases
+of kselftest failure?
+
+regards
+
+bamvor
+
+[1] http://storage.kernelci.org/images/selftests/arm/rootfs.cpio.gz
+[2] http://images.armcloud.us/misc/tyler-kselftest/armel/kselftest-cross-deps-armhf.tar.gz
+
+2.
+diff --git a/tools/testing/selftests/mqueue/Makefile b/tools/testing/selftests/mqueue/Makefile
+index 0e3b41e..83f26c8 100644
+--- a/tools/testing/selftests/mqueue/Makefile
++++ b/tools/testing/selftests/mqueue/Makefile
+@@ -1,4 +1,5 @@
+ CFLAGS = -O2
++CFLAGS += $(CFLAGS_EXTRA)
+
+ all:
+        $(CC) $(CFLAGS) mq_open_tests.c -o mq_open_tests -lrt
+
+09:41 2015-08-07
+----------------
+kselftest
+1.  compare the compiling result for arm and arm64.
+2.  found out why "exec" failed in install directory. ref"12:35 2015-07-23"
+    1.  try to learn from libvirt about how to install symbol link.
+
+16:11 2015-08-11
+---------------
+kselftest
+1.  tools/testing/selftests/jump_label is deleted by 2bf9e0ab.
 
