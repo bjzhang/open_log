@@ -1655,7 +1655,7 @@ It would be great if there are the test result from LAVA already.
 2.  send email
 "`git send-email --no-chain-reply-to --annotate --to broonie@linaro.org --to khilman@linaro.org --to tyler.baker@linaro.org --cc bamvor.zhangjian@linaro.org *.patch`"
 
-3.  kdbus: libcap-devel
+3.  kdbus: -devel
     mqueue: popt-devel
 
 4.  size compile failed on aarch64 on opensuse.
@@ -1766,6 +1766,42 @@ all the test cases. In my next step, I will fix them.
 
 It would be great if I could get our lastest test result(from LAVA?).
 
+6.  cover letter(send it to LKML):
+Improvement kselftest support for arm and arm64
+
+This is my first attempt for improving the kselftest for arm/arm64
+architecture. Eventually, we hope we could build(in an cross compile
+environment) and run all the kselftest cases automatically(successful
+of courses).
+
+I realize that there are lots of improvement for kselftest after the
+lastest pull request for kselftest. So, All my work is based on the
+lastest linux-next tree ("30b42f4 Add linux-next specific files for
+20150813").
+
+In this series, I try to make all the testcases compiling and
+installation successful.
+
+Patch 1 rename jumplabel target to static_keys in the Makefile.
+
+Patch 2 add CFLAGS_EXTRA to fix the cross comiling failure.
+
+Patch 3 fix the running the installation issue for exec testcase.
+
+Patch 4 check if there are files need to be installed. This is
+useful when such testcase is not built for specific architecture.
+E.g. x86 testcases for arm/arm64.
+
+Patch 5, 6 and 7 check the architecture before build and install.
+
+7.  0815: Mark said that I should send to broonie@kernel.org:
+    ```
+    Please when posting patches can you send them to my upstream address broonie@kernel.org - it is a lot easier for me to work with patches there and it avoids confusing other people working upstream.
+    ```
+    `git send-email --no-chain-reply-to --annotate --to linux-kernel@vger.kernel.org --cc broonie@kernel.org --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc bamvor.zhangjian@linaro.org --cc shuahkh@osg.samsung.com *.patch`
+    broonie@linaro.org
+--
+
 08:56 2015-08-13
 ----------------
 GTD
@@ -1778,7 +1814,77 @@ GTD
     5.  AAR: need continue to focus on kselftest. This is maybe my last chance to join the open source community.
         I cann't fail everytime!
 
+09:45 2015-08-14
+----------------
+GTD
+---
+1.  today
+    1.  9:45-10:50 11:25-12:40 14:20-14:47 kselftest exec.
+    2.  10:50-11:25 personal call.
+    3.  14:47-16:20 huawei internal meeting.
+
 2.  TODO
-    1.  ssd
     2.  vim markdown
+
+15:42 2015-08-14
+----------------
+kselftest
+---------
+1.  firmware
+    1.  need enable "`CONFIG_TEST_FIRMWARE`" and put `test_firmware.ko` into filesystem.
+    2.  PASS.
+
+2.  ftrace
+    1.  need enable COFNIG_FTRACE and all the sub config except CONFIG_FTRACE_STARTUP_TEST(This config will not affect the test result, but it takes long time to test it..
+    2.  ftrace: 10 PASS, 5 UNSUPPORTED(kprobe relative cases).
+
+3.  futex: PASS.
+
+4.  kcmp: PASS.
+
+5.  kdbus
+    1.  need enable CONFIG_KDBUS.
+
+    2.  fail
+        ```
+        Assertion 'ret == 0' failed in kdbus_test_activator_quota(), test-message.c:435
+        Assertion 'ret == 0' failed in kdbus_test_message_quota(), test-message.c:619
+        Testing message quotas are enforced (message-quota) .................... ERROR
+        ```
+
+    3.  skip
+        ```
+        Testing retrieving connection information (connection-info) ............ SKIPPED
+        Testing unprivileged bus access (policy-priv) .......................... SKIPPED
+        Testing policy in user namespaces (policy-ns) .......................... SKIPPED
+        Testing metadata in different namespaces (metadata-ns) ................. SKIPPED
+        Testing activator connections (activator) .............................. SKIPPED
+        ```
+
+6.  memfd
+    1.  memfd
+        > (./memfd_test && echo "selftests: memfd_test [PASS]") || echo "selftests: memfd_test [FAIL]"
+        memfd: CREATE
+        memfd: BASIC
+        memfd: SEAL-WRITE
+        memfd: SEAL-SHRINK
+        memfd: SEAL-GROW
+        memfd: SEAL-RESIZE
+        memfd: SHARE-DUP
+        memfd: SHARE-MMAP
+        memfd: SHARE-OPEN
+        memfd: SHARE-FORK
+        clone() failed: Invalid argument
+        selftests: memfd_test [FAIL]
+
+    2.  fuse: fuse-devel
+
+22:44 2015-08-15
+----------------
+send patches
+------------
+1.  check prefix, version; to and cc in patches.
+2.  ensure the proper email address
+    For non-linaro internal email: Mark: broonie@kernel.org
+    Same as arnd?
 
