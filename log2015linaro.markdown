@@ -1576,6 +1576,7 @@ index 0e3b41e..83f26c8 100644
 09:41 2015-08-07
 ----------------
 kselftest
+---------
 1.  compare the compiling result for arm and arm64.
 2.  found out why "exec" failed in install directory. ref"12:35 2015-07-23"
     1.  try to learn from libvirt about how to install symbol link.
@@ -1583,5 +1584,201 @@ kselftest
 16:11 2015-08-11
 ---------------
 kselftest
+---------
 1.  tools/testing/selftests/jump_label is deleted by 2bf9e0ab.
+
+14:39 2015-08-12
+----------------
+software skill, SCM, git, cherry-pick
+-------------------------------------
+apply the top 6 patches from bjzhang_github/kselftest to current branch:
+`git cherry-pick -6 bjzhang_github/kselftest`
+
+15:23 2015-08-12
+----------------
+kselftest
+---------
+1.  cover letter
+Improvement kselftest support for arm and arm64
+
+This is my first attempt to improve the kselftest for arm
+architecture. Eventually, we hope we could build(in an cross
+compile environment) and run all the kselftest cases
+automatically.
+
+According to your suggections, all my work is based on the lastest
+linux-next tree(c1a0c66 Add linux-next specific files for 20150812)
+right now.
+
+In this series, I try to make all the testcases compile pass
+except kdbus(i do not know whether it support arm or not, will deal
+with it later).
+
+There are different reasons that build or install fail on our arm or
+arm64 environment.
+
+The first reason is the test cases may fail in cross compiling due
+to lack of the headers and libraries. I add the CFLAGS_EXTRA to fix
+this. Reference patch 2 for details.
+
+The second reason is install rules do not handle the special file.
+I overwrite the INSTALL_RULES in exec test case to fix this.
+Reference patch 3 for details.
+
+The third reason is those cases do not support arm architecture.
+E.g. userfaultfd, x86, seccomp. I do the same thing in
+tools/testing/selftests/powerpc/Makefile, and move them to the
+lib.mk. Reference patch 4, 5, 6, 7 for details.
+
+In my next step, I will figure out how to build kdbus testcases.
+When all the testcases build pass, I will check the test result.
+
+In my previous testing, lots of testcass is failed. Due to the
+fact what I test it on 4.2-rcx instead linux-next. I will retest
+all the test cases.
+
+Here is my test result on 4.2-rcX.
+
+firmware         FAIL
+kcmp             FAIL
+memfd            FAIL
+memory-hotplug   SKIP
+mount            SKIP
+net              FAIL
+sysctl           FAIL
+timers           FAIL
+user             FAIL
+vm               FAIL
+
+It would be great if there are the test result from LAVA already.
+
+2.  send email
+"`git send-email --no-chain-reply-to --annotate --to broonie@linaro.org --to khilman@linaro.org --to tyler.baker@linaro.org --cc bamvor.zhangjian@linaro.org *.patch`"
+
+3.  kdbus: libcap-devel
+    mqueue: popt-devel
+
+4.  size compile failed on aarch64 on opensuse.
+    1. -lc not found
+        ```
+        > gcc -static -ffreestanding -nostartfiles -s get_size.c -o get_size
+        /usr/lib64/gcc/aarch64-suse-linux/5/../../../../aarch64-suse-linux/bin/ld: cannot find -lc
+        collect2: error: ld returned 1 exit status
+    ```
+    2.  create the soft link from libc_noshared.a to libc.a
+        ```
+        > gcc -static -ffreestanding -nostartfiles -s get_size.c -o get_size
+        /tmp/ccaUd19E.o: In function `print':
+        get_size.c:(.text+0x10): undefined reference to `strlen'
+        get_size.c:(.text+0x20): undefined reference to `write'
+        /tmp/ccaUd19E.o: In function `_start':
+        get_size.c:(.text+0x188): undefined reference to `sysinfo'
+        get_size.c:(.text+0x1b8): undefined reference to `_exit'
+        get_size.c:(.text+0x264): undefined reference to `_exit'
+        collect2: error: ld returned 1 exit status
+        ```
+    3.  it build successful on cross-compile with gcc-linaro
+        gcc version 5.9.3 20141031 (prerelease) (Linaro GCC 2014.11)
+
+    4.  the options difference between cross compiler(4.9 success) and native compiler(5.1 fail)
+        ```
+        diff -urN success pass
+        --- success     2015-08-13 15:46:24.145150405 +0800
+        +++ pass        2015-08-13 18:19:08.480025385 +0800
+        @@ -1,11 +1,12 @@
+        -/usr/lib64/gcc/aarch64-suse-linux/5/collect2
+        +/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/aarch64-linux-gnu/4.9.3/collect2
+         -plugin
+        -/usr/lib64/gcc/aarch64-suse-linux/5/liblto_plugin.so
+        --plugin-opt=/usr/lib64/gcc/aarch64-suse-linux/5/lto-wrapper
+        --plugin-opt=-fresolution=/tmp/ccYU3agp.res
+        +/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/aarch64-linux-gnu/4.9.3/liblto_plugin.so
+        +-plugin-opt=/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libexec/gcc/aarch64-linux-gnu/4.9.3/lto-wrapper
+        +-plugin-opt=-fresolution=/tmp/ccOfTGms.res
+         -plugin-opt=-pass-through=-lgcc
+         -plugin-opt=-pass-through=-lgcc_eh
+         -plugin-opt=-pass-through=-lc
+        +--sysroot=/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc
+         --build-id
+         -Bstatic
+         -dynamic-linker
+        @@ -13,16 +14,20 @@
+         -X
+         -EL
+         -maarch64linux
+        +--fix-cortex-a53-835769
+         -o
+         get_size
+         -s
+        --L/usr/lib64/gcc/aarch64-suse-linux/5
+        --L/usr/lib64/gcc/aarch64-suse-linux/5/../../../../lib64
+        --L/lib/../lib64
+        --L/usr/lib/../lib64
+        --L/usr/lib64/gcc/aarch64-suse-linux/5/../../../../aarch64-suse-linux/lib
+        --L/usr/lib64/gcc/aarch64-suse-linux/5/../../..
+        -/tmp/ccqmrEUN.o
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/../../../../aarch64-linux-gnu/lib/../lib64
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/lib/../lib64
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/usr/lib/../lib64
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../lib/gcc/aarch64-linux-gnu/4.9.3/../../../../aarch64-linux-gnu/lib
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/lib
+        +-L/path/to/gcc-linaro-4.9-2014.11-x86_64_aarch64-linux-gnu/bin/../libc/usr/lib
+        +/tmp/cceoPRQ6.o
+         --start-group
+         -lgcc
+         -lgcc_eh
+        ```
+
+5.  cover letter
+Improvement kselftest support for arm and arm64
+
+This is my second version for improving the kselftest for arm
+architecture. Eventually, we hope we could build(in an cross
+compile environment) and run all the kselftest cases
+automatically(successful of courses).
+
+According to your suggections, all my work is based on the lastest
+linux-next tree("c1a0c66 Add linux-next specific files for 20150812").
+
+In this series, I try to make all the testcases compiling and
+installation successful.
+
+There are different reasons that build or install fail on our arm or
+arm64 architecture.
+
+Patch 2 add CFLAGS_EXTRA to fix the cross comiling failure.
+
+Patch 3 fix the running the installation issue for exec testcase.
+
+Patch 4 check if there are files need to be installed. This is
+useful when such testcase is not built for specific architecture.
+E.g. x86 testcases for arm/arm64.
+
+Patch 5 and 6 disable seccomp for arm64 and only enable userfaultfd
+for x86 and powerpc.
+
+In my previous testing, lots of testcass is failed. Due to the
+fact what I test it on 4.2-rcx instead linux-next. I will retest
+all the test cases. In my next step, I will fix them.
+
+It would be great if I could get our lastest test result(from LAVA?).
+
+08:56 2015-08-13
+----------------
+GTD
+---
+1.  today
+    1.  8:57-9:18 rebase buildroot patch.
+    2.  9:25-09:31 update linaro card. <https://projects.linaro.org/browse/KWG-23>
+    3.  9:31-10:16 13:53-17:30 kselftest, fix compile issue for kdbus. send v2 internally.
+    4.  10:16-11:30 Preparing the environment and setup the network.
+    5.  AAR: need continue to focus on kselftest. This is maybe my last chance to join the open source community.
+        I cann't fail everytime!
+
+2.  TODO
+    1.  ssd
+    2.  vim markdown
 
