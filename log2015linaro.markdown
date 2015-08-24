@@ -1895,3 +1895,30 @@ GTD
 1.  today
     1.  kselftest kdbus.
 
+
+10:13 2015-08-24
+-
+GTD
+-
+1.  today
+    1.  10:13-10:34 weekly report.
+
+10:13 2015-08-24
+----------------
+linaro, work reprot, weekly report
+----------------------------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-08-10 to 2015-08-23
+
+=== Highlights ===
+1.  kselftest
+    1.  add some improvement for kselftest in order to build and test kselftest automatically.
+        And send v1 to LKML after internal review. No one response yet(because of Linux Plumbers Conference?).
+    2.  check the failure of kdbus and memfd. Some of the failure due to the failure of clone syscall.
+
+=== Plans ==
+1.  kselftest:
+    1.  try to write the kselftest for seccomp for arm64 in reference to the patch for s390[1]
+    2.  send v2 with more improvement for kselftest on arm64.
+
+[1]  http://comments.gmane.org/gmane.linux.kernel/2024322
+
