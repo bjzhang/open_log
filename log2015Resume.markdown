@@ -24,16 +24,21 @@ BTW, I am interested in learning new language. I learned very basic words for Ge
         3.  As a consultant, provide suggestion and troubleshooting for migration from old Linux kernel or arm 32bit hardware to lastest Linux on arm64 hardware, including kernel abi selection(aarch32, aarch64 ILP32, aarch64 LP64), kernel abi changes and update suggestion, glibc changes and suggestion.
 
         4.  Join openSUSE Asia Submit 2014 and give the presentation named "[openSUSE on ARM](https://github.com/openSUSE-CN/oSA2014-slides/blob/master/Bamvor_Jian_Zhang-openSUSE_on_Arm.pdf)"
+    4.  Explanation
+        I like the work in here(Linux kernel, arm, open source), But too many hours to work(ten hours per day in three month). It is hard to work here in long time.
 
 2.  SUSE(01/2011-07/2014):
     1.  Job title: Software engineer
     2.  Organizaiton: SUSE(Beijing)
     3.  Responsibilities
-1.  Develop new feature and fix bug in virtualzation management tools, including libvirt, xen and qemu.
-    Features including migration, snapshot and so on.
-    Fix critical bug in libvirt libxl drivers after the xen package upgrade.
-2.  Play openSUSE on my arm board in hackweek and my spare time. Our opensuse arm team got an reward in hackweek.
-    The first person port cubietruck(Cortex-A7 powered SOC) to [xen](http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions/Allwinner).
+        1.  Develop new feature and fix bug in virtualzation management tools, including libvirt, xen and qemu.
+            Features including migration, snapshot and so on.
+            Fix critical bug in libvirt libxl drivers after the xen package upgrade.
+        2.  Play openSUSE on my arm board in hackweek and my spare time. Our opensuse arm team got an reward in hackweek.
+            The first person port cubietruck(Cortex-A7 powered SOC) to [xen](http://wiki.xen.org/wiki/Xen_ARM_with_Virtualization_Extensions/Allwinner).
+        3.  Totally 11 patches got accept.
+    4.  Explanation
+        Want to look for the job which could focus on Linux kernel
 
 3.  Vimicro(12/2008-01/2011):
     1.  Job title: Software engineer
@@ -42,4 +47,6 @@ BTW, I am interested in learning new language. I learned very basic words for Ge
         1.  As a key member join the first Cortex-A8 powered arm SOC project from pre-research to the mass production of the Android pad.
         2.  Porting Nucleus and Linux to our SOC.
         3.  Due to the deep knowlege of the software stack and SOC design, fix **a critical bug** during SOC mass produciton. This bug is a power management bug. I write a small piece of hacking code to trigger special boot and suspend/resume sequence with our rom bootloader, u-boot and kernel.
+    4.  Explanation
+        The company do not want to update the lastest arm processs core anymore which block my technique patch.
 

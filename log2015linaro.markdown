@@ -1881,10 +1881,17 @@ kselftest
 
 22:44 2015-08-15
 ----------------
-send patches
-------------
+howto, send patches
+-------------------
 1.  check prefix, version; to and cc in patches.
 2.  ensure the proper email address
     For non-linaro internal email: Mark: broonie@kernel.org
     Same as arnd?
+
+18:18 2015-08-19
+-
+GTD
+-
+1.  today
+    1.  kselftest kdbus.
 
