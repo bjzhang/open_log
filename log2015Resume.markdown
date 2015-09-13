@@ -50,3 +50,51 @@ BTW, I am interested in learning new language. I learned very basic words for Ge
     4.  Explanation
         The company do not want to update the lastest arm processs core anymore which block my technique patch.
 
+19:59 2015-08-26
+----------------
+1.  recommandation letter.
+Hi Axel,
+I trust everything is going great over there. I miss OpenSynergy and Berlin a lot but I'm very happy to be back with my family.
+
+My friend Bamvor Zhang wants to move to Germany from Beijing and I thought he can be a great addition to your team. He has several years of experience with ARM, the Linux kernel and Xen, having worked porting them to different SoCs. He has also been very active in open source communities. His English is quite good, he is friendly, and he loves what he does.
+
+You can find a short CV from him in https://careers.stackoverflow.com/bamvor and his mail address is <bamv2005@gmail.com>
+
+best regards,
+Alejandro Mery
+
+1.  cover letter for opensynergy
+Dear Manager
+
+I am very excited to hear of your available Software Engineer – Embedded Linux (f/m) position, and formally submit my resume for consideration.
+
+I work on Linux, arm and virtualization more than 7 years after I got Master Degree.
+
+I installed Linux in my computer when I am in high school which is the same year I get my first PC. I was curious about how does people port Linux to an architecture or a SOC in university. And I finally get a chance to port Nucleus and Linux to our arm SOC 5 years ago. I am definitely not an early bird, but working on Linux kernel is my passion.
+
+When I work for vimicro, I take the responsibility for verifying the arm processor(not SOC) and upgrade our development environment from arm 9 to Cortex-A8. Thanks to this opportunity, I got plenty of time to dig into the arm architecture, debug tools and arm SOC. I also write assembly code for initialization the soc or finding out the failure of the soc. With the deep knowledge of arm and SOC, life is eaiser to understand the device driver and virtualization things.
+
+I learn differenct part of Linux kernel, including memory management, architecture relative code, device driver and so on.
+
+I experience in virtualization area(hypervisor and tools) more than two years.
+
+BTW, I am interested in learning new language. I learned very basic words for German and Japanese from my friends.
+
+Salary expertation: First of all, the opportunity is more important than the salary. My current package is 400k RMB per year(20000 x 12 month plus 8 month bonus). If this job is in China, I would say that I want roughly 30% more salary. But I have no idea the salary in Germany. Basically, I want to move the Germany because I hope we could work-life-balance: My wife will not work in Germany(My second daughter is 7 month at this moment).
+
+I could on boarding one month later(for resigning from HUAWEI) after I got the offer and visa.
+
+BTW: I have sent them in the website, but no response on website nor email. So, I send them again. Sorry for inconvenience.
+
+2.  resume for opensynergy
+You have completed a BS or MS in Computer Science, Electrical Engineering or in a related field
+You have experience in the development of embedded software and development of operating systems
+Excellent programming skills in C/C++ and optionally low-level assembly programming, especially on the ARM architecture
+You understand the overall architecture of the Linux Kernel and have already done kernel-level programming in Linux or comparable operating systems
+We are specifically interested in candidates who have additional experience in virtualization technologies
+You are familiar with professional software development processes and tools
+You are able to develop creative solutions for complex software problems
+You feel happy in a cooperatively managed team environment
+You have a good command of English (for technical work) and at least basic German (for day to day interaction)
+You are goal-oriented and can work independently but are ready to adjust quickly to the demands of our customers.
+

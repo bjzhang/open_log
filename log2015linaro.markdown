@@ -1895,3 +1895,205 @@ GTD
 1.  today
     1.  kselftest kdbus.
 
+14:45 2015-09-02
+-
+GTD
+-
+1.  today
+    1.  kselftest patch v2.
+
+15:57 2015-09-02
+010 67294071
+
+15:42 2015-09-03
+-
+GTD
+-
+1.  today
+    1.  kselftest patch v2. see"15:42 2015-09-03"
+2.  next
+    1.  evaluate the task for kselftest. when could I finish this task?
+
+15:42 2015-09-03
+kselftest
+1.  exec
+    1.  as Michael Ellerman said, the subdir I fixed is broken after 84cbd9e4c457.
+        try the rsync later, hope I could fix all the bugs.
+
+2.  if userfaultfd compile failed, it will not install the entire project.
+
+3.  TODO send v2 tomorrow.
+
+16:41 2015-09-03
+mmc, usb.
+
+15:26 2015-09-06
+-
+GTD
+-
+1.  today
+    1.  16:41- kselftest v2.
+
+16:19 2015-09-07
+-
+kselftest
+-
+1.  cover letter
+kselftest improvement and cleanup
+
+This is my second attempt for improving the kselftest for arm/arm64
+architecture. Eventually, we hope we could build(in an cross compile
+environment) and run all the kselftest cases automatically(successful
+of courses). The first version is here[1].
+
+In this series, I try to make all the testcases compiling and
+installation successful.
+
+c 9fae100 selftests: breakpoints: fix installing error on the architecture except x86
+c a7d0f07 selftests: check before install
+a 7824b26 selftests: rename jump label to static_keys
+a f93be76 selftests: only compile userfaultfd for x86 and powperpc
+  8ec8722 selftests: mqueue: allow extra cflags
+  d5babcb selftests: mqueue: simpification the Makefile
+  e2fe790 selftests: change install command to rsync
+  2becd5b selftests: exec: simpification the Makefile
+
+"c" means committed by Shuah Khan <shuahkh@osg.samsung.com>
+"a" means acked by Shuah Khan <shuahkh@osg.samsung.com>
+
+[1] http://www.spinics.net/lists/kernel/msg2056987.html
+
+2.  git send email
+    `git send-email --no-chain-reply-to --annotate --to linux-kernel@vger.kernel.org --cc broonie@kernel.org --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc bamvor.zhangjian@linaro.org --cc shuahkh@osg.samsung.com --cc mpe@ellerman.id.au *.patch`
+
+3.  the patch for userfaultfd is replaced by "Michael Ellerman"
+
+08:58 2015-09-09
+-
+GTD
+-
+1.  today
+    1.  kselftest: read the mail and patch sent by Andrea Arcangeli.
+    2.  9:27 seccomp: send email to maintainer.
+    3.  14:32 write v3 patch.
+
+12:05 2015-09-09
+-
+colleague, linaro, kwg
+-
+John Stultz, android, ion
+<http://lwn.net/Articles/656324/>
+
+12:13 2015-09-09
+-
+[what does tipbot mean in LKML?](http://stackoverflow.com/questions/15352669/what-does-tipbot-mean-in-lkml)
+tip-bot is an automated script that notifies the LKML(linux kernel mailing list) whenever a certain code or patch has made its way into few of the branches maintained by Peter Anvin, Thomas Gleixner, and Ingo Molnar. I think the tip refers to the tip trees.
+
+14:37 2015-09-09
+1.  Capitalize the Fixes?
+2.  Acked-by: Viresh Kumar <viresh.kumar@linaro.org>
+
+14:56 2015-09-09
+1.  cover letter
+kselftest improvement and cleanup
+
+This is my third attempt for improving the kselftest for arm/arm64
+architecture. Eventually, we hope we could build(in an cross compile
+environment) and run all the kselftest cases automatically(successful
+of courses). The first and second version is here[1][2].
+
+In this series, I try to make all the testcases compiling and
+installation successful.
+
+Changes since v2:
+1.  Remove the patch "selftests: only compile userfaultfd for x86 and
+powperpc". Michael sent anther better patch.
+2.  Improve the commits and patches according to Michael's suggestion.
+
+c 9fae100 selftests: breakpoints: fix installing error on the architecture except x86
+c a7d0f07 selftests: check before install
+a 1189f67 selftests: rename jump label to static_keys
+a 4ee06bb selftests: mqueue: allow extra cflags
+  9767a8e selftests: mqueue: Simplify the Makefile
+  980ac26 selftests: change install command to rsync
+  82775ac selftests: exec: Revert to default emit rule
+
+"c" means committed by Shuah Khan <shuahkh@osg.samsung.com>
+"a" means acked by Shuah Khan <shuahkh@osg.samsung.com> or Michael Ellermani <mpe@ellerman.id.au>
+
+09:46 2015-09-10
+-
+kselftest, seccomp, arm, arm64, restartable syscall
+-
+1.  "Kees Cook" reply to "Arnd Bergmann"
+On Wed, Sep 9, 2015 at 2:20 PM, Arnd Bergmann <arnd@arndb.de> wrote:
+> On Wednesday 09 September 2015 13:52:39 Kees Cook wrote:
+>> On Wed, Sep 9, 2015 at 1:08 PM, Arnd Bergmann <arnd@arndb.de> wrote:
+>>> On Wednesday 09 September 2015 12:30:27 Kees Cook wrote:
+>
+>>> If this is intentional, it at least needs a comment to explain the
+>>> situation, and be extended to all other architectures that do not have
+>>> a poll() system call.
+>>>
+>>> The arm32 version of sys_poll should be available as 168 in both native
+>>> and compat mode.
+>>
+>> Does ppoll still get interrupted like poll to require a restart_syscall call?
+>
+> Yes, the only difference between the two is the optional signal mask
+> argument in ppoll.
+
+Okay, good. I'll respin the patch to use ppoll (which was Bamvor's
+original suggestion to me, IIRC).
+
+>> Regardless, the primary problem is this (emphasis added):
+>>
+>>>> +        * - native ARM does _not_ expose true syscall.
+>>>> +        * - compat ARM on ARM64 _does_ expose true syscall.
+>>
+>> When you ptrace or seccomp an arm32 binary under and arm32 kernel,
+>> restart_syscall is invisible. When you ptrace or seccomp an arm32
+>> binary under and arm64 kernel, suddenly it's visible. This means, for
+>> example, seccomp filters will break under an arm64 kernel.
+>
+> Ok, I see.
+>
+>> (And apologies if I'm not remembering pieces of this correctly, I
+>> don't have access to arm64 hardware at the moment, which is why I'm
+>> reaching out for some help on this... I'm trying to close out this old
+>> thread: https://lkml.org/lkml/2015/1/20/778 )
+>
+> FWIW, it should not be too hard to get an image that runs in
+> qemu-system-arm64.
+
+Yeah, that's my next project on this front.
+
+> I suppose the same problem exists on all restartable system calls
+> (e.g. nanosleep, select, recvmsg, clock_nanosleep, ...)?
+
+As far as I know, yes. I just happened to set up the testing around
+poll as it was easiest to trigger for me.
+
+> I also believe there are various architectures that cannot see the
+> original system call number for a restarted syscall, in particular
+> when the syscall number argument is in the same register as the
+> return code of the syscall and gets overwritten on the way out of
+> the kernel. Is this the problem you are seeing? If so, we should
+> find a solution that works on all such architectures.
+
+I don't think there's any one way things operate, unfortunately. I
+need to map out the behaviors, since sometimes ptrace sees things
+differently from seccomp (which leads to no end of confusion on my
+part). I will try to generate a comparison across several
+architectures.
+
+-Kees
+
+-- 
+Kees Cook
+Chrome OS Security
+
+2.  kselftest status
+    1.  except seccomp which in discussion, all the testcases is compiled pass.
+    2.  Will check all the testcases failure in my next step.
+
