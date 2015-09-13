@@ -1895,12 +1895,38 @@ GTD
 1.  today
     1.  kselftest kdbus.
 
+10:13 2015-08-24
+-
+GTD
+-
+1.  today
+    1.  10:13-10:34 weekly report.
+
+10:13 2015-08-24
+----------------
+linaro, work reprot, weekly report
+----------------------------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-08-10 to 2015-08-23
+
+=== Highlights ===
+1.  kselftest
+    1.  add some improvement for kselftest in order to build and test kselftest automatically.
+        And send v1 to LKML after internal review. No one response yet(because of Linux Plumbers Conference?).
+    2.  check the failure of kdbus and memfd. Some of the failure due to the failure of clone syscall.
+
+=== Plans ==
+1.  kselftest:
+    1.  try to write the kselftest for seccomp for arm64 in reference to the patch for s390[1]
+    2.  send v2 with more improvement for kselftest on arm64.
+
+[1]  http://comments.gmane.org/gmane.linux.kernel/2024322
+
 14:45 2015-09-02
 -
 GTD
 -
 1.  today
-    1.  kselftest patch v2.
+1.  kselftest patch v2.
 
 15:57 2015-09-02
 010 67294071
@@ -1910,15 +1936,15 @@ GTD
 GTD
 -
 1.  today
-    1.  kselftest patch v2. see"15:42 2015-09-03"
+1.  kselftest patch v2. see"15:42 2015-09-03"
 2.  next
-    1.  evaluate the task for kselftest. when could I finish this task?
+1.  evaluate the task for kselftest. when could I finish this task?
 
 15:42 2015-09-03
 kselftest
 1.  exec
-    1.  as Michael Ellerman said, the subdir I fixed is broken after 84cbd9e4c457.
-        try the rsync later, hope I could fix all the bugs.
+1.  as Michael Ellerman said, the subdir I fixed is broken after 84cbd9e4c457.
+    try the rsync later, hope I could fix all the bugs.
 
 2.  if userfaultfd compile failed, it will not install the entire project.
 
@@ -1932,7 +1958,7 @@ mmc, usb.
 GTD
 -
 1.  today
-    1.  16:41- kselftest v2.
+1.  16:41- kselftest v2.
 
 16:19 2015-09-07
 -
@@ -1953,10 +1979,10 @@ c 9fae100 selftests: breakpoints: fix installing error on the architecture excep
 c a7d0f07 selftests: check before install
 a 7824b26 selftests: rename jump label to static_keys
 a f93be76 selftests: only compile userfaultfd for x86 and powperpc
-  8ec8722 selftests: mqueue: allow extra cflags
-  d5babcb selftests: mqueue: simpification the Makefile
-  e2fe790 selftests: change install command to rsync
-  2becd5b selftests: exec: simpification the Makefile
+8ec8722 selftests: mqueue: allow extra cflags
+d5babcb selftests: mqueue: simpification the Makefile
+e2fe790 selftests: change install command to rsync
+2becd5b selftests: exec: simpification the Makefile
 
 "c" means committed by Shuah Khan <shuahkh@osg.samsung.com>
 "a" means acked by Shuah Khan <shuahkh@osg.samsung.com>
@@ -1964,7 +1990,7 @@ a f93be76 selftests: only compile userfaultfd for x86 and powperpc
 [1] http://www.spinics.net/lists/kernel/msg2056987.html
 
 2.  git send email
-    `git send-email --no-chain-reply-to --annotate --to linux-kernel@vger.kernel.org --cc broonie@kernel.org --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc bamvor.zhangjian@linaro.org --cc shuahkh@osg.samsung.com --cc mpe@ellerman.id.au *.patch`
+`git send-email --no-chain-reply-to --annotate --to linux-kernel@vger.kernel.org --cc broonie@kernel.org --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc bamvor.zhangjian@linaro.org --cc shuahkh@osg.samsung.com --cc mpe@ellerman.id.au *.patch`
 
 3.  the patch for userfaultfd is replaced by "Michael Ellerman"
 
