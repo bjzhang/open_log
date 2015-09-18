@@ -1828,7 +1828,7 @@ GTD
 
 15:42 2015-08-14
 ----------------
-kselftest
+kselftest, testcases
 ---------
 1.  firmware
     1.  need enable "`CONFIG_TEST_FIRMWARE`" and put `test_firmware.ko` into filesystem.
@@ -2123,3 +2123,75 @@ Chrome OS Security
     1.  except seccomp which in discussion, all the testcases is compiled pass.
     2.  Will check all the testcases failure in my next step.
 
+11:38 2015-09-17
+---------------
+kselftest, testcases
+--------------------
+1.  memory hotplug
+    1.  do not support by arm and arm64.
+
+2.  mount
+    1.  enable /proc/self/uid_map
+        user namespace?
+
+    2.  enable CONFIG_DEVPTS_MULTIPLE_INSTANCES
+        TODO
+
+3.  mqueue
+    1.  PASS: mq_open_tests, mq_perf_tests
+
+4.  net
+    1.  run_afpackettests
+        1.  got the following failure.
+            test: datapath 0x1000
+            info: count=0,0, expect=0,0
+            info: count=0,20, expect=15,5
+            ERROR: incorrect queue lengths
+
+            1.  after enable user namespace, BPF_SYSCALL and TEST_BPF and reboot. it is ok.
+                but after reboot, it fail again. maybe it fail because of qemu?
+                TODO
+
+        2.  psock_fanout
+            CONFIG_BPF_SYSCALL: enable bpf syscall
+
+    2.  enable TEST_BPF for test_bpf.
+
+
+5.  rcutorture is not tested. TODO: do we need test it?
+
+6.  size
+    1.  compile failed in arm64 native.
+        ```
+        gcc -static -ffreestanding -nostartfiles -s get_size.c -o get_size
+        /usr/lib64/gcc/aarch64-suse-linux/5/../../../../aarch64-suse-linux/bin/ld: cannot find -lc
+        collect2: error: ld returned 1 exit status
+        Makefile:4: recipe for target 'get_size' failed
+        make: *** [get_size] Error 1
+        ```
+    2.  test pass.
+
+7.  staic_keys:
+    1.  enable TEST_STATIC_KEYS
+
+8.  sysctl
+    1.  got the same error on arm64 and x86
+    ```
+    # ./run_numerictests
+    == Testing sysctl behavior against /proc/sys/vm/swappiness ==
+    Writing middle of sysctl after synchronized seek ... FAIL
+    Writing beyond end of sysctl ... FAIL
+    # ./run_stringtests
+    == Testing sysctl behavior against /proc/sys/kernel/domainname ==
+    Writing middle of sysctl after synchronized seek ... FAIL
+    Writing beyond end of sysctl ... FAIL
+    Writing sysctl with multiple long writes ... FAIL
+    Writing entire sysctl in short writes ... FAIL
+    Checking sysctl keeps original string on overflow append ... FAIL
+    ```
+
+9.  timers
+    1.  FAIL: rtctest
+
+10. user
+    1.  enable TEST_USER_COPY
