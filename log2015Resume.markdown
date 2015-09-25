@@ -98,3 +98,11 @@ You feel happy in a cooperatively managed team environment
 You have a good command of English (for technical work) and at least basic German (for day to day interaction)
 You are goal-oriented and can work independently but are ready to adjust quickly to the demands of our customers.
 
+00:46 2015-09-23
+----------------
+1.  In Huawei
+    I focus on the features we need when we migratie from the old arm32 with old kernel(2.6.x or 3.x) to the our lastest stable kernel(4.x). E.g. ILP32 on aarch64, binary compatability when upgrade the kernel and glibc.
+
+2.  In Vimicro
+    The main of issue of the project we encountered is we upgraded the cpu from arm9 to Cortex-A8.
+
