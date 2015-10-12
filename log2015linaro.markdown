@@ -2196,3 +2196,67 @@ kselftest, testcases
 10. user
     1.  enable TEST_USER_COPY
 
+17:26 2015-10-11
+1.  这是我第一次参加linaro connect, 认识相关同事, 看了demo friday.
+    1.  和下列同事有面对面的交流.
+        1.  kwg
+            1.  Takahiro Akashi(kdump)
+                DONE: he will discuss with jeff about the plan of upstream for kdump and kexec.
+
+2.  daivd long kprobe
+      the handler of brk instruction changed a little. david will change his patches a little.
+     it may be useful for my breakpoint of kprobe work.
+
+    I suggest that david could use the 4.2 rcx for hikey board.
+
+3.  linus
+    he suggest gpio test.
+
+4.  mark
+   mark ack our(me and linus) thought, i will discuss with mark later after i think carefully.
+
+5.  Mathieu Poirier
+
+core
+Serge Broslavsky
+    Samsung leave and join.
+
+Alex Bennée
+    qemu tcg.
+
+pmwg
+lina: cpuidle
+todo suspend to idle?
+
+leg
+venkatesh jooth vivekanandan: was working in lng. focus on openstack for arm. the new arm64 server chip of broadcom is coming.
+guohanjun: 有的，而且应该支持多P互联，他们有人问我NUMA进展.
+
+lmg
+Sumit Semwal: android kernel leader(5 persons). maintainer of dma buffer sharing framework.
+
+Amit Pundir: lsk-android
+
+
+
+geoff
+he will send the new versions with Takahiro together. with an update which enable cache for kdump.
+
+Stefano Stabellini:
+i mentioned i contribute to xen two years ago. glad to know that he still remember me.
+
+Paul Liu
+
+Viswanath Puttagunta: show the case for wayland.
+
+阿里
+一斐: todo 最近在做什么？
+
+face to face hello
+1.  Samuel Li
+    linaro, vp, great China. responsible for bd(business development).
+
+Yongqin Liu
+
+Jorge Ramirez-Ortiz
+
