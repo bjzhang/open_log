@@ -2190,6 +2190,11 @@ kselftest, testcases
     Checking sysctl keeps original string on overflow append ... FAIL
     ```
 
+    2.  (17:14 2015-10-15)
+        It is a fix for procfs: when kernel.sysctl_writes_strict = 1, it will append instead of trucate. ref"f4aacea2" and [discussion](https://lkml.org/lkml/2015/6/17/124)
+
+    "17:14 2015-10-15"end
+
 9.  timers
     1.  FAIL: rtctest
 
@@ -2259,4 +2264,132 @@ face to face hello
 Yongqin Liu
 
 Jorge Ramirez-Ortiz
+
+18:10 2015-10-13
+----------------
+clone
+1.  there is copy_thread_tls in x86. it is not exist in another architecture.
+```
+> grep copy_thread_tls * -R -I
+arch/x86/kernel/process_32.c:int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
+arch/x86/kernel/process_64.c:int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
+arch/Kconfig:     Architecture provides copy_thread_tls to accept tls argument via
+include/linux/sched.h:extern int copy_thread_tls(unsigned long, unsigned long, unsigned long,
+include/linux/sched.h:/* Architectures that haven't opted into copy_thread_tls get the tls argument
+include/linux/sched.h:static inline int copy_thread_tls(
+kernel/fork.c:  retval = copy_thread_tls(clone_flags, stack_start, stack_size, p, tls);
+```
+
+2.  patch
+```c
+diff --git a/tools/testing/selftests/memfd/memfd_test.c b/tools/testing/selftests/memfd/memfd_test.c
+index 0b9eafb..6859af5 100644
+--- a/tools/testing/selftests/memfd/memfd_test.c
++++ b/tools/testing/selftests/memfd/memfd_test.c
+@@ -18,7 +18,7 @@
+ #include <unistd.h>
+ 
+ #define MFD_DEF_SIZE 8192
+-#define STACK_SIZE 65535
++#define STACK_SIZE (65535&(~15))
+ 
+ static int sys_memfd_create(const char *name,
+            unsigned int flags)
+```
+
+3.  send email(cancelled)
+RFC: selftest: memfd: fix alignment issue on aarch64
+Due to 16-byte aligned stack mandatory on AArch64, copy_thread() in arch/arm64/kernel/process.c will failed.
+Except arm64, parisc will do the word algn in copy_thread instead of checking and sparc will do the 16bytes algn.
+
+4.  reply to chunyan
+This works for me. Meanwhile, I check all the implementation of
+copy_thread in all architectures. There is no aliment check except
+aarch64. Parisc and sparc will do the 4bytes and 16bytes alignment
+instead of checking respectively.
+
+And such alignment is introduced by Commit e0fd18ce1169 ("arm64:
+get rid of fork/vfork/clone wrappers"). So, it seems that we should
+fix in memfd_test.c?
+
+not used
+dh.herrmann@gmail.com
+Catalin Marinas <catalin.marinas@arm.com>
+Will Deacon <will.deacon@arm.com>
+
+cc'd the author of memfd_test.c and aarch64 maintainer.
+
+
+19:17 2015-10-14
+----------------
+arm32 meeting
+For connect:
+This is the first time I join connect. The primary things in my mind is chatting, especially with the kernel developers.
+Linus suggest me to work on the gpio test stuff. Mark create a card for it(https://projects.linaro.org/browse/KWG-148).
+I take a vacation after conenct until this Monday.
+In recent two days, I evalute the gpio test stuff. And try to fix a bug for aarch64 in memfd test of kselftest.
+In memfd_test.c, due to 16-byte aligned stack mandatory on AArch64, copy_thread() in arch/arm64/kernel/process.c will failed.
+Except arm64, parisc will do the word algn in copy_thread instead of checking and sparc will do the 16bytes algn.
+There are two method for solving this issue: a, align to 16bytes in clone in memfd_test.c; b. change the stack check to force alignment in aarch64. I feel I should modify the code in memfd_test.c
+
+20:50 2015-10-14
+----------------
+Summary for linaro connect sfo15
+
+12:00 2015-10-16
+----------------
+CONFIG_DEVPTS_MULTIPLE_INSTANCES
+CONFIG_TEST_STATIC_KEYS
+CONFIG_TEST_USER_COPY
+CONFIG_KDBUS
+CONFIG_TEST_FIRMWARE
+CONFIG_FTRACE
+CONFIG_GENERIC_TRACER
+CONFIG_TRACING_SUPPORT
+CONFIG_FUNCTION_TRACER
+CONFIG_FUNCTION_GRAPH_TRACER
+CONFIG_IRQSOFF_TRACER
+CONFIG_PREEMPT_TRACER
+CONFIG_SCHED_TRACER
+CONFIG_FTRACE_SYSCALLS
+CONFIG_TRACER_SNAPSHOT
+CONFIG_TRACER_SNAPSHOT_PER_CPU_SWAP
+CONFIG_BRANCH_PROFILE_NONE
+CONFIG_STACK_TRACER
+CONFIG_BLK_DEV_IO_TRACE
+CONFIG_DYNAMIC_FTRACE
+CONFIG_FUNCTION_PROFILER
+CONFIG_FTRACE_MCOUNT_RECORD
+CONFIG_TRACEPOINT_BENCHMARK
+CONFIG_RING_BUFFER_STARTUP_TEST
+CONFIG_TRACE_ENUM_MAP_FILE
+CONFIG_USER_NS
+CONFIG_BPF_SYSCALL
+CONFIG_TEST_BPF
+
+15:20 2015-10-16
+----------------
+1.  efivarfs
+2.  exec
+    1.  cross-compile: fail.
+    2.  native build: succeessful: missing Makefile in installation path. successful if manaually add.
+3.  kdbus
+    1.  I suppose the module issue.
+
+16:00 2015-10-18
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-10-12 to 2015-10-16
+= Bamvor Jian Zhang=
+
+3 days leave this week.
+
+=== Highlights ===
+* GPIO kselftest/[new KWG-148]
+    - Get this task from Linus during sfo15.
+    - Understanding this task and read the patch from Kamlakant Patel.
+
+17:14 2015-10-19
+----------------
+1.  should i do it base on gpiolib?
+2.  which interface should I implemented for gpio_chip?
 
