@@ -2390,6 +2390,15 @@ CONFIG_TEST_BPF
 
 17:14 2015-10-19
 ----------------
+0.  take tegra as example.
 1.  should i do it base on gpiolib?
+    yes
 2.  which interface should I implemented for gpio_chip?
+    set, get, direction_out, direction_in; it seems that I should add request and free.
+3.  there is debugfs in drivers/gpio/gpiolib.c, So, why we need a dedicated /sys/kernel/debug/mock-up-gpio-state?
+
+4.  My plan
+    1.  write gpio-mock with set, get, direction_out, direction_in, request and free.
+        use gpiolib_seq_ops for our debugfs work.
+    2.  use dbg_show in other gpio, such as tegra...
 
