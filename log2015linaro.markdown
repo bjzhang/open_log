@@ -2402,3 +2402,8 @@ CONFIG_TEST_BPF
         use gpiolib_seq_ops for our debugfs work.
     2.  use dbg_show in other gpio, such as tegra...
 
+19:00 2015-10-21
+----------------
+// enable all the messages in file svcsock.c
+nullarbor:~ # echo -n 'file svcsock.c +p' > <debugfs>/dynamic_debug/control
+See Documentation/dynamic-debug-howto.txt for additional information.
