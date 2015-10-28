@@ -2407,3 +2407,31 @@ CONFIG_TEST_BPF
 // enable all the messages in file svcsock.c
 nullarbor:~ # echo -n 'file svcsock.c +p' > <debugfs>/dynamic_debug/control
 See Documentation/dynamic-debug-howto.txt for additional information.
+
+10:24 2015-10-26
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-10-19 to 2015-10-23
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* GPIO kselftest/[KWG-148]
+    - Discuss with Linus and arnd about this task. I may do the following items:
+      basic gpio mockup driver, kselftest test script, support pinctrl, emulate
+      interrupt by eventfd(not sure if it works in debugfs).
+    - Rebase and update the patch from Kamlakant Patel.
+      Currently, it support change direction and out value.
+    - Writing kselftest script.
+    - Found the new gpio interface(char device) from linus. Maybe my gpio
+      kselftest could try to support it after Linus send out the set/get API.
+
+* kselftest improvements/[KWG-23]
+    - Found out why my sysctl testcase is failed on both x86 and arm. It is
+      because write behave depend on the kernel.sysctl_writes_strict after
+      Commit 24fe831c17ab ("tools/testing/selftests/sysctl: validate
+      sysctl_writes_strict")
+
+=== Plans ===
+* GPIO: write kselftest script and pinctrl.
+* kselftest: revisit all the test result on the lastest kernel.
+* Try to boot the lastest kernel on my 96boards.
+
