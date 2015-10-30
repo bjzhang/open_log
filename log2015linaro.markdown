@@ -2444,6 +2444,8 @@ See Documentation/dynamic-debug-howto.txt for additional information.
     ```
         GPIO integer space overlap, cannot add chip\n");
     ```
+    3.  probe failed, but driver already insert. is it normal?
+        1.  improve gpiochip_add_to_list: add better overlap check; add base conflict check to avoid the failure of gpiochip_sysfs_register.
 
 1.  there are pros and cons if we do not support device tree.
 pros: do not need to mix with the real hardware dts.
