@@ -2338,6 +2338,7 @@ Summary for linaro connect sfo15
 
 12:00 2015-10-16
 ----------------
+kselftest
 CONFIG_DEVPTS_MULTIPLE_INSTANCES
 CONFIG_TEST_STATIC_KEYS
 CONFIG_TEST_USER_COPY
@@ -2434,4 +2435,21 @@ See Documentation/dynamic-debug-howto.txt for additional information.
 * GPIO: write kselftest script and pinctrl.
 * kselftest: revisit all the test result on the lastest kernel.
 * Try to boot the lastest kernel on my 96boards.
+
+15:07 2015-10-29
+----------------
+0.  TODO
+    1.  there is no relationship between generic gpio_chip and mockup gpio_stat.
+    2.  add multi gpio_chip to test overlap:
+    ```
+        GPIO integer space overlap, cannot add chip\n");
+    ```
+
+1.  there are pros and cons if we do not support device tree.
+pros: do not need to mix with the real hardware dts.
+cons: could not test the dt_gpio_count, of_find_gpio which rely on device tree. And other function such like gpiod_get_index which rely on the correctness dts.
+
+2.  should I set nrgpio and base as module parameter?
+    add multiple gpio chip support?
+
 
