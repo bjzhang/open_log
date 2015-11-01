@@ -2439,13 +2439,15 @@ See Documentation/dynamic-debug-howto.txt for additional information.
 15:07 2015-10-29
 ----------------
 0.  TODO
-    1.  there is no relationship between generic gpio_chip and mockup gpio_stat.
-    2.  add multi gpio_chip to test overlap:
+    1.  DONE: there is no relationship between generic gpio_chip and mockup gpio_stat.
+    2.  DONE: add multi gpio_chip to test overlap:
     ```
         GPIO integer space overlap, cannot add chip\n");
     ```
-    3.  probe failed, but driver already insert. is it normal?
+    3.  DONE: probe failed, but driver already insert. is it normal?
         1.  improve gpiochip_add_to_list: add better overlap check; add base conflict check to avoid the failure of gpiochip_sysfs_register.
+    4.  DONE: write proper label for gpio-mockup gpiochip.
+    5.  DONE: test base == -1;
 
 1.  there are pros and cons if we do not support device tree.
 pros: do not need to mix with the real hardware dts.
@@ -2454,4 +2456,29 @@ cons: could not test the dt_gpio_count, of_find_gpio which rely on device tree. 
 2.  should I set nrgpio and base as module parameter?
     add multiple gpio chip support?
 
+3.  I am wrong, we need to check it: there is no need to check `_chip->base==chip->base` when we look for where should insert gpiochip if we do not allow nrgpio == 0.
+
+4.  cover letter
+RFC: Add gpio test framework
+
+This series of patches try to add support for test of gpio subsystem
+base on the proposal from Linus Walleij.
+
+The basic idea is implement a virtual gpio device(gpio-mockup) base
+on gpiolib. Tester could test the gpiolib by manipulating gpio-mockup
+device through sysfs and check the result from debugfs. Both sysfs
+and debugfs are provided by gpiolib. Reference the following picture:
+
+                  sysfs  debugfs
+                    |       |
+gpio-mockup <--> gpiolib --/
+
+Find three issue with these series of patches.
+
+Futher work may need to do for testing of other control path.
+Will add pinctrl and interrupt support in next steps.
+
+TODO for sending out:
+1.  check the testcase and patch for overlapping.
+2.  review all the commit message.
 
