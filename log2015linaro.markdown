@@ -2453,32 +2453,119 @@ See Documentation/dynamic-debug-howto.txt for additional information.
 pros: do not need to mix with the real hardware dts.
 cons: could not test the dt_gpio_count, of_find_gpio which rely on device tree. And other function such like gpiod_get_index which rely on the correctness dts.
 
-2.  should I set nrgpio and base as module parameter?
+2.  YES: DONE: should I set nrgpio and base as module parameter?
     add multiple gpio chip support?
 
 3.  I am wrong, we need to check it: there is no need to check `_chip->base==chip->base` when we look for where should insert gpiochip if we do not allow nrgpio == 0.
 
-4.  cover letter
+4.
+```
+    #FAIL in original code
+    gpio_test_fail "0,32,30,5"
+    #FAIL in original code
+    gpio_test_fail "0,32,1,5"
+    #FAIL in original code
+    gpio_test_fail "10,32,9,5"
+    #FAIL in original code
+    gpio_test_fail "10,32,30,5"
+    #FAIL in original code
+    gpio_test_fail "0,32,40,16,39,5"
+    #successful in original code
+    gpio_test_fail "0,32,40,16,30,5"
+    #FAIL in original code
+    gpio_test_fail "0,32,40,16,30,11"
+    #successful in original code
+    gpio_test_fail "0,32,40,16,20,1"
+```
+
+5.  TODO before sending out:
+    1.  DONE: check the testcase and patch for overlapping.
+    2.  DONE: review all the commit message. TODO for gpio.sh and range overlap.
+    3.  DONE: add the error message for overlap of base.
+    4.  DONE: format check
+
+6.  cover letter
 RFC: Add gpio test framework
 
-This series of patches try to add support for test of gpio subsystem
-base on the proposal from Linus Walleij.
+These series of patches try to add support for testing of gpio
+subsystem based on the proposal from Linus Walleij.
 
 The basic idea is implement a virtual gpio device(gpio-mockup) base
 on gpiolib. Tester could test the gpiolib by manipulating gpio-mockup
 device through sysfs and check the result from debugfs. Both sysfs
-and debugfs are provided by gpiolib. Reference the following picture:
+and debugfs are provided by gpiolib. Reference the following figure:
 
-                  sysfs  debugfs
-                    |       |
-gpio-mockup <--> gpiolib --/
+   sysfs  debugfs
+     |       |
+  gpiolib---/
+     |
+ gpio-mockup
 
-Find three issue with these series of patches.
+Find three issue with these with gpio test script. Further discussion
+may needed for these issues.
 
-Futher work may need to do for testing of other control path.
-Will add pinctrl and interrupt support in next steps.
+I split the original patch(from Kamlakant with little update) and
+enhancement patch(support multiple gpiochip). Hope it is easy to
+review it. But I not sure if I should merge when I send to the ML.
 
-TODO for sending out:
-1.  check the testcase and patch for overlapping.
-2.  review all the commit message.
+I add the entry in MAINTAINER files due to the warning came from
+./scripts/checkpatch.pl. But I am not sure if I should add the
+M or R While I notice that there is a discussion about "Start using
+the 'reviewer' (R) tag"[1].
+
+Futher work and discussion:
+1.  Test other code path(if exists).
+2   Add pinctrl and interrupt support(Linus suggest trying the
+    eventfd) in next steps.
+3.  I feel that we could rework the debugfs in other gpiolib based
+    drivers to the code in gpiolib.c with generic gpiolib_dbg_show or
+    chip->dbg_show.
+4.  Currently, gpio-mockup does not support the device tree. There are
+    pros and cons if we do not support device tree:
+    Pros: do not need to mix with the real hardware dts.
+    Cons: could not test the dt_gpio_count, of_find_gpio which rely on
+    device tree. And other function such like gpiod_get_index which
+    rely on the correctness of the above functions.
+
+    If we want to test the above functions, we could provide a
+    dedicated device tree for gpio-mockup device which could be
+    included by other device tree. And we could use device tree
+    overlay to provide multiple device tree testcases.
+5.  Given that this gpio test framework is based on sysfs and debugfs.
+    I feel that it could be a generic gpio test script other then a
+    dedicated script for gpio-mockup driver. Although, my script only
+    support gpio-mockup driver at this monment.
+
+My patch rebased on linux-gpio/devel, could get from
+https://github.com/bjzhang/linux/tree/gpio-mockup-RFC-only-for-Linus
+
+[1] http://www.spinics.net/lists/arm-kernel/msg456194.html
+
+7.  send
+`git send-email --no-chain-reply-to --annotate --to linus.walleij@linaro.org --cc broonie@linaro.org *.patch`
+
+21:53 2015-11-03
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-10-26 to 2015-11-23
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* GPIO kselftest/[KWG-148]
+    - Add multiple gpiochip support in my gpio-mockup driver.
+    - Add a test script in kselftest for testing multiple gpiochip and overlap.
+    - Found three issues with my test script.
+    - Send all my 7 patches to Linus and Mark privately yestoday.
+
+* Play with my hikey board
+    - reflash the bootloader and debian.
+    -  The serial do not work with serial board for 96boards. Both Uart0 and Uart1
+       do not work. Will try from J16 directly.
+
+* 1:1 with Mark
+
+=== Plans ===
+* Discuss with Linus with my gpio patches.
+* y2038: ppdev: write a updated version of ppdev patches for converting it to
+  y2038 safe.
+* Continue trying the seiral of hikey.
 
