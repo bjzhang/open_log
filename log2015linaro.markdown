@@ -2569,3 +2569,32 @@ https://github.com/bjzhang/linux/tree/gpio-mockup-RFC-only-for-Linus
   y2038 safe.
 * Continue trying the seiral of hikey.
 
+14:56 2015-11-04
+----------------
+y2038, ppdev
+------------
+1.  requirement.
+    1.  Do not break old applications which include arm32 application on arm32 kernel; compat and aarch64 applications on arm64 kernel.
+    2.  New compiled code based on `time64_t` which include arm32 and compat.
+    3.  Do not consider ilp32 at this monment?
+
+2.  current status
+    1.  Do not support compat.
+    2.  There is no need to convert timeval to 64bit.
+
+3.  Analysis in details.
+        u:arch  u:time_t    k:arch  k:time_t    is_timeval_same     how_to_check_it_in_kernel
+    1.  32      32          32      32          yes                 !IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
+    2.  32      32          32      64          no                  !IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
+    3.  32      32          64      64          no                  IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
+    4.  32      64          64      64          yes                 IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
+    5.  64      64          64      64          yes                 IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+
+    Is_timeval_same: if timeval in userspace and kernel is same.
+    which should I use for check compat? is_compat_task or "#ifdef CONFIG_COMPAT"?
+    I could not check time_t is 64 or 32 in userspace from kernel. I could not distinguish item 3(not y2038 safe) and 4(y2038 safe). IIUC, what we want is migrate from 3 to 4. So, maybe there is another config(CONFIG_COMPAT_TIME?) to check it?
+    Should I need to find a way to avoid use CONFIG_COMPAT_TIME?
+    What does the mean of COMPAT_USE_64BIT_TIME?
+
+4.  need to consider big endian later.
+
