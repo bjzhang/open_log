@@ -2583,11 +2583,17 @@ y2038, ppdev
     2.  There is no need to convert timeval to 64bit.
 
 3.  Analysis in details.
+notes:
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit kernel. compat means 32bit app running on 64bit kernel. 64 means 64bit app running on 64bit kernel.
+
 summary            |u:arch |u:tv_sec |k:arch |k:tv_set |is_timeval_same |how_to_check_it_in_kernel
 -------------------|-------|---------|-------|---------|----------------|--------------------------------------------------------------------
 32_y2038_unsafe    |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
 compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
 64_y2038_safe      |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+
+    1.  1.3.4 are the original one, we need keep the compatability. 2 is new one we need to support.
+    2.  I suppose that there is no need to update time_t of timeval to time64_t(aka timeval64) in 32bit kernel. Because timeval is timeout, usually a little bit offset of realtime and is desprecated.
 
 TODO!!!
 summary            |u:arch |u:tv_sec |k:arch |k:tv_sec |is_timeval_same |how_to_check_it_in_kernel
@@ -2595,13 +2601,12 @@ summary            |u:arch |u:tv_sec |k:arch |k:tv_sec |is_timeval_same |how_to_
 32_y2038_unsafe    |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
 32_y2038_safe      |32     |64       |32     |64       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
 compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
-compat_y2038_safe  |32     |64       |64     |64       |yes              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
+compat_y2038_safe  |32     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
 64_y2038_safe      |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
 
-notes:
-    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit kernel. compat means 32bit app running on 64bit kernel. 64 means 64bit app running on 64bit kernel.
-    2.  1.3.4 are the original one, we need keep the compatability. 2 is new one we need to support.
-    3.  I suppose that there is no need to update time_t of timeval to time64_t(aka timeval64) in 32bit kernel. Because timeval is timeout, usually a little bit offset of realtime and is desprecated.
+    1.  1.3.5 are the original one, we need keep the compatability. 2,4 is new one we need to support.
+    2.  I suppose user will update time_t in timval to time64_t. And kernel will use timespec64 instead timeval.
+
 
     Is_timeval_same: if timeval in userspace and kernel is same.
 
@@ -2611,6 +2616,7 @@ notes:
     DONE: Should I need to find a way to avoid use CONFIG_COMPAT_TIME? Avoid to use it by check COMPAT_USE_64BIT_TIME.
     need to consider big endian later.
     DONE(NO, ref note 3): Should I define `__kernel_timeval`/`timeval64` or just use the `timeval`. The latter may work but the former one is more clear.
+    Do the same for: drivers/char/lp.c
 
 5.  Add get_timeval and put_timeval to abstract the difference time_t between kernel and userspace, between y2038 safe and not.
     TODO:
@@ -2673,6 +2679,50 @@ notes:
 7.  Difference between timespec and timeval.
     1.  There is no need to force userspace to migrate timeval to timeval64 because even if 32bit time is enough for timeval which is offset of the realtime(?).
         <https://lists.linaro.org/pipermail/y2038/2015-June/000553.html>
+
+8.  send email to arnd
+Hi, Arnd
+
+I am thinking the ppdev work recently. There are something I want to discuss
+with you. I am not sure if I understand my task correctly. Here, I hope I
+could align with you.
+
+My task is support ppdev driver in a y2038 safe way and keep the old binary
+(y2038 unsafe) running with the kernel which do not enble y2038 support.
+If I undertand correctly, when we talk about y2038 safe in user space, the
+time_t is always 64bit no matter we use it standalone or embeded it to other
+structure(e.g. timespec, timeval and so on)?
+
+And, secondly, will the 32bit kernel use time64_t allover the kernel when we
+say it is y2038 safe?(or on the contrast 32bit kernel do not update time_t
+in timeval to time64_t?)
+
+If then are both yes. I feel that there are the 5 cases I need to support:
+
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
+-------------------|-------|---------|-------|--------
+32_y2038_unsafe    |32     |32       |32     |32
+32_y2038_safe      |32     |64       |32     |64
+compat_y2038_unsafe|32     |32       |64     |64
+compat_y2038_safe  |32     |64       |64     |64
+64_y2038_safe      |64     |64       |64     |64
+
+notes:
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit kernel.
+        compat means 32bit app running on 64bit kernel. 64 means 64bit app
+        running on 64bit kernel.
+    2.  1.3.5 are the original one, we need keep the compatability. 2,4 is
+        new one we need to support.
+
+You are mentioned that timeval is depercated. And I found that pingbo convert
+timeval to timespec64 in his patch.
+Should I follow this rule too?
+
+Thanks in advance.
+
+Best regards
+
+Bamvor
 
 11:04 2015-11-06
 ----------------
