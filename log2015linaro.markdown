@@ -2583,18 +2583,121 @@ y2038, ppdev
     2.  There is no need to convert timeval to 64bit.
 
 3.  Analysis in details.
-        u:arch  u:time_t    k:arch  k:time_t    is_timeval_same     how_to_check_it_in_kernel
-    1.  32      32          32      32          yes                 !IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
-    2.  32      32          32      64          no                  !IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
-    3.  32      32          64      64          no                  IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
-    4.  32      64          64      64          yes                 IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
-    5.  64      64          64      64          yes                 IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+summary            |u:arch |u:time_t |k:arch |k:time_t |is_timeval_same |how_to_check_it_in_kernel
+-------------------|-------|---------|-------|---------|----------------|--------------------------------------------------------------------
+arm32_y2038_unsafe |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
+arm32_y2038_safe   |32     |32       |32     |64       |no              |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
+compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
+compat_y2038_safe  |32     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
+arm64_y2038_safe   |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+
+notes:
+    1.  xxx_y2038_safe/unsafe. arm32 means app running on the arm32 kernel. compat means arm32 app running on arm64 kernel. arm64 means arm64 app running on arm64 kernel.
+    2.  1.3.5 are the original one, we need keep the compatability. 2.4 are new one we need to support.
 
     Is_timeval_same: if timeval in userspace and kernel is same.
-    which should I use for check compat? is_compat_task or "#ifdef CONFIG_COMPAT"?
-    I could not check time_t is 64 or 32 in userspace from kernel. I could not distinguish item 3(not y2038 safe) and 4(y2038 safe). IIUC, what we want is migrate from 3 to 4. So, maybe there is another config(CONFIG_COMPAT_TIME?) to check it?
-    Should I need to find a way to avoid use CONFIG_COMPAT_TIME?
-    What does the mean of COMPAT_USE_64BIT_TIME?
 
-4.  need to consider big endian later.
+4.  TODO
+    which should I use for check compat? is_compat_task or "#ifdef CONFIG_COMPAT"?
+    I could not check time_t is 64 or 32 in userspace from kernel. So, I could not distinguish item 3(not y2038 safe) and 4(y2038 safe). IIUC, what we want is migrate from 3 to 4. So, maybe there is another config(CONFIG_COMPAT_TIME?) to check it?
+    DONE: Should I need to find a way to avoid use CONFIG_COMPAT_TIME? Avoid to use it by check compat_timeval.
+    need to consider big endian later.
+    Should I introduce timeval64? If timeval is though as desprecated. We should avoid introduce new timeval relatvie variable.
+
+5.  Add get_timeval and put_timeval to abstract the difference time_t between kernel and userspace, between y2038 safe and not.
+    TODO:
+    1.  Should I define `__kernel_timeval`/`timeval64` or just use the `timeval`. The latter may work but the former one is more clear.
+
+6.  The old reply from maintainer.
+    1.  <https://lists.linaro.org/pipermail/y2038/2015-June/000553.html>
+    ```
+        The problem for y2038 safety in this driver is not that the 32-bit time_t
+        is insufficient because the tv_sec member here is only used to pass
+        a timeout value that is at most a few seconds rather than an absolute
+        time.
+    ```
+
+    Instead, we need to modify the driver so it can work with new user space
+    that has set time_t to 64-bit and passes an updated structure layout.
+
+    2.  Whether I should define timeval or array in uapi? There are different reply here. Maybe I misunderstanding the reply?
+        <https://lists.linaro.org/pipermail/y2038/2015-June/000548.html>
+        <https://lists.linaro.org/pipermail/y2038/2015-June/000553.html>
+
+    3.  <https://lists.linaro.org/pipermail/y2038/2015-July/000575.html>
+    ```
+        I would also keep this function local to the ppdev driver, in order
+        to not proliferate this to generic kernel code, but that is something
+        we can debate, based on what other drivers need. For core kernel
+        code, we should not need a get_timeval64 function because all system
+        calls that pass a timeval structure are obsolete and we don't need
+        to provide 64-bit time_t variants of them.
+    ```
+
+    4.  CLOSE: <https://lists.linaro.org/pipermail/y2038/2015-July/000584.html>
+    ```
+        > > Actually I think we can completely skip this test here: Unlike
+        > > timespec, timeval is defined in a way that always lets user space
+        > > use a 64-bit type for the microsecond portion (suseconds_t tv_usec).
+        >
+        > I do not familar with this type. I grep the suseconds_t in glibc, it
+        > seems that suseconds_t(__SUSECONDS_T_TYPE) is defined as
+        > __SYSCALL_SLONG_TYPE which is __SLONGWORD_TYPE(32bit on 32bit
+        > architecture).
+
+        Correct, but POSIX allows it to be redefined along with time_t, so
+        timeval can be a pair of 64-bit values. In contrast, timespec is
+        required by POSIX (and C11) to be a time_t and a 'long', which is
+        why we need a hack to check the size of the second word of the
+        timespec structure.
+    ```
+
+7.  Difference between timespec and timeval.
+    1.  There is no need to force userspace to migrate timeval to timeval64 because even if 32bit time is enough for timeval which is offset of the realtime(?).
+        <https://lists.linaro.org/pipermail/y2038/2015-June/000553.html>
+
+11:04 2015-11-06
+----------------
+sihao:
+
+感谢帮忙. 请问下这是用哪个版本的内核测试的? 压缩包里面的README里面有需要打开的内核选项, 不好上次忘了说:p
+
+1.  memfd用例失败的需要合入这个补丁.
+    <https://lkml.org/lkml/2015/10/1/172>
+
+2.  其余用例有没有可能帮忙分析下是成功还是失败? 可以通过看log和测试用例的返回值($?)判断.
+
+谢谢
+
+10:54 2015-11-07
+----------------
+breakpoints
+capabilities
+cpu-hotplug
+efivarfs
+exec
+firmware,PASS
+ftrace,PASS
+futex,PASS
+ipc
+kcmp,PASS
+membarrier
+memfd,PASS
+memory-hotplug
+mount,?
+mqueue,PASS
+net,?
+powerpc,?
+pstore
+ptrace,PASS
+rcutorture
+seccomp
+size
+static_keys,PASS,?
+sysctl,PASS
+timers,PASS
+user,?,enable TEST_USER_COPY
+vm
+x86
+zram
 
