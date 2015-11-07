@@ -2593,9 +2593,9 @@ TODO!!!
 summary            |u:arch |u:tv_sec |k:arch |k:tv_sec |is_timeval_same |how_to_check_it_in_kernel
 -------------------|-------|---------|-------|---------|----------------|--------------------------------------------------------------------
 32_y2038_unsafe    |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
-32_y2038_safe      |32     |64       |32     |64       |no              |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
+32_y2038_safe      |32     |64       |32     |64       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
 compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
-compat_y2038_safe  |32     |64       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
+compat_y2038_safe  |32     |64       |64     |64       |yes              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
 64_y2038_safe      |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
 
 notes:
