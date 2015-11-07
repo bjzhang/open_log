@@ -2583,30 +2583,37 @@ y2038, ppdev
     2.  There is no need to convert timeval to 64bit.
 
 3.  Analysis in details.
-summary            |u:arch |u:time_t |k:arch |k:time_t |is_timeval_same |how_to_check_it_in_kernel
+summary            |u:arch |u:tv_sec |k:arch |k:tv_set |is_timeval_same |how_to_check_it_in_kernel
 -------------------|-------|---------|-------|---------|----------------|--------------------------------------------------------------------
-arm32_y2038_unsafe |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
-arm32_y2038_safe   |32     |32       |32     |64       |no              |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
+32_y2038_unsafe    |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
 compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
-compat_y2038_safe  |32     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
-arm64_y2038_safe   |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+64_y2038_safe      |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+
+TODO!!!
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec |is_timeval_same |how_to_check_it_in_kernel
+-------------------|-------|---------|-------|---------|----------------|--------------------------------------------------------------------
+32_y2038_unsafe    |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
+32_y2038_safe      |32     |64       |32     |64       |no              |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
+compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
+compat_y2038_safe  |32     |64       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
+64_y2038_safe      |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
 
 notes:
-    1.  xxx_y2038_safe/unsafe. arm32 means app running on the arm32 kernel. compat means arm32 app running on arm64 kernel. arm64 means arm64 app running on arm64 kernel.
-    2.  1.3.5 are the original one, we need keep the compatability. 2.4 are new one we need to support.
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit kernel. compat means 32bit app running on 64bit kernel. 64 means 64bit app running on 64bit kernel.
+    2.  1.3.4 are the original one, we need keep the compatability. 2 is new one we need to support.
+    3.  I suppose that there is no need to update time_t of timeval to time64_t(aka timeval64) in 32bit kernel. Because timeval is timeout, usually a little bit offset of realtime and is desprecated.
 
     Is_timeval_same: if timeval in userspace and kernel is same.
 
 4.  TODO
-    which should I use for check compat? is_compat_task or "#ifdef CONFIG_COMPAT"?
-    I could not check time_t is 64 or 32 in userspace from kernel. So, I could not distinguish item 3(not y2038 safe) and 4(y2038 safe). IIUC, what we want is migrate from 3 to 4. So, maybe there is another config(CONFIG_COMPAT_TIME?) to check it?
-    DONE: Should I need to find a way to avoid use CONFIG_COMPAT_TIME? Avoid to use it by check compat_timeval.
+    Which should I use for check compat? is_compat_task or "#ifdef CONFIG_COMPAT"?
+    DONE(The original 4 is deleted): I could not check time_t is 64 or 32 in userspace from kernel. So, I could not distinguish item 3(not y2038 safe) and 4(y2038 safe). IIUC, what we want is migrate from 3 to 4. So, maybe there is another config(CONFIG_COMPAT_TIME?) to check it?
+    DONE: Should I need to find a way to avoid use CONFIG_COMPAT_TIME? Avoid to use it by check COMPAT_USE_64BIT_TIME.
     need to consider big endian later.
-    Should I introduce timeval64? If timeval is though as desprecated. We should avoid introduce new timeval relatvie variable.
+    DONE(NO, ref note 3): Should I define `__kernel_timeval`/`timeval64` or just use the `timeval`. The latter may work but the former one is more clear.
 
 5.  Add get_timeval and put_timeval to abstract the difference time_t between kernel and userspace, between y2038 safe and not.
     TODO:
-    1.  Should I define `__kernel_timeval`/`timeval64` or just use the `timeval`. The latter may work but the former one is more clear.
 
 6.  The old reply from maintainer.
     1.  <https://lists.linaro.org/pipermail/y2038/2015-June/000553.html>
@@ -2615,10 +2622,10 @@ notes:
         is insufficient because the tv_sec member here is only used to pass
         a timeout value that is at most a few seconds rather than an absolute
         time.
-    ```
 
-    Instead, we need to modify the driver so it can work with new user space
-    that has set time_t to 64-bit and passes an updated structure layout.
+        Instead, we need to modify the driver so it can work with new user space
+        that has set time_t to 64-bit and passes an updated structure layout.
+    ```
 
     2.  Whether I should define timeval or array in uapi? There are different reply here. Maybe I misunderstanding the reply?
         <https://lists.linaro.org/pipermail/y2038/2015-June/000548.html>
@@ -2650,6 +2657,17 @@ notes:
         required by POSIX (and C11) to be a time_t and a 'long', which is
         why we need a hack to check the size of the second word of the
         timespec structure.
+    ```
+
+    5.  <https://lists.linaro.org/pipermail/y2038/2015-July/000572.html>
+    ```
+        In case of this driver, nobody would ever want to change their user
+        space to use a 64-bit __kernel_timeval instead of timeval and explicitly
+        call PPGETTIME64 instead of PPGETTIME, because we are only dealing with
+        an interval here, and a 32-bit second value is sufficient to represent
+        that. Instead, the purpose of your patch is to make the kernel cope with
+        user space that happens to use a 64-bit time_t based definition of
+        'struct timeval' and passes that to the ioctl.
     ```
 
 7.  Difference between timespec and timeval.
