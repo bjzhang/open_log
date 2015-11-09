@@ -2601,7 +2601,7 @@ summary            |u:arch |u:tv_sec |k:arch |k:tv_sec |is_timeval_same |how_to_
 32_y2038_unsafe    |32     |32       |32     |32       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
 32_y2038_safe      |32     |64       |32     |64       |yes             |!IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
 compat_y2038_unsafe|32     |32       |64     |64       |no              |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
-compat_y2038_safe  |32     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && !COMPAT_USE_64BIT_TIME
+compat_y2038_safe  |32     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task() && COMPAT_USE_64BIT_TIME
 64_y2038_safe      |64     |64       |64     |64       |yes             |IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
 
     1.  1.3.5 are the original one, we need keep the compatability. 2,4 is new one we need to support.
