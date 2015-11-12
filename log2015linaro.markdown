@@ -2171,7 +2171,7 @@ kselftest, testcases
         ```
     2.  test pass.
 
-7.  staic_keys:
+7.  static_keys:
     1.  enable TEST_STATIC_KEYS
 
 8.  sysctl
@@ -2546,7 +2546,7 @@ https://github.com/bjzhang/linux/tree/gpio-mockup-RFC-only-for-Linus
 
 21:53 2015-11-03
 ----------------
-[ACTIVITY] (Bamvor Jian Zhang) 2015-10-26 to 2015-11-23
+[ACTIVITY] (Bamvor Jian Zhang) 2015-10-26 to 2015-11-03
 = Bamvor Jian Zhang=
 
 === Highlights ===
@@ -2724,12 +2724,105 @@ Best regards
 
 Bamvor
 
+9.  compile test: arm32, arm64, COMPAT_USE_64BIT_TIME=0,1
+
+10.
+Hi,
+
+These patches try to convert user space parport driver to y2038 safe to avoid
+overflow in 32bit time in year 2038.
+
+An y2038 safe application/kernel use 64bit time_t(aka time64_t) instead of 32bit
+time_t. There are the 5 cases need to support:
+
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
+-------------------|-------|---------|-------|--------
+32_y2038_unsafe    |32     |32       |32     |32
+32_y2038_safe      |32     |64       |32     |64
+compat_y2038_unsafe|32     |32       |64     |64
+compat_y2038_safe  |32     |64       |64     |64
+64_y2038_safe      |64     |64       |64     |64
+
+notes:
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit kernel.
+        compat means 32bit app running on 64bit kernel. 64 means 64bit app
+        running on 64bit kernel.
+    2.  1.3.5 are the original one, we need keep the compatability. 2,4 is
+        new one we need to support.
+
+But it is not mean that we need to convert all the time relative struct
+to 64bit. Because some time relative struct(e.g. timeval in ppdev.c) is mainly
+the offset of the real time.
+
+The main issue in ppdev.c is PPSETTIME/PPGETTIME which transfer timeval between
+user space and kernel. Considering, timeval is deprecated and it is different
+in 32bit and 64bit kernel. I could not rely on it to represent the correct
+time.
+
+My approach here is replace original timeval to s64[2] in ioctl definition and
+then hanle the case of y2038 safe and unsafe in different types of array in
+kernel.
+
+I split to three patches to illustrate what I am doing.
+
+The first patch add some helper for 32bit kernel to use some of compat. This
+patch is useless after arnd's y2038 patch(which define the same things in
+compat_time.h) is accepted.
+
+The second patch convert parport driver to y2038 safe on 32bit kernel(case 2
+in above table) and the third patch do the similar work for compat on 64bit
+kernel(case 4 in above table).
+
+10. send to y2038 mailing list
+Hi,
+
+Here is the third version for converting parport device(ppdev) to y2038 safe.
+The first two version could found at [1],[2].
+
+An y2038 safe application/kernel use 64bit time_t(aka time64_t) instead of 32bit
+time_t. There are the 5 cases need to support:
+
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
+-------------------|-------|---------|-------|--------
+32_y2038_unsafe    |32     |32       |32     |32
+32_y2038_safe      |32     |64       |32     |64
+compat_y2038_unsafe|32     |32       |64     |64
+compat_y2038_safe  |32     |64       |64     |64
+64_y2038_safe      |64     |64       |64     |64
+
+notes:
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit kernel.
+        compat means 32bit app running on 64bit kernel. 64 means 64bit app
+        running on 64bit kernel.
+    2.  1.3.5 are the original one, we need keep the compatability. 2,4 is
+        new one we need to support.
+
+There are different ways to do this. Convert to 64bit time and/or define
+COMPAT_USE_64BIT_TIME 0 or 1 to indicate y2038 safe or unsafe.
+
+But it is not mean that we need to convert all the time relative struct
+to 64bit. Because some time relative struct(e.g. timeval in ppdev.c) is mainly
+the offset of the real time.
+
+The main issue in ppdev.c is PPSETTIME/PPGETTIME which transfer timeval between
+user space and kernel. My approach here is handle them as different ioctl
+command.
+
+Build successful on arm64 and arm.
+
+[1] https://lists.linaro.org/pipermail/y2038/2015-June/000522.html
+[2] https://lists.linaro.org/pipermail/y2038/2015-June/000567.html
+
+11. git send.email
+```
+git send-email --no-chain-reply-to --annotate --to y2038@lists.linaro.org --cc arnd@arndb.de --cc john.stultz@linaro.org --cc broonie@kernel.org *.patch
+```
+
 11:04 2015-11-06
 ----------------
 sihao:
 
 感谢帮忙. 请问下这是用哪个版本的内核测试的? 压缩包里面的README里面有需要打开的内核选项, 不好上次忘了说:p
-
 1.  memfd用例失败的需要合入这个补丁.
     <https://lkml.org/lkml/2015/10/1/172>
 
@@ -2737,35 +2830,138 @@ sihao:
 
 谢谢
 
-10:54 2015-11-07
+01:04 2015-11-10
+[ACTIVITY] (Bamvor Jian Zhang) 2015-11-04 to 2015-11-10
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* Y2038: ppdev
+    - Work on the new version of this work.
+    - Send to arnd privately on 10, Dec.
+    - Found that there are same issue in driver/char/lp.c.
+
+* GPIO kselftest/[KWG-148]
+    - Discuss with Mark with my patches.
+    - Update card. Not sure if I use jira correctly, please
+      correct me, thanks.
+
+* Play with my hikey board
+    - Try the board from lemaker.
+    - The serial do not work with serial board for both hikey early
+      access board and hikey from lemaker.
+
+* kselftest improvement/[KWG-23]
+    - Get some updates from Tyler and Kevin from KS. I will work on
+      provide something like kconfig things for kselftest.
+
+=== Plans ===
+* y2038
+  Send new version of patches of ppdev.
+
+* kselftest:
+  Work on provide something like kconfig things for kselftest.
+  The first step would provide kconfig fragments in each testcase
+  so that merge_configs.sh could make use of them.
+
+* GPIO kselftest:
+  Learn how pinctrl work with gpio and try to add pinctrl support
+  in my mockup driver.
+
+14:56 2015-11-04
 ----------------
-breakpoints
-capabilities
-cpu-hotplug
-efivarfs
-exec
-firmware,PASS
-ftrace,PASS
-futex,PASS
-ipc
-kcmp,PASS
-membarrier
-memfd,PASS
-memory-hotplug
-mount,?
-mqueue,PASS
-net,?
-powerpc,?
-pstore
-ptrace,PASS
+y2038, ppdev
+------------
+1.  requirement.
+    1.  Do not break old applications which include arm32 application on arm32 kernel; compat and aarch64 applications on arm64 kernel.
+    2.  New compiled code based on `time64_t` which include arm32 and compat.
+    3.  Do not consider ilp32 at this monment?
+
+2.  current status
+    1.  Do not support compat.
+    2.  There is no need to convert timeval to 64bit.
+
+3.  Analysis in details.
+        u:arch  u:time_t    k:arch  k:time_t    is_timeval_same     how_to_check_it_in_kernel
+    1.  32      32          32      32          yes                 !IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 4
+    2.  32      32          32      64          no                  !IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8
+    3.  32      32          64      64          no                  IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
+    4.  32      64          64      64          yes                 IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && is_compat_task()
+    5.  64      64          64      64          yes                 IS_ENABLED(CONFIG_64BIT) && sizeof(time_t) == 8 && !is_compat_task()
+
+    Is_timeval_same: if timeval in userspace and kernel is same.
+    which should I use for check compat? is_compat_task or "#ifdef CONFIG_COMPAT"?
+    I could not check time_t is 64 or 32 in userspace from kernel. I could not distinguish item 3(not y2038 safe) and 4(y2038 safe). IIUC, what we want is migrate from 3 to 4. So, maybe there is another config(CONFIG_COMPAT_TIME?) to check it?
+    Should I need to find a way to avoid use CONFIG_COMPAT_TIME?
+    What does the mean of COMPAT_USE_64BIT_TIME?
+
+4.  need to consider big endian later.
+
+14:29 2015-11-11
+1:1 with mark
+1.  I am in company. I could send patch with linaro.org email.
+1.  Sorry I do not notice that it is during merge windows. I do not want to push Linus.
+
+14:35 2015-11-11
+                built   x86     arm     arm64   CONFIG                                  module              other
+breakpoints     S               N/A     N/A     NONE
+capabilities    N
+cpu-hotplug     Y
+efivarfs        Y
+exec            Y                               NONE
+firmware        Y                               CONFIG_TEST_FIRMWARE                    test_firmware.ko
+ftrace          Y                       PASS,S  CONFIG_FTRACE
+                                                CONFIG_GENERIC_TRACER
+                                                CONFIG_TRACING_SUPPORT
+                                                CONFIG_FUNCTION_TRACER
+                                                CONFIG_FUNCTION_GRAPH_TRACER
+                                                CONFIG_IRQSOFF_TRACER
+                                                CONFIG_PREEMPT_TRACER
+                                                CONFIG_SCHED_TRACER
+                                                CONFIG_FTRACE_SYSCALLS
+                                                CONFIG_TRACER_SNAPSHOT
+                                                CONFIG_TRACER_SNAPSHOT_PER_CPU_SWAP
+                                                CONFIG_BRANCH_PROFILE_NONE
+                                                CONFIG_STACK_TRACER
+                                                CONFIG_BLK_DEV_IO_TRACE
+                                                CONFIG_DYNAMIC_FTRACE
+                                                CONFIG_FUNCTION_PROFILER
+                                                CONFIG_FTRACE_MCOUNT_RECORD
+                                                CONFIG_TRACEPOINT_BENCHMARK
+                                                CONFIG_RING_BUFFER_STARTUP_TEST
+                                                CONFIG_TRACE_ENUM_MAP_FILE
+                                                #CONFIG_FTRACE_STARTUP_TEST is not set
+futex           Y                       PASS    NONE
+ipc             N
+kcmp            Y                       PASS
+kdbus           N                       PASS,S  CONFIG_KDBUS
+membarrier      S
+memfd           Y       PASS            PASS
+memory-hotplug  Y               SKIP    SKIP
+mount           Y                               CONFIG_USER_NS
+                                                CONFIG_DEVPTS_MULTIPLE_INSTANCES(?)
+mqueue          Y                       PASS
+net             Y                       PASS    CONFIG_USER_NS
+                                                CONFIG_BPF_SYSCALL
+                                                CONFIG_TEST_BPF
+powerpc         S       SKIP    SKIP    SKIP
+pstore          Y
+ptrace          Y       PASS            PASS
 rcutorture
-seccomp
-size
-static_keys,PASS,?
-sysctl,PASS
-timers,PASS
-user,?,enable TEST_USER_COPY
-vm
-x86
-zram
+seccomp         Y                       PASS    CONFIG_SECCOMP
+                                                CONFIG_SECCOMP_FILTER(should be enabled after CONFIG_SECCOMP is enabled).
+size            Y                       PASS    NONE
+static_keys     Y                       PASS    TEST_STATIC_KEYS
+sysctl          Y                       PASS    NONE
+timers          Y       PASS                    NONE
+user            Y                               TEST_USER_COPY
+vm              S                               CONFIG_USERFAULTFD=y                                        compile need support the lastest unistd.h or `__NR_mlock2` is not defined.
+                                        FAIL    on-fault-limit: mlockall: cannot allocate memory.
+x86             S
+zram            Y                       PASS    CONFIG_ZBUD=m
+                                                CONFIG_ZSMALLOC=y
+                                                CONFIG_ZRAM=m
+
+19:20 2015-11-11
+----------------
+fd88d16 selftests/seccomp: Be more precise with syscall arguments.
 
