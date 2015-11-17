@@ -2818,6 +2818,53 @@ Build successful on arm64 and arm.
 git send-email --no-chain-reply-to --annotate --to y2038@lists.linaro.org --cc arnd@arndb.de --cc john.stultz@linaro.org --cc broonie@kernel.org *.patch
 ```
 
+12. 20151115: send v4 to y2038
+Hi,
+
+Here is the fourth version for converting parport device(ppdev) to
+y2038 safe. The first three could found at [1], [2], [3].
+
+An y2038 safe application/kernel use 64bit time_t(aka time64_t) 
+instead of 32bit time_t. There are the 5 cases need to support:
+
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
+-------------------|-------|---------|-------|--------
+32_y2038_unsafe    |32     |32       |32     |32
+32_y2038_safe      |32     |64       |32     |64
+compat_y2038_unsafe|32     |32       |64     |64
+compat_y2038_safe  |32     |64       |64     |64
+64_y2038_safe      |64     |64       |64     |64
+
+notes:
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit
+        kernel. Compat means 32bit app running on 64bit kernel. 64
+        means 64bit app running on 64bit kernel.
+    2.  1.3.5 are the original one, we need keep the compatability.
+        2,4 is new one we need to support.
+
+There are different ways to do this. Convert to 64bit time and/or
+define COMPAT_USE_64BIT_TIME 0 or 1 to indicate y2038 safe or unsafe.
+
+But it is not mean that we need to convert all the time relative
+struct to 64bit. Because some time relative struct(e.g. timeval in
+ppdev.c) is mainly the offset of the real time.
+
+The main issue in ppdev.c is PPSETTIME/PPGETTIME which transfer
+timeval between user space and kernel. My approach here is handle them
+as different ioctl command.
+
+Build successful on arm64 and arm.
+
+Changes since V3:
+1.  create pp_set_timeout, pp_get_timeout to reduce the duplicated
+    code in my patch according to the suggestion of arnd.
+    I use div_u64_rem instead of jiffies_to_timespec64 because
+    it could save a divide operaion.
+
+[1] https://lists.linaro.org/pipermail/y2038/2015-June/000522.html
+[2] https://lists.linaro.org/pipermail/y2038/2015-June/000567.html
+[3] https://lists.linaro.org/pipermail/y2038/2015-November/001093.html
+
 11:04 2015-11-06
 ----------------
 sihao:
@@ -2902,41 +2949,30 @@ y2038, ppdev
 1.  Sorry I do not notice that it is during merge windows. I do not want to push Linus.
 
 14:35 2015-11-11
+----------------
+kselftest, testcases, table
+---------------------------
                 built   x86     arm     arm64   CONFIG                                  module              other
 breakpoints     S               N/A     N/A     NONE
-capabilities    N
-cpu-hotplug     Y
+capabilities    Y                       PASS
+cpu-hotplug     Y                       PASS    CONFIG_NOTIFIER_ERROR_INJECTION=y                           run_hotplug for all cpu hotplug test
+                                                CONFIG_CPU_NOTIFIER_ERROR_INJECT=m
 efivarfs        Y
 exec            Y                               NONE
 firmware        Y                               CONFIG_TEST_FIRMWARE                    test_firmware.ko
 ftrace          Y                       PASS,S  CONFIG_FTRACE
-                                                CONFIG_GENERIC_TRACER
-                                                CONFIG_TRACING_SUPPORT
-                                                CONFIG_FUNCTION_TRACER
-                                                CONFIG_FUNCTION_GRAPH_TRACER
-                                                CONFIG_IRQSOFF_TRACER
-                                                CONFIG_PREEMPT_TRACER
-                                                CONFIG_SCHED_TRACER
-                                                CONFIG_FTRACE_SYSCALLS
-                                                CONFIG_TRACER_SNAPSHOT
-                                                CONFIG_TRACER_SNAPSHOT_PER_CPU_SWAP
-                                                CONFIG_BRANCH_PROFILE_NONE
-                                                CONFIG_STACK_TRACER
-                                                CONFIG_BLK_DEV_IO_TRACE
-                                                CONFIG_DYNAMIC_FTRACE
-                                                CONFIG_FUNCTION_PROFILER
-                                                CONFIG_FTRACE_MCOUNT_RECORD
-                                                CONFIG_TRACEPOINT_BENCHMARK
-                                                CONFIG_RING_BUFFER_STARTUP_TEST
-                                                CONFIG_TRACE_ENUM_MAP_FILE
                                                 #CONFIG_FTRACE_STARTUP_TEST is not set
 futex           Y                       PASS    NONE
-ipc             N
+ipc             Y                       PASS    CONFIG_EXPERT=y
+                                                CONFIG_CHECKPOINT_RESTORE=y                                 opensuse13.2 open it
 kcmp            Y                       PASS
 kdbus           N                       PASS,S  CONFIG_KDBUS
-membarrier      S
+membarrier      Y                       PASS
 memfd           Y       PASS            PASS
-memory-hotplug  Y               SKIP    SKIP
+memory-hotplug  Y               SKIP    SKIP    CONFIG_MEMORY_HOTPLUG=y
+                                                CONFIG_MEMORY_HOTPLUG_SPARSE=y
+                                                CONFIG_NOTIFIER_ERROR_INJECTION=y
+                                                CONFIG_MEMORY_NOTIFIER_ERROR_INJECT=m
 mount           Y                               CONFIG_USER_NS
                                                 CONFIG_DEVPTS_MULTIPLE_INSTANCES(?)
 mqueue          Y                       PASS
@@ -2944,9 +2980,13 @@ net             Y                       PASS    CONFIG_USER_NS
                                                 CONFIG_BPF_SYSCALL
                                                 CONFIG_TEST_BPF
 powerpc         S       SKIP    SKIP    SKIP
-pstore          Y
+pstore          Y                       It seems that pstore need dedicated hareware to test it.
+                                                CONFIG_MISC_FILESYSTEMS=y
+                                                CONFIG_PSTORE=y
+                                                CONFIG_PSTORE_PMSG=y
+                                                CONFIG_PSTORE_CONSOLE=y
 ptrace          Y       PASS            PASS
-rcutorture
+rcutorture      N                       It seems that this testcase is not supported by kselftest framework.
 seccomp         Y                       PASS    CONFIG_SECCOMP
                                                 CONFIG_SECCOMP_FILTER(should be enabled after CONFIG_SECCOMP is enabled).
 size            Y                       PASS    NONE
@@ -2957,11 +2997,200 @@ user            Y                               TEST_USER_COPY
 vm              S                               CONFIG_USERFAULTFD=y                                        compile need support the lastest unistd.h or `__NR_mlock2` is not defined.
                                         FAIL    on-fault-limit: mlockall: cannot allocate memory.
 x86             S
-zram            Y                       PASS    CONFIG_ZBUD=m
-                                                CONFIG_ZSMALLOC=y
+zram            Y                       PASS    CONFIG_ZSMALLOC=y
                                                 CONFIG_ZRAM=m
+
+temp summary for the testcase I do not try:
+efivarfs        Y
+rcutorture
 
 19:20 2015-11-11
 ----------------
-fd88d16 selftests/seccomp: Be more precise with syscall arguments.
+kselftest, seccomp
+------------------
+1.
+fix for commit fd88d16c58c2 ("selftests/seccomp: Be more precise with syscall arguments.")
+
+Signed-off-by: Robert Sesek <rsesek@google.com>
+Signed-off-by: Kees Cook <keescook@chromium.org>
+Signed-off-by: Shuah Khan <shuahkh@osg.samsung.com>
+
+git send-email --no-chain-reply-to --annotate --to linux-api@vger.kernel.org --cc rsesek@google.com --cc keescook@chromium.org --cc shuahkh@osg.samsung.com 0001-selftests-seccomp-Get-page-size-from-sysconf.patch
+
+2.  add assert
+the assert in test harmness.h could not print the negative value correctly(I intended to set page_size as "-1" to test it):
+seccomp_bpf.c:497:global.KILL_one_arg_six:Expected 0 (0) < page_size (18446744073709551615)
+global.KILL_one_arg_six: Test terminated by assertion
+
+16:32 2015-11-13
+----------------
+kselftest, gpio
+---------------
+Hi, sihao
+
+1. 打上我这两个补丁,
+2. 内核打开CONFIG_GPIO_MOCKUP=m
+3. 把编译出的模块包括gpio-mock.ko复制到/lib/modules/`uname -r`下对应目录.
+4. toots/testing/selftest/gpio/gpio.sh复制到板子执行.
+5. 如果成功, 最后会打印PASS.
+
+谢谢
+
+22:04 2015-11-13
+----------------
+kselftest, config
+-----------------
+1.  send to kevin, tyler and mark
+
+These series patches try to start the work mentioned by the kevin:
+
+"Yes, we discussed 2 things at ksummit.
+
+1) keep test-specific kconfig fragments inside each selftest so that
+an exteranl tool could use merge_configs.sh to build up a kernel that
+can test the specific feature.
+
+2) In the main menu, have an additional option/flag for each feature
+that should be enabled when ksefltests are wanted.  Similar to the
+CONFIG_COMPILE_TEST flag.
+
+I hope to start a discussion on LKML soon on this subject, but for now I
+suggest you follow option (1) so at least we have a good idea of which
+tests require which kconfig options."
+
+The first patch do the option 1. other patches do minor fixs for
+kselftest in order to actually do these tests.
+
+2.  send it out
+`git send-email --no-chain-reply-to --annotate --to khilman@linaro.org --cc tyler.baker@linaro.org --cc broonie@kernel.org *.patch`
+
+3.  send to upstream
+Michael Ellerman <mpe@ellerman.id.au>
+Darren Hart <dvhart@infradead.org>
+
+`git send-email --no-chain-reply-to --annotate --to linux-api@vger.kernel.org --cc shuahkh@osg.samsung.com --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc broonie@kernel.org --cc mpe@ellerman.id.au --cc dvhart@infradead.org  0001-selftests-create-test-specific-kconfig-fragments.patch`
+
+4.  send minor fix to upstream
+Enable two testcases in kselftest
+
+Capabilities and ipc exist in selftest but is not enabled in the top
+level Makefile. I do not know whether it is intended to.
+
+It seems that both of them are tiny tests. These patches try to enable
+them and make them build successful in cross compiling environment.
+
+14:39 2015-11-14
+----------------
+kselftest, gpio, mockup
+-----------------------
+1.  cover letter for gpio fix
+Fix bugs in the insertion of gpiochip.
+
+These patches try to fix following bugs which is found by my gpio
+mockup driver and testscript[1](will send them later):
+1.  Could not check the overlap if the new gpiochip is the secondly
+    gpiochip.
+2.  Could not check the overlap if the new gpiochip is overlap
+    with the left of gpiochip.
+3.  Allow overlap of base of different gpiochip.
+4.  Allow to insert an empty gpiochip
+
+The first patch fix the first three by rewriting the logic in the
+gpiochip_add_to_list.
+
+The second patch fix the fourth bug in gpiochip_add. I do not
+found the checker in gpiolib.c. Hope it is not a redundant logic.
+
+[1] https://github.com/bjzhang/linux/tree/gpio-fix-and-mockup-driver
+
+2.  cover letter for gpio mockup driver
+RFD: Add gpio test framework
+
+These series of patches try to add support for testing of gpio
+subsystem based on the proposal from Linus Walleij.
+
+The basic idea is implement a virtual gpio device(gpio-mockup) base
+on gpiolib. Tester could test the gpiolib by manipulating gpio-mockup
+device through sysfs and check the result from debugfs. Both sysfs
+and debugfs are provided by gpiolib. Reference the following figure:
+
+   sysfs  debugfs
+     |       |
+  gpiolib---/
+     |
+ gpio-mockup
+
+Find two issues with my patch series[1]
+
+Futher work and discussion:
+1.  Test other code path(if exists).
+
+2   Add pinctrl and interrupt support(Linus suggest trying the
+    eventfd) in next steps.
+
+3.  I feel that we could rework the debugfs in other gpiolib based
+    drivers to the code in gpiolib.c with generic gpiolib_dbg_show or
+    chip->dbg_show.
+
+4.  Currently, gpio-mockup does not support the device tree. There are
+    pros and cons if we do not support device tree:
+    Pros: do not need to mix with the real hardware dts.
+    Cons: could not test the dt_gpio_count, of_find_gpio which rely on
+    device tree. And other function such like gpiod_get_index which
+    rely on the correctness of the above functions.
+
+    If we want to test the above functions, we could provide a
+    dedicated device tree for gpio-mockup device which could be
+    included by other device tree. And we could use device tree
+    overlay to provide multiple device tree testcases.
+
+5.  Given that this gpio test framework is based on sysfs and debugfs.
+    I feel that it could be a generic gpio test script other then a
+    dedicated script for gpio-mockup driver. Although, my script only
+    support gpio-mockup driver at this monment.
+
+[1] http://article.gmane.org/gmane.linux.kernel.gpio/11878
+
+3.  send to upstream
+`git send-email --no-chain-reply-to --annotate --to linux-gpio@vger.kernel.org --cc linus.walleij@linaro.org --cc broonie@kernel.org *.patch`
+
+4.  send v2 fix to upstream
+Fix bugs in the insertion of gpiochip.
+
+The first version of these patches could be found [1].
+
+These patches try to fix following bugs which is found by my gpio
+mockup driver and testscript[1](will send them later):
+1.  Could not check the overlap if the new gpiochip is the secondly
+    gpiochip.
+2.  Could not check the overlap if the new gpiochip is overlap
+    with the left of gpiochip.
+3.  Allow overlap of base of different gpiochip.
+4.  Allow to insert an empty gpiochip
+
+The first patch fix the first three by rewriting the logic in the
+gpiochip_add_to_list.
+
+The second patch fix the fourth bug in gpiochip_add. I do not
+found the checker in gpiolib.c. Hope it is not a redundant logic.
+
+Changes since v1
+1.  Update comment and print according to suggestion given by Linus.
+2.  Delete the dedicated checking for base overlap. The other logic
+    in the patch 1/2 already cover it.
+
+[1] http://www.spinics.net/lists/linux-gpio/msg09594.html
+[2] https://github.com/bjzhang/linux/tree/gpio-fix-and-mockup-driver
+
+11:10 2015-11-16
+Hi, 思浩
+
+我重新看了下你11月14日 9:44发给我的log:
+1.  由于没打开内核选项或没安装相应的内核模块会导致下列测试失败: firmwire, net, static_keys, user, vm, zram.
+    以上用例需要打开相应内核选项并安装ko重新测试.
+2.  kcmp, memory-barrier我这里在qemu上测试是通过的, 麻烦你在hikey上再测试下.
+3.  capabilities, ipc之前的log里面没有, 麻烦你再测试一下.
+4.  memfd是最近才合入的,咱们的mainline rebase里面可能还没有. 这个先不用管.
+
+我这里有个表格, 梳理了我在qemu的测试结果, 供你参考.
 
