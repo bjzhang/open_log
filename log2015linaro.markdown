@@ -2944,7 +2944,8 @@ y2038, ppdev
 4.  need to consider big endian later.
 
 14:29 2015-11-11
-1:1 with mark
+----------------
+1:1 with mark(not used)
 1.  I am in company. I could send patch with linaro.org email.
 1.  Sorry I do not notice that it is during merge windows. I do not want to push Linus.
 
@@ -3183,6 +3184,9 @@ Changes since v1
 [2] https://github.com/bjzhang/linux/tree/gpio-fix-and-mockup-driver
 
 11:10 2015-11-16
+----------------
+kselftest
+---------
 Hi, 思浩
 
 我重新看了下你11月14日 9:44发给我的log:
@@ -3193,4 +3197,128 @@ Hi, 思浩
 4.  memfd是最近才合入的,咱们的mainline rebase里面可能还没有. 这个先不用管.
 
 我这里有个表格, 梳理了我在qemu的测试结果, 供你参考.
+
+11:40 2015-11-17
+----------------
+kselftest, minor fix
+--------------------
+1.  compile test need to be done
+    1.  build all the testcases:
+        make -C tools/testing/selftest
+
+    2.  build individual testcases
+        make -C tools/testing/selftest TARGETS=capabilities
+        make kselftest TARGETS=capabilities
+
+2. cover letter for v2.
+Clean up and enable two testcases in kselftest
+
+These patches try to enable two testcases (capabilities and ipc) and
+make them build successful in cross compiling environment.
+
+Clean up the Makefile of capabilities according to the usage in
+kselftest.
+
+Changes since v1
+1.  Update Makefile of capabilities according to Michael's suggestion.
+    reference commit message for details.
+
+3.  send
+`git send-email --no-chain-reply-to --annotate --to linux-api@vger.kernel.org --cc shuahkh@osg.samsung.com --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc broonie@kernel.org --cc mpe@ellerman.id.au 000*.patch`
+
+15:43 2015-11-17
+----------------
+kselftest, config, v2
+---------------------
+1.  Michael
+```
+> > Before you do, do you want to try adding a top-level target that does the
+> > merge, something like:
+> > 
+> >  $ make kselftest-mergeconfig
+> > 
+> > 
+> > Or some other better name.
+
+> Ok, Do you mean merge all the test config?
+
+Yeah sorry that wasn't very clear. I meant that it would essentialy do your
+logic to merge all the config fragments:
+
+./scripts/kconfig/merge_config.sh .config tools/testing/selftests/*/config
+
+You'll probably need to be more careful with $(srctree) vs $(objtree) etc. Have
+a look at the merge_into_defconfig rule in arch/powerpc/Makefile for an
+example.
+```
+2.  cover letter
+Create specific kconfig for kselftest
+
+There is a discussion about improving the usability of kselftest by
+creating test-specific kconfig in recent kernel Summit. Furthormore,
+there are different approaches to do it:
+
+1) keep test-specific kconfig fragments inside each selftest so that
+merge_configs.sh could build up a kernel that can test the specific
+or all feature(s).
+
+2) In the main menu, have an additional option/flag for each feature
+that should be enabled when ksefltests are wanted.  Similar to the
+CONFIG_COMPILE_TEST flag.
+
+Patch 1/2: do option 1. Hope it is a good start for discussion.
+
+Patch 2/2: add config option(kselftest-mergeconfig) in make file as a
+helper to merge all the test config dependecies to .config.
+
+Changes since v1:
+1.  Add kselftest-mergeconfig in scripts/kconfig/Makefile according
+    to the suggestion from Michael.
+
+3.  send
+`git send-email --no-chain-reply-to --annotate --to linux-api@vger.kernel.org --cc linux-kernel@vger.kernel.org --cc shuahkh@osg.samsung.com --cc khilman@linaro.org --cc tyler.baker@linaro.org --cc broonie@kernel.org --cc mpe@ellerman.id.au --cc dvhart@infradead.org  000*`
+
+16:41 2015-11-17
+----------------
+Kbuild, doc
+1.  $(kecho)
+
+22:50 2015-11-17
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2015-11-11 to 2015-11-17
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+
+* Y2038: ppdev
+    - Send out two version of patches this week.
+    - Removing the duplicated code according to the review.
+
+* GPIO kselftest/[KWG-148]
+    - Send GPIO mockup driver and gpio bug fix seperately.
+    - Re-write the comment of gpio bug fix and send v2 patches. Got ack today.
+    - Fix a comment in gpiolib. Got ack today.
+    - Update some test cases for gpio of kselftest.
+    - No update for gpio mockup driver(It is in my plan but not get chance to do it)
+
+* kselftest improvement/[KWG-23]
+    - Send three minor fix for kselftest: enable ipc and capabilities in the top level Makefile of kselftest.
+    - Send patch "Create specific kconfig for kselftest" to linux-api and LKML. Add a new make target(kselftest-mergeconfig) for merging all the kernel config dependencies to .config. [2]
+
+* Play with my hikey board
+    - Try the THP on my board. It seems that there is different alignment strategy for different version of glibc.
+
+=== Plans ===
+
+* GPIO kselftest:
+    Learn how pinctrl work with gpio and try to add pinctrl support
+    in my mockup driver.
+
+* kselftest:
+    Follow up the response from upstream for my patches.
+
+* Y2038
+    Convert driver/char/lp.c to y2038 safe(it seems that no one work on it).
+
+[1] https://www.mail-archive.com/linux-kernel@vger.kernel.org/msg1021974.html
 
