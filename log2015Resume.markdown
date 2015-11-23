@@ -212,3 +212,36 @@ I port a route procotol of wireless sensor network from simulation to real hardw
 
 I could on boarding one month later(for resigning from HUAWEI) after I got the offer and visa.
 
+17:49 2015-11-20
+----------------
+key experience
+1.  vimicro
+    1.  arm architecture.
+    2.  os porting.
+    3.  power management.
+
+2.  suse
+    1.  open source as work and hobbies(join allwinner and xen community: porting the first cortex-a7 powered SOC to xen).
+
+3.  huawei
+    1.  the good conenction and relationship between product and community.
+    2.  the migration from arm 32bit and 64bit(ILP32 and others).
+
+18:07 2015-11-20
+1.  50%:50%: german and japan.
+    55 in german.
+
+2.  common joint platform for ivi.
+    dsp, kernel, distribution.
+    do not use freescale bsp.
+    audio, mutlmeida integration.
+    ubuntu?
+    virtualization? opensynergy.
+
+3.  kernel
+    7 people: japan, india, german.
+    bsp.
+    porting feature.
+
+    upstream, backporting?
+

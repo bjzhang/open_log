@@ -3322,3 +3322,106 @@ Kbuild, doc
 
 [1] https://www.mail-archive.com/linux-kernel@vger.kernel.org/msg1021974.html
 
+16:14 2015-11-18
+----------------
+kernel; glibc, arm64, ilp32
+---------------------------
+1.  reply to wookey "Re: [Dev] Multilib/AArch32 support on AArch64 Linux?".
+Hi, Wookey
+
+Not sure if I lost some discussion. I am very interested in ilp32.
+And rfc2-v6 patches sent out today. Is there any plan to test in
+linaro? And how do I know the version of patches we supported?
+
+19:35 2015-11-18
+----------------
+<arnd> bamvor: when you start working on lp.c, have a look at fs/compat_ioctl.c, I think you can then remove the compat handling there once you are done with the new code
+
+09:46 2015-11-19
+----------------
+test framework, kernel
+----------------------
+1.  gpio mockup driver: Bamvor Jian Zhang
+
+2.  userio
+    <https://lwn.net/Articles/663755/>
+    ```
+    This module is intended to try to make the lives of input driver developers
+    easier by allowing them to test various serio devices (mainly the various
+    touchpads found on laptops) without having to have the physical device in front
+    of them. userio accomplishes this by allowing any privileged userspace program
+    to directly interact with the kernel's serio driver and control a virtual serio
+    port from there.
+    ```
+
+09:54 2015-11-19
+----------------
+kselftest, KBUILD_OUTPUT fix
+1.  From kevin
+    ```
+    Hi Bamvor,
+
+    If you have any more time for kselftest fixes, could you investigate
+    fixing the selftest build when "make O=<dir>" is used?
+
+    There seem to be several issues where this doesn't work properly, also
+    related to the dependency of some of the tests on the 'make
+    headers_install' which will put the headers into KBUILD_OUTPUT, but
+    not where the kselftest make expects them.
+
+    I think it's related, but there seem to be spots wher the selftest
+    makefiles should be using $(MAKE) instead of make to inherit things
+    from the parent.
+
+    Kevin
+    ```
+
+10:37 2015-11-20
+1.  could not boot after I follow the instruction in <https://github.com/96boards/documentation/wiki/HiKeyUEFI>.
+debug EMMC boot: print init OK
+debug EMMC boot: send RST_N .
+debug EMMC boot: start eMMC boot......
+
+I flash them twice but still failed. And I check the size of these images, found that fip is smaller that it should be.
+
+2.  after flash the right fip:
+
+debug EMMC boot: print init OK
+debug EMMC boot: send RST_N .
+debug EMMC boot: start eMMC boot......
+��`�`. �� INF TEE-CORE:init_primary_helper:322: Initializing (2cdaaac #2 Thu Nov 19 07:52:57 UTC 2015 aarch64)
+INF TEE-CORE:init_teecore:77: teecore inits done
+
+3.  I found the boot-fat.uefi.img is different. Try it again:
+
+20:29 2015-11-20
+1.  enable earlycon on 3.18 on hikey
+```
+    earlycon=pl011,0xf8015000 console=ttyAMA3,115200n8 root=/dev/disk/by-partlabel/system rootwait rw
+```
+
+2.  log
+ 64 start hifi ok
+[    0.000000] Initializing cgroup subsys cpuset
+[    0.000000] Initializing cgroup subsys cpu
+[    0.000000] Initializing cgroup subsys cpuacct
+[    1.000000] Linux version 3.18.0+ (bamvor@linux-j170.site) (gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11) ) #2 SMP PREEMPT Thu Nov 19 14:50:51 CST 2015
+[    0.000000] CPU: AArch64 Processor [410fd033] revision 3
+[    0.000000] Detected VIPT I-cache on CPU0
+[    0.000000] Ignoring memory range 0x0 - 0x7400000
+[    0.000000] Early serial console at I/O port 0x0 (options '')
+[    0.000000] bootconsole [uart0] enabled
+[    0.000000] Memory limited to 908MB
+[    0.000000] Kernel panic - not syncing: BUG!
+[    0.000000] CPU: 0 PID: 0 Comm: swapper Not tainted 3.18.0+ #2
+[    0.000000] Call trace:
+[    0.000000] [<ffffffc000088504>] dump_backtrace+0x0/0x124
+[    0.000000] [<ffffffc000088638>] show_stack+0x10/0x1c
+[    0.000000] [<ffffffc0008025ac>] dump_stack+0x74/0xb8
+[    0.000000] [<ffffffc000800c44>] panic+0xe0/0x220
+[    0.000000] [<ffffffc000b26750>] __create_mapping+0x22c/0x2cc
+[    0.000000] [<ffffffc000b26940>] paging_init+0xfc/0x1b8
+[    0.000000] [<ffffffc000b236ec>] setup_arch+0x2b0/0x5bc
+[    0.000000] [<ffffffc000b2065c>] start_kernel+0x94/0x3b0
+[    0.000000] ---[ end Kernel panic - not syncing: BUG!
+
