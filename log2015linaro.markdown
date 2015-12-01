@@ -2960,7 +2960,7 @@ cpu-hotplug     Y                       PASS    CONFIG_NOTIFIER_ERROR_INJECTION=
                                                 CONFIG_CPU_NOTIFIER_ERROR_INJECT=m
 efivarfs        Y
 exec            Y                               NONE
-firmware        Y                               CONFIG_TEST_FIRMWARE                    test_firmware.ko
+firmware        Y                       PASS    CONFIG_TEST_FIRMWARE                    test_firmware.ko
 ftrace          Y                       PASS,S  CONFIG_FTRACE
                                                 #CONFIG_FTRACE_STARTUP_TEST is not set
 futex           Y                       PASS    NONE
@@ -2995,7 +2995,7 @@ static_keys     Y                       PASS    TEST_STATIC_KEYS
 sysctl          Y                       PASS    NONE
 timers          Y       PASS                    NONE
 user            Y                               TEST_USER_COPY
-vm              S                               CONFIG_USERFAULTFD=y                                        compile need support the lastest unistd.h or `__NR_mlock2` is not defined.
+vm              S                       PASS,F  CONFIG_USERFAULTFD=y                                        compile need support the lastest unistd.h or `__NR_mlock2` is not defined.
                                         FAIL    on-fault-limit: mlockall: cannot allocate memory.
 x86             S
 zram            Y                       PASS    CONFIG_ZSMALLOC=y
@@ -3357,6 +3357,7 @@ test framework, kernel
 09:54 2015-11-19
 ----------------
 kselftest, KBUILD_OUTPUT fix
+----------------------------
 1.  From kevin
     ```
     Hi Bamvor,
@@ -3377,6 +3378,9 @@ kselftest, KBUILD_OUTPUT fix
     ```
 
 10:37 2015-11-20
+----------------
+hikey, uefi
+-----------
 1.  could not boot after I follow the instruction in <https://github.com/96boards/documentation/wiki/HiKeyUEFI>.
 debug EMMC boot: print init OK
 debug EMMC boot: send RST_N .
@@ -3395,33 +3399,425 @@ INF TEE-CORE:init_teecore:77: teecore inits done
 3.  I found the boot-fat.uefi.img is different. Try it again:
 
 20:29 2015-11-20
+----------------
+hikey
+----
 1.  enable earlycon on 3.18 on hikey
 ```
     earlycon=pl011,0xf8015000 console=ttyAMA3,115200n8 root=/dev/disk/by-partlabel/system rootwait rw
 ```
 
 2.  log
- 64 start hifi ok
+    ```
+     64 start hifi ok
+    [    0.000000] Initializing cgroup subsys cpuset
+    [    0.000000] Initializing cgroup subsys cpu
+    [    0.000000] Initializing cgroup subsys cpuacct
+    [    1.000000] Linux version 3.18.0+ (bamvor@linux-j170.site) (gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11) ) #2 SMP PREEMPT Thu Nov 19 14:50:51 CST 2015
+    [    0.000000] CPU: AArch64 Processor [410fd033] revision 3
+    [    0.000000] Detected VIPT I-cache on CPU0
+    [    0.000000] Ignoring memory range 0x0 - 0x7400000
+    [    0.000000] Early serial console at I/O port 0x0 (options '')
+    [    0.000000] bootconsole [uart0] enabled
+    [    0.000000] Memory limited to 908MB
+    [    0.000000] Kernel panic - not syncing: BUG!
+    [    0.000000] CPU: 0 PID: 0 Comm: swapper Not tainted 3.18.0+ #2
+    [    0.000000] Call trace:
+    [    0.000000] [<ffffffc000088504>] dump_backtrace+0x0/0x124
+    [    0.000000] [<ffffffc000088638>] show_stack+0x10/0x1c
+    [    0.000000] [<ffffffc0008025ac>] dump_stack+0x74/0xb8
+    [    0.000000] [<ffffffc000800c44>] panic+0xe0/0x220
+    [    0.000000] [<ffffffc000b26750>] __create_mapping+0x22c/0x2cc
+    [    0.000000] [<ffffffc000b26940>] paging_init+0xfc/0x1b8
+    [    0.000000] [<ffffffc000b236ec>] setup_arch+0x2b0/0x5bc
+    [    0.000000] [<ffffffc000b2065c>] start_kernel+0x94/0x3b0
+    [    0.000000] ---[ end Kernel panic - not syncing: BUG!
+    ```
+
+3.  
 [    0.000000] Initializing cgroup subsys cpuset
 [    0.000000] Initializing cgroup subsys cpu
 [    0.000000] Initializing cgroup subsys cpuacct
-[    1.000000] Linux version 3.18.0+ (bamvor@linux-j170.site) (gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11) ) #2 SMP PREEMPT Thu Nov 19 14:50:51 CST 2015
+[    0.000000] Linux version 3.18.0+ (bamvor@linux-j170.site) (gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11) ) #24 SMP PREEMPT Tue Nov 24 17:04:32 CST 2015
 [    0.000000] CPU: AArch64 Processor [410fd033] revision 3
 [    0.000000] Detected VIPT I-cache on CPU0
 [    0.000000] Ignoring memory range 0x0 - 0x7400000
 [    0.000000] Early serial console at I/O port 0x0 (options '')
 [    0.000000] bootconsole [uart0] enabled
 [    0.000000] Memory limited to 908MB
+[    0.000000] efi: Getting EFI parameters from FDT:
+[    0.000000] efi: UEFI not found.
+[    0.000000] cma: Reserved 128 MiB at 0x0000000038000000
+[    0.000000] create_mapping: start<phys: 7400000; virt: ffffffc000000000>, size: <f000>
+[    0.000000] BUG: failure at arch/arm64/mm/mmu.c:149/alloc_init_pte()!
 [    0.000000] Kernel panic - not syncing: BUG!
-[    0.000000] CPU: 0 PID: 0 Comm: swapper Not tainted 3.18.0+ #2
+[    0.000000] CPU: 0 PID: 0 Comm: swapper Not tainted 3.18.0+ #24
 [    0.000000] Call trace:
 [    0.000000] [<ffffffc000088504>] dump_backtrace+0x0/0x124
 [    0.000000] [<ffffffc000088638>] show_stack+0x10/0x1c
 [    0.000000] [<ffffffc0008025ac>] dump_stack+0x74/0xb8
 [    0.000000] [<ffffffc000800c44>] panic+0xe0/0x220
 [    0.000000] [<ffffffc000b26750>] __create_mapping+0x22c/0x2cc
-[    0.000000] [<ffffffc000b26940>] paging_init+0xfc/0x1b8
+[    0.000000] [<ffffffc000b26960>] paging_init+0x11c/0x1d8
 [    0.000000] [<ffffffc000b236ec>] setup_arch+0x2b0/0x5bc
 [    0.000000] [<ffffffc000b2065c>] start_kernel+0x94/0x3b0
 [    0.000000] ---[ end Kernel panic - not syncing: BUG!
+
+4.  
+
+    ```
+    diff --git a/arch/arm64/mm/mmu.c b/arch/arm64/mm/mmu.c
+    index f4f8b50..8a96ed6 100644
+    --- a/arch/arm64/mm/mmu.c
+    +++ b/arch/arm64/mm/mmu.c
+    @@ -269,6 +269,7 @@ static void __init __create_mapping(pgd_t *pgd, phys_addr_t phys,
+     static void __init create_mapping(phys_addr_t phys, unsigned long virt,
+                      phys_addr_t size)
+     {
+    +	pr_info("create_mapping: start<phys: %llx; virt: %llx>, size: <%llx>\n", phys, virt, size);
+        if (virt < VMALLOC_START) {
+            pr_warn("BUG: not creating mapping for %pa at 0x%016lx - outside kernel range\n",
+                &phys, virt);
+    diff --git a/drivers/of/fdt.c b/drivers/of/fdt.c
+    index d134710..12898b2 100644
+    --- a/drivers/of/fdt.c
+    +++ b/drivers/of/fdt.c
+    @@ -927,7 +927,7 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
+
+     void __init __weak early_init_dt_add_memory_arch(u64 base, u64 size)
+     {
+    -	const u64 phys_offset = __pa(PAGE_OFFSET);
+    +	const u64 phys_offset = 0x7500000;
+
+        if (!PAGE_ALIGNED(base)) {
+            size -= PAGE_SIZE - (base & ~PAGE_MASK);
+    ```
+
+    ```
+    [    0.000000] Initializing cgroup subsys cpuset
+    [    0.000000] Initializing cgroup subsys cpu
+    [    0.000000] Initializing cgroup subsys cpuacct
+    [    0.000000] Linux version 3.18.0+ (bamvor@linux-j170.site) (gcc version 4.9.3 20141031 (prerelease) (Linaro GCC 2014.11) ) #25 SMP PREEMPT Tue Nov 24 17:06:46 CST 2015
+    [    0.000000] CPU: AArch64 Processor [410fd033] revision 3
+    [    0.000000] Detected VIPT I-cache on CPU0
+    [    0.000000] Ignoring memory range 0x0 - 0x7500000
+    [    0.000000] Early serial console at I/O port 0x0 (options '')
+    [    0.000000] bootconsole [uart0] enabled
+    [    0.000000] Memory limited to 908MB
+    [    0.000000] efi: Getting EFI parameters from FDT:
+    [    0.000000] efi: UEFI not found.
+    [    0.000000] cma: Reserved 128 MiB at 0x0000000038000000
+    [    0.000000] create_mapping: start<phys: 7600000; virt: ffffffc000200000>, size: <38a00000>
+    [    0.000000] On node 0 totalpages: 232192
+    [    0.000000]   DMA zone: 3175 pages used for memmap
+    [    0.000000]   DMA zone: 0 pages reserved
+    [    0.000000]   DMA zone: 232192 pages, LIFO batch:31
+    [    0.000000] psci: probing for conduit method from DT.
+    ```
+
+14:21 2015-11-23
+----------------
+linaro, gpio
+1.  TODO
+    1.  Q: Do I really need create my specific pinctrl, or I could make use of pinctrl-single.c?
+        A: There is no device emulation in pinctrl-single.
+
+1.  TODO:
+    1.  where handle `pinctrl_gpio_range->pins` not NULL?
+    1.  need test lock in gpio and pinctrl.
+    1.  do we need to improve `pinctrl_check_ops`?
+        1.  print more accuracy error.
+        2.  check more ops?
+    1.  cleanup for specific driver
+        1.  the following function is duplicated with parent functions.
+            ```
+                static const struct pinconf_ops tegra_pinconf_ops = {
+                    .pin_config_get = tegra_pinconf_get,
+                    .pin_config_set = tegra_pinconf_set,
+            ```
+        2.  It seems that sunxi pinctrl driver do not support request gpio?
+            TODO: learn how to use gpio in sunxi. If I could not use it, discuss with maintainer and submit a patch.
+    1.  `pinmux_ops.gpio_set_direction` is useful when gpio set direction is handled by pinctrl subsystem.
+        It seems that it is a hardware specfic function. Where it should implement depend on the module(gpio or pinctrl) which control gpio direction.
+
+2.  `pinctrl_ready_for_gpio_range`
+    do it mean we want?
+    ```
+        if (range->base + range->npins - 1 < chip->base ||
+            range->base > chip->base + chip->ngpio - 1)
+            continue;
+    ```
+    ```
+    range->base + range->npins - 1 >= chip->base &&
+    range->base <= chip->base + chip->ngpio -1
+    ```
+    if so, the logic seems incorrrect.
+
+
+3.  "Documentation/pinctrl.txt"
+    ```
+    Calling pinctrl_add_gpio_range from pinctrl driver is DEPRECATED. Please see
+    section 2.1 of Documentation/devicetree/bindings/gpio/gpio.txt on how to bind
+    pinctrl and gpio drivers.
+    ```
+
+19:44 2015-11-23
+----------------
+gpio, learn
+-----------
+1.  `pinctrl_request_gpio`: switch the whole function to gpio mode. It is the same as just switch a pin to gpio, because after switching, user could not use that function anymore.
+    E.g. request a gpio in sd(4 gpio), sd function is disable after request successful.
+
+15:19 2015-11-24
+----------------
+kselftest, testcases, table, simple
+-----------------------------------
+                built   arm64
+breakpoints     S       N/A
+capabilities    Y       PASS
+cpu-hotplug     Y       PASS
+efivarfs        Y
+exec            Y
+firmware        Y       PASS
+ftrace          Y       PASS,S
+futex           Y       PASS
+ipc             Y       PASS
+kcmp            Y       PASS
+membarrier      Y       PASS
+memfd           Y       PASS
+memory-hotplug  Y       SKIP
+mount           Y
+mqueue          Y       PASS
+net             Y       PASS
+powerpc         S       SKIP
+pstore          Y
+ptrace          Y       PASS
+rcutorture      N
+seccomp         Y       PASS
+size            Y       PASS
+static_keys     Y       PASS
+sysctl          Y       PASS
+timers          Y       PASS
+user            Y       PASS
+vm              S       PASS, F
+x86             S
+zram            Y       PASS
+
+notes: Y: built, N: built fail, S: skip for some reason.
+       PASS,S: pass with some test cases skip.
+       PASS,F: pass with few test case failure.
+
+16:17 2015-11-24
+----------------
+1. Step for reproduce
+
+11:19 2015-11-25
+----------------
+1.  [ACTIVITY] (Bamvor Jian Zhang) 2015-11-18 to 2015-11-24
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* GPIO kselftest/[KWG-148]
+    - Write basic pinctrl-mockup driver which will interact with gpio-mockup driver.
+    - When I wrote the code, I feel that pinctrl-single.c match the functionality I want, But it could not save the reg status in memory without acctually write(mockup driver need this). May I could make use of regmap?
+    - There will be lots configuration things in gpio and pinctrl mockup drivers. It would be useful if I could use devicetree during module insertion(I do not want to impact the real system). Need think about it later.
+
+* kselftest improvement/[KWG-23]
+    - Five patches ack by Shuah will be included in 4.5 rc1.
+    - "Create specific kconfig for kselftest"[1]
+    - "Clean up and enable two testcases in kselftest"
+
+* Play with my hikey board
+    - Run kselftest on 3.18 with the patches "Create specific kconfig for kselftest".
+    - kernel hangs with above config while It could boot on qemu. With the default defconfig it boot successful on hikey and qemu.
+
+* arm32 team meeting.
+
+=== Plans ===
+* GPIO kselftest:
+    Continue working support pinctrl mockup driver.
+
+* Y2038
+    Convert driver/char/lp.c to y2038 safe.
+
+[1] http://www.spinics.net/lists/linux-api/msg15593.html
+
+2.  pending
+    1.  ppdev patch review.
+
+3.  Send to Mark
+    Hi, if you have time, I hope I could discuss with you about map gpio mockup driver works. I hope I could make use of regmap, but I am not sure about it.
+
+
+17:06 2015-11-25
+----------------
+My internet vendor is "Beijing gehua CATV network" who need to buy the international bandwidth from other vendor(e.g. China telcom). The result is as follows:
+sever                       25, Nov                 26, Nov         27, Nov         30, Nov
+git-ap.linaro.org           1.99 MiB/s              1.90 MiB/s      2.00 MiB/s      2.20 MiB/s
+git-ap-aryaka.linaro.org    Connection timed out    1.12 MiB/s      1.12 MiB/s      1.12 MiB/s
+git-us.linaro.org           273.00 KiB/s            173.00 KiB/s    179.00 KiB/s    231.00 KiB/s
+git-us-aryaka.linaro.org    1.07 MiB/s              1.04 MiB/s      1.11 MiB/s      1.11 MiB/s
+
+```
+:'<,'>s/^git.clone..v.ssh...git@\(git.*\.org\).*\.git\nReceiving.objects..100...[0-9]*\/[0-9]*.,.[0-9.]*\ MiB\ |\ \([0-9]*\.[0-9]*\ [KM]iB\/s\),.done.$/\1 \2/gc
+```
+
+12:56 2015-11-26
+----------------
+mockup, gpio, pinctrl
+---------------------
+1.  discuss with Mark:
+    ```
+    > A MMIO regmap backed by dynamically allocated memory should do the job there.
+    Do you mean add MMIO regmap support in pinctrl-single?
+    I could allocate the buf and call
+    regmap_init_mmio(dev, buf, &buf_regmap_config) in pinctrl-single and
+    replace all the read/write to regmap_read/write or their variants.
+    But I found that some of read/write is not protected by lock. Which
+    regmap function should I used in this case?
+
+    Assume that I have already convert pinctrl-single to regmap way, I need dt
+    test pinctrl sub system as well as gpio sub system. I feel that I should
+    pass them to kernel in runtime instead of boot time. But how?
+    ```
+
+2. no lock read in pinctrl-single
+pcs_request_gpio
+pcs_pinconf_get
+pcs_add_pin
+
+3.  Discuss with Linus
+    ```
+    > I'm sorry for not having had time to look at the patches yet, as I've been
+    > deeply focused on other stuff.
+    Understand. My confusion is not about the patches I already sent. I have no
+    idea how to test the pinctrl part with minimum duplicated code. After I
+    could test the pinctrl subsystem, I could test the interaction between
+    gpio and pinctrl. Am I in the right direction?
+    >
+    > Spontaneously I don't think the testing mock drivers should have device
+    > tree bindings (as they are Linux-specific) at all. DT is hardware
+    > descriptions.
+    Device tree could help test the corner test in pinctrl as well as
+    interacting with my gpio mockup driver. If I only want to test gpio mockup
+    driver seperatedly, I do not need the device tree.
+    ```
+
+16:36 2015-11-26
+----------------
+arm64, kernel, ftrace
+---------------------
+Ftrace问题可以打上这个补丁试下:
+"[PATCH] arm64: kernel: pause/unpause function graph tracer in cpu_suspend()"
+original discussion: "arm64 function_graph tracer panic with CONFIG_DYNAMIC_FTRACE"
+
+18:23 2015-11-26
+----------------
+kernel, gpio, pinctrl, mockup
+-----------------------------
+Hi, Mark, Linus
+
+I arm confused about my gpio mockup driver. Maybe I need to re-focus about what
+I need to do.
+
+What I should do is creae a mockup driver to testing more functionality in gpio
+sub system.
+
+There is already a basic gpio mockup driver which support multiple gpiochip
+(during review). Other function should support:
+1.  support request/free of a gpio. which could do in the different ways:
+    1.  Write a dedicated gpio request and free function for testing.
+    2.  Write a simple pinctrl mockup driver to testing the generic api
+        pinctrl_request_gpio/pinctrl_free_gpio. Such pinctrl mockup driver
+        need to support different parameter(through module parameter) for
+        testing the corner case.
+        E.g. A. gpio range is same as pinctrl range.
+             B. gpio range is different from pinctrl range.
+             C. gpio pins is discrete.
+    3.  Reuse the existing pinctrl drivers. E.g. re-use the pinctrl-single
+        in order to test all the pinctrl sub system.
+        pinctrl-single need to work with device tree. I would like to use
+        device tree overlay to provide different test cases. But I am not if
+        a mockup driver should use the device tree. User may not like insert
+        the test purpose device tree with the hardware specific dt.
+
+2.  Support interrupt. Linus suggest me try the eventfd. I do not investigate
+    it right now.
+
+Regards
+
+Bamvor
+
+11:36 2015-11-27
+----------------
+kernel, gpio, mockup; devicetree, overlay, unittest
+---------------------------------------------------
+1.  reply to Mark:
+    ```
+    > I'd expect it should be possible to just use the chardev interface that Linus has been working on here - if it can satisfy all the "real" userspace GPIO/pinctrl users it should also be doing most if not all of what a test driver would need. That'd also provide something for the people who need a better interface than sysfs currently provides.
+    Understand. I just read the patches(v1). According to the 3/6 and 5/6, it only
+    support read gpiochip info:
+        ```
+        #define GPIO_GET_CHIPINFO_IOCTL _IOR('o', 0x01, struct gpiochip_info)
+        ```
+    Do you mean I should read gpiochip information from chardev interface when it exists?
+
+    > We've discussed overlays before - some other test code is doing that, it might work here and only require minimal updates to the existing bindings rather than a completely new binding.
+    Yeap. Glad to know this. Do you mean something like
+    drivers/of/unittest-data/test*.dts(i)? I will learn it later.
+    > There is also the possibility of implementing platform data but like you've said elsewhere that's quite invasive for the current code since it unfortunately only supports DT systems.
+    Yeap.
+    ```
+
+15:21 2015-11-27
+----------------
+1.  Kevin
+    ```
+    Hi Bamvor,
+
+    If you have any more time for kselftest fixes, could you investigate
+    fixing the selftest build when "make O=<dir>" is used?
+
+    There seem to be several issues where this doesn't work properly, also
+    related to the dependency of some of the tests on the 'make
+    headers_install' which will put the headers into KBUILD_OUTPUT, but
+    not where the kselftest make expects them.
+
+    I think it's related, but there seem to be spots wher the selftest
+    makefiles should be using $(MAKE) instead of make to inherit things
+    from the parent.
+
+    Kevin
+    ```
+2.  KBUILD_OUTPUT is not work for perf. But O=dir works.
+3.  perf_clean do not work. Do I need to fix it?
+    ```
+    bamvor@linux-j170:~/works/source/kernel/linux> log.sh make -C tools/ perf_clean  O=`pwd`/../build
+    make: Entering directory '/home/bamvor/works_ssd/source/kernel/linux/tools'
+      DESCEND  perf
+    make[1]: Entering directory '/home/bamvor/works_ssd/source/kernel/linux/tools/perf'
+      CLEAN    libtraceevent
+      CLEAN    libapi
+      CLEAN    libbpf
+      CLEAN    config
+    /bin/sh: line 0: cd: /home/bamvor/works_ssd/source/kernel/build/perf/perf/: No such file or directory
+    ../../scripts/Makefile.include:16: *** output directory "/home/bamvor/works_ssd/source/kernel/build/perf/perf/" does not exist.  Stop.
+    Makefile.perf:430: recipe for target '/home/bamvor/works_ssd/source/kernel/build/perf//../lib/api/libapi.a-clean' failed
+    make[2]: *** [/home/bamvor/works_ssd/source/kernel/build/perf//../lib/api/libapi.a-clean] Error 2
+    make[2]: *** Waiting for unfinished jobs....
+    /bin/sh: line 0: cd: /home/bamvor/works_ssd/source/kernel/build/perf/perf/: No such file or directory
+    /bin/sh: line 0: cd: /home/bamvor/works_ssd/source/kernel/build/perf/perf/: No such file or directory
+    ../../scripts/Makefile.include:16: *** output directory "/home/bamvor/works_ssd/source/kernel/build/perf/perf/" does not exist.  Stop.
+    ../../scripts/Makefile.include:16: *** output directory "/home/bamvor/works_ssd/source/kernel/build/perf/perf/" does not exist.  Stop.
+    Makefile.perf:437: recipe for target '/home/bamvor/works_ssd/source/kernel/build/perf/libbpf.a-clean' failed
+    make[2]: *** [/home/bamvor/works_ssd/source/kernel/build/perf/libbpf.a-clean] Error 2
+    Makefile.perf:420: recipe for target '/home/bamvor/works_ssd/source/kernel/build/perf/libtraceevent.a-clean' failed
+    make[2]: *** [/home/bamvor/works_ssd/source/kernel/build/perf/libtraceevent.a-clean] Error 2
+    Makefile:75: recipe for target 'clean' failed
+    make[1]: *** [clean] Error 2
+    make[1]: Leaving directory '/home/bamvor/works_ssd/source/kernel/linux/tools/perf'
+    Makefile:132: recipe for target 'perf_clean' failed
+    make: *** [perf_clean] Error 2
+    make: Leaving directory '/home/bamvor/works_ssd/source/kernel/linux/tools'
+    ```
 

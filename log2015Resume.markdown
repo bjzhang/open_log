@@ -245,3 +245,26 @@ key experience
 
     upstream, backporting?
 
+22:25 2015-11-23
+1.  What the difference between internal and external(aka contractor) engineer?
+2.  Will I get the blue card?
+3.  Salary expectation?
+
+15:41 2015-11-24
+brunel, reply to Thomas
+> unfortunately I do not have a feedback from ADIT, yet. But I think it will be positive.
+Thanks.
+> In this case I think it will be useful to have a second interview in Germany at the ADIT site. All organizational and finically effort for this will be funded by Brunel, of course.
+So, the second interview is not requested by ADIT?
+When do we plan to do this interview, and how many days will I stay in Germany?
+I need to make sure my availability. This is my first time to Germany, it would be great if I could stay a few days and know more about Germany.
+> It would be great if you can give me your feedback soon.
+Sorry not reply to you yesterday, it is a little bit late for me.
+> If you have any questions please just let me know.
+Yes, there is something I want to know/confirm:
+1.  What the difference between internal and external(aka contractor) engineer in ADIT? E.g. salary, vacation, work overtime...
+    Will I lay off during the 2 years contracts if it is not my mistake?
+2.  How many hours should I work each week?
+3.  If I got this offer, my family will come with me. Does brunel will help me do this? or I need to do it by myself after I got bluecard?
+4.  What is the flow for this interview? E.g. interview pass -> discuss my salary package -> confirm offer -> apply blue card and visa?
+
