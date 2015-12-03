@@ -3821,3 +3821,27 @@ kernel, gpio, mockup; devicetree, overlay, unittest
     make: Leaving directory '/home/bamvor/works_ssd/source/kernel/linux/tools'
     ```
 
+19:18 2015-12-02
+----------------
+linaro, arm32 meeting
+---------------------
+1.  y2038 work: convert printer code to y2038 safe. Will send it out after I come back home.
+2.  I eventually found the arnd review which tagged by junk(I do not know why). I will send the new version to list later.
+3.  gpio mockup driver: discuss with Linus and Mark about my work. Not acctually coding this week.
+4.  It takes sometime for me to try to do kselftest on my hikey board.
+
+20:26 2015-12-02
+----------------
+lp.c
+char/lp: convert to y2038 safe
+
+The y2038 issue of printer exist in the time_t of timeval in ioctl
+LPSETTIME. This patch try to convert it to y2038 safe by the
+following steps:
+1.  Remove timeval from lp_set_timeout in order to support 32bit and
+    64bit time_t in the same function without the new definition
+    of timeval64 or something else.
+2.  Handle both 32bit and 64bit time in the same LPSETTIMEOUT switch
+    case in order to support y2038 safe and non-safe cases.
+3.  Merge compat and non-comapt ioctl together.
+
