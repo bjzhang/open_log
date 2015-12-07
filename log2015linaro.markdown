@@ -3651,6 +3651,7 @@ notes: Y: built, N: built fail, S: skip for some reason.
 
 17:06 2015-11-25
 ----------------
+1.
 My internet vendor is "Beijing gehua CATV network" who need to buy the international bandwidth from other vendor(e.g. China telcom). The result is as follows:
 sever                       25, Nov                 26, Nov         27, Nov         30, Nov
 git-ap.linaro.org           1.99 MiB/s              1.90 MiB/s      2.00 MiB/s      2.20 MiB/s
@@ -3661,6 +3662,16 @@ git-us-aryaka.linaro.org    1.07 MiB/s              1.04 MiB/s      1.11 MiB/s  
 ```
 :'<,'>s/^git.clone..v.ssh...git@\(git.*\.org\).*\.git\nReceiving.objects..100...[0-9]*\/[0-9]*.,.[0-9.]*\ MiB\ |\ \([0-9]*\.[0-9]*\ [KM]iB\/s\),.done.$/\1 \2/gc
 ```
+
+2.  reply to Philip Colmer
+Hi, Philip
+
+I definitely want to help on this. But I do not understand why I am the worst. I found that there are lots of people slower than me.
+Take git-us-aryaka.linaro.org example, fengwei.yin, hanjun guo, jun nie, junlin.quan are slower then me.
+
+Regards
+
+Bamvor
 
 12:56 2015-11-26
 ----------------
@@ -3832,16 +3843,154 @@ linaro, arm32 meeting
 
 20:26 2015-12-02
 ----------------
-lp.c
-char/lp: convert to y2038 safe
+y2038, kernel, printer, lp.c
+----------------------------
+1.  v1, cover letter
+    char/lp: convert to y2038 safe
 
-The y2038 issue of printer exist in the time_t of timeval in ioctl
-LPSETTIME. This patch try to convert it to y2038 safe by the
-following steps:
-1.  Remove timeval from lp_set_timeout in order to support 32bit and
-    64bit time_t in the same function without the new definition
-    of timeval64 or something else.
-2.  Handle both 32bit and 64bit time in the same LPSETTIMEOUT switch
-    case in order to support y2038 safe and non-safe cases.
-3.  Merge compat and non-comapt ioctl together.
+    The y2038 issue of printer exist in the time_t of timeval in ioctl
+    LPSETTIME. This patch try to convert it to y2038 safe by the
+    following steps:
+    1.  Remove timeval from lp_set_timeout in order to support 32bit and
+        64bit time_t in the same function without the new definition
+        of timeval64 or something else.
+    2.  Handle both 32bit and 64bit time in the same LPSETTIMEOUT switch
+        case in order to support y2038 safe and non-safe cases.
+    3.  Merge compat of LPSETTIMEOUT into non-comapt one.
+
+2.  Arnd reply to me
+> Given that long is 64bit in 64bit architecture, shall I keep tv_sec as s64
+> and cast HZ to s64 as well?
+> +       to_jiffies += tv_sec * (s64)HZ;
+
+I would just leave tv_sec as 'long' then.
+
+You don't need a cast for HZ at all.
+
+Neither of them is important, since it only matters if the timeout is
+more than 50 days, and that is not a setting we need to worry about.
+
+--------------
+Notes: 强制类型转换是同宽度有符号转为无符号, 小宽度转为大宽度.
+
+
+20:52 2015-12-04
+----------------
+Test command: git clone -v ssh://git@git-ap.linaro.org/boot/u-boot-linaro-stable.git
+Test command: git clone -v ssh://git@git-ap-aryaka.linaro.org/boot/u-boot-linaro-stable.git
+Total size: 53.03MiB
+
+                04, Dec
+git-ap-aryaka   1.12 MiB/s
+git-ap          61.00 KiB/s
+
+21:04 2015-12-04
+----------------
+1.
+Here is the fifth version for converting parport device(ppdev) to
+y2038 safe. The first four could found at [1], [2], [3], [4].
+
+An y2038 safe application/kernel use 64bit time_t(aka time64_t)
+instead of 32bit time_t. There are the 5 cases need to support:
+
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
+-------------------|-------|---------|-------|--------
+32_y2038_unsafe    |32     |32       |32     |32
+32_y2038_safe      |32     |64       |32     |64
+compat_y2038_unsafe|32     |32       |64     |64
+compat_y2038_safe  |32     |64       |64     |64
+64_y2038_safe      |64     |64       |64     |64
+
+notes:
+    1.  xxx_y2038_safe/unsafe. 32 means app running on the 32bit
+        kernel. Compat means 32bit app running on 64bit kernel. 64
+        means 64bit app running on 64bit kernel.
+    2.  1.3.5 are the original one, we need keep the compatability.
+        2,4 is new one we need to support.
+
+There are different ways to do this. Convert to 64bit time and/or
+define COMPAT_USE_64BIT_TIME 0 or 1 to indicate y2038 safe or unsafe.
+
+But it is not mean that we need to convert all the time relative
+struct to 64bit. Because some time relative struct(e.g. timeval in
+ppdev.c) is mainly the offset of the real time.
+
+The main issue in ppdev.c is PPSETTIME/PPGETTIME which transfer
+timeval between user space and kernel. My approach here is handle them
+as different ioctl command.
+
+Build successful on arm64 and arm.
+
+Change since v4:
+1.  change type of tv_sec and tv_usec to s64 in pp_set_timeout.
+    Use s64 could avoid s64 cast to s32 in arm 32bit.
+
+Changes since V3:
+1.  create pp_set_timeout, pp_get_timeout to reduce the duplicated
+    code in my patch according to the suggestion of arnd.
+    I use div_u64_rem instead of jiffies_to_timespec64 because
+    it could save a divide operaion.
+
+[1] https://lists.linaro.org/pipermail/y2038/2015-June/000522.html
+[2] https://lists.linaro.org/pipermail/y2038/2015-June/000567.html
+[3] https://lists.linaro.org/pipermail/y2038/2015-November/001093.html
+[4] https://lists.linaro.org/pipermail/y2038/2015-November/001132.html
+
+2.
+`git send-email --no-chain-reply-to --annotate --to y2038@lists.linaro.org --cc arnd@arndb.de --cc broonie@kernel.org *.patch`
+
+3.
+Here is the sixth version for converting parport device(ppdev) to
+y2038 safe. The first four could found at [1][2][3][4][5].
+
+An y2038 safe application/kernel use 64bit time_t(aka time64_t)
+instead of 32bit time_t. Given that some time relative struct(e.g.
+timeval in ppdev.c) is mainly the offset of the real time, the old
+32bit time_t in such application is safe. We need to handle the
+32bit time_t and 64bit time_t application at the same time.
+
+My approach here is handle them as different ioctl command for
+different size of timeval.
+
+Build successful on arm64 and arm.
+
+Changes since v5:
+1.  Replace PP[GS]ETTIME_safe/unsafe with PP[GS]ETTIME32/64.
+2.  Rewirte PPSETTIME ioctl with jiffies_to_timespec64 in order to
+    replace user fake HZ(TICK_USEC) to kernel HZ(TICK_NSEC).
+
+Change since v4:
+1.  change type of tv_sec and tv_usec to s64 in pp_set_timeout.
+    Use s64 could avoid s64 cast to s32 in arm 32bit.
+
+Changes since V3:
+1.  create pp_set_timeout, pp_get_timeout to reduce the duplicated
+    code in my patch according to the suggestion of arnd.
+    I use div_u64_rem instead of jiffies_to_timespec64 because
+    it could save a divide operaion.
+
+[1] https://lists.linaro.org/pipermail/y2038/2015-June/000522.html
+[2] https://lists.linaro.org/pipermail/y2038/2015-June/000567.html
+[3] https://lists.linaro.org/pipermail/y2038/2015-November/001093.html
+[4] https://lists.linaro.org/pipermail/y2038/2015-November/001132.html
+[5] https://lists.linaro.org/pipermail/y2038/2015-December/001201.html
+
+23:17 2015-12-04
+----------------
+Question about upstream of ILP32
+Hi, Mark, Arnd
+
+1.  v3 vs v6?
+2.  when upstream or when abi is stable?
+
+09:54 2015-12-05
+----------------
+
+summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
+-------------------|-------|---------|-------|--------
+32_y2038_unsafe    |32     |32       |32     |32
+32_y2038_safe      |32     |64       |32     |64
+compat_y2038_unsafe|32     |32       |64     |64
+compat_y2038_safe  |32     |64       |64     |64
+64_y2038_safe      |64     |64       |64     |64
 
