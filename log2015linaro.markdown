@@ -3958,6 +3958,8 @@ Changes since v5:
 1.  Replace PP[GS]ETTIME_safe/unsafe with PP[GS]ETTIME32/64.
 2.  Rewirte PPSETTIME ioctl with jiffies_to_timespec64 in order to
     replace user fake HZ(TICK_USEC) to kernel HZ(TICK_NSEC).
+3.  define tv_sec as long and tv_usec as int in pp_set_timeout. It
+    should be enough for the timeout.
 
 Change since v4:
 1.  change type of tv_sec and tv_usec to s64 in pp_set_timeout.
@@ -3974,6 +3976,34 @@ Changes since V3:
 [3] https://lists.linaro.org/pipermail/y2038/2015-November/001093.html
 [4] https://lists.linaro.org/pipermail/y2038/2015-November/001132.html
 [5] https://lists.linaro.org/pipermail/y2038/2015-December/001201.html
+
+4.  sent to LKML
+    1.  Do not add reviewed-by arnd. Arnd will add it in LKML.
+    2.  Do list all the revision(too much revision).
+    3.
+These series of patches try to convert parport device(ppdev) to
+y2038 safe, and support y2038 safe and unsafe application at the
+same time. There were some discussions in y2038 mailing list[1].
+
+An y2038 safe application/kernel use 64bit time_t(aka time64_t)
+to avoid 32-bit time types broken in the year 2038. Given that
+some time relative struct(e.g. timeval in ppdev.c) is mainly the
+offset of the real time, the old 32bit time_t in such application
+is safe. We need to handle the 32bit time_t and 64bit time_t
+application at the same time. My approach here is handle them as
+different ioctl command for different size of timeval.
+
+Build successful on arm64 and arm.
+
+[1] https://lists.linaro.org/pipermail/y2038/
+
+5.  Send to LKML
+Arnd Bergmann <arnd@arndb.de> (supporter:CHAR and MISC DRIVERS)
+Greg Kroah-Hartman <gregkh@linuxfoundation.org> (supporter:CHAR and MISC DRIVERS)
+Sudip Mukherjee <sudipm.mukherjee@gmail.com> (maintainer:PARALLEL PORT SUBSYSTEM)
+linux-kernel@vger.kernel.org (open list)
+
+`git send-email --no-chain-reply-to --annotate --to linux-kernel@vger.kernel.org --cc y2038@lists.linaro.org --cc gregkh@linuxfoundation.org -cc arnd@arndb.de --cc sudipm.mukherjee@gmail.com --cc broonie@kernel.org *.patch`
 
 23:17 2015-12-04
 ----------------
@@ -3993,4 +4023,100 @@ summary            |u:arch |u:tv_sec |k:arch |k:tv_sec
 compat_y2038_unsafe|32     |32       |64     |64
 compat_y2038_safe  |32     |64       |64     |64
 64_y2038_safe      |64     |64       |64     |64
+
+21:41 2015-12-07
+----------------
+1.  [ACTIVITY] (Bamvor Jian Zhang) 2015-11-25 to 2015-12-03
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* kselftest improvement/[KWG-23]
+    - Try to fix the KBUILD_OUTPUT issue for kselftest. It seems that I should write a make file like tools/perf/Makefile.perf to do it?
+
+* Y2038
+    - Send new version of parport device and printer and get useful feedback from maintainers.
+
+* arm32 team meeting.
+
+=== Plans ===
+* GPIO kselftest:
+    Continue working support pinctrl mockup driver.
+
+* Y2038
+    Convert driver/char/lp.c to y2038 safe.
+
+22:07 2015-12-07
+1.
+Hi all
+
+I'm pleased to say that the testing of the Aryaka network went very well next week. The average speed that people got from the downloads were better than if I tested it from Cambridge!
+
+For comparison, we now need to check going through Aryaka's Hong Kong POP instead of China.
+
+Please repeat the exact steps as before - four git downloads and four speeds.
+
+Please test daily if possible and email me the results.
+
+Many thanks.
+
+Philip
+
+2.
+My internet vendor is "Beijing gehua CATV network" who need to buy the international bandwidth from other vendor(e.g. China telcom). The result is as follows:
+sever                       07, Dec
+git-ap.linaro.org           86.00 KiB/s
+git-ap-aryaka.linaro.org    641.00 KiB/s
+git-us.linaro.org           37.00 KiB/s
+git-us-aryaka.linaro.org    606 KiB/s
+
+17:17 2015-12-10
+1.  Introduction for hikey and 96boards.
+    1.  take picture(from 96boards.org) for hikey and dragon 410c.
+        e.g. https://www.96boards.org/products/ce/hikey/start/
+
+1.  Introduction for hikey: hikey feature list.
+    reference: <http://www.cnx-software.com/2015/02/09/hikey-board-64-bit-arm-development-board/>
+
+1.  Hikey resource list
+    1.  add table for the follow links
+    hikey https://github.com/96boards/documentation/wiki/HiKey
+    uefi: https://github.com/96boards/documentation/wiki/HiKeyUEFI
+    kernel source: https://github.com/96boards/linux/tree/hikey-mainline-rebase
+
+1.  upstream status: already upstream
+    1.  bootloader: uefi
+    2.  kernel:
+        1.  basic dts of hi6330, clk, psci, uart
+        2.  power management: cpufreq, cpuidle, mailbox
+        3.  other: spi, emmu(exclude hi speed).
+
+1.  upstream status: already ack by maintainer
+    gpio、pinctrl, i2c, tsensor, reset
+
+1.  upstream status: in process:
+    1.  power management: pmic, mtcmos, regulator
+    2.  display
+        1.  DRM
+        2.  hdmi audio
+        3.  HDMI adv7533: by 96boards community.
+    3.  usb host, otg.
+    4.  smmu/ion.
+    5.  coresight.
+
+1.  introduction arduino
+    referecen arduino.cc
+
+1.  hikey sensor kit(will send picture to you later).
+
+1.  How to use relay from hikey.(will send picture to you later).
+
+14:29 2015-12-14
+----------------
+sever                       1           2           3
+git-ap.linaro.org           1.19 MiB/s  2.49 MiB/s  1008 KiB/s
+git-ap-aryaka.linaro.org    958 KiB/s   946 KiB/s   945 KiB/s
+git-us.linaro.org           357 KiB/s   292 KiB/s   1.33 MiB/s
+git-us-aryaka.linaro.org    623 KiB/s   907 KiB/s   878 KiB/s
+
+
 
