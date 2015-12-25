@@ -143,8 +143,7 @@ compat_ioctl
     time_xxx_list = [line.strip() for line in open("time_xxx_type_list")]
 
     common = set(ioctl_cmd_list) & set(time_xxx_list)
-    print common
-```
+    print common ```
 I could get the result:
 set(['linux/input.h', 'linux/cyclades.h', 'linux/atm_zatm.h', 'linux/atm_nicstar.h', 'linux/coda.h', 'linux/videodev2.h', 'drm/msm_drm.h', 'linux/ppdev.h', 'sound/asound.h', 'sound/asequencer.h', 'linux/omap3isp.h', 'linux/pps.h', 'linux/dvb/video.h', 'linux/btrfs.h'])
 
@@ -4118,5 +4117,178 @@ git-ap-aryaka.linaro.org    958 KiB/s   946 KiB/s   945 KiB/s
 git-us.linaro.org           357 KiB/s   292 KiB/s   1.33 MiB/s
 git-us-aryaka.linaro.org    623 KiB/s   907 KiB/s   878 KiB/s
 
+15:30 2015-12-16
+----------------
+kernel, device, driver, bind, unbind
+------------------------------------
+Manual driver binding and unbinding
+<https://lwn.net/Articles/143397/>
+echo -n "1-1:1.0" > /sys/bus/usb/drivers/ub/unbind
+
+18:37 2015-12-17
+
+
+ userspace |  kernel  | `__BITS_PER_SIZE_T` | `__BITS_PER_LONG`
+-----------|----------|---------------------|------------------
+    32     |    32    |         32          |       32
+    32     |    32    |         64          |       32
+    32     |    64    |         32          |       32
+    32     |    64    |         64          |       32
+    64     |    64    |         64          |       64
+           |          |                     |
+
+           |          |                     |
+
+16:37 2015-12-21
+----------------
+Hi, I have a fews questions about THP(Transparent Huge Page). Hope it is not off-topic.
+I found that arm64 consume more than 100-200MBytes memory than x86_64 when THP set to always.
+And this could be 'fixed' by the alignment the memory allocation code from arm64 to x86_64, the patches is here:
+1.  revert part of commit 41b8189 ("Handle ARENA_TEST correctly")
+diff --git a/malloc/arena.c b/malloc/arena.c
+index 26e9dfd..9738629 100644
+--- a/malloc/arena.c
++++ b/malloc/arena.c
+@@ -884,7 +884,7 @@ arena_get2 (mstate a_tsd, size_t size, mstate avoid_arena)
+          narenas_limit is 0.  There is no possibility for narenas to
+          be too big for the test to always fail since there is not
+          enough address space to create that many arenas.  */
+-      if (__glibc_unlikely (n <= narenas_limit - 1))
++      if (__glibc_unlikely (n < narenas_limit))
+         {
+           if (catomic_compare_and_exchange_bool_acq (&narenas, n + 1, n))
+             goto repeat;
+
+
+2.  Define the MULTI_PAGE_ALIASING
+diff --git a/sysdeps/aarch64/stack-aliasing.h b/sysdeps/aarch64/stack-aliasing.h
+new file mode 100644
+index 0000000..ced9f69
+--- /dev/null
++++ b/sysdeps/aarch64/stack-aliasing.h
+@@ -0,0 +1,7 @@
++/* Follow the definition from x86 in order to reduce the number of
++   THP when create a new thread. */
++/* What is useful is to avoid the 64k aliasing problem which reliably
++   happens if all stacks use sizes which are a multiple of 64k.  Tell
++   the stack allocator to disturb this by allocation one more page if
++   necessary.  */
++#define MULTI_PAGE_ALIASING     65536
+
+3.  There were some discuss in glibc mailiing list, but I do not get the point.
+[[RFC] malloc: a question about arena_get2()](https://sourceware.org/ml/libc-alpha/2015-12/msg00029.html)
+[hi, I have a question about "MULTI_PAGE_ALIASING" in allocate_stack()](https://sourceware.org/ml/libc-alpha/2015-12/msg00444.html)
+
+I am very appreciated if I could not get some suggestions.
+
+17:37 2015-12-21
+----------------
+1.  [ACTIVITY] (Bamvor Jian Zhang) 2015-12-14 to 2015-12-18
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* Y2038
+    - Send new version of parport device to LKML.
+
+* 1:1 with Mark.
+
+* Hikey
+    - Try to do the automating flash kernel and OTG unplugging according to the method 2 from kevin[1]. The basic function works.
+
+=== Plans ===
+* Y2038
+    Convert driver/char/lp.c to y2038 safe.
+
+[1] https://docs.google.com/document/d/1tCbC7gCRAIvmqXkePqMK-fLL0jfE3EPk3zW_u9x4YZw/
+
+11:53 2015-12-24
+----------------
+y2038, printer, lp
+------------------
+1.  reply to arnd
+    Hi, arnd
+
+    I am trying to follow your suggestion. But I do not understand why
+    `__BITS_PER_SIZE_T` is relative to sizeof(time_t). And I also tried to use
+    `__BITS_PER_TIME_T` according to the following table.
+
+    ```
+    /*
+     *  userspace |  kernel  | `__BITS_PER_TIME_T` | `__BITS_PER_LONG` | `__BITS_PER_TIME_T` <= `__BITS_PER_LONG`
+     * -----------|----------|---------------------|-------------------|------------------------------------------
+     *     32     |    32    |         32          |       32          |                    true
+     *     32     |    32    |         64          |       32          |                    false
+     *     32     |    64    |         32          |       32          |                    true
+     *     32     |    64    |         64          |       32          |                    false
+     *     64     |    64    |         64          |       64          |                    true
+     */
+    #if __BITS_PER_TIME_T <= __BITS_PER_LONG
+    #define LPSETTIMEOUT 0x060f /* set parport timeout */
+    #else
+    #define LPSETTIMEOUT _IOW(0x06, 0x0f, struct timeval)
+    #endif
+    ```
+    As you know, there is no `__BITS_PER_TIME_T` as well. Finally, I thought I could
+    make use of `__USE_TIME_BITS64` which mentioned in
+    <https://sourceware.org/glibc/wiki/Y2038ProofnessDesign>
+
+    How about something like this?
+    ```
+    #if defined(__USE_TIME_BITS64) && __BITS_PER_LONG == 32
+    #define LPSETTIMEOUT _IOW(0x06, 0x0f, struct timeval)
+    #else
+    #define LPSETTIMEOUT 0x060f /* set parport timeout */
+    #endif
+    ```
+
+2.  reply to arnd
+> Yes, this is what I meant. Unfortunately, we have not agreed on
+> what we are going to call that macro, but this is roughly how it
+> should work.
+Got you, could I use __USE_TIME_BITS64 in my patch right now?
+Or should I need to wait for this agreement?
+
+> However, the definition you have here is only correct
+> for user space, not for the kernel itself, which needs a slightly
+> different definition when __KERNEL__ is defined and 'struct timeval'
+> has been removed from the kernel.
+Yeap, I am thinking it is header for uapi. I will define LPSETTIMEOUT64 in
+driver/char/lp.c:
+#define LPSETTIMEOUT64	_IOW(0x06, 0x0f, s64[2])
+
+Is it make sense?
+
+Regards
+
+Bamvor
+
+17:50 2015-12-24
+----------------
+kernel, kselftest, mergeconfig
+------------------------------
+1.  reply to Michael
+    Hi, Michael
+
+    Do you mean "tools/testing/selftest/Makefile"? I try to do it but I could not
+    get the objtree and srctree if it is called directly(objtree and srctree is
+    defined in toplevel Makefile)
+    > make -C tools/testing/selftests kselftest-mergeconfig
+    make: Entering directory '/home/bamvor/works/source/kernel/linux/tools/testing/selftests'
+    Makefile:112: *** No .config exists, config your kernel first!.  Stop.
+    make: Leaving directory '/home/bamvor/works/source/kernel/linux/tools/testing/selftests'
+
+    Suggestions?
+
+    Regards
+
+    Bamvor
+
+14:40 2015-12-25
+----------------
+kernel, kselftest, KBUILD_OUTPUT
+
+Hi,
+
+I am trying to support KBUILD_OUTPUT(O=xxx) for kselftest. And I found that
 
 
