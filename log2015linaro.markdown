@@ -4287,8 +4287,25 @@ kernel, kselftest, mergeconfig
 ----------------
 kernel, kselftest, KBUILD_OUTPUT
 
+[RFD] How to supprot KBUILD_OUTPUT for kselftest?
 Hi,
 
-I am trying to support KBUILD_OUTPUT(O=xxx) for kselftest. And I found that
+I am trying to support KBUILD_OUTPUT(O=xxx) for kselftest. It seems that only
+perf tools(tools/perf) support it. And I could know that the following Makefile
+are called when building perf:
+tools/Makefile
+tools/perf/Makefile
+tools/perf/Makefile.perf
+tools/build/Makefile.build
+
+But I could not get the idea that how to do it for kselftest. Is there any
+existed infrastructure I could use?
+
+I am appreciated if there is any suggestions or ideas. Thanks in advance.
+
+Regards
+
+Bamvor
+
 
 
