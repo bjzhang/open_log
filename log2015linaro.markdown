@@ -1886,6 +1886,8 @@ howto, send patches
 2.  ensure the proper email address
     For non-linaro internal email: Mark: broonie@kernel.org
     Same as arnd?
+3.  do checkpatch and C=1(sparse) for each file I modified.
+4.  check the number of patches.
 
 18:18 2015-08-19
 -
@@ -4287,12 +4289,15 @@ kernel, kselftest, mergeconfig
 ----------------
 kernel, kselftest, KBUILD_OUTPUT
 
-[RFD] How to supprot KBUILD_OUTPUT for kselftest?
+[RFD] How to support KBUILD_OUTPUT for kselftest?
 Hi,
 
-I am trying to support KBUILD_OUTPUT(O=xxx) for kselftest. It seems that only
-perf tools(tools/perf) support it. And I could know that the following Makefile
-are called when building perf:
+I am trying to improve cross compiling support for kselftest recently. Right
+now I am stuck when I want to enable KBUILD_OUTPUT(O=xxx). It exist in wiki of
+kselftest[1]. Hope it is not a duplicated work.
+
+It seems that only perf tools(tools/perf) support it. And I could know that the
+following Makefile are called when building perf:
 tools/Makefile
 tools/perf/Makefile
 tools/perf/Makefile.perf
@@ -4307,5 +4312,40 @@ Regards
 
 Bamvor
 
+[1] https://kselftest.wiki.kernel.org/support_cross-compilation
 
+16:26 2015-12-29
+----------------
+Changes since v1:
+1.  gpio mockup driver
+    1.  Change from int to bool for the value of gpio.
+    2.  Use two parameters arraies for base and ngpio seperated.
+
+2.  we should keep gpio-mockup as module in suggestion. Because if this mockup driver is insert before the real hw, the real gpio may insert fail or the gpio range for gpio may varies.
+
+16:32 2015-12-29
+----------------
+Chat with Linus when possible
+1.  I do not famaliar with the kernel development flow(I want say that I am sorry I do not fix the warning in time).
+
+22:03 2015-12-30
+----------------
+zypper in sparse
+make C=1
+```
+  CHECK   drivers/char/ppdev.c
+drivers/char/ppdev.c:639:34: warning: incorrect type in argument 1 (different address spaces)
+drivers/char/ppdev.c:639:34:    expected void [noderef] <asn:1>*to
+drivers/char/ppdev.c:639:34:    got signed int *<noident>
+drivers/char/ppdev.c:639:42: warning: incorrect type in argument 2 (different address spaces)
+drivers/char/ppdev.c:639:42:    expected void const *from
+drivers/char/ppdev.c:639:42:    got void [noderef] <asn:1>*argp
+drivers/char/ppdev.c:651:34: warning: incorrect type in argument 1 (different address spaces)
+drivers/char/ppdev.c:651:34:    expected void [noderef] <asn:1>*to
+drivers/char/ppdev.c:651:34:    got signed long long *<noident>
+drivers/char/ppdev.c:651:42: warning: incorrect type in argument 2 (different address spaces)
+drivers/char/ppdev.c:651:42:    expected void const *from
+drivers/char/ppdev.c:651:42:    got void [noderef] <asn:1>*argp
+  CC      drivers/char/ppdev.o
+```
 
