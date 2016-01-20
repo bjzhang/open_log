@@ -33,3 +33,31 @@ Meeting with Mark
     1.  Ask Ryan Arnold(team leader of Ryan).
     2.  Steve Capper(LEG). kernel guy. Familiar with THP and memory things.
 
+21:23 2016-01-18
+----------------
+1.  [ACTIVITY] (Bamvor Jian Zhang) 2016-01-11 to 2016-01-18
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* Y2038
+    - Send new version of parport device to LKML.
+
+* 1:1 with Mark.
+
+* GPIO:
+    Try to re-write the gpiochip_add_to_list according to the suggestion
+    from arnd.
+
+* GPIO kselftest:
+    Address the comment from maintainer.
+    Re-write the gpio test script in c language.
+
+* Kselftest improvement
+    Support KBUILD_OUTPUT for kselftest
+        There is no reply in LKML. Maybe I do not ask the right question.
+        Will investigate it later.
+
+=== Plans ===
+* GPIO kselftest
+    Send out the new version of gpio mockup driver and testcases.
+
