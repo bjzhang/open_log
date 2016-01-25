@@ -59,5 +59,48 @@ Meeting with Mark
 
 === Plans ===
 * GPIO kselftest
-    Send out the new version of gpio mockup driver and testcases.
+Send out the new version of gpio mockup driver and testcases.
+
+16:45 2016-01-24
+----------------
+Hi, Linux
+
+I am re-writing the test in c language. When I do it, I found that the
+script in c language is longer that bash script. What I do is as
+follows:
+1.  gpio-mockup.h
+    1.  struct gpio_chip: define gpio_chip information for sysfs and
+        chardev. It is *different* from such definition in kernel.
+    2.  struct gpio_device: define function and value used by sysfs
+        and chardev include the array of struct gpio_chip. Such array
+        include information of gpio_chip attach to this gpio_device.
+
+2.  gpio-mockup.c: main function with test framework and common
+functions share with sysfs and chardev, user could select which
+interface is used. Chardev will be default after it uptream. This file
+includes:
+    1.  struct gpio_testcase: testcases for testing.
+    2.  main function for gpio test.
+    3.  pin_get_debugfs: read pin status from debugfs which is used
+        by both sysfs and chardev.
+
+3.  gpio-mockup-sysfs.c: define and implement the function and
+    variable defined by struct gpio_device.
+
+4.  gpio-mockup-chardev.c: define and implement the function and
+    variable defined by struct gpio_device.
+    I do not if the utils of chardev(located in tools) will be a
+    libray, if so, I could make use of the code to avoid duplicated
+    code.
+
+At the same time, I am thinking If I should wrote the test script in
+shell and call the util of gpio chardev in the script.
+
+Which one do you prefer?
+1.  Full c languarges.
+2.  Script for framework and sysfs, calling utils for chardev.
+
+Regards
+
+Bamvor
 
