@@ -104,3 +104,30 @@ Regards
 
 Bamvor
 
+16:42 2016-01-25
+----------------
+
+
+> cat test.sh
+#!/bin/bash
+
+make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j8
+killall qemu-system-aarch64
+/home/z00293696/works/software/distribution/opensuse/13.1/boot.sh >> log_1531
+make -C /home/z00293696/works/reference/code_collection/kernel_module_hello ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+while true; do
+	scp -p /home/z00293696/works/reference/code_collection/kernel_module_hello/hello.ko root@qarm64:/root/ && break || sleep 1
+done
+ssh root@qarm64 'insmod /root/hello.ko'
+if [ X$? != X0 ]; then
+	#CAUTION: do not use 125 which mean untestable for 'git bisect'
+	status=127
+fi
+ssh root@qarm64 'poweroff'
+make -C /home/z00293696/works/reference/code_collection/kernel_module_hello ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- clean
+
+exit $status
+
+git bisect start hulk-4.1-bad hulk-4.1-good --
+git bisect run `realpath test.sh`
+
