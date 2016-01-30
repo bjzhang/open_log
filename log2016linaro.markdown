@@ -107,7 +107,6 @@ Bamvor
 16:42 2016-01-25
 ----------------
 
-
 > cat test.sh
 #!/bin/bash
 
@@ -130,4 +129,43 @@ exit $status
 
 git bisect start hulk-4.1-bad hulk-4.1-good --
 git bisect run `realpath test.sh`
+
+17:41 2016-01-27
+----------------
+Hi, Linus
+
+I am using this interface to do my gpio mockup test. I need to list
+all the gpiochips attach to one gpio driver(aka gpio-mockup, there may
+be more than one gpio drivers in the system). And then test some of the
+pin of each gpio_chip.
+
+From the api(ioctl GPIO_GET_CHIPINFO_IOCTL: gpiochip_info), it seems
+that I could list all the gpiochips or list only one gpiochip. But
+I could not list gpiochip belongs to one gpio driver.
+
+Do I understand correctly?
+Will we add a new api to do it?
+
+Regards
+
+Bamvor
+
+19:07 2016-01-27
+----------------
+1.  gpio mockup
+2.  ilp32
+3.  lp.c pending
+4.  kmerge config
+
+18:11 2016-01-29
+----------------
+kernel, gpio, gpio-mockup
+-------------------------
+> I think you can get that information from parsing sysfs?
+Yeap, I could get the directory:
+"/sys/devices/platform/gpio-mockup/gpio/"
+
+I notice that you mark the sysfs ABI as obsolete in these series. I
+am not sure whether it is reasonable to read it from syfs when using
+chardev.
 
