@@ -169,3 +169,43 @@ I notice that you mark the sysfs ABI as obsolete in these series. I
 am not sure whether it is reasonable to read it from syfs when using
 chardev.
 
+11:27 2016-02-02
+----------------
+ilp32
+-----
+1.  kernel syscalls:
+    1.  the base is include/uapi/asm-generic/unistd.h, it may support normal and optional compat syscall as follows `__SYSCALL(__NR_openat, sys_openat)`, `SC_COMP(__NR_openat, sys_openat, compat_sys_openat)`
+        architecture could define it own unistd.h or overwrite the definition in it.
+        E.g. for define the following two syscall as compat syscall.
+        #define sys_openat             compat_sys_openat
+        #define sys_open_by_handle_at  compat_sys_open_by_handle_at
+
+2.  syscall wrapper
+```
++/*
++ * The SYSCALL_DEFINE_WRAP macro generates system call wrappers to be used by
++ * compat tasks. These wrappers will only be used for system calls where only
++ * the system call arguments need sign or zero extension or zeroing of upper
++ * bits of pointers.
++ * Note: since the wrapper function will afterwards call a system call which
++ * again performs zero and sign extension for all system call arguments with
++ * a size of less than eight bytes, these compat wrappers only touch those
++ * system call arguments with a size of eight bytes ((unsigned) long and
++ * pointers). Zero and sign extension for e.g. int parameters will be done by
++ * the regular system call wrappers.
+```
+
+2.  TODO
+    1.  cond_syscall
+    2.  tls register
+        ref: "d00a381 arm64: context-switch user tls register tpidr_el0 for compat tasks"
+        change from int to unsigned long in commit "3033f14a" (clone: support passing tls argument via C rather than pt_regs magic). It seems that it is a big reason to do it!
+
+3.  usefull: 
+    1.  BUILD_BUG_ON
+    2.  the stackop of compat mode in arm64 is AARCH32_VECTORS_BASE(0xffff0000).
+        in arm (32bit) 3G:1G kernel, it is PAGE_OFFSET(0xc0000000) - 16M
+    3.  how to access the compat register from native task.
+        5d220ff arm64: Better native ptrace support for compat tasks
+
+
