@@ -208,4 +208,98 @@ ilp32
     3.  how to access the compat register from native task.
         5d220ff arm64: Better native ptrace support for compat tasks
 
+18:08 2016-02-03
+----------------
+1.  cover letter
+Add gpio test framework
 
+These series of patches try to add support for testing of gpio
+subsystem based on the proposal from Linus Walleij. The first version
+is here[1].
+
+The basic idea is implement a virtual gpio device(gpio-mockup) base
+on gpiolib. Tester could test the gpiolib by manipulating gpio-mockup
+device through sysfs or char device and check the result from debugfs.
+Reference the following figure:
+
+   sysfs/char device  debugfs
+     |                   |
+  gpiolib----------------/
+     |
+ gpio-mockup
+
+Currently, this test script will use sysfs interface by default. I
+plan set char device as default after it upstreamed.
+
+In order to avoid conflict with other gpio exist in the system,
+only dynamic allocation is tested by default. User could pass -f to
+do full test.
+
+[1] http://comments.gmane.org/gmane.linux.kernel.gpio/11883
+
+Changes since v1:
+1.  Change value of gpio to boolean.
+2.  Only test dynamic allocation by default.
+
+2.  send them out:
+`git send-email --no-chain-reply-to --annotate --to linux-gpio@vger.kernel.org --cc linus.walleij@linaro.org --cc broonie@kernel.org *.patch`
+
+20:27 2016-02-03
+----------------
+hikey, kernel, upstream
+-----------------------
+hikey upstream discussion between Guodong and Mark.
+```
+On Wed, Feb 03, 2016 at 03:52:09PM +0800, Guodong Xu wrote:
+
+> As of v4.4, already upstreamed:
+
+> - clk, psci, basic dts, uart, cpufreq, cpuidle, mailbox, emmc, wifi driver
+> fix, and tsensor (thermal)
+
+Of these only the clock, PSCI and the UART appear to be included in the
+DTS.  If a feature is not enabled in the DTS most people would not
+understand it as being supported upstream for the board since there is
+no way for someone to actually use any of these features if they use
+mainline.
+
+> - hikey can boot using vanilla v4.4 kernel and defconfig.
+
+It can boot to serial console with a ramdisk, nothing else.  There is a
+serious discrepency between the features you are reporting as supported
+upstream and the features that are actually supported upstream, the set
+supported upstream is has not changed substantially since merge.
+
+> v4.5-rc1:
+
+> USB: driver, 37dd9d6 usb: dwc2: add support of hi6220.
+
+Again, this does not appear in the DT and is therefore unusable for
+anyone using mainline.
+
+> Slated for v4.6 merge-window:
+
+> hisi-reset driver: in linux-next ( http://git.kernel.org/cgit/linux/kernel/git/next/linux-next.git/tree/drivers/reset/hisilicon?h=next-20160129
+> )
+
+This seems to already be in Linus' tree so unless some major problem is
+discovered it should be in v4.5.
+
+> DTS: in maintainer's git repo: <https://github.com/hisilicon/linux-hisi>
+>
+> - Including: gpio, pinctrl, i2c
+
+This does not appear to be part of the kernel development process, it
+does not appear in -next and I can't see any prior cases where a pull
+request from this tree has made it into -next.  I don't see that there
+is any reasonable expectation that anything there will make it into
+mainline.
+
+Like I said above there is a big difference between what you are
+reporting as upstream and the features that are practically usable
+upstream.  This is creating a lot of frustration on the part of
+potential users who want to work on mainline, both with the lack of
+features itself and with the fact that lists of supported features are
+typically substantially inaccurate which makes people feel they are
+being mislead.
+```

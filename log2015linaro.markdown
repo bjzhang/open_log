@@ -4316,7 +4316,7 @@ Bamvor
 
 16:26 2015-12-29
 ----------------
-Changes since v1:
+Changes since v1(out of date):
 1.  gpio mockup driver
     1.  Change from int to bool for the value of gpio.
     2.  Use two parameters arraies for base and ngpio seperated.
