@@ -506,5 +506,29 @@ gpiochip_set_chained_irqchip->
 
 irq_chip->irq_set_type will set desc->handler: handle_edge_irq, handle_level_irq, handle_fasteoi_irq. All of them will call handle_irq_event and consequently action->handler()
 
+typedef irqreturn_t (*irq_handler_t)(int, void *);
 
+desc->handle_irq.
+
+18:14 2016-02-29
+----------------
+kwg, activity
+-------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-02-17 to 2016-02-29
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* GPIO:
+    Send 3 patch(need further discussion) for gpio core while rebasing my gpio-mockup driver.
+    Send v2 patch: rewrite-gpiodev-add-to-list.
+
+* Discuss my work with Mark.
+
+* ARM32 meeting.
+    - update document: add the source code of kernel for Hip05/D02, kirin 935/950.
+
+* Discuss my work with Mark.
+
+=== Plans ===
+* Improve the gpio-mockup driver and sent out new verison.
 
