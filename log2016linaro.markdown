@@ -597,7 +597,32 @@ discuss about ILP32 with Mark, Arnd.
 3.  Mark suggest me that send email to catalin about the ilp32.
 Hi, Catalin
 
-This is bamvor from linaro kwg. I am assignee from Huawei.
+This is bamvor from linaro kwg(Huawei assignee). Glad to see lots of discussion in LKML in recent months. It seems that the community get generally agreement about the abi. Huawei wants to use ILP32 in the production environment in the near future after the ILP32 is ready. 
+
+So, what is the blocker of getting ilp32 upstream(kernel part)?
+IIUC, there are three things being discussed, please correct me I am wrong:
+1.  Whether the abi get agreement?
+    I have seen Yury are working on the patches of SYSCALL WRAP recently. And there are some discussion about the patches of glibc in LKML. Both of them seem not relative the abi of ilp32.
+    Could I say that the abi have already got agreement if we do not find abi issue during ltp test?
+
+2.  Whether LTP test pass?
+    There are dozens of failures right now. Huawei are testing the ilp32 on our real hardware and qemu and are planning to fix these issue in our next steps. And we will send it out if we found something.
+    If all the LTP syscall test pass(in a make sense way not tricky nor something), do you willing to accept the patches of whole ilp32?
+
+3.  Whether we need a distribution of ilp32?
+    I am not quite understand about this requirement. We should of course provide a build system to build filesytem and test ilp32. Any of buildroot, yocto/openembedded or obs, koji and others could do this. I understand that the more packages built pass the more confidencial. But how many packges do we really want? dozens, hundreds, thousands?
+    I have patches to build ilp32 filesytem in buildroot. If we need build a filesytem including dozens packages, maybe I could try to do it. But if we want a real distribution. I do not know how should do it. Suse had a private obs for ilp32, I do not know the status of it.
+
+Thanks in advance and looking forward your reply.
+
+Regards
+
+Bamvor
+
+not send.
+And it seems that there are lots
+of work need to do(upstream, test, performance evalution ...).  I am
+curios that if there is a discussion about ILP32 in this week.
 
 Huawei plan to use ILP32 in next year or something.
 
@@ -619,4 +644,113 @@ discuss with rayn.
     discuss with ilp32.
     send email to ryan.
 
+09:00 2016-03-08
+----------------
+1.  coreos, security.
+    1. we generated more data than ever before.
+       we plac more trust in the system.
+       provide guarantees to higher layers.
+       UEFI.
+       do not differentiate on fundamental security.
+
+2.  Talk with Paul Liu(member serivce). He work on integration for 96boards. for action board.
+
+3.  Talk with alex hung(hong) from canonical. hardware enablement team(x86 and arm).
+
+4.  Gao Qingzhong.
+
+5.  Security, IoT.
+    1.  need generic device.
+    2.  trustzone. OP-TEE.
+    3.  arm and linaro do it together.
+
+6.  Wuzhangjin: meizu. TSC.
+    Update(2016-03-09): there are four people join this connect as far as I know.
+
+7.  IoLT: Internet of Light Linux.
+
+8.  Send email to catalin, ryan and Siddhesh Poyarekar.
+
+9.  STILL TODO:
+    Read the slide of LMG lighting talk.
+    Talk with majun with irq relative topic.
+
+09:19 2016-03-09
+----------------
+1.  Short talk with Andre wafa from ARM.
+
+2.  Discuss with toolchain about ilp32 with Arnd and Mark.
+	1.  5-10% performance improvement in gcc with developing patch.
+        2.  kernel: stat64, sysvipc flag need to use the new layout?
+
+3.  Tony chen.
+
+4.  Face to face short talk with winnie.
+
+5.  yinlingbing.
+
+6.  EAS power model.
+    1.  active idle.
+
+7.  Discuss with arnd about the support in arm64 linux. Arnd said that it is supported at the beginning. It was a bug about set endian intruction(it could not be emulated because the endian is the optional in the architecture). arm64 kernel must support it unless the original arm32 application will be broken(usually the application is compiled with thumb2).
+
+TODO
+1.  collect the use of trinity in huawei and send to tylor discuss about it.
+2.  collect the thoughts of ilp32 from huawei and discuss with Mark, Arnd and Catalin.
+3.  ping alex about ilp32 later.
+4.  talk with linus about gpio and bfq.
+    1. bfq:
+        <https://lwn.net/Articles/674300/>
+        <https://lists.linux-foundation.org/pipermail/containers/2014-June/034704.html>
+        [original bfq](https://lkml.org/lkml/2008/4/1/234)
+        [BFQ-v7r6 versus CFQ, DEADLINE and NOOP on an SSD](https://www.youtube.com/watch?v=1cjZeaCXIyM&feature=youtu.be)
+        [another introduction about bfq](http://algogroup.unimore.it/people/paolo/disk_sched/results.php)
+
+
+09:40 2016-03-09
+----------------
+KEY NOTE
+0.  I feel that I learn more than last connect. Because I take more clear task(ILP32) this time. It would be great if could continue working in the linaro.
+
+1.  bfq: it maybe useful in our mobile?
+2.  ilp32 discussion
+3.  kernelci: add fuzz test.
+
+18:27 2016-03-10
+----------------
+1.  there is a virtualization team and a IoT team in british.
+2.  yiselie team work on smt(super thread) on cpu.
+
+22:48 2016-03-10
+-----------------
+Hi,
+
+This is Bamvor Jian Zhang from Linux kernel working group(Huawei assignee). Nice to talk with Joey about aarch64 ILP32. Huawei wants to use ILP32 in the production environment in the near future after the ILP32 is ready. 
+
+So, what is the blocker of getting ilp32 upstream(kernel part)?
+
+09:57 2016-03-11
+-----------------
+1.  Ian Compbell went to unikernel. Julien is the xen arm maintainer, from citrix to arm.
+1.  Talk with arnd: does he discuss with catalin? Is catalin willing to tak ethe patches in next month?
+    1. Arnd will talk with catalin. I could ping him, there is no update from him in next week.
+2.  Talk with Mark about my work.
+    1.  Maybe in block layer.
+    2.  Send to catalin about why huawei care about ilp32.
+3.  Talk with Andy Gross again about Suspend to Idle. S2I is a suspend state in which not all the device freeze.
+4.  Talk with Linus about gpio mockup driver and block layer.
+    1.  plugin for scheduler.
+    2.  multi qeueu.
+        bamvor: how does the scheduler in block work with multi queue hardware?
+5.  Hanjun is working on the RBP. RBP kernel is the lastest(1 or 2) release kernel. it is easy to do the development.
+6.  kernelci:
+    1.  Currently kernelci only support build and boot test. The next step is adding the kselftest. And if it works, we will add other test.
+        E.g. LTP. For trinity, it will be added later.
+    2.  The filesystem of kernelci is built by LAVA.
+    3.  [This](https://kernelci.org/faq/) is how to build kernelci. But it is tagged as alpha/beta. It does not suggest to deploy it.
+    4.  bisec://kernelci.org/faq/tion.
+
+7.  TODO: ILP32
+    1.  send hello email to glibc arm64 maintainer.
+    2.  send hello email to alex graf.
 
