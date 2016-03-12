@@ -723,11 +723,25 @@ KEY NOTE
 
 22:48 2016-03-10
 -----------------
+arm64, ilp32, kernel; glibc, ping maintainer
+--------------------------------------------
+1.  to glibc arm64 maintainer
+Greeting from bamvor who care about ILP32
 Hi,
 
-This is Bamvor Jian Zhang from Linux kernel working group(Huawei assignee). Nice to talk with Joey about aarch64 ILP32. Huawei wants to use ILP32 in the production environment in the near future after the ILP32 is ready. 
+This is Bamvor Jian Zhang from Linux kernel working group(Huawei assignee). Nice to talk with Joey about aarch64 ILP32 in linaro connect. I heard that you may be interested to review the patch of ilp32 of glibc if we send them to libc-alpha mailing list. As you may know, there was a abi discussion[1] about ilp32 in LKML one or two month ago. And there is a latest patch of ilp32 of glibc in github[2]. It maybe need to reorgnize before send it libc-alpha mailing list. I could discuss with cavium and kernel guys about the plan of sending it to glibc mailing list.
 
-So, what is the blocker of getting ilp32 upstream(kernel part)?
+Here is some information of ilp32 in huawei: In 2014, we have a PoC work in huawei which pass all the syscall tests of LTP and could run the minimal system of our product. But the abi is not get agreement at that time. So we could not continue. Recently, We glad to see lots of discussion in LKML. And it seems that the kernel community get generally agreement for the abi of ILP32(maybe there is one or two item(s) need to futher discussion). We are thinking that if the ilp32(kernel and glibc) could be upstreamed in the next few months, it is a good chance to use it in our product. There are more than 1000 milion line of code need to migrate to ILP32 in Huawei.
+
+Regards
+
+Bamvor
+
+[1]: http://thread.gmane.org/gmane.linux.kernel/2126946
+[2]: https://github.com/norov/glibc/tree/new-api
+
+2.  reply to catalin
+Here is some information of ilp32 in huawei: In 2014, we have a PoC work in huawei which pass all the syscall tests of LTP and could run the minimal system of our product. But the abi is not get agreement at that time. So we could not continue. Recently, We glad to see lots of discussion in LKML, it is indeed a good progress. So, we plan to use it in our product. There are more than 1000 milion line of code need to migrate to ILP32 in Huawei. Whether the abi of ilp32 get agreement is very important for us.
 
 09:57 2016-03-11
 -----------------
@@ -739,9 +753,13 @@ So, what is the blocker of getting ilp32 upstream(kernel part)?
     2.  Send to catalin about why huawei care about ilp32.
 3.  Talk with Andy Gross again about Suspend to Idle. S2I is a suspend state in which not all the device freeze.
 4.  Talk with Linus about gpio mockup driver and block layer.
-    1.  plugin for scheduler.
-    2.  multi qeueu.
-        bamvor: how does the scheduler in block work with multi queue hardware?
+    1.  I will send out new version.
+        1.  implement the proper util in tools/gpio. my gpio-mockup script will call it.
+    2.  block
+        1.  look at the article in lwn.
+        2.  plugin for scheduler.
+        3.  multi queue.
+            bamvor: how does the scheduler in block work with multi queue hardware?
 5.  Hanjun is working on the RBP. RBP kernel is the lastest(1 or 2) release kernel. it is easy to do the development.
 6.  kernelci:
     1.  Currently kernelci only support build and boot test. The next step is adding the kselftest. And if it works, we will add other test.
