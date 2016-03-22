@@ -586,7 +586,6 @@ linaro, connect, notes
     Focus on HPC at this time.
      focus on memory and interconnect; architecture and lots of area,
      IoT generate Big Data.
-     
 
 10:33 2016-03-07
 ----------------
@@ -768,7 +767,44 @@ Here is some information of ilp32 in huawei: In 2014, we have a PoC work in huaw
     3.  [This](https://kernelci.org/faq/) is how to build kernelci. But it is tagged as alpha/beta. It does not suggest to deploy it.
     4.  bisec://kernelci.org/faq/tion.
 
-7.  TODO: ILP32
+7.  ILP32
     1.  send hello email to glibc arm64 maintainer.
     2.  send hello email to alex graf.
+
+09:22 2016-03-22
+-----------------
+1. activity
+[ACTIVITY] (Bamvor Jian Zhang) 2016-03-14 to 2016-03-22
+
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* ILP32:
+    - Backport ILP32 patches to huawei stable kernel. It is seqfault even if I only print one line. After debugging I found that the reason is I do not write the proper tpidr_el0 in thread switch. The code in thread switch of kernel is a little bit different from the upstream kernel.
+    - I also found another flush tls issue in kernel side, which may lead to some failure of testcases. I have already send such patch to LKML.
+*.bfq(a io scheduler):
+    - Read the relative documents of bfq, and discuss with Linus. I'd like to test it in our mobile.
+
+* 1:1 with Mark.
+
+=== Plans ===
+* Improve the gpio-mockup driver and sent out new verison according to the discussion with Linus in bkk16.
+* ILP32
+  -  backport
+     Do all the syscall test of LTP for aarch32 and aarch64 lp64 to ensure no regession after introduce ILP32 patches.
+  -  Try to fix some failure of LTP in upstream kernel. I hope I could do something for the upstreaming progresss.
+* bfq
+  -  test bfq in our mobile.
+
+2.  send to Mark
+Hi, Mark
+
+It may takes me some time for ILP32 and bfq recently. It may take me 50%-60% of time in next 2-4 weeks. I am not sure if you are ok.
+For the ilp32, there is a internal request for speeding up the upstreaming progress. It seems that there are two things I could do. The first thing is that debug the ltp failure and discuss them with community. The second thing is that provide a minimal fileysystem for testing. I hope linaro openembedded could do it. Except the OE, there is a small set of patch of illp32 of buildroot wrote by me. Such series depends on the external toolchain(such as linaro ilp32 toolchain or toolchain from leapproject[1]).  The buildroot maintainer told me that they could not accept the patches until there is a toolchain in a public place. So, do you know the plan of tcwg? Should I send email to them(Ryan, Maxim, Adhemerval) directly?
+
+Thanks
+
+Bamvor
+
+[1] https://hub.docker.com/r/leapproject/leap-aarch64_ilp32-toolchain/
 
