@@ -4,43 +4,73 @@ install_for_user()
 {
     USER=$1
     if [ X$USER = Xroot ]; then
-        UPATH="/$USER"
+        HOME="/$USER"
     else
-        UPATH="/home/$USER"
+        HOME="/home/$USER"
     fi
-    su $USER -c 'mkdir $UPATH/bin -p'
+    su $USER -c 'mkdir $HOME/bin -p'
+    BASHRC=$HOME/.bashrc
+    echo "export GIT_EXTERNAL_DIFF=~/bin/git_diff_wrapper" >> ${BASHRC}
     for l in `ls --color=none utils`; do
-        su $USER -c 'ln -sf `realpath utils/$l` $UPATH/bin'
+        su $USER -c 'ln -sf `realpath utils/$l` $HOME/bin'
     done
 
-    su $USER -c 'cp -a misc/tmux.conf $UPATH/.tmux.conf'
+    su $USER -c 'cp -a misc/tmux.conf $HOME/.tmux.conf'
 }
 
+DISABLE="software"
+#true: install script to global
+#false: install script to local
+IS_GLOBAL="false"
+
 echo "This script is not finished!!!!"
+read
 USER=$1
 
 if [ X$USER = X ]; then
 	echo "User is empty, exit"
+	exit
 fi
 
-echo "Install software"
-echo "install tmux"
-sudo zypper --non-interactive install tmux
-echo "install cscope"
-sudo zypper --non-interactive install cscope
-echo "instal qemu-system-aarch64"
-sudo zypper --non-interactive --gpg-auto-import-keys addrepo -c -f -r http://download.opensuse.org/repositories/Virtualization/openSUSE_Leap_42.1/Virtualization.repo
-sudo zypper --non-interactive  --gpg-auto-import-keys refresh
-sudo zypper --non-interactive  --gpg-auto-import-keys install qemu-arm
+echo $DISABLE | grep software > /dev/null
+if [ X"$?" = X1 ]; then
+	echo "Install software"
+	echo "install tmux"
+	sudo zypper --non-interactive install tmux
+	echo "install cscope"
+	sudo zypper --non-interactive install cscope
+	echo "instal qemu-system-aarch64"
+	sudo zypper --non-interactive --gpg-auto-import-keys addrepo -c -f -r http://download.opensuse.org/repositories/Virtualization/openSUSE_Leap_42.1/Virtualization.repo
+	sudo zypper --non-interactive  --gpg-auto-import-keys refresh
+	sudo zypper --non-interactive  --gpg-auto-import-keys install qemu-arm
+fi
 
-sudo su -c 'cat vim/vimrc >> /etc/vimrc'
-sudo cp -a vim/plugin vim/doc /usr/share/vim/current/
-sudo su -c 'echo ". $PWD/bash/gdb_debug" >> /etc/bash.bashrc'
-sudo su -c 'echo ". $PWD/bash/logAssistant_helper" >> /etc/bash.bashrc'
-sudo su -c 'echo ". $PWD/bash/indent-libvirt" >> /etc/bash.bashrc'
-sudo su -c 'echo "export GIT_EXTERNAL_DIFF=~/bin/git_diff_wrapper" >> /etc/bash.bashrc'
-sudo su -c 'cat ssh_config >> /etc/ssh/ssh_config'
-sudo su -c 'cat hosts >> /etc/hosts'
+#if [ X"$IS_GLOBAL" = Xtrue ]; then
+#	sudo su -c 'cat vim/vimrc >> /etc/vimrc'
+#	sudo cp -a vim/plugin vim/doc /usr/share/vim/current/
+#	sudo su -c 'echo ". $PWD/bash/gdb_debug" >> /etc/bash.bashrc'
+#	sudo su -c 'echo ". $PWD/bash/logAssistant_helper" >> /etc/bash.bashrc'
+#	sudo su -c 'echo ". $PWD/bash/indent-libvirt" >> /etc/bash.bashrc'
+#	sudo su -c 'cat misc/ssh_config >> /etc/ssh/ssh_config'
+#	sudo su -c 'cat misc/hosts >> /etc/hosts'
+#else
+#	USER=$1
+#	if [ X$USER = Xroot ]; then
+#	HOME="/$USER"
+#	else
+#	HOME="/home/$USER"
+#	fi
+#	su $USER -c 'mkdir $HOME/bin -p'
+#	BASHRC=$USER/.bashrc
+#	cat vim/vimrc >> $HOME/.vimrc
+#	mkdir -p $HOME/.vim/
+#	cp -a vim/plugin vim/doc $HOME/.vim
+#	echo ". $PWD/bash/gdb_debug" >> ${BASHRC}
+#	echo ". $PWD/bash/logAssistant_helper" >> ${BASHRC}
+#	echo ". $PWD/bash/indent-libvirt" >> ${BASHRC}
+#	cat misc/ssh_config >> $HOME/.ssh/ssh_config
+##	cat misc/hosts >> /etc/hosts
+#fi
 
 install_for_user $USER
 #install_for_user root
