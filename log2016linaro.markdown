@@ -808,3 +808,44 @@ Bamvor
 
 [1] https://hub.docker.com/r/leapproject/leap-aarch64_ilp32-toolchain/
 
+12:45 2016-03-29
+-----------------
+1.  syscall
+    __SYSCALL, __SC_COMP, __SC_COMP_3264, __SC_WRAP
+
+13:55 2016-05-09
+activity
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* ILP32
+    - vdso:
+      Fix vdso issue for ILP32.
+      There are three issues in vdso of ILP32.
+      1.  the version of vdso is not match between kernel and glibc.
+          kernel define the version 2.6, while glibc want to the 2.6.39.
+          IIUC, we should define 4.x(x=7, 8... depends on the version of
+          kernel in which ILP32 get merged) in kernel. And update the
+          code of glibc corrospondingly.
+	  Due to this reason, we use the syscall instead of vsyscall
+	  in previous version.
+      2.  The size of time struct(timeval and timespec) is different
+          between ILP32 and LP64. It leads to the wrong nsec or usec.
+      3.  We do not zero upper 32bit of register in the entry of
+          ILP32 functions.
+
+    - Discuss about is_compat_task.
+
+    - Discuss about off_t and mmap in LKML
+
+=== Plan ===
+* ILP32
+    - Thinking how to speed up the upstream process. Maybe discuss
+      with cavium and suse guys.
+      It would be great it could be merged in next merge window.
+      I do not know if it is possible.
+    - Test automation.
+
+* GPIO
+    - Update the gpio mockup driver.
+
