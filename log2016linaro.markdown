@@ -814,7 +814,7 @@ Bamvor
     __SYSCALL, __SC_COMP, __SC_COMP_3264, __SC_WRAP
 
 13:55 2016-05-09
-activity
+[ACTIVITY] (Bamvor Jian Zhang) 2016-05-03 to 2016-05-10
 = Bamvor Jian Zhang=
 
 === Highlights ===
@@ -848,4 +848,50 @@ activity
 
 * GPIO
     - Update the gpio mockup driver.
+
+22:15 2016-05-17
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-05-10 to 2016-05-17
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* ILP32
+    - mmap2
+      Send kernel and glibc patch to implement a real mmap2 syscall.
+      Test pass in little endian.
+
+    - off_t
+      Arnd suggest that define the off_t as 64bit in glibc. I do it and
+      revert two patches for fixing the off_t relative issue when off_t
+      is 32bit. The glibc the more readable after define off_t as 64bit.
+
+    - Backport the new-api patches of ILP32 to my glibc-2.20 repo. Huawei
+      plan to use ILP32 in this version of glibc.
+
+    - Testing
+      Read the code of abi-complaince-checker and abi-dumper. It seems that
+      I could make use of result of abi-dumper and generic the parameter of
+      each syscall. If I could do this, I would like to improve trinity by
+      adding those struct and do the fuzz test and parameter checking for
+      ILP32.
+
+* vdso remap
+    - try the patch of enable vdso remap in arm64. It works. It is useful
+      for criu(Checkpoint and Restore In Userspace) for docker.
+
+=== Plan ===
+* ILP32
+   -  Wrote a script to extract all the parameter of all the syscall in ILP32.
+   -  Fix the failure of ILP32 in LTP and other testsuite.
+   -  Plan to discuss with community guys for how to improve glibc together.
+
+=== Reference Link ===
+* ACC
+  <http://ispras.linuxbase.org/index.php/ABI_compliance_checker>
+  <https://github.com/lvc/abi-compliance-checker>
+
+* vdso remap
+  <https://lkml.org/lkml/2016/4/28/541>
+  <https://criu.org/Main_Page>
+  <https://criu.org/Docker>
 
