@@ -895,3 +895,64 @@ Bamvor
   <https://criu.org/Main_Page>
   <https://criu.org/Docker>
 
+19:48 2016-06-02
+----------------
+Hi, Mark, Arnd
+
+Here is some further update/question of my work.
+
+1.  ILP32
+    1.  As I said yesterday I am working on an automation test tools for testing the interface between kernel and glibc.
+        I decide to work on it because I found that there are lots of wrapper function for syscall in both kernel and glibc. It is hard to examine whether the parameter is passed correctly through these wrappers. And I could not compare the parameter between kernel and glibc directly because the types may different(this is why we need the wrapper/converter functions). And at that time I am looking for the the fuzz tools like trinity, skzkaller, I found that these fuzz tools could fuzz the parameters but they could not fuzz the item the complex types(such as the items in struct stat which we discussed in LKML) which is an issue for ilp32 porting/testing. And the existing fuzz tools could not check whether kernel get the correct parameter. It is meaningless if kernel do not accept the correct parameter we do the fuzz test.
+	So, my tools could:
+	1.  Get the types and function prototype we need from dwarf and generate the fuzz function in userspace(it usually the glibc function). And generate the hook function like jprobe for kernel, e.g.
+	    //userspace
+	    struct timeval *get_tv()
+	    {
+                struct timeval *tv = malloc(sizeof(struct timeval));
+		tv->tv_sec = get_tv_sec();//rand() inside
+		tv->tv_usec = get_tv_usec();//rand() inside
+		//print the values. in order to compare it later.
+	    }
+
+            struct timezone *get_tz()
+	    {
+
+               //
+	    }
+
+	    void fuzz_settimeofday() {
+		struct timeval *tv = get_tv();
+		struct timezone *tz = get_tz();
+                settimeofday(tv, tz);//glibc function or syscall()
+	    }
+
+	    //kernel
+	    //jprobe hook
+	    staic int Jsettimeofday(struct timeval __user *, tv, struct timezone __user *, tz)
+
+	    {
+                //print the parameter.
+                jprobe_return();
+		return 0;
+	    }
+
+        2.  An script which collect the log in both kernel and userspace and compare whether we do pass the parameter correctly.
+
+	3.  Test syscall return value through kretprobe.
+
+	Now, there are a demo of my tools and I could test all the return value and some syscall parameter. Do this tools make sense to you?
+And I found there is a cfp for linuxcon europe. Is it worth to try to submit a speaking proposal?
+
+2.  A tls issue.
+    As I said yeterday, we found a bug in tls.  it is only exist in some sinario(e.g. dlopen the library and run the function in that library, it could reproduce after do those steps several times). We could add one signed extension for ilp32 in _dl_tlsdesc_dynamic glibc, and do the similar work in gcc.  We are not sure where we should fix it. We plan to send this issue to glibc and gcc community, hope we could get more input. So, who should I send to?
+    Cavium guys: Andrew, yury.
+    Glibc: mailing list and arm64 maintainer(Marcus Shawcroft).
+    Tcwg: Ryan, Maxim and ?
+    GCC: mailing list and ?
+    Kernel: Catalin, both of you. I do not know if kernel community care it or not.
+
+3.  There are some discussion recently in ilp32 in community including the discussion of syscall wrapper, the width of off_t in glibc, the real mmap2 in both kernel and glibc. Given that huawei is working on Proof-of-Concept in this month. The delivery team could not take these to our kernel and glibc for now. So, I need to work on differnt versions of kerenl and glibc. I hope I could push it in huawei after they pass the first try(maybe later in this month).
+
+4.  About the new task, I do not read them right now. maybe discuss it in next time?
+
