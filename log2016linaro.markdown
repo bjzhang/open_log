@@ -956,3 +956,18 @@ And I found there is a cfp for linuxcon europe. Is it worth to try to submit a s
 
 4.  About the new task, I do not read them right now. maybe discuss it in next time?
 
+16:40 2016-06-09
+----------------
+Quick note for today's 1:1, please correct if I misunderstand something.
+Tasks and priorities:
+1.  ILP32:
+    1.  continue working on the bugfix or improvement, such as improving kernel wrappers.
+    2.  About the automatically unit test.
+        discuss with lkml. linux-arch. libc-alpha, trinity and skzkaller(?).
+        try to submit a proposal to linuxcon europe.
+    3.  We hope ILP32 would finish in the near future.
+2.  GPIO mockup driver.
+    update driver with latest Linus gpio chardev works.
+3.  [Convert mmc to blk-mq](https://projects.linaro.org/browse/KWG-200)
+    Talk to Ulf Hansson <ulf.hansson@linaro.org> when I start. Ulf worked on it a little bit.
+
