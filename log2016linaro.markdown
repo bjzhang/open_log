@@ -971,3 +971,44 @@ Tasks and priorities:
 3.  [Convert mmc to blk-mq](https://projects.linaro.org/browse/KWG-200)
     Talk to Ulf Hansson <ulf.hansson@linaro.org> when I start. Ulf worked on it a little bit.
 
+00:24 2016-06-13
+----------------
+activity
+[ACTIVITY] (Bamvor Jian Zhang) 2016-06-06 to 2016-06-13
+
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* ILP32:
+    - unwind:
+      solve the gdb unwind issue[1].
+
+    - review the code of ILP32
+      I plan to review the code relative to architecture and 32bit application in arch/arm64 kernel.
+      After review all the headers(~200 files), I found 4 minor issues for ILP32. Already send them
+      to LKML. plan to read the c source code in this week.
+
+
+* 1:1 with Mark
+    Tasks and priorities:
+    1.  ILP32:
+        1.  continue working on the bugfix or improvement, such as improving kernel wrappers.
+        2.  About the automatically unit test.
+            discuss with lkml. linux-arch. libc-alpha, trinity and skzkaller(?).
+            try to submit a proposal to linuxcon europe.
+        3.  We hope ILP32 would finish in the near future.
+    2.  GPIO mockup driver.
+        update driver with latest Linus gpio chardev works.
+    3.  [Convert mmc to blk-mq](https://projects.linaro.org/browse/KWG-200)
+        Talk to Ulf Hansson <ulf.hansson@linaro.org> when I start. Ulf worked on it a little bit.
+
+* Holiday(2016-06-08--2016-06-10).
+
+=== Plan ===
+* ILP32
+    1.  code review.
+* Submit a proposal to linuxcon in europe.
+
+
+[1] [gdb unwind issue](http://www.gossamer-threads.com/lists/linux/kernel/2452466#2452466)
+
