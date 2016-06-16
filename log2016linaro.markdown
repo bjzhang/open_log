@@ -1012,3 +1012,10 @@ activity
 
 [1] [gdb unwind issue](http://www.gossamer-threads.com/lists/linux/kernel/2452466#2452466)
 
+10:52 2016-06-16
+-----------------
+linaro, organization, Engineering Organization Update
+Mark Orvek
+15 June 2016 at 23:38
+Principal Engineer is a new senior technical level in Linaro Engineering with responsibilities that include the development and leadership of larger multifunctional / multi-group programs that require solving complex technical problems and integration of a number of moving parts in close coordination.  A Linaro Principal Engineer is also a senior source of expertise across engineering and the company.  Tyler has already demonstrated his leadership, ability to solve complex problems and has proven he get things done.  I expect great things to come from the teamwork Alan and Tyler have shown in the past.
+
