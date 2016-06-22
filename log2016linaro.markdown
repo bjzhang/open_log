@@ -1041,3 +1041,105 @@ Principal Engineer is a new senior technical level in Linaro Engineering with re
 * KWG-148 GPIO kselftest: discuss with Linus.
 * Working on merge the common mmap/mmap2 code in arch directory.
 
+21:09 2016-06-21
+----------------
+1.  To Catalin
+Hi, Catalin
+> Hi, catalin
+>
+> On 9 March 2016 at 00:41, Catalin Marinas <catalin.marinas@arm.com> wrote:
+> > Hi Bamvor,
+> >
+> > On Tue, Mar 08, 2016 at 07:06:53PM +0700, Bamvor Zhang Jian wrote:
+> >> This is bamvor from linaro kwg(Huawei assignee). Glad to see lots of
+> >> discussion in LKML in recent months. It seems that the community get
+> >> generally agreement about the abi. Huawei wants to use ILP32 in the
+> >> production environment in the near future after the ILP32 is ready.
+> >
+> > I haven't followed the details of the latest discussions, I think there
+> > are still some things to sort out.
+> >
+> >> So, what is the blocker of getting ilp32 upstream(kernel part)?
+> >> IIUC, there are three things being discussed, please correct me I am wrong:
+> >> 1.  Whether the abi get agreement?
+> >>     I have seen Yury are working on the patches of SYSCALL WRAP
+> >> recently. And there are some discussion about the patches of glibc in
+> >> LKML. Both of them seem not relative the abi of ilp32.
+> >>     Could I say that the abi have already got agreement if we do not
+> >> find abi issue during ltp test?
+> >
+> > The SYSCALL WRAP discussions are more of an kernel internal code reuse
+> > aspect. I can't yet tell whether we have full agreement on the ABI, I
+> > think Arnd raised something about stat64 but I haven't looked at the
+> > details.
+After work closely with our product software, we found signal, coredump, tls
+and other issues and discuss with community. There is no pending issue of
+ILP32 in kernel, glibc gcc and gdb right now.
+Yury remove the wrapper in RFC v7 patches. Even the 2% difference of
+performance is meaningful for huawei if it does not break other thing. What
+do you think about it?
+> >
+> > We also need the libc-alpha community to agree on the ABI, it's not a
+> > kernel only decision. It was them who raised the non-POSIX compliance
+> > aspect when we aimed for a mostly native (LP64) ABI.
+> Agree. It would be if cavium guys could send patch of glibc early.
+After some off-list discussion with yury, he send a patches of glibc yesterday.
+We got some crash when porting to glibc master, 2.23 is the latest version of
+glibc we could support ILP32 at this time. Hope we could get some input from
+community.
+
+Besides, I am working on an unit test for syscall which could validate whether
+the parameter and return value is pass correctly between c library and kernel
+core code. Base on the result of this tool, We found several endian issues of
+syscall wrapper in glibc. I plan to send an introduction of these tools to
+LKML and relative mailing list soon.
+
+I understand that adding a new ABI like ILP32 is not an easy task. I hope I
+could do something to help on this progress.
+
+Best wishes
+
+Bamvor
+> >
+> >> 2.  Whether LTP test pass?
+> >>     There are dozens of failures right now. Huawei are testing the
+> >> ilp32 on our real hardware and qemu and are planning to fix these
+> >> issue in our next steps. And we will send it out if we found
+> >> something.
+> >>     If all the LTP syscall test pass(in a make sense way not tricky
+> >> nor something), do you willing to accept the patches of whole ilp32?
+> >
+> > Not necessarily. See below.
+> Cool.
+> Here is some information of ilp32 in huawei: In 2014, we have a PoC
+> work in huawei which pass all the syscall tests of LTP and could run
+> the minimal system of our product. But the abi is not get agreement at
+> that time. So we could not continue. Recently, We glad to see lots of
+> discussion in LKML, it is indeed a good progress. So, we plan to use
+> it in our product. There are more than 1000 milion line of code need
+> to migrate to ILP32 in Huawei. Whether the abi of ilp32 get agreement
+> is very important for us.
+>
+> Regards
+
+2.  Reply to marcus.shawcroft@arm.com. ref"22:48 2016-03-10".
+Hi, Marcus
+
+After some off-list discussion with yury, he send a patches of glibc yesterday.
+We got some crash when porting to glibc master, 2.23 is the latest version of
+glibc we could support ILP32 at this time. Hope we could get some input from
+you and community.
+
+Besides, I am working on an unit test for syscall which could validate whether
+the parameter and return value is pass correctly between c library and kernel
+core code. We found several endian issues of syscall wrapper in glibc by this
+tools. I plan to send an introduction to LKML, glibc and relative mailing list
+soon.
+
+I understand that adding a new ABI like ILP32 is not an easy task. I hope I
+could do something to help on this progress.
+
+Best wishes
+
+Bamvor
+
