@@ -1045,6 +1045,12 @@ Principal Engineer is a new senior technical level in Linaro Engineering with re
 ----------------
 1.  To Catalin
 Hi, Catalin
+
+As you may notice, we found signal, coredump, tls and other issues and discuss
+with community, these issues are found after migrate the property software of
+Huawei from aarch32 to aarch64 ILP32. There is no pending issue relative to
+ILP32 including kernel, glibc gcc and gdb. The patches of kernel part looks
+good to me. Maybe it is a good time to review the current status of upstream.
 > Hi, catalin
 >
 > On 9 March 2016 at 00:41, Catalin Marinas <catalin.marinas@arm.com> wrote:
@@ -1072,9 +1078,6 @@ Hi, Catalin
 > > aspect. I can't yet tell whether we have full agreement on the ABI, I
 > > think Arnd raised something about stat64 but I haven't looked at the
 > > details.
-After work closely with our product software, we found signal, coredump, tls
-and other issues and discuss with community. There is no pending issue of
-ILP32 in kernel, glibc gcc and gdb right now.
 Yury remove the wrapper in RFC v7 patches. Even the 2% difference of
 performance is meaningful for huawei if it does not break other thing. What
 do you think about it?
@@ -1096,6 +1099,8 @@ LKML and relative mailing list soon.
 
 I understand that adding a new ABI like ILP32 is not an easy task. I hope I
 could do something to help on this progress.
+
+Looking forwand to you reply, Thanks.
 
 Best wishes
 
@@ -1142,4 +1147,38 @@ could do something to help on this progress.
 Best wishes
 
 Bamvor
+
+3.  Reply to Marcus. 20160623
+> Hi,
+>
+> > After some off-list discussion with yury, he send a patches of glibc yesterday.
+>
+> Excellent!
+Thanks.
+>
+> > We got some crash when porting to glibc master, 2.23 is the latest version of
+> > glibc we could support ILP32 at this time. Hope we could get some input from
+> > you and community.
+>
+> Looking in my inbox this morning I see there is already a lot of feedback from the community.  Iâd like to highlight Josephâs comment:
+>
+> https://sourceware.org/ml/libc-alpha/2016-06/msg00780.html
+>
+> .. particularly in with respect to:
+>
+> - getting the patches rebased on master
+We are working on it. Hope we could fix issue soon.
+> - providing feedback to the various issues raised in the previous round of reviews.
+Yes, it is very important. Joseph give us lots of usefull overall suggestions.
+We will review the all comments.
+
+Fo the syscall wrappers in ilp32 directory, Joseph suggest that add common
+function like Adhemerval does. It may takes some time to discuss it with
+community. Is it make sense to you we postpone this work until we address
+other comments?
+
+Regards
+
+Bamvor
+
 
