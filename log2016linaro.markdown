@@ -1181,4 +1181,30 @@ Regards
 
 Bamvor
 
+12:42 2016-06-23
+----------------
+perf, bpf
+---------
+perf and eBPF training.
+
+1.  perf support multi abi in the same time?
+2.  throughout and .
+3.  perf script.
+4.  R
+5.  /call-graph=no/
+6.  perf probe -a
+7.  --exclude-perf
+8.  overwritable ring buffer:
+    1. It was fix lengh ring buffer. When buffer is full, kernel will notify perf to collect the date. If perf could not collect the data, kernel will not write the new data.
+    2. We could only collect the info when we found the specific event.
+9.  perf need set llvm compiler in "~/.perfconfig".
+10. llvm compile c source code to bytecode which is cross platform.
+11. perf could be a deamon.
+12. bpf could support kprobe and uprobe. One could use SEC to specify them.
+13. decrease the impact on system.
+    1. -F: low the frequency of perf: it is the frequency of writing to ring buffer.
+    2. -m: size of ring buffer.
+14. how to analysis high sys.
+    1. high sys means sys call time is very long.
+15. what is the status of NMI for profiling?
 
