@@ -1208,3 +1208,44 @@ perf and eBPF training.
     1. high sys means sys call time is very long.
 15. what is the status of NMI for profiling?
 
+15:39 2016-06-28
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-06-20 to 2016-06-27
+
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* ILP32:
+    - Off-list Diccussion about upstream work of ILP32 with Catalin, Yury, Marcus Shawcroft@ARM, Thomas Molgaard@ARM. Base on the steps listed by Catalin[1], I realize that there is a big gap between my understanding and Catalin's. 3 and 4 seem not a big blocker. Since Huawei have migrated lots of private software from aarch32 to aarch64 ILP32 for evaluation. The overall usablility of ILP32 looks good. Regarding to the performance regression test, maybe I could talk with Fengguang Wu(The main contributor of lkp). Not sure if Linaro could help on do the performance test as well.
+    - Syscall unit test:
+      Discuss with Mark about my syscall unit test tools. Mark suggest that public the source code when discuss tools with community.
+      Found a fuzz tools[2] Triforce which base on AFL. It could do the coverage without enable kASAN or other features in kernel. It seems that it is very useful for old 3.x kernel. It depends on an special instruction for community between guest and host. Not sure if it is a blocker for porting to arm64.
+
+* KWG-148 GPIO kselftest
+    - After discuss with Linus, wrote a set of basic gpio operations: gpio set(s), gpio get(s). Will send to Linus this week.
+
+=== Plan ===
+* ILP32
+    - Considering lkp test.
+
+* KWG-148 GPIO kselftest
+    - Discuss my gpio basic operations with Linus.
+
+* Huawei internal request
+    - There is an internal request of evaluation of NEON support(performance, debug...) in kernel and userspace. Hope it will not take too much time.
+
+[1] Steps of ILP32 upstream work from Catalin:
+    1. Complete the review of the Linux patches and ABI (no merge yet)
+    2. Review the corresponding glibc patches (no merge yet)
+    3. Ask (Linaro, Cavium) for toolchain + filesystem (pre-built and more
+       than just busybox) to be able to reproduce the testing in ARM
+    4. More testing (LTP, trinity, performance regressions etc.)
+    5. Move the ILP32 PCS out of beta (based on the results from 4)
+    6. Check the market again to see if anyone still needs ILP32
+    7. Based on 6, decide whether to merge the kernel and glibc patches
+    We are pretty much around 1-2 currently and we would need to sort out 3.
+    Point 5 is ARM's responsibility (the PCS ABI). Points 6-7 are again up
+    for discussion with the wider kernel community.
+
+[2] https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2016/june/project-triforce-run-afl-on-everything/
+
