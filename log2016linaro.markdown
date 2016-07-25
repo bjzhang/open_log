@@ -1249,3 +1249,83 @@ perf and eBPF training.
 
 [2] https://www.nccgroup.trust/us/about-us/newsroom-and-events/blog/2016/june/project-triforce-run-afl-on-everything/
 
+10:41 2016-06-30
+-----------------
+Add basic gpio operations
+
+Hi, Linus
+
+These paches add basic gpio set/get operations and use it in
+gpio-hammer.c. It is RFD, because the test failed. I want to know
+if this approach is generally ok.
+
+In my test, the gpio-hammer could send the correct gpio values to
+the kernel, it seems that my mockup driver does not work properly
+which leads to gpio value stick to 1. I wil continue debugging it.
+
+21:28 2016-07-07
+----------------
+arnd: I talk with agraf today. There is an internal obs(aka ibs) for ilp32. Currently 7805 packages build successful. But there is no plan to public it. Because there is no volunteer maintaining the ilp32 package tree. And there is no builing power for it on obs.
+arnd: I am asking internally about if Huawei could help on maintain all or of some of the packages.
+
+09:58 2016-07-12
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-06-28 to 2016-07-10
+
+= Bamvor Jian Zhang=
+
+=== Highlights ===
+* KWG-148 GPIO kselftest
+    - debug gpio set(s), gpio get(s).
+
+* KWG-200: Convert mmc to blk-mq
+     - Learn the basic idea of blkmq. will contact Ulf later.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Read the page table test result from pingbo wen ILP32:
+
+* Huawei:
+    - Try to improve the NEON context switch performance in arm64 kernel with private aarch32 application, but there is no clear improvemen . Test two solutions with pure aarch32 application on arm64 kernelafter discuss with Arnd, Ard and Catalin.
+      1.  Save.16 register for aarch32 applicaiton. Test result of context switch in lmbench show that it is worse than default.
+      2.  Only save SIMD register when the application really use SIMD instruction. Add a new TIF_SIMD_NOT_USED flag record whether the thread use SIMD or not. This flag set after thread created. Clear this flag in SIMD access sync exception. Test result show that it is a little improvement(average 2%). Notes: the original context switch is removed in this test in order to compare with the original method.
+
+=== Holiday ===
+11, July to 18, July: go to Hulunbuir in the innner Mongoliar.
+
+11:45 2016-07-25
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-07-19 to 2016-07-25
+
+=== Highlights ===
+
+* KWG-200: Convert mmc to blk-mq
+     - Contact Ulf. Ulf suggestion take a look a blk-mq patch of ubi. It is a single patch.
+     - Read the blk-mq relative code in loop.c and ubifs.
+     - The key operation in blkmq is `struct blk_mq_tag_set` which is embedded in the device and blk_mq_ops which provide the opeartion for blk-mq.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - discuss with Arnd with Alex graf about this task in #armlinux irc channel.
+      There is already a patch "66b3923 arm64: hugetlb: add support for PTE contiguous bit" which finish part of my task.
+      We agree that I will test the performance when I wrote a worked patch. Reference the testsuite for hugepage.
+
+* Syscall unit test
+    - The proposal of linuxcon europe get accepted. My presentation "Efficient Unit Test and Fuzz Tools for Kernel/Libc Porting" is scheduled in 6, Oct. The the help from Mark.
+
+=== Plans ===
+* Prepare the visa for Germany.
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Read and test the patch 66b3923. Check if it finish my first two steps. If so, think about the third step.
+
+The step suggested by Arnd:
+maybe start working in this order then:
+1. implement 64K hugepage size as a compile-time selection and test that with the new code in linux-mm / linux-next
+2. get multiple concurrent page sizes to work
+3. add an option to the anonymous page handling to always use hugepages instead of the base page size
+
+```
+static struct blk_mq_ops ubiblock_mq_ops = {
+        .queue_rq       = ubiblock_queue_rq,
+        .init_request   = ubiblock_init_request,
+        .map_queue      = blk_mq_map_queue,
+};
+```
