@@ -1329,3 +1329,76 @@ static struct blk_mq_ops ubiblock_mq_ops = {
         .map_queue      = blk_mq_map_queue,
 };
 ```
+22:04 2016-07-26
+----------------
+1.  Ian C reply to me
+Hi Bamvor,
+
+Nice to hear from you. Sorry for the (very) late reply -- I saw your
+mail on my phone at the time but put the reply aside until I had a
+proper keyboard and then it got lost in the mess of my INBOX, sorry.
+
+I did indeed move to Unikernel, who got acquired by Docker as I was
+interviewing with them, we're still working out exactly where
+Unikernels technologies are going to fit within the Docker stack, but
+it's exciting times for sure!
+
+Docker has a bit of a growth spurt earlier in the year so I don't think
+we are hiring at the moment I'm afraid (at least not in Europe, looks
+like there might be some openings in SF).
+
+I think that Saumsing, Huawei (not 100% sure there) and Amazon all now
+have development teams in/around Cambridge, but I don't have any
+contacts at any of them and I'm not sure what sort of things they work
+on. I don't think Amazon is an EC2 team, something to do with drones or
+something I think. Of course there is always ARM here in Cambridge,
+it's possible that Julien's new team might be expanding? ;-)
+
+Julien, Stefano and myself all left Citrix in the last six months, so
+there ought to be some gaps, but I'm afraid I don't know what the
+hiring situation is there, you could maybe drop George (Dunlap) or Ian
+(Jackson) a line and see what they think and if not for ther OSS team
+they could connect you to the right people on the XenSeerver (AKA
+product) team. My guess is that they are likely to expand the team in
+Nanjing rather than Cambridge, which is a bit counter to you plans, but
+it could be worth investigating.
+
+You mentioned Germany, I think Amazon have an EC2 development office in
+Dresden, Andre Pyrzwara who is now at ARM in Cambridge (do you know
+him?) used to work for that team when it was part of AMD (when AMD
+downsized theat office Amazon picked up most of the team) -- he might
+be able to put you in touch with someone. I think Samsung also have a
+dev site in Munich but I don't know much about what they are doing
+(they sent me a mail a year or two ago asking if I would relocate but I
+didn't want to so I didn't pursue it and it looks on linkedin like they
+guy who approached me has moved on).
+
+Anyway, I hope that's somehow helpful. If you'd like me to try and put
+you in touch with anyone please do let me know.
+
+Good luck!
+
+2.  Reply to Ian
+Hello
+
+I plan to goto Berlin and Dresden(maybe) in Oct. I am thinking If I
+could talk with the guys in Germany.
+
+16:30 2016-08-04
+----------------
+1:1 with Mark
+1.  Jira: sorry for not updating jira.
+2.  gpio progress.
+3.  ILP32.
+    Mark will send to Ryan. For community, not for Huawei.
+4.  Linaro connect: what I could do.
+    presentation with kwg colleague.
+5.  64k page hint.
+    Talk to Arnd for technology.
+6.  Talk to Arnd for Germany community.
+7.  Mark think my work is going to good. He could understand that the internal task from huawei.
+
+1.  TODO:
+    I should ask if I could change the content of presentation of Linuxcon europe.
+
+
