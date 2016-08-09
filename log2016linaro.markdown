@@ -1401,4 +1401,40 @@ could talk with the guys in Germany.
 1.  TODO:
     I should ask if I could change the content of presentation of Linuxcon europe.
 
+21:18 2016-08-05
+----------------
+Arnd: I talk with David Woods. He told me that the 64k page hint for linear mapping of kernel is upstreamed([1]) in v3. It seems that the annoymous in userspace(IIUC it could be used by malloc from brk and mmap syscall, correct?) is not implemented yet.
+I am read the 64k page hint for hugetlb and read the code of memory mapping in kernel. I saw the HUGETLB code in mmap.
+Is it make sense to force MAP_HUGE when the size is suitable for 64k?
+[1] https://lkml.org/lkml/2015/9/16/715
+
+20:40 2016-08-08
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-07-26 to 2016-08-08
+
+=== Highlights ===
+* KWG-148 GPIO kselftest
+    - I found that I misuse the api from chardev. There is default values when open the chardev.
+    - I encounter a refcount issue in unregister the gpio device. Linus said that this issus had already fixed by community. I will try the linux-next tree.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Discuss with David[1] who were building an SOC with a custom network interface and various accelerators. The test suite from him is based on the libhugetlbfs test suite. He show me that kernel page ranges is already contiguous[2]. It seems that what I could do is check the alignment and add the HUGETLB flag for ANONYMOUS request.
+
+* ILP32
+     - Compare aarch64 LP64 performance between without ILP32 and ILP32 enabled in the upstream kernel. There is no performance regression. Plan to send the number to LKML.
+     - Wrote a documents for Huawei to report the latest status of ILP32. It seems that there is no pending arugments of api of ILP32. IIUC, I would suggest huawei alignment with the community at this point. It may be a good time to do it before we deploy it. I also suggest Huawei that there should be dedicated person who join the discussion of glibc part of ILP32. Because I am working in the kernel department in Huawei, Glibc is not my area.
+     - Huawei compare the aarch32 and aarch64 ILP32 in production environment. The cpu utilization of ILP32 is 5-10% lower than aarch32.
+
+* 1:1 with Mark.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - try to support the page hint for anonymous pages.
+
+* KWG-148 GPIO kselftest
+    - Debug refcount issue. If I could not find a way, plan to ask in mailing list.
+    - Maybe I could send the gpio ops code in tools/gpio individually.
+
+[1] David Woods <dwoods@ezchip.com> ("66b3923" arm64: hugetlb: add support for PTE contiguous bit)
+[2] Jeremy Linton <jeremy.linton@arm.com ("348a65c" arm64: Mark kernel page ranges contiguous)
 
