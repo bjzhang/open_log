@@ -1438,3 +1438,34 @@ Is it make sense to force MAP_HUGE when the size is suitable for 64k?
 [1] David Woods <dwoods@ezchip.com> ("66b3923" arm64: hugetlb: add support for PTE contiguous bit)
 [2] Jeremy Linton <jeremy.linton@arm.com ("348a65c" arm64: Mark kernel page ranges contiguous)
 
+11:32 2016-08-09
+----------------
+Arnd suggest that I maybe start working in this order then:
+1. implement 64K hugepage size as a compile-time selection and test that with the new code in linux-mm / linux-next
+2. get multiple concurrent page sizes to work
+3. add an option to the anonymous page handling to always use hugepages instead of the base page size
+4. investigate the page hint for kernel mapping.
+
+Later, we found that 1,2 are finished by David[1]. And 4 is finished by Jeremy. I will focus on 3 at this monment. I will do the performance test ASAP.
+
+[1] David Woods <dwoods@ezchip.com> ("66b3923" arm64: hugetlb: add support for PTE contiguous bit)
+[2] Jeremy Linton <jeremy.linton@arm.com ("348a65c" arm64: Mark kernel page ranges contiguous)
+
+09:15 2016-08-12
+----------------
+KWG192, discuss with arnd
+-------------------------
+```
+arnd> Arnd Bergmann
+bamvor: you also need to check the alignment of 'addr', otherwise this seems like it should work
+ah wait, you also need to check if a user is already asking for another hugepage size
+if ((flags & (MAP_ANONYMOUS & MAP_HUGETLB)) == MAP_ANONYMOUS)
+or even
+if ((flags & (MAP_ANONYMOUS | MAP_HUGETLB | (MAP_HUGE_MASK << MAP_HUGE_SHIFT)) == MAP_ANONYMOUS)
+
+arnd> Arnd Bergmann
+bamvor: I think what it means is that you will have to implement a lot of extra code to make transparent hugepages work with the huge page sizes that are not just using a whole page table level
+it may be better to build on top of your current hack if that works, e.g. as a compile-time option
+unfortunately, the hack somewhat clashes with the way we use getpagesize() for the mmap() length
+```
+
