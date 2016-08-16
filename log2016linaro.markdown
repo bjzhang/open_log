@@ -1469,3 +1469,25 @@ it may be better to build on top of your current hack if that works, e.g. as a c
 unfortunately, the hack somewhat clashes with the way we use getpagesize() for the mmap() length
 ```
 
+11:18 2016-08-16
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-08-09 to 2016-08-16
+
+=== Highlights ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+     - Discuss with Arnd about my work. Arnd help me fix some bug in my hack but I still could not boot a distribution (due to udev failure likely). I could boot a buildroot filesystem and do lmbench test. Lmbench show that mmap reread get 300% improvement other memory test get 5-20% improvement.
+
+* ILP32
+     - Backport current community version to 4.1 kernel and 2.20 glibc.
+     - Join the discussion of ILP32 of hwcap.
+
+* Arm32 team meeting.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Do other test and continue reading the mm code in kernel.
+
+* KWG-148 GPIO kselftest
+    - Debug refcount issue. If I could not find a way, plan to ask in mailing list.
+    - Maybe I could send the gpio ops code in tools/gpio individually.
+
