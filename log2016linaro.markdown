@@ -1565,3 +1565,128 @@ Changes since v2:
 2.  send them out:
 `git send-email --no-chain-reply-to --annotate --to linux-gpio@vger.kernel.org --cc linus.walleij@linaro.org --cc broonie@kernel.org *.patch`
  
+16:19 2016-09-05
+----------------
+1.  The ILP32 plan in linaro connect
+Hi, Mark, Arnd
+
+One of my task in linaro connect is speed up the ILP32 upstream progress.
+As I mentioned before, Huawei is willing use ILP32 in next year. My last change is the kernel-4.10 and glibc-2.25.
+
+I do not know if it is necessary to discuss the current status of ILP32 in connect. If there are some open issue we know, Is it make sense to book a private meeting?
+
+kernel part.
+glibc part.
+
+I could do the performance regression if I know what we want to test as I mentioned in the email.
+
+2.  Send to suse guys
+Hi, Andreas and Alex
+
+Are you plan to join Linaro connect in Las vegas. I plan to host a private meeting for discuss for ILP32. So, I am trying to collect the information here.
+
+Is there any open issue for ILP32 in your mind?
+
+
+Regards
+
+Bamvor
+
+16:46 2016-09-05
+----------------
+1.  [ACTIVITY] (Bamvor Jian Zhang) 2016-08-17 to 2016-08-29
+```
+I am trying to clean up the easy task while I spent more time on the new task.
+=== Highlights ===
+* KWG-148 GPIO kselftest
+    - Update the latest gpio-devel branch. The refcount issue have
+been resolved as expected.
+    - Write the test case for gpio chardev which need libmount for
+reading the entry of debugfs. Maybe I should fail back to the default
+mount point of debugfs when libmount is inexist. Cross-compiler a new
+library for embedded device maybe not a easy task.
+    - I found a crash when I try to insert number of gpio more than
+supported. IIRC it is works on my old kernel. There is a changes for
+gpiodev_add_to_list. I will revert it and test it again.
+
+* Arm32 team meeting.
+
+* ILP32
+   - Give a presentation of ILP32 for new developer of ilp32 in Huawei.
+   - Found an issue about sync_file_range2. It could be fixed after
+define __ARCH_WANT_SYNC_FILE_RANGE and redirect such syscall.
+
+=== Plans ===
+* KWG-148 GPIO kselftest
+   - send the patches to Linus.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+   - The hack code crash when do the specint test. Read the THP code
+and try to support multiple page size of THP.
+
+* ILP32
+   - Performance test.
+```
+
+2.  [ACTIVITY] (Bamvor Jian Zhang) 2016-08-30 to 2016-09-04
+=== Highlights ===
+* KWG-148 GPIO kselftest
+   - Send patch of gpio mockup driver and test script of chardev and sysfs.
+
+* 1:1 with Mark
+
+* ILP32
+   - send patch for sync_file_range2 which reviewed by Arnd.
+   - send a performance test result for aarch64 LP64 to LKML. There is
+no performance regression after apply patch of ILP32.
+
+=== Plans ===
+* ILP32
+   - There is a issue in mremap in aarch64 ILP32 in kernel part.
+Investigate whether it is a bug or not.
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+   - try to write the patch reference the existing code in tools/gpio/Makefile
+
+* Wrote the slide for Linuxcon.
+
+12:02 2016-09-07
+----------------
+cont page hint performance test(hack)
+Context switching - times in microseconds - smaller is better
+-------------------------------------------------------------------------
+Host                 OS  2p/0K 2p/16K 2p/64K 8p/16K 8p/64K 16p/16K 16p/64K
+                         ctxsw  ctxsw  ctxsw ctxsw  ctxsw   ctxsw   ctxsw
+--------- ------------- ------ ------ ------ ------ ------ ------- -------
+localhost Linux 4.1.23+  3.2067 3.3333 3.7900 4.3133 4.4267 4.21333 3.95333
+localhost Linux 4.1.23+  4.2780 3.9700 3.9080 4.3380 4.6760 4.04000 3.98600
+localhost Linux 4.1.23+  -25.04% -16.04% -3.02% -0.57% -5.33% 4.29% -0.82%
+
+*Local* Communication bandwidths in MB/s - bigger is better
+-----------------------------------------------------------------------------
+Host                OS  Pipe AF    TCP  File   Mmap  Bcopy  Bcopy  Mem   Mem
+                             UNIX      reread reread (libc) (hand) read write
+--------- ------------- ---- ---- ---- ------ ------ ------ ------ ---- -----
+localhost Linux 4.1.23+  1973 3456 1792 2355.5 13.5K 2686.3 3184.5 3627 4946.
+localhost Linux 4.1.23+  1851 3158 1977 2063.0 3631.1 2604.7 2865.6 3513 4341.
+localhost Linux 4.1.23+  6.59% 9.44% -9.36% 14.18% 271.79% 3.13% 11.13% 3.25% 13.94%
+
+16:23 2016-09-07
+----------------
+已经有了output directory. 还需要install脚本么? 还需要install么?
+ 
+19:19 2016-09-07
+----------------
+team meeting
+-------------
+1.  From arnd point of view, there is only one pending issue for ILP32: stat. 
+2.  Arnd suggest me dig into the performance changes of LP64 after apply ILP32.
+3.  Arnd told me there is a discussion about the Makefile in tools: "tools/Makefile: Fix Many Many problems and inconsistencies". It is relative to my work for kselftest.  
+    1.  Send to Arnd
+        arnd: I read the discussion of "[Ksummit-discuss] [TECH TOPIC] tools/Makefile: Fix Many Many problems and inconsistencies". It seems that people want to make kbuild usable for all the non-kernel project. If so, I think there is no need to continue my work for kselftest. Could/Should i join the discussion and confirm it?
+    2.  Arnd add me to this thread. TODO reply to the thread.
+4.  Discuss with Yury
+    1.  Create the trello for ILP32.
+    2.  Add sob of bamvor
+
+
