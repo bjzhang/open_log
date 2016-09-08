@@ -1684,9 +1684,52 @@ team meeting
 3.  Arnd told me there is a discussion about the Makefile in tools: "tools/Makefile: Fix Many Many problems and inconsistencies". It is relative to my work for kselftest.  
     1.  Send to Arnd
         arnd: I read the discussion of "[Ksummit-discuss] [TECH TOPIC] tools/Makefile: Fix Many Many problems and inconsistencies". It seems that people want to make kbuild usable for all the non-kernel project. If so, I think there is no need to continue my work for kselftest. Could/Should i join the discussion and confirm it?
-    2.  Arnd add me to this thread. TODO reply to the thread.
+    2.  Arnd add me to this thread. reply to the thread. ref"10:34 2016-09-08".
 4.  Discuss with Yury
     1.  Create the trello for ILP32.
     2.  Add sob of bamvor
 
+10:34 2016-09-08
+----------------
+kernel summit, tools, kselftest
+-------------------------------
+1.  reply to Arnaldo
+> means Arnaldo Carvalho de Melo <acme@kernel.org>
+>> means Ben Hutchings <ben@decadent.org.uk>
+
+>> 1. Many different build systems
+>>    - Inconsistent support for configuration variables (not just 'O')
+>>    - usbip isn't included in a recursive build, presumably because
+>>      it uses autotools
+>
+>Right, that needs improving, I haven't looked at anything outside
+>tools/{arch,build,lib,include,objtool,perf}
+I am working on enable O= support for kselftest(tools/testing/selftest).
+Kbuild or tools/build/Makefile.include seems too heavy for kselftest.
+Those Makefile could easily link lots of objects to single binary,
+while in kselftest, almost all the single binary is compiled from one
+single source respectively, I could redirect the output directory
+through the explicit rules.
+If there is a plan to build a generic build system(at least for tools),
+I hope kselftest could be counted in. Then I could suspend my work and
+waiting for this solutions.
+>
+>> 2. Tools include UAPI headers in one of two ways, neither of which is
+>>    reliable:
+>>    - Assume the current headers are on the system include path
+>>    - Include unprocessed UAPI headers through a relative path
+>>
+>>    The right thing to do is to run 'make headers_install' and add
+>>    usr/ to the front of the system include path.  But we'd want a
+>>    way to avoid re-doing that when the UAPI headers haven't changed.
+>
+>Again, haven't checked outside the above list of directories, by now,
+>tools/perf/ doesn't use anything outside tools/, are you talking about
+>other tools that touch kernel source files outside tools/?
+E.g. tools/gpio and some testcases in tools/testing/selftest
+
+
+Regards
+
+Bamvor
 
