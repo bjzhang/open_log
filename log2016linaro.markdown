@@ -1733,3 +1733,22 @@ Regards
 
 Bamvor
 
+21:16 2016-09-09
+----------------
+software skill, ubuntu, apt-get
+------------------------------
+"Trouble downloading packages list due to a “Hash sum mismatch” error"
+<http://askubuntu.com/questions/41605/trouble-downloading-packages-list-due-to-a-hash-sum-mismatch-error>
+1.  
+edited Sep 17 '15 at 15:21 sorin
+answered May 9 '11 at 21:52 Lorem
+
+Just remove all the content of /var/lib/apt/lists directory:
+
+sudo rm -rf /var/lib/apt/lists/*
+then run:
+
+sudo apt-get update
+
+2.  Behrang Jul 28 '13 at 12:51
+If you remove all files, you have to download them again. You can just remove the invalid file to make this process faster.
