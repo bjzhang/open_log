@@ -1761,3 +1761,30 @@ application in linux
     gnome: eog
     xfce: ristretto
 
+16:27 2016-09-16
+----------------
+1.  reply to Arnd
+> A couple of things I noticed:
+>
+> - The unusual font for the large text is a bit distracting
+> - The small text is a bit too small, especially in some of the
+>   diagrams (e.g. page 25 "The test flow of syscall unit test")
+Yeap. I will fix it later. This is a template I found from internet.
+I need to figure out how to change it.
+> - On page 5 ("data model"), the line wrap between "Arm/aarch32"
+>   and "aarch64 ILP32" is wrong. Maybe list Windows x86-64 as
+>   an example for LLP64 there.
+Yeap, Good suggestion. I will update it in next version.
+> - on page 10 ("There are actually lots of choices..."), replace
+>   "delouse" with a more technical term, nobody will know this
+>   word.
+> - On page 12 ("Version A"): you write "time_t should be 32bit
+>   for 32bit application", this is incorrect, POSIX doesn't
+>   specify it. The reason we went to 32-bit time_t is that
+>   inconsistent ABIs between arm32-compat and ilp32 break
+>   existing drivers that have a common ioctl handler for
+>   both.
+> - Before your version A/B/C, there was already an original
+>   version that was similar to version B. Back then we asked
+>   for what 
+
