@@ -1752,3 +1752,12 @@ sudo apt-get update
 
 2.  Behrang Jul 28 '13 at 12:51
 If you remove all files, you have to download them again. You can just remove the invalid file to make this process faster.
+
+8:27 2016-09-15
+---------------
+application in linux
+---------------------
+1.  image viewer
+    gnome: eog
+    xfce: ristretto
+
