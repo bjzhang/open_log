@@ -1740,6 +1740,7 @@ software skill, ubuntu, apt-get
 "Trouble downloading packages list due to a “Hash sum mismatch” error"
 <http://askubuntu.com/questions/41605/trouble-downloading-packages-list-due-to-a-hash-sum-mismatch-error>
 1.  
+```
 edited Sep 17 '15 at 15:21 sorin
 answered May 9 '11 at 21:52 Lorem
 
@@ -1749,6 +1750,7 @@ sudo rm -rf /var/lib/apt/lists/*
 then run:
 
 sudo apt-get update
+```
 
 2.  Behrang Jul 28 '13 at 12:51
 If you remove all files, you have to download them again. You can just remove the invalid file to make this process faster.
@@ -1778,13 +1780,80 @@ Yeap, Good suggestion. I will update it in next version.
 > - on page 10 ("There are actually lots of choices..."), replace
 >   "delouse" with a more technical term, nobody will know this
 >   word.
+How about "sign extend for 32bit variable"?
 > - On page 12 ("Version A"): you write "time_t should be 32bit
 >   for 32bit application", this is incorrect, POSIX doesn't
 >   specify it. The reason we went to 32-bit time_t is that
 >   inconsistent ABIs between arm32-compat and ilp32 break
 >   existing drivers that have a common ioctl handler for
 >   both.
+Ok. I will update it.
 > - Before your version A/B/C, there was already an original
 >   version that was similar to version B. Back then we asked
->   for what 
+>   for what you call "Version A" to make it work like x86-x32
+>   mode, but after a lot of discussion we went back to the
+>   original approach as it is less error prone.
+What's your mean "less error prone"?
+Do you mean v1 or v2? I could not find such version right now.
+
+So, I will list the following 4 version in the slide, is it
+make sense to you?
+### Version A
+*   Most of syscall is compat syscall.
+*   time_t and off_t is 32bit
+
+### Version B
+This vesion is very similar to x86-x32
+*   Most of syscall is as same as 64bit syscall.
+*   time_t and off_t is 64bit. It may break the compat ioctl.
+
+### Version C
+Come back to version A.
+*   Most of syscall is compat syscall.
+*   time_t and off_t is 32bit
+*   Pass 64bit variable through one 64bit register.
+*   Do the sign extend when enter into kernel.
+
+### Version D
+*   Most of syscall is compat syscall.
+*   time_t is 32bit and off_t is 64bit
+*   Pass 64bit variable through two 32bit register.
+*   Clear the top-havies of of all the registers of syscall when enter kernel.
+
+Regards
+
+Bamvor
+>
+>         Arnd
+
+2.   Update according to Arnd
+> Hi Bamvor,
+> 
+> I have a few more comments, mostly about formatting and spelling this time.
+> Overall: try to avoid full sentences, especially multi-line ones
+> Overall: when you wrap lines, continue below the first character
+>          of the starting line like this, not the
+> left-indented like this
+> Overall: 64bit -> 64-bit, 32bit -> 32-bit
+DONE
+> Overall: drop '.' at end of line
+DONE
+> Page 2, page 18: change alignment from center to left
+DONE
+Only h1 is centered. Downgrade page 2 and page 18 to h2.
+> Page 11: developemnt -> development
+DONE
+> Page 13: don't mention POSIX for 32-bit time_t, instead mention
+> incompatibility with arm33 compat-ioctl code
+DONE
+> Page 15: havies -> halves
+DONE
+
+19:21 2016-09-16
+---------------
+linuxcon, TODO
+--------------
+1.  ask syzkaller if I could use that picture.
+2.  change my font(wenquanyi?)
+2.  promote my talk?
 
