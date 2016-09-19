@@ -1857,3 +1857,31 @@ linuxcon, TODO
 2.  change my font(wenquanyi?)
 2.  promote my talk?
 
+18:17 2016-09-19
+----------------
+activity
+--------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-09-04 to 2016-09-19
+=== Highlights ===
+* Wrote the slide for Linuxcon.
+   - The source of this slide is [here](https://github.com/bjzhang/bjzhang.github.io/blob/master/_drafts/2016/ILP32_syscall_unit_test_linuxcon_europe.md). Any suggestion is appreciated. Section start with "???" is note which is not existed in final slide.
+   - I use remark to convert the markdown to html and use decktape to convert html to pdf. It is the first time I use css. It is hard but interesting for me because markdown is easy to maintain. The template is here[1](https://github.com/bjzhang/bjzhang.github.io/blob/master/_drafts/2016/remark-template.css)[2](https://github.com/bjzhang/bjzhang.github.io/blob/master/_drafts/2016/template.html). It takes me more than two days for getting the expected format for my slide.
+     Maybe I should prepare slide early.
+   - Thanks for Mark and Arnd for helping me reviewing this slide.
+
+* ARM32 team meeting.
+
+* 1:1 with Mark, discuss with Mark about my plan in connect
+   - ILP32 collaboration meeting.
+   - Discuss with Linus about my gpio-mockup driver.
+   - Discuss with Arnd about my cont page hint.
+   - Discuss about arm64 scalbiltity issue.
+
+* Holiday: The mid-autumn holiday(14-17, Sep).
+
+=== Plans ===
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+   - Send the patch out and cc Kevin Hilman
+
+* Discuss with Alex Shi about "Upstream session in Mandarin".
+
