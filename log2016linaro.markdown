@@ -1583,10 +1583,9 @@ I could do the performance regression if I know what we want to test as I mentio
 2.  Send to suse guys
 Hi, Andreas and Alex
 
-Are you plan to join Linaro connect in Las vegas. I plan to host a private meeting for discuss for ILP32. So, I am trying to collect the information here.
+Are you plan to join Linaro connect in Las vegas? There would be a private meeting for discussion of ILP32. So, I am trying to collect the information here.
 
-Is there any open issue for ILP32 in your mind?
-
+Is there any open issues for ILP32 in your mind?
 
 Regards
 
