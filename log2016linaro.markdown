@@ -1884,3 +1884,56 @@ activity
 
 * Discuss with Alex Shi about "Upstream session in Mandarin".
 
+17:25 2016-09-20
+----------------
+kselftest
+---------
+1.  TODO
+    1.  only convert the testcase which list in TARGETS in kselftest Makefile
+    2.  fix the header issue.
+2.  cover letter
+```
+Hi, Kevin, Mark
+
+Here is my draft for enable the KBUILD_OUTPUT for kselftest. I only
+test a few test case. I want to know if the idea is make sense to you.
+I spend two much time for the slide of linuxcon europe in recent two
+weeks. Sorry for the delay of these patches.
+
+There are four patches in these series. And three of them clean up
+the existing code. I split the clean up patches into three, hope it is
+easy to review.
+
+In the first patch, I split the test files into two types:
+TEST_GEN_XXX means such file is generated during compiling. TEST_XXX
+means there is no need to compile before use. The main reason of this
+change is the enablement of KBUILD_OUTPUT only need to care about
+TEST_GEN_XXX. I wanted to copy all the TEST_XXX with TEST_GEN_XXX,
+but I give up this idea in the end. Because people may puzzle why
+copy the file before installation.
+
+Because of the introducing of TEST_GEN_XXX, I update the top-level
+Makefile and lib.mk selftests directory.
+
+The other cleanup in the first patch is I remove all the unnecessary
+all and clean target.
+
+The second and third patch do the similar clean up in powerpc and
+futex directory.
+
+The fourth patch introduce the KBUILD_OUTPUT and O for my own.
+Because user may compile kselftest directly
+(make -C tools/testing/selftests). This patch also introduce the
+OUTPUT build target such as "$(OUTPUT)%:%.c".
+
+I plan to test all the testcase then send out the patches.
+
+This patch do not fix the dependency of header file as discussed
+in kernel-summit mailing list. I may fix it in seperate patch.
+
+Regards
+
+Bamvor
+
+3.  send out
+git send-email --no-chain-reply-to --annotate --to khilman@kernel.org --to broonie@kernel.org --cc bamvor.zhangjian@linaro.org *.patch
