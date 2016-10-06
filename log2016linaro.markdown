@@ -1936,4 +1936,74 @@ Regards
 Bamvor
 
 3.  send out
-git send-email --no-chain-reply-to --annotate --to khilman@kernel.org --to broonie@kernel.org --cc bamvor.zhangjian@linaro.org *.patch
+`git send-email --no-chain-reply-to --annotate --to khilman@kernel.org --to broonie@kernel.org --cc bamvor.zhangjian@linaro.org *.patch`
+
+18:15 2016-09-24
+----------------
+1.  Documentation/vm/pagemap.txt
+
+15. COMPOUND_HEAD
+16. COMPOUND_TAIL
+    A compound page with order N consists of 2^N physically contiguous pages.
+    A compound page with order 2 takes the form of "HTTT", where H donates its
+    head page and T donates its tail page(s).  The major consumers of compound
+    pages are hugeTLB pages (Documentation/vm/hugetlbpage.txt), the SLUB etc.
+    memory allocators and various device drivers. However in this interface,
+    only huge/giga pages are made visible to end users.
+
+Before Linux 3.11 pagemap bits 55-60 were used for "page-shift" (which is
+always 12 at most architectures). Since Linux 3.11 their meaning changes
+after first clear of soft-dirty bits. Since Linux 4.2 they are used for
+flags unconditionally.
+
+2.  Documentation/vm/transhuge.txt
+"mount -o remount,huge= /mountpoint" works fine after mount: remounting
+huge=never will not attempt to break up huge pages at all, just stop more
+from being allocated.
+
+05:31 2016-09-26
+-----------------
+kselftest
+---------
+1.  rebasing
+    1.  add the following things in dedicated commit:
+        1.  %:%.c
+        2.  CROSS_COMPILE
+        3.  other in git diff
+
+1.  TODO
+    1.  check cflags and ldflags for fusemnt.o, fusemnt
+
+12:31
+1.  update doc according to kernel doc how.txt
+2.  move doc to c source.
+
+11:48 2016-09-28
+----------------
+ILP32
+1.  About a public ILP32 build
+to agraf
+cc andrew wafaa, bamvor, hanjun, tianhong
+
+Hi, Alex
+
+I hope we could track it in email.
+
+2.  Send Matt
+Hi, Matt
+
+Glad to discuss with you about ILP32 this morning. I put the Huawei guys who join the meeting in the loops.
+Could you please send out the meeting minutes including action items and role/responsibility?
+
+Regards
+
+Bamvor
+
+21:11 2016-09-28
+----------------
+1.  Changes since v3
+    1.  remove name api in utils according the suggestion from Linus.
+    2.  move the comment from header to implementation.
+    3.  remove gpiotools_set_flags due to no one need this right now.
+2.  I found that I have no time to finish this patch in connect.
+
