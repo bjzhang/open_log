@@ -2009,44 +2009,62 @@ Bamvor
 
 16:42 2016-10-09
 ----------------
-Linaro connect
-1.  ILP32
+[ACTIVITY] (Bamvor Jian Zhang) 2016-09-25 to 2016-10-01
+Linaro connect report
+*   ILP32 discussion
     1.  Goal: Discuss the upstream of ILP32 including upstream risk, performance regression, role/responsibilities
 
     2.  Everyone agree on that the target is 4.10 and 2.25. The merge windows of 4.10 for arm64 will open in next week, we need speed up or we will miss it. 4.11 is also possible.
         The kernel and glibc will merge only if kernel and glibc acknowledge at the same time.
 
-    3.  Still want a distribution support(do not need to official version).
-        1.  Suse: There is a internal build for ILP32 in suse. Suse will public it if there are enough resources. Huawei and Cavium could provide some.
+    3.  Still want a distribution support(do not need to official version for upstreaming).
+        1.  Suse: There is a internal build for ILP32 in suse. Suse will public it if there are enough hw resources. Huawei and Cavium could provide some. Suse hope there is commercial request for ILP32 build. Not sure if Huawei need this, will investigate internally.
             Notes: I do not sure if cavium really want to provide or just follow after Huawei say yes.
-        2.  Debian: It seems that someone will contact debian later. Mark, Arnd, do you know that?
+        2.  Debian: It seems that someone from ARM contacted debian community for an unofficial build. Not sure the latest progress.
         3.  Ubuntu: will contact ubuntu after ILP32 upstreamed.
 
     4.  ILP32 could be merged after there is no performance regression.
 
-    5.  Role and responsbility
+    5.  This meeting will hold one month once.
+
+    6.  Role and responsbility
         1.  Two engineers from Cavium will work on the patches of kernel and glibc(excluding Andrew Pinski). Cavium will send out new patches after there is no performance regresssion.
         2.  Bamvor will compare the performance of LP64 between ILP32 unmerged and ILP32 disabled.
-            The test suite is specint.
+            The test suite is specint, lmbench and other reasonable benchmark. Bamvor will bring up D03 with upstream kernel and test specint as start point.
 
-    6.  Attendee(Get from pathable, it seems that some guys from ARM/Cavium do not attend).
-        1.  ARM: Matt Spencer(organizer), Marc Zyngier, Andrew Wafaa, Mark Hambleton(?), Matthew Gretton-Dann(?);
+    7.  Attendee
+        1.  ARM: Matt Spencer(organizer), Marc Zyngier, Andrew Wafaa, Mark Hambleton, Matthew Gretton-Dann;
         2.  Cavium: Andrew Pinski, Parsun Kapoor, Larry Wikelius;
         3.  Huawei: Bamvor Jian Zhang, Hanjun Guo, Tianhong Ding;
         4.  Linaro: Arnd Bergmann, Mark Brown, Ryan Arnold, Maxim Kuvyrkov, Adhemerval Zanella Netto.
         5.  Suse: not attend. But ask for the build resource for ILP32.
 
+* KWG-192: Use of contiguous page hint to create 64K pages
+    1.  The goal of this task is optimize performance of annoymous page for 4k.
+    2.  Discuss design with Arnd. There are three methods.
+        1.  The first method is force use hugetlb in mmap and brk if the lengh and alignment is multiple of 64k. This method consume the memory in hugetlb pool. It likes a hacking. And I wrote a patch with Arnd before connect, I would run lmbench in a filesystem built by buildroot. Some of memory relative performance improve a lot(reference the jira). But boot opensuse tumbleweed failed and run specint failed.
+	2.  The second one is replace THP code of 2m bytes in pagefault with 64k page. At the beginning, it seems a generic function which make THP support all the size of page(like hugetlb). But later, I realize that replace 2m page with 64k could not get better performance, and hanlde in pmd level will not help handling the page in pte level.
+	3.  So, we think about the third one. We plan to handle the 16 pages once in pte level when possible and set a flag to indicate it. We do not think clearly about how to handle it in SWAP, will deal with it later. We discuss this with Laura Abbott, Marc Zyngier and Christoffer Dall, no objection so far. Need performance benchmark such as specint to prove it. Maxim Kuvyrkov from tcwg hope we could find a way to improvement the result of specint for 4k page. I will contact Maxim again when I have some progress.
+    3.  I am thinking if there is some senario suitable for this improvement.
+
+* KWG-148 GPIO kselftest
+    Discuss Linus about my patches. Linus accept the driver part and give some suggestion for userspace patch. I almost finish my new patches in travel. Hope I could send the new version this week.
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+    Almost finish the code before connect. will work it later.
+
 16:43 2016-10-09
 ----------------
 Linaro connect总结(已发dingtianhong, 不要在原文修改)(已发dingtianhong, 不要在原文修改)(已发dingtianhong, 不要在原文修改)(已发dingtianhong, 不要在原文修改)
 ------------------
+Performance regression of ILP32 seems the biggest blocker.
 1.  讨论ILP32
    1.  参与人: ARM., Cavium, Huawei, Linaro
        ARM的networking manager Matt组织会议。Cavium Prasun, Andrew参会。arm和cavium还是比较重视的。
    2.  内核和glibc达成一致后会同时合入。以内核4.10和glibc2.25为目标. 由于4.10 arm64 merge windows下周会开始, 所以时间还是比较紧的.
    3.  Cavium会继续完善kernel和glibc的补丁(会有两个工程师投入，不算Andrew Pinski); 华为张健负责测试specint并解决performance regression问题（如果有）。
    4.  发行版支持:
-        1.  华为会给suse提供D03用于公开原有suse内部的ILP32 build. Cavium也表示愿意提供板子。
+        1.  华为会给suse提供D03用于公开原有suse内部的ILP32 build. Cavium也表示愿意提供板子。Commercial support?
         2.  和Debian联系，提供一个用于测试的build.
         3.  希望其它发行版(例如)ubuntu在glibc合入ILP2后支持。
 
@@ -2054,8 +2072,8 @@ Linaro connect总结(已发dingtianhong, 不要在原文修改)(已发dingtianho
     1.  和Arnd讨论了三个方案，方案1是直接利用hugetlb，直接在mmap/brk中发现是64k对齐的64k页就强制使用hugetlk。方案2是把原有pmd层次的THP（2M映射）用64k page代替。方案3是在pte fault时，如果一个vma里面有足够的空间，每次连续分配16个pte，后面处理时如果没有特殊情况，都是16个pte统一处理。
     2.  经过分析，发现方案1比较简单，但是会占用hugetlb可用空间，lmbench测试表明有12%-18%（？）甚至300%的提升， 但是有些情况会出错，启动opensuse distribution失败。方案2修改THP不太划算，因为已有的THP工作的很好，修改后预期不到性能的改进。
     3.  方案3的优势是不论有没有cont page hint，因为节省了15次page fault都可以获得性能提升。对于arm/arm64有page hint bit，以及x86虽然没有hint但是会自动判断是否16个page映射相同，可以预期到性能会有提升.
-    4.  方案3，Arnd和我一起与Laura(ION maintainer), Marc Z和Cristoffer讨论，目前没有反对意见，需要用性能测试证明有效。
-    5.  和Jeoff讨论了我在做的这个事情。Jeoff建议我看看对于一个go语言写的数据库有没有帮助。这个数据库通常不会用到2M，1G这么大的页。64k对他来说是有好处的。cont page hint的场景会继续挖掘。
+    4.  方案3，Arnd和我一起与Laura Abbott, Marc Zyngier和Christoffer Dall讨论，目前没有反对意见，需要用性能测试证明有效。
+    5.  和Geoff Levand讨论了我在做的这个事情。Geoff建议我看看对于一个go语言写的数据库有没有帮助。这个数据库通常不会用到2M，1G这么大的页。64k对他来说是有好处的。cont page hint的场景会继续挖掘。
 
 3.  Linaro在做bus scaling QoS和新的firmware标准。结合本部门arm64的计划，从系统角度看arm64还缺失什么东西也许是个切入点。
     1.  bus scaling qos. ELCE也有个topic, 可以再关注.
