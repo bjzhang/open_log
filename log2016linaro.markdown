@@ -2007,3 +2007,281 @@ Bamvor
     3.  remove gpiotools_set_flags due to no one need this right now.
 2.  I found that I have no time to finish this patch in connect.
 
+16:42 2016-10-09
+----------------
+Linaro connect
+1.  ILP32
+    1.  Discuss the upstream
+
+Linaro connect总结。
+1.  讨论ILP32
+   1.  参与人: ARM., Cavium, Huawei, Linaro
+       ARM的networking manager Matt组织会议。Cavium Prasun, Andrew参会。感觉arm和cavium还是比较重视的。
+   2.  内核和glibc达成一致后会同时合入。以内核4.10和glibc2.25为目标。
+   3.  Cavium会继续完善kernel和glibc的补丁(会有两个工程师投入，不算Andrew Pinski)，本人（张健）负责测试specint并解决performance regression问题（如果有）。
+   4.  发行版支持:
+        1.  华为会给suse提供D03用于ILP32 build. Cavium也表示愿意提供。
+        2.  （who？）和Debian联系，提供一个用于测试的build.
+        3.  希望其它发行版在glibc合入ILP2后支持。
+
+2.  讨论Cont pag hint
+    1.  和Arnd讨论了三个方案，方案1是直接利用hugetlb，直接在mmap/brk中发现是64k对齐的64k页就强制使用hugetlk。方案2是把原有pmd层次的THP（2M映射）用64k page代替。方案3是在pte fault时，如果一个vma里面有足够的空间，每次连续分配16个pte，后面处理时如果没有特殊情况，都是16个pte统一处理。
+    2.  经过分析，发现方案1比较简单，但是会占用hugetlb可用空间，lmbench测试表明有12%-18%（？）甚至300%的提升， 但是有些情况会出错，启动opensuse distribution失败。方案2修改THP不太划算，因为已有的THP工作的很好，修改后预期不到性能的改进。
+    3.  方案3的优势是不论有没有cont page hint，因为节省了15次page fault都可以获得性能提升。对于arm/arm64有page hint bit，以及x86虽然没有hint但是会自动判断是否16个page映射相同，可以预期到更好的改进。
+    4.  方案3，Arnd和我一起与Laura(ION maintainer), Marc Z和Cristoffer讨论，目前没有反对意见，需要用性能测试证明有效。
+    5.  和Jeoff讨论了我在做的这个事情。Jeoff建议我看看对于一个go语言写的数据库有没有帮助。这个数据库通常不会用到2M，1G这么大的页。64k对他来说是有好处的。cont page hint的场景我比较乐观，会继续挖掘。
+
+3.  Tianhong和Andrew Pinski讨论了Scalebility, Andrew建议看下v8.1 lse指令。我们想通过Mark Brown问LEG没有Cavium的板子可以用。LEG说有三个板子但是都在用，没有资源给我们用。TODO加上人名。
+
+4.  和ARM，诺基亚等人讨论tickless，希望在某些核上把一秒的时钟中断也关闭。我们也有这个场景，表达了对这个特性的兴趣。
+
+5.  Linaro在做bus scaling QoS在做新的firmware标准（TODO 名字）。结合本部门arm64的计划，从系统角度看arm64还缺失什么东西也许是个切入点。
+    1.  bus scaling qos. ELCE有个topic, 关注.
+
+6.  Linaro又在尝试做新的东西，有人持观望态度，主要看linaro能不能把事情做成。
+    1.  Linaro加入zephre, IoT操作系统。session里面比较强调安全。IoT demo包括用蓝牙BLE做的低功耗sensor，手机上有app可以直接控制，但是蓝牙距离比较近，目前的想法是用bluetooth to wifi和每个屋子的WiFi连接。
+    2.  Linaro 96board新板子比较多，看起来Linaro想通过96board提高影响力，增加收入。
+        1.  新增TV board（基于EE板子修改）；
+        2.  AMD似乎不做arm64了（96板EE没有进展，Softiron做的AMD arm64盒子从6月份宣布后一直难产，已经两次宣布delay）；
+        3  Linaro 96 board CE板子有两个新成员，一个是MTK的x20，10核芯片，据MTK合作方说现在都是海外客户，第一批2k已经卖完了。但是没有任何upstream想法，如果本身没有什么公用IP，这种情况下upstream会比较困难，这应该是目前upstream支持最差的96板，感觉这个板子可能会后劲不足。我司的hikey2 性能如果和MTK在一个量级，并且upstream预期比较好（因为有hikey upstream和AOSP的基础），还是比较有自己的特色。
+            另一个是ST（？）的A9，特点是硬件video decoder是开源的。
+        4.  看起来大家做96board都是把比较成熟的东西拿出来。
+
+7.  自己感觉这是收获最大的connect，这次做的计划比较充分，在会议上交流观点效率比较高。有明确目标的话，去参会收获挺大的。
+
+
+
+
+1.  问hanjun, tianhong和suse合作的事情，打算送更多的d03么？
+DONE hanjun: Ask xinwei.
+xinwei: It is ok. But maybe not 10 of D03. 160G harddisk is not problem.
+In progess: ask alex about the D03 support for suse. Make sure D03 supporting before provide more D03.
+2. DONE Ask Matt to add the Ryan, Maxim, Adhemal to ILP32 meeing.
+3.  DONE discuss Andrew pinski and Andrew wafaa about ILP32 before Wednesday meeting. Prepare outline for wednesday meets.
+4.  DONE: Wrote slide for kernel upstream
+5.  kselftest. gpio.
+6.  ILP32
+      1.   Andrew will work on kernel and glibc.
+      2.  Bamvor will work on the performance regression. Check the benchmark I need to run.
+      3.  TODO: email Alex and Andrew Wafaa about ILP32 build for ILP32.
+           It discussed on irc. It is better that in email. Loop tianhong and hanjun.
+      4.  Andrew wafaa mentioned that it is glad if huawei could request commercial distro for ILP32. TODO: discuss with Hanjun, tianhong.
+      5.  Doing: Find a guy in our team to help me run latest kernel in our hardware.
+7.  Tianhong will send me testcase and I will look for if the linaro employee could run the testcase on Cavium board.
+8.   Tianhong discuss scalebility on arm64 with Andrew Pinski.  Andrew suggest that look into the lex instruction introduced by arm64.
+9.  chat with Siddhesh Poyarekar who write glibc tunable configuration. Also do the plan for toolchain team.
+10.  问下孙远，测试容器也能给开发用么？开发自测试，很不方便。
+9.  TODO
+    1.   discuss with rengeng about bus scaling QoS.
+    2.   discuss with Christeoffer and Julien about the contigous page hint.
+    3.  make sure there is not page hint in LKML.
+    4.  和alex shi/Mark Brown讨论ks补丁回合。
+    5.  Arnd told me that a guy(maxim) in toolchain hope kernel could improve the specint performance by enable the cont page hint of 64k pages. Try to catch this guy in dinner.  Discuss with Laura Abbott
+https://www.kernel.org/doc/gorman/
+
+AAR:
+1.  ILP32
+    1.  I should check the availability of toolchain guys as early as possible.
+    2.  Ryan told me the TSC deny the request of working on the build of ILP32 in June or July. Xinwei forward the email of TSC at that time, I should suggest linaro do that at that time.
+
+seage
+
+
+This week Linaro Power Team (PMWG) is having a set of themed hacking sessions focused on specific technical aspects of Linux power management. Here is the list of such sessions.
+
+All the hacking sessions are going to be in the room named “Madrid”.
+
+Mon, 26 Sep
+
+16:00 / 4:00pm Update on LISA
+
+Tue, 27 Sep
+
+14:00 / 2:00pm Bus scaling QoS
+15:00 / 3:00pm Cpuidle in details - theory
+16:00 / 4:00pm Cpuidle in details - the code
+17:00 / 5:00pm Towards an EAS energy model from DT
+
+Wed, 28 Sep
+
+14:00 / 2:00pm Benchmarking Schedutil in Android
+15:00 / 3:00pm Coupling schedutil with EAS-core
+16:00 / 4:00pm PELT behavior and known limitations
+
+Thu, 29 Sep
+
+14:00 / 2:00pm Don’t waste power when idle with runtime PM
+15:00 / 3:00pm Power Farm Evolution
+16:00 / 4:00pm Debugging PM with Jtag (hands-on) - 2 hours
+
+NOTE: in case of any questions, please approach Vincent Guittot (PMWG TechLead) as I’m not at connect this time.
+
+16:54 2016-10-09
+----------------
+linuxcon
+和欧研交流
+IO NUMA, 把IO请求调度给临近的cpu处理.
+
+有两个议题还不错, 一个是用于linux kernel memory barrier分析的工具:
+Linux kernel memory ordering.
+非易失性存储如果作为系统内存, 内核和C lib需要如何修改
+Persistent memory usage within linux environment.
+另外就是和suse的alex graf交流ILP32.
+
+Using seccomp to Limit the kernel attack surface
+
+
+keynote1 linux foundation
+There are 38 million projects in github. It is huge number than I could imagine.
+
+keynote2 docker
+there are 6 billion pull in 2016 from docker hub.
+The microphone is broken temprary when he talk about swarn.
+"docker service create" create service cluster
+DEMO: service cluster in amazon. "docker service" is introduced in 1.12.
+docker  use EC2 and IAM(key management?).
+open source infrakit in the presentation.
+
+keynote3 SDS huawei
+华为开始前，有些人出去了。
+the font is too small in the slide.
+
+openSDS panel discussion with dell, EMC, huawei, intel.
+
+keynote4: arm
+感觉arm现在影响力也挺大的。在第一天的keynote里面。
+www.openchainproject.org new collaboration project in linux foundation.
+
+keynote5: intel vm and container
+intel clear container.
+
+session
+*  kernel regression
+work on the regression report for 4.7 and 4.8.
+主要是面向一般用户讲什么是regresstion，和bug有什么区别。如何判断是否是regression。如何报告regression。
+
+*  kernel backport, alex shi
+Lots of useful command for backporting kernel feature.
+1.  the difference between git log -S and -G
+       -G<regex>
+           Look for differences whose patch text contains added/removed lines that match <regex>.
+
+           To illustrate the difference between -S<regex> --pickaxe-regex and -G<regex>, consider a commit with the following diff in
+           the same file:
+               +    return !regexec(regexp, two->ptr, 1, &regmatch, 0);
+               ...
+               -    hit = !regexec(regexp, mf2.ptr, 1, &regmatch, 0);
+
+           While git log -G"regexec\(regexp" will show this commit, git log -S"regexec\(regexp" --pickaxe-regex will not (because the
+           number of occurrences of that string did not change).
+
+*  eBPF
+
+vbbm
+关注openQA:
+openQA在sle各组件都在用，除了用opencv也会比较串口信息。现在suse/opensue全部用openQA测试，fedora也用。openQA支持多种架构。
+和richard brown简单聊了下openQA, 由于时间关系没法去听session，建议eulerOS关注。
+
+原来以为openQA只是用openCV抓图比较图片，其实现在也可以抓串口数据。基本来说suse所有产品，opensuse，fedora都使用openQA用于测试，据说suse所有的自动化用例都加进去了。只有个别UI用例还是手动的。强烈建议做发行版的童鞋关注。
+
+华为同事交流:
+rtos huangjianhui是来看容器相关的。libos想给各产品线部分组建先用起来，然后普及。
+
+其他
+这次linuxcon， rtos的开发代表。eulerOS的部长都来了。
+自己感觉华为还是比较重视参会的，希望从会议上多了解信息。
+和hyper的张磊交流，k8s maintainer.
+和suse ha lars交流。
+
+Modularizing Fedora
+https://lwn.net/Articles/679697/
+
+bitbake(yocto)
+https://github.com/meta-debian/meta-debian
+
+
+
+
+
+keynote1: hyperledger
+
+这次linuxcon关于区块链(blockchain，简单说就是一种分布式数据库)的有三个talk。今天早晨开场就是linux基金会项目之一的hyperledger项目，采用Apache协议v2，之前一直认为linux基金会项目都是gpl协议的:p
+hyperledger并不是要提供hypercoin，而是要作为基础设施。类比一下如今的互联网，有全球公网也有大量私有网络，但是这些网络的用到的技术基本是一样的，hyperledgeer希望成为blockchain的基础设置。
+项目网页：www.hyperledger.org
+
+NFV: lunch and learn
+标准部周楠有人投入到NFV组织，参与项目管理。
+
+fd.io
+http://www.metaswitch.com/the-switch/fd.io-takes-over-vpp
+
+odp
+
+unikernel by amir(docker)
+
+作为docker跑unikernel的micro service。
+
+demo on cubieboard2.
+demo中提到了部署到了IoT领域，但是demo其实是部署到了Cortex-A7, 所以指的是IoT gateway?
+
+When should you use unikernel?
+
+认为可用，就像早期汽车一样，用户需要有比较多的知识。
+
+问下arm64的支持状态。
+
+问题：device drvier：其中一个使用xen的原因，就是unikernel在domU，在dom0提供驱动。
+问题：好像提到了rumpkernel？
+
+Ian Campbell也来了，交流下。
+
+rtos这次来了三个人，huangjianhui，刘洋，陶喆
+
+陶喆：负责libos里面网络部分，讨论了arm虚拟化情况下hypervisor注入中断到host，guest会不会有什么区别。TODO这个shannon讨论下。
+我把yongjun介绍给了陶喆。
+
+和agraf讨论cont page hint，alex认为只是tlb miss有帮助，invalidate tlb没有帮助，不管有没有hint，都需要按4k去invalidate，我今天查了armv8 arm，的确如此。
+cont page hint for tlb
+Setting this bit to 1 means that the TLB can cache a single entry to cover the contiguous translation table entries.
+This section defines the requirements for programming the Contiguous bit. Possible translation table registers
+programming errors on page D4-1681 describes the effect of not meeting these requirements.
+The architecture does not require a PE to cache TLB entries in this way. To avoid TLB coherency issues, any TLB
+maintenance by address must not assume any optimization of the TLB tables that might result from use of the
+Contiguous bit.
+TLB maintenance must be performed based on the size of the underlying translation table entries, to avoid TLB
+coherency issues.
+
+TODO check the ingored fieild(I should read the architecture doc)
+IGNORED fields
+In the VMSAv8-64 translation table descriptors, the following fields are identified as IGNORED , meaning the
+architecture guarantees that a PE makes no use of these fields:
+•
+In the stage 1 table descriptors, bits[58:52].
+•
+In the stage 1 and stage 2 block and page descriptors, bits[63:59] and bits[58:55].
+Of these fields:
+• In the stage 1 and stage 2 block and page descriptors, bits[58:55] are reserved for software use, see Field
+reserved for software use.
+• In the stage 2 block and page descriptors, bits[63:60] are reserved for use by a System MMU control.
+Field reserved for software use
+The architecture reserves a 4-bit IGNORED field in the Block and Page table descriptors, bits[58:55], for software
+use. The definition of IGNORED means the architecture guarantees that hardware makes no use of this field.
+Note
+This means there is no need to invalidate the TLB if these bits are changed.
+
+5号dinner alex shi主动问到了华为待遇，感觉是有意愿动的，也许再看更合适的机会，似乎和linaro马上要上税有关。
+
+17:36 2016-10-09
+----------------
+1.  Excise the presentation every day.
+2.  buy micro HDMI to HDMI converter. If I could not buy it, ask colleague to borrow their computer.
+3.  upload the slide to linuxcon sched.
+4.  Read the event in linuxcon.
+5.  ping maxim about benchmark improvement base on the 64k page.
+    1.  Hi, Maxim
+        I heard from Arnd that you are interested in the 64k page hint in arm64 which may improve the specint benchmark. Because 64k page of specint is much better than 4k page one.
+        I discuss with Arnd, Marc Z, Laura about a method which make use of 64k page hint. It is reasonable approach so far. I will start to work on it after I came back to my home after the linxcon europe. I will let you know if have some progress.
+        Regards
+        Bamvor
+6.  Align with Huawei(hanjun, tianhong) and Linaro(Mark, Arnd) about my linaro summary. If get agreement, sent it out.
+
