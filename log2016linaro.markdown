@@ -2011,7 +2011,40 @@ Bamvor
 ----------------
 Linaro connect
 1.  ILP32
-    1.  Discuss the upstream
+    1.  Goal: Discuss the upstream plan of ILP32 including upstream risk, performance regression, role/responsibilities
+    1.  Attendee(Get from pathable, it seems that some guys from ARM/Cavium do not attend).
+        1.  ARM:
+            Matt Spencer(organizer)
+            Marc Zyngier
+            Andrew Wafaa
+            Mark Hambleton(?)
+            Matthew Gretton-Dann(?)
+
+        2.  Cavium
+            Andrew Pinski
+            Parsun Kapoor
+            Larry Wikelius
+
+        3.  Huawei
+            Bamvor Jian Zhang
+            Hanjun Guuo
+            Tianhong Ding
+
+        4.  Linaro
+            Arnd Bergmann
+            Mark Brown
+            Ryan Arnold
+            Maxim Kuvyrkov
+            Adhemerval Zanella Netto
+
+        5.  Suse: not attend. But ask for the build resource for ILP32.
+
+    2.  Everyone agree on that the target is 4.10 and 2.25. The merge windows of 4.10 for arm64 will open in next week, we need speed up or we will miss it. 4.11 is also possible.
+        The kernel and glibc will merge only if kernel and glibc acknowledge at the same time.
+
+    3.  Role and responsbility
+        1.  Two engineers from Cavium will work on the patches of kernel and glibc(excluding Andrew Pinski).
+        2.  Bamvor will compare the performance of LP64 between ILP32 unmerged and ILP32 disabled. The test suite is specint.
 
 Linaro connect总结。
 1.  讨论ILP32
