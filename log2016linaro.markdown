@@ -2174,16 +2174,38 @@ NOTE: in case of any questions, please approach Vincent Guittot (PMWG TechLead) 
 
 16:54 2016-10-09
 ----------------
-linuxcon
+LCE, linuxcon europe
+--------------------
+这个第一次参加Linuxcon europe, 总体来说内核相关的开发议题比较少, 需要认真做好功课. 下面先会分享两个感激有价值的议题. 另外suse两个maintainer的交流内核, 最后是其它参会笔记.
 
-1.  有两个议题还不错, 一个是用于linux kernel memory barrier分析的工具:
-Linux kernel memory ordering.
-TODO 需要看胶片和照片, 整理下具体内容.
+1.  用于linux kernel memory barrier分析的工具: "Linux-Kernel Memory Ordering: Help Arrives At Last!"
+    作者是"Paul E. McKenney" <paulmck@linux.vnet.ibm.com>, 内核RCU的maintainer.
+    演讲首先提出问题: 对于memory barrier来说, 内核提供的唯一文档就是"Documentation/memory-barriers.txt", 而且这个文档还不全, 对于一般开发来说用对memory barrier并不是一件容易的事情.
+    作者指出memory barrier测试需要考虑编译器和硬件能力(工具明确支持armv8的硬件行为)等多个因素. 工具是用OCaml写成的. 对于不懂OCaml的我来说, 可能只能使用, 难以更深入.
+    演讲以两个竟态实例说明了分析方法, demo了运行结果.
+    我看了下工具的主页<http://diy.inria.fr/doc/index.html>, 上面有详细的文档, 看到工具是支持交叉编译的(文档中以arm为例).
+    结论: 这个工具对于内核开发中锁的检查很有帮助, 建议把这个工具用起来.
+    TODO能不能用到arm64多核可扩展性探索中对于不同锁的算法的选择?
 
-2.  非易失性存储如果作为系统内存, 内核和C lib需要如何修改
-Persistent memory usage within linux environment.
-
-3.  另外就是和suse的alex graf交流ILP32和cont page hint. Alex现场给我看了obs上arm64构建负载比较重, 没法在加入ILP32 build. 目前D03多次起停虚拟机上虚拟机会hang. hanjun帮忙联系了Shameerali Kolothum Thodi, Shameerali暂时没法复现alex说的问题. 后续继续交流.
+2.  围绕非易失性存储如果作为系统内存如何使用展开:
+    1.  "Persistent memory usage within Linux environment". Intel
+        1.  基于Intel的3D XPoint.
+        2.  ![Persistent_memory_programming_model](Persistent_memory_programming_model.png)
+        3.  胶片介绍了内存和Storage如何使用pmem.
+            1.  内存分配，通过libvmmalloc, libvmem分配堆内存，通过memkind管理不同的堆。libvmmalloc, libvmem和memkind都基于jemalloc.
+            2.  storage: ![pmem_for_storage](pmem_for_storage.png)
+        4.  胶片最后介绍了各种benchmark，包括redis的性能，下图是当内存不足时性能情况，可以看到只有pmem可以做到性能没有跳水。
+             ![Benchmark_Running_out_of_DRAM](Benchmark_Running_out_of_DRAM.png)
+    2.  pmem workshop: 介绍了pmem各种用户接口的用法，包括pmempool, pmemblkpool. TODO: mempool本来是做什么用的?
+        1.  pmem_mmap_file后需要pmem_persist持久化，由于没有听这个session不清楚是为什么。根据下文看，应该是因为系统cache导致的数据不一致问题。pmemcheck可以帮忙检查没有持久化或其他问题.
+    3.  persistent memory semantics in programming languages, overview of the ongoing research
+        1.  主要是比较已有的各种使用pmem的方法，涉及到实现复杂度，是否保证了一致性等方面
+        2.  比较有没有pmem的软件栈: ![](software_stack_with_pmem_enabled.png), ![](software_stack_without_pmem.png)
+        3.  受到系统cache/buffer同步的影响，pmem数据一致性需要api保证，参考断电实验![断电实验](pmem_power_interruption.png), 所以libc里面直接使用pmem也是有风险的, ![参考](pmem_unsafe_for_libc_direct_use.png)
+    4.  persistent memory extensions to libstdc++/libc++
+        介绍了pmem与c++特性如何结合.
+    
+3.  这次LCE另外就是和suse的alex graf交流ILP32和cont page hint. Alex现场给我看了obs上arm64构建负载比较重, 没法在加入ILP32 build. 目前D03多次起停虚拟机上虚拟机会hang. hanjun帮忙联系了Shameerali Kolothum Thodi, Shameerali暂时没法复现alex说的问题. 后续继续交流.
 
 4.  和suse libs的jiri kosina交流, jiri会host LPC上living patch的讨论, jiri是suse其中内核团队(共两个)leader, 他有个兄弟在做热补丁的工作(包括内核和编译器), 个人感觉可以和jiri提前接触下, 保证得到预期结果.
 
@@ -2330,17 +2352,8 @@ This means there is no need to invalidate the TLB if these bits are changed.
 
 Using seccomp to Limit the kernel attack surface
 
-17:36 2016-10-09
+17:46 2016-10-11
 ----------------
-1.  Excise the presentation every day.
-2.  buy micro HDMI to HDMI converter. If I could not buy it, ask colleague to borrow their computer.
-3.  upload the slide to linuxcon sched.
-4.  Read the event in linuxcon.
-5.  ping maxim about benchmark improvement base on the 64k page.
-    1.  Hi, Maxim
-        I heard from Arnd that you are interested in the 64k page hint in arm64 which may improve the specint benchmark. Because 64k page of specint is much better than 4k page one.
-        I discuss with Arnd, Marc Z, Laura about a method which make use of 64k page hint. It is reasonable approach so far. I will start to work on it after I came back to my home after the linxcon europe. I will let you know if have some progress.
-        Regards
-        Bamvor
-6.  Align with Huawei(hanjun, tianhong) and Linaro(Mark, Arnd) about my linaro summary. If get agreement, sent it out.
+„In theory, theory and practice are the same. In practice, they are not”
+Albert Einstein
 
