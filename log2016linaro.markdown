@@ -2179,13 +2179,11 @@ Albert Einstein
 
 19:02 2016-10-13
 ----------------
-./gpio-mockup.sh -f -m 9030000.pl061
-
 Add gpio test framework
 
 These series of patches try to add support for testing of gpio
 subsystem based on the proposal from Linus Walleij. The first two
-version is here[1][2].
+version is here[1][2][3].
 
 The basic idea is implement a virtual gpio device(gpio-mockup) base
 on gpiolib. Tester could test the gpiolib by manipulating gpio-mockup
@@ -2204,16 +2202,29 @@ In order to avoid conflict with other gpio exist in the system,
 only dynamic allocation is tested by default. User could pass -f to
 do full test.
 
+The test script could also test other (real) gpio device, such as
+pl061 in my qemu:
+./gpio-mockup.sh -m 9030000.pl061
+
 [1] http://comments.gmane.org/gmane.linux.kernel.gpio/11883
 [2] http://www.spinics.net/lists/linux-gpio/msg11700.html
+[2] http://www.spinics.net/lists/linux-gpio/msg16255.html
 
-Changes since v1:
-1.  Change value of gpio to boolean.
-2.  Only test dynamic allocation by default.
+Changes since v3:
+1.  Rename the api in gpio-utils.[ch] with gpiotools.
+2.  Update document of function according to the
+    "Documentation/kernel-docs.txt", and move it to implementation.
+3.  Remove useless label of goto according to the suggestion from
+    Michael Welling.
+
 Changes since v2:
 1.  Switch to chardev.
 2.  Add basic gpio operation for chardev.
 
+Changes since v1:
+1.  Change value of gpio to boolean.
+2.  Only test dynamic allocation by default.
+
 2.  send them out:
-`git send-email --no-chain-reply-to --annotate --to linux-gpio@vger.kernel.org --cc linus.walleij@linaro.org --cc broonie@kernel.org *.patch`
+`git send-email --no-chain-reply-to --annotate --cc linux-gpio@vger.kernel.org --to linus.walleij@linaro.org --cc broonie@kernel.org --cc mwelling@ieee.org *.patch`
 
