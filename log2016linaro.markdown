@@ -2255,4 +2255,34 @@ software, skill, markdown to word, pandoc
 -----------------------------------------
 <http://hi.ktsee.com/383.html>: `pandoc -f markdown -t html ./report.md | pandoc -f html -t docx -o report.docx`
 
+20:26 2016-10-14
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-10-09 to 2016-10-14
+=== Highlights ===
+* KWG-148 GPIO kselftest
+    - Address the comment from Linus and Micheal Welling
+    - Send out v4 patches today.
+
+* ILP32
+    - Spend some time to set up the test machine with uptream kernel with my colleague. Eventually, it works and test lmbench tonight. Hope could get the first version of lmbench result on next Monday.
+
+* Conference summary
+    - Spend hours to summary the linaro connect(Chinese and English) and LCE(Chinese).
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Read part of the book in  https://www.kernel.org/doc/gorman/.
+    - Some notes when read the code:
+      * Read the `do_anonymous_page`. I should take care the difference lock when I change the code.
+      * There is vma in fault_env. I think I could check range here.
+      * There is a fault_env.prealloc_pte. Could I pre allocated here? If I set the cont hint in pre-allocate, I may need invalidate the tlb entry if I could not allocate the cont 16 pages in the next comming page fault.
+
+=== Plans ===
+ILP32 performance test
+  - Test lmbench and fix the bug if found.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+  - Continue read the code in wp and other case.
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+  - Send out the patches.
 
