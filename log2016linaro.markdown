@@ -2182,21 +2182,19 @@ Albert Einstein
 Add gpio test framework
 
 These series of patches try to add support for testing of gpio
-subsystem based on the proposal from Linus Walleij. The first two
+subsystem based on the proposal from Linus Walleij. The first three
 version is here[1][2][3].
 
 The basic idea is implement a virtual gpio device(gpio-mockup) base
 on gpiolib. Tester could test the gpiolib by manipulating gpio-mockup
-device through sysfs or char device and check the result from debugfs.
-Reference the following figure:
+device through chardev(default) or sysfs and check the result from
+debugfs. Reference the following figure:
 
-   sysfs/char device  debugfs
+   sysfs/chardev      debugfs
      |                   |
   gpiolib----------------/
      |
  gpio-mockup
-
-Currently, this test script will use chardev interface by default.
 
 In order to avoid conflict with other gpio exist in the system,
 only dynamic allocation is tested by default. User could pass -f to
@@ -2206,13 +2204,22 @@ The test script could also test other (real) gpio device, such as
 pl061 in my qemu:
 ./gpio-mockup.sh -m 9030000.pl061
 
+Originally, there are 5 patches. 2 of them are merged by Linus:
+a6a1cf3 gpio: MAINTAINERS: Add an entry for GPIO mockup driver
+0f98dd1 gpio/mockup: add virtual gpio device
+
+There series only include the others:
+tools/gpio: add gpio basic opereations
+tools/gpio: re-work gpio hammer with gpio operations
+selftest/gpio: add gpio test case
+
 [1] http://comments.gmane.org/gmane.linux.kernel.gpio/11883
 [2] http://www.spinics.net/lists/linux-gpio/msg11700.html
 [2] http://www.spinics.net/lists/linux-gpio/msg16255.html
 
 Changes since v3:
 1.  Rename the api in gpio-utils.[ch] with gpiotools.
-2.  Update document of function according to the
+2.  Update in kernel document according to the
     "Documentation/kernel-docs.txt", and move it to implementation.
 3.  Remove useless label of goto according to the suggestion from
     Michael Welling.
@@ -2226,5 +2233,20 @@ Changes since v1:
 2.  Only test dynamic allocation by default.
 
 2.  send them out:
-`git send-email --no-chain-reply-to --annotate --cc linux-gpio@vger.kernel.org --to linus.walleij@linaro.org --cc broonie@kernel.org --cc mwelling@ieee.org *.patch`
+`git send-email --no-chain-reply-to --annotate --to linus.walleij@linaro.org --cc linux-gpio@vger.kernel.org --cc broonie@kernel.org --cc mwelling@ieee.org --cc shuahkh@osg.samsung.com *.patch`
+
+11:05 2016-10-14
+----------------
+1.  There is a prot in vma. But I could not set the hint in prot. Because I do not know how many vma is 64k aligned. TODO check it.
+2.  need to understand the mm_struct and vma
+3.  read the code in do_anonymous_page:
+    1.  It is a non-exclusive mmap_sem which mean I should lock all the 16 pages as soon as possible?
+    2.  `__pte_alloc`:
+        1.  It seems that __pte_alloc allocate a page and write to the specific pmd entry. I suppose this pmd should be offset of the pmd table.
+        2.  pte_alloc_one: I need to alloc 16 pages if there is enough in vma.
+            There are vm in fault_env.vma. I could check range.
+            There is a fault_env.prealloc_pte could I pre allocated here? If I set the cont hint in pre-allocate, I may need invalidate the tlb entry if I could not allocate the cont 16 pages.
+        3.  pmd_lock is a spinlock which is mm->page_table_lock. My understand is we need lock pmd when we want to change one of the pte in this pmd. Correct?
+    3.  What does PTE_SPECIAL mean?
+
 
