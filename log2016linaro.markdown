@@ -2249,4 +2249,10 @@ Changes since v1:
         3.  pmd_lock is a spinlock which is mm->page_table_lock. My understand is we need lock pmd when we want to change one of the pte in this pmd. Correct?
     3.  What does PTE_SPECIAL mean?
 
+17:32 2016-10-14
+----------------
+software, skill, markdown to word, pandoc
+-----------------------------------------
+<http://hi.ktsee.com/383.html>: `pandoc -f markdown -t html ./report.md | pandoc -f html -t docx -o report.docx`
+
 
