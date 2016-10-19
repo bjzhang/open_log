@@ -2476,3 +2476,38 @@ The O_TMPFILE option to the open() system call was pulled into the mainline duri
 473.astar       -0.34%
 483.xalancbmk   -0.90%
 
+5.  arnd:
+bamvor: if the .config is identical, the two tests that stick out most (mcf and hmmer) would be candidates for looking at with perf as well. probably the lmbench tests that show a big difference are easier to analyse, so maybe look at them first
+
+21:04 2016-10-19
+----------------
+1.  2/6 TEST_DIR
+    ```
+    The TEST_DIRS was introduced in Commit e8c1d7cdf137 ("selftests: copy
+    TEST_DIRS to INSTALL_PATH") for coping a whole directory in ftrace.
+    After rsync(with -a) is introduced by Commit 900d65ee11aa ("selftests:
+    change install command to rsync"). Rsync could handle the directory
+    without the definition of TEST_DIRS.
+
+    This patch simply replace TEST_DIRS with TEST_FILES in ftrace and remove
+    the TEST_DIRS in tools/testing/selftest/lib.mk
+    ```
+
+2.  3/6 add pattern ruls
+    ```
+    [PATCH RFD 3/6] Add default rules for c source file
+
+    There are difference rules for compiling c source file in different
+    testcases. In order to enable KBUILD_OUTPUT support in later patch,
+    this patch introduce the default rules in
+    "tools/testing/selftest/lib.mk" and remove the existing rules in each
+    testcase.
+    ```
+
+3.  4/6. CROSS_COMPILE
+    ```
+    After previous clean up patches, memfd and timers could get
+    CROSS_COMPILE from tools/testing/selftest/lib.mk. There is no need to
+    preserve these definition. So, this patch remove them.
+    ```
+
