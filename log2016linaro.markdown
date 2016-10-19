@@ -2428,3 +2428,35 @@ The O_TMPFILE option to the open() system call was pulled into the mainline duri
 [open() flags: O_TMPFILE and O_BENEATH](https://lwn.net/Articles/619146/)
  Amusingly, the original bug was discovered while digging into a related glibc bug. It seems that, when O_TMPFILE is used, the mode argument isn't passed into the kernel at all. In the case of open() on x86-64 machines, things work out of sheer luck: the mode argument just happens to be sitting in the right register when glibc makes the call into the kernel. Things do not work as well with openat(), though, with the result that, in current glibc installations, O_TMPFILE cannot be used with openat() at all. The bug is well understood and should be fixed soon.
 
+15:43 2016-10-19
+----------------
+1.  Compare the first 5 in each kernel, list all the ILP32_disabled worse than ILP32_unmerged above 1%.
+    1.  Processor, Processes - times in microseconds - smaller is better
+        *   open clos: 5.46%
+        *   Fork proc: 4.32%
+
+    2.  File & VM system latencies in microseconds - smaller is better
+        *   0K Create: 4.44%
+        *   File Delete: 1.83%
+
+    3.  *Local* Communication bandwidths in MB/s - bigger is better
+        *   TCP: -1.30%
+        *   Bcopy(libc): -1.32%
+
+2.  all the 15 test result: list all the ILP32_disabled worse than ILP32_unmerged above 1%.
+    The "sh proc" seem abnormal. I plan to test such case again.
+    1.  Processor, Processes - times in microseconds - smaller is better
+        *   open clos: 4.04%
+        *   sh proc: 14.47%
+
+    2.  Context switching - times in microseconds - smaller is better
+        *   8p/16k ctxsw: 2.27%
+
+    3.  File & VM system latencies in microseconds - smaller is better
+        *   0K Create: 3.68%
+        *   File Delete: 1.83%
+        *   Prot Fault: 1.82%
+
+    4.  *Local* Communication bandwidths in MB/s - bigger is better
+        *   Pipe: -1.70%
+
