@@ -2460,3 +2460,19 @@ The O_TMPFILE option to the open() system call was pulled into the mainline duri
     4.  *Local* Communication bandwidths in MB/s - bigger is better
         *   Pipe: -1.70%
 
+3.  open/close: mkdir -p /usr/tmp; touch /usr/tmp/lmbench; lat_syscall -P 1 open /usr/tmp/lmbench
+
+4.  specint
+                (ILP32_disabled-ILP32_unmerged)/ILP32_unmerged
+400.perlbench       0%
+401.bzip2       -0.65%
+403.gcc          0.26%
+429.mcf          2.75%
+445.gobmk           0%
+456.hmmer       -4.34%
+458.sjeng           0%
+462.libquantum      0%
+471.omnetpp      0.59%
+473.astar       -0.34%
+483.xalancbmk   -0.90%
+
