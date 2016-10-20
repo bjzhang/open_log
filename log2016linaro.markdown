@@ -2511,3 +2511,69 @@ bamvor: if the .config is identical, the two tests that stick out most (mcf and 
     preserve these definition. So, this patch remove them.
     ```
 
+20:35 2016-10-20
+----------------
+z00293696@d03-02:~/works/source/kernel/hulk> ./tools/perf/perf top
+Error:
+You may not have permission to collect system-wide stats.
+
+Consider tweaking /proc/sys/kernel/perf_event_paranoid,
+which controls use of the performance events system by
+unprivileged users (without CAP_SYS_ADMIN).
+
+The current value is 2:
+
+  -1: Allow use of (almost) all events by all users
+>= 0: Disallow raw tracepoint access by users without CAP_IOC_LOCK
+>= 1: Disallow CPU event access by users without CAP_SYS_ADMIN
+>= 2: Disallow kernel profiling by users without CAP_SYS_ADMIN
+z00293696@d03-02:~/works/source/kernel/hulk> cat /proc/sys/kernel/perf_event_paranoid
+2
+z00293696@d03-02:~/works/source/kernel/hulk> echo -1 > /proc/sys/kernel/perf_event_paranoid
+-bash: /proc/sys/kernel/perf_event_paranoid: Permission denied
+z00293696@d03-02:~/works/source/kernel/hulk> sudo echo -1 > /proc/sys/kernel/perf_event_paranoid
+-bash: /proc/sys/kernel/perf_event_paranoid: Permission denied
+z00293696@d03-02:~/works/source/kernel/hulk> su
+Password:
+d03-02:/home/z00293696/works/source/kernel/hulk # echo -1 > /proc/sys/kernel/perf_event_paranoid
+
+21:09 2016-10-20
+----------------
+1.  I hope you could add s-o-b in the following patch. And I suggest add s-o-b of Chengming Zhou <zhouchengming1@huawei.com> for 16/18.
+Subject: [PATCH 07/18] arm64: introduce is_a32_task and is_a32_thread (for AArch32 compat)
+`Subject: [PATCH 08/18] arm64: ilp32: add is_ilp32_compat_{task,thread} and TIF_32BIT_AARCH64`
+Subject: [PATCH 10/18] arm64: ilp32: introduce binfmt_ilp32.c
+Subject: [PATCH 12/18] arm64: ilp32: add sys_ilp32.c and a separate table (in entry.S) to use it
+Subject: [PATCH 13/18] arm64: signal: share lp64 signal routines to ilp32
+Subject: [PATCH 16/18] arm64: ptrace: handle ptrace_request differently for aarch32 and ilp32
+Subject: [PATCH 17/18] arm64:ilp32: add vdso-ilp32 and use for signal return
+
+2.  Do we need add more comment in the following patch?
+    1.  for the newly introduced USE_AARCH64_GREG:
+        Subject: [PATCH 10/18] arm64: ilp32: introduce binfmt_ilp32.c
+    2.  Subject: [PATCH 13/18] arm64: signal: share lp64 signal routines to ilp32
+
+3.  little suggestion for comments:
+    1.  Subject: [PATCH 16/18] arm64: ptrace: handle ptrace_request differently for aarch32 and ilp32
+        Here new aarch32 ptrace syscall handler is introsuced to avoid run-time
+        s/introsuced/introduced
+    2.  Subject: [PATCH 17/18] arm64:ilp32: add vdso-ilp32 and use for signal return
+        Usually, the kernel use the following format of Commit in commit message:
+        commit 601255ae3c98 ("arm64: vdso: move data page before code pages")
+
+4.  remove the tab in the doc:
+diff --git a/Documentation/arm64/ilp32.txt b/Documentation/arm64/ilp32.txt
+index d39ae82..3be35cb 100644
+--- a/Documentation/arm64/ilp32.txt
++++ b/Documentation/arm64/ilp32.txt
+@@ -22,8 +22,8 @@ Syscalls which pass 64bit values are handled by the code shared from
+ AARCH32 and pass that value as a pair. Next syscalls are affected:
+ fadvise64_64()
+ fallocate()
+-ftruncate64()
+-pread64        ()
++ftruncate64()
++pread64()
+ pwrite64()
+ readahead()
+ sync_file_range()
