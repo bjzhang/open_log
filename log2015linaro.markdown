@@ -1884,10 +1884,10 @@ howto, send patches
 -------------------
 1.  check prefix, version; to and cc in patches.
 2.  ensure the proper email address
-    For non-linaro internal email: Mark: broonie@kernel.org
-    Same as arnd?
+    For non-linaro internal email: Mark: broonie@kernel.org Same as arnd.
 3.  do checkpatch and C=1(sparse) for each file I modified.
 4.  check the number of patches.
+5.  khilman@kernel.org(should not khilman@linaro.org!!!)
 
 18:18 2015-08-19
 -

@@ -2298,11 +2298,13 @@ ILP32 performance test
 
 20:10 2016-10-17
 ----------------
-Subject: [PATCH RFD 0/6] enable O and KBUILD_OUTPUT for kselftest
+(18:47 2016-10-21)update
+
+Subject: [PATCH RFC 0/6] enable O and KBUILD_OUTPUT for kselftest
 
 Here is my first version for enabling the KBUILD_OUTPUT for kselftest.
 I fix and test all the TARGET in tools/testing/selftest/Makefile. For
-ppc, I test through some fake target.
+ppc, I test through fake target.
 
 There are six patches in these series. And five of them clean up the
 existing code. I split the clean up patches into five, hope it is easy
@@ -2335,9 +2337,11 @@ useless CROSS_COMPILE variable as it aleady exists in
 Further more, The fifth patch add the EXTRA_CLEAN variable to clean up
 the duplicated clean target
 
-The last patch introduce the KBUILD_OUTPUT and O for my own.
-Because user may compile kselftest directly
-(make -C tools/testing/selftests).
+The last patch introduce the KBUILD_OUTPUT and O for kselftest instead
+using the existing kbuild system because user may compile kselftest
+directly (make -C tools/testing/selftests).
+
+git send-email --no-chain-reply-to --annotate --to shuahkh@osg.samsung.com --cc linux-api@vger.kernel.org --cc linux-kernel@vger.kernel.org --cc khilman@kernel.org --cc broonie@kernel.org --cc mpe@ellerman.id.au 000*.patch
 
 14:54 2016-10-18
 ----------------
@@ -2460,7 +2464,10 @@ The O_TMPFILE option to the open() system call was pulled into the mainline duri
     4.  *Local* Communication bandwidths in MB/s - bigger is better
         *   Pipe: -1.70%
 
-3.  open/close: mkdir -p /usr/tmp; touch /usr/tmp/lmbench; lat_syscall -P 1 open /usr/tmp/lmbench
+3.  cmd
+    1.  open/close: mkdir -p /usr/tmp; touch /usr/tmp/lmbench; lat_syscall -P 1 open /usr/tmp/lmbench
+    2.  0k create: lat_fs /usr/tmp
+
 
 4.  specint
                 (ILP32_disabled-ILP32_unmerged)/ILP32_unmerged
@@ -2495,7 +2502,7 @@ bamvor: if the .config is identical, the two tests that stick out most (mcf and 
 
 2.  3/6 add pattern ruls
     ```
-    [PATCH RFD 3/6] Add default rules for c source file
+    [PATCH RFD 3/6] selftests: add default rules for c source file
 
     There are difference rules for compiling c source file in different
     testcases. In order to enable KBUILD_OUTPUT support in later patch,
@@ -2509,6 +2516,15 @@ bamvor: if the .config is identical, the two tests that stick out most (mcf and 
     After previous clean up patches, memfd and timers could get
     CROSS_COMPILE from tools/testing/selftest/lib.mk. There is no need to
     preserve these definition. So, this patch remove them.
+    ```
+4.  5/6 EXTRA_CLEAN
+    ```
+    Some testcases need the clean extra data after running. This patch
+    introduce the "EXTRA_CLEAN" variable to address this requirement.
+
+    After KOUTPUT_BUILD is enabled in later patch, it will be easy to
+    decide to if we need do the cleanup in the KOUTPUT_BUILD path, if the
+    testcase ran immediately after compiled.
     ```
 
 20:35 2016-10-20
@@ -2577,3 +2593,144 @@ index d39ae82..3be35cb 100644
  pwrite64()
  readahead()
  sync_file_range()
+
+10:55 2016-10-21
+----------------
+syscall unit test
+1.  用途: 内核和glibc接口一致性检查
+    1.  设计系统调用的特性合入检查, 例如ILP32, kexec.
+    2.  内核和glibc版本升级检查.
+2.  TODO
+    1.  提高测试速度, 能不能快速测试提前暴露问题?
+
+16:43 2016-10-21
+----------------
+perf record -g -e "syscall:*" -e "sched:sched_switch" lat_syscall -P 1 open /usr/tmp/lmbench
+
+19:32 2016-10-21
+----------------
+1.  open/close
+[z00293696@d03-02 lmbench-3.0-a9]$ lat_syscall -P 1 open /usr/tmp/lmbench
+Simple open/close: 3.0099 microseconds
+Simple open/close: 2.9817 microseconds
+Simple open/close: 2.9477 microseconds
+Simple open/close: 3.0199 microseconds
+Simple open/close: 2.9374 microseconds
+Simple open/close: 3.0864 microseconds
+Simple open/close: 2.9706 microseconds
+Simple open/close: 2.9440 microseconds
+Simple open/close: 2.9600 microseconds
+Simple open/close: 2.9308 microseconds
+
+(3.0099+ 2.9817+ 2.9477+ 3.0199+ 2.9374+ 3.0864+ 2.9706+ 2.9440+ 2.9600+ 2.9308)/10=2.9788
+2.  0k create
+0k      392     71260   92005
+1k      212     38552   53650
+4k      207     37595   53390
+10k     127     23466   43802
+0k      418     72218   89792
+1k      214     38126   53948
+4k      205     38055   54103
+10k     128     23512   44471
+0k      414     71863   91863
+1k      216     37968   53745
+4k      215     37568   54114
+10k     128     23503   44186
+0k      395     72570   91154
+1k      209     38483   53782
+4k      222     38302   54183
+10k     129     23942   43896
+0k      405     71923   89850
+1k      211     38128   53379
+4k      211     38392   53953
+10k     134     23742   43636
+0k      428     72261   90176
+1k      213     38247   53849
+4k      216     37709   54816
+10k     130     23564   44018
+0k      410     72336   92064
+1k      192     38224   53772
+4k      211     38156   54217
+10k     131     23966   44112
+0k      395     71910   90811
+1k      211     38032   53571
+4k      211     38350   54849
+10k     130     23675   44205
+0k      429     73358   90247
+1k      215     38188   54101
+4k      214     37650   54200
+10k     129     23814   43989
+0k      402     71658   92263
+1k      212     37993   53910
+4k      217     37713   54344
+10k     133     23869   43677
+
+
+(1000000.0 / 71260 + 1000000.0 / 72218 + 1000000.0 / 71863 + 1000000.0 / 72570 + 1000000.0 / 71923 + 1000000.0 / 72261 + 1000000.0 / 72336 + 1000000.0 / 71910 + 1000000.0 / 73358 + 1000000.0 / 71658 ) / 10 = 13.86
+
+2.  ilp32-unmerged-no-aarch32
+1.  open/close
+[z00293696@d03-02 lmbench-3.0-a9]$ for i in `seq 1 10`; do lat_syscall -P 1 open /usr/tmp/lmbench; done
+Simple open/close: 2.9459 microseconds
+Simple open/close: 3.0377 microseconds
+Simple open/close: 2.9295 microseconds
+Simple open/close: 2.9037 microseconds
+Simple open/close: 2.9434 microseconds
+Simple open/close: 2.8373 microseconds
+Simple open/close: 2.9010 microseconds
+Simple open/close: 2.9028 microseconds
+Simple open/close: 2.8775 microseconds
+Simple open/close: 2.9579 microseconds
+
+(2.9459 + 3.0377 + 2.9295 + 2.9037 + 2.9434 + 2.8373 + 2.9010 + 2.9028 + 2.8775 + 2.9579) / 10 = 2.9237
+
+1.89%
+
+2.  0k create
+
+[z00293696@d03-02 lmbench-3.0-a9]$ for i in `seq 1 10`; do lat_fs /usr/tmp; done
+0k      398     72707   91511
+1k      202     37821   54081
+4k      216     37875   54461
+10k     127     23703   44571
+0k      429     74080   93682
+1k      214     37689   54348
+4k      218     38205   54769
+10k     127     23703   44235
+0k      429     73991   91102
+1k      201     37683   53938
+4k      216     37474   54114
+10k     128     23603   44436
+0k      426     74190   92743
+1k      218     38212   54196
+4k      214     37570   53985
+10k     132     23991   45067
+0k      423     73706   91587
+1k      221     38163   53714
+4k      210     37453   54425
+10k     133     23844   44920
+0k      432     73821   91348
+1k      219     38307   53873
+4k      216     37809   54673
+10k     127     23681   44137
+0k      415     73791   91571
+1k      217     37779   54134
+4k      214     38139   54801
+10k     128     23599   44624
+0k      425     73913   91151
+1k      223     38231   54249
+4k      208     37464   54433
+10k     133     23573   44153
+0k      426     73639   91183
+1k      217     38258   54087
+4k      217     37543   54605
+10k     135     23680   44412
+0k      407     73639   91737
+1k      212     37945   54350
+4k      212     37877   54589
+10k     127     23545   44619
+
+(1000000.0 / 72707 + 1000000.0 / 74080 + 1000000.0 / 73991 + 1000000.0 / 74190 + 1000000.0 / 73706 + 1000000.0 / 73821 + 1000000.0 / 73791 + 1000000.0 / 73913 + 1000000.0 / 73639 + 1000000.0 / 73639)/10=13.56
+
+(13.85-13.56)/13.56 = 2.14%
+
