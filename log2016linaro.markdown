@@ -2486,6 +2486,27 @@ The O_TMPFILE option to the open() system call was pulled into the mainline duri
 5.  arnd:
 bamvor: if the .config is identical, the two tests that stick out most (mcf and hmmer) would be candidates for looking at with perf as well. probably the lmbench tests that show a big difference are easier to analyse, so maybe look at them first
 
+6. (19:17 2016-10-24)update
+    1.  lmbench
+                    enable_aarch32_el0   disable_aarch32_el0
+         open clos               4.04%                 1.89%
+         0K Create               3.68%                 2.14%
+
+    2.  specint
+    (ILP32_disabled-ILP32_unmerged)/ILP32_unmerged
+                    enable_aarch32_el0   disable_aarch32_el0
+    400.perlbench                   0%                 0.22%
+    401.bzip2                   -0.65%                 0.95%
+    403.gcc                      0.26%                 0.20%
+    429.mcf                      2.75%                 0.76%
+    445.gobmk                       0%                 0.36%
+    456.hmmer                   -4.34%                -2.06%
+    458.sjeng                       0%                -0.27%
+    462.libquantum                  0%                -1.28%
+    471.omnetpp                  0.59%                 0.86%
+    473.astar                   -0.34%                -0.85%
+    483.xalancbmk               -0.90%                 0.08%
+
 21:04 2016-10-19
 ----------------
 1.  2/6 TEST_DIR
@@ -2609,130 +2630,132 @@ perf record -g -e "syscall:*" -e "sched:sched_switch" lat_syscall -P 1 open /usr
 
 19:32 2016-10-21
 ----------------
-1.  open/close
-[z00293696@d03-02 lmbench-3.0-a9]$ lat_syscall -P 1 open /usr/tmp/lmbench
-Simple open/close: 3.0099 microseconds
-Simple open/close: 2.9817 microseconds
-Simple open/close: 2.9477 microseconds
-Simple open/close: 3.0199 microseconds
-Simple open/close: 2.9374 microseconds
-Simple open/close: 3.0864 microseconds
-Simple open/close: 2.9706 microseconds
-Simple open/close: 2.9440 microseconds
-Simple open/close: 2.9600 microseconds
-Simple open/close: 2.9308 microseconds
+only test open/close and 0K file create
+1.  ilp32 disabled no aarch32
+    1.  open/close
+    [z00293696@d03-02 lmbench-3.0-a9]$ lat_syscall -P 1 open /usr/tmp/lmbench
+    Simple open/close: 3.0099 microseconds
+    Simple open/close: 2.9817 microseconds
+    Simple open/close: 2.9477 microseconds
+    Simple open/close: 3.0199 microseconds
+    Simple open/close: 2.9374 microseconds
+    Simple open/close: 3.0864 microseconds
+    Simple open/close: 2.9706 microseconds
+    Simple open/close: 2.9440 microseconds
+    Simple open/close: 2.9600 microseconds
+    Simple open/close: 2.9308 microseconds
 
-(3.0099+ 2.9817+ 2.9477+ 3.0199+ 2.9374+ 3.0864+ 2.9706+ 2.9440+ 2.9600+ 2.9308)/10=2.9788
-2.  0k create
-0k      392     71260   92005
-1k      212     38552   53650
-4k      207     37595   53390
-10k     127     23466   43802
-0k      418     72218   89792
-1k      214     38126   53948
-4k      205     38055   54103
-10k     128     23512   44471
-0k      414     71863   91863
-1k      216     37968   53745
-4k      215     37568   54114
-10k     128     23503   44186
-0k      395     72570   91154
-1k      209     38483   53782
-4k      222     38302   54183
-10k     129     23942   43896
-0k      405     71923   89850
-1k      211     38128   53379
-4k      211     38392   53953
-10k     134     23742   43636
-0k      428     72261   90176
-1k      213     38247   53849
-4k      216     37709   54816
-10k     130     23564   44018
-0k      410     72336   92064
-1k      192     38224   53772
-4k      211     38156   54217
-10k     131     23966   44112
-0k      395     71910   90811
-1k      211     38032   53571
-4k      211     38350   54849
-10k     130     23675   44205
-0k      429     73358   90247
-1k      215     38188   54101
-4k      214     37650   54200
-10k     129     23814   43989
-0k      402     71658   92263
-1k      212     37993   53910
-4k      217     37713   54344
-10k     133     23869   43677
+    (3.0099+ 2.9817+ 2.9477+ 3.0199+ 2.9374+ 3.0864+ 2.9706+ 2.9440+ 2.9600+ 2.9308)/10=2.9788
+    2.  0k create
+    0k      392     71260   92005
+    1k      212     38552   53650
+    4k      207     37595   53390
+    10k     127     23466   43802
+    0k      418     72218   89792
+    1k      214     38126   53948
+    4k      205     38055   54103
+    10k     128     23512   44471
+    0k      414     71863   91863
+    1k      216     37968   53745
+    4k      215     37568   54114
+    10k     128     23503   44186
+    0k      395     72570   91154
+    1k      209     38483   53782
+    4k      222     38302   54183
+    10k     129     23942   43896
+    0k      405     71923   89850
+    1k      211     38128   53379
+    4k      211     38392   53953
+    10k     134     23742   43636
+    0k      428     72261   90176
+    1k      213     38247   53849
+    4k      216     37709   54816
+    10k     130     23564   44018
+    0k      410     72336   92064
+    1k      192     38224   53772
+    4k      211     38156   54217
+    10k     131     23966   44112
+    0k      395     71910   90811
+    1k      211     38032   53571
+    4k      211     38350   54849
+    10k     130     23675   44205
+    0k      429     73358   90247
+    1k      215     38188   54101
+    4k      214     37650   54200
+    10k     129     23814   43989
+    0k      402     71658   92263
+    1k      212     37993   53910
+    4k      217     37713   54344
+    10k     133     23869   43677
 
 
-(1000000.0 / 71260 + 1000000.0 / 72218 + 1000000.0 / 71863 + 1000000.0 / 72570 + 1000000.0 / 71923 + 1000000.0 / 72261 + 1000000.0 / 72336 + 1000000.0 / 71910 + 1000000.0 / 73358 + 1000000.0 / 71658 ) / 10 = 13.86
+    (1000000.0 / 71260 + 1000000.0 / 72218 + 1000000.0 / 71863 + 1000000.0 / 72570 + 1000000.0 / 71923 + 1000000.0 / 72261 + 1000000.0 / 72336 + 1000000.0 / 71910 + 1000000.0 / 73358 + 1000000.0 / 71658 ) / 10 = 13.86
 
 2.  ilp32-unmerged-no-aarch32
-1.  open/close
-[z00293696@d03-02 lmbench-3.0-a9]$ for i in `seq 1 10`; do lat_syscall -P 1 open /usr/tmp/lmbench; done
-Simple open/close: 2.9459 microseconds
-Simple open/close: 3.0377 microseconds
-Simple open/close: 2.9295 microseconds
-Simple open/close: 2.9037 microseconds
-Simple open/close: 2.9434 microseconds
-Simple open/close: 2.8373 microseconds
-Simple open/close: 2.9010 microseconds
-Simple open/close: 2.9028 microseconds
-Simple open/close: 2.8775 microseconds
-Simple open/close: 2.9579 microseconds
+    1.  open/close
+    [z00293696@d03-02 lmbench-3.0-a9]$ for i in `seq 1 10`; do lat_syscall -P 1 open /usr/tmp/lmbench; done
+    Simple open/close: 2.9459 microseconds
+    Simple open/close: 3.0377 microseconds
+    Simple open/close: 2.9295 microseconds
+    Simple open/close: 2.9037 microseconds
+    Simple open/close: 2.9434 microseconds
+    Simple open/close: 2.8373 microseconds
+    Simple open/close: 2.9010 microseconds
+    Simple open/close: 2.9028 microseconds
+    Simple open/close: 2.8775 microseconds
+    Simple open/close: 2.9579 microseconds
 
-(2.9459 + 3.0377 + 2.9295 + 2.9037 + 2.9434 + 2.8373 + 2.9010 + 2.9028 + 2.8775 + 2.9579) / 10 = 2.9237
+    (2.9459 + 3.0377 + 2.9295 + 2.9037 + 2.9434 + 2.8373 + 2.9010 + 2.9028 + 2.8775 + 2.9579) / 10 = 2.9237
 
-1.89%
+    1.89%
 
-2.  0k create
+    2.  0k create
 
-[z00293696@d03-02 lmbench-3.0-a9]$ for i in `seq 1 10`; do lat_fs /usr/tmp; done
-0k      398     72707   91511
-1k      202     37821   54081
-4k      216     37875   54461
-10k     127     23703   44571
-0k      429     74080   93682
-1k      214     37689   54348
-4k      218     38205   54769
-10k     127     23703   44235
-0k      429     73991   91102
-1k      201     37683   53938
-4k      216     37474   54114
-10k     128     23603   44436
-0k      426     74190   92743
-1k      218     38212   54196
-4k      214     37570   53985
-10k     132     23991   45067
-0k      423     73706   91587
-1k      221     38163   53714
-4k      210     37453   54425
-10k     133     23844   44920
-0k      432     73821   91348
-1k      219     38307   53873
-4k      216     37809   54673
-10k     127     23681   44137
-0k      415     73791   91571
-1k      217     37779   54134
-4k      214     38139   54801
-10k     128     23599   44624
-0k      425     73913   91151
-1k      223     38231   54249
-4k      208     37464   54433
-10k     133     23573   44153
-0k      426     73639   91183
-1k      217     38258   54087
-4k      217     37543   54605
-10k     135     23680   44412
-0k      407     73639   91737
-1k      212     37945   54350
-4k      212     37877   54589
-10k     127     23545   44619
+    [z00293696@d03-02 lmbench-3.0-a9]$ for i in `seq 1 10`; do lat_fs /usr/tmp; done
+    0k      398     72707   91511
+    1k      202     37821   54081
+    4k      216     37875   54461
+    10k     127     23703   44571
+    0k      429     74080   93682
+    1k      214     37689   54348
+    4k      218     38205   54769
+    10k     127     23703   44235
+    0k      429     73991   91102
+    1k      201     37683   53938
+    4k      216     37474   54114
+    10k     128     23603   44436
+    0k      426     74190   92743
+    1k      218     38212   54196
+    4k      214     37570   53985
+    10k     132     23991   45067
+    0k      423     73706   91587
+    1k      221     38163   53714
+    4k      210     37453   54425
+    10k     133     23844   44920
+    0k      432     73821   91348
+    1k      219     38307   53873
+    4k      216     37809   54673
+    10k     127     23681   44137
+    0k      415     73791   91571
+    1k      217     37779   54134
+    4k      214     38139   54801
+    10k     128     23599   44624
+    0k      425     73913   91151
+    1k      223     38231   54249
+    4k      208     37464   54433
+    10k     133     23573   44153
+    0k      426     73639   91183
+    1k      217     38258   54087
+    4k      217     37543   54605
+    10k     135     23680   44412
+    0k      407     73639   91737
+    1k      212     37945   54350
+    4k      212     37877   54589
+    10k     127     23545   44619
 
-(1000000.0 / 72707 + 1000000.0 / 74080 + 1000000.0 / 73991 + 1000000.0 / 74190 + 1000000.0 / 73706 + 1000000.0 / 73821 + 1000000.0 / 73791 + 1000000.0 / 73913 + 1000000.0 / 73639 + 1000000.0 / 73639)/10=13.56
+    (1000000.0 / 72707 + 1000000.0 / 74080 + 1000000.0 / 73991 + 1000000.0 / 74190 + 1000000.0 / 73706 + 1000000.0 / 73821 + 1000000.0 / 73791 + 1000000.0 / 73913 + 1000000.0 / 73639 + 1000000.0 / 73639)/10=13.56
 
-(13.85-13.56)/13.56 = 2.14%
+    (13.85-13.56)/13.56 = 2.14%
 
 21:33 2016-10-21
 ----------------
@@ -2824,4 +2847,96 @@ Ben Hutchings <ben@decadent.org.uk>
 Randy Dunlap <rdunlap@infradead.org>
 Arnaldo Carvalho de Melo <acme@redhat.com>
 ```
+
+19:48 2016-10-24
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-10-15 to 2016-10-24
+=== Highlights ===
+* KWG-148 GPIO kselftest
+    - Linus ack another two patches. Only one patch need to discuss.
+      Thanks all the help from Linus and Mark:)
+
+    - One of the comment from Linus actually out of the scope of my
+      single patch, it may need more time to discuss with Shuah or other
+      maintainers. It is about how to update/install kernel headers for
+      tools. There is a discussion[1] in ksummit-discuss(cced them in
+      our discussion). The thing is we could not check the header in
+      either "/usr/include" nor "linux/usr/include" and we should only
+      update the headers when it changes
+
+      I am thinking if we could introduce a dedicate Makefile in tools
+      directory which install necessary header to user defined path
+      (path/to/linux/usr/include by default).
+
+      Hope we could find a solution for it.
+
+* ILP32
+    - Performance test for LP64
+      Compare the performance of aarch64 LP64 between mainline kernel
+      (4.8-rc6 actually due to some downupstream patch of D03) and
+      ILP32 merged but disabled kernel. The test show that some of the
+      testcases get visiable worse. After discuss with Arnd and Mark,
+      I compare the kernel config, there is no difference except
+      changing COMPAT to AARCH32_EL0(We had to change it because ILP32
+      is another COMPAT(32bit) application). I planed to perf the
+      testcase but after enable some debug features our network driver
+      crash.
+
+      Another test I do in the weekend is disabled aarch32 el0/compat.
+      The result show that the difference decreased. The big difference
+      is 2.14% of 0K file create in lmbench and -2.06% of specint.
+
+      2% is a small difference for me(correct?). I plan to bisect the
+      patches of ILP32 to find out which patch affect result.(e.g.
+      the differnce between 4.04% and 1.89% for open/close). My feeling
+      and hoping is that the result of enable_aarch32_el0 is a
+      reasonable changes.
+
+      The percentagge equals (ILP32_disabled-ILP32_unmerged)/ILP32_unmerged
+
+      1.  lmbench(smaller is better)
+                      enable_aarch32_el0   disable_aarch32_el0
+           open clos               4.04%                 1.89%
+           0K Create               3.68%                 2.14%
+
+      2.  specint(bigger is better)
+                      enable_aarch32_el0   disable_aarch32_el0
+      400.perlbench                   0%                 0.22%
+      401.bzip2                   -0.65%                 0.95%
+      403.gcc                      0.26%                 0.20%
+      429.mcf                      2.75%                 0.76%
+      445.gobmk                       0%                 0.36%
+      456.hmmer                   -4.34%                -2.06%
+      458.sjeng                       0%                -0.27%
+      462.libquantum                  0%                -1.28%
+      471.omnetpp                  0.59%                 0.86%
+      473.astar                   -0.34%                -0.85%
+      483.xalancbmk               -0.90%                 0.08%
+
+    - Add S-o-B in some of patches before yury send out rfc3 of v7
+      last week. Thanks for yury.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Read the code. No much progress.
+
+* Found a unmerged bug for openat in our glibc which fix missing mode if
+  flag is O_TMPFILE. X86 is not affected by this bug. Reference the
+  notes in my blog:
+  <http://aarch64.me/2016/10/2016-10-18-openat-and-open-a-close-lookat-in-kernel-and-glibc/>
+
+* Setup my own vpn because the other two vpns are not very stable today.
+
+=== Plans ===
+ILP32 performance test
+  - Bisect the performance changes patch by patch.
+  - Fix the crash of network driver lead by profiling feature.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+  - Continue read the code.
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+  - Ask Shuah Khan if she could give me some suggestion about how to
+    update the headers.
+
+[1] https://lists.linuxfoundation.org/pipermail/ksummit-discuss/2016-August/003270.html
 
