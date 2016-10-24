@@ -2734,3 +2734,94 @@ Simple open/close: 2.9579 microseconds
 
 (13.85-13.56)/13.56 = 2.14%
 
+21:33 2016-10-21
+----------------
+kernel, gpio
+------------
+KWG-148 GPIO kselftest
+----------------------
+```
+>> +CFLAGS += -O2 -g -std=gnu99 -Wall -I../../../../usr/include/
+>Is this really what people are doing?
+>Isn't -I/usr/include the right way to express this?
+"/usr/include" is not correct for cross-compiling.
+
+>> +LDLIBS += -lmount -I/usr/include/libmount
+>> +
+>> +$(BINARIES): ../../../gpio/gpio-utils.o ../../../../usr/include/linux/gpio.h
+>> +
+>> +../../../gpio/gpio-utils.o:
+>> +       make ARCH=$(ARCH) CROSS_COMPILE=$(CROSS_COMPILE) -C ../../../gpio
+>Ah, that is clever. I hope I can get an ACK from Shuah if this is
+>how we're supposed to handle cross dependencies of common
+>helper code in the kernel.
+There are similar code in "tools/perf/tests/make". But I am not sure
+if it is who I suppose to do.
+
+>It looks a bit spaghetti, unfortunately.
+>> +../../../../usr/include/linux/gpio.h:
+>> +       make -C ../../../.. headers_install
+>Don't do this please, you would have to be root and it's very
+>fragile.
+Sorry for this. At least, I should make use of INSTALL_HDR_PATH.
+
+>How does tests in general resolve dependencies on
+>kernel headers? Please look around a bit and check what
+>they do. I think they just expect them to be installed.
+I check the relative file through "grep usr.include tools/ -R -l",
+there are three types:
+1.  Use relative path like me but do not "make headers_install"
+2.  Like my patch: use relative path and install headers when missing.
+3.  Use /usr/include
+
+And there is a discussion from Ben Hutchings[1]:
+   Tools include UAPI headers in one of two ways, neither of which is
+   reliable:
+   - Assume the current headers are on the system include path
+   - Include unprocessed UAPI headers through a relative path
+
+   The right thing to do is to run 'make headers_install' and add
+   usr/ to the front of the system include path.  But we'd want a
+   way to avoid re-doing that when the UAPI headers haven't changed.
+
+And there is a checker in "tools/perf/Makefile.perf" for $(PERF_IN)
+target. But it is very long. We definitely need a better solution.
+It may be in seperate patch.
+
+how about introduce a dedicate Makefile in tools directory which
+install necessary header to user defined path
+(path/to/linux/usr/include by default)?
+
+Or I just remove the following lines in this patch, and update it after
+we find better solution?
+../../../../usr/include/linux/gpio.h:
+       make -C ../../../.. headers_install
+
+cc: Ben Hutchings, Randy Dunlap and Arnaldo Carvalho de Melo.
+
+>I like the tests overall, but I'm a bit suspicious about the
+>sysfs tests. Maybe these should atleast print something
+>about the sysfs ABI being deprecated.
+Sound reasonable. I could add a prompt and wait user confirm when user
+want to test through sysfs. Is it what you want?
+I think we could remove the sysfs script when we remove the sysfs
+interface of gpio in kernel.
+>
+>Anyways I merged the first two patches so now we only have to
+>figure out this final patch!
+Thanks all your help:)
+
+Regards
+
+Bamvor
+>
+>Yours,
+>Linus Walleij
+
+[1] https://lists.linuxfoundation.org/pipermail/ksummit-discuss/2016-August/003270.html
+
+Ben Hutchings <ben@decadent.org.uk>
+Randy Dunlap <rdunlap@infradead.org>
+Arnaldo Carvalho de Melo <acme@redhat.com>
+```
+
