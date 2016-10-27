@@ -2940,3 +2940,34 @@ ILP32 performance test
 
 [1] https://lists.linuxfoundation.org/pipermail/ksummit-discuss/2016-August/003270.html
 
+10:53 2016-10-27
+----------------
+arm64, ILP32
+------------
+1.  merge the updated patch which is introduced by Commit dbd4d7ca563f ("arm64: Rework valid_user_regs")
+```
+diff --git a/arch/arm64/kernel/ptrace.c b/arch/arm64/kernel/ptrace.c
+index 083dc71..2cc8d6c 100644
+--- a/arch/arm64/kernel/ptrace.c
++++ b/arch/arm64/kernel/ptrace.c
+@@ -1448,7 +1448,7 @@ int valid_user_regs(struct user_pt_regs *regs, struct task_struct *task)
+        if (!test_tsk_thread_flag(task, TIF_SINGLESTEP))
+                regs->pstate &= ~DBG_SPSR_SS;
+
+-       if (is_compat_thread(task_thread_info(task)))
++       if (is_a32_compat_thread(task_thread_info(task)))
+                return valid_compat_regs(regs);
+        else
+                return valid_native_regs(regs);
+```
+
+16:29 2016-10-27
+----------------
+misc> python specint_get_data.py ~/works/source/testsuite/testresult/ilp32/20161026_1027_lmbench_specint_LP64/specint/8947bfe_aarch32_enable/ ~/works/source/testsuite/testresult/ilp32/20161022_1024_specint_LP64/ILP32_
+unmerged/
+       401.bzip2:  1.03%
+         429.mcf: -0.74%
+       456.hmmer: -2.88%
+  462.libquantum: -1.72%
+
+
