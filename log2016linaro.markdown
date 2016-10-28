@@ -2963,6 +2963,10 @@ index 083dc71..2cc8d6c 100644
 
 16:29 2016-10-27
 ----------------
+specint, LP64 performance regresssion
+-------------------------------------
+1.  Test the mid commit
+"8947bfe arm64:uapi: set __BITS_PER_LONG correctly for ILP32 and LP64"
 misc> python specint_get_data.py ~/works/source/testsuite/testresult/ilp32/20161026_1027_lmbench_specint_LP64/specint/8947bfe_aarch32_enable/ ~/works/source/testsuite/testresult/ilp32/20161022_1024_specint_LP64/ILP32_
 unmerged/
        401.bzip2:  1.03%
@@ -2970,4 +2974,44 @@ unmerged/
        456.hmmer: -2.88%
   462.libquantum: -1.72%
 
+summary
+         name        | enabled_aarch32_el0_bit_per_long  | enable_aarch32_el0  | disable_aarch32_el0
+---------------------|-----------------------------------|---------------------|--------------------
+      401.bzip2      |                            1.03%  |             -0.65%  |               0.95%
+      429.mcf        |                           -0.74%  |              2.75%  |               0.76%
+      456.hmmer      |                           -2.88%  |             -4.34%  |              -2.06%
+      462.libquantum |                           -1.72%  |                 0%  |              -1.28%
+
+2.  (10:25 2016-10-28)retest yesterday
+```
+z00293696@linux696:20161027_lmbench_specint_LP64> ~/works/reference/small_tools_collection/misc/specint_get_data.py afb510f_ilp32_disabled__aarch32_on_specint a5ba168_ilp32_unmerged__aarch32_on_specint
+diff: (afb510f_ilp32_disabled__aarch32_on_specint - a5ba168_ilp32_unmerged__aarch32_on_specint) / a5ba168_ilp32_unmerged__aarch32_on_specint
+total 1 tests
+total 1 tests
+{'429.mcf': 8.57, '401.bzip2': 9.23, '462.libquantum': 16.7, '456.hmmer': 13.6}
+{'429.mcf': 8.52, '401.bzip2': 9.19, '462.libquantum': 16.0, '456.hmmer': 13.4}
+       401.bzip2:  0.44%
+         429.mcf:  0.59%
+       456.hmmer:  1.49%
+  462.libquantum:  4.37%
+z00293696@linux696:20161027_lmbench_specint_LP64> ~/works/reference/small_tools_collection/misc/specint_get_data.py 8947bfe_bit_per_long__aarch32_on_specint/ a5ba168_ilp32_unmerged__aarch32_on_specint
+diff: (8947bfe_bit_per_long__aarch32_on_specint/ - a5ba168_ilp32_unmerged__aarch32_on_specint) / a5ba168_ilp32_unmerged__aarch32_on_specint
+total 1 tests
+total 1 tests
+{'429.mcf': 8.34, '401.bzip2': 9.2, '462.libquantum': 16.0, '456.hmmer': 13.9}
+{'429.mcf': 8.52, '401.bzip2': 9.19, '462.libquantum': 16.0, '456.hmmer': 13.4}
+       401.bzip2:  0.11%
+         429.mcf: -2.11%
+       456.hmmer:  3.73%
+  462.libquantum: 0.00%
+```
+
+            name | enabled_aarch32_el0_bit_per_long | enable_aarch32_el0
+-----------------|----------------------------------|--------------------
+       401.bzip2 |                            0.11% |              0.44%
+         429.mcf |                           -2.11% |              0.59%
+       456.hmmer |                            3.73% |              1.49%
+  462.libquantum |                            0.00% |              4.37%
+
+The bzip2 and mcf just have 1% difference. But hmmer and libquantum is change a lot. I test hammer again with --size=test,train,ref and --tune=base,peak which is similar to reportable run: "runspec --config=Arm64-single-core-linux64-arm64-lp64-gcc49.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 --verbose 1 hmmer"
 
