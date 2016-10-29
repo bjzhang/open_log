@@ -3015,3 +3015,46 @@ total 1 tests
 
 The bzip2 and mcf just have 1% difference. But hmmer and libquantum is change a lot. I test hammer again with --size=test,train,ref and --tune=base,peak which is similar to reportable run: "runspec --config=Arm64-single-core-linux64-arm64-lp64-gcc49.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 --verbose 1 hmmer"
 
+(16:09 2016-10-29)update
+z00293696@linux696:20161028_specint_LP64> ~/works/reference/small_tools_collection/misc/specint_get_data.py b5107ca__introduce_binfmt_ilp32__ilp32_disabled_aarch32_on a5ba168_ilp32_unmerged__aarch32_on
+diff: (b5107ca__introduce_binfmt_ilp32__ilp32_disabled_aarch32_on - a5ba168_ilp32_unmerged__aarch32_on) / a5ba168_ilp32_unmerged__aarch32_on
+{'462.libquantum': 16.0, '456.hmmer': 13.8}
+{'462.libquantum': 16.0, '456.hmmer': 13.8}
+       456.hmmer: 0.00%
+  462.libquantum: 0.00%
+z00293696@linux696:20161028_specint_LP64> ~/works/reference/small_tools_collection/misc/specint_get_data.py afb510f_ilp32_full_merged__ilp32_disabled_aarch32_on a5ba168_ilp32_unmerged__aarch32_on
+diff: (afb510f_ilp32_full_merged__ilp32_disabled_aarch32_on - a5ba168_ilp32_unmerged__aarch32_on) / a5ba168_ilp32_unmerged__aarch32_on
+{'462.libquantum': 16.0, '456.hmmer': 14.1}
+{'462.libquantum': 16.0, '456.hmmer': 13.8}
+       456.hmmer:  2.17%
+  462.libquantum: 0.00%
+
+17:45 2016-10-28
+----------------
+1.  What I could ignore at this point
+    1.  feature
+        1.  CONFIG_TRANSPARENT_HUGEPAGE
+            1.  pmd_trans_unstable():
+
+    2.  header
+        1.  arm64 do not use 4level-fixup.h
+            ```
+            z00293696@linux696:upstream-cont-page> grep_kernel 4level-fixup.h arch/
+            arch/m32r/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/microblaze/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/sparc/include/asm/pgtable_32.h:#include <asm-generic/4level-fixup.h>
+            arch/arm/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/alpha/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/parisc/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/blackfin/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/c6x/include/asm/pgtable.h:#include <asm-generic/4level-fixup.h>
+            arch/m68k/include/asm/pgtable_mm.h:#include <asm-generic/4level-fixup.h>
+            arch/m68k/include/asm/pgtable_no.h:#include <asm-generic/4level-fixup.h>
+            ```
+
+2.  I should take into account:
+    1.  PTE_SPECIAL: for zero page.
+
+3.  TODO:
+    1.  print the fe->vma. Is it the whole vma?
+
