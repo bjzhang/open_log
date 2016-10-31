@@ -3016,18 +3016,90 @@ total 1 tests
 The bzip2 and mcf just have 1% difference. But hmmer and libquantum is change a lot. I test hammer again with --size=test,train,ref and --tune=base,peak which is similar to reportable run: "runspec --config=Arm64-single-core-linux64-arm64-lp64-gcc49.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 --verbose 1 hmmer"
 
 (16:09 2016-10-29)update
+(11:31 2016-10-31)update
 z00293696@linux696:20161028_specint_LP64> ~/works/reference/small_tools_collection/misc/specint_get_data.py b5107ca__introduce_binfmt_ilp32__ilp32_disabled_aarch32_on a5ba168_ilp32_unmerged__aarch32_on
 diff: (b5107ca__introduce_binfmt_ilp32__ilp32_disabled_aarch32_on - a5ba168_ilp32_unmerged__aarch32_on) / a5ba168_ilp32_unmerged__aarch32_on
-{'462.libquantum': 16.0, '456.hmmer': 13.8}
-{'462.libquantum': 16.0, '456.hmmer': 13.8}
+Original numbers:
+{'462.libquantum': 16.0, '429.mcf': 8.59, '401.bzip2': 9.25, '456.hmmer': 13.8}
+{'462.libquantum': 16.0, '456.hmmer': 13.8, '429.mcf': 8.37, '401.bzip2': 9.15}
+
+Diff:
+b5107ca__introduce_binfmt_ilp32__ilp32_disabled_aarch32_off
+       401.bzip2:  1.09%
+         429.mcf:  2.63%
        456.hmmer: 0.00%
   462.libquantum: 0.00%
 z00293696@linux696:20161028_specint_LP64> ~/works/reference/small_tools_collection/misc/specint_get_data.py afb510f_ilp32_full_merged__ilp32_disabled_aarch32_on a5ba168_ilp32_unmerged__aarch32_on
 diff: (afb510f_ilp32_full_merged__ilp32_disabled_aarch32_on - a5ba168_ilp32_unmerged__aarch32_on) / a5ba168_ilp32_unmerged__aarch32_on
-{'462.libquantum': 16.0, '456.hmmer': 14.1}
-{'462.libquantum': 16.0, '456.hmmer': 13.8}
+Original numbers:
+{'429.mcf': 8.34, '456.hmmer': 14.1, '462.libquantum': 16.0, '401.bzip2': 9.28}
+{'462.libquantum': 16.0, '456.hmmer': 13.8, '429.mcf': 8.37, '401.bzip2': 9.15}
+
+Diff:
+afb510f_ilp32_full_merged__ilp32_disabled_aarch32_off
+       401.bzip2:  1.42%
+         429.mcf: -0.36%
        456.hmmer:  2.17%
   462.libquantum: 0.00%
+
+aarch32-disabled
+                   introduce_binfmt_ilp32 ilp32-merged-disabled
+       401.bzip2:  1.09%                   1.42%
+         429.mcf:  2.63%                  -0.36%
+       456.hmmer:  0.00%                   2.17%
+  462.libquantum:  0.00%                   0.00%
+
+3.  Analysis above result:
+```
+afb510f fix stat
+adae8a0 arm64:ilp32: add ARM64_ILP32 to Kconfig
+5a3a2c9 arm64:ilp32: add vdso-ilp32 and use for signal return
+6f346a0 arm64: ptrace: handle ptrace_request differently for aarch32 and ilp32
+71e8487 arm64: ilp32: introduce ilp32-specific handlers for sigframe and ucontext
+0bb5267 arm64: signal32: move ilp32 and aarch32 common code to separated file
+209fd42 arm64: signal: share lp64 signal routines to ilp32
+149d0db arm64: ilp32: add sys_ilp32.c and a separate table (in entry.S) to use it
+f791ec5 arm64: ilp32: share aarch32 syscall handlers
+b5107ca arm64: ilp32: introduce binfmt_ilp32.c
+99e9119 arm64: introduce binfmt_elf32.c
+464c58d arm64: ilp32: add is_ilp32_compat_{task,thread} and TIF_32BIT_AARCH64
+2607ec2 arm64: introduce is_a32_task and is_a32_thread (for AArch32 compat)
+4622f2c thread: move thread bits accessors to separated file
+8947bfe arm64:uapi: set __BITS_PER_LONG correctly for ILP32 and LP64
+31b690e arm64: rename COMPAT to AARCH32_EL0 in Kconfig
+de08b73 arm64: ensure the kernel is compiled for LP64
+2f2523a arm64: ilp32: add documentation on the ILP32 ABI for ARM64
+b43c4a1 32-bit ABI: introduce ARCH_32BIT_OFF_T config option
+d2f5228 fiz set_personality by Catalin
+```
+Reference "15:38 2016-10-31"
+
+4.  lmbench(more than 3%): I could not trust my test result...
+    1.  Processor, Processes - times in microseconds - smaller is better
+        *   open clos: 3.42%
+        *   sig hndl: -3.09%
+
+Context switching - times in microseconds - smaller is better
+-------------------------------------------------------------------------
+Host                 OS  2p/0K 2p/16K 2p/64K 8p/16K 8p/64K 16p/16K 16p/64K
+                         ctxsw  ctxsw  ctxsw ctxsw  ctxsw   ctxsw   ctxsw
+--------- ------------- ------ ------ ------ ------ ------ ------- -------
+d03-02    Linux 4.8.0-r 2.9560 3.0460 2.9980 4.2860 4.8060 3.94800 8.57200
+d03-02    Linux 4.8.0-r 2.7840 2.9880 2.9040 4.8160 3.7760 3.95600 8.26200
+d03-02    Linux 4.8.0-r 6.18% 1.94% 3.24% -11.00% 27.28% -0.20% 3.75%
+
+    2.  File & VM system latencies in microseconds - smaller is better
+        *   Prot Fault: 30.60%
+
+    3.  *Local* Communication bandwidths in MB/s - bigger is better
+*Local* Communication bandwidths in MB/s - bigger is better
+-----------------------------------------------------------------------------
+Host                OS  Pipe AF    TCP  File   Mmap  Bcopy  Bcopy  Mem   Mem
+                             UNIX      reread reread (libc) (hand) read write
+--------- ------------- ---- ---- ---- ------ ------ ------ ------ ---- -----
+d03-02    Linux 4.8.0-r 1750 2760 2144 1953.8 3311.1 2345.6 2749.2 3382 3135.
+d03-02    Linux 4.8.0-r 1693 2779 2137 1997.9 3040.5 2241.9 2563.3 3129 3131.
+d03-02    Linux 4.8.0-r 3.37% -0.68% 0.33% -2.21% 8.90% 4.63% 7.25% 8.09% 0.13%
 
 17:45 2016-10-28
 ----------------
@@ -3057,4 +3129,57 @@ diff: (afb510f_ilp32_full_merged__ilp32_disabled_aarch32_on - a5ba168_ilp32_unme
 
 3.  TODO:
     1.  print the fe->vma. Is it the whole vma?
+
+15:38 2016-10-31
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-10-25 to 2016-10-30
+* ILP32
+    - Update is_compat_thread to is_a32_compat_thread in arch/arm64/kernel/ptrace.c after LTS patch merged into our stable kernel.
+    - Performance test for LP64
+      *  Yury send the lmbench result which seems difference from my test(Will after the specific kernel config)
+
+      * specint(aarch32-disabled, ilp32 disabled)
+                   introduce_binfmt_ilp32 ilp32-merged-disabled
+       401.bzip2:  1.09%                   1.42%
+         429.mcf:  2.63%                  -0.36%
+       456.hmmer:  0.00%                   2.17%
+  462.libquantum:  0.00%                   0.00%
+
+1.  changes from ilp32 unmerged to b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c")
+```
+-#define SET_PERSONALITY(ex)            clear_thread_flag(TIF_32BIT);
++#define SET_PERSONALITY(ex)            \
++do {                                           \
++       clear_thread_flag(TIF_32BIT_AARCH64);   \
++       clear_thread_flag(TIF_32BIT);           \
++} while (0)
+
+STACK_RND_MASK() take 2x time when aarch32 and ilp32 is enabled. Similar to TASK_SIZE
+-#define STACK_RND_MASK                 (test_thread_flag(TIF_32BIT) ? \
++#define STACK_RND_MASK                 (is_compat_task() ? \
+                                                0x7ff >> (PAGE_SHIFT - 12) : \
+                                                0x3ffff >> (PAGE_SHIFT - 12))
+```
+
+2.  changes from b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c") to ilp32 fully merged
+The changes in arch/arm64/kernel/entry.S will not affect the LP64 apps.
+There is some changs in arch/arm64/kernel/signal.c, but the logic is same.
+
+* Misc
+    - Investigate writev fails in LTP in both ILP32 and LTP. The behavivor of writev changed slightly for invalid buffer. After the changes, the writev will write 0 and raise EFAULT which is as same as write. The new testcase of LTP is commited either. Reference the details in my blog[1].
+
+[1] http://aarch64.me/2016/10/writev-behavior-change-a-little-bit/
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - No big progress this week. Hope could focus on this in next week.
+
+* 1:1 with Mark
+
+=== Plans ===
+ILP32 performance test
+  - Dicuss with Mark/Arnd. Do more test if needed.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+  - Started to write patch in do_anonymous_page().
+
 
