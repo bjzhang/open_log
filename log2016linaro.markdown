@@ -3175,6 +3175,8 @@ afb510f_aarch32_on_ilp32_on
     1.  print the fe->vma. Is it the whole vma?
     2.  How should I deal with the pte_lockptr? Should I lock the pte depends on the cont flag?
         Where should I define the cont flag?
+    3.  I need find out where should I put the cont page track. It seems that anon_vma is a good candicate. But I do not fully understand it.
+    4.  need more understand for fe->pmd, do I need 16 pmds or one pmd?
 
 15:38 2016-10-31
 ----------------
