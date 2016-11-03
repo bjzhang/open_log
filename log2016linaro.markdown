@@ -3101,6 +3101,50 @@ d03-02    Linux 4.8.0-r 1750 2760 2144 1953.8 3311.1 2345.6 2749.2 3382 3135.
 d03-02    Linux 4.8.0-r 1693 2779 2137 1997.9 3040.5 2241.9 2563.3 3129 3131.
 d03-02    Linux 4.8.0-r 3.37% -0.68% 0.33% -2.21% 8.90% 4.63% 7.25% 8.09% 0.13%
 
+5.  The difference decreased when aarch32-enabled and ilp32 enabled.
+> ~/works/reference/small_tools_collection/misc/specint_get_data.py afb510f_aarch32_on_ilp32_on a5ba168_aarch32_on_ilp32_on
+diff: (afb510f_aarch32_on_ilp32_on - a5ba168_aarch32_on_ilp32_on) / a5ba168_aarch32_on_ilp32_on
+Original numbers:
+{'429.mcf': 8.59, '401.bzip2': 9.25, '462.libquantum': 16.8, '456hmmer': 13.8}
+{'429.mcf': 8.59, '401.bzip2': 9.16, '462.libquantum': 16.9, '456.hmmer': 13.9}
+
+Diff:
+afb510f_aarch32_on_ilp32_on
+       401.bzip2:  0.98%
+         429.mcf:  0.00%
+       456.hmmer: -0.72%
+  462.libquantum: -0.59%
+
+###the table may not correct!
+                  |introduce_binfmt_ilp32_aarch32-disabled|ilp32-merged-disabled_aarch32-disabled|ilp32-merged-enabled_aarch32-enabled
+------------------|---------------------------------------|--------------------------------------|------------------------------------
+       401.bzip2  |1.09%                                  |                    1.42%             |             0.98%
+         429.mcf  |2.63%                                  |                   -0.36%             |             0.00%
+       456.hmmer  |0.00%                                  |                    2.17%             |            -0.72%
+  462.libquantum  |0.00%                                  |                    0.00%             |            -0.59%
+###the table may not correct!###end
+
+6.  Comapre the commit:
+    1.  changes from ilp32 unmerged to b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c")
+        ```
+        -#define SET_PERSONALITY(ex)            clear_thread_flag(TIF_32BIT);
+        +#define SET_PERSONALITY(ex)            \
+        +do {                                           \
+        +       clear_thread_flag(TIF_32BIT_AARCH64);   \
+        +       clear_thread_flag(TIF_32BIT);           \
+        +} while (0)
+
+        STACK_RND_MASK() take 2x time when aarch32 and ilp32 is enabled. Similar to TASK_SIZE
+        -#define STACK_RND_MASK                 (test_thread_flag(TIF_32BIT) ? \
+        +#define STACK_RND_MASK                 (is_compat_task() ? \
+                                                        0x7ff >> (PAGE_SHIFT - 12) : \
+                                                        0x3ffff >> (PAGE_SHIFT - 12))
+        ```
+
+    2.  changes from b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c") to ilp32 fully merged
+        The changes in arch/arm64/kernel/entry.S will not affect the LP64 apps.
+        There is some changs in arch/arm64/kernel/signal.c, but the logic is same.
+
 17:45 2016-10-28
 ----------------
 1.  What I could ignore at this point
@@ -3129,6 +3173,8 @@ d03-02    Linux 4.8.0-r 3.37% -0.68% 0.33% -2.21% 8.90% 4.63% 7.25% 8.09% 0.13%
 
 3.  TODO:
     1.  print the fe->vma. Is it the whole vma?
+    2.  How should I deal with the pte_lockptr? Should I lock the pte depends on the cont flag?
+        Where should I define the cont flag?
 
 15:38 2016-10-31
 ----------------
@@ -3136,35 +3182,22 @@ d03-02    Linux 4.8.0-r 3.37% -0.68% 0.33% -2.21% 8.90% 4.63% 7.25% 8.09% 0.13%
 * ILP32
     - Update is_compat_thread to is_a32_compat_thread in arch/arm64/kernel/ptrace.c after LTS patch merged into our stable kernel.
     - Performance test for LP64
-      *  Yury send the lmbench result which seems difference from my test(Will after the specific kernel config)
+      * Yury send the lmbench result which seems difference from my test(I will test it with the specific kernel config)
 
-      * specint(aarch32-disabled, ilp32 disabled)
-                   introduce_binfmt_ilp32 ilp32-merged-disabled
-       401.bzip2:  1.09%                   1.42%
-         429.mcf:  2.63%                  -0.36%
-       456.hmmer:  0.00%                   2.17%
-  462.libquantum:  0.00%                   0.00%
+      * specint
+        Re-test the specint with reportable flow(--size=test,train,ref --tune=base,peak --iterations=3) for bzip2 mcf hmmer libquantum. The result show that enabled/disabled aarch32 el0 is -5.33 max difference in libquantum:
+       401.bzip2: -0.11%
+         429.mcf: -2.56%
+       456.hmmer: -0.72%
+  462.libquantum: -5.33%
 
-1.  changes from ilp32 unmerged to b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c")
-```
--#define SET_PERSONALITY(ex)            clear_thread_flag(TIF_32BIT);
-+#define SET_PERSONALITY(ex)            \
-+do {                                           \
-+       clear_thread_flag(TIF_32BIT_AARCH64);   \
-+       clear_thread_flag(TIF_32BIT);           \
-+} while (0)
-
-STACK_RND_MASK() take 2x time when aarch32 and ilp32 is enabled. Similar to TASK_SIZE
--#define STACK_RND_MASK                 (test_thread_flag(TIF_32BIT) ? \
-+#define STACK_RND_MASK                 (is_compat_task() ? \
-                                                0x7ff >> (PAGE_SHIFT - 12) : \
-                                                0x3ffff >> (PAGE_SHIFT - 12))
-```
-
-2.  changes from b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c") to ilp32 fully merged
-The changes in arch/arm64/kernel/entry.S will not affect the LP64 apps.
-There is some changs in arch/arm64/kernel/signal.c, but the logic is same.
-
+        But if I compare the result between ILP32 (merged and enabled) and ILP32 unmerged.(Both enable aarch32 el0 and compat respectively). There is no much difference:
+                  |ilp32-merged-enabled_aarch32-enabled
+------------------|------------------------------------
+       401.bzip2  |             0.98%
+         429.mcf  |             0.00%
+       456.hmmer  |            -0.72%
+  462.libquantum  |            -0.59%
 * Misc
     - Investigate writev fails in LTP in both ILP32 and LTP. The behavivor of writev changed slightly for invalid buffer. After the changes, the writev will write 0 and raise EFAULT which is as same as write. The new testcase of LTP is commited either. Reference the details in my blog[1].
 
@@ -3182,4 +3215,20 @@ ILP32 performance test
 * KWG-192: Use of contiguous page hint to create 64K pages
   - Started to write patch in do_anonymous_page().
 
+
+11:54 2016-11-02
+I do not know I could get_pty. 
+#       -D -m   This  also starts screen in "detached" mode, but doesn't fork a new process.
+#               The command exits if the session terminates.
+                        #c = "screen -D -m " + c
+
+The following things works:
+                channel = transport.open_session()
+                if detach:
+                        c = "screen -L " + c
+
+                print(c)
+                #channel.get_pty(term="vt100", width=80, height=24)
+                channel.get_pty()
+                channel.exec_command(c)
 
