@@ -3123,6 +3123,32 @@ afb510f_aarch32_on_ilp32_on
        456.hmmer  |0.00%                                  |                    2.17%             |            -0.72%
   462.libquantum  |0.00%                                  |                    0.00%             |            -0.59%
 ###the table may not correct!###end
+(15:06 2016-11-04)update
+Compare the aarch32 disable, ilp32 disable in 28, Oct and 4, Nov.
+diff: (20161028_specint_LP64/afb510f_ilp32_full_merged__ilp32_disabled_aarch32_disabled/ - 20161028_specint_LP64/a5ba168_ilp32_unmerged__aarch32_disabled/) / 20161028_specint_LP64/a5ba168_ilp32_unmerged__aarch32_disabled/
+Original numbers:
+{'429.mcf': 8.34, '456.hmmer': 14.1, '462.libquantum': 16.0, '401.bzip2': 9.28}
+{'462.libquantum': 16.0, '456.hmmer': 13.8, '429.mcf': 8.37, '401.bzip2': 9.15}
+
+Diff:
+20161028_specint_LP64/afb510f_ilp32_full_merged__ilp32_disabled_aarch32_disabled/
+       401.bzip2:  1.42%
+         429.mcf: -0.36%
+       456.hmmer:  2.17%
+  462.libquantum: 0.00%
+z00293696@linux696:ilp32> ~/works/reference/small_tools_collection/misc/specint_get_data.py 20161103_specint_LP64_aarch32_disable/afb510f_ilp32_disable_aarch32_disable/ 20161103_specint_LP64_aarch32_disable/a5ba168_ilp32_unmerged_aarch32_disable/
+diff: (20161103_specint_LP64_aarch32_disable/afb510f_ilp32_disable_aarch32_disable/ - 20161103_specint_LP64_aarch32_disable/a5ba168_ilp32_unmerged_aarch32_disable/) / 20161103_specint_LP64_aarch32_disable/a5ba168_ilp32_unmerged_aarch32_disable/
+Original numbers:
+{'429.mcf': 8.6, '401.bzip2': 9.22, '462.libquantum': 16.6, '456.hmmer': 13.7}
+{'429.mcf': 8.35, '401.bzip2': 9.2, '462.libquantum': 15.9, '456.hmmer': 13.7}
+
+Diff:
+20161103_specint_LP64_aarch32_disable/afb510f_ilp32_disable_aarch32_disable/
+       401.bzip2:  0.22%
+         429.mcf:  2.99%
+       456.hmmer: 0.00%
+  462.libquantum:  4.40%
+(15:06 2016-11-04)end
 
 6.  Comapre the commit:
     1.  changes from ilp32 unmerged to b5107ca ("arm64: ilp32: introduce binfmt_ilp32.c")
@@ -3233,4 +3259,11 @@ The following things works:
                 #channel.get_pty(term="vt100", width=80, height=24)
                 channel.get_pty()
                 channel.exec_command(c)
+
+10:37 2016-11-04
+----------------
+1.  Why is MM_MMUFLAGS relative to 64k page. It is pte level when enable 64k page, otherwise it is pmd level. Is it because 64k page need 2 or 3 level compare to 3 or 4 for 4k page?
+2.  pmd from `handle_pte_fault()`->`do_anonymous_page()` is allocated in `__handle_mm_fault()`.
+3.  TODO walk the page table by hand. Understand how many pgd, pud, pmd, pte is used. Including 2, 3 and 4 levels.
+
 
