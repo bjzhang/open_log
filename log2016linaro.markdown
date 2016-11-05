@@ -3265,5 +3265,208 @@ The following things works:
 1.  Why is MM_MMUFLAGS relative to 64k page. It is pte level when enable 64k page, otherwise it is pmd level. Is it because 64k page need 2 or 3 level compare to 3 or 4 for 4k page?
 2.  pmd from `handle_pte_fault()`->`do_anonymous_page()` is allocated in `__handle_mm_fault()`.
 3.  TODO walk the page table by hand. Understand how many pgd, pud, pmd, pte is used. Including 2, 3 and 4 levels.
-
-
+4.  (14:46 2016-11-05)
+    After read the code again, I realize that I should allocate more page in one pte entry. Not allocate more pte entries. Because the pte point to the pages.
+    I need to check whether the address overflow in vma and one pte index(512 entries).
+5.
+    ```
+    /*
+     * We could change fe->pte safely because we exit handle_pte_fault
+     * after exit do_anonymous_page. And fe is allocated in
+     * __handle_mm_fault.
+     * There is no need to set the flat of cont pte because we only do the
+     * cont when 16 contiguous pages align with 16 * PAGE_SIZE of start address.
+     */
+#define max_num_of_pte (16)
+    static int do_anonymous_page(struct fault_env *fe)
+    ```
+6.  dead lock after changes:
+```
+[    2.565831] random: fast init done
+[    2.888652]
+[    2.888777] =============================================
+[    2.888919] [ INFO: possible recursive locking detected ]
+[    2.889121] 4.9.0-rc2-next-20161028-00004-g36adf46-dirty #9 Not tainted
+[    2.889297] ---------------------------------------------
+[    2.889456] systemd/1 is trying to acquire lock:
+[    2.889672]  ([    2.889787] &(ptlock_ptr(page))->rlock
+){+.+...}[    2.889975] , at:
+[    2.890326] [<ffff0000081c5d6c>] do_anonymous_page+0x18c/0x720
+[    2.890513]
+[    2.890513] but task is already holding lock:
+[    2.890705]  ([    2.890786] &(ptlock_ptr(page))->rlock
+){+.+...}[    2.890968] , at:
+[    2.891067] [<ffff0000081c5d6c>] do_anonymous_page+0x18c/0x720
+[    2.891230]
+[    2.891230] other info that might help us debug this:
+[    2.891439]  Possible unsafe locking scenario:
+[    2.891439]
+[    2.891607]        CPU0
+[    2.891694]        ----
+[    2.891781]   lock([    2.891857] &(ptlock_ptr(page))->rlock
+[    2.891983] );
+[    2.892054]   lock([    2.892130] &(ptlock_ptr(page))->rlock
+[    2.892256] );
+[    2.892327]
+[    2.892327]  *** DEADLOCK ***
+[    2.892327]
+[    2.892499]  May be due to missing lock nesting notation
+[    2.892499]
+[    2.892711] 2 locks held by systemd/1:
+[    2.892831]  #0: [    2.892901]  (
+&mm->mmap_sem[    2.893028] ){++++++}
+, at: [    2.893192] [<ffff000008097874>] do_page_fault+0xd4/0x360
+[    2.893363]  #1: [    2.893431]  (
+&(ptlock_ptr(page))->rlock[    2.893582] ){+.+...}
+, at: [    2.893718] [<ffff0000081c5d6c>] do_anonymous_page+0x18c/0x720
+[    2.893897]
+[    2.893897] stack backtrace:
+[    2.894135] CPU: 0 PID: 1 Comm: systemd Not tainted 4.9.0-rc2-next-20161028-00004-g36adf46-dirty #9
+[    2.894375] Hardware name: linux,dummy-virt (DT)
+[    2.894609] Call trace:
+[    2.894720] [<ffff000008088ad0>] dump_backtrace+0x0/0x1b0
+[    2.894906] [<ffff000008088c94>] show_stack+0x14/0x20
+[    2.895066] [<ffff0000083cea44>] dump_stack+0xb4/0xf0
+[    2.895226] [<ffff00000810dbdc>] __lock_acquire+0x51c/0x18e0
+[    2.895397] [<ffff00000810f2fc>] lock_acquire+0x4c/0x70
+[    2.895583] [<ffff0000089487bc>] _raw_spin_lock+0x4c/0x90
+[    2.895750] [<ffff0000081c5d6c>] do_anonymous_page+0x18c/0x720
+[    2.895920] [<ffff0000081c6a28>] handle_mm_fault+0x728/0xd40
+[    2.896100] [<ffff000008097a18>] do_page_fault+0x278/0x360
+[    2.896272] [<ffff0000080812d4>] do_mem_abort+0x44/0xb0
+[    2.896509] Exception stack(0xffff80007c47bc80 to 0xffff80007c47bdb0)
+[    2.896788] bc80: 0000000000000ba0 0001000000000000 ffff80007c47be50 ffff000008235f18
+[    2.897014] bca0: ffff80007c47bce0 ffff00000810d920 ffff80007c4707f8 ffff000009db9000
+[    2.897229] bcc0: 0000000000000013 ffff000009026000 ffff0000092f8bd0 0000000000000000
+[    2.897443] bce0: ffff80007c47bde0 ffff00000810f2fc ffff80007c478000 0000000000000140
+[    2.897658] bd00: ffff80007b1d2540 00000000000001ed 00000000ffffff9c 000000003d8567b0
+[    2.897875] bd20: ffff80007bf1f460 0000000000000000 0000000000000000 0000000000000000
+[    2.898086] bd40: 0001000000000000 ffff80007b200407 ffff80007b200407 fefefefefefefeff
+[    2.898300] bd60: 0000000000000000 0000000000000000 622e6f746e716662 7f7f7f7f7f7f7f7f
+[    2.898512] bd80: 0101010101010101 0000000000000007 ffffffffffffffff 0000ffff9dee2580
+[    2.898718] bda0: ffff000008236ef0 0000ffff9de4a000
+[    2.898889] [<ffff0000080825c4>] el1_da+0x18/0x78
+[    2.899043] [<ffff000008236f44>] SyS_mount+0x54/0xe0
+[    2.899214] [<ffff000008082ef0>] el0_svc_naked+0x24/0x28
+[   14.221107] BUG: spinlock lockup suspected on CPU#0, systemd/1
+[   14.221372]  lock: 0xffff80007b1e0168, .magic: dead4ead, .owner: systemd/1, .owner_cpu: 0
+[   14.221604] CPU: 0 PID: 1 Comm: systemd Not tainted 4.9.0-rc2-next-20161028-00004-g36adf46-dirty #9
+[   14.221829] Hardware name: linux,dummy-virt (DT)
+[   14.221967] Call trace:
+[   14.222091] [<ffff000008088ad0>] dump_backtrace+0x0/0x1b0
+[   14.222247] [<ffff000008088c94>] show_stack+0x14/0x20
+[   14.222387] [<ffff0000083cea44>] dump_stack+0xb4/0xf0
+[   14.222571] [<ffff000008112a08>] spin_dump+0x68/0x90
+[   14.222728] [<ffff000008112c4c>] do_raw_spin_lock+0x17c/0x1b0
+[   14.222902] [<ffff0000089487dc>] _raw_spin_lock+0x6c/0x90
+[   14.223073] [<ffff0000081c5d6c>] do_anonymous_page+0x18c/0x720
+[   14.223246] [<ffff0000081c6a28>] handle_mm_fault+0x728/0xd40
+[   14.223414] [<ffff000008097a18>] do_page_fault+0x278/0x360
+[   14.223578] [<ffff0000080812d4>] do_mem_abort+0x44/0xb0
+[   14.223733] Exception stack(0xffff80007c47bc80 to 0xffff80007c47bdb0)
+[   14.223917] bc80: 0000000000000ba0 0001000000000000 ffff80007c47be50 ffff000008235f18
+[   14.224135] bca0: ffff80007c47bce0 ffff00000810d920 ffff80007c4707f8 ffff000009db9000
+[   14.224345] bcc0: 0000000000000013 ffff000009026000 ffff0000092f8bd0 0000000000000000
+[   14.224556] bce0: ffff80007c47bde0 ffff00000810f2fc ffff80007c478000 0000000000000140
+[   14.224767] bd00: ffff80007b1d2540 00000000000001ed 00000000ffffff9c 000000003d8567b0
+[   14.224979] bd20: ffff80007bf1f460 0000000000000000 0000000000000000 0000000000000000
+[   14.225213] bd40: 0001000000000000 ffff80007b200407 ffff80007b200407 fefefefefefefeff
+[   14.225429] bd60: 0000000000000000 0000000000000000 622e6f746e716662 7f7f7f7f7f7f7f7f
+[   14.225642] bd80: 0101010101010101 0000000000000007 ffffffffffffffff 0000ffff9dee2580
+[   14.225850] bda0: ffff000008236ef0 0000ffff9de4a000
+[   14.225998] [<ffff0000080825c4>] el1_da+0x18/0x78
+[   14.226149] [<ffff000008236f44>] SyS_mount+0x54/0xe0
+[   14.226305] [<ffff000008082ef0>] el0_svc_naked+0x24/0x28
+[   28.102585] NMI watchdog: BUG: soft lockup - CPU#0 stuck for 23s! [systemd:1]
+[   28.102819] Modules linked in:
+[   28.103003] irq event stamp: 207211
+[   28.103125] hardirqs last  enabled at (207211): [   28.103288] [<ffff00000813521c>] current_kernel_time64+0xac/0xc0
+[   28.103456] hardirqs last disabled at (207210): [   28.103596] [<ffff00000813519c>] current_kernel_time64+0x2c/0xc0
+[   28.103754] softirqs last  enabled at (207036): [   28.103881] [<ffff0000080c64dc>] __do_softirq+0x20c/0x280
+[   28.104026] softirqs last disabled at (206999): [   28.104151] [<ffff0000080c68c4>] irq_exit+0xc4/0xf0
+[   28.104297]
+[   28.104392] CPU: 0 PID: 1 Comm: systemd Not tainted 4.9.0-rc2-next-20161028-00004-g36adf46-dirty #9
+[   28.104602] Hardware name: linux,dummy-virt (DT)
+[   28.104731] task: ffff80007c470000 task.stack: ffff80007c478000
+[   28.104900] PC is at do_raw_spin_lock+0x1a0/0x1b0
+[   28.105034] LR is at do_raw_spin_lock+0x17c/0x1b0
+[   28.105167] pc : [<ffff000008112c70>] lr : [<ffff000008112c4c>] pstate: 20000145
+[   28.105344] sp : ffff80007c47b960
+[   28.105459] x29: ffff80007c47b960 x28: 000000003d85a000
+[   28.105653] x27: ffff80007c47bbc8 x26: ffff80007b1f2d10
+[   28.105819] x25: ffff00000900f000 x24: ffff000008feb000
+[   28.105983] x23: ffff000008caa000 x22: 0000000000000008
+[   28.106150] x21: 0000000003b9aca0 x20: 0000000003b9aca0
+[   28.106313] x19: ffff80007b1e0168 x18: ffff000009ad85a0
+[   28.106476] x17: 00000000000016df x16: 0000000000000002
+[   28.106639] x15: 00000000000016e2 x14: 6666663030303020
+[   28.106801] x13: 0000000000000000 x12: 000000000000000f
+[   28.106963] x11: ffff80007c47b5c0 x10: ffff80007c47b5c0
+[   28.107147] x9 : 0000000000000130 x8 : 0000000000000000
+[   28.107313] x7 : ffff80007ee16090 x6 : 0000000000003ff0
+[   28.107476] x5 : ffff80007c47be90 x4 : ffff80007ee16090
+[   28.107640] x3 : ffff80007c47bfe0 x2 : 0000000000000004
+[   28.107802] x1 : 0000000000000001 x0 : 0000000000050004
+[   28.107969]
+[   28.894593] INFO: rcu_preempt detected stalls on CPUs/tasks:
+[   28.894884]  (detected by 0, t=6502 jiffies, g=447, c=446, q=1)
+[   28.895170] All QSes seen, last rcu_preempt kthread activity 6502 (4294899511-4294893009), jiffies_till_next_fqs=1, root ->qsmask 0x0
+[   28.895506] systemd         R  running task        0     1      0 0x00000002
+[   28.895786] Call trace:
+[   28.895881] [<ffff000008088ad0>] dump_backtrace+0x0/0x1b0
+[   28.896024] [<ffff000008088c94>] show_stack+0x14/0x20
+[   28.896164] [<ffff0000080f04ec>] sched_show_task+0x11c/0x220
+[   28.896312] [<ffff00000812b090>] rcu_check_callbacks+0xa40/0xa50
+[   28.896467] [<ffff00000812f3b4>] update_process_times+0x34/0x60
+[   28.896620] [<ffff00000813fe9c>] tick_sched_handle.isra.16+0x2c/0x70
+[   28.896779] [<ffff00000813ff24>] tick_sched_timer+0x44/0x90
+[   28.896924] [<ffff00000812fca8>] __hrtimer_run_queues+0xa8/0x170
+[   28.897079] [<ffff0000081302e4>] hrtimer_interrupt+0xa4/0x1e0
+[   28.897231] [<ffff0000087c74bc>] arch_timer_handler_virt+0x2c/0x40
+[   28.897389] [<ffff00000811f3a8>] handle_percpu_devid_irq+0x78/0x120
+[   28.897549] [<ffff000008119ff4>] generic_handle_irq+0x24/0x40
+[   28.897698] [<ffff00000811a6bc>] __handle_domain_irq+0x5c/0xc0
+[   28.897848] [<ffff0000080815c8>] gic_handle_irq+0x58/0xb0
+[   28.897993] Exception stack(0xffff80007c47b830 to 0xffff80007c47b960)
+[   28.898173] b820:                                   0000000000050004 0000000000000001
+[   28.898362] b840: 0000000000000004 ffff80007c47bfe0 ffff80007ee16090 ffff80007c47be90
+[   28.898550] b860: 0000000000003ff0 ffff80007ee16090 0000000000000000 0000000000000130
+[   28.898738] b880: ffff80007c47b5c0 ffff80007c47b5c0 000000000000000f 0000000000000000
+[   28.898930] b8a0: 6666663030303020 00000000000016e2 0000000000000002 00000000000016df
+[   28.899122] b8c0: ffff000009ad85a0 ffff80007b1e0168 0000000003b9aca0 0000000003b9aca0
+[   28.899310] b8e0: 0000000000000008 ffff000008caa000 ffff000008feb000 ffff00000900f000
+[   28.899500] b900: ffff80007b1f2d10 ffff80007c47bbc8 000000003d85a000 ffff80007c47b960
+[   28.899688] b920: ffff000008112c4c ffff80007c47b960 ffff000008112c70 0000000020000145
+[   28.899876] b940: ffff80007c47b960 ffff000008112c4c 0001000000000000 0000000003b9aca0
+[   28.900066] [<ffff0000080827b4>] el1_irq+0xb4/0x12c
+[   28.900198] [<ffff000008112c70>] do_raw_spin_lock+0x1a0/0x1b0
+[   28.900350] [<ffff0000089487dc>] _raw_spin_lock+0x6c/0x90
+[   28.900497] [<ffff0000081c5d6c>] do_anonymous_page+0x18c/0x720
+[   28.900649] [<ffff0000081c6a28>] handle_mm_fault+0x728/0xd40
+[   28.900798] [<ffff000008097a18>] do_page_fault+0x278/0x360
+[   28.900954] [<ffff0000080812d4>] do_mem_abort+0x44/0xb0
+[   28.901092] Exception stack(0xffff80007c47bc80 to 0xffff80007c47bdb0)
+[   28.901258] bc80: 0000000000000ba0 0001000000000000 ffff80007c47be50 ffff000008235f18
+[   28.901454] bca0: ffff80007c47bce0 ffff00000810d920 ffff80007c4707f8 ffff000009db9000
+[   28.901648] bcc0: 0000000000000013 ffff000009026000 ffff0000092f8bd0 0000000000000000
+[   28.901845] bce0: ffff80007c47bde0 ffff00000810f2fc ffff80007c478000 0000000000000140
+[   28.902039] bd00: ffff80007b1d2540 00000000000001ed 00000000ffffff9c 000000003d8567b0
+[   28.902237] bd20: ffff80007bf1f460 0000000000000000 0000000000000000 0000000000000000
+[   28.902434] bd40: 0001000000000000 ffff80007b200407 ffff80007b200407 fefefefefefefeff
+[   28.902627] bd60: 0000000000000000 0000000000000000 622e6f746e716662 7f7f7f7f7f7f7f7f
+[   28.902824] bd80: 0101010101010101 0000000000000007 ffffffffffffffff 0000ffff9dee2580
+[   28.903017] bda0: ffff000008236ef0 0000ffff9de4a000
+[   28.903154] [<ffff0000080825c4>] el1_da+0x18/0x78
+[   28.903287] [<ffff000008236f44>] SyS_mount+0x54/0xe0
+[   28.903426] [<ffff000008082ef0>] el0_svc_naked+0x24/0x28
+[   28.903679] rcu_preempt kthread starved for 6502 jiffies! g447 c446 f0x2 RCU_GP_WAIT_FQS(3) ->state=0x0
+[   28.903909] rcu_preempt     R  running task        0     7      2 0x00000000
+[   28.904151] Call trace:
+[   28.904248] [<ffff0000080858d8>] __switch_to+0x88/0xb0
+[   28.904469] [<ffff000008941ce4>] __schedule+0x1e4/0x720
+[   28.904614] [<ffff00000894225c>] schedule+0x3c/0xb0
+[   28.904749] [<ffff000008948080>] schedule_timeout+0x170/0x2d0
+[   28.904901] [<ffff00000812a014>] rcu_gp_kthread+0x534/0x7c0
+[   28.905049] [<ffff0000080e36c0>] kthread+0xd0/0xf0
+[   28.905186] [<ffff000008082e80>] ret_from_fork+0x10/0x50
+```
