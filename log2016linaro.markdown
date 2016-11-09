@@ -3683,3 +3683,40 @@ I do not split the page after allocation. Maybe it is why it fails.
 
 6.  current fail: "[   94.230998] BUG: Bad rss-counter state mm:ffff800079c51b00 idx:1 val:-15", in commit "7630224 put page when we could not allocate 16 pages; split_page after alloc"
 
+7.  Dicuss with Arnd
+    ```
+    <bamvor> Bamvor Jian Zhang arnd: About the current status of my contiguous page hint work. After fix the refcount for page and add split_page after page allocation. I could run basic command in my system. But it will report "BUG: Bad rss-counter state mm:ffff800079c51b00 idx:1 val:-15" sometimes. I will check it later. I suspect there is still some issue in do_anonymous_page. I just
+    22:30 allocate 16 pages when possible but I do not set the hint of contiguous pages. Is it true that I do not need to look at other functions at this point? I do not take a look about do_wp_page right now.
+    22:30 arnd: my plan is that read and change the code piece by piece as it is the first time I touch these parts of kernel. I will ignore the userfaultfd, memcg and swap before the whole things work.
+    22:30 A<arnd> though his solution doesn't apply here (CONFIG_FHANDLE is already enabled in multi_v7_defconfig)
+    22:30 B<bamvor> Bamvor Jian Zhang arnd: I plan working on in three steps:
+    22:30 arnd: 1.  Grouping 16 pages when possible, I need to understand and work on do_anonymous_page(currently I am working on), do_wp_page and other code in handle_pte_fault.
+    22:31 A<arnd> bamvor: good idea leaving out the hint for now, that clearly simplifies the prototyping
+    22:31 ⇐ mcoquelin_ quit (~mcoquelin@104.79.140.88.rev.sfr.net) Ping timeout: 256 seconds
+    22:31 B<bamvor> Bamvor Jian Zhang arnd: 2.  Seting contiguous page hint: Allocate the 16 pages when possible and split them in the first fault page. Set the hint in the secon
+    22:31 d time of page fault.
+    22:31 arnd: 3.  Deal with spliting the 64k page when needed, e.g. mprotect, mremap, munmap, LRU handling. Maybe reference how trans-huge pages are being split up into small pages, and doing the same here for each caller.
+    22:34 A<arnd> step 2 also requires the do_fault_around() when setting the hint: the idea is to only set one PTE at first and then fill the other ones for the second fault (I assume that's what you meant)
+    22:34 bamvor: at some point before step 3 there should also be a proper specint run
+    22:35 bamvor: you mentioned that you couldn't get specint working properly. what problem did you run into?
+    22:35 did it work in some configurations but not others?
+    22:36 B<bamvor> Bamvor Jian Zhang no. it seems that it just crash with our hack code. (not my current code). I think explicit compile and use hugetlb ld should works. 
+    22:36 A<arnd> for the start, we mainly need to know the potential gains, comparing the three cases that already work (pure 4k page, pure 64k page, 4k+trans-huge)
+    22:36 B<bamvor> Bamvor Jian Zhang understand.
+    22:37  i will try to test them. maybe start this week. if ILP32 performance test finish. 
+    22:38 A<arnd> if 4k+trans-huge is already faster than 64k, there won't be much to gain by having 4k+page-hint+trans-huge
+    22:39 B<bamvor> Bamvor Jian Zhang the thing is trans huge only works for 2m, correct? 
+    22:39 A<arnd> also, if 64k is not much faster than 4k, then 4k+hint won't be very valuable because it's likely slower than 64k
+    22:40 B<bamvor> Bamvor Jian Zhang maybe our case is the apps which could not allocate 2m huge page or trans page but could get benefit from 64k pages? 
+    22:40 <arnd> bamvor: correct, and Mel Gorman also said that extending trans-huge to pagehint for 64k TLBs would not be a good idea because of all the extra complexity
+    22:41 bamvor: right, but that case may be exceptionally rare
+    22:42 64k pagehint will clearly waste less memory than trans-huge, but also require more TLBs for a given working-set
+    22:43 B<bamvor> Bamvor Jian Zhang Yes. At that point, maybe I could analysis the popular apps in server, desktop and android. 
+    22:44 A<arnd> I think we should look at the specint results (and share them with Mel) once you have measured the existing cases, and then decide whether doing more tests is needed or not
+    22:45 B<bamvor> Bamvor Jian Zhang yes. understand. it is reasonable for me. 
+    22:46 arnd: do_fault_around will pre-allocate the pages but I only saw this function in do_fault which is file backed. it seems that it is not the anonymous page cases. 
+    22:46 A<arnd> specint is exactly the kind of test that benefits most of reduced TLB pressure while not being severely memory limited, other tests likely just show smaller differences or won't even run on 64k pages
+    22:46 → mcoquelin_ joined (~mcoquelin@104.79.140.88.rev.sfr.net)
+    22:47 A<arnd> bamvor: hmm, I thought that was the function that Mel recommended. if that doesn't work, look for something similar, or use it as a template for writing the function you actually need
+    22:49 B<bamvor> Bamvor Jian Zhang oh. that sound reasonable. We  need the function similar to do_fault_around:) 
+    ```
