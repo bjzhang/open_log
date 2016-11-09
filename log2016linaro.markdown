@@ -3677,9 +3677,9 @@ Welcome to openSUSE Leap 42.1 (aarch64)!
 
 4.  The above error fail in zap_pte_range because of mapcount < 0.
 
+5.  discuss with Arnd
 do_anonymous_page, do_wp_page
 I do not split the page after allocation. Maybe it is why it fails.
 
-5.  "[   94.230998] BUG: Bad rss-counter state mm:ffff800079c51b00 idx:1 val:-15"
-
+6.  current fail: "[   94.230998] BUG: Bad rss-counter state mm:ffff800079c51b00 idx:1 val:-15", in commit "7630224 put page when we could not allocate 16 pages; split_page after alloc"
 
