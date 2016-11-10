@@ -3718,5 +3718,38 @@ I do not split the page after allocation. Maybe it is why it fails.
     22:46 A<arnd> specint is exactly the kind of test that benefits most of reduced TLB pressure while not being severely memory limited, other tests likely just show smaller differences or won't even run on 64k pages
     22:46 → mcoquelin_ joined (~mcoquelin@104.79.140.88.rev.sfr.net)
     22:47 A<arnd> bamvor: hmm, I thought that was the function that Mel recommended. if that doesn't work, look for something similar, or use it as a template for writing the function you actually need
-    22:49 B<bamvor> Bamvor Jian Zhang oh. that sound reasonable. We  need the function similar to do_fault_around:) 
+    22:49 B<bamvor> Bamvor Jian Zhang oh. that sound reasonable. We need the function similar to do_fault_around:) 
     ```
+
+17:32 2016-11-10
+----------------
+the time of compile the kernel
+1.  arm(asus chromebook 4G memory.
+    1.  kernel
+        ```
+        Kernel: arch/arm/boot/Image is ready
+        (trusty)bamvor@localhost:~/works/source/kernel/linux$ ll arch/arm/boot/Image
+        -rwxrwxr-x. 1 bamvor bamvor 18952192 Nov 10 09:13 arch/arm/boot/Image
+        ```
+    2.  In sd
+        ```
+        Kernel: arch/arm/boot/Image is ready
+        real    14m58.796s
+        user    46m38.430s
+        sys     3m44.100s
+        ```
+
+    3.  emmc
+        ```
+        Kernel: arch/arm/boot/Image is ready
+
+        real    14m27.411s
+        user    46m50.080s
+        sys     3m29.550s
+        ```
+
+17:59 2016-11-10
+----------------
+ask arnd
+send out the lmbench.
+
