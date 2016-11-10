@@ -3721,6 +3721,54 @@ I do not split the page after allocation. Maybe it is why it fails.
     22:49 B<bamvor> Bamvor Jian Zhang oh. that sound reasonable. We need the function similar to do_fault_around:) 
     ```
 
+8.  I guess that rss_stat.counter decreased 16 times and get -15.
+    1.  read the code relative to `dec_mm_counter_fast()`, `inc_mm_counter_fast()`.
+    2.  read the commit in `struct mm_struct`:
+        ```
+        /*
+         * Special counters, in some configurations protected by the
+         * page_table_lock, in other configurations by being atomic.
+         */
+        struct mm_rss_stat rss_stat;
+        ```
+       the `page_table_lock` is the lock locked by `pte_lockptr`. Read the code in `do_anonymous_page()` which use this lock.
+    3.   after move inc_mm_counter_fast into for loop. There is no rss_stat.counter report. But "time cnf cnf" segfault:
+        ```
+        [  153.767200] cnf[2344]: unhandled level 0 translation fault (11) at 0x100004346f8c4, esr 0x90000004
+        [  153.767244] pgd = ffff80007943f000
+        [  153.767409] [100004346f8c4] *pgd=00000000b7e61003
+        [  153.767430] , *pud=0000000000000000
+        [  153.767435]
+        [  153.767454]
+        [  153.767616] CPU: 0 PID: 2344 Comm: cnf Not tainted 4.9.0-rc2-next-20161028-00007-g7630224-dirty #65
+        [  153.767642] Hardware name: linux,dummy-virt (DT)
+        [  153.767717] task: ffff800077eb9880 task.stack: ffff800077e40000
+        [  153.767936] PC is at 0xffff7ef9a138
+        [  153.767954] LR is at 0xffff7ef9a16c
+        [  153.767970] pc : [<0000ffff7ef9a138>] lr : [<0000ffff7ef9a16c>] pstate: 80000000
+        [  153.767981] sp : 0000ffffd60e11e0
+        [  153.768104] x29: 0000ffffd60e11e0 x28: 0000000039596cb0
+        [  153.768146] x27: 0000000000035e62 x26: 0000ffff7e9bcde0
+        [  153.768167] x25: 00000000393ac408 x24: 0000000000000000
+        [  153.768187] x23: 0000ffff7f029000 x22: 0000000000000000
+        [  153.768207] x21: 00000000393eb850 x20: 00000000393ac400
+        [  153.768228] x19: 0000ffffd60e13c0 x18: 000000000000c004
+        [  153.768253] x17: 0000ffff7fc6bdc0 x16: 0000ffff7f02a0d8
+        [  153.768273] x15: 0000ffff7fd50580 x14: 2e6e6f6974617275
+        [  153.768294] x13: 6769666e6f635f65 x12: 0000000000000038
+        [  153.768314] x11: 0101010101010101 x10: 7f7f7f7f7f7f7fff
+        [  153.768357] x9 : ff676271606e6dfe x8 : ffffffffffffffff
+        [  153.768391] x7 : fefefefefefefefe x6 : 0000ffff7e9bc010
+        [  153.768420] x5 : 0000000000000007 x4 : 0000ffff7e8e3010
+        [  153.768440] x3 : 00000000312e322d x2 : 0000000000009f7e
+        [  153.768460] x1 : 0000ffff7e9bcde0 x0 : 0000000000000000
+        [  153.768469]
+        Segmentation fault
+        ```
+    4.  I need a better test case to debug the issue. I could reproduce it by "zypper se cnf". Similar issuse(pud is empty).
+
+    1.  add a stats for 16 pages allocate successful and fail.
+
 17:32 2016-11-10
 ----------------
 the time of compile the kernel
