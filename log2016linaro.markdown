@@ -3769,6 +3769,17 @@ I do not split the page after allocation. Maybe it is why it fails.
 
     1.  add a stats for 16 pages allocate successful and fail.
 
+9.  (11:15 2016-11-11)
+    Think about the translation fault.
+    1.  The next level entry is empty. Could I reproduce how does the page table entry add?
+    2.  Same code path with one page is correct but 16 pages fault.
+        1.  Does anon_vma_prepare need to care about more than one page?
+        2.  Is that possible there is a race condition when do_anonymous_page handle the 16 pages and other code in handle_pte_fault try to deal with same pte?
+    3.  Current test base one the qemu. Should I tested in the real hardware?
+    4.  Arnd mentioned NOWAIT in last meeting. Do I need this right now?
+
+    5.  About"2.1". `anon_vma_chain()` is relative to COW. It may share by other process(parent or children).
+
 17:32 2016-11-10
 ----------------
 the time of compile the kernel
@@ -3800,4 +3811,35 @@ the time of compile the kernel
 ----------------
 ask arnd
 send out the lmbench.
+
+12:14 2016-11-11
+----------------
+[  139.103954] cnf[2347]: unhandled level 0 translation fault (11) at 0x100014fdc10b4, esr 0x90000004
+[  139.103986] pgd = ffff800077eb3000
+[  139.104199] [100014fdc10b4] *pgd=00000000b7d4a003
+[  139.109528] , *pud=0000000000000000
+[  139.109537]
+[  139.109565]
+[  139.109846] CPU: 0 PID: 2347 Comm: cnf Not tainted 4.9.0-rc2-next-20161028-00002-g8c80679-dirty #70
+[  139.109873] Hardware name: linux,dummy-virt (DT)
+[  139.109927] task: ffff80007b11c980 task.stack: ffff800077d64000
+[  139.110076] PC is at 0xffff9c3b8138
+[  139.110094] LR is at 0xffff9c3b816c
+[  139.110110] pc : [<0000ffff9c3b8138>] lr : [<0000ffff9c3b816c>] pstate: 80000000
+[  139.110120] sp : 0000ffffc19e0940
+[  139.110230] x29: 0000ffffc19e0940 x28: 0000000032170fe0
+[  139.110271] x27: 0000000000035e62 x26: 0000ffff9bddade0
+[  139.110292] x25: 0000000032002818 x24: 0000000000000000
+[  139.110313] x23: 0000ffff9c447000 x22: 0000000000000000
+[  139.110334] x21: 0000000031fdc9a0 x20: 0000000032002810
+[  139.110354] x19: 0000ffffc19e0b20 x18: 000000000000c004
+[  139.110375] x17: 0000ffff9d089dc0 x16: 0000ffff9c4480d8
+[  139.110396] x15: 0000ffff9d16e580 x14: 2e6e6f6974617275
+[  139.110435] x13: 6769666e6f635f65 x12: 0000000000000038
+[  139.110472] x11: 0101010101010101 x10: 7f7f7f7f7f7f7fff
+[  139.110515] x9 : ff676271606e6dfe x8 : ffffffffffffffff
+[  139.110535] x7 : fefefefefefefefe x6 : 0000ffff9bdda010
+[  139.110556] x5 : 0000000000000007 x4 : 0000ffff9bd01010
+[  139.110577] x3 : 000000006d030029 x2 : 0000000000009f7e
+[  139.110597] x1 : 0000ffff9bddade0 x0 : 0000000000000000
 
