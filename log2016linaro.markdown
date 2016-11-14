@@ -3164,8 +3164,7 @@ a5ba168_ilp32_unmerged/
   462.libquantum:  3.75%
 
 
-z00293696@linux696:ilp32> ~/works/reference/small_tools_collection/misc/specint_get_data.py --testresult 20161028_specint_LP64/afb510f_ilp32_full_merged__ilp32_disabled_aarch32_disabled/ --testresult 20161103_specint_LP64_aarch32_disable/afb510f_ilp32_disable_aarch32_disable/ --testbase  20161028_specint_LP64/a5ba168_ilp32_unmerged__aarch32_disabled/ --testbase  20161103_specin
-t_LP64_aarch32_disable/a5ba168_ilp32_unmerged_aarch32_disable/
+z00293696@linux696:ilp32> ~/works/reference/small_tools_collection/misc/specint_get_data.py --testresult 20161028_specint_LP64/afb510f_ilp32_full_merged__ilp32_disabled_aarch32_disabled/ --testresult 20161103_specint_LP64_aarch32_disable/afb510f_ilp32_disable_aarch32_disable/ --testbase  20161028_specint_LP64/a5ba168_ilp32_unmerged__aarch32_disabled/ --testbase  20161103_specint_LP64_aarch32_disable/a5ba168_ilp32_unmerged_aarch32_disable/
 The test result:
 ['20161028_specint_LP64/afb510f_ilp32_full_merged__ilp32_disabled_aarch32_disabled/', '20161103_specint_LP64_aarch32_disable/afb510f_ilp32_disable_aarch32_disable/']
 The test base:
@@ -3185,9 +3184,7 @@ Diff:
          429.mcf:  1.32%
        456.hmmer:  1.09%
   462.libquantum:  2.19%
-z00293696@linux696:ilp32> ~/works/reference/small_tools_collection/misc/specint_get_data.py --testresult 20161031_specint_LP64_aarch32_enable/afb510f_aarch32_on_ilp32_on/ --testresult 201611
-04_specint_LP64_ilp32_on_aarch32_on/afb510f_ilp32_merged/ --testbase 20161031_specint_LP64_aarch32_enable/a5ba168_aarch32_on_ilp32_on/ --testbase 20161104_specint_LP64_ilp32_on_aarch32_on/a5
-ba168_ilp32_unmerged/
+z00293696@linux696:ilp32> ~/works/reference/small_tools_collection/misc/specint_get_data.py --testresult 20161031_specint_LP64_aarch32_enable/afb510f_aarch32_on_ilp32_on/ --testresult 20161104_specint_LP64_ilp32_on_aarch32_on/afb510f_ilp32_merged/ --testbase 20161031_specint_LP64_aarch32_enable/a5ba168_aarch32_on_ilp32_on/ --testbase 20161104_specint_LP64_ilp32_on_aarch32_on/a5ba168_ilp32_unmerged/
 The test result:
 ['20161031_specint_LP64_aarch32_enable/afb510f_aarch32_on_ilp32_on/', '20161104_specint_LP64_ilp32_on_aarch32_on/afb510f_ilp32_merged/']
 The test base:
@@ -3842,4 +3839,37 @@ send out the lmbench.
 [  139.110556] x5 : 0000000000000007 x4 : 0000ffff9bd01010
 [  139.110577] x3 : 000000006d030029 x2 : 0000000000009f7e
 [  139.110597] x1 : 0000ffff9bddade0 x0 : 0000000000000000
+
+19:13 2016-11-14
+Hi, all
+
+I test specint of aarch64 LP64 when aarch32 el0 disable/enabled and compare with ILP32 unmerged(4.8-rc6) in D03.
+The following test result is tested through --size=ref --iterations=3.
+
+                      enable_aarch32_el0   disable_aarch32_el0
+      400.perlbench                   0%                 0.22%
+      401.bzip2                   -0.65%                 0.95%
+      403.gcc                      0.26%                 0.20%
+      429.mcf                      2.75%                 0.76%
+      445.gobmk                       0%                 0.36%
+      456.hmmer                   -4.34%                -2.06%
+      458.sjeng                       0%                -0.27%
+      462.libquantum                  0%                -1.28%
+      471.omnetpp                  0.59%                 0.86%
+      473.astar                   -0.34%                -0.85%
+      483.xalancbmk               -0.90%                 0.08%
+
+I found that difference of performance is bigger when aarch32 el0 is enabled. And bzip2, mcg, hmmer, libquantum are the top four differences.
+
+In order to know whether 
+       401.bzip2:  0.82%
+         429.mcf:  0.18%
+       456.hmmer: -0.36%
+  462.libquantum: -2.09%
+
+
+The result of lmbench is not stable in my board. I plan to dig it later.
+
+The final command of specint is:
+runspec --config=my.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 bzip2 mcf hmmer libquantum
 
