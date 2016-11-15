@@ -3843,9 +3843,12 @@ send out the lmbench.
 19:13 2016-11-14
 Hi, all
 
-I test specint of aarch64 LP64 when aarch32 el0 disable/enabled and compare with ILP32 unmerged(4.8-rc6) in D03.
-The following test result is tested through --size=ref --iterations=3.
+I test specint of aarch64 LP64 when aarch32 el0 disable/enabled respectively and compare with ILP32 unmerged kernel(4.8-rc6) in our D03 board. I found that difference is bigger when aarch32 el0 is enabled. And bzip2, mcg, hmmer, libquantum are the top four differences[1].
+In order to make sure the above result results, I retest these testcases in reportable way(reference the command in the end). The result[2] show that libquantum decrease -2.09% after ILP32 merged(aarch32 on). I think it is in significant.
 
+The result of lmbench is not stable in my board. I plan to dig it later.
+
+[1] The following test result is tested through --size=ref --iterations=3.
                       enable_aarch32_el0   disable_aarch32_el0
       400.perlbench                   0%                 0.22%
       401.bzip2                   -0.65%                 0.95%
@@ -3859,17 +3862,19 @@ The following test result is tested through --size=ref --iterations=3.
       473.astar                   -0.34%                -0.85%
       483.xalancbmk               -0.90%                 0.08%
 
-I found that difference of performance is bigger when aarch32 el0 is enabled. And bzip2, mcg, hmmer, libquantum are the top four differences.
-
-In order to know whether 
+[2] The following test result is tested through:
+runspec --config=my.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 bzip2 mcf hmmer libquantum
        401.bzip2:  0.82%
          429.mcf:  0.18%
        456.hmmer: -0.36%
   462.libquantum: -2.09%
 
 
-The result of lmbench is not stable in my board. I plan to dig it later.
-
-The final command of specint is:
-runspec --config=my.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 bzip2 mcf hmmer libquantum
-
+15:01 2016-11-15
+---------------
+cont page
+1.  disable swap and try again.
+    1.  similiar error: three times empty pmd.
+2.  disable hugetlb and transhuge:
+    1.  disable HUGETLBFS will disable CGROUP_HUGETLB and HUGETLB_PAGE automatically.
+    2.  disable CONFIG_TRANSPARENT_HUGEPAG.
