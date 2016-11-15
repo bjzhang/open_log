@@ -3824,8 +3824,11 @@ the time of compile the kernel
 
 17:59 2016-11-10
 ----------------
+1:1 with Mark
+-------------
 ask arnd
-send out the lmbench.
+send out the specint if lmbench could not get quickly.
+test multi-process for mm.
 
 12:14 2016-11-11
 ----------------
