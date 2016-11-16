@@ -3843,32 +3843,48 @@ send out the lmbench.
 19:13 2016-11-14
 Hi, all
 
-I test specint of aarch64 LP64 when aarch32 el0 disable/enabled respectively and compare with ILP32 unmerged kernel(4.8-rc6) in our D03 board. I found that difference is bigger when aarch32 el0 is enabled. And bzip2, mcg, hmmer, libquantum are the top four differences[1].
-In order to make sure the above result results, I retest these testcases in reportable way(reference the command in the end). The result[2] show that libquantum decrease -2.09% after ILP32 merged(aarch32 on). I think it is in significant.
+I test specint of aarch64 LP64 when aarch32 el0 disable/enabled respectively and compare with ILP32 unmerged kernel(4.8-rc6) in our arm64 board. I found that difference is bigger when aarch32 el0 is enabled. And bzip2, mcg, hmmer, libquantum are the top four differences[1].
+In order to make sure the above result results, I retest these testcases in reportable way(reference the command in the end). The result[2] show that libquantum decrease -2.09% after ILP32 enabled and aarch32 on. I think it is in significant.
 
 The result of lmbench is not stable in my board. I plan to dig it later.
 
 [1] The following test result is tested through --size=ref --iterations=3.
-                      enable_aarch32_el0   disable_aarch32_el0
-      400.perlbench                   0%                 0.22%
-      401.bzip2                   -0.65%                 0.95%
-      403.gcc                      0.26%                 0.20%
-      429.mcf                      2.75%                 0.76%
-      445.gobmk                       0%                 0.36%
-      456.hmmer                   -4.34%                -2.06%
-      458.sjeng                       0%                -0.27%
-      462.libquantum                  0%                -1.28%
-      471.omnetpp                  0.59%                 0.86%
-      473.astar                   -0.34%                -0.85%
-      483.xalancbmk               -0.90%                 0.08%
+1.1 Test when aarch32_el0 is enabled.
+                        ILP32 disabled        base line
+      400.perlbench            100.00%             100%
+      401.bzip2                 99.35%             100%
+      403.gcc                  100.26%             100%
+      429.mcf                  102.75%             100%
+      445.gobmk                100.00%             100%
+      456.hmmer                 95.66%             100%
+      458.sjeng                100.00%             100%
+      462.libquantum           100.00%             100%
+      471.omnetpp              100.59%             100%
+      473.astar                 99.66%             100%
+      483.xalancbmk             99.10%             100%
+
+1.2 Test when aarch32_el0 is disabled
+                        ILP32 disabled         base line
+      400.perlbench            100.22%              100%
+      401.bzip2                100.95%              100%
+      403.gcc                  100.20%              100%
+      429.mcf                  100.76%              100%
+      445.gobmk                100.36%              100%
+      456.hmmer                 97.94%              100%
+      458.sjeng                 99.73%              100%
+      462.libquantum            98.72%              100%
+      471.omnetpp              100.86%              100%
+      473.astar                 99.15%              100%
+      483.xalancbmk            100.08%              100%
 
 [2] The following test result is tested through:
 runspec --config=my.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 bzip2 mcf hmmer libquantum
-       401.bzip2:  0.82%
-         429.mcf:  0.18%
-       456.hmmer: -0.36%
-  462.libquantum: -2.09%
-
+2.1 Test when aarch32_el0 is enabled.
+                         ILP32_enabled         base line
+      401.bzip2                100.82%              100%
+      429.mcf                  100.18%              100%
+      456.hmmer                 99.64%              100%
+      462.libquantum            97.91%              100%
 
 15:01 2016-11-15
 ---------------
@@ -3878,3 +3894,51 @@ cont page
 2.  disable hugetlb and transhuge:
     1.  disable HUGETLBFS will disable CGROUP_HUGETLB and HUGETLB_PAGE automatically.
     2.  disable CONFIG_TRANSPARENT_HUGEPAG.
+
+14:32 2016-11-16
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-10-31 to 2016-11-15
+=== Highlights ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    * Discuss with Arnd.
+        The plan is that read and change the code piece by piece as it is the first time I touch these parts of kernel. I will ignore the userfaultfd, memcg and swap before the whole things work.
+        I plan working on in three steps:
+        1.  Grouping 16 pages when possible, I need to understand and work on do_anonymous_page(currently I am working on), do_wp_page and other code in handle_pte_fault.
+        2.  Spliting 16 pages when needed: e.g. mprotect, mremap, munmap, LRU handling. Need add pointers to track the contiguous pages.
+        3.  Setting the cont page hint. Add a function like do_fault_around to preallocate the contiguous pages and set the hint when hit the same range twice; Invalid tlb and deal with the other pages in the second time hit in the same contiguous range.
+        Draw a mindmap to track it: <https://github.com/bjzhang/bjzhang.github.io/blob/master/public/images/pagetable/cont_page_development.svg>. The blue one is what I am working on. The gray one is not relative to the contiguous page hint.
+    *  Fix some issues in do_anonymous_page of my work. There are still a lots of crash when I try to compile the lmbench binary. But it could run lmbench successful (I do not mean to test the performance by lmbench).
+       The crash is lead by some empty pmd or pgd in userspace. I plan to learn more about how does the kernel set the pgd and pmd for userspace.
+    *  I write a test code which could malloc and set memory parallel. But I could not reproduce the above crash through a simple test program right now.
+
+* ILP32 performance regression.
+    * Test specint and lmbench.
+      There is no regression in specint. Reference the following data(aarch32 el0 is enabled) for the top four differences.
+                         ILP32_enabled         base line
+      401.bzip2                100.82%              100%
+      429.mcf                  100.18%              100%
+      456.hmmer                 99.64%              100%
+      462.libquantum            97.91%              100%
+
+      The result of lmbench is not stable, I plan to test it more.
+
+* Gpio selftest
+    There is only one patch left. Discuss with Shuah today.
+
+* Enable KBUILD_OUTPUT for kselftest
+    No progress. Plan to work on these after gpio selftest fully merged.
+
+* 1:1 with Mark
+
+* Arm32 meeting.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Work on group pages.
+
+* ILP32 performance test
+    Lmbench
+
+* Gpio selftest
+    Discuss with Shuah.
+
