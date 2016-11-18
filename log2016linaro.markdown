@@ -3803,6 +3803,15 @@ the time of compile the kernel
         user    46m50.080s
         sys     3m29.550s
         ```
+2.  arm64(D03)
+    1.  Image
+        ```
+        real    3m37.178s
+        user    34m32.720s
+        sys     3m8.548s
+        ~/works/source/kernel/hulk> ll arch/arm64/boot/Image
+        -rwxr-xr-x 1 z00293696 users 13771264 Nov 17 20:08 arch/arm64/boot/Image
+        ```
 
 17:59 2016-11-10
 ----------------
@@ -3841,10 +3850,20 @@ send out the lmbench.
 [  139.110597] x1 : 0000ffff9bddade0 x0 : 0000000000000000
 
 19:13 2016-11-14
+1.  send to LKML
 Hi, all
 
-I test specint of aarch64 LP64 when aarch32 el0 disable/enabled respectively and compare with ILP32 unmerged kernel(4.8-rc6) in our arm64 board. I found that difference is bigger when aarch32 el0 is enabled. And bzip2, mcg, hmmer, libquantum are the top four differences[1].
-In order to make sure the above result results, I retest these testcases in reportable way(reference the command in the end). The result[2] show that libquantum decrease -2.09% after ILP32 enabled and aarch32 on. I think it is in significant.
+I test specint of aarch64 LP64 when aarch32 el0 disable/enabled respectively
+and compare with ILP32 unmerged kernel(4.8-rc6) in our arm64 board. I found
+that difference(ILP32 disabled/ILP32 unmerged) is bigger when aarch32 el0 is
+enabled, compare with aarch32 el0 disabled kernel. And bzip2, mcg, hmmer,
+libquantum are the top four differences[1]. Note that bigger is better in
+specint test.
+
+In order to make sure the above results, I retest these four testcases in
+reportable way(reference the command in the end). The result[2] show that
+libquantum decrease -2.09% after ILP32 enabled and aarch32 on. I think it is in
+significant.
 
 The result of lmbench is not stable in my board. I plan to dig it later.
 
@@ -3877,14 +3896,43 @@ The result of lmbench is not stable in my board. I plan to dig it later.
       473.astar                 99.15%              100%
       483.xalancbmk            100.08%              100%
 
-[2] The following test result is tested through:
-runspec --config=my.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 bzip2 mcf hmmer libquantum
+[2] The following test result is tested through: runspec --config=my.cfg --size=test,train,ref --noreportable --tune=base,peak --iterations=3 bzip2 mcf hmmer libquantum
 2.1 Test when aarch32_el0 is enabled.
                          ILP32_enabled         base line
       401.bzip2                100.82%              100%
       429.mcf                  100.18%              100%
       456.hmmer                 99.64%              100%
       462.libquantum            97.91%              100%
+
+2.  Maxim
+3.  Reply to Maxim
+                    ILP32_merged    ILP32_unmerged
+      401.bzip2            0.31%            0.26%
+      429.mcf              1.61%            1.36%
+      456.hmmer            1.37%            1.57%
+      462.libquantum       0.29%            0.28%
+
+    1.  ILP32
+        ```
+        >>> numpy.std([9.26, 9.29, 9.22])/9.26*100
+        0.3096589368985761
+        >>> numpy.std([8.59, 8.34, 8.28])/8.34*100
+        1.6096747054837965
+        >>> numpy.std([13.7, 13.7, 14.1])/13.7*100
+        1.3763635643533785
+        >>> numpy.std([16.0, 16.0, 15.9])/16.0*100
+        ```
+    2.  ILP32 unmerged
+        ```
+        >>> numpy.std([9.20,9.20,9.15])/9.20*100
+        0.25619810912555524
+        >>> numpy.std([8.31,8.31,8.55])/8.31*100
+        1.3614570997574935
+        >>> numpy.std([13.7,14.1,13.6])/13.7*100
+        1.5768225543571441
+        >>> numpy.std([16.6,16.6,16.5])/16.6*100
+        0.28397862698255327
+        ```
 
 15:01 2016-11-15
 ---------------
@@ -3942,3 +3990,228 @@ cont page
 * Gpio selftest
     Discuss with Shuah.
 
+16:14 2016-11-16
+----------------
+activity
+--------
+1.  Get specint from lianro. I could setup a specint environment in my home now. It is a backup when I could not get machine from huawei.
+
+16:27 2016-11-17
+----------------
+1.  test on d03. fail. same log.
+2.  git clone also failed:
+    ```
+    ~/works/source/kernel> git clone git@code.huawei.com:z00293696/hulk.git
+    Cloning into 'hulk'...
+    remote: Counting objects: 5129446, done.
+    remote: Compressing objects: 100% (805702/805702), done.
+    fatal: BUG: parse_object_buffer transmogrified our buffer
+    fatal: index-pack failed
+    ```
+3.  install the following package when compile perf:
+    ` zypper in libdwarf libdwarf-devel libelf libelf-dvel libelf-devel libdw-devel systemtap-sdt-devel libnuma-devel audit audit-devel libunwind-devel python-devel git2-devel gtk2-devel slang-devel`
+
+20:16 2016-11-18
+----------------
+kselftest, KBUILD_OUTPUT, discuss with Micheal
+----------------------------------------------
+1.  1/6
+Hi, Micheal
+>Hi Bamvor,
+>
+>bamvor.zhangjian@huawei.com writes:
+>
+>> From: Bamvor Jian Zhang <bamvor.zhangjian@linaro.org>
+>>
+>> Currently, kselftest use TEST_PROGS, TEST_PROGS_EXTENDED, TEST_FILES to
+>> indicate the default test program, extended test program and test files.
+>> These lead to duplicated all and clean targets.
+>>
+>> In order to remove them, introduce TEST_GEN_PROGS,
+>> TEST_GEN_PROGS_EXTENDED, TEST_GEN_FILES to indicate the compiled
+>> objected.
+>
+>It's nice to be able to drop the clean rules, but renaming all those
+>variables causes a lot of churn.
+>
+>I think it would be better if we add a new variable, maybe NO_CLEAN,
+>which can be used to specify anything in TEST_PROGS/EXTENDED which
+>should *not* be cleaned.
+>
+>And then the default clean rule will just do:
+>
+>clean:
+>    $(RM) -fr $(filter-out $(NO_CLEAN),$(TEST_PROGS))
+Maybe I lost somewhere. I add these variable for all and
+clean target. They will be used to output the objects to OUTPUT
+directory. Could you please explain in details how should I do it for
+"all" target if I do not introduce TEST_GEN_PROGS,
+TEST_GEN_PROGS_EXTENDED and TEST_GEN_FILES?
+
+Regards
+
+Bamvor
+>
+>
+>I think that would require less changes overall, because most tests just
+>want to build some files, run them, and then clean them. The tests that
+>need to do more elaborate things are the exception.
+>
+>cheers
+
+1.  6/6
+Hi, Macheal
+
+Thanks your reply.
+
+On 2016/11/18 19:29, Michael Ellerman wrote:
+>> From: Bamvor Jian Zhang <bamvor.zhangjian@linaro.org>
+>>
+>> Enable O and KBUILD_OUTPUT for kselftest. User could compile kselftest
+>> to another directory by passing O or KBUILD_OUTPUT. And O is high
+>> priority than KBUILD_OUTPUT.
+>
+>We end up saying $(OUTPUT) a lot, kbuild uses $(obj), which is shorter
+>and less shouty and reads nicer I think ?
+I agree that we need a clearly name. Meanwhile the $(obj) sounds like
+compile objects. But it is actually a directory which we put objs to
+there. I am wondering if people may confuse about he name. Given that
+kbuild make KBUILD_OUTPUT work by defining the srctree. How about pick
+up dst (means dsttree) instead of OUTPUT?
+>
+>> diff --git a/tools/testing/selftests/Makefile b/tools/testing/selftests/Makefile
+>> index a3144a3..79c5e97 100644
+>> --- a/tools/testing/selftests/Makefile
+>> +++ b/tools/testing/selftests/Makefile
+>> @@ -47,29 +47,47 @@ override LDFLAGS =
+>>  override MAKEFLAGS =
+>>  endif
+>>
+>> +ifeq ($(O)$(KBUILD_OUTPUT),)
+>> +        BUILD :=$(shell pwd)
+>> +else
+>> +        ifneq ($(O),)
+>> +                BUILD := $(O)
+>> +        else
+>> +                ifneq ($(KBUILD_OUTPUT),)
+>> +                        BUILD := $(KBUILD_OUTPUT)
+>> +                endif
+>> +        endif
+>> +endif
+>
+>That should be equivalent to:
+>
+>BUILD := $(O)
+>ifndef BUILD
+>  BUILD := $(KBUILD_OUTPUT)
+>endif
+>ifndef BUILD
+>  BUILD := $(shell pwd)
+>endif
+Thanks. It works for me. I will update in my next version.
+>
+>> diff --git a/tools/testing/selftests/exec/Makefile b/tools/testing/selftests/exec/Makefile
+>> index 48d1f86..fe5cdec 100644
+>> --- a/tools/testing/selftests/exec/Makefile
+>> +++ b/tools/testing/selftests/exec/Makefile
+>> @@ -5,18 +5,19 @@ TEST_GEN_FILES := execveat.symlink execveat.denatured script subdir
+>>  # Makefile is a run-time dependency, since it's accessed by the execveat test
+>>  TEST_FILES := Makefile
+>>
+>> -EXTRA_CLEAN := subdir.moved execveat.moved xxxxx*
+>> +EXTRA_CLEAN := $(OUTPUT)subdir.moved $(OUTPUT)execveat.moved $(OUTPUT)xxxxx*
+>
+>It reads strangely to not have a slash after the output I think it would
+>be better if you used a slash everywhere you use it, like:
+>
+>EXTRA_CLEAN := $(OUTPUT)/subdir.moved $(OUTPUT)/execveat.moved $(OUTPUT)/xxxxx*
+>
+>That makes it clear that it's a directory, and not some other prefix.
+Oh, yes. The origin code is not work if remove the slash. I eventually
+found that it is because I do the wrong replacement in TEST_GEN_PROGS
+and TEST_GEN_FILES. They should be:
+TEST_GEN_PROGS := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_PROGS))
+TEST_GEN_FILES := $(patsubst %,$(OUTPUT)/%,$(TEST_GEN_FILES))
+>
+>
+>Having said that, I think for EXTRA_CLEAN it should just be defined that
+>the contents are in $(OUTPUT), and so we can just do that in lib.mk, eg:
+>
+>EXTRA_CLEAN := $(addprefix $(OUTPUT)/,$(EXTRA_CLEAN))
+>
+>clean:
+>    $(RM) -r $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES) $(EXTRA_CLEAN)
+The OUTPUT is the directory we build. It may be not be not the
+directory we run the test. For example, pstore do not need compile.
+It could run in the source directory.
+>
+>
+>>  include ../lib.mk
+>>
+>> -subdir:
+>> +$(OUTPUT)subdir:
+>>   mkdir -p $@
+>> -script:
+>> +$(OUTPUT)script:
+>>   echo '#!/bin/sh' > $@
+>>   echo 'exit $$*' >> $@
+>>   chmod +x $@
+>> -execveat.symlink: execveat
+>> - ln -s -f $< $@
+>> -execveat.denatured: execveat
+>> +$(OUTPUT)execveat.symlink: execveat
+>> + cd $(OUTPUT) && ln -s -f $< `basename $@`
+>> +$(OUTPUT)execveat.denatured: execveat
+>>   cp $< $@
+>>   chmod -x $@
+>
+>Do those work? I would have thought you'd need $(OUTPUT) on the right
+>hand side also?
+It works because execveat will generate twice which is wrong. I will
+fix in next version.
+>
+>> diff --git a/tools/testing/selftests/lib.mk b/tools/testing/selftests/lib.mk
+>> index 0f7a371..fa87f98 100644
+>> --- a/tools/testing/selftests/lib.mk
+>> +++ b/tools/testing/selftests/lib.mk
+>> @@ -33,19 +34,29 @@ endif
+>>
+>>  define EMIT_TESTS
+>>   @for TEST in $(TEST_GEN_PROGS) $(TEST_PROGS); do \
+>> -     echo "(./$$TEST && echo \"selftests: $$TEST [PASS]\") || echo \"selftests: $$TEST [FAIL]\""; \
+>> +     BASENAME_TEST=`basename $$TEST`;    \
+>> +     echo "(./$$BASENAME_TEST && echo \"selftests: $$BASENAME_TEST [PASS]\") || echo \"selftests: $$BASENAME_TEST [FAIL]\""; \
+>>   done;
+>>  endef
+>>
+>>  emit_tests:
+>>   $(EMIT_TESTS)
+>>
+>> +TEST_GEN_PROGS := $(patsubst %,$(OUTPUT)%,$(TEST_GEN_PROGS))
+>> +TEST_GEN_FILES := $(patsubst %,$(OUTPUT)%,$(TEST_GEN_FILES))
+>
+>You should just be able to use addprefix there.
+Yes.
+>
+>> +
+>>  all: $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES)
+>>
+>>  clean:
+>>   $(RM) -r $(TEST_GEN_PROGS) $(TEST_GEN_PROGS_EXTENDED) $(TEST_GEN_FILES) $(EXTRA_CLEAN)
+>>
+>> -%: %.c
+>> - $(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) -o $@ $^
+>> +$(OUTPUT)%:%.c
+>> + $(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $< -o $@
+>
+>I think it reads better with a space after the ":"
+Sure
+
+Regards
+
+Bamvor
+
+>
+>$(OUTPUT)/%: %.c
+>    $(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $< -o $@
+>
