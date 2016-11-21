@@ -4215,3 +4215,12 @@ Bamvor
 >$(OUTPUT)/%: %.c
 >    $(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $< -o $@
 >
+
+17:08 2016-11-21
+----------------
+better ChangeLog/Commit message will save the time of review.
+
+18:05 2016-11-21
+----------------
+git send-email --in-reply-to=7e8cac40-ccf1-d4c3-5a08-09969b273b11@osg.samsung.com --from bamvor.zhangjian@huawei.com --to shuahkh@osg.samsung.com --to linus.walleij@linaro.org --cc linux-gpio@vger.kernel.org --cc bamvor.zhangjian@huawei.com --cc broonie@kernel.org --cc mwelling@ieee.org --cc shuah@kernel.org --cc bamvor.zhangjian@linaro.org
+
