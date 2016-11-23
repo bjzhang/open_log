@@ -3992,9 +3992,30 @@ cont page
 
 16:14 2016-11-16
 ----------------
-activity
---------
-1.  Get specint from lianro. I could setup a specint environment in my home now. It is a backup when I could not get machine from huawei.
+(10:12 2016-11-23)update
+[ACTIVITY] (Bamvor Jian Zhang) 2016-11-16 to 2016-11-22
+* Gpio selftest
+    Discuss with Shuah, She ack if I could address the existing comment from Linus. I send v5 to mailing list this week.
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+    Discuss with Michael Ellerman. I need write better comment next time. Better ChangeLog/Commit message will save the time of review.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Read the code in do_wp_page and try to modify it.
+
+* ILP32 performance test
+    Send out the specint test result. But no response exept Maxim.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Think about how to debug the existing empty pgd/pmd entry produced by my patch.
+
+* ILP32 performance test
+    Test Lmbench.
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+    Work on new version, hope could send out this week.
+
+Not send: Get specint from lianro. I could setup a specint environment in my home now. It is a backup when I could not get machine from huawei.
 
 16:27 2016-11-17
 ----------------
@@ -4215,10 +4236,6 @@ Bamvor
 >$(OUTPUT)/%: %.c
 >    $(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $< -o $@
 >
-
-17:08 2016-11-21
-----------------
-better ChangeLog/Commit message will save the time of review.
 
 18:05 2016-11-21
 ----------------
