@@ -4241,3 +4241,12 @@ Bamvor
 ----------------
 git send-email --in-reply-to=7e8cac40-ccf1-d4c3-5a08-09969b273b11@osg.samsung.com --from bamvor.zhangjian@huawei.com --to shuahkh@osg.samsung.com --to linus.walleij@linaro.org --cc linux-gpio@vger.kernel.org --cc bamvor.zhangjian@huawei.com --cc broonie@kernel.org --cc mwelling@ieee.org --cc shuah@kernel.org --cc bamvor.zhangjian@linaro.org
 
+11:03 2016-11-23
+----------------
+即使是有脚本的情况下, 编译内核还是用了20分钟时间(我的时间, 不是机器的时间). 工作方法还是很有问题.
+每次都要折腾板子, 给我的感觉很不好. hikey还不能连大网. 后面用d03启动kvm虚拟机内核需要用旧的内核.
+
+12:19 2016-11-23
+----------------
+kernel_build --path $PWD --extra kernel_disable_arm_smmu_v3_config --extra kernel_disable_hugetlb_config --extra kernel_disable_memcg_config --extra kernel_disable_swap_config --extra kernel_disable_transhuge_config  --disable install_header_to_cc
+
