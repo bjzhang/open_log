@@ -3313,6 +3313,8 @@ The following things works:
 
 10:37 2016-11-04
 ----------------
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
 1.  Why is MM_MMUFLAGS relative to 64k page. It is pte level when enable 64k page, otherwise it is pmd level. Is it because 64k page need 2 or 3 level compare to 3 or 4 for 4k page?
 2.  pmd from `handle_pte_fault()`->`do_anonymous_page()` is allocated in `__handle_mm_fault()`.
 3.  TODO walk the page table by hand. Understand how many pgd, pud, pmd, pte is used. Including 2, 3 and 4 levels.
@@ -3524,6 +3526,8 @@ The following things works:
 
 12:28 2016-11-07
 ----------------
+kernel, ILP32
+-------------
 20161104_lmbench_LP64_ilp32_on_aarch32_on
 1.  Processor, Processes - times in microseconds - smaller is better
     1.  null call -3.70%
@@ -3590,6 +3594,8 @@ The following things works:
 
 16:33 2016-11-07
 ----------------
+KWG-192: Use of contiguous page hint to create 64K pages, log
+--------------------------------------------------------
 [    2.870208] entries: 0x1600000410e0f53; ptes: 0xffff80007b1f6870.
 [    2.870545] entries: 0x1600000410e0f53; ptes: 0xffff80007b1f6860.
 [    2.882744] entries: 0x1600000410e0f53; ptes: 0xffff80007b1f6868.
@@ -3612,6 +3618,8 @@ Welcome to openSUSE Leap 42.1 (aarch64)!
 
 11:20 2016-11-09
 ----------------
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
 1.  It seems that it fail in print? I could not understand why it happened.
     No. after diasble the print, it still fail.
 2.  it seems that there is a bug in release.
@@ -3780,6 +3788,7 @@ I do not split the page after allocation. Maybe it is why it fails.
 17:32 2016-11-10
 ----------------
 the time of compile the kernel
+------------------------------
 1.  arm(asus chromebook 4G memory.
     1.  kernel
         ```
@@ -3820,6 +3829,8 @@ send out the lmbench.
 
 12:14 2016-11-11
 ----------------
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
 [  139.103954] cnf[2347]: unhandled level 0 translation fault (11) at 0x100014fdc10b4, esr 0x90000004
 [  139.103986] pgd = ffff800077eb3000
 [  139.104199] [100014fdc10b4] *pgd=00000000b7d4a003
@@ -3850,6 +3861,8 @@ send out the lmbench.
 [  139.110597] x1 : 0000ffff9bddade0 x0 : 0000000000000000
 
 19:13 2016-11-14
+kernel, ILP32
+-------------
 1.  send to LKML
 Hi, all
 
@@ -3936,7 +3949,8 @@ The result of lmbench is not stable in my board. I plan to dig it later.
 
 15:01 2016-11-15
 ---------------
-cont page
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
 1.  disable swap and try again.
     1.  similiar error: three times empty pmd.
 2.  disable hugetlb and transhuge:
@@ -4019,6 +4033,8 @@ Not send: Get specint from lianro. I could setup a specint environment in my hom
 
 16:27 2016-11-17
 ----------------
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
 1.  test on d03. fail. same log.
 2.  git clone also failed:
     ```
@@ -4249,4 +4265,17 @@ git send-email --in-reply-to=7e8cac40-ccf1-d4c3-5a08-09969b273b11@osg.samsung.co
 12:19 2016-11-23
 ----------------
 kernel_build --path $PWD --extra kernel_disable_arm_smmu_v3_config --extra kernel_disable_hugetlb_config --extra kernel_disable_memcg_config --extra kernel_disable_swap_config --extra kernel_disable_transhuge_config  --disable install_header_to_cc
+
+10:53 2016-11-25
+----------------
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
+1.  There is no progress in recent two weeks. I still do not understand how the page allocated when a process forked.
+    And I need to understand each function I used in do_anonymous_page. Do I use them corrrently?
+2.  Thinking in handle_pte_fault, `pmd_trans_unstable(fe->pmd) make suse it is safe for transhuge. I am thinking if I need to do similar for contiguous pages.
+3.  In __pte_alloc,  there is another pmd_none check. Is it lead to the crash(pmd empty?).
+4.  There are two type of lock. The first one is mm_sem which is belong to the process. The other is the lock in page table. e.g. pmd lock, pte lock which lock the page and page table belong to it. The latter one is used when differnce process/thread share the memory(COW after fork is the typical one, share memory is another, not sure if there are others).
+    I suspect the I do not protect the latter one correctly. It lead to the current crash.
+5.  Does the process copy the pgd or copy the page table belong to pgd when fork a process?
+6.  Maybe there is some comments of function need to update according to the kernel docs. Could I do it for mm subsystem when I reading the code?
 
