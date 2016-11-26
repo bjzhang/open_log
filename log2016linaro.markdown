@@ -4282,3 +4282,23 @@ KWG-192: Use of contiguous page hint to create 64K pages
 5.  Does the process copy the pgd or copy the page table belong to pgd when fork a process?
 6.  Maybe there is some comments of function need to update according to the kernel docs. Could I do it for mm subsystem when I reading the code?
 
+10:57 2016-11-26
+----------------
+KWG-192: Use of contiguous page hint to create 64K pages
+--------------------------------------------------------
+1.  plan to figure out the failure of memsize.c, step:
+    1.  run malloc and memsize, compare the result. Maybe the issue in touch memory?
+    2.  25minutes to get the first result.
+2.  Eventually, I found that memsize fail because my vm is too slow to timeout.
+    So, I go back the issue in compile of lmbench.
+
+11:44 2016-11-26
+----------------
+ILP32 regression, ftest02, sync_file_range01
+--------------------------------------------
+1.  compile fail in latest LTP.
+    Download latest linaro toolchain. If confirm ask in ltp mailing list.
+2.  compile pass in ltp tag 20150903.
+3.  sync_file_range2: It is my mistake I could
+
+
