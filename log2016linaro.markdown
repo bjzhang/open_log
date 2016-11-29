@@ -4301,4 +4301,75 @@ ILP32 regression, ftest02, sync_file_range01
 2.  compile pass in ltp tag 20150903.
 3.  sync_file_range2: It is my mistake I could
 
+11:36 2016-11-29
+----------------
+1.  tools/testing/selftests/vDSO/Makefile and  tools/testing/selftests/prctl/Makefile is not included in selftests suite. deal with them later.
+2.  TODO track the new case in tools/testing/selftests/Makefile. e.g. tools/testing/selftests/nsfs/Makefile, bpf, sigaltstack.
+3.  cover lettter
+[PATCH v2 0/6] enable O and KBUILD_OUTPUT for kselftest
+
+Here is my second version for enabling the KBUILD_OUTPUT for kselftest.
+The first version could be found here[1]. I fix and test all the TARGET
+in tools/testing/selftest/Makefile. For ppc, I test through fake target.
+
+There are six patches in these series. And five of them clean up the
+existing code. I split the clean up patches into five, hope it is easy
+to review.
+
+  selftests: remove duplicated all and clean target
+  selftests: remove useless TEST_DIRS
+a selftests: add pattern rules
+A selftests: remove CROSS_COMPILE in dedicated Makefile
+A selftests: add EXTRA_CLEAN for clean target
+  selftests: enable O and KBUILD_OUTPUT
+
+Notes:
+  A: Ack by Michael.
+  a: ack by Michael. Minor update after rebase.
+
+In the first patch, I split the test files into two types:
+TEST_GEN_XXX means such file is generated during compiling. TEST_XXX
+means there is no need to compile before use. The main reason of this
+is the enablement of KBUILD_OUTPUT only need to care about TEST_GEN_XXX.
+I wanted to copy all the TEST_XXX with TEST_GEN_XXX, but I give up this
+idea in the end. Because people may puzzle why copy the file before
+installation.
+
+Because of the introducing of TEST_GEN_XXX, I update the top-level
+Makefile and lib.mk selftests directory. After introduce TEST_GEN_XXX, I
+could remove all the unnecessary all and clean targets.
+
+The second patch remove TEST_DIRS variable. And third patch add the
+pattern for compiling the c sourc code. The fourth patch remove the
+useless CROSS_COMPILE variable as it aleady exists in
+"tools/testing/selftests/lib.mk".
+
+Further more, The fifth patch add the EXTRA_CLEAN variable to clean up
+the duplicated clean target
+
+The last patch introduce the KBUILD_OUTPUT and O for kselftest instead
+using the existing kbuild system because user may compile kselftest
+directly (make -C tools/testing/selftests).
+
+Changes:
+1.  remove the useless *.o target in the following file suggested by
+    Michael:
+    tools/testing/selftests/powerpc/benchmarks/Makefile
+    tools/testing/selftests/powerpc/copyloops/Makefile
+    tools/testing/selftests/powerpc/dscr/Makefile
+    tools/testing/selftests/powerpc/math/Makefile
+    tools/testing/selftests/powerpc/primitives/Makefile
+    tools/testing/selftests/powerpc/stringloops/Makefile
+    tools/testing/selftests/powerpc/syscalls/Makefile
+    tools/testing/selftests/powerpc/tm/Makefile
+
+2.  remove the useless "all" and "clean" target in bpf and nsfs which
+    are added after my previous patch.
+
+3.  Improve the commit message.
+
+[1] http://www.spinics.net/lists/linux-api/msg20789.html
+
+git send-email --no-chain-reply-to --annotate --to shuahkh@osg.samsung.com --cc linux-api@vger.kernel.org --cc linux-kernel@vger.kernel.org --cc khilman@kernel.org --cc broonie@kernel.org --cc mpe@ellerman.id.au 000*.patch
+
 
