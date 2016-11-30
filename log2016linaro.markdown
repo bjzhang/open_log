@@ -4372,4 +4372,27 @@ Changes:
 
 git send-email --no-chain-reply-to --annotate --to shuahkh@osg.samsung.com --cc linux-api@vger.kernel.org --cc linux-kernel@vger.kernel.org --cc khilman@kernel.org --cc broonie@kernel.org --cc mpe@ellerman.id.au 000*.patch
 
+08:54 2016-11-30
+----------------
+[ACTIVITY] (Bamvor Jian Zhang) 2016-11-23 to 2016-11-29
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+    Discuss with Michael Ellerman. I need write better comment next time. Better ChangeLog/Commit message will save the time of review.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Read the code in do_wp_page and try to modify it.
+    About the current crash:
+        - After analysis the code, I realize that there are two locks when hanlding the page table fault. The one is mm semaphore in mm_struct which belong to each process. The other is lock of page which is used for lock the entire (sub) page table of belong to this page. Currently, single thread is good. I think the semaphore of mm_struct is not relative to my issue. The question is whether there is some misuse the lock of page. After read the code in handle_pte_fault. I notice that there is a check in 
+
+* Gpio selftest
+    No response.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Think about how to debug the existing empty pgd/pmd entry produced by my patch.
+
+* ILP32 performance test
+    Test Lmbench.
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+    Work on new version, hope could send out this week.
 
