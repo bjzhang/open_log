@@ -4374,14 +4374,18 @@ git send-email --no-chain-reply-to --annotate --to shuahkh@osg.samsung.com --cc 
 
 08:54 2016-11-30
 ----------------
-[ACTIVITY] (Bamvor Jian Zhang) 2016-11-23 to 2016-11-29
+git send-email activity --to "Private Kernel Alias" <private-kwg@linaro.org> --cc "Mark Brown" <broonie@linaro.org> --cc "Linus Walleij" <linus.walleij@linaro.org> --cc "Arnd Bergmann" <arnd@arndb.de> --cc "Bamvor Jian Zhang" <bamvor.zhangjian@linaro.org>
+
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2016-11-23 to 2016-11-29
+
 * KWG 174: KBUILD_OUTPUT fix for kseltest
-    Discuss with Michael Ellerman. I need write better comment next time. Better ChangeLog/Commit message will save the time of review.
+    Rebase to latest linux-next and send v2 yesterday(29 Dec).
 
 * KWG-192: Use of contiguous page hint to create 64K pages
     Read the code in do_wp_page and try to modify it.
     About the current crash:
-        - After analysis the code, I realize that there are two locks when hanlding the page table fault. The one is mm semaphore in mm_struct which belong to each process. The other is lock of page which is used for lock the entire (sub) page table of belong to this page. Currently, single thread is good. I think the semaphore of mm_struct is not relative to my issue. The question is whether there is some misuse the lock of page. After read the code in handle_pte_fault. I notice that there is a check in 
+        - After analysis the code, I realize that there are two locks when hanlding the page table fault. The one is mm semaphore in mm_struct which belong to each process. The other is lock of page which is used for lock the entire (sub) page table of belong to this page. Currently, single thread is good. I think the semaphore of mm_struct is not relative to my issue. The question is whether there is some misuse the lock of page. After read the code in handle_pte_fault. I notice that there is a pmd check(pmd_trans_unstable(fe->pmd) || pmd_devmap(*fe->pmd)) in handle_pte_fault. I am thinking if i should add a similar protect for my contiguous pages. (Maybe I could share some code with transhuge eventually).
+        - There was a failure of memory allocation test(memsize) in lmbench. I found that this is because the timeout in memsize is too small for my vm.
 
 * Gpio selftest
     No response.
@@ -4393,6 +4397,107 @@ git send-email --no-chain-reply-to --annotate --to shuahkh@osg.samsung.com --cc 
 * ILP32 performance test
     Test Lmbench.
 
-* KWG 174: KBUILD_OUTPUT fix for kseltest
-    Work on new version, hope could send out this week.
+11:12 2016-11-30
+----------------
+TODO
+  VG     #PV #LV #SN Attr   VSize   VFree 
+  system   1   4   0 wz--n- 460.00g 81.00g
+
+  LV    VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  home  system -wi-a-----  15.00g                                                    
+  root  system -wi-a-----  30.00g                                                    
+  swap  system -wi-a-----   4.00g                                                    
+  works system -wi-ao---- 320.00g                                                    
+    1  2016-11-30 10:30:44 ls
+    2  2016-11-30 10:30:46 df -h
+    3  2016-11-30 10:30:49 lvs
+    4  2016-11-30 10:43:21 ls
+    5  2016-11-30 10:46:16 vgs
+    6  2016-11-30 10:47:07 vgextend --help
+    7  2016-11-30 10:47:42 vgreduce --help
+    8  2016-11-30 10:47:56 vgchange --help
+    9  2016-11-30 10:48:33 lvextend -L 10G system/root
+   10  2016-11-30 10:48:57 lvextend --help
+   11  2016-11-30 10:49:12 lvextend -L 10G root system
+   12  2016-11-30 10:49:22 lvextend -L10G system/root system
+   13  2016-11-30 10:49:32 vgs
+   14  2016-11-30 10:49:40 lvextend -L10G system/root 
+   15  2016-11-30 10:49:42 lvs
+   16  2016-11-30 10:49:46 vgs
+   17  2016-11-30 10:50:14 lvextend -L+10G system/root 
+   18  2016-11-30 10:50:19 lvs
+   19  2016-11-30 10:50:33 resize2fs /dev/mapper/system-root 
+   20  2016-11-30 10:50:43 e2fsck -f /dev/mapper/system-root 
+   21  2016-11-30 10:51:05 resize2fs /dev/mapper/system-root 
+   22  2016-11-30 10:51:12 e2fsck -f /dev/mapper/system-root 
+   23  2016-11-30 10:51:50 mount|grep mnt
+   24  2016-11-30 10:51:58 mount /dev/mapper/system-root /mnt/
+   25  2016-11-30 10:52:11 df -h
+   26  2016-11-30 10:52:14 umount /mnt 
+   27  2016-11-30 10:58:54 mount /dev/mapper/system-root /mnt/
+   28  2016-11-30 10:59:01 umount /mnt 
+   29  2016-11-30 10:59:10 mount /dev/mapper/system-works /mnt/
+   30  2016-11-30 10:59:49 vim /mnt/reference/open_log/1057
+   31  2016-11-30 10:59:59 history | less
+   32  2016-11-30 11:00:11 vgs >>  /mnt/reference/open_log/1057
+   33  2016-11-30 11:00:17 lvs >>  /mnt/reference/open_log/1057
+   34  2016-11-30 11:00:25 history >>   /mnt/reference/open_log/1057
+
+  LV    VG     Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  home  system -wi-a-----  15.00g                                                    
+  root  system -wi-a-----  30.00g                                                    
+  swap  system -wi-a-----   4.00g                                                    
+  works system -wi-ao---- 320.00g                                                    
+
+19:12 2016-11-30
+----------------
+1.  read file after type "vim filename"
+```
+[<0000000000000000>] wait_transaction_locked+0x7e/0xb0 [jbd2]
+[<0000000000000000>] add_transaction_credits+0x207/0x2a0 [jbd2]
+[<0000000000000000>] start_this_handle+0x100/0x3f0 [jbd2]
+[<0000000000000000>] jbd2__journal_start+0xe7/0x210 [jbd2]
+[<0000000000000000>] __ext4_journal_start_sb+0x6d/0x110 [ext4]
+[<0000000000000000>] ext4_dirty_inode+0x32/0x70 [ext4]
+[<0000000000000000>] __mark_inode_dirty+0x1c6/0x3f0
+[<0000000000000000>] generic_update_time+0x79/0xd0
+[<0000000000000000>] touch_atime+0x88/0xa0
+[<0000000000000000>] generic_file_read_iter+0x508/0x5d0
+[<0000000000000000>] new_sync_read+0x85/0xb0
+[<0000000000000000>] __vfs_read+0x26/0x40
+[<0000000000000000>] vfs_read+0x86/0x130
+[<0000000000000000>] SyS_read+0x46/0xa0
+[<0000000000000000>] entry_SYSCALL_64_fastpath+0x16/0x6a
+```
+open ~/.vimin*.tmp when exit vim
+```
+z00293696@linux696:open_log> cat /proc/4155/stack
+[<0000000000000000>] wait_transaction_locked+0x7e/0xb0 [jbd2]
+[<0000000000000000>] add_transaction_credits+0x207/0x2a0 [jbd2]
+[<0000000000000000>] start_this_handle+0x100/0x3f0 [jbd2]
+[<0000000000000000>] jbd2__journal_start+0xe7/0x210 [jbd2]
+[<0000000000000000>] __ext4_journal_start_sb+0x6d/0x110 [ext4]
+[<0000000000000000>] __ext4_new_inode+0x6ac/0x1450 [ext4]
+[<0000000000000000>] ext4_create+0x10e/0x190 [ext4]
+[<0000000000000000>] vfs_create+0xc2/0x120
+[<0000000000000000>] path_openat+0x1393/0x14a0
+[<0000000000000000>] do_filp_open+0x7e/0xe0
+[<0000000000000000>] do_sys_open+0x12c/0x210
+[<0000000000000000>] SyS_open+0x1e/0x20
+[<0000000000000000>] tracesys_phase2+0x88/0x8d
+[<0000000000000000>] 0xffffffffffffffff
+```
+2.  fragment?
+    e4defrag -c /home/z00293696/works/
+
+    1 score
+
+3.  
+```
+z00293696@linux696:open_log> balooctl status
+Baloo File Indexer is running
+Indexer state: Indexing file content
+Indexed 485286 / 1011001 files
+Current size of index is 3.27 GiB
+```
 
