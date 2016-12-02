@@ -4579,4 +4579,18 @@ Current size of index is 3.27 GiB
 It is created by not enter copy_page_range.
 "mm("0xffff800079f5c900")->pgd: ("0xffff80007b3e2000)
 
+14:41 2016-12-02
+----------------
+runltplite: mmap16 fail
+
+I think I should check how does hugetlb create the page table.
+
+14:55 2016-12-02
+----------------
+patch series
+------------
+1.  gpio mockup test script: v5: wait for ack from Linusw.
+2.  KBUILD_OUTPUT: rebase after 4.10-rc1 is out.
+3.  rewrite mmap.
+4.  gpio-mockup interrupt test.
 
