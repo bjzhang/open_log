@@ -4594,3 +4594,24 @@ patch series
 3.  rewrite mmap.
 4.  gpio-mockup interrupt test.
 
+04:21 2016-12-05
+----------------
+network, ssh, reverse agent
+-----------------
+1.  run in the machine in localnetwork.
+ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+
+2.  check in the server
+$ netstat -anltp
+(No info could be read for "-p": geteuid()=1001 but you should be root.)
+Active Internet connections (servers and established)
+Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name
+tcp        0      0 127.0.0.1:20322         0.0.0.0:*               LISTEN      - 
+
+3.  usage:
+    ssh -p 20322 localhost
+
+4.  reference:
+    <http://blog.chinaunix.net/uid-30243292-id-5031363.html>
+    <http://daaoao.blog.51cto.com/2329117/614698>
+
