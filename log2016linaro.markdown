@@ -4615,3 +4615,109 @@ tcp        0      0 127.0.0.1:20322         0.0.0.0:*               LISTEN      
     <http://blog.chinaunix.net/uid-30243292-id-5031363.html>
     <http://daaoao.blog.51cto.com/2329117/614698>
 
+5. systemd service
+    1.  systemd service, ref<https://wiki.archlinux.org/index.php/Systemd#Writing_unit_files>
+        ```
+        root@linaro-developer:/etc/systemd/system# cat /lib/systemd/system/ssh_reverse_agent.service
+        [Unit]
+        Description=SSH Reverse Agent
+
+        [Service]
+        ExecStart=/usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+        ExecReload=/bin/kill -HUP $MAINPID
+        KillMode=process
+        Restart=always
+        Type=forking
+
+        [Install]
+        WantedBy=multi-user.target
+        ```
+
+root@linaro-developer:/etc/systemd/system# systemctl enable ssh_reverse_agent.service
+Created symlink from /etc/systemd/system/multi-user.target.wants/ssh_reverse_agent.service to /lib/systemd/system/ssh_reverse_agent.service.
+
+
+note: if change the service file after enable. Should run systemctl daemon-reload
+
+root@linaro-developer:/etc/systemd/system# systemctl status -l ssh_reverse_agent.service
+● ssh_reverse_agent.service - SSH Reverse Agent
+   Loaded: loaded (/lib/systemd/system/ssh_reverse_agent.service; enabled)
+   Active: activating (start) since Tue 2016-12-06 14:08:55 UTC; 436ms ago
+ Main PID: 4514 (code=exited, status=255);         : 4555 (ssh)
+   CGroup: /system.slice/ssh_reverse_agent.service
+           └─4555 /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+root@linaro-developer:/etc/systemd/system# ps -ef|grep ssh
+root      4408     1  0 13:51 ?        00:00:00 sshd: bamvor [priv]
+bamvor    4414  4408  0 13:51 ?        00:00:01 sshd: bamvor@pts/0
+root      4564  4420  0 14:09 pts/0    00:00:00 grep ssh
+
+passwd needed:
+root@linaro-developer:/etc/systemd/system# /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+bamvor@182.61.59.26's password:
+
+root@linaro-developer:/etc/systemd/system# ssh-copy-id bamvor@182.61.59.26
+/usr/bin/ssh-copy-id: ERROR: No identities found
+root@linaro-developer:/etc/systemd/system# ssh-keygen
+Generating public/private rsa key pair.
+Enter file in which to save the key (/root/.ssh/id_rsa):
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /root/.ssh/id_rsa.
+Your public key has been saved in /root/.ssh/id_rsa.pub.
+The key fingerprint is:
+e3:e3:b1:bc:6c:fb:6d:cb:69:ed:3d:2b:5c:83:a5:96 root@linaro-developer
+The key's randomart image is:
++---[RSA 2048]----+
+|                 |
+|                 |
+|                 |
+|               . |
+|        S     =  |
+|       . .   E o |
+|        +   o.. .|
+|       +.+ oo+.o |
+|       .B+.o=oo.+|
++-----------------+
+root@linaro-developer:/etc/systemd/system#
+root@linaro-developer:/etc/systemd/system#
+root@linaro-developer:/etc/systemd/system# ssh-copy-id bamvor@182.61.59.26
+/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+/usr/bin/ssh-copy-id: INFO: 1 key(s) remain to be installed -- if you are prompted now it is to install the new keys
+bamvor@182.61.59.26's password:
+Permission denied, please try again.
+bamvor@182.61.59.26's password:
+
+Number of key(s) added: 1
+
+Now try logging into the machine, with:   "ssh 'bamvor@182.61.59.26'"
+and check to make sure that only the key(s) you wanted were added.
+
+root@linaro-developer:/etc/systemd/system#
+root@linaro-developer:/etc/systemd/system#
+root@linaro-developer:/etc/systemd/system# /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+root@linaro-developer:/etc/systemd/system# ps -ef|grep ssh
+root      4408     1  0 13:51 ?        00:00:00 sshd: bamvor [priv]
+bamvor    4414  4408  0 13:51 ?        00:00:01 sshd: bamvor@pts/0
+root      4628     1  0 14:10 ?        00:00:00 /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+root      4630  4420  0 14:10 pts/0    00:00:00 grep ssh
+root@linaro-developer:/etc/systemd/system# kill 4628
+root@linaro-developer:/etc/systemd/system# systemctl restart ssh_reverse_agent.service
+root@linaro-developer:/etc/systemd/system# systemctl status -l ssh_reverse_agent.service
+● ssh_reverse_agent.service - SSH Reverse Agent
+   Loaded: loaded (/lib/systemd/system/ssh_reverse_agent.service; enabled)
+   Active: active (running) since Tue 2016-12-06 14:11:05 UTC; 3s ago
+  Process: 4633 ExecStart=/usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26 (code=exited, status=0/SUCCESS)
+ Main PID: 4634 (ssh)
+   CGroup: /system.slice/ssh_reverse_agent.service
+           └─4634 /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+
+
+# while true; do ps -ef|grep ssh; sleep 2; done
+root      4408     1  0 13:51 ?        00:00:00 sshd: bamvor [priv]
+bamvor    4414  4408  0 13:51 ?        00:00:01 sshd: bamvor@pts/0
+root      4673     1  0 14:12 ?        00:00:00 /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+root      4693  4420  0 14:12 pts/0    00:00:00 grep ssh
+root      4408     1  0 13:51 ?        00:00:00 sshd: bamvor [priv]
+bamvor    4414  4408  0 13:51 ?        00:00:01 sshd: bamvor@pts/0
+root      4695     1  0 14:12 ?        00:00:00 /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
+root      4697  4420  0 14:13 pts/0    00:00:00 grep ssh
