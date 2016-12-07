@@ -4721,3 +4721,20 @@ root      4408     1  0 13:51 ?        00:00:00 sshd: bamvor [priv]
 bamvor    4414  4408  0 13:51 ?        00:00:01 sshd: bamvor@pts/0
 root      4695     1  0 14:12 ?        00:00:00 /usr/bin/ssh -fNR 182.61.59.26:20322:192.168.1.200:22 bamvor@182.61.59.26
 root      4697  4420  0 14:13 pts/0    00:00:00 grep ssh
+
+12:14 2016-12-06
+----------------
+1.  add a pte_to_page to track the page use?  print pmd_to_page and pte_to_page?
+2.  do i need to check the pte stable or not?
+
+14:46 2016-12-06
+----------------
+1.  11/18 do not reply
+> For compat sys_mmap2, the pgoff argument is in multiples of 4K. This was
+> traditionally used for architectures where off_t is 32-bit to allow
+> mapping files to 2^44.
+>
+> Since off_t is 64-bit with AArch64/ILP32, should we just pass the off_t
+> as a 64-bit value in two different registers (w5 and w6)?
+Is there a requirement to make use of 64bit off_t in mmap?
+
