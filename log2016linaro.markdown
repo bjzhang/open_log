@@ -4901,3 +4901,12 @@ linux:~ # [  184.253414] cc1[2471]: unhandled level 2 translation fault (11) at 
 ----------------
 arnd: Here is my current patch[1], could you please take a look? It look good when I run basic comand, and allocate and set memory in multi process. It will crash when I compile the lmbench. I suspect there is some sort of race condition. But I could not figure out the reason.
 
+18:02 2016-12-08
+----------------
+1:1 with Mark
+1.  ILP32
+    1.  Do the performance test of aarch32. Discuss with Mark if it is not easy.
+    2.  follow up the glibc test failure if got some progress.
+    3.  Reply to Catalin about current performance test result.
+2.  apply attendee for linux storage, filesytem and memory conference.
+
