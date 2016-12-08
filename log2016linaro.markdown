@@ -4897,4 +4897,7 @@ linux:~ # [  184.253414] cc1[2471]: unhandled level 2 translation fault (11) at 
 [  184.265485] x3 : 0000000000000000 x2 : 0000000000000000
 [  184.265611] x1 : 0000000000000000 x0 : 0000000000d5f000
 
+21:10 2016-12-07
+----------------
+arnd: Here is my current patch[1], could you please take a look? It look good when I run basic comand, and allocate and set memory in multi process. It will crash when I compile the lmbench. I suspect there is some sort of race condition. But I could not figure out the reason.
 
