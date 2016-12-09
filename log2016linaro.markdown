@@ -4829,6 +4829,7 @@ pgd = ffff800075ea2000 [ffffa888a000] *pgd=00000000b5c37003 , *pud=00000000b67d9
 
 19:52 2016-12-07
 ----------------
+```
 linux:~ # [  118.025213] Current address of pte already alloc, release, unlock and exit
 [  118.027563] Unable to handle kernel NULL pointer dereference at virtual address 00000018
 [  118.027993] pgd = ffff80007664d000
@@ -4865,6 +4866,7 @@ linux:~ # [  118.025213] Current address of pte already alloc, release, unlock a
 [  118.041934] [<ffff0000081b7540>] handle_mm_fault+0x1d0/0xc60
 [  118.042074] [<ffff000008096710>] do_page_fault+0x2b8/0x358
 [  118.042227] [<ffff0000080812a8>] do_mem_abort+0x40/0x98
+```
 
 20:33 2016-12-07
 ----------------
@@ -4909,4 +4911,48 @@ arnd: Here is my current patch[1], could you please take a look? It look good wh
     2.  follow up the glibc test failure if got some progress.
     3.  Reply to Catalin about current performance test result.
 2.  apply attendee for linux storage, filesytem and memory conference.
+
+11:08 2016-12-09
+----------------
+1.  `__get_user_pages()` -> `follow_hugetlb_page()`
+Is it another chance to allocate the cont page? It seems that it is the hugetlb way to do it.
+Do I need do the similar things for 16pages in the future? Maybe not.
+
+
+2.  `hugetlb_fault()`
+```
+    /*
+     * Serialize hugepage allocation and instantiation, so that we don't
+     * get spurious allocation failures if two CPUs race to instantiate
+     * the same page in the page cache.
+     */
+    hash = hugetlb_fault_mutex_hash(h, mm, vma, mapping, idx, address);
+    mutex_lock(&hugetlb_fault_mutex_table[hash]);
+```
+
+3.  About the lock, currently, only pte lock is used by copy_page_range. And hugepge will use huge_pte_lock. I should use the corresponding lock.
+    And I could not understand the pte_lockptr(), why use *pmd?
+    ```
+    static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
+    {
+        return ptlock_ptr(pmd_page(*pmd));
+    }
+
+    static inline spinlock_t *pmd_lockptr(struct mm_struct *mm, pmd_t *pmd)
+    {
+        return ptlock_ptr(pmd_to_page(pmd));
+    }
+    ```
+static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
+
+4.  About the crash
+    1.  Show pte when enter do_anonymous_page. I do not understand why it allocate new pgd.
+    2.  Should I lock the in the beginning of copy_page_range to avoid the incomplete copy of pgd?
+
+5.  TODO
+    1.  fix the wrong counter.
+    2.  performance test:
+        A<arnd> for the start, we mainly need to know the potential gains, comparing the three cases that already work (pure 4k page, pure 64k page, 4k+trans-huge)
+        A<arnd> if 4k+trans-huge is already faster than 64k, there won't be much to gain by having 4k+page-hint+trans-huge
+        A<arnd> also, if 64k is not much faster than 4k, then 4k+hint won't be very valuable because it's likely slower than 64k
 
