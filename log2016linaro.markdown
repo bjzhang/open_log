@@ -4956,3 +4956,41 @@ static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
         A<arnd> if 4k+trans-huge is already faster than 64k, there won't be much to gain by having 4k+page-hint+trans-huge
         A<arnd> also, if 64k is not much faster than 4k, then 4k+hint won't be very valuable because it's likely slower than 64k
 
+09:28 2016-12-10
+----------------
+感觉自己节奏不太好. 每天到公司是否可以做一个25分钟可以做完的技术工作.
+
+14:50 2016-12-12
+----------------
+Board farm in my home
+----------------
+1.  I was thinking buy a wifi power module for safe. Now I think only need a temperature sensor to monitor the temperature in the first step.
+2.  Environment build up
+    1.  Use the reply to console my board instead of buying a new wifi relay.
+    2.  collect the sd card in my home.
+    4.  Setup two ssh reverse agent for 'HA': Hikey and Pine64.
+3.  For my baby project:
+    1.  Use existing rfid/nfc reader/writer(or buy a new one) to test the report the wether, play the music.
+    2.  Use one (usb) microphone to try to Amazon Echo/Google home. And then decided if I need buy a microphone array such as respeaker.
+    3.  Read the book?
+4.  For my arm64 high performance board:
+    1.  Test performance(May need buy a sata ssd disk) with existing opensuse benchmark repo. Ask Mark Brown if I could test specint from Linaro on my board.
+    2.  Try to setup a smart proxy with cow proxy to access the internet without enable vpn in mobile. Considering, there are only one 1G port. I may need another one to connect to my router.
+
+15:01 2016-12-12
+----------------
+GTD
+1.  today
+    0.  I do not find the benifit for my works when I use trello.com and toggl.com. Plan to use these tools for non-work things.
+    1.  Wrote baidu vm conf.
+        14:56-15:52 I think it is more reasonable if I could finish it within 30 miutes. I just finish this work and there is no much characters actually.
+    2.  Think about my board farm
+        16:20-16:35
+
+16:47 2016-12-12
+----------------
+1.  4.18-4.20. 4.18.19 last year. 4.20 this year.
+2.  5.12,16 last year.
+3.  5.23, 5.23 grand mather.
+4.  7.11-7.15, 7.18. 7.11 last year. 7.12-7.15, 7.18 this year leave.
+
