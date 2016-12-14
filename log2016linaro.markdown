@@ -5069,6 +5069,8 @@ GTD
             15:29-16:02 16:09-16:21
         3.  Run selftest for vm.
             16:21-16:28
+        4.  Discuss with Arnd
+            18:20-
     2.  specint test for aarch32 on arm64 kernel.
         1.  Ask if there is a native aarch32 compiler in huawei and/or opensuse.
         2.  rebase ILP32 to our latest upstream branch for D03.
@@ -5081,7 +5083,7 @@ GTD
             2.  (Tomorrow) compile specint testcase (I suppose there are spectools in linaro private repo).
             3.  (Friday) Test specint.
     3.  Linaro arm32 meeting.
-        17:04-
+        17:04-17:50
     4.  Public (performance) test framework for developer.
         1.  Discuss with test manager and project manager in Huawei if there is/will be.
         2.  (Tomorrow) If not build my own one(not script, It should be based on obs). Ask in opensuse mailing list before I started to do it.
@@ -5097,8 +5099,78 @@ cont page hint
     If fail, find another fail senario.
 2.  Run selftest for vm: it mainly for hugetlb.
 3.  looking for memtester in opensuse repo.
+4.  
+```
+"vma<"0x400000" -- "0xcaf000">, addr<"0x501d8c>
+"ret<"0x204>
+
+Breakpoint 2, __do_user_fault (tsk=0xffff80007aa96200, addr=44392332482589349, esr=2415919108, sig=11, code=196609, regs=0xffff80007420bec0) at arch/arm64/mm/fault.c:197
+```
+
 
 17:05 2016-12-14
 ----------------
 I am working on cont page hint and ILP32 recently.
-For cont page hint, there are stills segfault with empty. Such segfault is failed at load/store. Which is outside any vma of this process. I would image there are some wrong memory mapping with my patch, but I do not find a better way to check the mapping. Maybe
+For cont page hint, there are stills segfault with empty. Such segfault is failed at load/store. Which is outside any vma of this process. I would image there are some wrong memory mapping with my patch, but I do not find a better way to check the mapping.
+
+20:23 2016-12-14
+----------------
+ref<https://sourceware.org/gdb/onlinedocs/gdb/Define.html>
+```
+define recursive_vma
+set $gdb_vma=$arg0
+while($gdb_vma->vm_next)
+        output "vma<"
+        output/x $gdb_vma->vm_start
+        output " -- "
+        output/x $gdb_vma->vm_end
+        printf ">\n"
+        set $gdb_vma=$gdb_vma->vm_next
+end
+```
+
+(gdb) recursive_vma tsk->mm->mmap
+"vma<"0x400000" -- "0xcaf000>
+"vma<"0xcbe000" -- "0xcc0000>
+"vma<"0xcc0000" -- "0xcd0000>
+"vma<"0xcd0000" -- "0xd78000>
+"vma<"0x2dacf000" -- "0x2db01000>
+"vma<"0xffff96382000" -- "0xffff965a3000>
+"vma<"0xffff965a3000" -- "0xffff965e2000>
+"vma<"0xffff965e2000" -- "0xffff9672e000>
+"vma<"0xffff9672e000" -- "0xffff9673d000>
+"vma<"0xffff9673d000" -- "0xffff96741000>
+"vma<"0xffff96741000" -- "0xffff96743000>
+"vma<"0xffff96743000" -- "0xffff96747000>
+"vma<"0xffff96747000" -- "0xffff967e1000>
+"vma<"0xffff967e1000" -- "0xffff967f0000>
+"vma<"0xffff967f0000" -- "0xffff967f1000>
+"vma<"0xffff967f1000" -- "0xffff967f2000>
+"vma<"0xffff967f2000" -- "0xffff96806000>
+"vma<"0xffff96806000" -- "0xffff96815000>
+"vma<"0xffff96815000" -- "0xffff96816000>
+"vma<"0xffff96816000" -- "0xffff96817000>
+"vma<"0xffff96817000" -- "0xffff96883000>
+"vma<"0xffff96883000" -- "0xffff96892000>
+"vma<"0xffff96892000" -- "0xffff96893000>
+"vma<"0xffff96893000" -- "0xffff9689c000>
+"vma<"0xffff9689c000" -- "0xffff968f9000>
+"vma<"0xffff968f9000" -- "0xffff96908000>
+"vma<"0xffff96908000" -- "0xffff9690a000>
+"vma<"0xffff9690a000" -- "0xffff9690b000>
+"vma<"0xffff9690b000" -- "0xffff96923000>
+"vma<"0xffff96923000" -- "0xffff96932000>
+"vma<"0xffff96932000" -- "0xffff96933000>
+"vma<"0xffff96933000" -- "0xffff96934000>
+"vma<"0xffff96938000" -- "0xffff96944000>
+"vma<"0xffff96944000" -- "0xffff96962000>
+"vma<"0xffff96962000" -- "0xffff96963000>
+"vma<"0xffff96963000" -- "0xffff9696a000>
+"vma<"0xffff9696a000" -- "0xffff9696f000>
+"vma<"0xffff9696f000" -- "0xffff96970000>
+"vma<"0xffff96970000" -- "0xffff96971000>
+"vma<"0xffff96971000" -- "0xffff96972000>
+"vma<"0xffff96972000" -- "0xffff96973000>
+"vma<"0xffff96973000" -- "0xffff96974000>
+
+
