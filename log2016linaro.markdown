@@ -4994,3 +4994,111 @@ GTD
 3.  5.23, 5.23 grand mather.
 4.  7.11-7.15, 7.18. 7.11 last year. 7.12-7.15, 7.18 this year leave.
 
+14:32 2016-12-13
+----------------
+GTD
+---
+1.  today
+    1.  cont page hint. send patch to Arnd and Mark.
+        1.  do anon_vma_prepare num_of_page times. no works.
+            14:40-15:25
+        2.  reorganize the patch.
+        3.  send patch.
+    2.  specint test for aarch32 on arm64 kernel.
+        1.  more than 1 hour to prepare the environment.
+    3.  I almost finish the job, except the specint one.
+
+15:00 2016-12-13
+Hi, Arnd, Mark
+
+Here is part of my patch for contiguous page hint. I still encounter emptry page table entries. And I thought about the page table lock and misuse of some api. But no progress in recent weeks.
+
+There are two debug flags. cont_page_order set the current order of page which will allocated during one hanle_pte_fault. The default value of cont_page_order is 0 which fall back to original code. cont_page_debug indicate the debug level.
+
+Currently, I disable memcg, hugetlb, swap, transhuge, ksm in my test. There are empty entries when I compile lmbench. Could you please give me some suggestions? Thanks
+[  275.021096] cc1[2721]: unhandled level 2 translation fault (11) at 0x3e9606b0, esr 0x90000006
+[  275.022501] pgd = ffff80006e920000
+[  275.022674] [3e9606b0] *pgd=00000000af020003[  275.022995] , *pud=00000000ada10003
+, *pmd=0000000000000000[  275.023247]
+[  275.027644]
+[  275.027926] CPU: 0 PID: 2721 Comm: cc1 Not tainted 4.9.0-next-20161212-00001-g231b910-dirty #115
+[  275.028126] Hardware name: linux,dummy-virt (DT)
+[  275.028285] task: ffff8000768d1880 task.stack: ffff80006fa0c000
+[  275.028593] PC is at 0x61ab14
+[  275.028689] LR is at 0x61aad4
+[  275.028772] pc : [<000000000061ab14>] lr : [<000000000061aad4>] pstate: 60000000
+[  275.028918] sp : 0000ffffc3624c00
+[  275.029021] x29: 0000ffffc3624c00 x28: 0000000000d76000
+[  275.029284] x27: 0000000000cc0000 x26: 00000000ffc8968d
+[  275.029446] x25: 0000000000000000 x24: 0000000000000000
+[  275.029586] x23: 0000000020a1f880 x22: 0000000000000000
+[  275.029714] x21: 0000000000d77130 x20: 0000000000d77130
+[  275.029842] x19: 000000003e9606a8 x18: 0000ffffc3624ab0
+[  275.029970] x17: 0000ffff99ae8d80 x16: 0000000000cc01f8
+[  275.030099] x15: 0000ffff99bcb580 x14: ffffffffffffffff
+[  275.030227] x13: 0000000000000008 x12: 0000000000000010
+[  275.030362] x11: 0101010101010101 x10: 7f7f7f7f7f7f7f7f
+[  275.030506] x9 : 6564631f71647254 x8 : 0000ffffc3624cd0
+[  275.030640] x7 : 697461746e656d67 x6 : 0000000020a1c092
+[  275.030767] x5 : 0000000020a1be80 x4 : 0000000000000000
+[  275.030894] x3 : 0000000000000000 x2 : 0000000000000000
+[  275.031050] x1 : 0000000000000000 x0 : 0000000000d5f000
+[  275.031194]
+
+
+What we could do for check_stack_guard_page? We could ignore it safely
+when stack is grow down, we coud propbably not allocate the more than one
+page. But we could also allocate 16 page by growing down the stack 16 pages.
+Given that the stack may grow up quickly. It maybe worth to do it.
+mmu_notifier_invalidate_range_start(src_mm, mmun_start, mmun_end);
+
+git send-email --to  broonie@linaro.org --to arnd@arndb.de --cc bamvor.zhangjian@linaro.org --from bamvor.zhangjian@huawei.com
+
+10:01 2016-12-14
+----------------
+GTD
+---
+1.  today
+    0.  GTD and misc
+        10:01-10:31 Is it possible use less than 20 minutes?
+        20'         recover the network in blue area.
+    1.  cont page hint.
+        1.  Check the vma and page table and its parent when the process segfault. And print the corresponding page table in its parent.
+            10:32-10:46 11:33-11:51 14:45-15:23
+        2.  Write malloc, fork and access code to try to reproduce the failure. Could not reproduce.
+            15:29-16:02 16:09-16:21
+        3.  Run selftest for vm.
+            16:21-16:28
+    2.  specint test for aarch32 on arm64 kernel.
+        1.  Ask if there is a native aarch32 compiler in huawei and/or opensuse.
+        2.  rebase ILP32 to our latest upstream branch for D03.
+            1.  Test current kernel.
+            2.  rebase.
+        3.  run the current specint case in my company.
+            1.  There are so many errors only sjeng is successful. give it up.
+        4.  Test specint on aarch32 board(cubietruck) in my home farm.
+            1.  (Tonight) Deploy opensuse tumbleweed.
+            2.  (Tomorrow) compile specint testcase (I suppose there are spectools in linaro private repo).
+            3.  (Friday) Test specint.
+    3.  Linaro arm32 meeting.
+        17:04-
+    4.  Public (performance) test framework for developer.
+        1.  Discuss with test manager and project manager in Huawei if there is/will be.
+        2.  (Tomorrow) If not build my own one(not script, It should be based on obs). Ask in opensuse mailing list before I started to do it.
+    5.  When should I rebase the kselftest output?
+
+10:35 2016-12-14
+----------------
+cont page hint
+--------------
+1.  check vma and mapping in `__do_user_fault()`. Check the parent from task_struct.real_parent
+    I found that the invalid access is came from load/store. How should I know where does this access came from?
+    Maybe I should write a test case which malloc memory in parent and access in child.
+    If fail, find another fail senario.
+2.  Run selftest for vm: it mainly for hugetlb.
+3.  looking for memtester in opensuse repo.
+
+17:05 2016-12-14
+----------------
+I am working on cont page hint and ILP32 recently.
+For cont page hint, there are stills segfault with empty. Such segfault is failed at load/store. Which is outside any vma of this process. I would image there are some wrong memory mapping with my patch, but I do not find a better way to check the mapping. Maybe
