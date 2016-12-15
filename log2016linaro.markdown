@@ -5073,6 +5073,7 @@ GTD
             18:20-
     2.  specint test for aarch32 on arm64 kernel.
         1.  Ask if there is a native aarch32 compiler in huawei and/or opensuse.
+            My colleague of huawei will help on it.
         2.  rebase ILP32 to our latest upstream branch for D03.
             1.  Test current kernel.
             2.  rebase.
@@ -5080,6 +5081,7 @@ GTD
             1.  There are so many errors only sjeng is successful. give it up.
         4.  Test specint on aarch32 board(cubietruck) in my home farm.
             1.  (Tonight) Deploy opensuse tumbleweed.
+                delayed.
             2.  (Tomorrow) compile specint testcase (I suppose there are spectools in linaro private repo).
             3.  (Friday) Test specint.
     3.  Linaro arm32 meeting.
@@ -5115,6 +5117,8 @@ For cont page hint, there are stills segfault with empty. Such segfault is faile
 
 20:23 2016-12-14
 ----------------
+debugging, gdb, user-defined commands
+-------------------------------------
 ref<https://sourceware.org/gdb/onlinedocs/gdb/Define.html>
 ```
 define recursive_vma
@@ -5173,4 +5177,130 @@ end
 "vma<"0xffff96972000" -- "0xffff96973000>
 "vma<"0xffff96973000" -- "0xffff96974000>
 
+12:09 2016-12-15
+----------------
+GTD
+---
+1.  today
+    0.  GTD and misc
+        1.  Not actually work in whole morning.
+        2.  Started to work from 14:45.
+    1.  cont page hint.
+        1.  Summary for the discussion of yesterday
+            14:45-14:56 ref"14:28 2016-12-15"
+        2.  Start to write the other code.
+            Delayed.
+    2.  specint test for aarch32 on arm64 kernel.
+        1.  Ask if there is a native aarch32 compiler in huawei and/or opensuse.
+            Ask in next week: My colleague of huawei will help on it.
+            Ask in opensuse: If I fail in try the cubieboard JeOS.
+        2.  rebase ILP32 to our latest upstream branch for D03.
+            1.  rebase.
+                15:11-15:25
+                16:04-16:11  compile
+            2.  Test
+                Test tonight.
+        3.  run the current specint case in my company.
+            1.  There are so many errors only sjeng is successful. give it up.
+        4.  Test specint on aarch32 board(cubietruck) in my home farm.
+            1.  (Tonight) Deploy opensuse tumbleweed.
+                delayed.
+            2.  (Friday) compile specint testcase (I suppose there are spectools in linaro private repo).
+            3.  (Friday) Test specint.
+    4.  Public (performance) test framework for developer.
+        1.  Discuss with test manager and project manager in Huawei if there is/will be.
+        2.  Ask developer of kselftest.
+        3.  If not build my own one(not script, It should be based on obs). Ask in opensuse mailing list before I started to do it.
+    5.  Fix the issue in ssh.py.
+        15:35-16:04 ref"15:40 2016-12-15"
+        16:30-17:02 It should be worked.
+        17:06-17:20 Add commit message.
+        17:50-18:08 Fix the fake failure of ssh.
+    6.  When should I rebase the kselftest output?
+
+14:28 2016-12-15
+----------------
+1.  Chat with Arnd(#arm-linux at freenode).
+    ```
+    [2016-12-14 05:19:48] <arnd> bamvor: regarding your patch to do_anonymous_page, I wonder if you could be hitting a race there, and multiple CPUs are trying to modify the same ptes at the same time
+    [2016-12-14 05:20:49] <bamvor> yes. I think about it. But there is pte_lock when I modify the entry of page.
+    [2016-12-14 05:20:57] <bamvor> is it enough?
+    [2016-12-14 05:21:20] <arnd> I also see that the page fault you get is for level 2, but I assume you are running four-level  page tables, so the fault is for the pmd, not the pte level
+    [2016-12-14 05:21:29] <bamvor> I also try the mm->page_table_lock, but no difference .
+    [2016-12-14 05:21:58] <bamvor> yes. usually pmd level fault. sometimes pgd.
+    [2016-12-14 05:22:15] <arnd> ok
+    [2016-12-14 05:24:36] <bamvor> currently, I get pte from pte_offset_map_lock and then pte++ to get other pte. Because I aleady check such address in the single pmd entry. It is similar to hugetlb way. Do you think it is ok?
+    [2016-12-14 05:25:28] <arnd> I think we also hold mm->mmap_sem, which is probably sufficient here
+    [2016-12-14 05:25:58] <bamvor> yes. I think so.
+    [2016-12-14 05:26:48] <bamvor> And another question is I do not understand the anon_vma_prepare. Does anon_vma_prepare relative to one page? I do not see any code in it rely on the address or num of page.
+    [2016-12-14 05:30:53] <arnd> bamvor: looking at the error message, it's clear that handle_mm_fault() returned one of VM_FAULT_ERROR , VM_FAULT_BADMAP, or VM_FAULT_BADACCESS, so I'd try to find out where they are returned
+    [2016-12-14 05:34:43] <bamvor> I think I could confirm it in my environment.
+    [2016-12-14 05:35:38] <arnd> and the most likely candidate for returning one of them would be do_wp_page, so it's probably a write access following the read access that fails
+    [2016-12-14 05:38:56] <arnd> bamvor: one thing I don't see is where you align vmf->address to the lower 64k boundary
+    [2016-12-14 05:39:52] <bamvor> I do not align it. I just allocate the 64k page when it align with 64k boundary.
+    [2016-12-14 05:40:23] <arnd> ah, I see
+    [2016-12-14 05:41:07] <bamvor> maybe I could optimize as you said. I am just not sure whether it will improve or not.
+    [2016-12-14 05:41:46] <bamvor> i do not understand why the fault address is outside all the vma. I do not think it is possible. correct?
+    [2016-12-14 05:46:15] <arnd> why would it be? I don't see any indication that it is
+    [2016-12-14 05:46:33] <arnd> bamvor: the in_pte() check is redundant, right?
+    [2016-12-14 05:46:48] <arnd> since you already check the alignment
+    [2016-12-14 05:48:45] <bamvor> yes. I could remove the in_pte.
+    [2016-12-14 05:48:52] <arnd> ah wait, you don't check the alignment, the 'if (ALIGN(vmf->address, PAGE_SIZE * cont_page_num))' check won't do anything really since vmf->address is always a number larger than the first few pages
+    [2016-12-14 05:50:28] <arnd> I think the check you need here is 'vmf->address < ALIGN(vmf->address, PAGE_SIZE * cont_page_num) + PAGE_SIZE'
+    [2016-12-14 05:50:36] <arnd> to check that you are within the first page
+    [2016-12-14 05:51:11] <arnd> bamvor: at least I think that is what you intended
+    [2016-12-14 05:51:47] <bamvor> not sure if I could follow you. before enter handle_mm_fault, address already align to PAGE_MASK.
+    [2016-12-14 05:52:58] <bamvor> And it will align again when create vmf.
+    [2016-12-14 05:53:34] <arnd> ah, then you just need to check 'if (!(vmf->address & (PAGE_MASK << cont_page_order))
+    [2016-12-14 05:53:40] <arnd> )'
+    [2016-12-14 05:54:20] <bamvor> oh, yes.
+    [2016-12-14 05:54:42] <arnd> but it would be better to not limit yourself to that special case at all
+    [2016-12-14 05:55:00] <arnd> and instead align the address down:
+    [2016-12-14 05:55:10] <arnd> address = ALIGN(vmf->address, PAGE_SIZE * cont_page_num);
+    [2016-12-14 05:56:06] <arnd> then check that address..address+64k is within the vma and fault all 16 pages
+    [2016-12-14 05:56:16] <arnd> independent of where within that range the faulting address was
+    [2016-12-14 05:56:23] <arnd> so faulting both before and after
+    [2016-12-14 05:57:23] <bamvor> understand.
+    [2016-12-14 05:58:06] <arnd> for the initial testing, either way should work, but I see no reason to not just do it the full way already
+    [2016-12-14 06:02:38] <arnd> bamvor: I think I see another problem: the !FAULT_FLAG_WRITE case is interesting, as you change that to have 16 copies of the zero-page
+    [2016-12-14 06:03:42] <bamvor> arnd: the return value of handle_mm_fault is 0x204: VM_FAULT_LOCKED &&  VM_FAULT_MAJOR.
+    [2016-12-14 06:03:45] <arnd> this is probably where things go wrong in the do_wp_page later. I don't see a specific problem here, but you can probably skip that for now and only worry about do_anonymous_page() with FAULT_FLAG_WRITE for the start
+    [2016-12-14 06:05:45] <arnd> bamvor: I don't see how VM_FAULT_LOCKED or VM_FAULT_MAJOR would cause the warning message to be printed. Are you sure this isn't just the initial fault that is successful?
+    [2016-12-14 06:19:34] <bamvor> arnd: I came back. i am checking it.
+    [2016-12-14 06:24:47] <bamvor> I do not find that mmap_mm is release after __do_page_fault, i will retest it.
+    ```
+
+2.  suggestion from Arnd:
+    1.  Ignore the current failure, only work for write of do_anonymous_page. Work on do_wp_page.
+    2.  Allocate the contiguous pages no mather current address is the beginning page or not. Remove useless alignment check.
+
+15:40 2016-12-15
+----------------
+fix the issue in ssh.py
+-----------------------
+1.  Error
+    ```
+    Traceback (most recent call last):
+      File "./ssh.py", line 332, in <module>
+        test()
+      File "./ssh.py", line 293, in test
+        ssh_transport(host, host_user, ["ls"])
+      File "./ssh.py", line 98, in ssh_transport
+        ssh.load_system_host_keys()
+      File "/usr/lib/python2.7/site-packages/paramiko/client.py", line 101, in load_system_host_keys
+        self._system_host_keys.load(filename)
+      File "/usr/lib/python2.7/site-packages/paramiko/hostkeys.py", line 101, in load
+        e = HostKeyEntry.from_line(line, lineno)
+      File "/usr/lib/python2.7/site-packages/paramiko/hostkeys.py", line 331, in from_line
+        key = RSAKey(data=decodebytes(key))
+      File "/usr/lib/python2.7/site-packages/paramiko/rsakey.py", line 58, in __init__
+        ).public_key(default_backend())
+      File "/usr/lib64/python2.7/site-packages/cryptography/hazmat/backends/__init__.py", line 35, in default_backend
+        _default_backend = MultiBackend(_available_backends())
+      File "/usr/lib64/python2.7/site-packages/cryptography/hazmat/backends/__init__.py", line 22, in _available_backends
+        "cryptography.backends"
+    AttributeError: 'EntryPoint' object has no attribute 'resolve'
+    ```
+
+2.  Someone in internet said I should downgrade cryptography. But I do not know how.
 
