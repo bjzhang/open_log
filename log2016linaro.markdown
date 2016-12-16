@@ -5306,6 +5306,9 @@ fix the issue in ssh.py
 
 19:38 2016-12-15
 ----------------
+From: Bamvor Jian Zhang <bamvor.zhangjian@linaro.org>
+Subject: [RFD] bamvor's work and priority
+
 Hi, Arnd, Mark
 
 I feel the progress of my work is not good in recent one month. I am re-thinking what I need to do and priorities, any feedback or suggestion is welcome. Thanks.
@@ -5313,12 +5316,20 @@ I feel the progress of my work is not good in recent one month. I am re-thinking
     1.  I need test lmbench and specint for arm32.
         1.  lmbench: I am looking for help from my colleague.
         2.  specint: After I read the script of from tcwg, I get the idea how to test aarch32 specint on arm64 kernel. I think I could get the result in early next week.
-    2.  Minor maintainance work internally in huawei. It will not take too much time.
+    2.  Minor maintainance work internally in huawei. It will not take too much time, 0.5 day or so.
+    3.  Is there anything I could do with regard to upstreaming?
 
 2.  Cont page hint:
     1.  After discuss with Arnd this week, I start to write the code in do_wp_page. Hope I could send a new version of patch in the end of next week.
-    2.  I plan to test 4k page, 4k page with transhuge, 64k page hugetlb on 4k page in next week.
+    2.  I plan to test 4k page, 4k page with transhuge, 64k page hugetlb on 4k page in next week. And compare the result from [1]
         Once I got the performance numbers I will send to you. I think a positive number may help me apply as attendee of linux mm conference.
+
+Regards
+
+Bamvor
+
+[1] http://users.ece.utexas.edu/~ljohn/teaching/382m-15/reading/korn.pdf, Got this paper from Maxim
+[1] https://www.cs.utexas.edu/~yjkwon/pdf/kwon16osdi-ingens.pdf
 
 09:58 2016-12-16
 ----------------
