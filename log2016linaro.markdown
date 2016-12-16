@@ -5305,17 +5305,66 @@ fix the issue in ssh.py
 2.  Someone in internet said I should downgrade cryptography. But I do not know how.
 
 19:38 2016-12-15
------------------
-think about the priority between ilp32 and cont page hint.ilp32 could only be accepted in the merge window of 4.11, I do not know how long does catalin need to decide to merge it. But 4.11 is actual too late for me.
-for the cont page hint, I need to think about what should I do for Linux mm conference.
+----------------
+Hi, Arnd, Mark
+
+I feel the progress of my work is not good in recent one month. I am re-thinking what I need to do and priorities, any feedback or suggestion is welcome. Thanks.
+1.  ILP32:
+    1.  I need test lmbench and specint for arm32.
+        1.  lmbench: I am looking for help from my colleague.
+        2.  specint: After I read the script of from tcwg, I get the idea how to test aarch32 specint on arm64 kernel. I think I could get the result in early next week.
+    2.  Minor maintainance work internally in huawei. It will not take too much time.
+
+2.  Cont page hint:
+    1.  After discuss with Arnd this week, I start to write the code in do_wp_page. Hope I could send a new version of patch in the end of next week.
+    2.  I plan to test 4k page, 4k page with transhuge, 64k page hugetlb on 4k page in next week.
+        Once I got the performance numbers I will send to you. I think a positive number may help me apply as attendee of linux mm conference.
 
 09:58 2016-12-16
 ----------------
 GTD
 ---
 1.  today
-    1.  add env check in ssh.py
-        1.  10:03-10:36
+    0.  rest and/or leave the desk
+        11:29-11:35
+    1.  ILP32
+        1.  performance:
+            1.  ssh.py
+                10:03-10:36 add env check in ssh.py
+                10:42-10:50 minor fix for above changes.
+            2.  specint for arm:
+                1.  compile specint in 32bit arm environment.
+                    11:21-11:29 make toolsinstall
+                    11:36-12:02
+                2.  copy the object to arm64 board and do the test.
+            3.  lmbench for arm(wrote script).
     1.  Think about the plan of today.
-    2.  Send email to Mark and Arnd about my priority
+        10:52-11:21
+    2.  Send email to Mark and Arnd about my confuse of priority.
+    3.  cont_page_hint: "10:57 2016-12-16".
+    4.  KBUILD_OUTPUT: "11:28 2016-12-16"
+2.  Next
+    1.  Share build method of specint with my colleague.
+
+10:57 2016-12-16
+----------------
+cont page hint
+--------------
+1.  Performance proof:
+    1.  Ask performance comparision of 4k and 64k from Maxim Kuvyrkov
+    2.  Run 4k, 4k with transhuge, 64k for specint(64k hugetlb on 4k?).
+
+2.  linux mm conference.
+    1.  possible requirement:
+        1.  performance proof.
+        2.  current patch(?)
+
+3.  Coding
+    1.  do_wp_page.
+
+11:28 2016-12-16
+----------------
+KBUILD_OUTPUT
+-------------
+1.  Ask Shuah if I could rebase to her next branch now.
 
