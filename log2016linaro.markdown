@@ -5308,3 +5308,14 @@ fix the issue in ssh.py
 -----------------
 think about the priority between ilp32 and cont page hint.ilp32 could only be accepted in the merge window of 4.11, I do not know how long does catalin need to decide to merge it. But 4.11 is actual too late for me.
 for the cont page hint, I need to think about what should I do for Linux mm conference.
+
+09:58 2016-12-16
+----------------
+GTD
+---
+1.  today
+    1.  add env check in ssh.py
+        1.  10:03-10:36
+    1.  Think about the plan of today.
+    2.  Send email to Mark and Arnd about my priority
+
