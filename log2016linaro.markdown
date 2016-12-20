@@ -5434,6 +5434,39 @@ learning syscall, file, sync
              * will be available after a crash.
             ```
 
+20:15 2016-12-19
+----------------
+git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc linus.walleij@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
+
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2016-12-12 to 2016-12-19
+
+* KWG 174: KBUILD_OUTPUT fix for kseltest
+    Got confict when Shuah merge them. Will rebase and send to LKML after 4.10-rc1 is out.
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Discuss with Arnd and Mark. Arnd suggest skip the current segfault temperary and work on the do_wp_page.
+    Read the doc in libhugetlbfs to learn how to test 64k hugetlb performance of speccpu.
+    Discuss with Maxim(from tcwg). Maxim share me a paper[1] which is shown that the benefit of 64k page.
+
+* Gpio selftest
+    Shuah merge the last(5/5) patch.
+
+* ILP32
+    Two issues from huawei:
+        sync_file_range2: I forget to cc our(Huawei) stable kernel after discuss with LKML. It is merged to huawei stable kernel this week.
+        Input test case: The input01-input06 of LTP failed in our system because the wrong INPUT_COMPACT_TEST for ILP32. It is not existed in upstream kernel because INPUT_COMPAT_TEST is replaced by is_compat_syscall().
+    Performance test: looking for the internal resource for test lmbench of aarch32 on arm64 kernel.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Write the code in do_wp_page
+    Performance test to evaluate whether it is worth to do this.
+
+* ILP32 performance test
+    Test Lmbench and specint.
+
+[1] http://users.ece.utexas.edu/~ljohn/teaching/382m-15/reading/korn.pdf
+
 11:09 2016-12-20
 ----------------
 GTD
