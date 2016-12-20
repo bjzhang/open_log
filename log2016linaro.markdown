@@ -5349,13 +5349,12 @@ GTD
                     11:36-12:02
                 2.  copy the object to arm64 board and do the test.
             3.  lmbench for arm(wrote script).
+                Cancel. Looking for the resouce in huawei.
     1.  Think about the plan of today.
         10:52-11:21
     2.  Send email to Mark and Arnd about my confuse of priority.
     3.  cont_page_hint: "10:57 2016-12-16".
     4.  KBUILD_OUTPUT: "11:28 2016-12-16"
-2.  Next
-    1.  Share build method of specint with my colleague.
 
 10:57 2016-12-16
 ----------------
@@ -5364,6 +5363,10 @@ cont page hint
 1.  Performance proof:
     1.  Ask performance comparision of 4k and 64k from Maxim Kuvyrkov
     2.  Run 4k, 4k with transhuge, 64k for specint(64k hugetlb on 4k?).
+        1.  1219: Discuss with Arnd. Arnd suggest pure 64k.
+                  Environment setup finish.
+        2.  1220: Verity the hugetlb environment.
+                  Test pure 64k environment.
 
 2.  linux mm conference.
     1.  possible requirement:
@@ -5372,10 +5375,102 @@ cont page hint
 
 3.  Coding
     1.  do_wp_page.
+    2.  Arnd: allocate the 64k in the twice request. This is essential for sending to list.
 
 11:28 2016-12-16
 ----------------
 KBUILD_OUTPUT
 -------------
 1.  Ask Shuah if I could rebase to her next branch now.
+
+11:40 2016-12-19
+----------------
+GTD
+---
+1.  today
+    1.  send patch to guohanun. DONE
+    2.  Process the ticket of sync_file_range2 in huawei internally.
+        15:19-15:50 17:03-17:20
+    2.  read reply from arnd and mark DONE
+    3.  linaro activity. DONE(On my way home and at home)
+
+12:07 2016-12-19
+----------------
+TODO
+---
+add to ssh.py
+ssh.py is not intened to as a build system. It is a glue for kernel testing.
+1.  ltp
+    1.  env_check
+        rpm -qa |grep ltp -w
+    2.  env_setup
+        zypper addrepo -c -f -r http://download.opensuse.org/repositories/benchmark/openSUSE_Factory_ARM/benchmark.repo
+        zypper -v --non-interactive install ltp
+
+    add ssh no key check: -o "StrictHostKeyChecking=no"
+    compile kernel add kernel config.
+
+15:28 2016-12-19
+----------------
+learning syscall, file, sync
+----------------------------
+1.  sync_file_range
+    1.  Learned:
+        1.  Sync and Async.
+        2.  Metadata and data.
+
+    2.  Useful flag:
+        ```
+         * SYNC_FILE_RANGE_WAIT_BEFORE|SYNC_FILE_RANGE_WRITE: ensures that all pages
+         * in the range which were dirty on entry to sys_sync_file_range() are placed
+         * under writeout.  This is a start-write-for-data-integrity operation.
+        ```
+        SYNC_FILE_RANGE_WAIT_AFTER
+        2.  Do not write the metadata
+            ```
+             * It should be noted that none of these operations write out the file's
+             * metadata.  So unless the application is strictly performing overwrites of
+             * already-instantiated disk blocks, there are no guarantees here that the data
+             * will be available after a crash.
+            ```
+
+11:09 2016-12-20
+----------------
+GTD
+---
+1.  today
+    1.  Upstream kernel: hikey.
+        Plan: 10min
+        11:19-11:45 upstream kernel boot successful. But forget to build usb net. And there are hangtask.
+        16:08-16:54
+    1.  Performance test.
+        1.  ILP32:
+            1.  Think about how to test in batch mode.
+                17:11-17:59 My colleague help me on it, test stream,hackbench,libMicro-0.4.0,bonnie-1.03e,lmbench3,netperf-2.7.0,sysbench,tiobench-0.3.3. Running except lmbench build failure.
+                            Running. Check result tomorrow.
+            2.  Run specint(from linaro) on hikey upstream kernel.
+                Running.
+        2.  cont page hint(DELAY)
+            1.  64k hugetlb need boot with 64k hugetlb only mode.
+    1.  Reply to Patent.
+        14:29-14:57 15:02-15:15
+    1.  huawei:
+        14:57-15:02 15:30-15:42 ILP32 issue. ILP32 performance regression.
+        15:13-15:30 page dirty.
+    1.  Excise
+        15:42-16:08
+    1.  do_wp_page(DELAY).
+    1.  Summay:
+        18:20-
+        1.  do not write the code for cont page hint. This is the second day not wrote the code:(
+        2.  Not test the performance of cont page hint.
+        3.  ILP32 performance regression seems a good start.
+
+2.  Next
+    1.  Share build method of specint with my colleague.
+    1.  do_wp_page.
+    1.  cont page hint
+        1.  64k hugetlb need boot with 64k hugetlb only mode.
+        2.  4k transtlb, 64k pure.
+    1.  continue to ILP32 performance test
 
