@@ -5501,9 +5501,36 @@ GTD
 
 2.  Next
     1.  Share build method of specint with my colleague.
-    1.  do_wp_page.
-    1.  cont page hint
-        1.  64k hugetlb need boot with 64k hugetlb only mode.
-        2.  4k transtlb, 64k pure.
+        Cancel. Already fix it by colleague.
+
+10:34 2016-12-21
+----------------
+GTD
+---
+1.  today
+    1.  Huawei: discuss with our pl.
+        10:34-10:57
+    2.  Huawei: discuss about my cont page hint and linux-mm in our department.
+        11:04-11:22 I should quickly if I want to attend the linux-mm.
+    3.  Internal issue.
+        14:08-14:17
+    4.  cont page hint
+        1.  performance test
+            1.  64k hugetlb need boot with 64k hugetlb only mode.
+        2.  pure 4k, 4k transtlb, pure 64k, 64k transtlb.
+            14:37-15:24
+            15:35-15:55
+            19:19-19:40 There is not differece between 4k and 64k if transhuge opened. Run all the specint to verify this conclusion.
     1.  continue to ILP32 performance test
+        1.  Check the previous result and patch ILP32 patches, run specint.
+            16:17-17:21
+    1.  do_wp_page.
+        Cancel. The third day do not work on the code.
+
+1.  Next
+    1.  cont page hint:
+        1. Test with defragment.
+    1.  gpio patch: ask mark: should I said s-o-b if I think it is ok?
+    1.  abi checker. two versions
+    2.  issue of ilp32 in huawei.
 
