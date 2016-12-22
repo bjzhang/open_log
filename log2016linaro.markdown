@@ -5534,3 +5534,37 @@ GTD
     1.  abi checker. two versions
     2.  issue of ilp32 in huawei.
 
+09:42 2016-12-22
+----------------
+GTD
+---
+1.  today
+    1.  cont page hint:
+        1.  Improve specint script to support *.ref.txt directly(It only support directory till now) and get the yesterday. ref"10:14 2016-12-22"1
+            9:54-10:15
+        2.  Prepare the environment to run specint in hikey.
+        2.  Try the hack patch.
+            14:44-15:16 Could not focus. Stop the timer.
+        2.  Ask my colleagues about FMFI.
+    1.  ssh tools
+        Json dump to the wrong directory.
+    1.  同样是出错: 在restore_sigframe里面有打印, 但是在handle_signal里面没有. 要不要给社区发个补丁?
+
+10:14 2016-12-22
+----------------
+Result yesterday
+1.  specint single core
+base: 4k(dis transtlb)
+                   4k with transtlb      64k(transtlb disable)  64k with transtlb
+   400.perlbench:  1.59%                  2.38%                    2.38%
+       401.bzip2:  0.53%                  2.88%                    3.21%
+         403.gcc:  1.58%                  3.16%                    3.29%
+         429.mcf: 19.65%                 17.26%                    18.33%
+       445.gobmk:  0.88%                  1.77%                    1.77%
+       456.hmmer:  0.00%                -39.61%                   -40.33%
+       458.sjeng:  2.88%                  3.85%                    1.92%
+  462.libquantum:  5.88%                  9.80%                    14.38%
+     471.omnetpp: 12.54%                 13.04%                    12.04%
+       473.astar:  8.59%                 10.59%                    9.76%
+   483.xalancbmk:  8.11%                  5.41%                    6.31%
+
