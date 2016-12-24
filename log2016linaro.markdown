@@ -5568,3 +5568,31 @@ base: 4k(dis transtlb)
        473.astar:  8.59%                 10.59%                    9.76%
    483.xalancbmk:  8.11%                  5.41%                    6.31%
 
+10:29 2016-12-23
+----------------
+GTD
+---
+1.  today
+    1.  Discuss with my colleague about how to migrate legacy arm 32bit apps to arm64 SOC which without aarch32 EE.
+        ILP32, qemu-system, qemu-linux-user.
+
+10:55 2016-12-24
+----------------
+GTD
+---
+1.  today
+    1.  Test ILP32 on hikey, lmbench, specint(aarch32, aarch64), upstream kernel, with disabled ILP32, enable ILP32.
+        11:02: run aarch64 specint on when ILP32 enabled.
+        how to run aarch32 specint? set ext to aarch32 or aarch64 or what ever you set in build.
+        next: run aarch32 specint on when ILP32 enabled.
+    2.  cont page hint: hack.
+        11:46-
+    3.  make use of hugetlb.
+        15:01-15:52 The reason libhugetlbfs do not work is that I do not mount hugetlbfs.
+        16:45-
+
+2.  Plan
+    1.  Timesheet:
+        1.  cont page hint: more than 4h.
+        2.  other work: 1h. Security and patches review.
+        3.  ILP32: other.
