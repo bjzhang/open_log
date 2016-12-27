@@ -5596,3 +5596,21 @@ GTD
         1.  cont page hint: more than 4h.
         2.  other work: 1h. Security and patches review.
         3.  ILP32: other.
+
+16:03 2016-12-27
+----------------
+<https://bugs.96boards.org/show_bug.cgi?id=467>
+
+Hi, I also find this issue in my hikey. It will show hung task when I compile kernel on hikey with -j4[1].
+I try to disable the uhs hung tasks still exist[2].
+
+There are similar interrupt storm in my board. It just cpu4 instead of CPU0.
+bamvor@localhost:~> A=$(cat /proc/interrupts | grep "38:" | awk '{ print $6 }'); sleep 1; B=$(cat /proc/interrupts | grep "38:" | awk '{ print $6 }'); echo "$((B - A)) irq/sec"
+8173 irq/sec
+
+My kernel is master of kernel: "59331c215daf Merge tag 'ceph-for-4.10-rc1' of git://github.com/ceph/ceph-client""""
+My hikey is lemaker 2G version with 100M usb ethernet. My rootfs(opensuse tumbleweed) on sd card.
+
+[1] hung_task_log_from_bamvor
+[2] hung_task_wo_uhs_log_from_bamvor
+
