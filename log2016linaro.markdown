@@ -5553,34 +5553,9 @@ GTD
 10:14 2016-12-22
 ----------------
 (17:12 2016-12-27)
-Result yesterday
-1.  specint single core(20161222)
-base: 4k(dis transtlb)
-                   4k with transtlb      64k(transtlb disable)  64k with transtlb
-   400.perlbench:  1.59%                  2.38%                    2.38%
-       401.bzip2:  0.53%                  2.88%                    3.21%
-         403.gcc:  1.58%                  3.16%                    3.29%
-         429.mcf: 19.65%                 17.26%                    18.33%
-       445.gobmk:  0.88%                  1.77%                    1.77%
-       456.hmmer:  0.00%                -39.61%                   -40.33%
-       458.sjeng:  2.88%                  3.85%                    1.92%
-  462.libquantum:  5.88%                  9.80%                    14.38%
-     471.omnetpp: 12.54%                 13.04%                    12.04%
-       473.astar:  8.59%                 10.59%                    9.76%
-   483.xalancbmk:  8.11%                  5.41%                    6.31%
-
-2.  specint single core(20161226)
-                   hugetlb_64k   hugetlb_2048k
-       401.bzip2:        2.34%           3.72%
-         403.gcc:        0.39%           0.90%
-         429.mcf:        0.55%           0.89%
-       445.gobmk:        0.88%           0.88%
-       456.hmmer:       10.34%           8.97%
-       458.sjeng:       -1.87%           0.93%
-  462.libquantum:       10.49%           4.32%
-     471.omnetpp:       -0.45%           2.84%
-       473.astar:        1.30%           2.70%
-   483.xalancbmk:       -1.67%           0.83%
+Reference the result and analysis in "17:46 2016-12-27"
+1.  specint single core(20161222) compare with 4k pure(dis transtlb)
+2.  specint single core(20161226) compare with 4k with transhuge:
 
 10:29 2016-12-23
 ----------------
@@ -5630,27 +5605,99 @@ My hikey is lemaker 2G version with 100M usb ethernet. My rootfs(opensuse tumble
 
 17:46 2016-12-27
 ----------------
-git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc linus.walleij@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
+git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
 
 Subject: [ACTIVITY] (Bamvor Jian Zhang) 2016-12-20 to 2016-12-27
 
-[Bug 467 - mainline kernel (4.9-rc8) shows a task hung warning related to MMC](https://bugs.96boards.org/show_bug.cgi?id=467)
-
 * KWG-192: Use of contiguous page hint to create 64K pages
-    Performance test
+    - Current performance test
+        Arnd suggest test pure 4k/64k and/or transhuge. We could see that the performance of 4k with transhuge improved a lot. But it is insignificant on 64k page. Compare with 4k(transhuge), only libquantum gets improved in 64k. And hmmer is decreased a lot. The result is as follows. Note that all the test is running only once, for a reportable run, it should be 3. So, the result may be not very acurate.
+        specint single core compare with 4k disable transtlb
+                        4k with transtlb      64k(transtlb disable)  64k with transtlb  Mark
+         400.perlbench:  1.59%                  2.38%                    2.38%
+             401.bzip2:  0.53%                  2.88%                    3.21%
+               403.gcc:  1.58%                  3.16%                    3.29%
+               429.mcf: 19.65%                 17.26%                    18.33%
+             445.gobmk:  0.88%                  1.77%                    1.77%
+             456.hmmer:  0.00%                -39.61%                   -40.33%          ---
+             458.sjeng:  2.88%                  3.85%                    1.92%
+        462.libquantum:  5.88%                  9.80%                    14.38%          ++
+           471.omnetpp: 12.54%                 13.04%                    12.04%
+             473.astar:  8.59%                 10.59%                    9.76%
+         483.xalancbmk:  8.11%                  5.41%                    6.31%           -
+
+        So, I continue to test with hugetlb on 4k. hmmer and libquantum get significantly improved. And hugetlb 64k is better than hugetlb 2048k in hmmer and libquantum.
+        Specint single core compare with 4k with transhuge:
+                           hugetlb_64k   hugetlb_2048k    Mark
+               401.bzip2:        2.34%           3.72%      +
+                 403.gcc:        0.39%           0.90%
+                 429.mcf:        0.55%           0.89%
+               445.gobmk:        0.88%           0.88%
+               456.hmmer:       10.34%           8.97%      ++
+               458.sjeng:       -1.87%           0.93%
+          462.libquantum:       10.49%           4.32%      ++
+             471.omnetpp:       -0.45%           2.84%
+               473.astar:        1.30%           2.70%
+           483.xalancbmk:       -1.67%           0.83%
+
+    - libquantum is a library for the simulation of a quantum computer, and hmmer is "Search a gene sequence database". I am not sure if these numbers are enough. And there is another advantages of 64k hugepage is the less memory waste. I test the waste of memory through malloc.
+    malloc 3000000Bytes
+    size  | Actual allocated       |   waste
+    ------|------------------------|--------
+    2048k | 10485760(5 hugepages)  |    249%
+    64k   | 3145728(48 hugepages)  |   0.49%
+
+    malloc 30000000Bytes
+    size  | Actual allocated       |  waste
+    ------|------------------------|-------
+    2048k | 37748736(18 hugepages) |    25%
+    64k   | 30146560(460 hugepages)| 0.049%
+
+    We could see that 2048k in hugetlb will waste lots memories, and potentially lead to more fragment. I am thinking if I should evaluate by FMFI(Free Memory Fragmentation Index).
+
+    - I also investigate the kernel config in mobile. I found that both HUGETLB and TRANSHUGE are disabled. My colleague told me that enable transhuge will use ~800M more memory after system boot. There is a discussion about if android should make use of 64k/16k page or remain 4k page internally. Is it a better solution that mobile stay 4k page with 64k contiguous page hint compare with migrating to pure 64k page?
 
 * ILP32
-    Performance test
-    stream,hackbench,libMicro-0.4.0,bonnie-1.03e,lmbench3,netperf-2.7.0,sysbench,tiobench-0.3.3
+    - Performance test:
+        When I do the ILP32 performance regression test on my hikey board, I found a hungtask issue which is as same as Denial: [Bug 467 - mainline kernel (4.9-rc8) shows a task hung warning related to MMC](https://bugs.96boards.org/show_bug.cgi?id=467). This issue seems not affect the correctness of test.
+        There is a benchmark test suite which could support stream,hackbench,libMicro-0.4.0,bonnie-1.03e,lmbench3,netperf-2.7.0,sysbench,tiobench-0.3.3 and other testcases, plan to test them after finish the performance test of cont page hint.
+    - Misc support for my colleague in huawei.
 
 === Plans ===
 * KWG 174: KBUILD_OUTPUT fix for kseltest
-    Rebase and send to LKML on 4.10-rc1.
+    Rebase and send to LKML based on 4.10-rc1.
 
 * KWG-192: Use of contiguous page hint to create 64K pages
     Write the code in do_wp_page
-    Continue to performance test to evaluate whether it is worth to do this.
+    Continue to performance test to evaluate whether it is worth to do this. Finish the lmbench test on above hugetlb 4k/2048k on 4k page size. Test specpu float.
 
 * ILP32 performance test
-    Test Lmbench and specint.
+    Test Lmbench, specint and other testsuite.
+
+
+DO NOT SEND
+    I check the hugetlb usage in try run. I found that there is not much 64k hugetlb allocated compare with hugetlb 2048k and THP. E.g. there are totally 8MBytes 64k-sized hugepage allocated in mcf test which is much smaller in 2048k hugetlb and THP. And I test the memory consumption with malloc:
+
+11:06 2016-12-28
+----------------
+GTD
+---
+1.  today
+    1.  Plan
+        11:07-11:14
+    1.  Linaro activity.
+        11:14
+    2.  cont page hint:
+        1.  do_wp_page(more than 3h)
+        2.  Performance test result.
+    3.  ILP32 performance regression test
+        11:24-11:27
+    3.  Discuss with Ming Ling about 4k and 64k page?
+    4.  Discuss about education of children and/or new (IT/embedded) technology in traditional industry at lunch.
+    5.  Finish record for Kameila.
+    6.  Send out the wechat for vocore and earbon.
+
+2.  Next
+    1.  security
+        1.  ask my colleague in suse and linaro.
 
