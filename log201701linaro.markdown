@@ -80,7 +80,7 @@ GTD
 1.  today
     0.  Misc:
         14:22 wakeup
-        15:18 Start to work
+        15:18 Plan to start to work
     1.  run lmbench on hikey emmc.
         10:59-11:08 replace kernel. est 10min. I forget there is not compile script in my home. And I plan to update to the latest kernel when I plan to do it.
                     boot fail(probably because of missing ethernet module). I could not use hikey today.
