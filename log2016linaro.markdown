@@ -5685,19 +5685,27 @@ GTD
 1.  today
     1.  Plan
         11:07-11:14
-    1.  Linaro activity.
-        11:14
+    1.  Linaro activity.  11:14
     2.  cont page hint:
         1.  do_wp_page(more than 3h)
         2.  Performance test result.
     3.  ILP32 performance regression test
         11:24-11:27
     3.  Discuss with Ming Ling about 4k and 64k page?
-    4.  Discuss about education of children and/or new (IT/embedded) technology in traditional industry at lunch.
+    4.  DONE: Discuss about education of children and/or new (IT/embedded) technology in traditional industry at lunch.
     5.  Finish record for Kameila.
     6.  Send out the wechat for vocore and earbon.
 
 2.  Next
     1.  security
         1.  ask my colleague in suse and linaro.
+
+10:30 2016-12-30
+----------------
+GTD
+---
+1.  today
+    1.  short summary of my work in this year.
+        10:31-11:58
+    2.  check the result of lmbench.
 
