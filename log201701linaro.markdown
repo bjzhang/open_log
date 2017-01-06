@@ -88,11 +88,39 @@ GTD
         DELAY, resume when I could use hikey tomorrow: try ssh.py without kernel compile.
     2.  do_wp_page.
         11:23-11:56 This part is too complex than I could imagine.
-    2.  buy serial: 1.8v x2, 3.6v x2.
-    3.  check result in huawei.
-    4.  1:1 with Mark.
-    2.  Test lmbench aarch32 on d03 after current test finish(probably tomorrow).
 
 2.  TODO
     1.  考虑写glibc release notes.
+
+08:38 2017-01-05
+----------------
+pm2.5过滤器
+-----------
+1.  尽量利用现有开发板，淘宝上买12v电池和电池盒，买来试试(通过led看长时间放电的性能)，如果可以用hikey。
+2.  如果用hikey，需要1.8到3.3v双向电平转换，这个需要焊接（可以考虑让卖家焊接好接插件）。已经选好的电烙铁（ts100）和焊锡（小桶），助焊剂，需要购买时购买。
+3.  另外需要买一个1.8到3.3v双向电平转换， 用于cubietruck上链接96boards的串口。
+
+10:29 2017-01-06
+----------------
+GTD
+---
+1.  today
+    1.  ILP32 performance test. ref"03:30 2017-01-06"
+    2.  do_wp_page.
+    2.  buy serial: 1.8v x2, 3.6v x2.
+    4.  1:1 with Mark.
+
+10:30 2017-01-06
+----------------
+arm64, ILP32, performance regresssion
+-------------------------------------
+1.  run lmbench on hikey emmc.
+    0105 10:59-11:08 replace kernel. est 10min. I forget there is not compile script in my home. And I plan to update to the latest kernel when I plan to do it.
+                boot fail(probably because of missing ethernet module). I could not use hikey today.
+                I feel that I need to improve the experiment at home: serial console and remote power up.
+    DELAY, resume when I could use hikey tomorrow: try ssh.py without kernel compile.
+2.  test ILP32 enable: use merge config to select ILP32.
+3.  check result in huawei.
+3.  test ILP32 disable: use rpmspec file.
+3.  Test lmbench aarch32 on d03 after current test finish(probably tomorrow).
 
