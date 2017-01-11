@@ -241,3 +241,102 @@ Diff:
      464.h264ref:  2.69%
        473.astar:  0.73%
    483.xalancbmk: 0.00%
+
+10:36 2017-01-09
+----------------
+v8.1 must support crc intruction.
+看arm架构手册，我又想自己写操作系统了。不自己动手总是理解不了。
+网上找到一个singpolyma-kernel例子，是基于arm的，我觉得可以我可以参考这个写一个arm64 hikey的操作系统。
+<https://singpolyma.net/category/singpolyma-kernel/>
+
+12:04 2017-01-10
+----------------
+GTD
+1.  today
+    1.  linaro activity. est 20'
+        14:51-14:52 cancel.
+    2.  reply to Alex Bennee.
+        14:52-14:59
+    2.  reply to Arnd in my last activity. est 20'
+        14:59-15:25 finish draft. It takes more 5 minutes because I need to re-check the result and calculate the Coefficient of Variation.
+        15:25-15:35 Send out. I forget why I need 10 minutes more.
+    3.  Discuss with my boss in huawei.
+    3.  do_wp_page: it seems that I have no time to do it.
+
+14:48 2017-01-10
+----------------
+自己想了想，每周中午两个中午用来做自己的事情，初步想法是1天画画。其余四天做技术，技术方便需要考虑实际动手和架构学习的需求，目前动手类想做pm2.5传感器，nfc和语音助手。架构类学习是自己动手写操作系统。每个月各自用一般的时间。
+
+10:25 2017-01-11
+----------------
+GTD
+1.  today
+    1.  linux mm summit proposal.
+    2.  linaro proposal
+    3.  apply for linaro connect(for my visa).
+
+
+18:59 2017-01-11
+----------------
+kwg, meeting
+------------
+1.  Brief from arnd:
+```
+right, so there is probably hope. I think in order to present this at lsf/mm, you either should have prototype code that shows a clear overall performance win of at least 2 or 3 percent compared to 4k pages, or have a theory of what is going on with hmmer that predicts a positive outcome
+actually we probably need an improvement comparing 4k+transhuge against 4k+pagehint+transhuge
+from the data so far, it's not clear how much we can expect there, I was hoping for a more consistent picture in the results
+I guess if showing that the hmmer benchmark falls into a class of tests that would be worse with the page hint than without it, that would kill the work, while showing that it would be better than 64k pages would make it interesting a gain as we could try again to convince Red Hat to move away from 64k pages
+bamvor: either by understanding what is going with with hmmer and 64k pages,or by getting your patches to run correctly under the benchmark
+in any case, if you want to submit this for lsf/mm, feel free to send me your abstract and I'll have a look before you send it in
+```
+
+2.  I need a stable result. Which I could run on hikey after ILP32 result?. Repair the hikey!!!!
+
+3.  Full conversation:
+```
+[2017-01-11 17:38:13] <arnd> bamvor: anything  to report from your side?
+[2017-01-11 17:39:16] <bamvor> most of thing we already discuss in my activity.
+[2017-01-11 17:39:49] <bamvor> And I am in a train of armv8 in huawei in this week. So no much progress this week.
+[2017-01-11 17:41:00] <arnd> ok
+[2017-01-11 17:41:14] <bamvor> I plan to write the proposal/atttend for linux mm summit. I want to discuss the design of cont page hint and the performance improvement. Is it make sense to you?
+[2017-01-11 17:41:51] <arnd> I wonder how much sense it still makes after your findings with the benchmarks
+[2017-01-11 17:42:09] <bamvor> This is what I want to know from you.
+[2017-01-11 17:42:12] <arnd> I was expecting a clear win for 64k pages on specint when you don't run into low memory
+[2017-01-11 17:42:46] <arnd> but what you found was a much more mixed picture, with a significant degradation in some cases
+[2017-01-11 17:43:02] <bamvor> do you mean compare with 4k with transhuge or 4k without transhuge.
+[2017-01-11 17:43:21] <arnd> I mean comparing 4k pages with 64k pages
+[2017-01-11 17:44:38] <bamvor> I suppose 4k with cont page hint could be better because we only allocate cont 64k page when it needed(by request the same 64k region twice as you said).
+[2017-01-11 17:44:44] <arnd> the question is whether the 64k page hint on 4k pages will be able to perform better than plain 4k pages in the same test
+[2017-01-11 17:45:24] <bamvor> yes. i do not know right now. do you think worth to investigate? it is hard to say without the code.
+[2017-01-11 17:47:12] <arnd> right, so there is probably hope. I think in order to present this at lsf/mm, you either should have prototype code that shows a clear overall performance win of at least 2 or 3 percent compared to 4k pages, or have a theory of what is going on with hmmer that predicts a positive outcome
+[2017-01-11 17:48:07] <arnd> actually we probably need an improvement comparing 4k+transhuge against 4k+pagehint+transhuge
+[2017-01-11 17:49:07] <arnd> from the data so far, it's not clear how much we can expect there, I was hoping for a more consistent picture in the results
+[2017-01-11 17:49:18] <bamvor> I do not know if I could finish the code before lsf/mm. But I think it is worth to try.
+[2017-01-11 17:49:52] <bamvor> yes, I hoped so.
+[2017-01-11 17:50:34] <arnd> e.g. the bzip2 benchmark is actually quite promising as it shows very little gains from transhuge, but noticeable gains from 64k
+[2017-01-11 17:53:22] <arnd> looking at the numbers again, I would estimate that we can get at best a 1-2% improvement in specint
+[2017-01-11 17:53:34] <bamvor> why?
+[2017-01-11 17:54:27] <bamvor> does 1-2% enough for continuing this work?
+[2017-01-11 17:54:50] <arnd> that's a very good question. I was initially hoping for much more, but it's still significant
+[2017-01-11 17:56:07] <bamvor> I would like to continue doing till we prove that it is impossible.
+[2017-01-11 17:56:11] <arnd> I guess if you put that estimate in your proposal for lsf/mm, the program committee can decide if they think it's worth discussing it there
+[2017-01-11 17:57:13] <bamvor> Ok. i will write the proposal and send to you before I apply.
+[2017-01-11 17:57:13] <arnd> it's also possible that other CPU cores gain more from this
+[2017-01-11 17:57:28] <bamvor> do you mean other cpu arch?
+[2017-01-11 17:58:00] <bamvor> or other arm SOC?
+[2017-01-11 17:58:11] <arnd> If you tested this on Cortex-A57/A72/A73 or similar, they probably have a large enough TLB cache that the gains are smaller than on a Cortex-A35 or A53
+[2017-01-11 17:59:29] <bamvor> oh, understand.
+[2017-01-11 18:01:21] <arnd> http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.subset.cortexa.a72/index.html and http://infocenter.arm.com/help/index.jsp?topic=/com.arm.doc.ddi0500g/Chddabii.html have some numbers for the TLB
+[2017-01-11 18:03:50] <arnd> I guess if showing that the hmmer benchmark falls into a class of tests that would be worse with the page hint than without it, that would kill the work, while showing that it would be better than 64k pages would make it interesting a gain as we could try again to convince Red Hat to move away from 64k pages
+[2017-01-11 18:05:18] <arnd> bamvor: either by understanding what is going with with hmmer and 64k pages,or by getting your patches to run correctly under the benchmark
+[2017-01-11 18:05:55] <arnd> in any case, if you want to submit this for lsf/mm, feel free to send me your abstract and I'll have a look before you send it in
+[2017-01-11 18:06:40] <bamvor> ok. understand. The deadline of lsf/mm is 15, Jan. I think we could discuss the proposal then continue to work.
+```
+
+19:01 2017-01-11
+----------------
+Contiguous page hint is a feature in arm64 which could decrease the tlb miss and improve the performance.
+We already know that the performance of 64k is complex compare with 4k system.
+
+
+
