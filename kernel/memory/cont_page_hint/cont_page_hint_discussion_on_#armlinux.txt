@@ -34,7 +34,6 @@
 [2016-11-10 01:30:49] <bamvor> arnd: I plan working on in three steps:
 [2016-11-10 01:30:49] <bamvor> arnd: 1.  Grouping 16 pages when possible, I need to understand and work on do_anonymous_page(currently I am working on), do_wp_page and other code in handle_pte_fault.
 [2016-11-10 01:31:25] <arnd> bamvor: good idea leaving out the hint for now, that clearly simplifies the prototyping
-[2016-11-10 01:31:38] ⇐ mcoquelin_ quit (~mcoquelin@104.79.140.88.rev.sfr.net): Ping timeout: 256 seconds
 [2016-11-10 01:31:41] <bamvor> arnd: 2.  Seting contiguous page hint: Allocate the 16 pages when possible and split them in the first fault page. Set the hint in the secon
 [2016-11-10 01:31:41] <bamvor> d time of page fault.
 [2016-11-10 01:31:41] <bamvor> arnd: 3.  Deal with spliting the 64k page when needed, e.g. mprotect, mremap, munmap, LRU handling. Maybe reference how trans-huge pages are being split up into small pages, and doing the same here for each caller.
@@ -67,13 +66,11 @@
 [2016-12-14 21:20:57] <bamvor> is it enough? 
 [2016-12-14 21:21:20] <arnd> I also see that the page fault you get is for level 2, but I assume you are running four-level  page tables, so the fault is for the pmd, not the pte level
 [2016-12-14 21:21:29] <bamvor> I also try the mm->page_table_lock, but no difference .
-[2016-12-14 21:21:30] → eduardas_m joined (~eduardas_@213.197.143.19)
 [2016-12-14 21:21:58] <bamvor> yes. usually pmd level fault. sometimes pgd. 
 [2016-12-14 21:22:15] <arnd> ok
 [2016-12-14 21:24:36] <bamvor> currently, I get pte from pte_offset_map_lock and then pte++ to get other pte. Because I aleady check such address in the single pmd entry. It is similar to hugetlb way. Do you think it is ok? 
 [2016-12-14 21:25:28] <arnd> I think we also hold mm->mmap_sem, which is probably sufficient here
 [2016-12-14 21:25:58] <bamvor> yes. I think so.
-[2016-12-14 21:26:35] → navidr joined (uid112413@gateway/web/irccloud.com/x-anyjawnzjbzqdnzu)
 [2016-12-14 21:26:48] <bamvor> And another question is I do not understand the anon_vma_prepare. Does anon_vma_prepare relative to one page? I do not see any code in it rely on the address or num of page. 
 [2016-12-14 21:30:53] <arnd> bamvor: looking at the error message, it's clear that handle_mm_fault() returned one of VM_FAULT_ERROR , VM_FAULT_BADMAP, or VM_FAULT_BADACCESS, so I'd try to find out where they are returned
 [2016-12-14 21:34:43] <bamvor> I think I could confirm it in my environment. 
@@ -82,7 +79,6 @@
 [2016-12-14 21:39:52] <bamvor> I do not align it. I just allocate the 64k page when it align with 64k boundary. 
 [2016-12-14 21:40:23] <arnd> ah, I see
 [2016-12-14 21:41:07] <bamvor> maybe I could optimize as you said. I am just not sure whether it will improve or not. 
-[2016-12-14 21:41:28] ⇐ rric quit (~robert@x5ce55874.dyn.telefonica.de): Quit: Leaving.
 [2016-12-14 21:41:46] <bamvor> i do not understand why the fault address is outside all the vma. I do not think it is possible. correct? 
 [2016-12-14 21:46:15] <arnd> why would it be? I don't see any indication that it is
 [2016-12-14 21:46:33] <arnd> bamvor: the in_pte() check is redundant, right?

@@ -335,22 +335,56 @@ in any case, if you want to submit this for lsf/mm, feel free to send me your ab
 
 19:01 2017-01-11
 ----------------
-lsf/mm proposal: implement contiguous page hint for anonymous page in user space
+[LSF/MM TOPIC][LSF/MM ATTEND] Implement contiguous page hint for anonymous page in user space
 
-Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance. Currently, it is only used in hugeltb which limited the senario. This proposal want to discuss the possibiliy and method for using contiguous page hint in annoymous page in user space. There are already some off-list discussion focus on two aspects: how much performance gain we could get; how to implement it in a simple way.
+Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance. Currently, it is only used in hugetlb which limited the senario. This proposal want to discuss the possibiliy and design for implementing contiguous page hint in annoymous page in user space. There are already some off-list discussion on two aspects: how much performance gain we could get; how to implement it in a simple way.
 
-Hope could discuss the following things:
+Hope could discuss the following items in lsf:
+1.  Dicuss the my current idea and/or prototype(I am actively working on the prototype, hope could get a work prototype with performance result before lsf).
+    Allocate 64k(with GFP_NOWAIT to avoid evict any other pages) during pte fault, where we have already handled the possible transparent hugepage. Immediatelly split it up into 4k pages and only add one page at this time. Once the fault happens again in the same contiguous area, add all the remaining 15 pages and set the contiguous page hint. We will track the 64k pages in mm_struct.
+    We will split the 64k page in mprotect, mremap, munmap, LRU handling and any other point similar to trans-huge.
 
-1.  Show the reason why specific test case in specint could get improvement.
-    We already know that the performance of 64k is complex compare with 4k system.  There are some improvement and downgrade in specint. The idea is if we could add contiguous page hint for the pages they really need we could avoid the disadvantage of pure 64k page and get the overall improvement.
+2.  Analysis the reason of performance result of specint in mix with 4k/64k page size, transhuge and hugetlb.
+    2.1 The following teest result is compare with 4k page with transhuge with or without hugetlb through libhugetlbfs and hugectl. We could see that only xalancbmk downgrade in both 64k and 2048k hugetlb. This is very interesting thing I will investigate and explain it in lsf. On the other hand, sjeng, omnetpp also downgrade in hugetlb 64k case, I think it is because in hugetlb we allocate the hugetlb before transhuge, while in cont page hint, we will allocate the 64k page after the check of transhuge. Therefore we could avoid these downgrade.
+    Arnd: I plan to test the tlb miss tomorrow for the downgrade case, if the tlb miss of hugetlb 64k is higher than 4k with transhuge for sjeng and omnetpp. I think it could prove my guess. And I do not know why the result is a little bit difference than before. These number get from 3 times test which should be reliable than before. I plan to do specint test on my hikey but I do not start it yet.
 
-2.  Dicuss the my current prototype.
+                  64k hugetlb 2048k hugetlb
+       401.bzip2:       2.33%         3.18%
+         403.gcc:       0.13%         0.64%
+         429.mcf:      -0.22%         0.77%
+       445.gobmk:       0.00%         0.88%
+       456.hmmer:       5.96%         5.30%
+       458.sjeng:      -1.87%         0.00%
+  462.libquantum:       3.73%         4.35%
+     471.omnetpp:      -2.66%         0.89%
+       473.astar:       2.19%         4.37%
+   483.xalancbmk:      -4.10%        -2.46%
+
+   2.2  In our another test, we found that there are some downgrade of 64k compare with 4k with or without transhuge. I think it show that there is some shortage of 64k page size, and we need to find a better way to improve the overall performance instead of increasing the base page size.
+   Arnd: I am re-testing the result tonight with 3 times test, will paste the result tomorrow.
+
+                        4k with transtlb      64k(transtlb disable)  64k with transtlb  Mark
+         400.perlbench:  1.59%                  2.38%                    2.38%
+             401.bzip2:  0.53%                  2.88%                    3.21%
+               403.gcc:  1.58%                  3.16%                    3.29%
+               429.mcf: 19.65%                 17.26%                    18.33%
+             445.gobmk:  0.88%                  1.77%                    1.77%
+             456.hmmer:  0.00%                -39.61%                   -40.33%          ---
+             458.sjeng:  2.88%                  3.85%                    1.92%
+        462.libquantum:  5.88%                  9.80%                    14.38%          ++
+           471.omnetpp: 12.54%                 13.04%                    12.04%
+             473.astar:  8.59%                 10.59%                    9.76%
+         483.xalancbmk:  8.11%                  5.41%                    6.31%           -
+
+3.  Discuss the potential solution for mobile world. Android is usually base on 4k page and disable transhuge and hugetlb to save high order memories and total memories. Our idea of contiguous page hint could be a better belance for mobile or other limited memory senario.
 
 10:21 2017-01-12
 ----------------
 GTD
 ---
 1.  today
+    0.  misc
+        18:00-18:50 lunch and rest
     1.  find a better way to sync with trello to avoid block by the great wall.
         I could use icalsync2 which support create account on android and continuously import calender from trello.
         20'(-10:15)
@@ -358,10 +392,14 @@ GTD
         10:29-11:03 It is hard for me.
         11:19-11:52 15:12-15:25
         15:25-16:29 calculate the result.
+        -18:00 try to write the proposal, not big progress.
+        19:00-
     3.  huawei opensource discussion.
         11:04-11:19 15:05-15:11
     4.  dairy.
         14:20-14:45
+    5.  update the repo in github.
+        16:29-16:40 I think it takes too much time to update the repo. The main issues are the diversity of repo.
     2.  Test base memory copy in hugetlb(with cont page hint). monitor the tlb miss through perf.
     2.  linaro proposal
     2.  reply to guodongxu and zhuangluan su.
@@ -369,6 +407,7 @@ GTD
 
 16:38 2017-01-12
 ----------------
+1.  64k(with all the testresult in 4k with transhuge and 64k)
        testcases: increase cv(base) cv(result) CV: Coefficient of Variation
        401.bzip2:   2.30%   0.13%    0.22%
          403.gcc:   0.34%   0.12%    0.37%
@@ -381,6 +420,7 @@ GTD
        473.astar:   1.15%   0.27%    0.10%
    483.xalancbmk:  -3.31%   1.07%    0.78%
 
+2.  64k(only the testresult in yesterday).
        401.bzip2:   2.33%   0.00%    0.00%
          403.gcc:   0.13%   0.00%    0.00%
          429.mcf:  -0.22%   0.00%    0.00%
@@ -392,6 +432,7 @@ GTD
        473.astar:   2.19%   0.00%    0.00%
    483.xalancbmk:  -4.10%   0.00%    0.00%
 
+3.  2048k(only the testresult in yesterday).
        401.bzip2:   3.18%   0.00%    0.00%
          403.gcc:   0.64%   0.00%    0.00%
          429.mcf:   0.77%   0.00%    0.00%
@@ -402,4 +443,7 @@ GTD
      471.omnetpp:   0.89%   0.00%    0.00%
        473.astar:   4.37%   0.00%    0.00%
    483.xalancbmk:  -2.46%   0.00%    0.00%
+
+In hugetlb 2048k, xalancbmk is only decreasing one. In hugetlb 64k, there are three testcases downgrade 458.sjeng, 471.omnetp, 483.xalancbmk.
+I am thinking the unsplitable hugetlb hurt the flexbility. I plan to test the tlb miss in hmmer and xalancbmk to prove it.
 
