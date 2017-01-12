@@ -335,10 +335,35 @@ in any case, if you want to submit this for lsf/mm, feel free to send me your ab
 
 19:01 2017-01-11
 ----------------
-proposal: implement contiguous page hint for anonymous page in user space
+lsf/mm proposal: implement contiguous page hint for anonymous page in user space
 
-Contiguous page hint is a feature in arm which could decrease the tlb miss and improve the performance. It is only used in
-We already know that the performance of 64k is complex compare with 4k system.  There are some improvement and downgrade in specint. The idea is if we could add contiguous page hint for the pages they really need we could avoid the disadvantage of pure 64k page and get the overall improvement.
+Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance. Currently, it is only used in hugeltb which limited the senario. This proposal want to discuss the possibiliy and method for using contiguous page hint in annoymous page in user space. There are already some off-list discussion focus on two aspects: how much performance gain we could get; how to implement it in a simple way.
 
+Hope could discuss the following things:
 
+1.  Show the reason why specific test case in specint could get improvement.
+    We already know that the performance of 64k is complex compare with 4k system.  There are some improvement and downgrade in specint. The idea is if we could add contiguous page hint for the pages they really need we could avoid the disadvantage of pure 64k page and get the overall improvement.
+
+2.  Dicuss the my current prototype.
+
+10:21 2017-01-12
+----------------
+GTD
+---
+1.  today
+    1.  find a better way to sync with trello to avoid block by the great wall.
+        I could use icalsync2 which support create account on android and continuously import calender from trello.
+        20'(-10:15)
+    2.  linux mm summit proposal.
+        10:29-11:03 It is hard for me.
+        11:19-11:52 15:12-15:25
+        15:25-16:29 calculate the result.
+    3.  huawei opensource discussion.
+        11:04-11:19 15:05-15:11
+    4.  dairy.
+        14:20-14:45
+    2.  Test base memory copy in hugetlb(with cont page hint). monitor the tlb miss through perf.
+    2.  linaro proposal
+    2.  reply to guodongxu and zhuangluan su.
+    3.  apply for linaro connect(for my visa).
 

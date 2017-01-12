@@ -1,0 +1,115 @@
+[2016-11-09 21:05:06] <arnd> hi bamvor
+[2016-11-09 21:05:15] <bamvor> hi, arnd
+[2016-11-09 21:07:50] <arnd> another thing I found out about last week is that someone in ARM is also looking at the 64k page hint. I wasn't directly involved in the discussion, but wildea01, maz or cmarinas probably knows who is working on that
+[2016-11-09 21:08:29] <bamvor> do you mean for the anonymous page? 
+[2016-11-09 21:08:34] <arnd> yes
+[2016-11-09 21:09:19] <arnd> I also don't know how far they have come, or if they are still in the discussion phase
+[2016-11-09 21:09:43] <bamvor> Who should we talk to? 
+[2016-11-09 21:10:26] <arnd> Mel also mentioned that a number of important use cases have very sparse memory usage, so we should use 4k pages by default and only use 64k pages if there is a reason to believe they will be needed.
+[2016-11-09 21:11:14] <arnd> the way he imagined it is to allocate 64k during a fault, but immediately split it up into 4k pages and only add the one page you got the fault for at first
+[2016-11-09 21:11:36] <arnd> then keep a pointer to the 64k page in 'struct mm_struct'
+[2016-11-09 21:12:03] <arnd> the next time a a fault happens, see if it is for the same 64k chunk
+[2016-11-09 21:12:40] <arnd> if it is, use do_fault_around() to add the entire 64k and set the hint bit
+[2016-11-09 21:13:09] <arnd> otherwise, just free the remaining 15 pages and get a new 64k reservation
+[2016-11-09 21:14:28] <arnd> the 64k allocation must be done as carefully as possible, using GFP_NOWAIT to ensure we don't evict any other pages in order to get the reservation, that would be highly counterproductive
+[2016-11-09 21:14:38] <arnd> if the GFP_NOWAIT fails, just use a 4k page
+[2016-11-09 21:15:43] <bamvor> I am not quite understand. What's your mean allocate 64k and split into 4k? Is there a function to split the pages? 
+[2016-11-09 21:16:00] <arnd> yes, though I'd have to look up the function name for that
+[2016-11-09 21:16:27] <arnd> I think it's split_page()
+[2016-11-09 21:17:18] <bamvor> Currently, I use the alloc_pages_vma for allocating the pages. is it ok? 
+[2016-11-09 21:17:20] <arnd> basically to all of mm/*.c we'd keep using 4k pages, except they often happen to be contiguous because of they way we allocate them
+[2016-11-09 21:18:38] <arnd> I think alloc_pages_vma() is fine, yes
+[2016-11-09 21:19:18] <bamvor> do you mean I add a new entry in mm_struct for tracking the 64k reservation? 
+[2016-11-09 21:19:28] <arnd> correct, inside of a new #ifdef
+[2016-11-09 21:23:07] <arnd> bamvor: When creating the 64k entry, we obviously have to check the VMA boundaries, but there are a lot of places in which we have to split the 64k page later, e.g. mprotect, mremap, munmap, LRU handling in general.
+[2016-11-09 21:23:50] <arnd> Mel suggested looking at how trans-huge pages are being split up into small pages, and doing the same here for each caller, though for an intial prototype that  probably won't be needed
+[2016-11-09 21:24:24] <bamvor> arnd: yes.I check the boundaries and align of 64k for the address. 
+[2016-11-09 21:29:27] <bamvor> arnd: As we split the page after the allocating the 64k pages and set the contiguous hint after the second fault. The page is remains split. For mprotect, mremap, munmap, LRU handling, the 'split' you mentioned is invalidate cont hint in tlb entry and remove the pointer of 64k page in mm_struct. Is it correct?
+[2016-11-09 21:30:17] <arnd> invailated cont hint yes, but the pointer to the page would be removed as soon as we get another fault
+
+[2016-11-10 01:30:01] <bamvor> arnd: About the current status of my contiguous page hint work. After fix the refcount for page and add split_page after page allocation. I could run basic command in my system. But it will report "BUG: Bad rss-counter state mm:ffff800079c51b00 idx:1 val:-15" sometimes. I will check it later. I suspect there is still some issue in do_anonymous_page. I just
+[2016-11-10 01:30:01] <bamvor> allocate 16 pages when possible but I do not set the hint of contiguous pages. Is it true that I do not need to look at other functions at this point? I do not take a look about do_wp_page right now.
+[2016-11-10 01:30:14] <bamvor> arnd: my plan is that read and change the code piece by piece as it is the first time I touch these parts of kernel. I will ignore the userfaultfd, memcg and swap before the whole things work.
+[2016-11-10 01:30:21] <arnd> though his solution doesn't apply here (CONFIG_FHANDLE is already enabled in multi_v7_defconfig)
+[2016-11-10 01:30:49] <bamvor> arnd: I plan working on in three steps:
+[2016-11-10 01:30:49] <bamvor> arnd: 1.  Grouping 16 pages when possible, I need to understand and work on do_anonymous_page(currently I am working on), do_wp_page and other code in handle_pte_fault.
+[2016-11-10 01:31:25] <arnd> bamvor: good idea leaving out the hint for now, that clearly simplifies the prototyping
+[2016-11-10 01:31:38] ⇐ mcoquelin_ quit (~mcoquelin@104.79.140.88.rev.sfr.net): Ping timeout: 256 seconds
+[2016-11-10 01:31:41] <bamvor> arnd: 2.  Seting contiguous page hint: Allocate the 16 pages when possible and split them in the first fault page. Set the hint in the secon
+[2016-11-10 01:31:41] <bamvor> d time of page fault.
+[2016-11-10 01:31:41] <bamvor> arnd: 3.  Deal with spliting the 64k page when needed, e.g. mprotect, mremap, munmap, LRU handling. Maybe reference how trans-huge pages are being split up into small pages, and doing the same here for each caller.
+[2016-11-10 01:33:58] <arnd> step 2 also requires the do_fault_around() when setting the hint: the idea is to only set one PTE at first and then fill the other ones for the second fault (I assume that's what you meant)
+[2016-11-10 01:34:50] <arnd> bamvor: at some point before step 3 there should also be a proper specint run
+[2016-11-10 01:35:09] <arnd> bamvor: you mentioned that you couldn't get specint working properly. what problem did you run into?
+[2016-11-10 01:35:27] <arnd> did it work in some configurations but not others?
+[2016-11-10 01:36:14] <bamvor> no. it seems that it just crash with our hack code. (not my current code). I think explicit compile and use hugetlb ld should works. 
+[2016-11-10 01:36:17] <arnd> for the start, we mainly need to know the potential gains, comparing the three cases that already work (pure 4k page, pure 64k page, 4k+trans-huge)
+[2016-11-10 01:36:25] <bamvor> understand.
+[2016-11-10 01:37:06] <bamvor>  i will try to test them. maybe start this week. if ILP32 performance test finish. 
+[2016-11-10 01:38:10] <arnd> if 4k+trans-huge is already faster than 64k, there won't be much to gain by having 4k+page-hint+trans-huge
+[2016-11-10 01:39:05] <bamvor> the thing is trans huge only works for 2m, correct? 
+[2016-11-10 01:39:07] <arnd> also, if 64k is not much faster than 4k, then 4k+hint won't be very valuable because it's likely slower than 64k
+[2016-11-10 01:40:13] <bamvor> maybe our case is the apps which could not allocate 2m huge page or trans page but could get benefit from 64k pages? 
+[2016-11-10 01:40:24] <arnd> bamvor: correct, and Mel Gorman also said that extending trans-huge to pagehint for 64k TLBs would not be a good idea because of all the extra complexity
+[2016-11-10 01:41:22] <arnd> bamvor: right, but that case may be exceptionally rare
+[2016-11-10 01:42:07] <arnd> 64k pagehint will clearly waste less memory than trans-huge, but also require more TLBs for a given working-set
+[2016-11-10 01:43:19] <bamvor> Yes. At that point, maybe I could analysis the popular apps in server, desktop and android. 
+[2016-11-10 01:44:47] <arnd> I think we should look at the specint results (and share them with Mel) once you have measured the existing cases, and then decide whether doing more tests is needed or not
+[2016-11-10 01:45:17] <bamvor> yes. understand. it is reasonable for me. 
+[2016-11-10 01:46:10] <bamvor> arnd: do_fault_around will pre-allocate the pages but I only saw this function in do_fault which is file backed. it seems that it is not the anonymous page cases. 
+[2016-11-10 01:46:19] <arnd> specint is exactly the kind of test that benefits most of reduced TLB pressure while not being severely memory limited, other tests likely just show smaller differences or won't even run on 64k pages
+[2016-11-10 01:46:19] → mcoquelin_ joined (~mcoquelin@104.79.140.88.rev.sfr.net)
+[2016-11-10 01:47:43] <arnd> bamvor: hmm, I thought that was the function that Mel recommended. if that doesn't work, look for something similar, or use it as a template for writing the function you actually need
+[2016-11-10 01:49:18] <bamvor> oh. that sound reasonable. We  need the function similar to do_fault_around:) 
+
+[2016-12-14 21:19:48] <arnd> bamvor: regarding your patch to do_anonymous_page, I wonder if you could be hitting a race there, and multiple CPUs are trying to modify the same ptes at the same time
+[2016-12-14 21:20:49] <bamvor> yes. I think about it. But there is pte_lock when I modify the entry of page. 
+[2016-12-14 21:20:57] <bamvor> is it enough? 
+[2016-12-14 21:21:20] <arnd> I also see that the page fault you get is for level 2, but I assume you are running four-level  page tables, so the fault is for the pmd, not the pte level
+[2016-12-14 21:21:29] <bamvor> I also try the mm->page_table_lock, but no difference .
+[2016-12-14 21:21:30] → eduardas_m joined (~eduardas_@213.197.143.19)
+[2016-12-14 21:21:58] <bamvor> yes. usually pmd level fault. sometimes pgd. 
+[2016-12-14 21:22:15] <arnd> ok
+[2016-12-14 21:24:36] <bamvor> currently, I get pte from pte_offset_map_lock and then pte++ to get other pte. Because I aleady check such address in the single pmd entry. It is similar to hugetlb way. Do you think it is ok? 
+[2016-12-14 21:25:28] <arnd> I think we also hold mm->mmap_sem, which is probably sufficient here
+[2016-12-14 21:25:58] <bamvor> yes. I think so.
+[2016-12-14 21:26:35] → navidr joined (uid112413@gateway/web/irccloud.com/x-anyjawnzjbzqdnzu)
+[2016-12-14 21:26:48] <bamvor> And another question is I do not understand the anon_vma_prepare. Does anon_vma_prepare relative to one page? I do not see any code in it rely on the address or num of page. 
+[2016-12-14 21:30:53] <arnd> bamvor: looking at the error message, it's clear that handle_mm_fault() returned one of VM_FAULT_ERROR , VM_FAULT_BADMAP, or VM_FAULT_BADACCESS, so I'd try to find out where they are returned
+[2016-12-14 21:34:43] <bamvor> I think I could confirm it in my environment. 
+[2016-12-14 21:35:38] <arnd> and the most likely candidate for returning one of them would be do_wp_page, so it's probably a write access following the read access that fails
+[2016-12-14 21:38:56] <arnd> bamvor: one thing I don't see is where you align vmf->address to the lower 64k boundary
+[2016-12-14 21:39:52] <bamvor> I do not align it. I just allocate the 64k page when it align with 64k boundary. 
+[2016-12-14 21:40:23] <arnd> ah, I see
+[2016-12-14 21:41:07] <bamvor> maybe I could optimize as you said. I am just not sure whether it will improve or not. 
+[2016-12-14 21:41:28] ⇐ rric quit (~robert@x5ce55874.dyn.telefonica.de): Quit: Leaving.
+[2016-12-14 21:41:46] <bamvor> i do not understand why the fault address is outside all the vma. I do not think it is possible. correct? 
+[2016-12-14 21:46:15] <arnd> why would it be? I don't see any indication that it is
+[2016-12-14 21:46:33] <arnd> bamvor: the in_pte() check is redundant, right?
+[2016-12-14 21:46:48] <arnd> since you already check the alignment
+[2016-12-14 21:48:45] <bamvor> yes. I could remove the in_pte. 
+[2016-12-14 21:48:52] <arnd> ah wait, you don't check the alignment, the 'if (ALIGN(vmf->address, PAGE_SIZE * cont_page_num))' check won't do anything really since vmf->address is always a number larger than the first few pages
+[2016-12-14 21:50:28] <arnd> I think the check you need here is 'vmf->address < ALIGN(vmf->address, PAGE_SIZE * cont_page_num) + PAGE_SIZE'
+[2016-12-14 21:50:36] <arnd> to check that you are within the first page
+[2016-12-14 21:51:11] <arnd> bamvor: at least I think that is what you intended
+[2016-12-14 21:51:47] <bamvor> not sure if I could follow you. before enter handle_mm_fault, address already align to PAGE_MASK. 
+[2016-12-14 21:52:58] <bamvor> And it will align again when create vmf. 
+[2016-12-14 21:53:34] <arnd> ah, then you just need to check 'if (!(vmf->address & (PAGE_MASK << cont_page_order))
+[2016-12-14 21:53:40] <arnd> )'
+[2016-12-14 21:54:20] <bamvor> oh, yes. 
+[2016-12-14 21:54:42] <arnd> but it would be better to not limit yourself to that special case at all
+[2016-12-14 21:55:00] <arnd> and instead align the address down:
+[2016-12-14 21:55:10] <arnd> address = ALIGN(vmf->address, PAGE_SIZE * cont_page_num);
+[2016-12-14 21:56:06] <arnd> then check that address..address+64k is within the vma and fault all 16 pages
+[2016-12-14 21:56:16] <arnd> independent of where within that range the faulting address was
+[2016-12-14 21:56:23] <arnd> so faulting both before and after
+[2016-12-14 21:57:23] <bamvor> understand. 
+[2016-12-14 21:58:06] <arnd> for the initial testing, either way should work, but I see no reason to not just do it the full way already
+[2016-12-14 22:02:38] <arnd> bamvor: I think I see another problem: the !FAULT_FLAG_WRITE case is interesting, as you change that to have 16 copies of the zero-page
+[2016-12-14 22:03:42] <bamvor> arnd: the return value of handle_mm_fault is 0x204: VM_FAULT_LOCKED &&  VM_FAULT_MAJOR. 
+[2016-12-14 22:03:45] <arnd> this is probably where things go wrong in the do_wp_page later. I don't see a specific problem here, but you can probably skip that for now and only worry about do_anonymous_page() with FAULT_FLAG_WRITE for the start
+[2016-12-14 22:05:45] <arnd> bamvor: I don't see how VM_FAULT_LOCKED or VM_FAULT_MAJOR would cause the warning message to be printed. Are you sure this isn't just the initial fault that is successful?
+[2016-12-14 22:19:34] <bamvor> arnd: I came back. i am checking it.
+[2016-12-14 22:24:47] <bamvor> I do not find that mmap_mm is release after __do_page_fault, i will retest it. 
+[2016-12-14 22:55:27] <bamvor> arnd: it enter __do_page_fault but do not enter do_mm_fault, and call do_user_fault eventually. 
+
