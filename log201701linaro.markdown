@@ -335,8 +335,10 @@ in any case, if you want to submit this for lsf/mm, feel free to send me your ab
 
 19:01 2017-01-11
 ----------------
-Contiguous page hint is a feature in arm64 which could decrease the tlb miss and improve the performance.
-We already know that the performance of 64k is complex compare with 4k system.
+proposal: implement contiguous page hint for anonymous page in user space
+
+Contiguous page hint is a feature in arm which could decrease the tlb miss and improve the performance. It is only used in
+We already know that the performance of 64k is complex compare with 4k system.  There are some improvement and downgrade in specint. The idea is if we could add contiguous page hint for the pages they really need we could avoid the disadvantage of pure 64k page and get the overall improvement.
 
 
 
