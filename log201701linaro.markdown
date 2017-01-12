@@ -367,3 +367,17 @@ GTD
     2.  reply to guodongxu and zhuangluan su.
     3.  apply for linaro connect(for my visa).
 
+16:38 2017-01-12
+----------------
+       testcases: increase cv(base) cv(result) CV: Coefficient of Variation
+       401.bzip2:   2.30%   0.13%    0.22%
+         403.gcc:   0.34%   0.12%    0.37%
+         429.mcf:   0.62%   0.57%    1.26%
+       445.gobmk:   0.29%   0.41%    0.00%
+       456.hmmer:   7.20%   0.00%    2.24%
+       458.sjeng:  -1.87%   0.00%    0.00%
+  462.libquantum:   4.47%   3.17%    2.11%
+     471.omnetpp:  -1.74%   0.57%    0.39%
+       473.astar:   1.15%   0.27%    0.10%
+   483.xalancbmk:  -3.31%   1.07%    0.78%
+
