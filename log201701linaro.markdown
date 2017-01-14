@@ -555,3 +555,69 @@ GTD
 In hugetlb 2048k, xalancbmk is only decreasing one. In hugetlb 64k, there are three testcases downgrade 458.sjeng, 471.omnetp, 483.xalancbmk.
 I am thinking the unsplitable hugetlb hurt the flexbility. I plan to test the tlb miss in hmmer and xalancbmk to prove it.
 
+4.  (15:58 2017-01-13)Test on hikey
+    1.  400.perlbench 403.gcc test run fail. I do not know the reason.
+
+5.  Key case I need to know
+    401.bzip2
+    456.hmmer
+    462.libquantum
+    483.xalancbmk
+    471.omnetpp
+
+6.  pmu on d03 and hikey could not use right now. I boot fail after apply the pmu of acpi from arm.
+
+15:52 2017-01-13
+----------------
+GTD
+---
+1.  today
+    1.  who should I cc when I send to linux/mm?
+
+09:43 2017-01-14
+----------------
+GTD
+---
+1.  today
+    1.  set one boot option for grub.
+        9:50-10:20 not works. continue trying when doing "3".
+        10' 11:17-11:20 learn how to use grub2 tools. see"11:20 2017-01-14"
+
+    2.  TODO count the reboot time
+        reboot 10:10-10:14 10:23-10:27:41 10:44:23-10:48:54 11:16:01-11:20:33 about 4:30, I could set the timeout as 9minutes.
+    3.  try pmu patch one by one
+        10:20
+        1: pass
+        2: pass
+        d055481: pass
+        4b1420d: pass
+        74991b6: pass
+        84f6528: pass
+        d5921fa: 
+    4.  send out the proposal of lsf/mm
+        1.  update the doc according to arnd.
+        2.  update the test result of hikey and perf pmu of d03.
+            1.  11:24-11:40 check result of hikey. Hikey hung all the night in bzip after perlbench fail.  comment perlbench and run bzip and other case again.
+                timer: check if bzip finish after 13:00
+        3.  cc:
+            > And who should I cc in the list? you two, mel gorman, Laura Abbott,
+            > Marc Zyngier, Christoffer Dall?
+            Sounds ok. I'd also suggest including Catalin Marinas and Will Deacon.
+
+11:20 2017-01-14
+----------------
+software skill, grub2, grub configuration editor
+------------------------------------------------
+1.  set variable through grub2-edit-env
+    `grub2-editenv /boot/EFI/grub2/grubenv set saved_entry=z00293696-ilp32-test`
+2.  set saved_entry through grub2-set-default
+    `grub2-set-default --boot-directory=/boot/EFI z00293696-4.1-test`
+3.  set next_entry through grub2-reboot
+    `grub2-reboot --boot-directory=/boot/EFI z00293696-ilp32-test1
+4.  if prompt "error: environment block too small.", create the new one
+    ```
+    # grub2-set-default --boot-directory=/boot/EFI z00293696-ilp32-test`
+    /usr/bin/grub2-editenv: error: environment block too small.
+    # grub2-editenv  /boot/EFI/grub2/grubenv create
+    ```
+
