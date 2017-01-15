@@ -697,3 +697,8 @@ bamvor@instance-uu77xy2w:~/works/source/test_results$ ~/works/source/small_tools
 
     3.  Discuss the potential solution for mobile world. Android is usually base on 4k page and disable transhuge and hugetlb to save high order memories and total memories. Our idea of contiguous page hint could be a better belance for mobile or other limited memory senario.
 
+17:46 2017-01-15
+----------------
+kindle: 905a 2201 3505 05sg
+amazon Japan telephone: +81 11 330 3000
+
