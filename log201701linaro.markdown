@@ -655,18 +655,19 @@ bamvor@instance-uu77xy2w:~/works/source/test_results$ ~/works/source/small_tools
 16:17 2017-01-15
 ----------------
 [LSF/MM TOPIC][LSF/MM ATTEND] Implement contiguous page hint for anonymous page in user space
-    Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance by sharing a single TLB entry across 16 4k pages whenever the pages are also physically contiguous. Currently, it is only used in hugetlb which limited the senario. This proposal want to discuss the possibiliy and design for implementing contiguous page hint in annoymous page in user space. There are already some off-list discussion on two aspects: how much performance gain we could get; how to implement it in a simple way.
+
+    Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance by sharing a single TLB entry across 16 4k pages whenever the pages are also physically contiguous. Currently, it is only used in hugetlb which limited the scenario. This proposal want to discuss the possibility and design for implementing contiguous page hint in anonymous page in user space. There are already some off-list discussion on two aspects: how much performance gain we could get; how to implement it in a simple way.
 
     Hope could discuss the following items in lsf/mm:
-    1.  Dicuss the my current idea and/or prototype(I am actively working on the prototype, hope could get a work prototype with performance result before lsf).
-        Allocate 64k(with GFP_NOWAIT to avoid evict any other pages) during pte fault, where we have already handled the possible transparent hugepage. Immediatelly split it up into 4k pages and only add one page at this time. Once the fault happens again in the same contiguous area, add all the remaining 15 pages and set the contiguous page hint. We will track the 64k pages in mm_struct.
+    1.  Discuss the my current idea and/or prototype(I am actively working on the prototype, hope could get a work prototype with performance result before lsf).
+        Allocate 64k(with GFP_NOWAIT to avoid evict any other pages) during pte fault, where we have already handled the possible transparent hugepage. Immediately split it up into 4k pages and only add one page at this time. Once the fault happens again in the same contiguous area, add all the remaining 15 pages and set the contiguous page hint. We will track the 64k pages in mm_struct.
         We will split the 64k page in mprotect, mremap, munmap, LRU handling and any other point similar to transparent hugepage.
 
-    2.  Analysis the reason of performance result of specint in mix with 4k/64k page size, transhuge and hugetlb.
-        2.1 The following test result is compare with 4k page with transhuge with or without hugetlb through libhugetlbfs and hugectl. In this test, hugepage is allocated before transparent page(THP), while in our idea, the contiguous page hint will be allocated after THP. Allocate 64k hugepage before THP could break the 2M THP. So we could see that the overall performance improvement of 2048k hugetlb is better than 64k hugetlb.
+    2.  Analysis the reason of performance result of specint in mix with 4k/64k page size, transparent hugepage(THP) and hugetlb.
+        2.1 The following test result is compare with 4k page with THP with or without hugetlb through libhugetlbfs and hugectl. In this test, hugepage is allocated before THP, while in our idea, the contiguous page hint will be allocated after THP. Allocate 64k hugepage before THP could break the 2M THP. So we could see that the overall performance improvement of 2048k hugetlb is better than 64k hugetlb.
         With the performance monitor unit in arm cpu, we could see the positive correlation between tlb miss and performance improvement.
-        We also notice xalancbmk downgrade in both 64k and 2048k hugetlb. This is very interesting thing I will investigate and explain it in lsf.
-        The following test results come from Cortext-A57 which is a classic high performance cpu in armv8a. It support larger tlb than low power cpu(such as cortex-A53). I would expect the more improvement in low power cpu.
+        We also notice xalancbmk downgrade in both 64k and 2048k hugetlb. This is very interesting thing I plan to investigate and discuss it in lsf.
+        The following test results come from Cortex-A57 which is a classic high performance CPU in arm64. It support larger tlb than low power CPU(such as Cortex-A53). I would expect the more improvement in low power CPU.
 
                       64k hugetlb 2048k hugetlb
            401.bzip2:       2.33%         3.18%
@@ -680,7 +681,7 @@ bamvor@instance-uu77xy2w:~/works/source/test_results$ ~/works/source/small_tools
            473.astar:       2.19%         4.37%
        483.xalancbmk:      -4.10%        -2.46%
 
-       2.2  In our another test, we found that there are some downgrade of 64k compare with 4k with or without transhuge. I think it show that there is some shortage of 64k page size, and we need to find a better way to improve the overall performance instead of increasing the base page size. As several distributions are already using 64k base pages, moving them to 4k pages with the continuous page hint should drastically improve performance in cases that are currently limited on the amount of memory, but ideally also keep the better performance in benchmarks that are limited by TLB misses.
+       2.2  In our another test, we found that there are some downgrade of 64k compare with 4k with or without THP. I think it show that there is some shortage of 64k of base page size, and we need to find a better way to improve the overall performance instead of increasing the base page size. As several distributions are already using 64k base pages, moving them to 4k pages with the continuous page hint should drastically improve performance in cases that are currently limited on the amount of memory, but ideally also keep the better performance in benchmarks that are limited by TLB misses.
 
                             4k with transtlb      64k(transtlb disable)  64k with transtlb  Mark
              400.perlbench:  1.59%                  2.38%                    2.38%
@@ -695,7 +696,11 @@ bamvor@instance-uu77xy2w:~/works/source/test_results$ ~/works/source/small_tools
                  473.astar:  8.59%                 10.59%                    9.76%
              483.xalancbmk:  8.11%                  5.41%                    6.31%           -
 
-    3.  Discuss the potential solution for mobile world. Android is usually base on 4k page and disable transhuge and hugetlb to save high order memories and total memories. Our idea of contiguous page hint could be a better belance for mobile or other limited memory senario.
+    3.  Discuss the potential solution for mobile world. Android is usually base on 4k page and disable THP and hugetlb to save high order memories and total memories. Our idea of contiguous page hint could be a better balance for mobile or other limited memory scenario.
+
+Regards
+
+Bamvor
 
 17:46 2017-01-15
 ----------------
