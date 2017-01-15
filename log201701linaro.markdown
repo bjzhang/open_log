@@ -582,23 +582,39 @@ GTD
     1.  set one boot option for grub.
         9:50-10:20 not works. continue trying when doing "3".
         10' 11:17-11:20 learn how to use grub2 tools. see"11:20 2017-01-14"
-
+        FAIL: I suspect there is a bug in my grub suite.
     2.  TODO count the reboot time
         reboot 10:10-10:14 10:23-10:27:41 10:44:23-10:48:54 11:16:01-11:20:33 about 4:30, I could set the timeout as 9minutes.
     3.  try pmu patch one by one
-        10:20
+        10:20-11:53 interleave with other work. I do not why it not work yesterday.
         1: pass
         2: pass
         d055481: pass
         4b1420d: pass
         74991b6: pass
         84f6528: pass
-        d5921fa: 
-    4.  send out the proposal of lsf/mm
+        d5921fa: pass
+    4.  specint analysis:
+        1.  try armv8 pmu tlb miss.
+            1.  try with malloc.
+                12:09-12:53 tlb miss increase after I use hugetlb, why?
+            2.  try specint testcases: sjeng, omnetpp, xalancbmk.
+                12:53-13:50 write the conf file for test hmmer and sjeng.
+                16:02-16:32 check the result, test other significant test case.
+                TODO I should force test with huge64k binary even if I test the normal patch in order to avoid compile stage in test. It could also avoid the alignment difference across pure 4k with transhuge, huge64k and huge2048k.
+                Should I mention that I relink the application in order to test hugepage?
+            3.  internal discussion for pmu of acpi patches. Add tested by.
+                15'
+        2.  64k hmmer
+            > On the same note, I wonder if the overhead you see for 64k pages
+            > in hmmer is a result of wp_page_copy()/clear_page()/copy_user_highpage()
+            > having to copy or zero-fill more data on a page fault. This is
+            > probably easy to see using 'perf'.
+    5.  send out the proposal of lsf/mm
         1.  update the doc according to arnd.
         2.  update the test result of hikey and perf pmu of d03.
             1.  11:24-11:40 check result of hikey. Hikey hung all the night in bzip after perlbench fail.  comment perlbench and run bzip and other case again.
-                timer: check if bzip finish after 13:00
+                timer: 16:02 libquan 16:32 h264 18:34 astar
         3.  cc:
             > And who should I cc in the list? you two, mel gorman, Laura Abbott,
             > Marc Zyngier, Christoffer Dall?
@@ -620,4 +636,64 @@ software skill, grub2, grub configuration editor
     /usr/bin/grub2-editenv: error: environment block too small.
     # grub2-editenv  /boot/EFI/grub2/grubenv create
     ```
+22:54 2017-01-14
+----------------
+1   I think the base is not suitable to compare the result(4.10-rc2). because there are differnce kernel.
+bamvor@instance-uu77xy2w:~/works/source/test_results$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase ILP32_performance_regression/hikey_4.9_sd_hungtask_20161224/ILP32_unmerged_aarch64/ --testresult cont_page_hint/20170114_huge64k/
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+       401.bzip2:   0.00%   0.00%    0.00%
+       445.gobmk:   0.21%   0.00%    0.00%
+       456.hmmer:   1.24%   0.00%    0.00%
+       458.sjeng:   5.30%   0.00%    0.00%
+  462.libquantum:  -8.93%   0.00%    0.00%
+     464.h264ref:   2.83%   0.00%    0.00%
+       473.astar:   1.46%   0.00%    0.00%
+   483.xalancbmk:  -1.59%   0.00%    0.00%
+
+2.  Continue testing.
+
+16:17 2017-01-15
+----------------
+[LSF/MM TOPIC][LSF/MM ATTEND] Implement contiguous page hint for anonymous page in user space
+    Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance by sharing a single TLB entry across 16 4k pages whenever the pages are also physically contiguous. Currently, it is only used in hugetlb which limited the senario. This proposal want to discuss the possibiliy and design for implementing contiguous page hint in annoymous page in user space. There are already some off-list discussion on two aspects: how much performance gain we could get; how to implement it in a simple way.
+
+    Hope could discuss the following items in lsf/mm:
+    1.  Dicuss the my current idea and/or prototype(I am actively working on the prototype, hope could get a work prototype with performance result before lsf).
+        Allocate 64k(with GFP_NOWAIT to avoid evict any other pages) during pte fault, where we have already handled the possible transparent hugepage. Immediatelly split it up into 4k pages and only add one page at this time. Once the fault happens again in the same contiguous area, add all the remaining 15 pages and set the contiguous page hint. We will track the 64k pages in mm_struct.
+        We will split the 64k page in mprotect, mremap, munmap, LRU handling and any other point similar to transparent hugepage.
+
+    2.  Analysis the reason of performance result of specint in mix with 4k/64k page size, transhuge and hugetlb.
+        2.1 The following test result is compare with 4k page with transhuge with or without hugetlb through libhugetlbfs and hugectl. In this test, hugepage is allocated before transparent page(THP), while in our idea, the contiguous page hint will be allocated after THP. Allocate 64k hugepage before THP could break the 2M THP. So we could see that the overall performance improvement of 2048k hugetlb is better than 64k hugetlb.
+        With the performance monitor unit in arm cpu, we could see the positive correlation between tlb miss and performance improvement.
+        We also notice xalancbmk downgrade in both 64k and 2048k hugetlb. This is very interesting thing I will investigate and explain it in lsf.
+        The following test results come from Cortext-A57 which is a classic high performance cpu in armv8a. It support larger tlb than low power cpu(such as cortex-A53). I would expect the more improvement in low power cpu.
+
+                      64k hugetlb 2048k hugetlb
+           401.bzip2:       2.33%         3.18%
+             403.gcc:       0.13%         0.64%
+             429.mcf:      -0.22%         0.77%
+           445.gobmk:       0.00%         0.88%
+           456.hmmer:       5.96%         5.30%
+           458.sjeng:      -1.87%         0.00%
+      462.libquantum:       3.73%         4.35%
+         471.omnetpp:      -2.66%         0.89%
+           473.astar:       2.19%         4.37%
+       483.xalancbmk:      -4.10%        -2.46%
+
+       2.2  In our another test, we found that there are some downgrade of 64k compare with 4k with or without transhuge. I think it show that there is some shortage of 64k page size, and we need to find a better way to improve the overall performance instead of increasing the base page size. As several distributions are already using 64k base pages, moving them to 4k pages with the continuous page hint should drastically improve performance in cases that are currently limited on the amount of memory, but ideally also keep the better performance in benchmarks that are limited by TLB misses.
+
+                            4k with transtlb      64k(transtlb disable)  64k with transtlb  Mark
+             400.perlbench:  1.59%                  2.38%                    2.38%
+                 401.bzip2:  0.53%                  2.88%                    3.21%
+                   403.gcc:  1.58%                  3.16%                    3.29%
+                   429.mcf: 19.65%                 17.26%                    18.33%
+                 445.gobmk:  0.88%                  1.77%                    1.77%
+                 456.hmmer:  0.00%                -39.61%                   -40.33%          ---
+                 458.sjeng:  2.88%                  3.85%                    1.92%
+            462.libquantum:  5.88%                  9.80%                    14.38%          ++
+               471.omnetpp: 12.54%                 13.04%                    12.04%
+                 473.astar:  8.59%                 10.59%                    9.76%
+             483.xalancbmk:  8.11%                  5.41%                    6.31%           -
+
+    3.  Discuss the potential solution for mobile world. Android is usually base on 4k page and disable transhuge and hugetlb to save high order memories and total memories. Our idea of contiguous page hint could be a better belance for mobile or other limited memory senario.
 
