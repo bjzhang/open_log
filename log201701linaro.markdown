@@ -594,22 +594,7 @@ GTD
         74991b6: pass
         84f6528: pass
         d5921fa: pass
-    4.  specint analysis:
-        1.  try armv8 pmu tlb miss.
-            1.  try with malloc.
-                12:09-12:53 tlb miss increase after I use hugetlb, why?
-            2.  try specint testcases: sjeng, omnetpp, xalancbmk.
-                12:53-13:50 write the conf file for test hmmer and sjeng.
-                16:02-16:32 check the result, test other significant test case.
-                TODO I should force test with huge64k binary even if I test the normal patch in order to avoid compile stage in test. It could also avoid the alignment difference across pure 4k with transhuge, huge64k and huge2048k.
-                Should I mention that I relink the application in order to test hugepage?
-            3.  internal discussion for pmu of acpi patches. Add tested by.
-                15'
-        2.  64k hmmer
-            > On the same note, I wonder if the overhead you see for 64k pages
-            > in hmmer is a result of wp_page_copy()/clear_page()/copy_user_highpage()
-            > having to copy or zero-fill more data on a page fault. This is
-            > probably easy to see using 'perf'.
+    4.  specint analysis. see"12:09 2017-01-16"
     5.  send out the proposal of lsf/mm
         1.  update the doc according to arnd.
         2.  update the test result of hikey and perf pmu of d03.
@@ -636,6 +621,34 @@ software skill, grub2, grub configuration editor
     /usr/bin/grub2-editenv: error: environment block too small.
     # grub2-editenv  /boot/EFI/grub2/grubenv create
     ```
+
+12:09 2017-01-14
+----------------
+KWG-192, cont page hint, specint analysis
+-----------------------------------------
+1.  try armv8 pmu tlb miss.
+    1.  try with malloc.
+        12:09-12:53 tlb miss increase after I use hugetlb, why?
+    2.  try specint testcases: sjeng, omnetpp, xalancbmk.
+        12:53-13:50 write the conf file for test hmmer and sjeng.
+        16:02-16:32 check the result, test other significant test case.
+        TODO I should force test with huge64k binary even if I test the normal patch in order to avoid compile stage in test. It could also avoid the alignment difference across pure 4k with transhuge, huge64k and huge2048k.
+        Should I mention that I relink the application in order to test hugepage?
+    3.  internal discussion for pmu of acpi patches. Add tested by.
+        15'
+2.  64k hmmer
+    > On the same note, I wonder if the overhead you see for 64k pages
+    > in hmmer is a result of wp_page_copy()/clear_page()/copy_user_highpage()
+    > having to copy or zero-fill more data on a page fault. This is
+    > probably easy to see using 'perf'.
+
+3.  (10:15 2017-01-16) Aleast finish one today.
+    1.  Analysis the relationship between performance and perf stat for 4k transhuge with/without huge64k
+        17:46-18:23
+        18:54-19:44 Discuss with my colleague. For sjeng, he suggest add l1 access to think why l2 data access increasing when the behavior of test is not changed. He also suggest add :u after the event to only track the userspace.
+    2.  Analysis 64k hmmer with perf.
+        1.  17:45 I overwrite the perf.data. Start re-testing.
+
 22:54 2017-01-14
 ----------------
 1   I think the base is not suitable to compare the result(4.10-rc2). because there are differnce kernel.
@@ -706,4 +719,96 @@ Bamvor
 ----------------
 kindle: 905a 2201 3505 05sg
 amazon Japan telephone: +81 11 330 3000
+
+10:08 2017-01-16
+----------------
+GTD
+---
+1.  today
+    0.  misc
+        10:46-11:05
+        11:23-11:51
+        I could not focus on in the morning. Hope I could track more than 3 hours in the afternoon.
+    1.  plan
+        10:08-10:45 走神10分钟。It is too long to plan a day.
+    2.  linaro activity.
+        11:05-11:09
+    3.  kabi check.
+        11:51-12:06 run the script.
+        20' discuss with my colleague. TODO: wait for him response.
+        14:33-14:53 check the kabi result. Est. 20'
+                    delete the result by mistake. Update the script in order to call from script. Re-run it.
+        15:40-16:00 discuss with my colleague.
+        16:00-16:29 update the script.
+    4.  linaro proposal. Est 30'
+        14:57-15:28 I think I wrote the proposal so smoothly. But it actually just on time. I should consider more time for the works.
+    5.  huawei department meeting.
+        16:54-17:19
+    3.  do_wp_page 3h.
+        17:40 I could not find so much time doing it.
+    4.  cont page hint analysis. see"12:09 2017-01-14"3
+2.  next
+    1.  test performance with latest ILP32 patches.
+    2.  wrote kabi test script.
+    3.  is there analysis of linux vdso?
+    4.  fix the log jump.
+
+10:47 2017-01-16
+----------------
+activity
+--------
+git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
+
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-01-09 to 2017-01-15
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+    - Discuss the proposal of lsf/mm and send out this week.
+      TODO draw picture of performance and perf stat. 数据归一化?
+
+* ILP32
+    - Performance test:
+      TODO paste the performance result here.
+
+=== Plans ===
+* KWG-192: Use of contiguous page hint to create 64K pages
+    Write the code in do_wp_page
+    Continue to analysis the performance result.
+
+* ILP32 performance test
+    Test Lmbench, specint and other testsuite.
+
+14:59 2017-01-16
+----------------
+linaro connect, bud17
+---------------------
+Presenter Name *
+Bamvor Jian Zhang
+
+Company *
+Huawei
+
+Presenter Title *
+Senior Software Engineer
+
+Presenter Bio
+Bamvor Jian Zhang is a software engineer in Huawei who focuses on arm architecture relative things in linux kernel. He maintains ILP32 for ARM64 for huawei and work closely with community. ARM64 ILP32 supports running legacy 32bit binaries on ARM64. From the last year, He start to work on the optimization of page table for arm/arm64. He gave a presentation in Linuxcon europe 2016, Opensuse Asia Summit 2014 and also some presentations in local open source activities in Beijing China. He is also the member of Beijing Linux User Group(BLUG).
+
+Presenter Contact Email *
+bamvor.zhangjian@linaro.org
+
+If known, which industry segment(s)?
+Enterprise
+
+Session/Demo Title *
+Implement contiguous page hint for anonymous page in user space
+
+Session/Demo Abstract (short description including technical focus areas, e.g. kernel, virtualization,...) *
+Area: Kernel.
+
+Contiguous page hint is a feature in arm/arm64 which could decrease the tlb miss and improve the performance by sharing a single TLB entry across 16 4k pages whenever the pages are also physically contiguous. Currently, it is only used in hugetlb which limited the scenario.
+
+This proposal want to share and discuss following things:
+1.  The current design of hugepage, transparent hugepage and page fault. And current design of bamvor'
+2.  Compare and analysis the performance of different design, mix with transparent hugepage, hugepage and bamvor' design.
+3.  Discuss the scenarios which are suitable for this work beyond the enterprise.
 
