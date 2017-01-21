@@ -14,6 +14,7 @@ GTD
 15:03 2017-01-04
 ----------------
 GTD
+---
 1.  today
     1.  There is discussion about ILP32 merged. Process and send out the performance report.
         1.  Test huawei benchmark. Test specint and lmbench.
@@ -646,8 +647,14 @@ KWG-192, cont page hint, specint analysis
     1.  Analysis the relationship between performance and perf stat for 4k transhuge with/without huge64k
         17:46-18:23
         18:54-19:44 Discuss with my colleague. For sjeng, he suggest add l1 access to think why l2 data access increasing when the behavior of test is not changed. He also suggest add :u after the event to only track the userspace.
+        0119 14:48-15:58 check the result.
+                         My colleague suggest to run perf report/top get the hot spot.
+             15:38-15:46 plot?
+             -16:34      update the format for gnuplot. It takes too much time to do this right long.
+             16:34-17:13 -17:24 Already overtime. finish it.
     2.  Analysis 64k hmmer with perf.
         1.  17:45 I overwrite the perf.data. Start re-testing.
+            TODO
 
 22:54 2017-01-14
 ----------------
@@ -732,7 +739,7 @@ GTD
     1.  plan
         10:08-10:45 走神10分钟。It is too long to plan a day.
     2.  linaro activity.
-        11:05-11:09
+        11:05-11:09 Not finish. Need more test result.
     3.  kabi check.
         11:51-12:06 run the script.
         20' discuss with my colleague. TODO: wait for him response.
@@ -748,9 +755,9 @@ GTD
         17:40 I could not find so much time doing it.
     4.  cont page hint analysis. see"12:09 2017-01-14"3
 2.  next
-    1.  test performance with latest ILP32 patches.
+    1.  MOVE TO 0118: test performance with latest ILP32 patches.
     2.  wrote kabi test script.
-    3.  is there analysis of linux vdso?
+    3.  MOVE TO 0118: is there analysis of linux vdso?
     4.  fix the log jump.
 
 10:47 2017-01-16
@@ -759,15 +766,39 @@ activity
 --------
 git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
 
-Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-01-09 to 2017-01-15
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-01-09 to 2017-01-16
 
 * KWG-192: Use of contiguous page hint to create 64K pages
     - Discuss the proposal of lsf/mm and send out this week.
-      TODO draw picture of performance and perf stat. 数据归一化?
+    - Investigate the following test data(the baseline is 4k base page with transparent hugepage). Except xalancbmk, other test show good relationship with data tlb miss. I plan to calculate the calcorrelation coefficient, but I am not sure which one is better for discrete data.
+      For xalancbmk, the tlb miss of 64k hugetlb is much smaller(maybe ~70%. I will post all the data later) than baseline. But L2 cache access is 20% more than baseline. Given than in armv8, L1 and L2 is inclusive, I decide to test the L1 i$ access, d$ access and d$ miss to verify the result.
+      The other issue is about libquantum. The baseline of libquantum is not stable. The Coefficient of Variation(standard deviation divided by mean) of baseline is about 3%. The below 3.73% is the minimal improvement.
+                      64k hugetlb 2048k hugetlb
+           401.bzip2:       2.33%         3.18%
+             403.gcc:       0.13%         0.64%
+             429.mcf:      -0.22%         0.77%
+           445.gobmk:       0.00%         0.88%
+           456.hmmer:       5.96%         5.30%
+           458.sjeng:      -1.87%         0.00%
+      462.libquantum:       3.73%         4.35%
+         471.omnetpp:      -2.66%         0.89%
+           473.astar:       2.19%         4.37%
+       483.xalancbmk:      -4.10%        -2.46%
 
 * ILP32
-    - Performance test:
-      TODO paste the performance result here.
+    - Performance test. test the hikey with huntask. Huawei colleague find a root cause, I will re-test them this week.
+                  ILP32_enable_aarch32  ILP32_disable_aarch32  ILP32_enable_aarch64 ILP32_disable_aarch64
+   400.perlbench                 0.69%                  0.69%                -0.23%                -2.78%
+       401.bzip2                -0.76%                  0.00%                -0.38%                -1.14%
+         403.gcc                 0.26%                  0.52%                -0.25%                 0.00%
+         429.mcf                 7.32%                  4.88%                -3.37%                -0.48%
+       445.gobmk                -0.21%                 -0.21%                 1.27%                 0.84%
+       456.hmmer                -0.33%                 -1.66%                 0.25%                 0.25%
+       458.sjeng                -3.26%                  0.23%                 1.99%                 0.00%
+  462.libquantum                -0.74%                 -0.74%                -2.68%                -1.79%
+     464.h264ref                 0.42%                  0.56%                 3.82%                 2.69%
+       473.astar                 1.02%                  0.34%                 0.73%                 0.73%
+   483.xalancbmk                -0.24%                 -2.13%                 2.39%                 0.00%
 
 === Plans ===
 * KWG-192: Use of contiguous page hint to create 64K pages
@@ -811,4 +842,146 @@ This proposal want to share and discuss following things:
 1.  The current design of hugepage, transparent hugepage and page fault. And current design of bamvor'
 2.  Compare and analysis the performance of different design, mix with transparent hugepage, hugepage and bamvor' design.
 3.  Discuss the scenarios which are suitable for this work beyond the enterprise.
+
+15:56 2017-01-17
+----------------
+GTD
+---
+1.  today
+    1.  linaro activity(need collect the data)
+        1.  cont page hint. 10'
+            16:05-16:19 It is complex than I thought. I need more than 10 minutes to write 766 characters.
+        2.  ILP32. 30'
+            16:20-16:44 and finish activity
+    2.  do_wp_page
+        1.  more than 1h.
+            16:57-17:20 prepare the environment and misc.
+            17:28-18:46
+            18:50-18:55 I feel I understand something.
+2.  next
+    1.  MOVE TO 0118; Reply the email.
+    1.  write to mel?
+    1.  dnspod(upload the picture of my ID card).
+    1.  learn os courses?
+
+17:50 2017-01-17
+----------------
+cont page hint
+--------------
+1.  how about set flags in page to indicate it belong to cont area?
+2.  does cow_user_page lead to the current my failure?
+3.  Could not understand:
+         if (!trylock_page(vmf->page)) {
+
+4. (11:57 2017-01-18)
+    What does it mean after pte_mkdirty?
+    If it is the read, it read the zero page allocated in do_anonymous_page. I think it should allocate the new page for read.
+    TODO.
+5.  (15:32 2017-01-20)
+    The difficult of record in mm struct is we do not know the size of mm. And most of area is empty actually. I am thinking I should record in vma.
+    There is always vma in vm_fault. So, I think it is good for me.
+6.  The question is where does vma allocate?
+    1.  I found where does file back vma allocate: elf_map->vm_mmap->vm_mmap_pgoff->do_mmap_pgoff
+    2.  brk: set_brk->do_brk_flags->vma allocate
+    3.  malloc: in mmap_region or `__vma_adjust`
+
+10:31 2017-01-18
+----------------
+GTD
+---
+1.  today
+    1.  plan
+        10:33-10:46
+    2.  Diary
+        1.  11:02-11:20
+    2.  do_wp_page: start write the code.
+        1.  read the rest of code.
+            11:21-12:03
+    3.  evus.
+        30' 13:45-14:52 Finish the table on 14:20, but it takes 30' to review and save the result.
+    1.  test performance with latest ILP32 patches.
+        1.  plan
+            15:05-15:07
+        1.  automatically compile and update kernel and modules to board.
+            15:07-15:46 It takes too long to replace in bash like this<http://stackoverflow.com/questions/13210880/replace-one-substring-for-another-string-in-shell-script>, This one works for me: <http://stackoverflow.com/questions/7718307/how-to-split-a-list-by-comma-not-space>
+            16:36-17:33 install kernel and modules.
+        2.  specint support select difference case.
+            17:50-18:20
+            aarch32: mcf hmmer sjeng h264ref astar xalancbmk
+            aarch64: perlbench bzip2 mcf gobmk sjeng libquantum h264ref xalancbmk
+        3.  Test with ssh.py script.
+            DONE
+        4.  kernel compile script support checkout commit.
+            DONE
+    1.  wrote docment for linux vdso for arm64.
+    1.  Reply the email to Mark, Akashi.
+
+2.  next
+    1.  review the todo in 16,17 Jan.
+
+10:31 2017-01-19
+----------------
+GTD
+---
+1.  today
+    1.  check the reason of hikey and cubietruct reboot.
+        10:31-10:45 5' I do not know. Buy heat sink later.
+    2.  do_wp_page: start write the code.
+        1.  read the rest of code.
+            DO NOT DO IT IN TWO DAYS. I NEED TO CHANGE!
+    2.  ILP32 performance test finish the following one:
+        11:51-12:00 run aarch64: perlbench bzip2 mcf gobmk sjeng libquantum h264ref xalancbmk.
+                    TODO aarch64 ILP32 enable.
+            aarch32: mcf hmmer sjeng h264ref astar xalancbmk
+    2.  1:1 with Mark.
+        17:30-18:11
+2.  next
+    1.  buy heat sink for my ct and hikey.
+
+11:17 2017-01-19
+----------------
+cubietruck, reboot
+------------------
+```
+localhost:~ # journalctl --since 2017-01-17
+Jan 19 07:00:03 localhost systemd[1]: Started Rotate log files.
+Jan 19 10:12:39 localhost wickedd-dhcp4[502]: eth0: Committed DHCPv4 lease with address 192.168.1.202 (lease time 86400 sec, renew in 43200 sec, rebind in 75600 sec)
+Jan 19 10:12:39 localhost wickedd[511]: route ipv4 0.0.0.0/0 via 192.168.1.1 dev eth0#2 type unicast table main scope universe protocol dhcp covered by a ipv4:dhcp le
+Jan 19 10:30:53 localhost systemd[1]: Starting Cleanup of Temporary Directories...
+Jan 19 10:30:53 localhost systemd[1]: Started Cleanup of Temporary Directories.
+-- Reboot --
+Jan 01 08:00:15 localhost systemd-journald[134]: Runtime journal (/run/log/journal/) is currently using 8.0M.
+                                                 Maximum allowed usage is set to 100.3M.
+                                                 Leaving at least 150.5M free (of currently available 995.8M of space).
+                                                 Enforced usage limit is thus 100.3M, of which 92.3M are still available.
+Jan 01 08:00:15 localhost kernel: Booting Linux on physical CPU 0x0
+Jan 01 08:00:15 localhost kernel: Linux version 4.8.13-1-default (geeko@buildhost) (gcc version 6.2.1 20160830 [gcc-6-branch revision 239856] (SUSE Linux) ) #1 SMP PR
+Jan 01 08:00:15 localhost kernel: CPU: ARMv7 Processor [410fc074] revision 4 (ARMv7), cr=10c5387d
+```
+
+10:01 2017-01-20
+----------------
+GTD
+---
+1.  today
+    1.  misc
+        9:50-10:01 Linaro leave.
+        11:16-11:38 who and tmux.
+        15:01-15:15 talk with yury.
+        15:51-16:11 It takes 20 minutes to rest. Too long!
+    2.  plan
+    2.  do_wp_page: start write the code.
+        1.  read the rest of code.
+            11:38-12:08
+            15:19-15:51
+        2.  Think about how to modity the code.
+            16:12-16:47 Where does new mmap do.
+    3.  安装站立办公位.
+        14:16-14:45 比计划多用了10分钟.
+    2.  ILP32 performance test.
+        1.  check the result. I should only use 30 minutes to work on the script recently.
+            14:45-15:01 It will finish tonight. Check tonight or later.
+    2.  check result of cont page hint.
+2.  next
+    1.  Does rt-thread support arm64? Search the current os which do not support arm/arm64. The new os from google?
 
