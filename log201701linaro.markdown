@@ -1213,4 +1213,56 @@ Diff:
       473.astar:    0.34%    0.00%     0.00%
   483.xalancbmk:  -0.23%    0.00%     0.00%
 
+17:32 2017-01-23
+----------------
+git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
+
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-01-17 to 2017-01-23
+
+* KWG-192: Use of contiguous page hint to create 64K pages
+
+* ILP32
+    - Performance test. Coefficient of Variation in hikey is a little bit bigger than d03.
+      aarch64(ILP32 disable compare with ILP32 unmerge)
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.12%    0.00%     0.12%
+       401.bzip2:   0.32%    0.18%     0.57%
+         429.mcf:  -1.13%    1.40%     0.00%
+       445.gobmk:  -0.14%    0.10%     0.63%
+       458.sjeng:   0.21%    0.00%     0.42%
+  462.libquantum:   0.31%    0.43%     0.00%
+     464.h264ref:  -0.23%    0.28%     0.00%
+   483.xalancbmk:   0.41%    2.17%     1.22%
+
+      aarch64(ILP32 enable compare with ILP32 unmerge)
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.23%    0.12%     0.12%
+       401.bzip2:   0.19%    0.38%     0.57%
+         429.mcf:  -2.17%    1.73%     0.00%
+       445.gobmk:  -0.21%    0.21%     0.63%
+       458.sjeng:  -1.06%    1.50%     0.42%
+  462.libquantum:  -0.46%    0.46%     0.00%
+     464.h264ref:  -2.32%    1.82%     0.00%
+   483.xalancbmk:   1.22%    1.08%     1.22%
+
+      aarch32(ILP32 disable compare with ILP32 unmerge)
+      testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+        429.mcf:  -3.57%    1.75%     1.50%
+      456.hmmer:  -0.33%    0.34%     0.33%
+      458.sjeng:  -2.33%    2.26%     0.12%
+    464.h264ref:  -1.82%    0.57%     0.28%
+      473.astar:  -0.51%    0.34%     0.51%
+  483.xalancbmk:  -0.47%    1.31%     1.07%
+
+      aarch32(ILP32 enable compare with ILP32 unmerge)
+      testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+        429.mcf:  -1.13%    1.52%     1.50%
+      456.hmmer:  -0.84%    0.84%     0.33%
+      458.sjeng:  -0.23%    0.12%     0.12%
+    464.h264ref:  -0.14%    0.14%     0.28%
+      473.astar:    0.00%    0.17%     0.51%
+  483.xalancbmk:    0.71%    0.12%     1.07%
+
+===Holiday===
+24, Jan to 2, Feb.
 
