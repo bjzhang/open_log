@@ -884,6 +884,8 @@ cont page hint
     1.  I found where does file back vma allocate: elf_map->vm_mmap->vm_mmap_pgoff->do_mmap_pgoff
     2.  brk: set_brk->do_brk_flags->vma allocate
     3.  malloc: in mmap_region or `__vma_adjust`
+7.  Think about maintain the cont page region bit.
+    1.  
 
 10:31 2017-01-18
 ----------------
@@ -984,4 +986,231 @@ GTD
     2.  check result of cont page hint.
 2.  next
     1.  Does rt-thread support arm64? Search the current os which do not support arm/arm64. The new os from google?
+
+10:07 2017-01-22
+----------------
+bjzhang.github.io, ip address
+-----------------------------
+bamvor@instance-uu77xy2w:~/works/source/small_tools_collection$ nslookup bjzhang.github.io
+Server:         172.16.0.3
+Address:        172.16.0.3#53
+
+Non-authoritative answer:
+bjzhang.github.io       canonical name = github.map.fastly.net.
+Name:   github.map.fastly.net
+Address: 151.101.100.133
+
+bamvor@instance-uu77xy2w:~/works/source/small_tools_collection$ nslookup aarch64.me
+Server:         172.16.0.3
+Address:        172.16.0.3#53
+
+Non-authoritative answer:
+aarch64.me      canonical name = bjzhang.github.io.
+bjzhang.github.io       canonical name = github.map.fastly.net.
+Name:   github.map.fastly.net
+Address: 151.101.100.133
+
+10:39 2017-01-23
+----------------
+ILP32, aarch64
+--------------
+1.  ILP32 disable
+    mcf and xalancbmk are not stable.
+
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged/ --testbase 20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170120_2042/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_0920/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/ --testresult 20170118_specint_aarch64/ILP32_disabled/
+The test result:
+['20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170120_2042/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_0920/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/', '20170118_specint_aarch64/ILP32_disabled/']
+The test base:
+['20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged/', '20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/']
+Original numbers:
+{'462.libquantum': 10.933333333333332, '464.h264ref': 7.303333333333334, '401.bzip2': 2.643333333333333, '429.mcf': 2.0466666666666664, '400.perlbench': 4.33, '458.sjeng': 4.72, '483.xalancbmk': 3.69, '445.gobmk': 4.753333333333333}
+{'462.libquantum': 10.9, '400.perlbench': 4.335, '401.bzip2': 2.635, '429.mcf': 2.07, '464.h264ref': 7.32, '458.sjeng': 4.710000000000001, '483.xalancbmk': 3.675, '445.gobmk': 4.76}
+
+Diff:
+['20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170120_2042/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_0920/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/', '20170118_specint_aarch64/ILP32_disabled/']
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.12%    0.00%     0.12%
+       401.bzip2:    0.32%    0.18%     0.57%
+         429.mcf:  -1.13%    1.40%     0.00%
+       445.gobmk:  -0.14%    0.10%     0.63%
+       458.sjeng:    0.21%    0.00%     0.42%
+  462.libquantum:    0.31%    0.43%     0.00%
+     464.h264ref:  -0.23%    0.28%     0.00%
+   483.xalancbmk:    0.41%    2.17%     1.22%
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged/ --testbase 20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170120_2042/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_0920/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/
+The test result:
+['20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170120_2042/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_0920/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/']
+The test base:
+['20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged/', '20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/']
+Original numbers:
+{'462.libquantum': 10.933333333333332, '464.h264ref': 7.303333333333334, '401.bzip2': 2.643333333333333, '429.mcf': 2.0466666666666664, '400.perlbench': 4.33, '458.sjeng': 4.72, '483.xalancbmk': 3.716666666666667, '445.gobmk': 4.753333333333333}
+{'462.libquantum': 10.9, '400.perlbench': 4.335, '401.bzip2': 2.635, '429.mcf': 2.07, '464.h264ref': 7.32, '458.sjeng': 4.710000000000001, '483.xalancbmk': 3.675, '445.gobmk': 4.76}
+
+Diff:
+['20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170120_2042/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_0920/', '20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/']
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.12%    0.00%     0.12%
+       401.bzip2:    0.32%    0.18%     0.57%
+         429.mcf:  -1.13%    1.40%     0.00%
+       445.gobmk:  -0.14%    0.10%     0.63%
+       458.sjeng:    0.21%    0.00%     0.42%
+  462.libquantum:    0.31%    0.43%     0.00%
+     464.h264ref:  -0.23%    0.28%     0.00%
+   483.xalancbmk:    1.13%    2.03%     1.22%
+-bash: /home/bamvor/works/source/small_tools_collection/misc/specint_get_data.py--testbase: No such file or directory
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 2017011
+8_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/ --testresult 20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/
+The test result:
+['20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/']
+The test base:
+['20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/']
+Original numbers:
+{'462.libquantum': 11.0, '400.perlbench': 4.33, '401.bzip2': 2.64, '429.mcf': 2.01, '464.h264ref': 7.28, '458.sjeng': 4.72, '483.xalancbmk': 3.61, '445.gobmk': 4.75}
+{'462.libquantum': 10.9, '400.perlbench': 4.34, '401.bzip2': 2.65, '429.mcf': 2.07, '464.h264ref': 7.32, '458.sjeng': 4.69, '483.xalancbmk': 3.63, '445.gobmk': 4.73}
+
+Diff:
+['20170118_specint_aarch64/ILP32_disabled/a3eb14be_ilp32_disabled_20170121_1558/']
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.23%    0.00%     0.00%
+       401.bzip2:  -0.38%    0.00%     0.00%
+         429.mcf:  -2.90%    0.00%     0.00%
+       445.gobmk:    0.42%    0.00%     0.00%
+       458.sjeng:    0.64%    0.00%     0.00%
+  462.libquantum:    0.92%    0.00%     0.00%
+     464.h264ref:  -0.55%    0.00%     0.00%
+   483.xalancbmk:  -0.55%    0.00%     0.00%
+
+2.  ILP32 enable
+Significant result:
+         429.mcf:  -2.17%    1.73%     0.00%
+       458.sjeng:  -1.06%    1.50%     0.42%
+     464.h264ref:  -2.32%    1.82%     0.00%
+   483.xalancbmk:    1.22%    1.08%     1.22%
+
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 2017011
+8_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged --testbase 20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/ --testresult 201701
+18_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled_20170121_2244/ --testresult 20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled
+The test result:
+['20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled_20170121_2244/', '20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled']
+The test base:
+['20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged', '20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/']
+Original numbers:
+{'462.libquantum': 10.850000000000001, '400.perlbench': 4.325, '401.bzip2': 2.6399999999999997, '429.mcf': 2.025, '464.h264ref': 7.15, '458.sjeng': 4.66, '483.xalancbmk': 3.7199999999999998, '445.gobmk': 4.75}
+{'462.libquantum': 10.9, '400.perlbench': 4.335, '401.bzip2': 2.635, '429.mcf': 2.07, '464.h264ref': 7.32, '458.sjeng': 4.710000000000001, '483.xalancbmk': 3.675, '445.gobmk': 4.76}
+
+Diff:
+['20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled_20170121_2244/', '20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled']
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.23%    0.12%     0.12%
+       401.bzip2:    0.19%    0.38%     0.57%
+         429.mcf:  -2.17%    1.73%     0.00%
+       445.gobmk:  -0.21%    0.21%     0.63%
+       458.sjeng:  -1.06%    1.50%     0.42%
+  462.libquantum:  -0.46%    0.46%     0.00%
+     464.h264ref:  -2.32%    1.82%     0.00%
+   483.xalancbmk:    1.22%    1.08%     1.22%
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/ --testresult 20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled_20170121_2244/
+The test result:
+['20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled_20170121_2244/']
+The test base:
+['20170118_specint_aarch64/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_0525/']
+Original numbers:
+{'462.libquantum': 10.9, '400.perlbench': 4.33, '401.bzip2': 2.63, '429.mcf': 2.06, '464.h264ref': 7.02, '458.sjeng': 4.73, '483.xalancbmk': 3.68, '445.gobmk': 4.74}
+{'462.libquantum': 10.9, '400.perlbench': 4.34, '401.bzip2': 2.65, '429.mcf': 2.07, '464.h264ref': 7.32, '458.sjeng': 4.69, '483.xalancbmk': 3.63, '445.gobmk': 4.73}
+
+Diff:
+['20170118_specint_aarch64/ILP32_enabled/a3eb14be_ilp32_enabled_20170121_2244/']
+       testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+   400.perlbench:  -0.23%    0.00%     0.00%
+       401.bzip2:  -0.75%    0.00%     0.00%
+         429.mcf:  -0.48%    0.00%     0.00%
+       445.gobmk:    0.21%    0.00%     0.00%
+       458.sjeng:    0.85%    0.00%     0.00%
+  462.libquantum:    0.00%    0.00%     0.00%
+     464.h264ref:  -4.10%    0.00%     0.00%
+   483.xalancbmk:    1.38%    0.00%     0.00%
+
+10:44 2017-01-23
+----------------
+ILP32, aarch32
+--------------
+1.  ILP32 disable
+    significant: mcf, sjeng, h264ref
+
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged/ --testbase 20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/ --testresult 20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled --testresult 20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled_20170122_1204/
+The test result:
+['20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled', '20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled_20170122_1204/']
+The test base:
+['20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged/', '20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/']
+Original numbers:
+{'464.h264ref': 7.0, '429.mcf': 2.565, '473.astar': 2.9400000000000004, '458.sjeng': 4.195, '456.hmmer': 2.9800000000000004, '483.xalancbmk': 4.205}
+{'464.h264ref': 7.130000000000001, '429.mcf': 2.66, '473.astar': 2.955, '458.sjeng': 4.295, '456.hmmer': 2.99, '483.xalancbmk': 4.225}
+
+Diff:
+['20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled', '20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled_20170122_1204/']
+      testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+        429.mcf:  -3.57%    1.75%     1.50%
+      456.hmmer:  -0.33%    0.34%     0.33%
+      458.sjeng:  -2.33%    2.26%     0.12%
+    464.h264ref:  -1.82%    0.57%     0.28%
+      473.astar:  -0.51%    0.34%     0.51%
+  483.xalancbmk:  -0.47%    1.31%     1.07%
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 2017011
+8_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/ --testresult 20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled_20170122_1204/
+The test result:
+['20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled_20170122_1204/']
+The test base:
+['20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/']
+Original numbers:
+{'464.h264ref': 6.96, '429.mcf': 2.61, '473.astar': 2.95, '458.sjeng': 4.1, '456.hmmer': 2.99, '483.xalancbmk': 4.26}
+{'464.h264ref': 7.15, '429.mcf': 2.7, '473.astar': 2.94, '458.sjeng': 4.3, '456.hmmer': 3.0, '483.xalancbmk': 4.27}
+
+Diff:
+['20170118_specint_aarch32/ILP32_disabled/a3eb14be_ilp32_disabled_20170122_1204/']
+      testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+        429.mcf:  -3.33%    0.00%     0.00%
+      456.hmmer:  -0.33%    0.00%     0.00%
+      458.sjeng:  -4.65%    0.00%     0.00%
+    464.h264ref:  -2.66%    0.00%     0.00%
+      473.astar:    0.34%    0.00%     0.00%
+  483.xalancbmk:  -0.23%    0.00%     0.00%
+
+2.  ILP32 enable
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged/ --testbase 20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/ --testresult 20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled --testresult 20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled_20170122_1715/
+The test result:
+['20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled', '20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled_20170122_1715/']
+The test base:
+['20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged/', '20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/']
+Original numbers:
+{'464.h264ref': 7.12, '429.mcf': 2.63, '473.astar': 2.955, '458.sjeng': 4.285, '456.hmmer': 2.965, '483.xalancbmk': 4.255}
+{'464.h264ref': 7.130000000000001, '429.mcf': 2.66, '473.astar': 2.955, '458.sjeng': 4.295, '456.hmmer': 2.99, '483.xalancbmk': 4.225}
+
+Diff:
+['20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled', '20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled_20170122_1715/']
+      testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+        429.mcf:  -1.13%    1.52%     1.50%
+      456.hmmer:  -0.84%    0.84%     0.33%
+      458.sjeng:  -0.23%    0.12%     0.12%
+    464.h264ref:  -0.14%    0.14%     0.28%
+      473.astar:    0.00%    0.17%     0.51%
+  483.xalancbmk:    0.71%    0.12%     1.07%
+bamvor@instance-uu77xy2w:~/works/source/test_results/ILP32_performance_regression$ ~/works/source/small_tools_collection/misc/specint_get_data.py --testbase 20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/ --testresult 20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled_20170122_1715/
+The test result:
+['20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled_20170122_1715/']
+The test base:
+['20170118_specint_aarch32/ILP32_unmerged/c84d0bb_ilp32_unmerged_20170122_2225/']
+Original numbers:
+{'464.h264ref': 7.11, '429.mcf': 2.59, '473.astar': 2.95, '458.sjeng': 4.29, '456.hmmer': 2.94, '483.xalancbmk': 4.26}
+{'464.h264ref': 7.15, '429.mcf': 2.7, '473.astar': 2.94, '458.sjeng': 4.3, '456.hmmer': 3.0, '483.xalancbmk': 4.27}
+
+Diff:
+['20170118_specint_aarch32/ILP32_enabled/a3eb14be_ilp32_enabled_20170122_1715/']
+      testcases: increase cv(base) cv(result) cv: Coefficient of Variation
+        429.mcf:  -4.07%    0.00%     0.00%
+      456.hmmer:  -2.00%    0.00%     0.00%
+      458.sjeng:  -0.23%    0.00%     0.00%
+    464.h264ref:  -0.56%    0.00%     0.00%
+      473.astar:    0.34%    0.00%     0.00%
+  483.xalancbmk:  -0.23%    0.00%     0.00%
+
 
