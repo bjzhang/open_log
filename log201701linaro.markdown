@@ -884,6 +884,9 @@ cont page hint
     1.  I found where does file back vma allocate: elf_map->vm_mmap->vm_mmap_pgoff->do_mmap_pgoff
     2.  brk: set_brk->do_brk_flags->vma allocate
     3.  malloc: in mmap_region or `__vma_adjust`
+        (11:42 2017-02-09)
+        There is another two cases which will split vma or shink vma.
+        Reference vma_adjust_trans_huge?
 7.  Think about maintain the cont page region bit.
     1.  
 
