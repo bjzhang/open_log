@@ -21,3 +21,23 @@ Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-03-06 to 2017-03-21
 
 *   Kselftest
 
+17:22 2017-03-22
+----------------
+arm32, meeting
+--------------
+1.  arnd: build kernel with distcc in arm machine farm.
+
+last thing from me, I've done some more analysis on the requirements of my build machine, trying to come up with a theoretical analysis of what kind of cheap ARM devboards I could use to get similar performance with lower power
+My current estimate is that I'd need only 24 quad-core cortex-a53 boards with 1GB RAM each, but there are lots of downsides to doing that
+<bamvor> Bamvor Jian Zhang do you mean the socionext 24core A53 board? 
+A<arnd> bamvor: no, I would need four of those boards, with 16GB RAM each for the CPU performance, but if I did that, I'd probably run into network bandwidth limits
+and memory bandwidth
+an interesting find is that 80% of the build time can be parallelized for the kernel with distcc, which is better than I thought
+
+2.  binoy: dm-crypt performance test. It downgrade except sequential writes with "bonnie". The reason of downgraion is because the lack of dm crypt hw in arm(410c).
+
+3.  baolin:
+    1.  extcon
+    2.  vbus notification.
+USB GPIO Extcon device: This is a virtual device used to generate USB cable states from the USB ID pin
+connected to a GPIO pin.
