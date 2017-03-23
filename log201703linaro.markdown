@@ -20,6 +20,7 @@ Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-03-06 to 2017-03-21
     Read the coresight driver, especially the tmc part.
 
 *   Kselftest
+    try to fix the regression introduced by my patch. The reasone is build one testcase of x86 will bypass the top level Makefile of kselftests.
 
 17:22 2017-03-22
 ----------------
