@@ -42,3 +42,37 @@ an interesting find is that 80% of the build time can be parallelized for the ke
     2.  vbus notification.
 USB GPIO Extcon device: This is a virtual device used to generate USB cable states from the USB ID pin
 connected to a GPIO pin.
+
+09:20 2017-04-04
+----------------
+activity
+
+git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
+
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-03-22 to 2017-04-04
+
+=== Highlights ===
+*   Coresight
+    Discuss with Mathieu and Mike Leach.
+
+*   Kselftest
+    Send two patches to fix the regression introduced by my patch.
+    Review the patch from Fathi Boundra.
+
+*   1:1 with Mark Brown
+
+*   Huawei internal work
+
+*   op-tee
+    Discuss with jerome.forissier@linaro.org about op-tee. The op-tee driver will be merged in 4.12. I am thinking if I could help on improving the op-tee driver.
+
+=== Plans ===
+*   Kselftest
+    Test all the testcases in kselftest in x86 and arm64. Fathi may work on this. Confirm before work on it.
+
+*   KWG-192
+    Discuss with Arnd and Mark about this work. Whether it is worth to place the contiguous hint in exeve.
+
+=== Travel/Out ===
+    2, April to 4, April for Qingming Festival(also known as Tomb-Sweeping Day)
+
