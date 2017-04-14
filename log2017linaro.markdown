@@ -76,3 +76,9 @@ Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-03-22 to 2017-04-04
 === Travel/Out ===
     2, April to 4, April for Qingming Festival(also known as Tomb-Sweeping Day)
 
+10:49 2017-04-14
+----------------
+KWG-225
+-------
+Mark to me:
+It's about using signatures to verify that the firmware we're loading is authorized at all - basically a firmware counterpoint to signed modules for systems that want this either for security reasons or just to make sure we're using a single system image for regulatory reasons. Currently we just don't do any verification at all.
