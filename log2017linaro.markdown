@@ -126,15 +126,23 @@ software skills, bash, cut
 
 20:52 2017-06-05
 ----------------
+(14:47 2017-06-14)
+
 activity
 
 git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc bamvor.zhangjian@linaro.org
 
-Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-05-29 to 2017-06-05
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-05-29 to 2017-06-14
 
-Help on analysis the security issue on our android branch. Find some potential issue in kernel.
+=== Highlights ===
+*   Help on analysis the security issue on our android branch. Find some potential issue in kernel.
+*   Help on Evaluation the board to develop optee. Choose hikey at the end. Because hikey960 is not supported at the momnent.
+*   KWG-248: ILP32 upstreaming
+    *   Review  the ILP32 patches. Setup up the environment on hikey960. Plan to test ILP32 on hikey960.
+    *   Heard from arm engineer that arm plan to merge in Q4, 2017.
+*   KWG-192: Use of contiguous page hint to create 64K pages
+    write the patch of do_wp_page
 
-Help on Evaluation the board to develop optee. Choose hikey at the end. Because hikey960 is not supported at the momnent.
-
+=== Travel/Out ===
 Holiday 28, May to 31, May.
 
