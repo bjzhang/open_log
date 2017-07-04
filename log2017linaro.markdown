@@ -146,3 +146,37 @@ Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-05-29 to 2017-06-14
 === Travel/Out ===
 Holiday 28, May to 31, May.
 
+20:13 2017-07-03
+----------------
+activity
+
+git send-email --to private-kwg@linaro.org --cc broonie@linaro.org --cc arnd@arndb.de --cc zhang.chunyan@linaro.org --cc bamvor.zhangjian@linaro.org
+
+Subject: [ACTIVITY] (Bamvor Jian Zhang) 2017-06-26 to 2017-07-04
+
+=== Highlights ===
+*   Join the LC3 China last week.
+    Some topics seem very interesting.
+    1.  [Secure Containers with EPT Isolation(Huawei, Intel)](https://www.slideshare.net/LCChina/secure-containers-with-ept-isolation) build the containers with EPT page table protection. EPT is a memory virtualization technology used in kvm and xen by default. It could deployed in vm in the cloud compare with the kvm-based ontainers(Intel: Clear Container or Huawei vm-based containers[2]).
+    2.  Coly Li from suse work on ssd/nvm optimization. He Explain the bottleneck for the Global I/O barrier and show the performance improvement after Hash Bucket Barriers and Lockless I/O barrier merged[3].
+    3.  There are two relative topics about libos. The first one from vmware who work on Linux libos[4]. It seems similar with Hajime Tazaki <tazaki@sfc.wide.ad.jp>[5]. The other one is port unikernel to aarch64 in uKVM[6]. I think unikernel could potentially get performance improvement for single process application if unikernel could provide all the dependency for apps. It seems that the only use-casse is network based application. Compare with unikernel, running a 'full functional' Linux as base of libos seems resolve the port effort for the dependency of apps, because the software on Linux do not need modify(only need to statically linked).
+    4.  Other topics from our department.
+        *   The New Container Engine from the New Containerd [E] - Qiang Huang, Huawei[7]
+        *   Introduction to OCI Image Technologies Serving Container [C] - Keyang Xie & Jitang Lei, Huawei[8]
+        *   Obstacles & Solutions for Livepatch Support on Arm64 Architecture [C] - Bin Li, Huawei[9]
+        *   Make Accelerator Pluggable for Container Engine [C] - Jiuyue Ma, Huawei[10]
+
+*   Review the patch of kselftest.
+
+[1] <https://www.slideshare.net/LCChina/presentations>
+[2] <http://events.linuxfoundation.org/sites/events/files/slides/LinuxCon-VM-based%20container-submission-v4.pdf>
+[3] Some slides fron Coly Li <http://aarch64.me/2017/07/LC3-notes/>
+[4] <https://www.slideshare.net/LCChina/unikernelized-linux>
+[5] <https://lwn.net/Articles/637658/>
+[6] <https://www.slideshare.net/LCChina/64bit-arm-unikernels-on-ukvm>
+[7] <https://lc3china2017.sched.com/event/AVBR/the-new-container-engine-from-the-new-containerd-e-qiang-huang-huawei>
+[8] [introduction](https://lc3china2017.sched.com/event/AVBU/introduction-to-oci-image-technologies-serving-container-c-keyang-xie-jitang-lei-huawei), [slide](https://www.slideshare.net/LCChina/introduction-to-oci-image-technologies-serving-container)
+[9] <https://lc3china2017.sched.com/event/AVBC/obstacles-solutions-for-livepatch-support-on-arm64-architecture-c-bin-li-huawei>
+[10] [introduction](https://lc3china2017.sched.com/event/AVB7/make-accelerator-pluggable-for-container-engine-c-jiuyue-ma-huawei), [slide](https://www.slideshare.net/LCChina/make-accelerator-pluggable-for-container-engine-77110680)
+
+
