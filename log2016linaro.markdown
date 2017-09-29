@@ -4627,11 +4627,16 @@ tcp        0      0 127.0.0.1:20322         0.0.0.0:*               LISTEN      
         ExecReload=/bin/kill -HUP $MAINPID
         KillMode=process
         Restart=always
+        RestartSec=10
         Type=forking
 
         [Install]
         WantedBy=multi-user.target
         ```
+(17:14 2017-09-29)
+If RestartSec is not add, this service will fail. I guess the reason is this service retry too fast to terminated by systemd
+"17:14 2017-09-29"end
+
 
 root@linaro-developer:/etc/systemd/system# systemctl enable ssh_reverse_agent.service
 Created symlink from /etc/systemd/system/multi-user.target.wants/ssh_reverse_agent.service to /lib/systemd/system/ssh_reverse_agent.service.
