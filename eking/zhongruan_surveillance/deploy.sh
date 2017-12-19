@@ -1,8 +1,13 @@
 
-#Prepare disk
-#echo y | yum install lvm2
+echo y | screen
+echo y | yum install lvm2
+echo y | yum install go
+echo y | yum install git
+echo y | yum install libvirt-devel
+echo y | yum install libvirt
+echo y | yum install qemu-kvm
 
-#Copying file from aliyun to internal network.
+#Copying file from aliyun to internal network. Only need to run on one server
 #mkdir -p /mnt/ssd/catkeeper/images
 #cd /mnt/ssd/catkeeper/images
 #wget -c http://los-cn-north-1.lecloudapis.com/document/LimeJeOS-CentOS-07.0.x86_64-1.2.0.raw
@@ -12,11 +17,35 @@
 #scp -p bamvor@119.23.217.97:/var/local/catkeeper/libvirt/centos7.0_04.xml /mnt/ssd/catkeeper/libvirt
 #scp -p bamvor@119.23.217.97:/home/bamvor/works/publish/schema.sql /mnt/ssd/catkeeper #scp -p bamvor@119.23.217.97:/home/bamvor/works/publish/web /mnt/ssd/catkeeper
 
+#Prepare disk. It may format the user data, run it seperately!
+#mkdir -p /mnt/ssd
+#mount /dev/nvme0n1p2 /mnt/ssd
+#if [ $? = 0 ]; then
+#   echo "nvme0n1p2 aleady formatted. exit"
+#   exit
+#fi
+#vgcreate nvme_vg0 /dev/nvme0n1p2
+#lvcreate -L 120g -n images nvme_vg0
+#mkfs.ext4 /dev/mapper/nvme_vg0-images
+#mount /dev/mapper/nvme_vg0-images /mnt/ssd
 #setup go env
-#echo y | yum install go
-#echo y | yum install git
+#build code on target due to differnce libvirt version
+#go get github.com/bjzhang/catkeeper
+#go get ./...
+#cd /root/go/src
+#wget http://los-cn-north-1.lecloudapis.com/document/golang.org.tar.gz
+#tar zxf golang.org.tar.gz
+#rm golang.org.tar.gz
+#cd /root/go/src/github.com/bjzhang/catkeeper
+#make -f makefile -C web
+#cd /root/go/src/github.com/bjzhang/catkeeper/web
+#sqlite3 /tmp/post_db.bin < /root/go/src/github.com/bjzhang/catkeeper/web/schema.sql
 
-echo "make sure there is enough space in /mnt/ssd. Press enter to continue"
+#Prepare ssh key login
+#ssh-keygen
+#ssh-copy-id ceph220
+
+echo "make sure there is enough space in /mnt/ssd and ssh to ceph220 with sshkey. Press enter to continue"$
 #[root@ct147 libvirt]# /usr/libexec/qemu-kvm  -machine help |grep i440fx
 #pc                   RHEL 7.0.0 PC (i440FX + PIIX, 1996) (alias of pc-i440fx-rhel7.0.0)
 #pc-i440fx-rhel7.0.0  RHEL 7.0.0 PC (i440FX + PIIX, 1996) (default)
@@ -34,10 +63,7 @@ qemu-img create -f qcow2 -b /mnt/ssd/catkeeper/images/LimeJeOS-CentOS-07.0.x86_6
 qemu-img create -f qcow2 -b /mnt/ssd/catkeeper/images/LimeJeOS-CentOS-07.0.x86_64-1.2.0.raw /mnt/ssd/catkeeper/images/centos7.0_03.qcow2 20g
 qemu-img create -f qcow2 -b /mnt/ssd/catkeeper/images/LimeJeOS-CentOS-07.0.x86_64-1.2.0.raw /mnt/ssd/catkeeper/images/centos7.0_04.qcow2 20g
 
-echo "Install and configure libvirt"
-echo y | yum install libvirt
-echo y | yum install qemu-kvm
-
+echo "Configure libvirt"
 systemctl restart libvirtd
 systemctl status -l libvirtd
 #● libvirtd.service - Virtualization daemon
@@ -89,10 +115,10 @@ virsh net-list --all |grep bridge0
 # bridge0              active     yes           yes
 # default              active     yes           yes
 
-scp -p bamvor@119.23.217.97:/var/local/catkeeper/libvirt/centos7.0_01.xml /mnt/ssd/catkeeper/libvirt
-scp -p bamvor@119.23.217.97:/var/local/catkeeper/libvirt/centos7.0_02.xml /mnt/ssd/catkeeper/libvirt
-scp -p bamvor@119.23.217.97:/var/local/catkeeper/libvirt/centos7.0_03.xml /mnt/ssd/catkeeper/libvirt
-scp -p bamvor@119.23.217.97:/var/local/catkeeper/libvirt/centos7.0_04.xml /mnt/ssd/catkeeper/libvirt
+scp -p ceph220:/mnt/ssd/catkeeper/libvirt/centos7.0_01.xml /mnt/ssd/catkeeper/libvirt
+scp -p ceph220:/mnt/ssd/catkeeper/libvirt/centos7.0_02.xml /mnt/ssd/catkeeper/libvirt
+scp -p ceph220:/mnt/ssd/catkeeper/libvirt/centos7.0_03.xml /mnt/ssd/catkeeper/libvirt
+scp -p ceph220:/mnt/ssd/catkeeper/libvirt/centos7.0_04.xml /mnt/ssd/catkeeper/libvirt
 
 virsh define /mnt/ssd/catkeeper/libvirt/centos7.0_01.xml
 virsh define /mnt/ssd/catkeeper/libvirt/centos7.0_02.xml
