@@ -6,10 +6,22 @@ die()
 }
 
 deploy_user=$1
+deploy_dir=$2
+target=$3
 dryrun="true"
+
 if [ "$deploy_user" = "" ]; then
     deploy_user=etidb
 fi
+
+if [ "$deploy_dir" = "" ]; then
+    deploy_dir=/home/$deploy_user/deploy
+fi
+
+if [ "$target" = "" ]; then
+    die "Target could not empty. exit"
+fi
+
 if [ "$dryrun" = "true" ]; then
         LIMITS_CONF="etc_security_limits.conf"
 else
@@ -17,10 +29,14 @@ else
 fi
 
 echo "Checking whether disk is full or not"
-#disk is not 100%:  `df -h . |tail -n1`
+ssh $target "cd `dirname $deploy_dir`; df -h . |tail -n1 | grep 100%"
+if [ "$?" = "0" ]; then
+        die "Disk is full in $deploy_dir. Exit"
+fi
 
 echo "Checking date(ntp)"
 #check ntp
+echo "TODO ntp, exit"
 
 echo "Configuration system and user limitation"
 sysctl -w net.core.somaxconn=32768
@@ -45,6 +61,13 @@ if [ "$?" != 0 ]; then
 	die "ERROR: user add fail, exit"
 	groupdel $deploy_user 
 fi
+
+echo "Create deploy dir"
+mkdir -p $deploy_dir
+chown -R $deploy_user:$deploy_user $deploy_dir
+chmod 755 $deploy_dir
+
+echo "TODO"
 
 echo "Disable Firewall"
 #Centos
