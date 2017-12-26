@@ -5,14 +5,14 @@
 2. 写TiDB安装脚本。
 3. 入职考试
     1. 完成三人行入职考试。
-    2. 周五转正考试 
+    2. 周五转正考试
 4. 给mark发邮件。
 5. 可选：
     1. 准备TiDB arm环境。
     2. TiDB分享整理。
     3. 找凡一老师。
 
-2017-12-25 
+2017-12-25
 ----------
 1. 中软光盘镜像（使用kiwi ng） "15:34 2017-12-25"
 2. 刘蓓，漏水。
@@ -39,7 +39,7 @@
            "repo_ceph":  "http://mirrors.aliyun.com/centos/7.4.1708/storage/x86_64/ceph-luminous/",
            "repo_epel":  "http://mirrors.aliyun.com/epel/7/x86_64/",
            "repo_os":  "http://mirrors.aliyun.com/centos/7.4.1708/os/x86_64/",
-           "repo_updates":  "http://mirrors.aliyun.com/centos/7.4.1708/updates/x86_64/",
+           "repo_updates":  "http://mirrors.aliyun.com/centos/8.4.1708/updates/x86_64/",
            "repo_extras":  "http://mirrors.aliyun.com/centos/7.4.1708/extras/x86_64/",
            "repo_cephdeploy":  "https://mirrors.aliyun.com/ceph/rpm-luminous/el7/noarch/",
            "repo_samba":  "http://sambarepo.los-cn-north-1.lecloudapis.com"
@@ -49,6 +49,7 @@
            yum install fabric ceph ceph-common ceph-deploy nfs-utils -y
            yum install --disablerepo=* --enablerepo=repo_samba --enablerepo=repo_os samba samba-vfs-cephfs ctdb samba-client -y
            ```
+        5.  add ntp
 2. 技术需求
     1. 添加带优先级的repo，安装指定包。16:05-
     2. 硬盘分区。
@@ -58,24 +59,6 @@
 
 18:00 2017-12-25
 ----------------
-```
-suse01@osh01:/usr/lib/python3.4/site-packages/kiwi> sudo cat
-/home/suse01/works/software/kiwi/build/image-root/tmpipepc1cv
-[main]
-cachedir=/var/cache/kiwi/yum/cache
-reposdir=/var/cache/kiwi/yum/repos
-pluginconfpath=/var/cache/kiwi/yum/pluginconf
-keepcache=1
-debuglevel=2
-pkgpolicy=newest
-tolerant=0
-exactarch=1
-obsoletes=1
-plugins=1
-gpgcheck=0
-metadata_expire=1800
-group_command=compat
-```
 
 ```
 [ ERROR   ]: 05:12:41 | KiwiInstallPhaseFailed: System package installation failed: Main config did not have a requires_policy attr. before setopt
@@ -100,3 +83,112 @@ wget http://sambarepo.los-cn-north-1.lecloudapis.com/repodata/1d56b97d82cf346451
 wget http://sambarepo.los-cn-north-1.lecloudapis.com/repodata/796ccd3b13606fd18a5e4b6710302ad5f60117aabafa5b8967fe4327128bf3f7-other.xml.gz
 wget http://sambarepo.los-cn-north-1.lecloudapis.com/repodata/e76bac4b8275f283677a527b0393ada7958df767680e323fbb3623f9bb44b3d9-filelists.sqlite.bz2
 ```
+
+10:15 2017-12-26
+----------------
+1.  执行kiwi-ng出错。
+    `> sudo kiwi-ng --type vmx system build --description $PWD --target-dir ~/works/software/kiwi`。
+    备注：可以添加如下参数。debug会增加很多调试信息。如果构建出错可以加入。--color-output会在很少命令增加颜色，例如告警的黄色，错误是红色。
+    ```
+    --color-output   Use Escape Sequences to print different types of information in colored output. The underlaying terminal has to understand those escape characters. Error messages appear red, warning messages yellow and debugging information will be printed light grey.
+    --debug Print debug information on the commandline.
+    ```
+    1.  用脚本下载repomd.xml中的文件。
+        `grep location  repomd.xml  | sed "s/^.*\"\(.*\)\".*$/wget http:\/\/reposamba.los-cn-north-1.lecloudapis.com\/\1/g" > repomd.sh`
+    2.  手动执行yum makecache仍然有问题，说明问题和kiwi无关。
+        ```
+        > sudo cat yum.conf
+        [main]
+        cachedir=/var/cache/kiwi/yum/cache
+        reposdir=/var/cache/kiwi/yum/repos
+        pluginconfpath=/var/cache/kiwi/yum/pluginconf
+        keepcache=1
+        debuglevel=2
+        pkgpolicy=newest
+        tolerant=0
+        exactarch=1
+        obsoletes=1
+        plugins=1
+        gpgcheck=0
+        metadata_expire=1800
+        group_command=compat
+        > sudo yum -c yum.conf makecache
+        ```
+    3.  注释代码中makecache部分：
+        ```
+        suse01@osh01:/usr/lib/python3.4/site-packages/kiwi> realpath package_manager/yum.py
+        /usr/lib/python3.4/site-packages/kiwi/package_manager/yum.py
+        suse01@osh01:/usr/lib/python3.4/site-packages/kiwi> rpm -qf /usr/lib/python3.4/site-packages/kiwi/package_manager/yum.py
+        python3-kiwi-9.11.24-64.1.x86_64
+        ```
+        ```
+            def process_install_requests_bootstrap(self):
+                """
+                Process package install requests for bootstrap phase (no chroot)
+                """
+                yum = self._get_yum_binary_name()
+                log.info("BAMVOR: skip makecache!")
+                """
+                Command.run(
+                    [yum] + self.yum_args + ['makecache']
+                )
+                """
+        ```
+2.  kiwi-ng有时会提示404，在macbook上手工下载可以，在传到服务器。不知道是否是网络问题。
+	```
+	[ ERROR   ]: 21:20:22 | KiwiInstallPhaseFailed: System package installation failed: Main config did not have a requires_policy attr. before setopt
+	http://reposamba.los-cn-north-1.lecloudapis.com/noarch/samba-common-4.6.2-999.el7.centos.noarch.rpm: [Errno 14] HTTP Error 404 - Not Found
+	Trying other mirror.
+	To address this issue please refer to the below knowledge base article
+
+	https://access.redhat.com/articles/1320623
+
+	If above article doesn't help to resolve this issue please create a bug on https://bugs.centos.org/
+
+	Error downloading packages:
+	  samba-common-4.6.2-999.el7.centos.noarch: [Errno 256] No more mirrors to try.
+	```
+3.  kiwi oem运行时重新分区：
+    1.  执行 `/usr/lib/python3.4/site-packages/kiwi/boot/arch/x86_64/oemboot/rhel-07.0/root/repart`，读取initrd中.profile的内容。
+        ```
+        kiwi_Volume_1='var|size:51200|var'
+        kiwi_Volume_2='LVRoot|size:all|'
+        ```
+        这是0.2.0的".profile"，看起来没问你。除非是size传的不对。但是我看了repart脚本，单位是M。看来需要保存console log看下。
+    2.  "<size unit="G">80</size>"会指定image的大小。这不会影响squash image的大小。但是会影响从cdrom写入到硬盘的时间。
+        先测试下这样行不行，如果可以再调整参数。
+    3.  0.2.1也不行。
+    4.  最后发现是"oem-systemsize"必须大于systemdisk里面要求的大小。
+5.  其它有用的信息：
+    1.  mksquashfs
+        ```
+        [ DEBUG   ]: 01:37:38 | EXEC: [mksquashfs /home/suse01/works/software/kiwi/kiwi_install_squashfs.jp9_tqmt /home/suse01/works/software/kiwi/Ceph-CentOS-07.0.raw.squashfs -noappend -b 1M -comp xz -Xbcj x86]
+        ```
+    2.  如果提示lvm的vg已经存在，可以重启lvm2-lvmetad.service: `sudo systemctl restart lvm2-lvmetad.service`，参考<https://groups.google.com/d/msg/kiwi-images/gO5apLcysUc/zygqLGmhAgAJ>
+
+11:06 2017-12-26
+----------------
+```
+<disk type='file' device='cdrom'>
+	<driver name='qemu' type='raw'/>
+	<source file='/mnt/ssd/catkeeper/images/openSUSE-Leap-42.3-DVD-x86_64.iso'/>
+	<target dev='sdb' bus='scsi'/>
+	<readonly/>
+	<address type='drive' controller='0' bus='0' target='1' unit='0'/>
+</disk>
+```
+https://www.centos.org/docs/5/html/Installation_Guide-en-US/ch-kickstart2.html
+
+13:34 2017-12-26
+----------------
+1.  分区不对。使用oem而不是vmx.
+2.  现在的问题是没有建立正确的var分区，var分区只有102M.
+3.  TODO
+    1.  添加cloud-user到/etc/sudoers.d/ceph失败。文件不存在。
+    2.  添加smbuser
+    3.  安装后还要配置yum源么?
+    4.  光盘安装后启动有问题，原因是没有lvm命令。
+
+14:12 2017-12-26
+----------------
+
