@@ -159,12 +159,55 @@ wget http://sambarepo.los-cn-north-1.lecloudapis.com/repodata/e76bac4b8275f28367
         先测试下这样行不行，如果可以再调整参数。
     3.  0.2.1也不行。
     4.  最后发现是"oem-systemsize"必须大于systemdisk里面要求的大小。
-5.  其它有用的信息：
+4.  去掉package的一些bootinclude属性，安装时提示：
+    ```
+    Warning, gdisk tool not found
+    ```
+	rhel/centos需要加入gdisk包。suse需要加入gptfdisk。
+5.	安装后同时打开serial和console
+	```
+	self.header_serial = dedent('''
+		serial --speed=9600 --unit=0 --word=8 --parity=no --stop=1
+		terminal_input serial console
+		terminal_output serial console
+	''').strip() + os.linesep
+	```
+6.	密码： mdpasswd -m md5 Eking1234!
+7.	schema/kiwi.rng
+	```
+		<choice>
+		  <value>console</value>
+		  <value>gfxterm</value>
+		  <value>serial</value>
+		  <value>console serial</value>
+		</choice>
+	```
+6.  其它有用的信息：
     1.  mksquashfs
         ```
         [ DEBUG   ]: 01:37:38 | EXEC: [mksquashfs /home/suse01/works/software/kiwi/kiwi_install_squashfs.jp9_tqmt /home/suse01/works/software/kiwi/Ceph-CentOS-07.0.raw.squashfs -noappend -b 1M -comp xz -Xbcj x86]
         ```
-    2.  如果提示lvm的vg已经存在，可以重启lvm2-lvmetad.service: `sudo systemctl restart lvm2-lvmetad.service`，参考<https://groups.google.com/d/msg/kiwi-images/gO5apLcysUc/zygqLGmhAgAJ>
+    2.  如果提示lvm的vg已经存在:
+        ```
+        [ DEBUG   ]: 21:45:03 | EXEC: [vgs --noheadings -o vg_name]
+        [ ERROR   ]: 21:45:03 | KiwiVolumeGroupConflict: Requested volume group
+        systemVG is in use on this host
+        [ INFO    ]: 21:45:03 | Cleaning up BootImageKiwi instance
+        ```
+        可以用vgs，lvs看到系统的确有systemVG:
+        ```
+		> sudo vgs
+		  WARNING: Device for PV jwc9vS-aqUN-EECW-YM2p-7ghC-40tH-Any8Q7 not found or rejected by a filter.
+		  VG       #PV #LV #SN Attr   VSize VFree
+		  systemVG   1   2   0 wz-pn- 2.23g    0
+		> sudo lvs
+		[sudo] password for root:
+		  WARNING: Device for PV jwc9vS-aqUN-EECW-YM2p-7ghC-40tH-Any8Q7 not found or rejected by a filter.
+		  LV     VG       Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+		  LVRoot systemVG -wi-----p-   1.93g
+		  var    systemVG -wi-----p- 316.00m
+        ```
+        可以重启lvm2-lvmetad.service: `sudo systemctl restart lvm2-lvmetad.service`，参考<https://groups.google.com/d/msg/kiwi-images/gO5apLcysUc/zygqLGmhAgAJ>
 
 11:06 2017-12-26
 ----------------
@@ -181,14 +224,16 @@ https://www.centos.org/docs/5/html/Installation_Guide-en-US/ch-kickstart2.html
 
 13:34 2017-12-26
 ----------------
-1.  分区不对。使用oem而不是vmx.
+历史问题
+1.  分区不对。build的时候使用oem而不是vmx. 因为oem是支持动态扩展的。
 2.  现在的问题是没有建立正确的var分区，var分区只有102M.
 3.  TODO
-    1.  添加cloud-user到/etc/sudoers.d/ceph失败。文件不存在。
-    2.  添加smbuser
+    1.  CANCEL. 添加cloud-user到/etc/sudoers.d/ceph失败。文件不存在。
+    2.  CANCEL. 添加smbuser
     3.  安装后还要配置yum源么?
-    4.  光盘安装后启动有问题，原因是没有lvm命令。
-
-14:12 2017-12-26
-----------------
+    4.  DONE: 光盘安装后启动有问题，原因是没有lvm命令。
+        1.  添加lvm命令。测试中。
+	5.	DONE: tar, gzip, xz
+4.	安装后grub还是没有console
+    1.  修改schema之后看起来grub还是没对。是否还是需要改bootloader的grub2.py?
 
