@@ -71,6 +71,8 @@ eking, GTD
     1.  "This works by using the code pattern that was used for the previous variants, but in userspace."
 
 13:53 2018-01-05
+漏洞讨论
+--------
 1.  升级范围：600-700 node. 5000 vm.
 2.  sammy: 私有云风险大不大？
 3.  zhenyao: 虚拟机镜像是否和host一起升级？
@@ -79,3 +81,114 @@ eking, GTD
 6.  客户支持？
     1.  云平台接口。
     2.  安全相关的直接去安全平台。
+
+10:55 2018-01-08
+----------------
+proxy, cow
+----------
+<https://github.com/cyfdecyf/cow>
+遇到这个错误<https://github.com/golang/go/issues/17335>，重新用go构建就好了。
+go get github.com/cyfdecyf/cow
+go build
+
+11:02 2018-01-08
+----------------
+1.  "sudo useradd -G docker <builduser>"
+    应该是"sudo usermod -a -G docker <builduser>
+2.  根据[docker systemd文档](https://docs.docker.com/engine/admin/systemd/#httphttps-proxy)docker需要单独在systemd service里面设置代理：
+	不知道为什么docker用[cow](https://github.com/cyfdecyf/cow)做二级代理时会报错："net/http: TLS handshake timeout"。这次还知道[systemd unit](https://www.freedesktop.org/software/systemd/man/systemd.unit.html)可以用servicde.d/xxx.conf在不修改原有service文件情况下，增加功能：
+	```
+	Along with a unit file foo.service, the directory foo.service.wants/ may exist. All unit files symlinked from such a directory are implicitly added as dependencies of type Wants= to the unit. This is useful to hook units into the start-up of other units, without having to modify their unit files. For details about the semantics of Wants=, see below. The preferred way to create symlinks in the .wants/ directory of a unit file is with the enable command of the systemctl(1) tool which reads information from the [Install] section of unit files (see below). A similar functionality exists for Requires= type dependencies as well, the directory suffix is .requires/ in this case.
+
+	Along with a unit file foo.service, a "drop-in" directory foo.service.d/ may exist. All files with the suffix ".conf" from this directory will be parsed after the file itself is parsed. This is useful to alter or add configuration settings for a unit, without having to modify unit files. Each drop-in file must have appropriate section headers. Note that for instantiated units, this logic will first look for the instance ".d/" subdirectory and read its ".conf" files, followed by the template ".d/" subdirectory and the ".conf" files there.
+
+	In addition to /etc/systemd/system, the drop-in ".d" directories for system services can be placed in /usr/lib/systemd/system or /run/systemd/system directories. Drop-in files in /etc take precedence over those in /run which in turn take precedence over those in /usr/lib. Drop-in files under any of these directories take precedence over unit files wherever located. Multiple drop-in files with different names are applied in lexicographic order, regardless of which of the directories they reside in.
+	```
+	```
+	suse01@osh01:~> sudo cat /etc/systemd/system/docker.service.d/http-proxy.conf
+	[Service]
+	Environment="HTTP_PROXY=http://127.0.0.1:7228/"
+	suse01@osh01:~> sudo systemctl status docker
+	● docker.service - Docker Application Container Engine
+	   Loaded: loaded (/usr/lib/systemd/system/docker.service; disabled; vendor preset: disabled)
+	   Active: active (running) since Sun 2018-01-07 22:00:52 EST; 13min ago
+		 Docs: http://docs.docker.com
+	  Process: 1818 ExecStartPost=/usr/lib/docker/docker_service_helper.sh wait (code=exited, status=0/SUCCESS)
+	 Main PID: 1817 (dockerd)
+		Tasks: 14
+	   Memory: 54.0M
+		  CPU: 1.749s
+	   CGroup: /system.slice/docker.service
+			   └─1817 /usr/bin/dockerd --containerd /run/containerd/containerd.sock --add-runtime oci=/usr/bin/docker-runc
+
+	Jan 07 22:07:56 osh01 dockerd[1817]: time="2018-01-07T22:07:56.039627913-05:00" level=warning msg="failed to retrieve docker-runc version: unknown output format: runc version spec: 1.0.0-rc2-dev\n"
+	Jan 07 22:07:56 osh01 dockerd[1817]: time="2018-01-07T22:07:56.039726176-05:00" level=warning msg="failed to retrieve docker-init version"
+	Jan 07 22:08:11 osh01 dockerd[1817]: time="2018-01-07T22:08:11.042496163-05:00" level=warning msg="Error getting v2 registry: Get https://registry-1.docker.io/v2/: net/http: request canceled whi...iting headers)"
+	Jan 07 22:08:11 osh01 dockerd[1817]: time="2018-01-07T22:08:11.042617745-05:00" level=info msg="Attempting next endpoint for pull after error: Get https://registry-1.docker.io/v2/: net/http: req...iting headers)"
+	Jan 07 22:08:11 osh01 dockerd[1817]: time="2018-01-07T22:08:11.042679650-05:00" level=error msg="Handler for POST /v1.28/images/create returned error: Get https://registry-1.docker.io/v2/: net/h...iting headers)"
+	Jan 07 22:08:24 osh01 dockerd[1817]: time="2018-01-07T22:08:24.163960278-05:00" level=warning msg="failed to retrieve docker-runc version: unknown output format: runc version spec: 1.0.0-rc2-dev\n"
+	Jan 07 22:08:24 osh01 dockerd[1817]: time="2018-01-07T22:08:24.164052192-05:00" level=warning msg="failed to retrieve docker-init version"
+	Jan 07 22:08:39 osh01 dockerd[1817]: time="2018-01-07T22:08:39.166635111-05:00" level=warning msg="Error getting v2 registry: Get https://registry-1.docker.io/v2/: net/http: request canceled whi...iting headers)"
+	Jan 07 22:08:39 osh01 dockerd[1817]: time="2018-01-07T22:08:39.166726076-05:00" level=info msg="Attempting next endpoint for pull after error: Get https://registry-1.docker.io/v2/: net/http: req...iting headers)"
+	Jan 07 22:08:39 osh01 dockerd[1817]: time="2018-01-07T22:08:39.166786788-05:00" level=error msg="Handler for POST /v1.28/images/create returned error: Get https://registry-1.docker.io/v2/: net/h...iting headers)"
+	Warning: docker.service changed on disk. Run 'systemctl daemon-reload' to reload units.
+	Hint: Some lines were ellipsized, use -l to show in full.
+	suse01@osh01:~> sudo systemctl daemon-reload
+	suse01@osh01:~> sudo systemctl restart docker
+	suse01@osh01:~> docker pull opensuse/dice:latest
+	latest: Pulling from opensuse/dice
+	caf3d94c0ab8: Pulling fs layer
+	error pulling image configuration: Get https://dseasb33srnrn.cloudfront.net/registry-v2/docker/registry/v2/blobs/sha256/a9/a9b445468bcd1417360e988c7f38a89988b5f7e0683f9c6abde7b9071affd1d8/data?Expires=1515424637&Signature=a41X4WJBiHJA3l7RUvmCfVhjjx717lBDURjnl7-gElxFZ2e27K3loPlcy8sdyzjodLke-YUFZ-g6yPY0XqH5kFfGGGOHl9DLinmAdgVKN~vcw3HzA0irZ4UnXsVjILvmnywVS558xhR2TqipxJxvqYb9zAel6TWXKvE5JtLXRrA_&Key-Pair-Id=APKAJECH5M7VWIS5YZ6Q: net/http: TLS handshake timeout
+	suse01@osh01:~> sudo cat /etc/systemd/system/docker.service.d/http-proxy.conf
+	[Service]
+	Environment="HTTP_PROXY=http://127.0.0.1:8228/"
+	suse01@osh01:~> sudo systemctl restart docker
+	Warning: docker.service changed on disk. Run 'systemctl daemon-reload' to reload units.
+	suse01@osh01:~> sudo systemctl daemon-reload
+	suse01@osh01:~> sudo systemctl restart docker
+	suse01@osh01:~> docker pull opensuse/dice:latest
+	```
+
+12:13 2018-01-08
+----------------
+[ INFO    ]: 23:09:24 | --> Type: rpm-md
+[ INFO    ]: 23:09:24 | --> Translated:
+/home/suse01/works/source/kiwi-descriptions/centos/x86_64/ceph-applicance/rpms
+[ INFO    ]: 23:09:24 | --> Alias: rpms
+[ WARNING ]: 23:09:24 | repository
+file:///home/suse01/works/source/kiwi-descriptions/centos/x86_64/ceph-applicance/rpms does not exist and will be skipped
+
+14:59 2018-01-08
+----------------
+中软监控, 需要增加的文件
+------------------------
+```
+https://github.com/journeymidnight/niergui  ALL
+https://github.com/journeymidnight/automata ALL
+https://github.com/journeymidnight/nier     ALL
+https://github.com/journeymidnight/prometheus-rpm/  ceph_exporter, node-exporter, prometheus
+https://github.com/journeymidnight/storedeployer
+tidb
+```
+
+11:45 2018-01-09
+----------------
+1.  昨天不行的原因时private repo必须assert id下载。并且给出Accept application/octet-stream
+2.  环境变量:
+    1.  有人说jq引用环境变量有时要用单引号，jq自己用双引号。<https://stackoverflow.com/questions/40027395/passing-bash-variable-to-jq-select>。但是我在命令行里面传数字可以，在shell脚本里面传数字不行。
+    2.
+        ```
+        > test=url; count=; cat json | jq '.assets[]' | jq "[.$test, .id][$count]"
+        "https://api.github.com/repos/journeymidnight/nier/releases/assets/5808414"
+        5808414
+        "https://api.github.com/repos/journeymidnight/nier/releases/assets/5808413"
+        5808413
+        > test=url; count=1; cat json | jq '.assets[]' | jq "[.$test, .id][$count]"
+        5808414
+        5808413
+        > test=url; count=0; cat json | jq '.assets[]' | jq "[.$test, .id][$count]"
+        "https://api.github.com/repos/journeymidnight/nier/releases/assets/5808414"
+        "https://api.github.com/repos/journeymidnight/nier/releases/assets/5808413"
+        ```
+3.  上午本来想用go访问GitHub api，尝试了下发现自己对go web差的太远。还是改为bash curl jq了。jq感觉不太方便。
+
