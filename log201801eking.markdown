@@ -173,6 +173,8 @@ tidb
 
 11:45 2018-01-09
 ----------------
+中软
+----
 1.  昨天不行的原因时private repo必须assert id下载。并且给出Accept application/octet-stream
 2.  环境变量:
     1.  有人说jq引用环境变量有时要用单引号，jq自己用双引号。<https://stackoverflow.com/questions/40027395/passing-bash-variable-to-jq-select>。但是我在命令行里面传数字可以，在shell脚本里面传数字不行。
