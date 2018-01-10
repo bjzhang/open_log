@@ -25,7 +25,7 @@ else
 fi
 
 echo "Set language to English UTF8"
-LANG = en_US.UTF8
+export LANG=en_US.UTF8
 
 echo "Checking whether disk is full or not"
 cd `dirname $deploy_dir`; df -h . |tail -n1 | grep 100%
