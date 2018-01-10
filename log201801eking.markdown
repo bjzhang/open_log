@@ -194,3 +194,8 @@ tidb
         ```
 3.  上午本来想用go访问GitHub api，尝试了下发现自己对go web差的太远。还是改为bash curl jq了。jq感觉不太方便。
 
+21:20 2018-01-10
+----------------
+1.  现在兴义有没有配置hostname？
+2.  kiwi: 根据bootstrap脚本修改。
+
