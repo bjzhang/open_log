@@ -9,6 +9,33 @@ IMG_IP=10.72.84.147
 IMG_NAME=/mnt/ssd/catkeeper/images/kiwi/Ceph-CentOS-07.0.x86_64-0.4.1.install.iso
 BRIDGE=virbr1
 
+#Try to get ip through arp with 10 seconds timeout.
+#Arguments: $1 name of vm: could be name, uuid, ID any of which could be
+#                          supported by virsh
+get_ip() {
+    NAME=$1
+    echo "wait for ip is not tested yet"
+    virsh list --all | grep $NAME -w 2>&1 > /dev/null
+    if [ "$?" != "0" ]; then
+        echo "Error: vm($NAME) inexist. exit"
+        return
+    fi
+
+    bridge=`virsh dumpxml $NAME | grep source.bridge | cut -d \' -f 2`
+    mac=`virsh dumpxml $NAME |grep mac.address | cut -d = -f 2 | sed "s/['/>']//g"`
+    for i in `seq 10`; do
+        ip=`arp -a -i $bridge | grep $mac | cut -d \  -f 2 | sed "s/[()]//g"`
+        if [ "$ip" != "" ]; then
+            echo "Ip address is $ip"
+            return
+        fi
+        sleep 1
+        echo -n "."
+    done
+    echo "wait for ip address timeout"
+}
+
+#Install vm
 install_ceph() {
     MOUNT_POINT=$1
     IMG_NAME=$2
@@ -51,9 +78,7 @@ install_ceph() {
     read
     virsh resume $NAME
     screen -d -r
-    mac=`virsh dumpxml ceph_test_03 |grep mac.address | cut -d = -f 2 | sed "s/['/>']//g"`
-    ip=`arp -a -i $BRIDGE | grep $mac | cut -d \  -f 2 | sed "s/[()]//g"`
-    echo "Ip address is $ip"
+    get_ip $NAME
 }
 
 echo "WARNING: it is only the collection of my command. NOT FULLY test yet, press enter to continue"
@@ -136,5 +161,5 @@ for i in `seq -f "%02.g" 0 3`; do
     install_ceph $MOUNT_POINT $IMG_NAME $BRIDGE $NAME
 done
 
-echo "Boot the managerment vm"
+#echo "Boot the managerment vm"
 
