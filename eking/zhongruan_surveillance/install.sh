@@ -40,9 +40,10 @@ install_ceph() {
             fi
     done
     PORT=`sudo virsh vncdisplay $NAME | cut -d : -f 2`
-    echo "Connect to ip:$((PORT + 5900)) to do the installation"
+    echo "Connect to ip:$((PORT + 5900)) to do the installation:"
+    echo "HOST=this_host_ip; vncviewer \$HOST:\$((5900 + \`ssh root@\$HOST 'virsh vncdisplay $NAME' | cut -d : -f 2 | head -n1\`))"
     sudo virsh suspend $NAME
-    echo "press enter to continue installation"
+    echo "press enter to continue installation. Then select Install"
     read
     sudo virsh resume $NAME
     screen -d -r
@@ -50,12 +51,12 @@ install_ceph() {
 
 IMG_NAME=$1
 NAME=$2
-if [ -f "$IMG_NAME" ]; then
-	echo $IMG_NAME
-else
+if ! [ -f "$IMG_NAME" ]; then
+	echo image $IMG_NAME does not exist. exit
 	exit
 fi
 if [ "$NAME" = "" ]; then
+	echo vm $NAME empty. exit
 	exit
 fi
 echo "    Install ceph vm from iso"
