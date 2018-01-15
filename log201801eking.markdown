@@ -199,3 +199,245 @@ tidb
 1.  现在兴义有没有配置hostname？
 2.  kiwi: 根据bootstrap脚本修改。
 
+09:44 2018-01-11
+----------------
+software skill, bash, sudo
+--------------------------
+1.  sudo执行函数: <https://unix.stackexchange.com/questions/269078/executing-a-bash-script-function-with-sudo>
+	```
+	function hello()
+	{
+		echo "Hello!"
+	}
+
+	# Test that it works.
+	hello
+
+	FUNC=$(declare -f hello)
+	sudo bash -c "$FUNC; hello"
+	Or more simply:
+
+	sudo bash -c "$(declare -f hello); hello"
+	```
+
+12:06 2018-01-11
+---------------
+GTD
+---
+1.  去兴义的机器看fabric脚本。ssh cloud-user@116.204.24.47 Lalala1200099
+2.  打算学学ansible，这两天刚写的shell脚本打算用ansible实现：同时看看有没有其它机器部署安装的工具。
+3.  vm创建阶段：需要增加一块硬盘。如果系统有两个硬盘，iso安装有没有问题？
+4.  TiDB ip修改, <https://pingcap.com/docs-cn/FAQ/>
+    ```
+    更改 PD 的启动参数 当想更改 PD 的 --client-url，--advertise-client-url 或 --name 时，只要用更新后的参数重新启动该 PD 就可以了。当更改的参数是 --peer-url 或 --advertise-peer-url 时，有以下几种情况需要区别处理：
+    之前的启动参数中有 --advertise-peer-url，但只想更新 --peer-url：用更新后的参数重启即可。 之前的启动参数中没有 --advertise-peer-url：先用 etcdctl 更新该 PD 的信息，之后再用更新后的参数重启即可。
+    ```
+5.	DML, DDL, DCL。<http://blog.csdn.net/level_level/article/details/4248685>
+	```
+	DML（data manipulation language）：
+		   它们是SELECT、UPDATE、INSERT、DELETE，就象它的名字一样，这4条命令是用来对数据库里的数据进行操作的语言
+	DDL（data definition language）：
+		   DDL比DML要多，主要的命令有CREATE、ALTER、DROP等，DDL主要是用在定义或改变表（TABLE）的结构，数据类型，表之间的链接和约束等初始化工作上，他们大多在建立表时使用
+	DCL（Data Control Language）：
+		   是数据库控制功能。是用来设置或更改数据库用户或角色权限的语句，包括（grant,deny,revoke等）语句。在默认状态下，只有sysadmin,dbcreator,db_owner或db_securityadmin等人员才有权力执行DCL
+	```
+
+16:19 2018-01-11
+----------------
+1.  sunxin：之前在联想。
+2.  超融合对标:
+    1.  http://www.maxta.com/cn/
+    2.  https://www.nutanix.com/
+
+10:27 2018-01-12
+----------------
+software skills, useful link
+1.  SUSE Linux Enterprise Product Sources
+    <https://www.suse.com/download-linux/source-code/>
+2.  Using Paxos to Build a Scalable, Consistent, and Highly Available Datastore
+
+10:50 2018-01-12
+----------------
+GTD
+---
+1.  中软:
+    1.  直接写ceph安装脚本。
+    2.  fabric.
+    3.  TiDB暂时不考虑重新起ip。直接重新部署。
+
+18:47 2018-01-14
+----------------
+<https://doc.opensuse.org/documentation/leap/reference/html/book.opensuse.reference/cha.dns.html>
+<http://www.syrlug.org/contrib/ipmasq.html>
+<https://doc.opensuse.org/documentation/leap/security/html/book.security/cha.security.firewall.html>
+之前转发一直不行。最后发现必须打开防火墙。
+```
+bamvor@localhost:~> sudo iptables -t nat -L
+Chain PREROUTING (policy ACCEPT)
+target     prot opt source               destination
+
+Chain INPUT (policy ACCEPT)
+target     prot opt source               destination
+
+Chain OUTPUT (policy ACCEPT)
+target     prot opt source               destination
+
+Chain POSTROUTING (policy ACCEPT)
+target     prot opt source               destination
+MASQUERADE  all  --  anywhere             anywhere
+```
+
+20:35 2018-01-14
+----------------
+1.  突然想起原来脚本里面配置TiDB所需的系统参数还没有配置。
+    1.  未测试。
+    2.  加入到root/etc/sysctl.d/99-tidb.conf
+        本地测试可以。
+    3.  如果不行加入到fabric.py
+2.  三节点TiDB还没有测试。
+    1.  初步测试正确。
+    2.  找人帮我测试。
+3.  TiDB的配置文件需要和TiDB二进制在一起。
+    1.  将来在支持更新TiDB二进制。
+4.  (12:00 2018-01-15)
+    1.  装mysql
+5.  curl check http code, <https://gist.github.com/rgl/f90ff293d56dbb0a1e0f7e7e89a81f42>
+    ```
+    # curl -s -o /dev/null -w ''%{http_code}'' 192.168.122.35:2379/pd/api/v1/members
+    200
+    ```
+6.  感觉今天进展不大，有时候越是着急，越是没有进展。整理一下思路。确认下修改都已经提交。
+    1.  今天主要进展是TiDB toml配置文件有问题。目前是fabric里面没法把tidb拉起来。
+        1.  systemd拉不起来的原因是tidb deploy目录的log和status使用root建立的，用户tidb没有权限写入。晚上是在没有办法了，切换到用户tidb执行/home/tidb/deploy/scripts/run_pd.sh，才发现目录权限问题。
+    2.  ceph: 需要在其中一台目标机器执行fabric脚本。
+    3.  包：已加入mysql，为测试。
+    4.  自动拿最新的包。还没有做。
+
+09:52 2018-01-15
+----------------
+mysql -u root -h 192.168.122.53 -P 4000
+MySQL [test]> CREATE TABLE Persons (     PersonID int,     LastName varchar(255),     FirstName varchar(255),     Address varchar(255), City varchar(255)  );
+
+mysql -u root -h 192.168.122.115 -P 4000
+MySQL [test]> insert into Persons (PersonID, LastName, FirstName) values (1, "Bamvor", "Zhang");
+
+mysql -u root -h 192.168.122.232 -P 4000
+MySQL [test]> update Persons set LastName="Bamvor Jian" where PersonID=1;
+
+mysql -u root -h 192.168.122.53 -P 4000
+MySQL [test]> select * from Persons;
+
+11:13 2018-01-15
+----------------
+cpu漏洞讨论
+1.  有人说如果内存比较大，热迁移比较慢，不如停机。家军说如果是万兆网络还好。
+
+21:57 2018-01-15
+----------------
+```
+[root@ceph-bj-beishu-cluster-node-2 ~]# systemctl status pd
+...
+Jan 15 13:52:50 ceph-bj-beishu-cluster-node-2 systemd[1]: pd.service: main process exited, code=exited, status=1/FAILURE
+Jan 15 13:52:50 ceph-bj-beishu-cluster-node-2 systemd[1]: Unit pd.service entered failed state.
+Jan 15 13:52:50 ceph-bj-beishu-cluster-node-2 systemd[1]: pd.service failed.
+[root@ceph-bj-beishu-cluster-node-2 ~]# systemctl status pd
+● pd.service - pd service
+   Loaded: loaded (/etc/systemd/system/pd.service; disabled; vendor preset: disabled)
+   Active: activating (auto-restart) (Result: exit-code) since Mon 2018-01-15 13:52:50 UTC; 6s ago
+  Process: 28660 ExecStart=/home/tidb/deploy/scripts/run_pd.sh (code=exited, status=1/FAILURE)
+ Main PID: 28660 (code=exited, status=1/FAILURE)
+   CGroup: /system.slice/pd.service
+
+Jan 15 13:52:50 ceph-bj-beishu-cluster-node-2 systemd[1]: pd.service: main process exited, code=exited, status=1/FAILURE
+Jan 15 13:52:50 ceph-bj-beishu-cluster-node-2 systemd[1]: Unit pd.service entered failed state.
+Jan 15 13:52:50 ceph-bj-beishu-cluster-node-2 systemd[1]: pd.service failed.
+[root@ceph-bj-beishu-cluster-node-2 ~]# tail -f /home/tidb/deploy/log/pd.log
+2018/01/15 13:53:05.473 log.go:85: [info] rafthttp: [started streaming with peer 70adc409ea993288 (stream MsgApp v2 reader)]
+2018/01/15 13:53:05.473 log.go:85: [info] rafthttp: [started streaming with peer 70adc409ea993288 (stream Message reader)]
+2018/01/15 13:53:05.474 log.go:85: [info] rafthttp: [started streaming with peer 3311b709387977fb (writer)]
+2018/01/15 13:53:05.474 log.go:85: [info] rafthttp: [started streaming with peer 3311b709387977fb (writer)]
+2018/01/15 13:53:05.474 log.go:85: [info] rafthttp: [started streaming with peer 3311b709387977fb (stream MsgApp v2 reader)]
+2018/01/15 13:53:05.474 log.go:85: [info] rafthttp: [started streaming with peer 3311b709387977fb (stream Message reader)]
+2018/01/15 13:53:05.475 log.go:85: [info] rafthttp: [started streaming with peer 70adc409ea993288 (writer)]
+2018/01/15 13:53:05.476 log.go:79: [error] rafthttp: [request sent was ignored (cluster ID mismatch: peer[3311b709387977fb]=b91f7b0260e4b739, local=f66c304993c262f9)]
+2018/01/15 13:53:05.477 log.go:79: [error] rafthttp: [request sent was ignored (cluster ID mismatch: peer[3311b709387977fb]=b91f7b0260e4b739, local=f66c304993c262f9)]
+2018/01/15 13:53:05.559 main.go:86: [fatal] run server failed: Etcd cluster ID mismatch, expect 17756620523384759033, got 13339515871440451385
+^C
+[root@ceph-bj-beishu-cluster-node-2 ~]# sudo rm /home/tidb/deploy/data.pd/ -rf
+```
+
+23:26 2018-01-15
+----------------
+```
+[192.168.122.202] sudo: sudo rm  /etc/ctdb/public_addresses /etc/ctdb/nodes -f
+[192.168.122.31] sudo: sudo rm  /etc/ctdb/public_addresses /etc/ctdb/nodes -f
+[192.168.122.206] sudo: sudo rm  /etc/ctdb/public_addresses /etc/ctdb/nodes -f
+[192.168.122.202] sudo: echo 192.168.122.176 ctdb  >> /etc/hosts
+[192.168.122.31] sudo: echo 192.168.122.176 ctdb  >> /etc/hosts
+[192.168.122.206] sudo: echo 192.168.122.176 ctdb  >> /etc/hosts
+[192.168.122.202] sudo: echo 192.168.122.176/24  lan0 > /etc/ctdb/public_addresses
+[192.168.122.31] sudo: echo 192.168.122.176/24  lan0 > /etc/ctdb/public_addresses
+[192.168.122.206] sudo: echo 192.168.122.176/24  lan0 > /etc/ctdb/public_addresses
+[192.168.122.202] sudo: echo '192.168.122.202' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.31] sudo: echo '192.168.122.202' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.206] sudo: echo '192.168.122.202' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.202] sudo: echo '192.168.122.31' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.206] sudo: echo '192.168.122.31' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.31] sudo: echo '192.168.122.31' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.202] sudo: echo '192.168.122.206' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.206] sudo: echo '192.168.122.206' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.31] sudo: echo '192.168.122.206' >> "$(echo /etc/ctdb/nodes)"
+[192.168.122.202] Executing task 'all_startctdb'
+[192.168.122.31] Executing task 'all_startctdb'
+[192.168.122.206] Executing task 'all_startctdb'
+[192.168.122.206] sudo: systemctl enable ctdb
+[192.168.122.31] sudo: systemctl enable ctdb
+[192.168.122.202] sudo: systemctl enable ctdb
+[192.168.122.206] out: Created symlink from /etc/systemd/system/multi-user.target.wants/ctdb.service to /usr/lib/systemd/system/ctdb.service.
+[192.168.122.31] out: Created symlink from /etc/systemd/system/multi-user.target.wants/ctdb.service to /usr/lib/systemd/system/ctdb.service.
+[192.168.122.202] out: Created symlink from /etc/systemd/system/multi-user.target.wants/ctdb.service to /usr/lib/systemd/system/ctdb.service.
+[192.168.122.206] out:
+[192.168.122.31] out:
+
+[192.168.122.206] sudo: systemctl restart ctdb
+
+[192.168.122.31] sudo: systemctl restart ctdb
+[192.168.122.202] out:
+
+[192.168.122.202] sudo: systemctl restart ctdb
+[192.168.122.206] out: Job for ctdb.service failed because a timeout was exceeded. See "systemctl status ctdb.service" and "journalctl -xe" for details.
+[192.168.122.206] out:
+
+
+Fatal error: sudo() received nonzero return code 1 while executing!
+
+Requested: systemctl restart ctdb
+Executed: sudo -S -p 'sudo password:'  /bin/bash -l -c "systemctl restart ctdb"
+
+Aborting.
+[192.168.122.202] out: Job for ctdb.service failed because a timeout was exceeded. See "systemctl status ctdb.service" and "journalctl -xe" for details.
+[192.168.122.202] out:
+
+
+Fatal error: sudo() received nonzero return code 1 while executing!
+
+Requested: systemctl restart ctdb
+Executed: sudo -S -p 'sudo password:'  /bin/bash -l -c "systemctl restart ctdb"
+
+Aborting.
+[192.168.122.31] out: Job for ctdb.service failed because a timeout was exceeded. See "systemctl status ctdb.service" and "journalctl -xe" for details.
+[192.168.122.31] out:
+
+
+Fatal error: sudo() received nonzero return code 1 while executing!
+
+Requested: systemctl restart ctdb
+Executed: sudo -S -p 'sudo password:'  /bin/bash -l -c "systemctl restart ctdb"
+
+Aborting.
+
+Fatal error: One or more hosts failed while executing task 'all_startctdb'
+
+Aborting.
+```
+
