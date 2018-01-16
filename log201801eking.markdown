@@ -312,6 +312,7 @@ MASQUERADE  all  --  anywhere             anywhere
     2.  ceph: 需要在其中一台目标机器执行fabric脚本。
     3.  包：已加入mysql，为测试。
     4.  自动拿最新的包。还没有做。
+7.  (10:15 2018-01-16)昨天ceph和ctdb其实都有问题。问题原因是硬盘不可写，我添加硬盘时加了readonly参数。ref"23:26 2018-01-15"
 
 09:52 2018-01-15
 ----------------
@@ -439,5 +440,127 @@ Aborting.
 Fatal error: One or more hosts failed while executing task 'all_startctdb'
 
 Aborting.
+```
+```
+[192.168.122.185] out: [192.168.122.185][WARNIN] IOError: [Errno 1] Operation not permitted
+[192.168.122.169] out: [192.168.122.169][ERROR ] RuntimeError: command returned non-zero exit status: 1
+[192.168.122.169] out: [ceph_deploy.osd][ERROR ] Failed to execute command: /usr/sbin/ceph-disk -v prepare --zap-disk --cluster ceph --fs-type xfs -- /dev/vda
+[192.168.122.169] out: [ceph_deploy][ERROR ] GenericError: Failed to create 1 OSDs
+[192.168.122.169] out:
+[192.168.122.185] out: [192.168.122.185][ERROR ] RuntimeError: command returned non-zero exit status: 1
+[192.168.122.185] out: [ceph_deploy.osd][ERROR ] Failed to execute command: /usr/sbin/ceph-disk -v prepare --zap-disk --cluster ceph --fs-type xfs -- /dev/vda
+[192.168.122.185] out: [ceph_deploy][ERROR ] GenericError: Failed to create 1 OSDs
+```
+
+09:28 2018-01-16
+----------------
+```
+   <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2'/>
+      <source file='/mnt/ssd/catkeeper/images/opensuse42.3_01.qcow2'/>
+      <backingStore type='file' index='1'>
+        <format type='raw'/>
+        <source file='/mnt/ssd/catkeeper/images/opensuse42.3_base_20171215.qcow2'/>
+        <backingStore/>
+      </backingStore>
+      <target dev='vda' bus='virtio'/>
+      <alias name='virtio-disk0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x07' function='0x0'/>
+    </disk>
+```
+```
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source file='/mnt/ssd/catkeeper/images/kiwi/ceph_data_02.raw'/>
+      <backingStore/>
+      <target dev='vdb' bus='virtio'/>
+      <alias name='virtio-disk1'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x0a' function='0x0'/>
+    </disk>
+```
+```
+<disk type='file' device='disk'>
+        <driver name='qemu' type='raw'/>
+        <source file='/mnt/images/disk_name.raw'/>
+        <target dev='vdb' bus='virtio'/>
+        <address type='pci' domain='0x0000' bus='0x00' slot='0x0e' function='0x0'/>
+</disk>
+```
+```
+[root@ceph-bj-beishu-cluster-node-0 storedeployer]# ceph -s
+  cluster:
+    id:     e81275ae-4452-4a0d-80ba-11c2e7723474
+    health: HEALTH_OK
+
+  services:
+    mon: 3 daemons, quorum ceph-bj-beishu-cluster-node-0,ceph-bj-beishu-cluster-node-2,ceph-bj-beishu-cluster-node-1
+    mgr: ceph-bj-beishu-cluster-node-0(active), standbys: ceph-bj-beishu-cluster-node-1, ceph-bj-beishu-cluster-node-2
+    mds: newfs-1/1/1 up  {0=ceph-bj-beishu-cluster-node-2=up:active}, 2 up:standby
+    osd: 3 osds: 3 up, 3 in
+
+  data:
+    pools:   2 pools, 256 pgs
+    objects: 21 objects, 22277 bytes
+    usage:   3168 MB used, 296 GB / 299 GB avail
+    pgs:     256 active+clean
+
+  io:
+    client:   255 B/s wr, 0 op/s rd, 0 op/s wr
+
+[root@ceph-bj-beishu-cluster-node-0 storedeployer]# ctdb status
+Number of nodes:3
+pnn:0 192.168.122.74   OK (THIS NODE)
+pnn:1 192.168.122.185  OK
+pnn:2 192.168.122.169  OK
+Generation:420110881
+Size:3
+hash:0 lmaster:0
+hash:1 lmaster:1
+hash:2 lmaster:2
+Recovery mode:NORMAL (0)
+Recovery master:1
+```
+
+10:04 2018-01-16
+----------------
+1.  promesus 153.
+2.  测试:
+    1.  测试多个硬盘和网卡。
+    2.  测试合法的不同配置文件。
+
+
+16:51 2018-01-16
+----------------
+1.  dialog包缺失造成在多块硬盘时无法选择。
+    ```
+    BAMVOR: Echo to ttyS0: Searching harddrive for CD installation
+    BAMVOR: Echo to ttyS0: Disk 0 -> /dev/sda [ 102400 MB ]
+    BAMVOR: Echo to ttyS0: Disk 1 -> /dev/sdb [ 102400 MB ]
+    BAMVOR: Echo to ttyS0: Entering installation mode for disk:
+    BAMVOR: Echo to ttyS0: Have size:  -> 0 MB
+    BAMVOR: Echo to ttyS0: Need size: /squashed/Ceph-CentOS-07.0.raw -> 3500 MB
+    BAMVOR: Echo to ttyS0: Not enough space available for this image
+    BAMVOR: Echo to ttyS0: rebootException: reboot in 120 sec...
+    ```
+    ```
+    dialog --yesno "Continue?" 5 80
+    ```
+    如果选择yes会$?=0，选择no是1。我觉得这里需要有个判断。如果dialog不存在改为命令行方式？
+2.  性能
+    1.  8vcpu, 2G memory，机械硬盘，大约构建26分钟。
+    2.  mksquashfs会把cpu跑满，大约持续3分钟。感觉增加vcpu，提升也不会很大。
+
+18:40 2018-01-16
+----------------
+```
+BAMVOR: Echo to ttyS0: Searching for boot device in Application ID...
+BAMVOR: Echo to ttyS0: Found Install CD/DVD: /dev/cdrom
+BAMVOR: Echo to ttyS0: Searching harddrive for CD installation
+BAMVOR: Echo to ttyS0: Disk 0 -> /dev/sda [ 102400 MB ]
+BAMVOR: Echo to ttyS0: Entering installation mode for disk:
+/dev/disk/by-id/ata-QEMU_HARDDISK_QM00001
+BAMVOR: Echo to ttyS0: System installation canceled
+BAMVOR: Echo to ttyS0: reboot triggered by user
+BAMVOR: Echo to ttyS0: reboot in 30 sec...
 ```
 
