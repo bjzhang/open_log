@@ -28,7 +28,7 @@ install_ceph() {
         echo "Run \"sudo bash -c 'virsh destroy $NAME; virsh undefine $NAME'\" if you want to delete it"
         return
     fi
-    sudo screen -d -m virt-install --name $NAME --memory $MEMORY --vcpus $VCPUS \
+    sudo virt-install --name $NAME --memory $MEMORY --vcpus $VCPUS \
             --virt-type $HYPERVISOR --disk $DISK --cdrom $CDROM \
             --graphics $GRAPHICS --network bridge=$BRIDGE --noreboot \
             --noautoconsole
@@ -43,10 +43,10 @@ install_ceph() {
     echo "Connect to ip:$((PORT + 5900)) to do the installation:"
     echo "HOST=this_host_ip; vncviewer \$HOST:\$((5900 + \`ssh root@\$HOST 'virsh vncdisplay $NAME' | cut -d : -f 2 | head -n1\`))"
     sudo virsh suspend $NAME
+    sudo virsh suspend $NAME
     echo "press enter to continue installation. Then select Install"
     read
     sudo virsh resume $NAME
-    screen -d -r
 }
 
 IMG_NAME=$1
