@@ -310,7 +310,7 @@ MASQUERADE  all  --  anywhere             anywhere
     1.  今天主要进展是TiDB toml配置文件有问题。目前是fabric里面没法把tidb拉起来。
         1.  systemd拉不起来的原因是tidb deploy目录的log和status使用root建立的，用户tidb没有权限写入。晚上是在没有办法了，切换到用户tidb执行/home/tidb/deploy/scripts/run_pd.sh，才发现目录权限问题。
     2.  ceph: 需要在其中一台目标机器执行fabric脚本。
-    3.  包：已加入mysql，为测试。
+    3.  包：已加入mysql，未测试。
     4.  自动拿最新的包。还没有做。
 7.  (10:15 2018-01-16)昨天ceph和ctdb其实都有问题。问题原因是硬盘不可写，我添加硬盘时加了readonly参数。ref"23:26 2018-01-15"
 
