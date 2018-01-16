@@ -564,3 +564,37 @@ BAMVOR: Echo to ttyS0: reboot triggered by user
 BAMVOR: Echo to ttyS0: reboot in 30 sec...
 ```
 
+21:06 2018-01-16
+----------------
+<https://git-lfs.github.com/>
+
+```
+$ git init
+Initialized empty Git repository in /Users/Shared/iso/.git/
+$ git lfs track "*.iso"
+Tracking "*.iso"
+```
+添加.gitattributes
+$ git add .gitattributes
+```
+$ cat .gitattributes
+*.iso filter=lfs diff=lfs merge=lfs -text
+```
+$ git remote add origin https://github.com/bjzhang/iso.git
+支持的最大文件是2G：
+```
+bogon:iso bamvor$ git push --set-upstream origin master
+Git LFS: (0 of 0 files, 1 skipped) 0 B / 0 B, 4.32 GB skipped
+[195baca6c5f3b7f3ad4d7984a7f7bd5c4a37be2eb67e58b65d07ac3a2b599e83] Size must be
+less than 2147483648: [422] Size must be less than 2147483648
+error: failed to push some refs to 'https://github.com/bjzhang/iso.git'
+```
+换了小一些文件。不过eof了（走的新加坡代理）。
+```
+bogon:iso bamvor$ git push --set-upstream origin master
+Git LFS: (0 of 1 files) 253.66 MB / 846.00 MB
+LFS: Put
+https://github-cloud.s3.amazonaws.com/alambic/media/166029199/59/f9/59f9d53ba2d11aa8d6d5f10c92e822ecd9eb4c06c6ff9c1fa3ae4e8d55b36c52?actor_id=2332740:
+EOF
+error: failed to push some refs to 'https://github.com/bjzhang/iso.git'
+```
