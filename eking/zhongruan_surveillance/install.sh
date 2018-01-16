@@ -4,9 +4,9 @@ LANG=en_US.UTF-8
 MOUNT_POINT=/mnt/images
 BRIDGE=virbr0
 
-install_ceph() {
+install_from_iso() {
     MOUNT_POINT=$1
-    IMG_NAME=$2
+    ISO=$2
     BRIDGE=$3
     NAME=$4
     MEMORY=2048
@@ -15,7 +15,6 @@ install_ceph() {
     DISK=$MOUNT_POINT/$NAME.raw
     SIZE=100g
     GRAPHICS=vnc,listen=0.0.0.0
-    CDROM=$MOUNT_POINT/`basename $IMG_NAME`
     if [ -f $DISK ]; then
         echo "ERROR: disk($DISK) exist. exit"
         return
@@ -29,9 +28,13 @@ install_ceph() {
         return
     fi
     sudo virt-install --name $NAME --memory $MEMORY --vcpus $VCPUS \
-            --virt-type $HYPERVISOR --disk $DISK --cdrom $CDROM \
+            --virt-type $HYPERVISOR --disk $DISK --cdrom $ISO \
             --graphics $GRAPHICS --network bridge=$BRIDGE --noreboot \
             --noautoconsole
+    if [ "$?" != "0" ]; then
+        echo "virt-install failed. exit"
+        exit
+    fi
     sleep 1
     while true; do
             sudo virsh vncdisplay $NAME 2>&1 > /dev/null
@@ -40,24 +43,36 @@ install_ceph() {
             fi
     done
     PORT=`sudo virsh vncdisplay $NAME | cut -d : -f 2`
-    echo "Connect to ip:$((PORT + 5900)) to do the installation:"
-    echo "HOST=this_host_ip; vncviewer \$HOST:\$((5900 + \`ssh root@\$HOST 'virsh vncdisplay $NAME' | cut -d : -f 2 | head -n1\`))"
-    sudo virsh suspend $NAME
-    sudo virsh suspend $NAME
+    echo "Connect to through vncview ip:$((PORT + 5900)) to do the installation:"
+    while true; do
+        echo "debug: pause domain"
+        sudo virsh suspend $NAME
+        state=`sudo virsh domstate $NAME | head -n1`
+        sleep 1
+        if [ "$state" = "paused" ]; then
+            break
+        fi
+    done
     echo "press enter to continue installation. Then select Install"
     read
     sudo virsh resume $NAME
 }
 
-IMG_NAME=$1
+usage() {
+    echo "$0 cdrom vm_name"
+    exit
+}
+
+ISO=$1
 NAME=$2
-if ! [ -f "$IMG_NAME" ]; then
-	echo image $IMG_NAME does not exist. exit
+if ! [ -f "$ISO" ]; then
+	echo image $ISO does not exist. exit
+        usage
 	exit
 fi
 if [ "$NAME" = "" ]; then
 	echo vm $NAME empty. exit
 	exit
 fi
-echo "    Install ceph vm from iso"
-install_ceph $MOUNT_POINT $IMG_NAME $BRIDGE $NAME
+echo "Install vm from iso"
+install_from_iso $MOUNT_POINT $ISO $BRIDGE $NAME
