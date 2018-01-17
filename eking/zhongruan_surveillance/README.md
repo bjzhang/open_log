@@ -4,6 +4,11 @@
 
 1.  构建：在opensuse/suse执行, `git clone --branch 0.1 https://github.com/journeymidnight/kiwi-descriptions`
     ```
+    ssh ct01@10.72.84.147(Suse1234!)
+    ssh osh01.local
+    cd works/source/kiwi-descriptions/centos/x86_64/ceph-applicance/
+    ```
+    ```
     > cd centos/x86_64/ceph-applicance
     > sudo bash ./build.sh c1d302e89018ed05282b08779d2d3cd5d7842fbc
     #构建结果位于/root/works/software/kiwi/Ceph-CentOS-07.0.x86_64-${version}.install.iso 
@@ -61,6 +66,9 @@
 
 3.  部署业务
     1.  连接到任意一台虚机：`vm.sh ssh ceph_test_0.6.0_01`，root密码是"Eking1234!"，vip需要时同网段未被使用的ip。例如：
+        cd /binaries/
+        tar zxf storedeployer_v1.1.2.tar.gz
+        cd bjzhang-storedeployer-94b5eba9f09c1738c4f0431bd2e43204cc0f6624/
         ```
         {
             "monitors": ["192.168.122.98", "192.168.122.38", "192.168.122.16"],
@@ -74,7 +82,8 @@
             "disks": ["/dev/vda"]
         }
         ```
-    2.  修改nginx /etc/nginx/nginx.conf，ip修改为上面的vip：
+        python ./fabfile.py
+    2.  修改物理机158: nginx /etc/nginx/nginx.conf，ip修改为上面的vip：
 		```
 		upstream nier {
 				server 192.168.122.179:8080;
@@ -87,4 +96,5 @@
 				server 192.168.122.179:9090;
 		}
 		```
+        systemctl restart nginx
 
