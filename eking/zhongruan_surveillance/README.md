@@ -23,7 +23,7 @@
     > sudo bash ./build.sh ${your_github_token}
     #构建结果位于/root/works/software/kiwi/Ceph-CentOS-07.0.x86_64-${version}.install.iso
     > sudo scp -p /root/works/software/kiwi/Ceph-CentOS-07.0.x86_64-0.6.2.install.iso 10.72.84.158:/mnt/images
-    Ceph-CentOS-07.0.x86_64-0.6.2.install.iso                                                                                                                                                                   100%  846MB 105.8MB/s   00:08
+    Ceph-CentOS-07.0.x86_64-0.6.2.install.iso                                    100%  846MB 105.8MB/s   00:08
     ```
 
 2.  安装虚拟机:
@@ -59,7 +59,7 @@
         ceph_test_0.6.0_03: 192.168.122.207
         ["192.168.122.98", "192.168.122.38", "192.168.122.16", "192.168.122.207"]
         ```
-    4.  动态插入硬盘。此处的vda是我们希望vm中的硬盘名称，
+    4.  动态插入硬盘。此处的vda是我们希望vm中的硬盘名称，**每个机器必须都插入硬盘**
         ```
         $ insert_data_disk.sh ceph_test_0.6.2_01 vda
         Target     Source
