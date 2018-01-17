@@ -10,7 +10,17 @@
     ```
     ```
     > cd centos/x86_64/ceph-applicance
-    > sudo bash ./build.sh c1d302e89018ed05282b08779d2d3cd5d7842fbc
+    ```
+	修改版本号：
+	```
+    <preferences>
+        <version>0.6.2</version>
+        <packagemanager>yum</packagemanager>
+        <bootsplash-theme>charge</bootsplash-theme>
+	```
+	构建：
+	```
+    > sudo bash ./build.sh ${your_token}
     #构建结果位于/root/works/software/kiwi/Ceph-CentOS-07.0.x86_64-${version}.install.iso 
     > sudo scp -p /root/works/software/kiwi/Ceph-CentOS-07.0.x86_64-0.6.2.install.iso 10.72.84.158:/mnt/images
     Ceph-CentOS-07.0.x86_64-0.6.2.install.iso                                                                                                                                                                   100%  846MB 105.8MB/s   00:08
