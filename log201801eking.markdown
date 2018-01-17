@@ -251,10 +251,18 @@ GTD
 
 10:27 2018-01-12
 ----------------
+(10:46 2018-01-17)
 software skills, useful link
 1.  SUSE Linux Enterprise Product Sources
     <https://www.suse.com/download-linux/source-code/>
 2.  Using Paxos to Build a Scalable, Consistent, and Highly Available Datastore
+3.  开源的dropbox: <https://syncthing.net/>
+4.  owncloud
+5.  kernel
+    1.  内核测试可以看看。https://kernelci.org/
+    2.  然后用https://github.com/google/syzkaller做fuzz测试。
+6.  语言学习
+    1.  go <https://github.com/astaxie/go-best-practice/blob/master/ebook/zh/preface.md>
 
 10:50 2018-01-12
 ----------------
@@ -598,3 +606,203 @@ https://github-cloud.s3.amazonaws.com/alambic/media/166029199/59/f9/59f9d53ba2d1
 EOF
 error: failed to push some refs to 'https://github.com/bjzhang/iso.git'
 ```
+
+10:20 2018-01-17
+----------------
+software skills, virtualization, spice, os x上安装spice client
+--------------------------------------------------------------
+<https://wiki.gnome.org/Projects/GTK+/OSX/Building>
+```
+I: Moving temporary DESTDIR u'/Users/bamvor/gtk/inst/_jhbuild/root-intltool'
+into build prefix
+I: Install complete: 12 files copied
+*** success *** [24/24]
+```
+
+11:53 2018-01-17
+----------------
+中软
+----
+1.  测试3-5台物理机。
+2.  测试小硬盘(容量大于)情况。
+    1.  修改kiwi-description: 不做var分区。
+    2.  修改install脚本。
+3.  测试机器硬盘1-x块硬盘数量。
+    1.  不同的硬盘名称。
+    2.  安装到不同的硬盘。
+4.  录屏。
+	1.	已完成装机。
+	2.	TODO：fabric.
+5.	网卡默认配置脚本。
+6.	159物理机装机测试
+
+14:10 2018-01-17
+----------------
+1.  安装vagrant
+    ```
+    [bamvor@ceph-bj-rabbit-10-72-84-158 ~]$ sudo yum install https://releases.hashicorp.com/vagrant/2.0.1/vagrant_2.0.1_x86_64.rpm
+    已加载插件：fastestmirror
+    Repository extras is listed more than once in the configuration
+    Repository updates is listed more than once in the configuration
+    无法打开 https://releases.hashicorp.com/vagrant/2.0.1/vagrant_2.0.1_x86_64.rpm ，跳过。
+    错误：无须任何处理
+    wget  https://releases.hashicorp.com/vagrant/2.0.1/vagrant_2.0.1_x86_64.rpm
+    echo y | sudo yum install vagrant_2.0.1_x86_64.rpm
+    ```
+
+2.  安装vagrant provider
+    1.  参考<https://github.com/vagrant-libvirt/vagrant-libvirt>。保证libvirt已经正常安装。并安装如下包： `sudo dnf install libxslt-devel libxml3-devel libvirt-devel libguestfs-tools-c ruby-devel gcc`
+
+3.  varant启动vm失败
+    ```
+    $ vagrant up
+    Bringing machine 'default' up with 'libvirt' provider...
+    Error while connecting to libvirt: Error making a connection to libvirt URI qemu:///system?no_verify=1&keyfile=/home/bamvor/.ssh/id_rsa:
+    Call to virConnectOpen failed: authentication unavailable: no polkit agent available to authenticate action 'org.libvirt.unix.manage'
+    ```
+
+4.  突然发现libvvirtd启动不了了；
+```
+1月 17 16:01:01 ceph-bj-rabbit-10-72-84-158 systemd[1]: Started Session 32 of user root.
+-- Subject: Unit session-32.scope has finished start-up
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+--
+-- Unit session-32.scope has finished starting up.
+--
+-- The start-up result is done.
+1月 17 16:01:01 ceph-bj-rabbit-10-72-84-158 systemd[1]: Starting Session 32 of user root.
+-- Subject: Unit session-32.scope has begun start-up
+-- Defined-By: systemd
+-- Support: http://lists.freedesktop.org/mailman/listinfo/systemd-devel
+--
+-- Unit session-32.scope has begun starting up.
+1月 17 16:01:01 ceph-bj-rabbit-10-72-84-158 CROND[21282]: (root) CMD (run-parts /etc/cron.hourly)
+1月 17 16:01:01 ceph-bj-rabbit-10-72-84-158 run-parts(/etc/cron.hourly)[21285]: starting 0anacron
+1月 17 16:01:01 ceph-bj-rabbit-10-72-84-158 run-parts(/etc/cron.hourly)[21291]: finished 0anacron
+1月 17 16:01:39 ceph-bj-rabbit-10-72-84-158 sudo[21384]:   bamvor : TTY=pts/18 ; PWD=/home/bamvor/works/vagrant ; USER=root ; COMMAND=/bin/vim /etc/polkit-1/rules.d/50-default.rules
+1月 17 16:02:34 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: DHCPREQUEST(virbr0) 192.168.122.76 52:54:00:09:31:b7
+1月 17 16:02:34 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: DHCPACK(virbr0) 192.168.122.76 52:54:00:09:31:b7
+1月 17 16:02:34 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: not giving name ceph-bj-beishu-cluster-node-0 to the DHCP lease of 192.168.122.35 because the name exists in /etc/hosts with address 192.168.122.74
+1月 17 16:03:53 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: DHCPREQUEST(virbr0) 192.168.122.72 52:54:00:28:13:f7
+1月 17 16:03:53 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: DHCPACK(virbr0) 192.168.122.72 52:54:00:28:13:f7
+1月 17 16:03:53 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: not giving name ceph-bj-beishu-cluster-node-0 to the DHCP lease of 192.168.122.35 because the name exists in /etc/hosts with address 192.168.122.74
+1月 17 16:04:22 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: DHCPREQUEST(virbr0) 192.168.122.84 52:54:00:9b:7f:bc
+1月 17 16:04:22 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: DHCPACK(virbr0) 192.168.122.84 52:54:00:9b:7f:bc
+1月 17 16:04:22 ceph-bj-rabbit-10-72-84-158 dnsmasq-dhcp[2774]: not giving name ceph-bj-beishu-cluster-node-0 to the DHCP lease of 192.168.122.35 because the name exists in /etc/hosts with address 192.168.122.74
+```
+删除了"/etc/hosts"中192.168.122的地址都不行。前者是fabric脚本加入的。根据`systemctl status livirtd`的提示，看看"/var/lib/libvirt/dnsmasq"。
+```
+ Main PID: 22859 (libvirtd)
+   CGroup: /system.slice/libvirtd.service
+           ├─ 2735 /usr/sbin/dnsmasq --conf-file=/var/lib/libvirt/dnsmasq/virbr1.conf --leasefile-ro --dhcp-script=/usr/libexec/libvirt_leaseshelper
+           ├─ 2736 /usr/sbin/dnsmasq --conf-file=/var/lib/libvirt/dnsmasq/virbr1.conf --leasefile-ro --dhcp-script=/usr/libexec/libvirt_leaseshelper
+           ├─ 2774 /usr/sbin/dnsmasq --conf-file=/var/lib/libvirt/dnsmasq/default.conf --leasefile-ro --dhcp-script=/usr/libexec/libvirt_leaseshelper
+           ├─ 2775 /usr/sbin/dnsmasq --conf-file=/var/lib/libvirt/dnsmasq/default.conf --leasefile-ro --dhcp-script=/usr/libexec/libvirt_leaseshelper
+           └─22859 /usr/sbin/libvirtd
+```
+在/var/lib/libvirt/dnsmasq/virbr0.status，看到
+```
+
+  {
+    "ip-address": "192.168.122.35",
+    "mac-address": "52:54:00:84:60:47",
+    "hostname": "ceph-bj-beishu-cluster-node-0",
+    "expiry-time": 1516180037
+  }
+```
+和上面信息能对上。删除这个文件后。libvirtd可以正常启动。
+
+sudo usermod -a -G wheel bamvor
+修改"/etc/libvirt/libvirtd.conf"，加入：
+auth_unix_rw = "none"
+上面两个修改后可以，不确定是否都有。
+
+5.  vagrant卡在了nfs。两次Ctrl+C后可以使用虚机。
+
+6.  改进设置
+    1.  使用已有的网卡：
+        <https://github.com/vagrant-libvirt/vagrant-libvirt/issues/380>
+        machine.vm.network :public_network, :dev => 'virbr0', :type => 'bridge'
+    2.  hostname:
+        config.vm.hostname = "os01"
+    3.  disable nfs
+        <https://stackoverflow.com/questions/36727053/disable-nfs-pruning-in-vagrant>
+        config.nfs.functional = false
+
+
+16:57 2018-01-17
+----------------
+调用kpartx -dv xxx.raw时有个分区没有umount，造成kpartx失败。再执行kpartx也没有用。参考下文手工解决。
+<https://davidjb.com/blog/2009/05/unix-removing-open-logical-volumes-in-centosrhl/>
+<https://gist.github.com/waja/c780d4217fd695e4f55f>
+```
+osh01:~/works/software/temp # dmsetup status
+loop0p4: 0 5971935 linear
+loop0p3: 0 614400 linear
+systemVG-LVRoot: 0 5742592 linear
+loop0p2: 0 40960 linear
+loop0p1: 0 4096 linear
+systemVG-var: 0 221184 linear
+osh01:~/works/software/temp # lvs
+  LV     VG       Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  LVRoot systemVG -wi-a-----   2.74g
+  var    systemVG -wi-a----- 108.00m
+osh01:~/works/software/temp # vgs
+  VG       #PV #LV #SN Attr   VSize VFree
+  systemVG   1   2   0 wz--n- 2.84g    0
+osh01:~/works/software/temp # lvchange -an /dev/systemVG/LVRoot
+osh01:~/works/software/temp # lvchange -an /dev/systemVG/var
+osh01:~/works/software/temp # vgs
+  VG       #PV #LV #SN Attr   VSize VFree
+  systemVG   1   2   0 wz--n- 2.84g    0
+osh01:~/works/software/temp # lvs
+  LV     VG       Attr       LSize   Pool Origin Data%  Meta%  Move Log Cpy%Sync Convert
+  LVRoot systemVG -wi-------   2.74g
+  var    systemVG -wi------- 108.00m
+osh01:~/works/software/temp # dmsetup status
+loop0p4: 0 5971935 linear
+loop0p3: 0 614400 linear
+loop0p2: 0 40960 linear
+loop0p1: 0 4096 linear
+osh01:~/works/software/temp # dmsetup statusf^C
+osh01:~/works/software/temp # fuser -c /dev/mapper/loop0p1
+/dev/dm-0:               1rce     2rc     3rc     5rc     7rc     8rc     9rc    10rc    11rc    12rc    13rc    15rc    16rc    17rc    18rc    20rc    21rc    22rc    23rc    25rc    26rc    27rc    28rc    30rc    31rc    32rc    33rc    35rc    36rc    37rc    38rc    40rc    41rc    42rc    43rc    45rc    47rc    48rc    49rc    50rc    51rc    52rc    53rc    55rc    56rc    57rc    58rc    59rc    60rc    62rc    63rc    64rc    65rc    78rc    80rc    82rc    83rc    93rc   139rc   141rc   144rc   149rc   150rc   247rc   248rc   249rc   250rc   251rc   252rc   253rc   254rc   263rc   283rc   287rc   288rc   289rc   290rc   295rc   557rc   558rc   560rc   561rc   568rc   586rc   588rc   589rc   590rc   591rc   592rc   593rc   594rc   595rc   596rc   597rc   598rc   599rc   600rc   601rc   602rc   603rc   604rc   605rc   606rc   607rc   658rc   660rc   663rc   665rc   678rc   680rce   690rc   739rc   747rce   794rc   863rc  1015rce  1019rc  1032rce  1036rce  1040rce  1043rce  1054rce  1056rce  1058rce  1060rce  1064rce  1067rce  1072rce  1531rce  1533rce  1536rce  1577rce  1578rce  1581rce  1785re  1788re  1809rce  2990rce  2994rce  3037rce  3041rce  3042re  3309re 17582rc 18057rc 18061rc 18065rc 18066rc 18074rc 18079rc 18086rc 18247re 18248rce 18249rce 18319rc 18320rc 18401rc 18404rc 18405rc 18406rc 18443rc 18446rc 18448rc 18452rc 18454rc 18458rc 18459rc 18464rc 18465rc 18497rc 18552rc 18675re 18676re 18677re 18683rce 22737rc 22739rc 22741rc 22742rc 22744rc 22746rc 22747rc 22749rc 22871rc 22872rc 26666rc 28196rce 28199rce 28200re 29183rc 29405rc 29409rc 29417re 29644rc 29698rc 29703rc 30023rce 30026rce 30027re 30178rc 30547rce 30550rc 30730rc
+osh01:~/works/software/temp # ll /dev/mapper/loop0p
+loop0p1  loop0p2  loop0p3  loop0p4
+osh01:~/works/software/temp # ll /dev/mapper/loop0p1
+lrwxrwxrwx 1 root root 7 Jan 17 03:46 /dev/mapper/loop0p1 -> ../dm-0
+osh01:~/works/software/temp # dmsetup remove /dev/mapper/loop0p1
+osh01:~/works/software/temp # dmsetup remove /dev/mapper/loop0p2
+osh01:~/works/software/temp # dmsetup remove /dev/mapper/loop0p3
+osh01:~/works/software/temp # dmsetup remove /dev/mapper/loop0p4
+osh01:~/works/software/temp # dmsetup status
+No devices found
+```
+
+18:14 2018-01-17
+----------------
+1.  ceph:
+    1.  检查硬盘在不在。
+        DONE
+    2.  完善文档，说明每个虚机都要加硬盘。
+        DONE
+    3.  20180117 18:14
+        1.  node0 tidb启动失败。systemctl重启tidb后正常。
+            1.  TODO: 检查tidb是否启动成功。
+        2.  node0的osd没有启动成功。重跑一遍脚本后可以。
+        3.  ceph exporter没有启动起来。
+            1.  TODO:
+                1.  restart ceph_exporter, add dependency in systemd
+                2.  restart nier, add dependency in systemd
+        4.  xingyi: 改minsize. DONE.
+        5.  脚本默认重定向，保存日志。
+        6.  0118冬卯帮忙做优盘。
+        7.  kiwi
+            1.  spare_part有什么用，可以作为可选的扩展区域么？
+            2.  installstick用于优盘？
+            3.  构建的镜像如何做成优盘。 <https://suse.github.io/kiwi/building/working_with_images/iso_to_usb_stick_deployment.html>
+
+3.  usermod，polkit。
+4.  Linux音频剪辑软件。Audacity
+
