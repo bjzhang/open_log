@@ -613,6 +613,8 @@ software skills, virtualization, spice, os x上安装spice client
 --------------------------------------------------------------
 <https://wiki.gnome.org/Projects/GTK+/OSX/Building>
 ```
+$ ./gtk-osx-build-setup.sh
+$ jhbuild bootstrap
 I: Moving temporary DESTDIR u'/Users/bamvor/gtk/inst/_jhbuild/root-intltool'
 into build prefix
 I: Install complete: 12 files copied
@@ -802,7 +804,16 @@ No devices found
             1.  spare_part有什么用，可以作为可选的扩展区域么？
             2.  installstick用于优盘？
             3.  构建的镜像如何做成优盘。 <https://suse.github.io/kiwi/building/working_with_images/iso_to_usb_stick_deployment.html>
+    4.  (10:05 2018-01-18)
+        1.  tidb三个组建用wants。
+        2.  加tidb组件的monitor，后面的服务以来monitor service。
 
 3.  usermod，polkit。
 4.  Linux音频剪辑软件。Audacity
+
+10:40 2018-01-18
+----------------
+资源：
+10.72.22.49 10.72.84.158 E15-27U-28U Printfzj*158
+10.72.22.58 10.72.84.159 E16-27U-28U
 
