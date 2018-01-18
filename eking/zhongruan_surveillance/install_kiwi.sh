@@ -16,10 +16,10 @@ init() {
 	ssh-copy-id smb_rd@10.71.84.50
 
 	MY_ENV="$home/.bash_profile"
-	echo "export http_proxy=localhost:8228" >> $MY_ENV
+	echo "export http_proxy=localhost:8228" > $MY_ENV
 	echo "export https_proxy=localhost:8228" >> $MY_ENV
-	echo "export http_proxy=localhost:7228" >> $MY_ENV
-	echo "export https_proxy=localhost:7228" >> $MY_ENV
+	echo "#export http_proxy=localhost:7228" >> $MY_ENV
+	echo "#export https_proxy=localhost:7228" >> $MY_ENV
 	source $MY_ENV
 
 	wget google.com
@@ -71,6 +71,7 @@ init() {
 build(){
 	APPLICANCE=$1
 	TARGET=$2
+	KIWI_TYPE=$3
 
 	echo "update kiwi-descriptions"
 	cd $APPLICANCE
@@ -87,7 +88,7 @@ build(){
 	sudo systemctl restart lvm2-lvmetad.service
 
 	echo "Building(comment --debug if you want to a clean output)"
-	sudo kiwi-ng --debug --color-output --type oem system build --description $APPLICANCE --target-dir $TARGET
+	sudo kiwi-ng --debug --color-output --type $KIWI_TYPE system build --description $APPLICANCE --target-dir $TARGET
 	ret=$?
 	if [ "$ret" = "0" ]; then
 		echo "Building Successful"
@@ -99,7 +100,8 @@ build(){
 
 TARGET=$home/works/software/kiwi
 APPLICANCE=/home/vagrant/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
+KIWI_TYPE="oem"
 
 init
-build $APPLICANCE $TARGET
+build $APPLICANCE $TARGET $KIWI_TYPE
 
