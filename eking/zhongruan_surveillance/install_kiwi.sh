@@ -28,7 +28,7 @@ init() {
 		ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.50
 	fi
 
-	sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_prox\"' > /etc/sudoers.d/proxy"
+	sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	OPEN_LOG_PATH="$home/works/open_log"
 	if [ -d $OPEN_LOG_PATH/.git ]; then
 		echo "open log already exist skip"
