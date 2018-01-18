@@ -37,13 +37,20 @@ init() {
 	fi
 
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
-	PACKAGES="python3-kiwi>=9.11 man jq yum command-not-found"
+	PACKAGES="python3-kiwi>=9.11 man jq yum command-not-found syslinux"
 
 	ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
 	$ZYPPER ar -c -f -r $KIWI_REPO
 	$ZYPPER install $PACKAGES
-
+	ret=$?
+	if [ "$ret" != "0" ]; then
+		echo "ERROR: zypper installation fail. exit"
+		if [ "$ret" = "104" ]; then
+			echo "ERROR: one of packages($PACKAGES) is not found"
+		fi
+		exit
+	fi
 	echo "clone kiwi-descriptions"
 	KIWI_DESCRIPTIONS="https://github.com/journeymidnight/kiwi-descriptions.git"
 	KIWI_DESCRIPTIONS_PATH=$SOURCE/${KIWI_DESCRIPTIONS##*/}
