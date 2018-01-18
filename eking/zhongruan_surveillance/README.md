@@ -1,4 +1,4 @@
-
+﻿
 本文的说明使用kiwi构建并测试镜像的过程
 --------------------------------------
 
@@ -29,7 +29,7 @@
 2.  安装虚拟机:
     1.  登陆到物理机并设置环境变量：
         ```
-        ssh bamvor10.72.84.158
+        ssh bamvor@10.72.84.158
         passwd: suse
         export PATH=$PATH:/home/bamvor/works/open_log/eking/zhongruan_surveillance
         ```
