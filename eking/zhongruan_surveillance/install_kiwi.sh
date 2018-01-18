@@ -55,13 +55,18 @@ init() {
 	else
 		git clone $KIWI_DESCRIPTIONS $KIWI_DESCRIPTIONS_PATH
 	fi
-	git checkout -f -b ceph_deploy origin/ceph_deploy
+	echo cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy origin/ceph_deploy
+	cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy origin/ceph_deploy
 
 	echo "initial finish. re-login or soruce $MY_ENV to valid the environment!"
 }
 
 build(){
+	APPLICANCE=$1
+	TARGET=$2
+
 	echo "update kiwi-descriptions"
+	cd $APPLICANCE
 	git fetch
 	git rebase
 	ret=$?
