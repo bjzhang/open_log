@@ -837,3 +837,12 @@ Traceback (most recent call last):
 pip install --upgrade distribute
 1.  python3 build.py works/
 
+22:12 2018-01-18
+----------------
+```
+[ INFO    ]: Processing: [########################################] 100%
+[ ERROR   ]: 08:55:32 | KiwiInstallPhaseFailed: System package installation
+failed: Main config did not have a requires_policy attr. before setopt
+Error unpacking rpm package nier-1.2-46.fea4e11git.el7.centos.x86_64
+```
+
