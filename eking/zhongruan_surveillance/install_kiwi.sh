@@ -1,5 +1,7 @@
 home=/home/vagrant
+SOURCE=${home}/works/source
 
+echo "environment setup"
 if [ -f "$home/.ssh/id_rsa.pub" ]; then
 	echo "ssh public key exist. skip"
 else
@@ -7,6 +9,9 @@ else
 	ssh-keygen
 fi
 
+mkdir -p $SOURCE
+
+echo "ssh setup"
 ssh-copy-id smb_rd@10.71.84.50
 export http_proxy=localhost:8228
 export https_proxy=localhost:8228
@@ -32,5 +37,14 @@ ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 $ZYPPER ar -c -f -r $KIWI_REPO
 $ZYPPER install $PACKAGES
 
-echo export http_proxy=localhost:8228
-echo export https_proxy=localhost:8228
+KIWI_DESCRIPTIONS="https://github.com/journeymidnight/kiwi-descriptions.git"
+KIWI_DESCRIPTIONS_PATH="$SOURCE/${KIWI_DESCRIPTION##*/}"
+KIWI_DESCRIPTIONS_PATH="$SOURCE/${KIWI_DESCRIPTIONS_PATH%.git}"
+if [ -d "$KIWI_DESCRIPTIONS_PATH/.git" ]; then
+	echo "kiwi descriptions exist. skip"
+else
+	git clone $KIWI_DESCRIPTIONS $KIWI_DESCRIPTIONS_PATH
+fi
+
+echo export http_proxy=localhost:8228 https_proxy=localhost:8228
+
