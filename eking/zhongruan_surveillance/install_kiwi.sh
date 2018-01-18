@@ -36,7 +36,7 @@ init() {
 	fi
 
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
-	PACKAGES="python3-kiwi>=9.11 man jq yum command-not-found syslinux"
+	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux"
 
 	ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
@@ -97,9 +97,6 @@ build(){
 	fi
 }
 
-TARGET=$home/works/software/kiwi
-APPLICANCE=/home/vagrant/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
-KIWI_TYPE="oem"
 
 user=$1
 if [ "$user" = "" ]; then
@@ -108,6 +105,9 @@ if [ "$user" = "" ]; then
 fi
 home=/home/$user
 SOURCE=${home}/works/source
+TARGET=${home}/works/software/kiwi
+APPLICANCE=${home}/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
+KIWI_TYPE="oem"
 
 init $home $SOURCE
 build $APPLICANCE $TARGET $KIWI_TYPE
