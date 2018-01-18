@@ -792,6 +792,8 @@ No devices found
     3.  20180117 18:14
         1.  node0 tidb启动失败。systemctl重启tidb后正常。
             1.  TODO: 检查tidb是否启动成功。
+                1.  参考"https://github.com/pingcap/tidb-ansible.git"的start.yml各组件的name: wait up
+                2.  例如pd: curl -s -o /dev/null -w ''%{http_code}'' 192.168.122.35:2379/pd/api/v1/members
         2.  node0的osd没有启动成功。重跑一遍脚本后可以。
         3.  ceph exporter没有启动起来。
             1.  TODO:
@@ -807,6 +809,8 @@ No devices found
     4.  (10:05 2018-01-18)
         1.  tidb三个组建用wants。
         2.  加tidb组件的monitor，后面的服务以来monitor service。
+        3.  加入wget, curl包。
+    5.  启动时kernel cmdline改为kiwidebug=1，如果安装失败会进入shell。
 
 3.  usermod，polkit。
 4.  Linux音频剪辑软件。Audacity
@@ -816,4 +820,20 @@ No devices found
 资源：
 10.72.22.49 10.72.84.158 E15-27U-28U Printfzj*158
 10.72.22.58 10.72.84.159 E16-27U-28U
+
+12:46 2018-01-18
+----------------
+<https://stackoverflow.com/questions/27243891/run-a-python-script-from-within-python-and-also-catch-the-exception>
+1.  
+```
+vagrant@os01:~/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS>
+python build.py
+Traceback (most recent call last):
+      File "build.py", line 3, in <module>
+          from pkg_resources import load_entry_point
+      ImportError: No module named pkg_resources
+```
+1.  无效
+pip install --upgrade distribute
+1.  python3 build.py works/
 
