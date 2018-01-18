@@ -50,7 +50,7 @@
         vncviewer 10.72.84.158:5916
         ```
 
-    3.  安装成功后后，可以用如下命令查看虚拟机ip地址，最后一行地址是配置config.json
+    3.  安装成功后后，可以用如下命令查看虚拟机ip地址，最后一行地址是配置config.json 文件要用到的
         ```
         $ vm.sh ips ceph_test_0.6.2_0
         ceph_test_0.6.0_01: 192.168.122.98
@@ -85,7 +85,7 @@
         tar zxf storedeployer_v1.1.2.tar.gz
         cd bjzhang-storedeployer-94b5eba9f09c1738c4f0431bd2e43204cc0f6624/
         ```
-    3.  根据需要修改参数：
+    3.  根据需要修改参数config.json：
         ```
         {
             #任意三台机器
@@ -104,7 +104,7 @@
         }
         ```
     3.  执行脚本`python ./fabfile.py`
-    4.  如果测试在虚拟机，需要修改host上的nginx代理文件的物理机158: nginx /etc/nginx/nginx.conf，ip修改为上面的vip：
+    4.  如果测试在虚拟机，需要修改host上的nginx代理文件。本文是物理机158: nginx /etc/nginx/nginx.conf，ip修改为上面的vip：
 		```
 		upstream nier {
 				server 192.168.122.179:8080;
@@ -118,4 +118,6 @@
 		}
 		```
         修改后重启nginx服务：`systemctl restart nginx`
+
+4. 在浏览器中访问10.72.84.158就可以看到登录界面了, admin/admin.
 
