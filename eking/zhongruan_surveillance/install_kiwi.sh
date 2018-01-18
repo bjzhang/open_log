@@ -1,7 +1,8 @@
-home=/home/vagrant
-SOURCE=${home}/works/source
 
 init() {
+    home=$1
+    SOURCE=$2
+    proxy=""
 	echo "environment setup"
 	if [ -f "$home/.ssh/id_rsa.pub" ]; then
 		echo "ssh public key exist. skip"
@@ -13,22 +14,20 @@ init() {
 	mkdir -p $SOURCE
 
 	echo "ssh setup"
-	ssh-copy-id smb_rd@10.71.84.50
+    if [ "$proxy" = "true" ]; then
+        ssh-copy-id smb_rd@10.71.84.50
 
-	MY_ENV="$home/.bash_profile"
-	echo "export http_proxy=localhost:8228" > $MY_ENV
-	echo "export https_proxy=localhost:8228" >> $MY_ENV
-	echo "#export http_proxy=localhost:7228" >> $MY_ENV
-	echo "#export https_proxy=localhost:7228" >> $MY_ENV
-	source $MY_ENV
-
-	wget google.com
-	if [ "$?" != "0" ]; then
+        MY_ENV="$home/.bash_profile"
+        echo "export http_proxy=localhost:8228" > $MY_ENV
+        echo "export https_proxy=localhost:8228" >> $MY_ENV
+        echo "#export http_proxy=localhost:7228" >> $MY_ENV
+        echo "#export https_proxy=localhost:7228" >> $MY_ENV
+        source $MY_ENV
 		ssh -fNL 8228:localhost:8228 smb_rd@10.71.84.50
 		ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.50
+        sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	fi
 
-	sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	OPEN_LOG_PATH="$home/works/open_log"
 	if [ -d $OPEN_LOG_PATH/.git ]; then
 		echo "open log already exist skip"
@@ -102,6 +101,14 @@ TARGET=$home/works/software/kiwi
 APPLICANCE=/home/vagrant/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
 KIWI_TYPE="oem"
 
-init
+user=$1
+if [ "$user" = "" ]; then
+    echo "user empty .exit"
+    exit 1
+fi
+home=/home/$user
+SOURCE=${home}/works/source
+
+init $home $SOURCE
 build $APPLICANCE $TARGET $KIWI_TYPE
 
