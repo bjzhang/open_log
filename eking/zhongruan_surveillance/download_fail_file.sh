@@ -3,10 +3,18 @@ for url in `grep Timeout /home/vagrant/works/software/kiwi/build/image-root.log 
 	echo url is $url
 	repo=${url%/*}
 	repo=`echo $repo | sed "s/repodata//g" | sed "s/%3A/:/g"`
+	repo=${repo##*//}
+	repo=${repo#*/}
+	repo=`echo $repo | sed "s/repositories\///g"`
+	repo=`echo $repo | sed "s/\/x86_64//g"`
 	#    <repository type="rpm-md" alias="KIWI-NG_Appliance">
 	alias=`grep $repo /home/vagrant/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS/config.xml -B 1 | head -n1`
 	alias=`echo $alias | cut -d = -f 3 | sed "s/[\">]//g"`
 	echo "repo alias is $alias"
+	if [ "$alias" = "" ]; then
+		echo "ERROR: alias is empty. exit"
+		exit 1
+	fi
 	REPO_PATH=/var/cache/kiwi/yum/cache/$alias
 	name=${url##*//}
 	name=${name##*/}
