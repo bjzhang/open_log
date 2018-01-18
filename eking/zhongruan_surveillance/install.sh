@@ -9,18 +9,26 @@ install_from_iso() {
     ISO=$2
     BRIDGE=$3
     NAME=$4
+    NUM_OF_DISK=$5
     MEMORY=2048
     VCPUS=2
     HYPERVISOR=kvm
     DISK=$MOUNT_POINT/$NAME.raw
     SIZE=100g
     GRAPHICS=vnc,listen=0.0.0.0
-    if [ -f $DISK ]; then
-        echo "ERROR: disk($DISK) exist. exit"
-        return
-    else
+    for num in `seq $NUM_OF_DISK`; do
+        DISK=$MOUNT_POINT/${NAME}_${num}.raw
+        if [ -f $DISK ]; then
+            echo "ERROR: disk($DISK) exist. exit"
+            exit
+        fi
+    done
+    for num in `seq $NUM_OF_DISK`; do
+        DISK=$MOUNT_POINT/${NAME}_${num}.raw
         sudo truncate -s $SIZE $DISK
-    fi
+        DISK_CMDLINE="$DISK_CMDLINE --disk $DISK"
+    done
+    echo $DISK_CMDLINE
     sudo virsh list --all | grep $NAME -w 2>&1 > /dev/null
     if [ "$?" = "0" ]; then
         echo "Error: vm($NAME) exist. exit"
@@ -28,7 +36,7 @@ install_from_iso() {
         return
     fi
     sudo virt-install --name $NAME --memory $MEMORY --vcpus $VCPUS \
-            --virt-type $HYPERVISOR --disk $DISK --cdrom $ISO \
+            --virt-type $HYPERVISOR $DISK_CMDLINE --cdrom $ISO \
             --graphics $GRAPHICS --network bridge=$BRIDGE --noreboot \
             --noautoconsole
     if [ "$?" != "0" ]; then
@@ -75,4 +83,10 @@ if [ "$NAME" = "" ]; then
 	exit
 fi
 echo "Install vm from iso"
-install_from_iso $MOUNT_POINT $ISO $BRIDGE $NAME
+NUM_OF_DISK=$3
+if [ "$NUM_OF_DISK" = "" ]; then
+	echo "Set number of DISK as default while arguments missing"
+	NUM_OF_DISK="1"
+fi
+
+install_from_iso $MOUNT_POINT $ISO $BRIDGE $NAME $NUM_OF_DISK
