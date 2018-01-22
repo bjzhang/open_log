@@ -8,18 +8,18 @@ if [ "$op" = "" ]; then exit; fi
 
 if [ "$op" = "ssh" ]; then
 	if [ "$name" = "" ]; then exit; fi
-	IP=`sudo bash $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP; ssh-copy-id root@$IP
+	IP=`sudo $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP; ssh-copy-id root@$IP
 	ssh root@$IP
 elif [ "$op" = "ip" ]; then
 	if [ "$name" = "" ]; then exit; fi
-	IP=`sudo bash $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP
+	IP=`sudo $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP
 elif [ "$op" = "ips" ]; then
         pattern=$name
 	if [ "$pattern" = "" ]; then exit; fi
         vms=`sudo virsh list --name | grep $pattern`
 	if [ "$vms" = "" ]; then exit; fi
         for vm in `echo $vms`; do
-                IP=`sudo bash $dir/get_ip.sh $vm | cut -d \  -f 4`; echo $vm: $IP
+                IP=`sudo $dir/get_ip.sh $vm | cut -d \  -f 4`; echo $vm: $IP
                 IPS+="\"$IP\", "
         done
         echo [${IPS%??}]
