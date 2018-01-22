@@ -4,6 +4,8 @@ op=$1
 name=$2
 dir=`dirname $0`
 
+echo "PLEASE migrate to vagrant. those scripts will not add new features"
+
 if [ "$op" = "" ]; then exit; fi
 
 if [ "$op" = "ssh" ]; then
