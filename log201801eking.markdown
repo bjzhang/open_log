@@ -846,3 +846,75 @@ failed: Main config did not have a requires_policy attr. before setopt
 Error unpacking rpm package nier-1.2-46.fea4e11git.el7.centos.x86_64
 ```
 
+08:49 2018-01-19
+----------------
+```
+[   10.579371] fbcon: cirrusdrmfb (fb0) is primary device
+[   10.643902] Console: switching to colour frame buffer device 128x48
+[   10.676698] ata1.00: ATA-7: QEMU HARDDISK, 1.5.3, max UDMA/100
+[   10.676702] ata1.00: 209715200 sectors, multi 16: LBA48
+[   10.676725] ata1.01: ATAPI: QEMU DVD-ROM, 1.5.3, max UDMA/100
+[   10.677518] ata1.00: configured for MWDMA2
+[   10.678187] ata1.01: configured for MWDMA2
+[   10.678710] scsi 0:0:0:0: Direct-Access     ATA      QEMU HARDDISK    3    PQ: 0 ANSI: 5
+[   10.699254] cirrus 0000:00:02.0: fb0: cirrusdrmfb frame buffer device
+[   10.710033] [drm] Initialized cirrus 1.0.0 20110418 for 0000:00:02.0 on minor 0
+[   10.720925] scsi 0:0:1:0: CD-ROM            QEMU     QEMU DVD-ROM     1.5. PQ: 0 ANSI: 5
+[   10.738566] scsi 0:0:0:0: Attached scsi generic sg0 type 0
+[   10.740716] scsi 0:0:1:0: Attached scsi generic sg1 type 5
+[   10.752124] sr 0:0:1:0: [sr0] scsi3-mmc drive: 4x/4x cd/rw xa/form2 tray
+[   10.752378] sd 0:0:0:0: [sda] 209715200 512-byte logical blocks: (107 GB/100 GiB)
+[   10.752464] sd 0:0:0:0: [sda] Write Protect is off
+[   10.752511] sd 0:0:0:0: [sda] Write cache: enabled, read cache: enabled, doesn't support DPO or FUA
+[   10.758617] sd 0:0:0:0: [sda] Attached SCSI disk
+[   10.765176] cdrom: Uniform CD-ROM driver Revision: 3.20
+[    0.992489] Starting boot shell on /dev/tty2
+[   13.179533] brd: module loaded
+[   13.193583] BIOS EDD facility v0.16 2004-Jun-25, 1 devices found
+[   13.216430] device-mapper: uevent: version 1.0.3
+[   13.218824] device-mapper: ioctl: 4.35.0-ioctl (2016-06-23) initialised: dm-devel@redhat.com
+[   13.260149] loop: module loaded
+[   13.270698] squashfs: version 4.0 (2009/01/31) Phillip Lougher
+[   13.287158] fuse init (API version 7.22)
+[    0.992489] Starting boot shell on /dev/tty2
+[    3.500040] Couldn't find any boot device... abort
+Give root password for maintenance
+(or type Control-D to continue):
+sulogin: crypt failed: Invalid argument
+Login incorrect
+```
+11:16 2018-01-19
+----------------
+1.	"multiple devices matches same MBR ID: $mbrI", kiwi/boot/functions:
+```
+        #======================================
+        # Multiple matches are bad
+        #--------------------------------------
+        if [ $match_count -gt 1 ];then
+            export biosBootDevice="multiple devices matches same MBR ID: $mbrI"
+            return 2
+        fi
+```
+
+```
+        i*386|x86_64)
+            masterBootID=$(printf 0x%04x%04x $RANDOM $RANDOM)
+            Echo "writing new MBR ID to master boot record: $masterBootID"
+            echo $masterBootID > /boot/mbrid
+            masterBootIDHex=$(echo $masterBootID |\
+                sed 's/^0x\(..\)\(..\)\(..\)\(..\)$/\\x\4\\x\3\\x\2\\x\1/')
+            echo -e -n $masterBootIDHex | dd of=$imageDiskDevice \
+                bs=1 count=4 seek=$((0x1b8))
+            ;;
+```
+
+16:21 2018-01-19
+----------------
+01: 
+02: 10.16.1.27 -> 10.16.0.221
+03: 10.16.1.94 -> 10.16.0.222
+04: 10.16.1.43 -> 10.16.0.223
+
+<http://kernelpanik.net/rename-a-linux-network-interface-without-udev/>
+ip link set peth0 name eth0 
+
