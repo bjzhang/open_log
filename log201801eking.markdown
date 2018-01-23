@@ -934,3 +934,31 @@ destroy行为有差异。后者只是不由libvirt管理，不会实际删除硬
 ----------------
 1.  看了看pulp部署有点复杂，稍后在用。
 
+09:23 2018-01-23
+----------------
+GTD
+---
+1.  kiwi构建每次都遇到包无法下载。尝试下1小时能不能部署出pulp。
+    1.  pulp: <https://pulpproject.org/2015/05/21/use-docker-to-try-pulp/>
+2.  使能kiwidebug。
+
+11:20 2018-01-23
+----------------
+nas
+---
+1.  cubietruck建立wifi网卡失败，网卡是down。
+    参考：<http://forum.cubietech.com/forum.php?mod=viewthread&tid=1992>，我的内核，网卡驱动是brcmfmac（通过模块目录和源代码确认）。
+    `sudo modprobe brcmfmac op_mode=2`
+    /usr/sbin/install-brcmfmac
+
+18:49 2018-01-23
+----------------
+[ INFO    ]: 11:42:57 | Preparing extra install boot system
+[ INFO    ]: 11:42:57 | Cleaning up BootImageDracut instance
+[ INFO    ]: 11:42:57 | Loading Boot XML description
+[ ERROR   ]: 11:42:57 | KiwiConfigFileNotFound: no boot reference specified in XML description
+[ INFO    ]: 11:42:57 | Cleaning up FileSystemExt3 instance
+[ DEBUG   ]: 11:42:57 | EXEC: [mountpoint /tmp/kiwi_mount_manager.n3uf__io]
+[ DEBUG   ]: 11:42:57 | EXEC: [mountpoint /tmp/kiwi_mount_manager.n3uf__io]
+[ DEBUG   ]: 11:42:57 | EXEC: [rm -r -f /tmp/kiwi_mount_manager.n3uf__io]
+
