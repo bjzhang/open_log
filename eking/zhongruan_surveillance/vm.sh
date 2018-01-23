@@ -10,8 +10,22 @@ if [ "$op" = "" ]; then exit; fi
 
 if [ "$op" = "ssh" ]; then
 	if [ "$name" = "" ]; then exit; fi
-	IP=`sudo $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP; ssh-copy-id root@$IP
-	ssh root@$IP
+	USER=$3
+	if [ "$USER" = "" ]; then
+		USER=root
+	fi
+	IP=`sudo $dir/get_ip.sh $name | cut -d \  -f 4`
+	echo "ssh to $USER@$IP"
+	for i in `seq 10`; do
+		http_proxy= https_proxy= curl -s $IP:22 | grep SSH > /dev/null
+		if [ "$?" = "0" ]; then
+			break
+		else
+			sleep 1
+		fi
+	done
+	ssh-copy-id $USER@$IP
+	ssh $USER@$IP
 elif [ "$op" = "ip" ]; then
 	if [ "$name" = "" ]; then exit; fi
 	IP=`sudo $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP
