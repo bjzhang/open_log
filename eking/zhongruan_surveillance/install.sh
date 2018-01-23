@@ -66,15 +66,59 @@ install_from_iso() {
     sudo virsh resume $NAME
 }
 
+install_from_disk() {
+    MOUNT_POINT=$1
+    BASE_DISK=$2
+    BRIDGE=$3
+    NAME=$4
+    MEMORY=2048
+    VCPUS=2
+    HYPERVISOR=kvm
+    GRAPHICS=vnc,listen=0.0.0.0
+    DISK=$MOUNT_POINT/$NAME.raw
+    if [ -f $DISK ]; then
+        echo "ERROR: disk($DISK) exist. exit"
+        exit
+    fi
+    sudo qemu-img create -f qcow2 -b ${BASE_DISK} $DISK
+    DISK_CMDLINE="--import --disk $DISK,bus=virtio"
+    echo $DISK_CMDLINE
+    sudo virsh list --all | grep $NAME -w 2>&1 > /dev/null
+    if [ "$?" = "0" ]; then
+        echo "Error: vm($NAME) exist. exit"
+        echo "Run \"sudo bash -c 'virsh destroy $NAME; virsh undefine $NAME'\" if you want to delete it"
+        return
+    fi
+    sudo virt-install --name $NAME --memory $MEMORY --vcpus $VCPUS \
+            --virt-type $HYPERVISOR $DISK_CMDLINE --boot hd\
+            --graphics $GRAPHICS --network bridge=$BRIDGE --noreboot \
+            --noautoconsole
+    if [ "$?" != "0" ]; then
+        echo "virt-install failed. exit"
+        exit
+    fi
+    sleep 1
+    sudo virsh start $NAME
+    sleep 1
+    while true; do
+            sudo virsh vncdisplay $NAME 2>&1 > /dev/null
+            if [ "$?" = "0" ]; then
+                break
+            fi
+    done
+    PORT=`sudo virsh vncdisplay $NAME | cut -d : -f 2`
+    echo "Connect to through vncview ip:$((PORT + 5900)):"
+}
+
 usage() {
     echo "$0 cdrom vm_name"
     exit
 }
 
-ISO=$1
+FILE=$1
 NAME=$2
-if ! [ -f "$ISO" ]; then
-	echo image $ISO does not exist. exit
+if ! [ -f "$FILE" ]; then
+	echo image $FILE does not exist. exit
         usage
 	exit
 fi
@@ -82,11 +126,16 @@ if [ "$NAME" = "" ]; then
 	echo vm $NAME empty. exit
 	exit
 fi
-echo "Install vm from iso"
-NUM_OF_DISK=$3
-if [ "$NUM_OF_DISK" = "" ]; then
-	echo "Set number of DISK as default while arguments missing"
-	NUM_OF_DISK="1"
+echo $FILE | grep "iso$"
+if [ "$?" = "0" ]; then
+	echo "Install vm from iso"
+	NUM_OF_DISK=$3
+	if [ "$NUM_OF_DISK" = "" ]; then
+		echo "Set number of DISK as default while arguments missing"
+		NUM_OF_DISK="1"
+	fi
+	install_from_iso $MOUNT_POINT $FILE $BRIDGE $NAME $NUM_OF_DISK
+else
+	echo "Install vm from disk"
+	install_from_disk $MOUNT_POINT $FILE $BRIDGE $NAME
 fi
-
-install_from_iso $MOUNT_POINT $ISO $BRIDGE $NAME $NUM_OF_DISK
