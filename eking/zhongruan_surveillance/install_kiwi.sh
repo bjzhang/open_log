@@ -1,8 +1,9 @@
+#!/bin/bash
 
 init() {
-    home=$1
-    SOURCE=$2
-    proxy=$3
+	home=$1
+	SOURCE=$2
+	proxy=$3
 	echo "environment setup"
 	if [ -f "$home/.ssh/id_rsa.pub" ]; then
 		echo "ssh public key exist. skip"
@@ -14,18 +15,32 @@ init() {
 	mkdir -p $SOURCE
 
 	echo "ssh setup"
-    if [ "$proxy" = "true" ]; then
-        ssh-copy-id smb_rd@10.71.84.51
-
-        MY_ENV="$home/.bash_profile"
-        echo "export http_proxy=localhost:8228" > $MY_ENV
-        echo "export https_proxy=localhost:8228" >> $MY_ENV
-        echo "#export http_proxy=localhost:7228" >> $MY_ENV
-        echo "#export https_proxy=localhost:7228" >> $MY_ENV
-        source $MY_ENV
-		ssh -fNL 8228:localhost:8228 smb_rd@10.71.84.51
-		ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.51
-        sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
+	if [ "$proxy" = "true" ]; then
+		ssh-copy-id smb_rd@10.71.84.51
+		MY_ENV=~/.bash_profile
+		if ! [ -f "$MY_ENV" ]; then
+			touch $MY_ENV
+		fi
+		echo $MY_ENV | grep http_proxy
+		if [ "$?" != "0" ]; then
+			echo "export http_proxy=localhost:8228" >> $MY_ENV
+			echo "#export http_proxy=localhost:7228" >> $MY_ENV
+		fi
+		echo $MY_ENV | grep https_proxy
+		if [ "$?" != "0" ]; then
+			echo "export https_proxy=localhost:8228" >> $MY_ENV
+			echo "#export https_proxy=localhost:7228" >> $MY_ENV
+		fi
+		source $MY_ENV
+		netstat -anltp |grep 7228.*LISTEN
+		if [ "$?" != "0" ]; then
+			ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.51
+		fi
+		netstat -anltp |grep 8228.*LISTEN
+		if [ "$?" != "0" ]; then
+			ssh -fNL 8228:localhost:8228 smb_rd@10.71.84.51
+		fi
+		sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	fi
 
 	OPEN_LOG_PATH="$home/works/open_log"
@@ -100,8 +115,8 @@ build(){
 
 user=$1
 if [ "$user" = "" ]; then
-    echo "user empty .exit"
-    exit 1
+	echo "user empty .exit"
+	exit 1
 fi
 home=/home/$user
 SOURCE=${home}/works/source
