@@ -98,7 +98,7 @@ build(){
 	fi
 	echo "Cleaning up the previous build"
 	sudo mv ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`
-	sudo rm -rf ${TARGET}/build/image-root/
+	sudo rm -rf ${TARGET} -rf
 	sudo systemctl restart lvm2-lvmetad.service
 
 	echo "Building(comment --debug if you want to a clean output)"
