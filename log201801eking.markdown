@@ -918,3 +918,19 @@ Login incorrect
 <http://kernelpanik.net/rename-a-linux-network-interface-without-udev/>
 ip link set peth0 name eth0 
 
+16:53 2018-01-22
+----------------
+software skills, virtualizaiton, machine management, vagrant
+------------------------------------------------------------
+1.  provider: libvirt, virtualbox等虚拟化管理工具。
+2.  `vagrant up`: start vm.
+    vagrant默认会使用目录名名+config.vm.define作为libvirt管理机器名称。我一般会建立一个数字目录，然后用符号连接或复制vagrant配置文件。
+3.  `vagrant global-status --prune`: display all vagrant managed vm.
+    1.  可以用里面的id操作具体vm。例如`vagrant ssh $id`
+3.  `vagrant destroy`: 彻底删除虚拟机。这个和libvirt，virsh
+destroy行为有差异。后者只是不由libvirt管理，不会实际删除硬盘。
+
+17:53 2018-01-22
+----------------
+1.  看了看pulp部署有点复杂，稍后在用。
+
