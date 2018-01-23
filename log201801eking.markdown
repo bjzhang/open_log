@@ -953,12 +953,41 @@ nas
 
 18:49 2018-01-23
 ----------------
+kiwi
+----
+1.  ask for help(kiwi google groups)
+Hi, 
+
+Recently I build kiwi for centos 7. Everything looks good when there is only
+one disk in the system. If there are two disks(both 100g). The oem installation
+iso will fail because of the empty of imageDevice in 'Echo "Have size:
+$imageDevice -> $haveBytes Bytes [ $haveMByte MB ]"'. But such script could get
+the correct disk size at the beginning of the boot. I try to use kiwidebug=1 in
+cmdline but I got the following errors when I input the password:
+sulogin: crypt failed: invalid agrument.
+
+If I add the missing dialog package, I could see the blue screen in the
+beginning. But there is no dialog pop up actually.
+
+Finally, I found the latest kiwi-description:
+commit c4d62f7c865e662517562589ce04d70d48e535b0 (HEAD -> master, origin/master, origin/HEAD)
+Author: Marcus Schäfer <ms@suse.de>
+Date:   Mon Jan 22 19:01:08 2018 +0100
+
+    Update descriptions to use dracut
+
+If I try this one, I will encounter the following error after change the schame version to 6.7:
 [ INFO    ]: 11:42:57 | Preparing extra install boot system
 [ INFO    ]: 11:42:57 | Cleaning up BootImageDracut instance
 [ INFO    ]: 11:42:57 | Loading Boot XML description
-[ ERROR   ]: 11:42:57 | KiwiConfigFileNotFound: no boot reference specified in XML description
+[ ERROR   ]: 11:42:57 | KiwiConfigFileNotFound: no boot reference specified
+in XML description
 [ INFO    ]: 11:42:57 | Cleaning up FileSystemExt3 instance
 [ DEBUG   ]: 11:42:57 | EXEC: [mountpoint /tmp/kiwi_mount_manager.n3uf__io]
 [ DEBUG   ]: 11:42:57 | EXEC: [mountpoint /tmp/kiwi_mount_manager.n3uf__io]
 [ DEBUG   ]: 11:42:57 | EXEC: [rm -r -f /tmp/kiwi_mount_manager.n3uf__io]
+
+Should I install the kiwi manually?
+
+I am really appreciated any suggestions. Thanks in advance.
 
