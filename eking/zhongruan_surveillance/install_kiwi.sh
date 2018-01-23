@@ -82,7 +82,7 @@ init() {
 	echo "initial finish. re-login or soruce $MY_ENV to valid the environment!"
 }
 
-build(){
+rebase(){
 	APPLICANCE=$1
 	TARGET=$2
 	KIWI_TYPE=$3
@@ -96,6 +96,13 @@ build(){
 		echo "ERROR: git rebase fail. exit with $ret"
 		exit $ret
 	fi
+}
+
+build(){
+	APPLICANCE=$1
+	TARGET=$2
+	KIWI_TYPE=$3
+
 	echo "Cleaning up the previous build"
 	sudo mv ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`
 	sudo rm -rf ${TARGET} -rf
@@ -112,6 +119,17 @@ build(){
 	fi
 }
 
+while getopts 'm:' opt; do
+    case $opt in
+        m)
+            mode=$OPTARG
+            ;;
+        *)
+            echo "Internal error!"
+            exit 1
+            ;;
+    esac
+done
 
 user=$1
 if [ "$user" = "" ]; then
@@ -124,6 +142,23 @@ TARGET=${home}/works/software/kiwi
 APPLICANCE=${home}/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
 KIWI_TYPE="oem"
 
-init $home $SOURCE "true"
-build $APPLICANCE $TARGET $KIWI_TYPE
+if [ "$mode" = "all" ] || [ "$mode" = "" ]; then
+	echo all
+	init $home $SOURCE "true"
+	rebase $APPLICANCE $TARGET $KIWI_TYPE
+	build $APPLICANCE $TARGET $KIWI_TYPE
+fi
+
+if [ "$mode" = "init" ]; then
+	echo $mode
+	init $home $SOURCE "true"
+fi
+if [ "$mode" = "rebase" ]; then
+	echo $mode
+	rebase $APPLICANCE $TARGET $KIWI_TYPE
+fi
+if [ "$mode" = "build" ]; then
+	echo $mode
+	build $APPLICANCE $TARGET $KIWI_TYPE
+fi
 
