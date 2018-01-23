@@ -2,20 +2,20 @@
 init() {
     home=$1
     SOURCE=$2
-    proxy=""
+    proxy=$3
 	echo "environment setup"
 	if [ -f "$home/.ssh/id_rsa.pub" ]; then
 		echo "ssh public key exist. skip"
 	else
 		echo "generate ssh key, press anykey to continue"
-		ssh-keygen
+		ssh-keygen -b 2048 -t rsa -f ~/.ssh/id_rsa -q -N ""
 	fi
 
 	mkdir -p $SOURCE
 
 	echo "ssh setup"
     if [ "$proxy" = "true" ]; then
-        ssh-copy-id smb_rd@10.71.84.50
+        ssh-copy-id smb_rd@10.71.84.51
 
         MY_ENV="$home/.bash_profile"
         echo "export http_proxy=localhost:8228" > $MY_ENV
@@ -23,8 +23,8 @@ init() {
         echo "#export http_proxy=localhost:7228" >> $MY_ENV
         echo "#export https_proxy=localhost:7228" >> $MY_ENV
         source $MY_ENV
-		ssh -fNL 8228:localhost:8228 smb_rd@10.71.84.50
-		ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.50
+		ssh -fNL 8228:localhost:8228 smb_rd@10.71.84.51
+		ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.51
         sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	fi
 
@@ -109,6 +109,6 @@ TARGET=${home}/works/software/kiwi
 APPLICANCE=${home}/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
 KIWI_TYPE="oem"
 
-init $home $SOURCE
+init $home $SOURCE "true"
 build $APPLICANCE $TARGET $KIWI_TYPE
 
