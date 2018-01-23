@@ -10,11 +10,11 @@ download_url()
 		repo_type=opensuse
 	else
 		# <source path="http://mirrors.aliyun.com/centos/7/os/x86_64/"/>
-		echo $repo | grep centos -i
+		echo $url | grep centos -i
 		if [ "$?" = "0" ]; then
 			repo_type=centos
 		else
-			echo "unknow repo type: $repo. exit"
+			echo "unknow repo type: $url. exit"
 			exit
 		fi
 	fi
