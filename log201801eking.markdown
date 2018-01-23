@@ -263,6 +263,10 @@ software skills, useful link
     2.  然后用https://github.com/google/syzkaller做fuzz测试。
 6.  语言学习
     1.  go <https://github.com/astaxie/go-best-practice/blob/master/ebook/zh/preface.md>
+7.  container
+    1.  proxy
+        1.  <http://silarsis.blogspot.nl/2014/03/proxy-all-containers.html>
+        2.  <https://github.com/silarsis/docker-proxy>
 
 10:50 2018-01-12
 ----------------
