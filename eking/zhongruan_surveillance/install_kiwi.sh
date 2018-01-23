@@ -123,6 +123,7 @@ while getopts 'm:' opt; do
     case $opt in
         m)
             mode=$OPTARG
+            shift 2
             ;;
         *)
             echo "Internal error!"
