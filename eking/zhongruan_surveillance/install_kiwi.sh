@@ -51,7 +51,7 @@ init() {
 	fi
 
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
-	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux"
+	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing"
 
 	ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
