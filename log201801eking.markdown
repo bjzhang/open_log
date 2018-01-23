@@ -991,3 +991,15 @@ Should I install the kiwi manually?
 
 I am really appreciated any suggestions. Thanks in advance.
 
+19:33 2018-01-23
+----------------
+system, packages, pulp
+----------------------
+1.  start.sh 端口80被占用。改为1080:80.
+2.  start.sh失败后一定要用stop.sh清理。
+3.  现在可以同步内网的数据。外网有问题。pulp需要针对repo设置proxy。用系统proxy不行。
+    <https://www.redhat.com/archives/pulp-list/2015-March/msg00036.html>
+    <https://github.com/PulpQE/pulp-smash/issues/284>
+    <https://docs.pulpproject.org/user-guide/deferred-download.html>
+    如果是所有docker都开proxy需要<https://stackoverflow.com/questions/29078248/how-can-i-make-all-my-docker-containers-use-my-proxy>
+
