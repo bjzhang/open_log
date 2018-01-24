@@ -1007,3 +1007,24 @@ system, packages, pulp
     <https://docs.pulpproject.org/user-guide/deferred-download.html>
     如果是所有docker都开proxy需要<https://stackoverflow.com/questions/29078248/how-can-i-make-all-my-docker-containers-use-my-proxy>
 
+15:42 2018-01-24
+----------------
+GTD
+---
+1. -15:42 上午为了测试社区最新python-kiwi3。从加速ansible运行转到烧写cubietruck tf的问题。问题最终解决。后面中软项目用macbook烧写也比较方便了。具体过程参考<https://github.com/bjzhang/bjzhang.github.io/blob/master/_drafts/2018-01-24-ox-x-skills-find-the-usb-disk.md>
+2.  在海口搭建pulp。
+    2.  申请虚机 15:42-15:56
+        1.  haihangyun.com, 18811049366/IDC@test123
+        2.  没钱了。等振尧充值。
+        3.  振尧帮忙拉了人，内部同步对应的源。
+    3.  pulp start.sh
+    4.  同步repo
+2.  回复kiwi邮件。16:26-16:30
+    1.  实验最新的kiwi ng。
+3.  测试kiwi 9.12.0
+    1.  ansible加速。
+4.  cubietruck:
+    1.  尝试最新opensuse tumbleweed，使用master mode后，wifi网卡会down。搜索ko，发现stmmac有op_mode，需要看代码看看是否支持热点。明天先用iw命令尝试。
+2.  TODO
+    1.  这周回复mark，希望每周一天做linaro事情。
+
