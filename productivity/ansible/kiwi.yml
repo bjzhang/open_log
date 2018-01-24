@@ -1,0 +1,41 @@
+- hosts: kiwi
+  # Do not use root by default. Call the sudo through "become"
+  remote_user: vagrant
+  gather_facts: no
+  # Define the variable. call them through {{ variable_name }}
+  vars:
+    target: /home/vagrant/works/software/kiwi
+  tasks:
+  - name: detect network
+    shell:
+        curl -s --connect-timeout 2 baidu.com 2>/dev/null >/dev/null
+  - name: update all the packages
+    zypper:
+      name: '*'
+      state: latest
+    become: true
+  #FIXME: will fail when git in an detached branch.
+  - name: update kiwi-description
+    git:
+      repo: https://github.com/SUSE/kiwi-descriptions.git
+      dest: /home/vagrant/works/source/kiwi-descriptions
+      update: yes
+  - name: clean previous kiwi build
+    shell:
+        TARGET=/home/vagrant/works/software/kiwi;
+        mv ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`;
+        rm -rf ${TARGET}/build/image-root/;
+    become: true
+  - name: restart lvm daemon to prune the invalid lvm
+    shell:
+        systemctl restart lvm2-lvmetad.service;
+    become: true
+  # Use screen at the monment. Because I do not find a better to check the kiwi build status.
+  - name: triger kiwi build
+    shell:
+        TARGET=/home/vagrant/works/software/kiwi;
+        screen -d -m kiwi-ng --debug --color-output --type oem system build --description /home/vagrant/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS --target-dir $TARGET
+    become: true
+  - name: output_the_log_name
+    debug:
+      msg: kiwi triggered. check the log with the following command. ssh {{ inventory_hostname }} 'tail -f {{ target }}/build/image-root.log'
