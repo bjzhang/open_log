@@ -3,7 +3,7 @@
 init() {
 	home=$1
 	SOURCE=$2
-	proxy=$3
+	PROXY=$3
 	echo "environment setup"
 	if [ -f "$home/.ssh/id_rsa.pub" ]; then
 		echo "ssh public key exist. skip"
@@ -15,8 +15,8 @@ init() {
 	mkdir -p $SOURCE
 
 	echo "ssh setup"
-	if [ "$proxy" = "true" ]; then
-		ssh-copy-id smb_rd@10.71.84.51
+	if [ "$PROXY" != "" ]; then
+		ssh-copy-id $PROXY
 		MY_ENV=~/.bash_profile
 		if ! [ -f "$MY_ENV" ]; then
 			touch $MY_ENV
@@ -34,11 +34,11 @@ init() {
 		source $MY_ENV
 		netstat -anltp |grep 7228.*LISTEN
 		if [ "$?" != "0" ]; then
-			ssh -fNL 7228:localhost:7228 smb_rd@10.71.84.51
+			ssh -fNL 7228:localhost:7228 $PROXY
 		fi
 		netstat -anltp |grep 8228.*LISTEN
 		if [ "$?" != "0" ]; then
-			ssh -fNL 8228:localhost:8228 smb_rd@10.71.84.51
+			ssh -fNL 8228:localhost:8228 $PROXY
 		fi
 		sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	fi
@@ -127,17 +127,27 @@ while getopts 'm:' opt; do
             ;;
         *)
             echo "Internal error!"
-            exit 1
+            exit 128
             ;;
     esac
 done
 
-user=$1
-if [ "$user" = "" ]; then
-	echo "user empty .exit"
-	exit 1
+home=$1
+if [ "$home" = "" ]; then
+	echo "ERROR: home empty .exit"
+	# DOC: Return 128 means invalid arguments.
+	#      Reference: <http://tldp.org/LDP/abs/html/exitcodes.html#EXITCODESREF>
+	exit 128
 fi
-home=/home/$user
+if ! [ -d "$home" ]; then
+	echo "ERROR: home directroy $home does not exist. exit"
+	exit 128
+fi
+PROXY=$2
+if [ "$PROXY" = "" ]; then
+	echo "WARNING: PROXY empty. press anykey to continue."
+	read
+fi
 SOURCE=${home}/works/source
 TARGET=${home}/works/software/kiwi
 APPLICANCE=${home}/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
@@ -145,14 +155,14 @@ KIWI_TYPE="oem"
 
 if [ "$mode" = "all" ] || [ "$mode" = "" ]; then
 	echo all
-	init $home $SOURCE "true"
+	init $home $SOURCE $PROXY
 	rebase $APPLICANCE $TARGET $KIWI_TYPE
 	build $APPLICANCE $TARGET $KIWI_TYPE
 fi
 
 if [ "$mode" = "init" ]; then
 	echo $mode
-	init $home $SOURCE "true"
+	init $home $SOURCE $PROXY
 fi
 if [ "$mode" = "rebase" ]; then
 	echo $mode
