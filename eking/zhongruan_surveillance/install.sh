@@ -80,7 +80,10 @@ install_from_disk() {
         echo "ERROR: disk($DISK) exist. exit"
         exit
     fi
-    sudo qemu-img create -f qcow2 -b ${BASE_DISK} $DISK
+    capacity=`sudo virsh vol-info --bytes ${BASE_DISK} | grep Capacity | sed "s/\ \ */ /g" | cut -d \  -f 2`
+    actual_size=`python -c "print $capacity/1024.0/1024/1024"`
+    echo "use the same size of backing vol(${BASE_DISK}) $capacity($actual_size GB)"
+    sudo virsh vol-create-as images `basename $DISK` --capacity $capacity --format qcow2 --backing-vol ${BASE_DISK} --backing-vol-format qcow2
     DISK_CMDLINE="--import --disk $DISK,bus=virtio"
     echo $DISK_CMDLINE
     sudo virsh list --all | grep $NAME -w 2>&1 > /dev/null
