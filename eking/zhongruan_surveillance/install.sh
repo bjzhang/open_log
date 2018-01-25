@@ -10,8 +10,8 @@ install_from_iso() {
     BRIDGE=$3
     NAME=$4
     NUM_OF_DISK=$5
-    MEMORY=2048
-    VCPUS=2
+    MEMORY=4096
+    VCPUS=4
     HYPERVISOR=kvm
     DISK=$MOUNT_POINT/$NAME.raw
     SIZE=100g
@@ -71,11 +71,11 @@ install_from_disk() {
     BASE_DISK=$2
     BRIDGE=$3
     NAME=$4
-    MEMORY=2048
-    VCPUS=2
+    MEMORY=4096
+    VCPUS=4
     HYPERVISOR=kvm
     GRAPHICS=vnc,listen=0.0.0.0
-    DISK=$MOUNT_POINT/$NAME.raw
+    DISK=$MOUNT_POINT/${NAME}.qcow2
     if [ -f $DISK ]; then
         echo "ERROR: disk($DISK) exist. exit"
         exit
