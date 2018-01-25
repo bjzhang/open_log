@@ -1025,6 +1025,62 @@ GTD
     1.  ansible加速。
 4.  cubietruck:
     1.  尝试最新opensuse tumbleweed，使用master mode后，wifi网卡会down。搜索ko，发现stmmac有op_mode，需要看代码看看是否支持热点。明天先用iw命令尝试。
-2.  TODO
+
+10:07 2018-01-25
+----------------
+GTD
+---
+1.  今天最想做的事情
+    1.  在可以访问外网的机器走通构建ceph applicance的流程
+    1.  hikey960启动Linux。
+2.  看kiwi问题讨论
+    1.  有更新。测试。
+3.  TODO
     1.  这周回复mark，希望每周一天做linaro事情。
+    2.  和宋宝华沟通，cont page hint扩充，投稿。
+
+10:08 2018-01-25
+----------------
+badger io
+---------
+1.  20180124
+    1.  冬卯看中的是badger io使用的value log。这样可以更快recovery。
+    2.  目前我还是要先看google的论文。
+
+10:12 2018-01-25
+----------------
+杂记
+----
+1.  dongmao
+    ```
+    可以蹭热点, 我们正常参与ceph社区的性能优化, 把底层的通信模型从async
+    messager替换成seastar, seastar是新一代超高性能通信框架, 底层用的是DPDK,
+    seastar是kvm大神Avi Kivity的作品,性能屌得一批
+    https://www.spinics.net/lists/ceph-devel/msg38897.html
+    http://www.zdnet.com/article/kvm-creators-open-source-fast-cassandra-drop-in-replacement-scylla/
+    相关参考
+    ```
+
+15:54 2018-01-25
+----------------
+虚拟化
+------
+1.  需求
+    1.  价格比vmware低。
+    2.  提供基本虚拟化功能。
+    3.  根据集群价格，基本定位是5台机器的集群。
+2.  小规模集群HA？
+3.  红帽方案：ovirt+glusterFS(后者性能不行）。
+4.  ceph分布式集群，最多能做到本地iops 300，没法满足客户需求。
+    1.  三副本不ack。
+    2.  先写后hash。
+    3.  filestore: 用btrfs替换xfs。所以用的opensuse。
+        1.  冬卯：现在是bluestore。<https://ceph.com/community/new-luminous-bluestore/>
+    4.  本地inode都放到ssd上。
+5.  ceph现在bluestore，应该没问题。
+6.  EC性能差？dongmao：快。
+7.  磁盘需求：80 * 25 = 2000
+8.  一体机
+    1.  孙新：往上走。
+        1.  容器。
 
