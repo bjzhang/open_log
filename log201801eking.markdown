@@ -1084,3 +1084,12 @@ badger io
     1.  孙新：往上走。
         1.  容器。
 
+13:17 2018-01-26
+----------------
+software skill, SCM, git, proxy
+-------------------------------
+<https://gist.github.com/evantoli/f8c23a37eb3558ab8765>
+<https://forum.freecodecamp.org/t/git-behind-a-proxy-server/13187>
+`git config --global http.https://github.com http://localhost:8228`
+只给github设置proxy没有成功。
+
