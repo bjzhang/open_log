@@ -828,7 +828,7 @@ No devices found
 12:46 2018-01-18
 ----------------
 <https://stackoverflow.com/questions/27243891/run-a-python-script-from-within-python-and-also-catch-the-exception>
-1.  
+1.
 ```
 vagrant@os01:~/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS>
 python build.py
@@ -914,13 +914,13 @@ Login incorrect
 
 16:21 2018-01-19
 ----------------
-01: 
+01:
 02: 10.16.1.27 -> 10.16.0.221
 03: 10.16.1.94 -> 10.16.0.222
 04: 10.16.1.43 -> 10.16.0.223
 
 <http://kernelpanik.net/rename-a-linux-network-interface-without-udev/>
-ip link set peth0 name eth0 
+ip link set peth0 name eth0
 
 16:53 2018-01-22
 ----------------
@@ -960,7 +960,7 @@ nas
 kiwi
 ----
 1.  ask for help(kiwi google groups)
-Hi, 
+Hi,
 
 Recently I build kiwi for centos 7. Everything looks good when there is only
 one disk in the system. If there are two disks(both 100g). The oem installation
@@ -1093,3 +1093,34 @@ software skill, SCM, git, proxy
 `git config --global http.https://github.com http://localhost:8228`
 只给github设置proxy没有成功。
 
+15:16 2018-01-26
+----------------
+<https://github.com/pearofducks/ansible-vim>
+1.  如果不存在"~/.vim/autoload/plug.vim"，安装vim-plug
+    <https://github.com/junegunn/vim-plug>
+    `curl -fLo ~/.vim/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim`
+2.  edit ~/.vimrc
+" Specify a directory for plugins
+" - Avoid using standard Vim directory names like 'plugin'
+call plug#begin('~/.vim/plugged')
+
+Plug 'pearofducks/ansible-vim'
+
+" Initialize plugin system
+call plug#end()
+
+3.	确认ansible vim插件没有安装。
+:PlugStatus
+Finished. 1 error(s).
+[=]
+
+x ansible-vim:
+    Not found. Try PlugInstall.
+
+4.	:PlugInstall
+git config --global http.proxy http://localhost:7228
+
+5.	使能文件自动检测：
+	1.	确保vimrc已经有：
+		"filetype plugin on"
+	2.	加入"au BufRead,BufNewFile */playbooks/*.yml set filetype=ansible"
