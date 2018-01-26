@@ -1,5 +1,8 @@
 #!/bin/bash
 
+ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
+
+# Global variable: ZYPPER
 init() {
 	home=$1
 	SOURCE=$2
@@ -52,8 +55,6 @@ init() {
 
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
 	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing"
-
-	ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
 	$ZYPPER ar -c -f -r $KIWI_REPO
 	$ZYPPER install $PACKAGES
