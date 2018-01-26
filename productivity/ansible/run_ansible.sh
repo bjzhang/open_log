@@ -18,6 +18,7 @@ if [ "$HOST" = "" ]; then
     echo "Error: target host(hostname of ip listed in $dir) fail mising"
     exit
 fi
+shift 2
 
 cd $dir
-ansible-playbook --limit $HOST $YML
+ansible-playbook --limit $HOST $YML $@
