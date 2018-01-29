@@ -62,8 +62,8 @@ install_from_iso() {
             break
         fi
     done
-    sudo truncate -s 8192g /mnt/images/${NAME}_4.raw
-    sudo virsh attach-disk $NAME /mnt/images/${NAME}_4.raw vde --targetbus virtio
+    sudo truncate -s 8192g /mnt/images/${NAME}_5.raw
+    sudo virsh attach-disk $NAME /mnt/images/${NAME}_5.raw vde --targetbus virtio
     echo "press enter to continue installation. Then select Install"
     read
     sudo virsh resume $NAME
