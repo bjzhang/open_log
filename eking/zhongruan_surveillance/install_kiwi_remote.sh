@@ -4,10 +4,11 @@ usage(){
 	echo "Usage: $0 hostname_or_ip arguments_to_install_kiwi"
 	echo "Example: "
 	echo "1.  setup environment, update the kiwi-description and build kiwi image"
-	echo "    $0 os03 proxy_user@proxy_host_name"
-	echo "Example: "
-	echo "2.  build kiwi image"
-	echo "    $0 os03 proxy_user@proxy_host_name -m build"
+	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48"
+	echo "2.  udpate installed rpm packages"
+	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m update"
+	echo "3.  build kiwi image"
+	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build"
 }
 
 WORK_DIR=`realpath $0`
