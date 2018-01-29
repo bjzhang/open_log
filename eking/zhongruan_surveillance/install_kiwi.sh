@@ -116,6 +116,38 @@ rebase(){
 	fi
 }
 
+rebase(){
+	APPLIANCE=$1
+	TARGET=$2
+	KIWI_TYPE=$3
+
+	echo "update kiwi-descriptions"
+	cd $APPLIANCE
+	git fetch
+	git rebase
+	ret=$?
+	if [ "$ret" != "0" ]; then
+		echo "ERROR: git rebase fail. exit with $ret"
+		exit $ret
+	fi
+}
+
+checkout(){
+	APPLIANCE=$1
+	COMMIT=$2
+
+	if [ "$COMMIT" != "" ]; then
+		cd $APPLIANCE
+		if [ -z "$(git status --untracked-files=no --porcelain)" ]; then 
+			echo "Working directory clean excluding untracked files"
+			git checkout -f $COMMIT
+		else 
+			echo "Uncommitted changes in tracked files, exit"
+			exit 128
+		fi
+	fi
+}
+
 # Global variable: ZYPPER
 update() {
 	$ZYPPER update
@@ -150,19 +182,25 @@ build(){
 }
 
 # ref: <https://gist.github.com/cosimo/3760587#file-parse-options-sh-L8>
-OPTS=`getopt -o m: --long appliance:,help,mode:,proxy: -n 'parse-options' -- "$@"`
+OPTS=`getopt -o c:m: --long appliance:,commit:,help,mode:,proxy: -n 'parse-options' -- "$@"`
 
 if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
 
 #DEBUG "$OPTS"
 eval set -- "$OPTS"
 
-HELP=false
+APPLIANCE=""
+COMMIT=""
 DISK=""
+HELP=false
 while true; do
 	case "$1" in
 		--appliance )
 			APPLIANCE=$2
+			shift 2
+			;;
+		-c | --commit )
+			COMMIT=$2
 			shift 2
 			;;
 		-h | --help )
@@ -222,12 +260,13 @@ fi
 echo "mode: $mode"
 echo "appliance: $APPLIANCE"
 echo "proxy: $PROXY"
+echo "kiwi description commit: $COMMIT"
 echo "remains arguments(will be used if extra prepare exist): $@"
 
 if [ "$mode" = "all" ] || [ "$mode" = "" ]; then
 	echo all
 	init $home $SOURCE $PROXY
-	rebase $APPLIANCE $TARGET $KIWI_TYPE
+	checkout $APPLIANCE $COMMIT
 	update
 	build $APPLIANCE $TARGET $KIWI_TYPE
 fi
@@ -235,14 +274,22 @@ fi
 if [ "$mode" = "init" ]; then
 	echo $mode
 	init $home $SOURCE $PROXY
+	exit
 fi
 if [ "$mode" = "rebase" ]; then
 	echo $mode
 	rebase $APPLIANCE $TARGET $KIWI_TYPE
+	exit
+fi
+if [ "$mode" = "checkout" ]; then
+	echo $mode
+	checkout $APPLIANCE $TARGET $KIWI_TYPE
+	exit
 fi
 if [ "$mode" = "update" ]; then
 	echo $mode
 	update
+	exit
 fi
 if [ "$mode" = "build" ]; then
 	echo $mode
