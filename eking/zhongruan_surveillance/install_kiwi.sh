@@ -90,6 +90,7 @@ init() {
 	#echo cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy journalmidnight/ceph_deploy
 	cd $KIWI_DESCRIPTIONS_PATH
 	
+	# DOC: set -e will not catch the error in some like test state, e.g. if statement, && and so on.
 	if [ "`git branch | grep ceph_deploy`" = "" ]; then
 		git checkout -f -b ceph_deploy journalmidnight/ceph_deploy
 	else
