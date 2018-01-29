@@ -31,23 +31,22 @@ init() {
 		if ! [ -f "$MY_ENV" ]; then
 			touch $MY_ENV
 		fi
-		cat $MY_ENV | grep http_proxy
+		cat $MY_ENV | grep http_proxy > /dev/null
 		if [ "$?" != "0" ]; then
 			echo "#export http_proxy=localhost:8228" >> $MY_ENV
 			echo "export http_proxy=localhost:7228" >> $MY_ENV
 		fi
-		cat $MY_ENV | grep https_proxy
+		cat $MY_ENV | grep https_proxy > /dev/null
 		if [ "$?" != "0" ]; then
 			echo "#export https_proxy=localhost:8228" >> $MY_ENV
 			echo "export https_proxy=localhost:7228" >> $MY_ENV
 		fi
 		source $MY_ENV
-		netstat -anltp |grep 7228.*LISTEN
-		if [ "$?" != "0" ]; then
+		
+		if [ "`sudo netstat -anltp |grep 7228.*LISTEN`" = "" ]; then
 			ssh -fNL 7228:localhost:7228 $PROXY
 		fi
-		netstat -anltp |grep 8228.*LISTEN
-		if [ "$?" != "0" ]; then
+		if [ "`sudo netstat -anltp |grep 8228.*LISTEN`" = "" ]; then
 			ssh -fNL 8228:localhost:8228 $PROXY
 		fi
 		sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
@@ -137,6 +136,7 @@ checkout(){
 	APPLIANCE=$1
 	COMMIT=$2
 
+	git fetch journalmidnight
 	if [ "$COMMIT" != "" ]; then
 		cd $APPLIANCE
 		if [ -z "$(git status --untracked-files=no --porcelain)" ]; then 
