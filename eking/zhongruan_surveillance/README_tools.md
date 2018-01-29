@@ -28,3 +28,4 @@ vagrant@os42:~>
 ```
 install_kiwi_remote.sh os03 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 --commit c6d5ed01 your_git_hub_token
 ```
+use internal repo: `sudo sed "s/download.opensuse.org/mirrors.haihangyun.com\/opensuse/g" -ibak *`
