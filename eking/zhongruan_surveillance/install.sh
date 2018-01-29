@@ -114,7 +114,12 @@ install_from_disk() {
 }
 
 usage() {
-    echo "$0 cdrom vm_name"
+    echo "Install from cdrom:"
+    echo "    $0 cdrom vm_name"
+    echo "Install from base disk which will be used as base disk:"
+    echo "    $0 /mnt/images/zhangjian/opensuse42.3_kiwi.qcow2 opensuse_42.3_kiwi_03"
+    echo "    watch installation through vnc port display by this script. And"
+    echo "    get ip/ssh in to it through vm.sh ssh/ip opensuse_42.3_kiwi_03"
     exit
 }
 
