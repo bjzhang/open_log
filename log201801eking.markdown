@@ -1123,4 +1123,47 @@ git config --global http.proxy http://localhost:7228
 5.	使能文件自动检测：
 	1.	确保vimrc已经有：
 		"filetype plugin on"
-	2.	加入"au BufRead,BufNewFile */playbooks/*.yml set filetype=ansible"
+	2.	加入`au BufRead,BufNewFile */playbooks/*.yml set filetype=ansible`
+
+09:34 2018-01-29
+----------------
+GTD
+---
+1.	脑子反应慢。
+2.	中软
+	1.	根据客户机器硬盘特别情况定制特殊版本：
+		1.	确认硬盘是否小于4G。
+			1.	空间不够先压缩tidb等比较大的二进制。DONE。fabric脚本已改。
+			2.	现在可以在3995MB的硬盘上安装：
+				1.	3995074560bytes，对应3810MiB（3995074560 / 1024 / 1024）。
+			3.	kiwi xml显示设置freespace，可以更好控制硬盘大小。
+		2.	写安装脚本模拟实际硬盘大小。
+			1.	rongrong能不能帮忙写自动就带3块硬盘的，一块1G，一块1.5T, 一块500G？DONE。
+			2.	DONE：4G，1.5T，8T，8T，8T
+	2.	FIXED by upstream: emergency mode
+		1.	重启会不会有问题。
+			1.	先测试9.12.5看有没有解决问题
+				1.	看log没有解决问题。
+				2.	看论坛状态：<https://groups.google.com/forum/#!topic/kiwi-images/d-f1wSb3Kuo>
+					1.	看起来现在问题没有解决。kiwi repart有问题。
+				3.	能不能不做repart？
+		2.	能不能自动重启。
+	3.	lvm分区自动扩展。
+	4.	重要：删除udev的net规则。
+	4.	远期问题
+		1.	可以选择安装在其它硬盘。
+3.	杂
+	1.	迟到报备。
+	2.	徐国栋，多借一周hikey960.
+	3.	mark
+	4.	jobleads取消订阅。
+
+15:41 2018-01-29
+----------------
+```
+[root@localhost binaries]# cd /home/tidb/deploy/
+[root@localhost deploy]# tar zxf /binaries/tidb-v1.0.6-linux-amd64.tar.gz
+[root@localhost deploy]# mv tidb-v1.0.6-linux-amd64/bin  bin
+[root@localhost deploy]# ls
+bin  conf  log  scripts  status  tidb-v1.0.6-linux-amd64
+```
