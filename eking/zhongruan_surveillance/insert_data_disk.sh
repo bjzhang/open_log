@@ -1,5 +1,10 @@
 #!/bin/bash
 
+usage()
+{
+	echo "insert_data_disk.sh ceph_test_0.6.9_02 vdb"
+}
+
 #NAME=ceph_test_0.5.4_02
 DIR=`which $0`
 DIR=`dirname $DIR`
