@@ -84,12 +84,12 @@ init() {
 }
 
 rebase(){
-	APPLICANCE=$1
+	APPLIANCE=$1
 	TARGET=$2
 	KIWI_TYPE=$3
 
 	echo "update kiwi-descriptions"
-	cd $APPLICANCE
+	cd $APPLIANCE
 	git fetch
 	git rebase
 	ret=$?
@@ -99,8 +99,13 @@ rebase(){
 	fi
 }
 
+# Global variable: ZYPPER
+update() {
+	$ZYPPER update
+}
+
 build(){
-	APPLICANCE=$1
+	APPLIANCE=$1
 	TARGET=$2
 	KIWI_TYPE=$3
 
@@ -110,7 +115,7 @@ build(){
 	sudo systemctl restart lvm2-lvmetad.service
 
 	echo "Building(comment --debug if you want to a clean output)"
-	sudo kiwi-ng --debug --color-output --type $KIWI_TYPE system build --description $APPLICANCE --target-dir $TARGET
+	sudo kiwi-ng --debug --color-output --type $KIWI_TYPE system build --description $APPLIANCE --target-dir $TARGET
 	ret=$?
 	if [ "$ret" = "0" ]; then
 		echo "Building Successful"
@@ -120,20 +125,51 @@ build(){
 	fi
 }
 
-while getopts 'm:' opt; do
-    case $opt in
-        m)
-            mode=$OPTARG
-            shift 2
-            ;;
-        *)
-            echo "Internal error!"
-            exit 128
-            ;;
-    esac
+# ref: <https://gist.github.com/cosimo/3760587#file-parse-options-sh-L8>
+OPTS=`getopt -o m: --long appliance:,help,mode:,proxy: -n 'parse-options' -- "$@"`
+
+if [ $? != 0 ] ; then echo "Failed parsing options." >&2 ; exit 1 ; fi
+
+#DEBUG "$OPTS"
+eval set -- "$OPTS"
+
+HELP=false
+DISK=""
+while true; do
+	case "$1" in
+		--appliance )
+			APPLIANCE=$2
+			shift 2
+			;;
+		-h | --help )
+			HELP=true
+			shift
+			;;
+		-m | --mode )
+			mode=$2
+			shift 2
+			;;
+		--proxy )
+			PROXY=$2
+			shift 2
+			;;
+		-- )
+			shift
+			break
+			;;
+		* )
+			break
+			;;
+	esac
 done
 
+if [ "$APPLIANCE" = "" ]; then
+	echo "ERROR: applicance($APPLIANCE) is empty. exit"
+	exit 128
+fi
+
 home=$1
+shift 1
 if [ "$home" = "" ]; then
 	echo "ERROR: home empty .exit"
 	# DOC: Return 128 means invalid arguments.
@@ -144,21 +180,32 @@ if ! [ -d "$home" ]; then
 	echo "ERROR: home directroy $home does not exist. exit"
 	exit 128
 fi
-PROXY=$2
 if [ "$PROXY" = "" ]; then
 	echo "WARNING: PROXY empty. press anykey to continue."
 	read
 fi
 SOURCE=${home}/works/source
 TARGET=${home}/works/software/kiwi
-APPLICANCE=${home}/works/source/kiwi-descriptions/centos/x86_64/centos-07.0-JeOS
 KIWI_TYPE="oem"
+
+APPLIANCE_ROOT=${home}/works/source/kiwi-descriptions
+APPLIANCE=${APPLIANCE_ROOT}/${APPLIANCE}
+if ! [ -d $APPLIANCE ]; then
+	echo "ERROR: appliance($APPLIANCE) is inexist. exit"
+	exit 128
+fi
+
+echo "mode: $mode"
+echo "appliance: $APPLIANCE"
+echo "proxy: $PROXY"
+echo "remains arguments(should be empty!): $@"
 
 if [ "$mode" = "all" ] || [ "$mode" = "" ]; then
 	echo all
 	init $home $SOURCE $PROXY
-	rebase $APPLICANCE $TARGET $KIWI_TYPE
-	build $APPLICANCE $TARGET $KIWI_TYPE
+	rebase $APPLIANCE $TARGET $KIWI_TYPE
+	update
+	build $APPLIANCE $TARGET $KIWI_TYPE
 fi
 
 if [ "$mode" = "init" ]; then
@@ -167,10 +214,14 @@ if [ "$mode" = "init" ]; then
 fi
 if [ "$mode" = "rebase" ]; then
 	echo $mode
-	rebase $APPLICANCE $TARGET $KIWI_TYPE
+	rebase $APPLIANCE $TARGET $KIWI_TYPE
+fi
+if [ "$mode" = "update" ]; then
+	echo $mode
+	update
 fi
 if [ "$mode" = "build" ]; then
 	echo $mode
-	build $APPLICANCE $TARGET $KIWI_TYPE
+	build $APPLIANCE $TARGET $KIWI_TYPE
 fi
 
