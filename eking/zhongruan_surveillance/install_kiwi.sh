@@ -31,15 +31,15 @@ init() {
 		if ! [ -f "$MY_ENV" ]; then
 			touch $MY_ENV
 		fi
-		echo $MY_ENV | grep http_proxy
+		cat $MY_ENV | grep http_proxy
 		if [ "$?" != "0" ]; then
-			echo "export http_proxy=localhost:8228" >> $MY_ENV
-			echo "#export http_proxy=localhost:7228" >> $MY_ENV
+			echo "#export http_proxy=localhost:8228" >> $MY_ENV
+			echo "export http_proxy=localhost:7228" >> $MY_ENV
 		fi
-		echo $MY_ENV | grep https_proxy
+		cat $MY_ENV | grep https_proxy
 		if [ "$?" != "0" ]; then
-			echo "export https_proxy=localhost:8228" >> $MY_ENV
-			echo "#export https_proxy=localhost:7228" >> $MY_ENV
+			echo "#export https_proxy=localhost:8228" >> $MY_ENV
+			echo "export https_proxy=localhost:7228" >> $MY_ENV
 		fi
 		source $MY_ENV
 		netstat -anltp |grep 7228.*LISTEN
@@ -63,7 +63,10 @@ init() {
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
 	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing"
 
-	$ZYPPER ar -c -f -r $KIWI_REPO
+	$ZYPPER lr | grep Appliance.Builder > /dev/null
+	if [ "$?" = "" ]; then
+		$ZYPPER addrepo -c -f -r $KIWI_REPO
+	fi
 	$ZYPPER install $PACKAGES
 	ret=$?
 	if [ "$ret" != "0" ]; then
@@ -84,8 +87,15 @@ init() {
 	else
 		git clone $KIWI_DESCRIPTIONS $KIWI_DESCRIPTIONS_PATH
 	fi
-	echo cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy origin/ceph_deploy
-	cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy origin/ceph_deploy
+	#echo cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy journalmidnight/ceph_deploy
+	cd $KIWI_DESCRIPTIONS_PATH
+	
+	if [ "`git branch | grep ceph_deploy`" = "" ]; then
+		git checkout -f -b ceph_deploy journalmidnight/ceph_deploy
+	else
+		echo "ceph_deploy branch exits. checkout without create it"
+		git checkout -f ceph_deploy
+	fi
 
 	echo "initial finish. re-login or soruce $MY_ENV to valid the environment!"
 }
@@ -117,8 +127,15 @@ build(){
 	KIWI_TYPE=$3
 
 	echo "Cleaning up the previous build"
-	sudo mv ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`
-	sudo rm -rf ${TARGET} -rf 2&>/dev/null
+	if [ -d ${TARGET}/build/image-root/var/lib/machines/ ]; then
+		echo mv
+		sudo mv -f ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`
+	fi
+	if [ -d ${TARGET} ]; then
+		# Force rm successful. It is known bug when build centos 7 in opensuse host.
+		# Some directory(e.g. /lib/machiens) could be not deleted.
+		sudo rm -rf ${TARGET} 2&>/dev/null | true
+	fi
 	sudo systemctl restart lvm2-lvmetad.service
 
 	echo "Building(comment --debug if you want to a clean output)"
@@ -237,5 +254,6 @@ if [ "$mode" = "build" ]; then
 		echo "INFO: there is no extra prepare script. run build immediately"
 	fi
 	build $APPLIANCE $TARGET $KIWI_TYPE
+	exit
 fi
 
