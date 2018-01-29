@@ -2,6 +2,13 @@
 
 ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
+function abort {
+        echo "Abort."
+}
+
+set -e
+trap abort ERR
+
 # Global variable: ZYPPER
 init() {
 	home=$1
@@ -111,7 +118,7 @@ build(){
 
 	echo "Cleaning up the previous build"
 	sudo mv ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`
-	sudo rm -rf ${TARGET} -rf
+	sudo rm -rf ${TARGET} -rf 2&>/dev/null
 	sudo systemctl restart lvm2-lvmetad.service
 
 	echo "Building(comment --debug if you want to a clean output)"
@@ -198,7 +205,7 @@ fi
 echo "mode: $mode"
 echo "appliance: $APPLIANCE"
 echo "proxy: $PROXY"
-echo "remains arguments(should be empty!): $@"
+echo "remains arguments(will be used if extra prepare exist): $@"
 
 if [ "$mode" = "all" ] || [ "$mode" = "" ]; then
 	echo all
@@ -222,6 +229,13 @@ if [ "$mode" = "update" ]; then
 fi
 if [ "$mode" = "build" ]; then
 	echo $mode
+	if [ -f $APPLIANCE/prepare.sh ]; then
+		echo "run extra prepare script <$APPLIANCE/prepare.sh> with arguments $@"
+		cd $APPLIANCE
+		sudo bash ./prepare.sh $@
+	else
+		echo "INFO: there is no extra prepare script. run build immediately"
+	fi
 	build $APPLIANCE $TARGET $KIWI_TYPE
 fi
 

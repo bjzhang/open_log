@@ -9,6 +9,8 @@ usage(){
 	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m update"
 	echo "3.  build kiwi image"
 	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build"
+	echo "4.  build kiwi image with extra token for extra prepare"
+	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build 1234abcd"
 }
 
 WORK_DIR=`realpath $0`
