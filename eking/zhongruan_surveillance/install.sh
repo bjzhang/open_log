@@ -72,7 +72,7 @@ install_from_disk() {
     BRIDGE=$3
     NAME=$4
     MEMORY=4096
-    VCPUS=4
+    VCPUS=16
     HYPERVISOR=kvm
     GRAPHICS=vnc,listen=0.0.0.0
     DISK=$MOUNT_POINT/${NAME}.qcow2
