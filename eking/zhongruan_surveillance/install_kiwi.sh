@@ -3,7 +3,7 @@
 ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
 function abort {
-        echo "Abort."
+        echo "Abort from $0."
 }
 
 set -e
@@ -14,7 +14,9 @@ init() {
 	home=$1
 	SOURCE=$2
 	PROXY=$3
-	echo "environment setup"
+
+	echo "INFO: environment setup"
+
 	if [ -f "$home/.ssh/id_rsa.pub" ]; then
 		echo "ssh public key exist. skip"
 	else
@@ -60,7 +62,7 @@ init() {
 	fi
 
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
-	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing"
+	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing createrepo lsof"
 
 	$ZYPPER lr | grep Appliance.Builder > /dev/null
 	if [ "$?" = "" ]; then
@@ -105,23 +107,7 @@ rebase(){
 	TARGET=$2
 	KIWI_TYPE=$3
 
-	echo "update kiwi-descriptions"
-	cd $APPLIANCE
-	git fetch
-	git rebase
-	ret=$?
-	if [ "$ret" != "0" ]; then
-		echo "ERROR: git rebase fail. exit with $ret"
-		exit $ret
-	fi
-}
-
-rebase(){
-	APPLIANCE=$1
-	TARGET=$2
-	KIWI_TYPE=$3
-
-	echo "update kiwi-descriptions"
+	echo "INFO: update kiwi-descriptions"
 	cd $APPLIANCE
 	git fetch
 	git rebase
@@ -136,9 +122,10 @@ checkout(){
 	APPLIANCE=$1
 	COMMIT=$2
 
+	echo "INFO: checkout to specific commit of kiwi-description"
+	cd $APPLIANCE
 	git fetch journalmidnight
 	if [ "$COMMIT" != "" ]; then
-		cd $APPLIANCE
 		if [ -z "$(git status --untracked-files=no --porcelain)" ]; then 
 			echo "Working directory clean excluding untracked files"
 			git checkout -f $COMMIT
@@ -151,6 +138,7 @@ checkout(){
 
 # Global variable: ZYPPER
 update() {
+	echo "INFO: update system installed packages"
 	$ZYPPER update
 }
 
@@ -158,6 +146,17 @@ build(){
 	APPLIANCE=$1
 	TARGET=$2
 	KIWI_TYPE=$3
+	shift 3
+
+	echo "INFO: build kiwi image"
+	if [ -f $APPLIANCE/prepare.sh ]; then
+		echo "run extra prepare script <$APPLIANCE/prepare.sh> with arguments $@"
+		cd $APPLIANCE
+		sudo ./prepare.sh $@
+	else
+		echo "INFO: there is no extra prepare script. run build immediately"
+		exit
+	fi
 
 	echo "Cleaning up the previous build"
 	if [ -d ${TARGET}/build/image-root/var/lib/machines/ ]; then
@@ -264,44 +263,25 @@ echo "proxy: $PROXY"
 echo "kiwi description commit: $COMMIT"
 echo "remains arguments(will be used if extra prepare exist): $@"
 
-if [ "$mode" = "all" ] || [ "$mode" = "" ]; then
-	echo all
-	init $home $SOURCE $PROXY
-	checkout $APPLIANCE $COMMIT
-	update
-	build $APPLIANCE $TARGET $KIWI_TYPE
+if [ "$mode" = "" ]; then
+	mode=all
 fi
-
-if [ "$mode" = "init" ]; then
-	echo $mode
-	init $home $SOURCE $PROXY
-	exit
+if [ "$mode" = "all" ] || [ "$mode" = "init" ]; then
+       echo init
+       init $home $SOURCE $PROXY
 fi
 if [ "$mode" = "rebase" ]; then
-	echo $mode
+	echo rebase
 	rebase $APPLIANCE $TARGET $KIWI_TYPE
-	exit
 fi
-if [ "$mode" = "checkout" ]; then
-	echo $mode
-	checkout $APPLIANCE $TARGET $KIWI_TYPE
-	exit
+if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "checkout" ]; then
+	echo checkout
+	checkout $APPLIANCE $COMMIT
 fi
-if [ "$mode" = "update" ]; then
-	echo $mode
+if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "update" ]; then
 	update
-	exit
 fi
-if [ "$mode" = "build" ]; then
-	echo $mode
-	if [ -f $APPLIANCE/prepare.sh ]; then
-		echo "run extra prepare script <$APPLIANCE/prepare.sh> with arguments $@"
-		cd $APPLIANCE
-		sudo bash ./prepare.sh $@
-	else
-		echo "INFO: there is no extra prepare script. run build immediately"
-	fi
-	build $APPLIANCE $TARGET $KIWI_TYPE
-	exit
+if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "build" ]; then
+	build $APPLIANCE $TARGET $KIWI_TYPE $@
 fi
 
