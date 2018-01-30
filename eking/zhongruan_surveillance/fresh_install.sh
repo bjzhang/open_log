@@ -92,4 +92,7 @@ for i in `seq -f "%02.g" 0 3`; do
 done
 
 #echo "Boot the managerment vm"
-
+cd /home/bamvor/works/open_log/eking/zhongruan_surveillance
+mkdir 01
+cd 01
+vagrant up
