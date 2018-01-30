@@ -142,6 +142,43 @@ update() {
 	$ZYPPER update
 }
 
+precheck(){
+	echo "INFO: precheck build environment"
+	echo "Check if the version of kernel and modules is consistent"
+	# To avoid the "losetup: cannot find an unused loop device"
+	MODULES=`ls /lib/modules/* -d`
+	if ! [ -d /lib/modules/"$(uname -r)" ]; then
+		echo "INFO: current kernel version is `uname -r` while modules verion(s) are $MODULES, check bootloader(grub2) config"
+		for version in `echo $MODULES`; do
+			echo "DEBUG: looking for `basename ${version}`"
+			if ! [ -z "$(sudo grep `basename ${version}` /boot/grub2/grub.cfg 2>/dev/null)" ]; then
+				echo "DEBUG: found corresponding kernel in grub.cfg"
+				KERNEL_VER=`basename ${version}`
+				found=true
+			fi
+		done
+		if [ "$found" = "true" ]; then
+			ENTRIES=$(sudo grep "\(\<menuentry\>.*{\)\|\(linux.*vmlinu.*${KERNEL_VER}\)" /boot/grub2/grub.cfg | grep "linux.*\/vmlinu.*${KERNEL_VER}" -B 1 | grep -v "linux.*vmlinu.*${KERNEL_VER}" | sed "s/[\ \t][\ \t]*/ /g" | cut -d \' -f 2)
+			echo "INFO: possible entry(s) you could use:"
+			echo "$ENTRIES"
+		else
+			echo "ERROR: not found the kernel in current grub2 config. exit"
+			exit 3
+		fi
+	else
+		echo "DEBUG: kernel and modules are consistent: `uname -r`"
+	fi
+
+	echo "INFO: check if need to reboot or restart services after installation"
+	SERVICES=$(sudo zypper ps --print "systemctl status %s")
+	if ! [ -z $SERVICES ]; then
+		echo "INFO: some process use deleted files: run 'zypper ps -s' to show the relatives process"
+		echo "INFO: you could reboot or restart the following services at least"
+		echo "$SERVICES"
+		exit 4
+	fi
+}
+
 build(){
 	APPLIANCE=$1
 	TARGET=$2
@@ -275,11 +312,13 @@ if [ "$mode" = "rebase" ]; then
 	rebase $APPLIANCE $TARGET $KIWI_TYPE
 fi
 if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "checkout" ]; then
-	echo checkout
 	checkout $APPLIANCE $COMMIT
 fi
 if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "update" ]; then
 	update
+fi
+if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "precheck" ]; then
+	precheck
 fi
 if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "build" ]; then
 	build $APPLIANCE $TARGET $KIWI_TYPE $@
