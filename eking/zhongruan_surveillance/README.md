@@ -8,23 +8,36 @@
 1.  环境准备：
     1.  环境准备参考脚本：fresh_install.sh（只经过分段测试，不要直接执行）。
     2.  准备物理机环境，至少需要安装libvirtd等必要的包，建立虚拟机所需的网桥。为了管理方便158机器上使用了nat网桥（libvirtd安装后会自动建立这个网桥）。
-    3.  准备用于build kiwi镜像的vm。
-        1.  kiwi是opensuse提供的构建镜像服务，推荐在opensuse上使用。
-        2.  推荐使用vagrant建立系统的第一个虚拟机镜像。可以用vagrant up下载并启动opensuse镜像。vagrant配置文件参考（Vagrant）。由于vagrant会使用目录名作为vm名称的一部分。可以新建目录并建立符号连接。
+    3.  准备用于build kiwi镜像的vm。kiwi是opensuse提供的构建镜像服务，推荐在opensuse上使用。两种方法
+        1.  推荐使用vagrant建立系统的第一个虚拟机镜像。可以用vagrant up下载并启动opensuse镜像。vagrant配置文件参考（Vagrant）。由于vagrant会使用目录名作为vm名称的一部分。可以新建目录并建立符号连接。
             ``` 
-            cd /home/bamvor/works/open_log/eking/zhongruan_surveillance
-            mkdir 01
-            cd 01
-            ln -sf ../Vagrant
+            cd ~/works/open_log/eking/zhongruan_surveillance/
+            mkdir  kiwi_vagrant_01/
+            cd kiwi_vagrant_01/
+            ln -sf ../Vagrantfile
             vagrant up
+            vm.sh ip kiwi_vagrant_01_opensuse42.3
+            ssh vagrant@192.168.122.204
             ``` 
-        3.  可以用已有的机器作为base image，节省后续的准备的时间。
+            在vm中修改hostname。
+            ``` 
+            sudo hostnamectl set-hostname os04
+            ``` 
+        2.  可以用已有的机器作为base image，节省后续的准备的时间。
             1.  `sudo virsh domblklist vm_name`看到硬盘名称。`sudo virsh destroy vm_name; sudo virsh undefine vm_name`删除系统（libvird）中注册的虚拟机信息（并不会删除虚拟机硬盘）。
             2.  例如用已经配置kiwi基本环境的硬盘(/mnt/images/zhangjian/opensuse42.3_kiwi.qcow2)，建立新的vm：
                 1.  保证该硬盘无vm使用，并改为只读保证不会被改写。base image变化会导致依赖镜像出问题。
                 2.  `install.sh /mnt/images/zhangjian/opensuse42.3_kiwi.qcow2 ${vm_name}`
                 3.  安装后可以用`vm.sh`命令查看ip地址并ssh连接。用户名密码是vagrant(有sudo权限)。具体参考[README_tools](https://github.com/bjzhang/open_log/blob/master/eking/zhongruan_surveillance/README_tools.md) TODO
-
+        3.  安装后，设置在host该机器的hostname和username。
+        4.  use internal repo: `sudo sed "s/download.opensuse.org/mirrors.haihangyun.com\/opensuse/g" -ibak /etc/zypp/repos.d/*`
+        5.  enable auto refresh
+            ```
+            sudo zypper modifyrepo --refresh distro-non-oss
+            sudo zypper modifyrepo --refresh distro-oss
+            sudo zypper modifyrepo --refresh distro-update-oss
+            sudo zypper modifyrepo --refresh distro-update-non-oss
+            ```
 2.  build image(同时适用于x86_64的虚拟机和物理机)
     1.  install_kiwi_remote.sh把同目录的install_kiwi.sh复制到目标机器，并执行，install_kiwi.sh的流程包括（每个步骤都可以用"-m xxx"单独执行）：
         1.  init: 初始化。安装kiwi build环境所需的rpm包，git clone kiwi的配置文件(kiwi-descriptions)。
@@ -154,13 +167,13 @@
 		```
         修改后重启nginx服务：`systemctl restart nginx`
 
-4. 在浏览器中访问10.72.84.158就可以看到登录界面了, admin/admin.
-
-1.  测试项。
-    1.  基本功能
-        1.  安装部署四台机器：UI正常。
-        2.  物理机可以安装。
-        3.  优盘可以安装。
-    2.  定制要求
-        1.  最小的硬盘（3900m）。
-
+5. 测试
+    1.  在浏览器中访问10.72.84.158就可以看到登录界面了, admin/admin.
+    2.  测试项。
+        1.  基本功能
+            1.  安装部署四台机器：UI正常。
+            2.  物理机可以安装。
+            3.  优盘可以安装。
+        2.  定制要求
+            1.  最小的硬盘（3900m）。
+    
