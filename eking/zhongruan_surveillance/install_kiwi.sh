@@ -197,7 +197,6 @@ build(){
 
 	echo "Cleaning up the previous build"
 	if [ -d ${TARGET}/build/image-root/var/lib/machines/ ]; then
-		echo mv
 		sudo mv -f ${TARGET}/build/image-root/var/lib/machines/ ${TARGET}/kiwi.machines.old-`date "+%d%m%S"`
 	fi
 	if [ -d ${TARGET} ]; then
