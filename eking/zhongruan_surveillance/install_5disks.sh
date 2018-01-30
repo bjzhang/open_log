@@ -14,7 +14,7 @@ install_from_iso() {
     VCPUS=4
     HYPERVISOR=kvm
     DISK=$MOUNT_POINT/$NAME.raw
-    SIZE=(0 3000m 1500g 8192g 8192g)
+    SIZE=(0 3200m 1500g 8192g 8192g)
     GRAPHICS=vnc,listen=0.0.0.0
     for num in `seq $NUM_OF_DISK`; do
         DISK=$MOUNT_POINT/${NAME}_${num}.raw
@@ -63,7 +63,7 @@ install_from_iso() {
         fi
     done
     sudo truncate -s 8192g /mnt/images/${NAME}_5.raw
-    sudo virsh attach-disk $NAME /mnt/images/${NAME}_5.raw vde --targetbus virtio
+    sudo virsh attach-disk $NAME /mnt/images/${NAME}_5.raw vde --targetbus virtio --persistent --live
     echo "press enter to continue installation. Then select Install"
     read
     sudo virsh resume $NAME
