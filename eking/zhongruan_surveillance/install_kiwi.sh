@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 
 ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
@@ -67,7 +67,8 @@ init() {
 		$ZYPPER addrepo -c -f -r $KIWI_REPO
 	fi
 
-	ret=`$ZYPPER install $PACKAGES; echo $?`
+	$ZYPPER install $PACKAGES
+	ret=$?
 	if [ "$ret" != "0" ]; then
 		echo "ERROR: zypper installation fail. exit"
 		if [ "$ret" = "104" ]; then

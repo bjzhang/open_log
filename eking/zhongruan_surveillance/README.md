@@ -30,14 +30,16 @@
                 2.  `install.sh /mnt/images/zhangjian/opensuse42.3_kiwi.qcow2 ${vm_name}`
                 3.  安装后可以用`vm.sh`命令查看ip地址并ssh连接。用户名密码是vagrant(有sudo权限)。具体参考[README_tools](https://github.com/bjzhang/open_log/blob/master/eking/zhongruan_surveillance/README_tools.md) TODO
         3.  安装后，设置在host该机器的hostname和username。
-        4.  use internal repo: `sudo sed "s/download.opensuse.org/mirrors.haihangyun.com\/opensuse/g" -ibak /etc/zypp/repos.d/*`
-        5.  enable auto refresh
-            ```
-            sudo zypper modifyrepo --refresh distro-non-oss
-            sudo zypper modifyrepo --refresh distro-oss
-            sudo zypper modifyrepo --refresh distro-update-oss
-            sudo zypper modifyrepo --refresh distro-update-non-oss
-            ```
+        4.  zypper
+            1.  use internal repo: `sudo sed "s/download.opensuse.org/mirrors.haihangyun.com\/opensuse/g" -ibak /etc/zypp/repos.d/*`
+            2.  enable auto refresh
+                ```
+                sudo zypper modifyrepo --refresh distro-non-oss
+                sudo zypper modifyrepo --refresh distro-oss
+                sudo zypper modifyrepo --refresh distro-update-oss
+                sudo zypper modifyrepo --refresh distro-update-non-oss
+                ```
+            3.  sudo zypper refresh
 2.  build image(同时适用于x86_64的虚拟机和物理机)
     1.  install_kiwi_remote.sh把同目录的install_kiwi.sh复制到目标机器，并执行，install_kiwi.sh的流程包括（每个步骤都可以用"-m xxx"单独执行）：
         1.  init: 初始化。安装kiwi build环境所需的rpm包，git clone kiwi的配置文件(kiwi-descriptions)。
