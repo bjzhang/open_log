@@ -62,7 +62,7 @@ init() {
 	fi
 
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
-	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing createrepo lsof"
+	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing createrepo lsof xfsprogs"
 
 	$ZYPPER lr | grep Appliance.Builder > /dev/null
 	if [ "$?" = "" ]; then
