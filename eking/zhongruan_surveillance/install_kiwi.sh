@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -x
 
 ZYPPER="sudo zypper -v --non-interactive --gpg-auto-import-keys"
 
@@ -33,13 +33,12 @@ init() {
 		if ! [ -f "$MY_ENV" ]; then
 			touch $MY_ENV
 		fi
-		cat $MY_ENV | grep http_proxy > /dev/null
-		if [ "$?" != "0" ]; then
+		
+		if [ "`cat $MY_ENV | grep http_proxy > /dev/null; echo $?`" != "0" ]; then
 			echo "#export http_proxy=localhost:8228" >> $MY_ENV
 			echo "export http_proxy=localhost:7228" >> $MY_ENV
 		fi
-		cat $MY_ENV | grep https_proxy > /dev/null
-		if [ "$?" != "0" ]; then
+		if [ "`cat $MY_ENV | grep https_proxy > /dev/null; echo $?`" != "0" ]; then
 			echo "#export https_proxy=localhost:8228" >> $MY_ENV
 			echo "export https_proxy=localhost:7228" >> $MY_ENV
 		fi
@@ -64,12 +63,11 @@ init() {
 	KIWI_REPO="http://download.opensuse.org/repositories/Virtualization:/Appliances:/Builder/openSUSE_Leap_42.3/Virtualization:Appliances:Builder.repo"
 	PACKAGES="python3-kiwi>=9.11 man jq yum git command-not-found syslinux jing createrepo lsof xfsprogs"
 
-	$ZYPPER lr | grep Appliance.Builder > /dev/null
-	if [ "$?" = "" ]; then
+	if [ "`$ZYPPER lr | grep Appliance.Builder > /dev/null; echo $?`" != "0" ]; then
 		$ZYPPER addrepo -c -f -r $KIWI_REPO
 	fi
-	$ZYPPER install $PACKAGES
-	ret=$?
+
+	ret=`$ZYPPER install $PACKAGES; echo $?`
 	if [ "$ret" != "0" ]; then
 		echo "ERROR: zypper installation fail. exit"
 		if [ "$ret" = "104" ]; then
@@ -108,6 +106,10 @@ rebase(){
 	KIWI_TYPE=$3
 
 	echo "INFO: update kiwi-descriptions"
+	if ! [ -d $APPLIANCE ]; then
+		echo "ERROR: appliance($APPLIANCE) is inexist. exit"
+		exit 128
+	fi
 	cd $APPLIANCE
 	git fetch
 	git rebase
@@ -123,6 +125,10 @@ checkout(){
 	COMMIT=$2
 
 	echo "INFO: checkout to specific commit of kiwi-description"
+	if ! [ -d $APPLIANCE ]; then
+		echo "ERROR: appliance($APPLIANCE) is inexist. exit"
+		exit 128
+	fi
 	cd $APPLIANCE
 	git fetch journalmidnight
 	if [ "$COMMIT" != "" ]; then
@@ -186,6 +192,10 @@ build(){
 	shift 3
 
 	echo "INFO: build kiwi image"
+	if ! [ -d $APPLIANCE ]; then
+		echo "ERROR: appliance($APPLIANCE) is inexist. exit"
+		exit 128
+	fi
 	if [ -f $APPLIANCE/prepare.sh ]; then
 		echo "run extra prepare script <$APPLIANCE/prepare.sh> with arguments $@"
 		cd $APPLIANCE
@@ -288,10 +298,6 @@ KIWI_TYPE="oem"
 
 APPLIANCE_ROOT=${home}/works/source/kiwi-descriptions
 APPLIANCE=${APPLIANCE_ROOT}/${APPLIANCE}
-if ! [ -d $APPLIANCE ]; then
-	echo "ERROR: appliance($APPLIANCE) is inexist. exit"
-	exit 128
-fi
 
 echo "mode: $mode"
 echo "appliance: $APPLIANCE"
