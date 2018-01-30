@@ -822,8 +822,10 @@ No devices found
 10:40 2018-01-18
 ----------------
 资源：
+```
 10.72.22.49 10.72.84.158 E15-27U-28U Printfzj*158
-10.72.22.58 10.72.84.159 E16-27U-28U
+10.72.22.58 10.72.84.159 E16-27U-28U Password@_
+```
 
 12:46 2018-01-18
 ----------------
@@ -1152,9 +1154,16 @@ GTD
 	3.	lvm分区自动扩展。DONE by dongmao.
 	4.	TODO:
 		1.	重要：删除udev的net规则。
+			1.	DONE
+			2.	TODO: 测试四块网卡。
 		2.	s3 repo的特殊处理还是要保留。
-		3.	在完全全新的机器可以部署。
-		4.	kiwi要打patch，加入脚本。
+			DONE
+		3.	制作优盘!!!
+		4.	在完全全新的机器可以部署。
+			DOING：os03 build成功，正在测试。
+			TODO: 从vagrant建立的新vm测试。
+		5.	kiwi要打patch，加入脚本。
+			TODO: 暂时只加入文档。
 	4.	远期问题
 		1.	可以选择安装在其它硬盘。
 3.	杂
@@ -1171,4 +1180,21 @@ GTD
 [root@localhost deploy]# mv tidb-v1.0.6-linux-amd64/bin  bin
 [root@localhost deploy]# ls
 bin  conf  log  scripts  status  tidb-v1.0.6-linux-amd64
+```
+15:16 2018-01-30
+----------------
+zhongruan
+---------
+1.	nier失败：
+```
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=ceph_osd_used_bytes&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 258, duration: 3.522149ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=ceph_osd_avail_bytes&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 262, duration: 3.970408ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=node_memory_MemFree&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 223, duration: 4.578505ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=node_load1&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 196, duration: 4.404981ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=ceph_client_io_read_bytes&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 180, duration: 4.581329ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=node_memory_MemTotal&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 201, duration: 4.940606ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=node_load5&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 196, duration: 3.559262ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:19Z" level=info msg="vulcand/oxy/forward/http: Round trip: http://127.0.0.1:9090/api/v1/query?query=node_load15&time=2018-01-30T07%3A10%3A29.952Z, code: 200, Length: 196, duration: 11.200456ms"
+Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: [mysql] 2018/01/30 07:07:19 packets.go:36: unexpected EOF
+	Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: [mysql] 2018/01/30 07:07:19 packets.go:141: write tcp 127.0.0.1:43888->127.0.0.1:4000: write: broken pipe
 ```
