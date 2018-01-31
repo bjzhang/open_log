@@ -77,22 +77,31 @@ init() {
 		exit
 	fi
 	echo "clone kiwi-descriptions"
-	KIWI_DESCRIPTIONS="https://github.com/journeymidnight/kiwi-descriptions.git"
+	KIWI_DESCRIPTIONS="https://github.com/SUSE/kiwi-descriptions.git"
 	KIWI_DESCRIPTIONS_PATH=$SOURCE/${KIWI_DESCRIPTIONS##*/}
-	echo $KIWI_DESCRIPTIONS_PATH
+	#echo $KIWI_DESCRIPTIONS_PATH
 	KIWI_DESCRIPTIONS_PATH=${KIWI_DESCRIPTIONS_PATH%.git}
-	echo $KIWI_DESCRIPTIONS_PATH
+	#echo $KIWI_DESCRIPTIONS_PATH
+	cd $KIWI_DESCRIPTIONS_PATH
 	if [ -d "$KIWI_DESCRIPTIONS_PATH/.git" ]; then
 		echo "kiwi descriptions exist. skip"
 	else
 		git clone $KIWI_DESCRIPTIONS $KIWI_DESCRIPTIONS_PATH
 	fi
-	#echo cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy journalmidnight/ceph_deploy
-	cd $KIWI_DESCRIPTIONS_PATH
-	
+	KIWI_DESCRIPTIONS="https://github.com/journeymidnight/kiwi-descriptions.git"
+	GIT_URL_BASE=${KIWI_DESCRIPTIONS%\/*.git}
+	ACCOUNT=${GIT_URL_BASE##*\/}
+	#FIXME: I do not checkout the actually git remote url.
+	remote=`git remote | grep $ACCOUNT || true`
+	echo "remote is $remote"
+	if [ "$remote" = "" ]; then
+		git remote add $ACCOUNT $KIWI_DESCRIPTIONS
+	fi
+	git fetch $ACCOUNT
+	#echo cd $KIWI_DESCRIPTIONS_PATH; git checkout -f -b ceph_deploy journeymidnight/ceph_deploy
 	# DOC: set -e will not catch the error in some like test state, e.g. if statement, && and so on.
 	if [ "`git branch | grep ceph_deploy`" = "" ]; then
-		git checkout -f -b ceph_deploy journalmidnight/ceph_deploy
+		git checkout -f -b ceph_deploy $ACCOUNT/ceph_deploy
 	else
 		echo "ceph_deploy branch exits. checkout without create it"
 		git checkout -f ceph_deploy
@@ -131,7 +140,7 @@ checkout(){
 		exit 128
 	fi
 	cd $APPLIANCE
-	git fetch journalmidnight
+	git fetch journeymidnight
 	if [ "$COMMIT" != "" ]; then
 		if [ -z "$(git status --untracked-files=no --porcelain)" ]; then 
 			echo "Working directory clean excluding untracked files"
@@ -310,11 +319,9 @@ if [ "$mode" = "" ]; then
 	mode=all
 fi
 if [ "$mode" = "all" ] || [ "$mode" = "init" ]; then
-       echo init
        init $home $SOURCE $PROXY
 fi
 if [ "$mode" = "rebase" ]; then
-	echo rebase
 	rebase $APPLIANCE $TARGET $KIWI_TYPE
 fi
 if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "checkout" ]; then
