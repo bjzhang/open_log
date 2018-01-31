@@ -48,19 +48,19 @@ elif [ "$op" = "tidb_mysql" ]; then
 elif [ "$op" = "pd" ]; then
 	if [ "$name" = "" ]; then exit; fi
 	IP=`sudo bash $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP
-	ssh -f root@$IP "bash -x /home/tidb/deploy/scripts/run_pd.sh"
+	ssh -f root@$IP "systemctl restart pd"
 	ssh root@$IP "tail -f /home/tidb/deploy/log/pd.log"
 	ssh root@$IP "tail -f /home/tidb/deploy/log/pd_stderr.log"
 elif [ "$op" = "tikv" ]; then
 	if [ "$name" = "" ]; then exit; fi
 	IP=`sudo bash $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP
-	ssh -f root@$IP "bash -x /home/tidb/deploy/scripts/run_tikv.sh"
+	ssh -f root@$IP "systemctl restart tikv-20160"
 	ssh root@$IP "tail -f /home/tidb/deploy/log/tikv.log"
 	ssh root@$IP "tail -f /home/tidb/deploy/log/tikv_stderr.log"
 elif [ "$op" = "tidb" ]; then
 	if [ "$name" = "" ]; then exit; fi
 	IP=`sudo bash $dir/get_ip.sh $name | cut -d \  -f 4`; echo $IP
-	ssh -f root@$IP "bash -x /home/tidb/deploy/scripts/run_tidb.sh"
+	ssh -f root@$IP "systemctl restart tidb-4000"
 	ssh root@$IP "tail -f /home/tidb/deploy/log/tidb.log"
 	ssh root@$IP "tail -f /home/tidb/deploy/log/tidb_stderr.log"
 fi

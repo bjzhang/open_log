@@ -16,3 +16,12 @@
         vda        /mnt/images/ceph_data_0.6.0_04_vda.raw
         ```
         **libvirt实际会根据已有硬盘个数，重命名为vdX**，下述脚本操作的硬盘以日志结尾的新增的target硬盘为准，例如上面的"vda        /mnt/images/ceph_data_0.6.0_04_vda.raw"
+
+2.  libvirt helper: vm.sh
+    1.  ssh: 支持复制ss key并ssh连接。
+    2.  ip: 调用get_ip.sh得到vm的ip地址。
+    3.  ips: 使用grep得到一组虚机的ip地址。
+    4.  list: 列出所有虚机。
+    5.  tidb helper:
+        1.  tidb_mysql: 连接tidb建立的mysql
+        2.  pd, tikv, tidb: 重启tidb相关服务并查看日志。
