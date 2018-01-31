@@ -10,7 +10,9 @@ usage(){
 	echo "3.  build kiwi image"
 	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build"
 	echo "4.  build kiwi image with extra token for extra prepare"
-	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build 1234abcd"
+	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build ${your_github_token}"
+	echo "5.  build kiwi image checkout to specific commits of kiwi_description, with extra token for extra prepare"
+	echo "    $0 os01 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 -m build -c f267a610 ${your_github_token}"
 }
 
 WORK_DIR=`realpath $0`
