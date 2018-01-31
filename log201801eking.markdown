@@ -1198,3 +1198,39 @@ Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: time="2018-01-30T07:07:
 Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: [mysql] 2018/01/30 07:07:19 packets.go:36: unexpected EOF
 	Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: [mysql] 2018/01/30 07:07:19 packets.go:141: write tcp 127.0.0.1:43888->127.0.0.1:4000: write: broken pipe
 ```
+09:32 2018-01-31
+----------------
+超融合, 中软
+------------
+1.	镜像位置：
+	1.	hna
+		<http://hos-north-1.apis.haihangyun.com/kiwi/Ceph-CentOS-07.0.x86_64-0.7.02.os01.install.iso>
+		<http://hos-north-1.apis.haihangyun.com/kiwi/Ceph-CentOS-07.0.x86_64-0.7.02.os01.md5sum>
+		<http://hos-north-1.apis.haihangyun.com/kiwi/Ceph-CentOS-07.0.x86_64-0.7.02.os01.packages>
+	2.	le
+		1.	<http://los-cn-north-1.lecloudapis.com/document/Ceph-CentOS-07.0.x86_64-0.7.02.os01.install.iso>
+		2.	<http://los-cn-north-1.lecloudapis.com/document/Ceph-CentOS-07.0.x86_64-0.7.02.os01.md5sum>
+2.	下一步计划
+	1.	支持串口和vnc同时控制和显示。
+	2.	合并install_5disk.sh和install.sh
+	3.	统一用install.sh, install_kiwi.sh(rename: build_kiwi_image.sh).
+	4.	提供host的kiwi description。
+		1.	nat网卡。
+		2.	libvirtd等工具。
+		3.	指定源
+		4.	virtlockd.
+	5.	mount squashfs
+	6.	改进或直接在.packages加入ceph_deploy, tidb等非rpm的版本。
+	6.	改进：
+		1.	虚机支持IPMI.便于测试。
+
+13:06 2018-01-31
+----------------
+GTD
+---
+1.	上午时间安排又有点跑偏。每天要控制在工具改进上花的时间。细水长流。
+2.	中软明天的版本打tag。
+3.	hikey960 m.2
+	1.	uefi要支持pcie
+	2.	内核对m.2是怎么支持的？
+
