@@ -9,12 +9,13 @@
     1.  环境准备参考脚本：fresh_install.sh（只经过分段测试，不要直接执行）。
     2.  准备物理机环境，至少需要安装libvirtd等必要的包，建立虚拟机所需的网桥。为了管理方便158机器上使用了nat网桥（libvirtd安装后会自动建立这个网桥）。
     3.  准备用于build kiwi镜像的vm。kiwi是opensuse提供的构建镜像服务，推荐在opensuse上使用。两种方法
-        1.  推荐使用vagrant建立系统的第一个虚拟机镜像。可以用vagrant up下载并启动opensuse镜像。vagrant配置文件参考（Vagrant）。由于vagrant会使用目录名作为vm名称的一部分。可以新建目录并建立符号连接。
+        1.  推荐使用vagrant建立系统的第一个虚拟机镜像。可以用vagrant up下载并启动opensuse镜像。vagrant配置文件参考Vagrant。由于vagrant会使用目录名作为vm名称的一部分。可以新建目录并建立符号连接。
             ``` 
             cd ~/works/open_log/eking/zhongruan_surveillance/
             mkdir  kiwi_vagrant_01/
             cd kiwi_vagrant_01/
             ln -sf ../Vagrantfile
+            # 如果image不存在，vagrant会自动下载。
             vagrant up
             vm.sh ip kiwi_vagrant_01_opensuse42.3
             ssh vagrant@192.168.122.204
@@ -23,6 +24,22 @@
             ``` 
             sudo hostnamectl set-hostname os04
             ``` 
+            如果不在上述目录，可以用下列命令查到vagrant管理的虚拟机id，使用id可以操作vagrant的虚拟机。**注意vagrant destroy会删除虚拟机的配置文件和硬盘**
+            ```
+            $ vagrant global-status --prune
+            /home/bamvor/.vagrant.d/gems/2.4.2/gems/nokogiri-1.6.8.1/lib/nokogiri/xml/document.rb:44: warning: constant ::Fixnum is deprecated
+            id       name         provider state   directory
+            ----------------------------------------------------------------------------------------------------------------
+            b05af06  opensuse42.3 libvirt running /home/bamvor/works/open_log/eking/zhongruan_surveillance/kiwi_vagrant_01
+            
+            The above shows information about all known Vagrant environments
+            on this machine. This data is cached and may not be completely
+            up-to-date. To interact with any of the machines, you can go to
+            that directory and run Vagrant, or you can use the ID directly
+            with Vagrant commands from any directory. For example:
+            "vagrant destroy 1a2b3c4d"
+            ```
+
         2.  可以用已有的机器作为base image，节省后续的准备的时间。
             1.  `sudo virsh domblklist vm_name`看到硬盘名称。`sudo virsh destroy vm_name; sudo virsh undefine vm_name`删除系统（libvird）中注册的虚拟机信息（并不会删除虚拟机硬盘）。
             2.  例如用已经配置kiwi基本环境的硬盘(/mnt/images/zhangjian/opensuse42.3_kiwi.qcow2)，建立新的vm：
@@ -39,7 +56,7 @@
                 sudo zypper modifyrepo --refresh distro-update-oss
                 sudo zypper modifyrepo --refresh distro-update-non-oss
                 ```
-            3.  sudo zypper refresh
+            3.  刷新所有repo：sudo zypper refresh
 2.  build image(同时适用于x86_64的虚拟机和物理机)
     1.  install_kiwi_remote.sh把同目录的install_kiwi.sh复制到目标机器，并执行，install_kiwi.sh的流程包括（每个步骤都可以用"-m xxx"单独执行）：
         1.  init: 初始化。安装kiwi build环境所需的rpm包，git clone kiwi的配置文件(kiwi-descriptions)。
