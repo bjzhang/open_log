@@ -13,6 +13,9 @@ sshretry () {
         echo "Destination($1) is not reachable, exit"
         exit
     fi
+    echo "TODO"
+    echo "nc os01 22 < /dev/null"
+    #SSH-2.0-OpenSSH_7.2
     while true; do
         ssh $1 || sleep 1
         break
