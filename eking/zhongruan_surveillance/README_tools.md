@@ -1,31 +1,18 @@
 
-1.   install from disk
-```
-[bamvor@ceph-bj-rabbit-10-72-84-158 zhongruan_surveillance]$ vm.sh ssh opensuse_42.3_kiwi_03
-PLEASE migrate to vagrant. those scripts will not add new features
-ssh to root@192.168.122.225
-/usr/bin/ssh-copy-id: INFO: Source of key(s) to be installed: "/home/bamvor/.ssh/id_rsa.pub"
-/usr/bin/ssh-copy-id: INFO: attempting to log in with the new key(s), to filter out any that are already installed
+1.  虚机建立后插入硬盘。 此处的vda是我们希望vm中的硬盘名称"insert_data_disk.sh vn_name vda":
+        ```
+        $ insert_data_disk.sh ceph_test_0.6.2_01 vda
+        Target     Source
+        ------------------------------------------------
+        hda        /mnt/images/ceph_test_0.6.0_04.raw
+        hdb        /mnt/images/Ceph-CentOS-07.0.x86_64-0.6.0.install.iso
 
-/usr/bin/ssh-copy-id: WARNING: All keys were skipped because they already exist on the remote system.
-                (if you think this is a mistake, you may want to use -f option)
+        Device attached successfully
 
-Last login: Mon Jan 29 13:45:16 2018 from 192.168.122.1
-Have a lot of fun...
-os42:~ # logout
-Connection to 192.168.122.225 closed.
-[bamvor@ceph-bj-rabbit-10-72-84-158 zhongruan_surveillance]$ vim ~/.ssh/config
-[bamvor@ceph-bj-rabbit-10-72-84-158 zhongruan_surveillance]$ ssh os03
-Last login: Tue Jan 23 09:23:44 2018
-Have a lot of fun...
-vagrant@os42:~> ls
-bin  install_kiwi.sh  works
-vagrant@os42:~> sudo hostnamectl set-hostname os03
-vagrant@os42:~>
-```
-
-2.  Prepare and build kiwi appliance
-```
-install_kiwi_remote.sh os03 --appliance centos/x86_64/ceph-applicance --proxy smb_rd@10.71.84.48 --commit c6d5ed01 your_git_hub_token
-```
-use internal repo: `sudo sed "s/download.opensuse.org/mirrors.haihangyun.com\/opensuse/g" -ibak *`
+        Target     Source
+        ------------------------------------------------
+        hda        /mnt/images/ceph_test_0.6.0_04.raw
+        hdb        /mnt/images/Ceph-CentOS-07.0.x86_64-0.6.0.install.iso
+        vda        /mnt/images/ceph_data_0.6.0_04_vda.raw
+        ```
+        **libvirt实际会根据已有硬盘个数，重命名为vdX**，下述脚本操作的硬盘以日志结尾的新增的target硬盘为准，例如上面的"vda        /mnt/images/ceph_data_0.6.0_04_vda.raw"

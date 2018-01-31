@@ -123,23 +123,7 @@
         ceph_test_0.6.0_03: 192.168.122.207
         ["192.168.122.98", "192.168.122.38", "192.168.122.16", "192.168.122.207"]
         ```
-    4.  动态插入硬盘(可选)。此处的vda是我们希望vm中的硬盘名称，**每个机器必须都插入硬盘**
-        ```
-        $ insert_data_disk.sh ceph_test_0.6.2_01 vda
-        Target     Source
-        ------------------------------------------------
-        hda        /mnt/images/ceph_test_0.6.0_04.raw
-        hdb        /mnt/images/Ceph-CentOS-07.0.x86_64-0.6.0.install.iso
-
-        Device attached successfully
-
-        Target     Source
-        ------------------------------------------------
-        hda        /mnt/images/ceph_test_0.6.0_04.raw
-        hdb        /mnt/images/Ceph-CentOS-07.0.x86_64-0.6.0.install.iso
-        vda        /mnt/images/ceph_data_0.6.0_04_vda.raw
-        ```
-        **libvirt实际会根据已有硬盘个数，重命名为vdX**，下述脚本操作的硬盘以日志结尾的新增的target硬盘为准，例如上面的"vda        /mnt/images/ceph_data_0.6.0_04_vda.raw"
+    4.  动态插入硬盘(可选)。参见"README_tools.md"
 
 4.  部署业务
     1.  连接到任意一台虚机(`vm.sh ssh ceph_test_0.6.0_01`，root密码是"Eking1234!")
