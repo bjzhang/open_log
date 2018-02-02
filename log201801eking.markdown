@@ -1210,19 +1210,22 @@ Jan 30 07:07:19 ceph-bj-beishu-cluster-node-1 nier[753]: [mysql] 2018/01/30 07:0
 	2.	le
 		1.	<http://los-cn-north-1.lecloudapis.com/document/Ceph-CentOS-07.0.x86_64-0.7.02.os01.install.iso>
 		2.	<http://los-cn-north-1.lecloudapis.com/document/Ceph-CentOS-07.0.x86_64-0.7.02.os01.md5sum>
-2.	下一步计划
-	1.	支持串口和vnc同时控制和显示。
-	2.	合并install_5disk.sh和install.sh
-	3.	统一用install.sh, install_kiwi.sh(rename: build_kiwi_image.sh).
-	4.	提供host的kiwi description。
-		1.	nat网卡。
-		2.	libvirtd等工具。
-		3.	指定源
-		4.	virtlockd.
-	5.	mount squashfs
-	6.	改进或直接在.packages加入ceph_deploy, tidb等非rpm的版本。
-	6.	改进：
-		1.	虚机支持IPMI.便于测试。
+2.	还缺啥
+	1.	qa虚拟化环境测试易用性
+		1.	支持串口和vnc同时控制和显示。
+		2.	合并install_5disk.sh和install.sh
+		3.	虚机支持IPMI.便于测试。
+	2.	iso CI构建环境
+		1.	build_kiwi_image.sh可以构建出安装好libvirtd的host环境。	提供host的kiwi description。
+			1.	nat网卡。
+			2.	libvirtd等工具。
+			3.	指定源
+			4.	virtlockd.
+	3.	没有二进制安装包的版本（ceph_deploy, tidb等非rpm的版本）
+	4.	已知问题
+		1.	客户定制机器现场测试暴露的问题：
+			1.	20%概率安装程序无法启动，在家无法复现。
+			2.	nvme加入lvm，无法重启，原因是客户机器硬盘识别比较慢，并且同一机器的不同硬盘首次可用时间不同。
 
 13:06 2018-01-31
 ----------------
@@ -1230,7 +1233,17 @@ GTD
 ---
 1.	上午时间安排又有点跑偏。每天要控制在工具改进上花的时间。细水长流。
 2.	中软明天的版本打tag。
-3.	hikey960 m.2
+
+14:49 2018-02-02
+----------------
+GTD
+---
+1.	中软项目
+	1.	完成文档。
+	2.	测试问题求助社区。
+2.	hikey960 m.2
 	1.	uefi要支持pcie
+		1.	看启动日志。15:01-16:09
 	2.	内核对m.2是怎么支持的？
+3.	写一个通用的git clone脚本。
 
