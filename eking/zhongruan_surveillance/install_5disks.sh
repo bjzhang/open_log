@@ -3,6 +3,8 @@
 LANG=en_US.UTF-8
 MOUNT_POINT=/mnt/images
 BRIDGE=virbr0
+#BUS=virtio
+BUS=scsi
 
 install_from_iso() {
     MOUNT_POINT=$1
@@ -26,7 +28,7 @@ install_from_iso() {
     for num in `seq $NUM_OF_DISK`; do     
         DISK=$MOUNT_POINT/${NAME}_${num}.raw
 	sudo truncate -s ${SIZE[${num}]} $DISK
-        DISK_CMDLINE="$DISK_CMDLINE --disk $DISK,bus=virtio"
+        DISK_CMDLINE="$DISK_CMDLINE --disk $DISK,bus=$BUS"
     done
 
     echo $DISK_CMDLINE
@@ -62,8 +64,8 @@ install_from_iso() {
             break
         fi
     done
-    sudo truncate -s 8192g /mnt/images/${NAME}_5.raw
-    sudo virsh attach-disk $NAME /mnt/images/${NAME}_5.raw vde --targetbus virtio --persistent --live
+    sudo virsh vol-create-as images `basename /mnt/images/${NAME}_5.raw` --capacity 8192g --allocation 0 --format raw
+    sudo virsh attach-disk $NAME /mnt/images/${NAME}_5.raw vde --targetbus $BUS --persistent --live
     echo "press enter to continue installation. Then select Install"
     read
     sudo virsh resume $NAME
@@ -86,8 +88,8 @@ install_from_disk() {
     capacity=`sudo virsh vol-info --bytes ${BASE_DISK} | grep Capacity | sed "s/\ \ */ /g" | cut -d \  -f 2`
     actual_size=`python -c "print $capacity/1024.0/1024/1024"`
     echo "use the same size of backing vol(${BASE_DISK}) $capacity($actual_size GB)"
-    sudo virsh vol-create-as images `basename $DISK` --capacity $capacity --format qcow2 --backing-vol ${BASE_DISK} --backing-vol-format qcow2
-    DISK_CMDLINE="--import --disk $DISK,bus=virtio"
+    sudo virsh vol-create-as images `basename $DISK` --capacity $capacity --format qcow2 --backing-vol ${BASE_DISK} --backing-vol-format qcow2 --pool /mnt/images
+    DISK_CMDLINE="--import --disk $DISK,bus=$BUS"
     echo $DISK_CMDLINE
     sudo virsh list --all | grep $NAME -w 2>&1 > /dev/null
     if [ "$?" = "0" ]; then
