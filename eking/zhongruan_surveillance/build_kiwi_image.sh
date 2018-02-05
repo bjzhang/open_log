@@ -9,6 +9,17 @@ function abort {
 set -e
 trap abort ERR
 
+# Variable: proxy: user@host(could provide 7228 and 8228 proxy)
+create_proxy_tunnel() {
+	PROXY=$1
+	if [ "`sudo netstat -anltp |grep 7228.*LISTEN`" = "" ]; then
+		ssh -fNL 7228:localhost:7228 $PROXY
+	fi
+	if [ "`sudo netstat -anltp |grep 8228.*LISTEN`" = "" ]; then
+		ssh -fNL 8228:localhost:8228 $PROXY
+	fi
+}
+
 # Global variable: ZYPPER
 init() {
 	home=$1
@@ -44,12 +55,7 @@ init() {
 		fi
 		source $MY_ENV
 		
-		if [ "`sudo netstat -anltp |grep 7228.*LISTEN`" = "" ]; then
-			ssh -fNL 7228:localhost:7228 $PROXY
-		fi
-		if [ "`sudo netstat -anltp |grep 8228.*LISTEN`" = "" ]; then
-			ssh -fNL 8228:localhost:8228 $PROXY
-		fi
+		create_proxy_tunnel $PROXY
 		sudo bash -c "echo 'Defaults env_keep += \"http_proxy https_proxy\"' > /etc/sudoers.d/proxy"
 	fi
 
@@ -199,9 +205,13 @@ build(){
 	APPLIANCE=$1
 	TARGET=$2
 	KIWI_TYPE=$3
-	shift 3
+	PROXY=$4
+	# Makefile shift the number of above arguments!
+	shift 4
 
 	echo "INFO: build kiwi image"
+	create_proxy_tunnel $PROXY
+
 	if ! [ -d $APPLIANCE ]; then
 		echo "ERROR: appliance($APPLIANCE) is inexist. exit"
 		exit 128
@@ -334,6 +344,6 @@ if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "prech
 	precheck
 fi
 if [ "$mode" = "all" ] || [ "$mode" = "update_and_build" ] || [ "$mode" = "build" ]; then
-	build $APPLIANCE $TARGET $KIWI_TYPE $@
+	build $APPLIANCE $TARGET $KIWI_TYPE $PROXY $@
 fi
 
