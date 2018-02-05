@@ -192,3 +192,8 @@
         1.  更小容量需要特殊定制。
     3.  NTP偏差：5分钟。
 
+7.  kiwi config.xml修改
+    1.  默认配置文件
+    2.  使用lvm分区
+    3.  添加包。build include
+
