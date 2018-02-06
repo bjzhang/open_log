@@ -12,6 +12,7 @@ trap abort ERR
 # Variable: proxy: user@host(could provide 7228 and 8228 proxy)
 create_proxy_tunnel() {
 	PROXY=$1
+	echo "Create proxy tunnel(input password when necessary):"
 	if [ "`sudo netstat -anltp |grep 7228.*LISTEN`" = "" ]; then
 		ssh -fNL 7228:localhost:7228 $PROXY
 	fi

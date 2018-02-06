@@ -192,8 +192,14 @@
         1.  更小容量需要特殊定制。
     3.  NTP偏差：5分钟。
 
-7.  kiwi config.xml修改
+7.  定制kiwi
+    1.  rpms, binaries, root fs
+
+8.  config.xml修改
     1.  默认配置文件
     2.  使用lvm分区
     3.  添加包。build include
+    4.  修改网卡名称
+        1.  修改"kiwi-descriptions/centos/x86_64/ceph-applicance/root/etc/sysconfig/network-scripts"的脚本。
+        2.  如果需要添加udev规则修改网卡名称。
 
