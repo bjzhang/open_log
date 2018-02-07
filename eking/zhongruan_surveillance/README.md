@@ -202,4 +202,11 @@
     4.  修改网卡名称
         1.  修改"kiwi-descriptions/centos/x86_64/ceph-applicance/root/etc/sysconfig/network-scripts"的脚本。
         2.  如果需要添加udev规则修改网卡名称。
+    5.  不弹出选择界面，默认选择默认磁盘安装。如果不写oem-unattended-id, kiwi会直接安装在找到的第一个硬盘上。根据[kiwi的文档](https://suse.github.io/kiwi/development/schema.html#id175)，id是grep "/dev/disks/by-*/*", "/dev/mapper/*"的结果。
+        ```
+        <oemconfig>
+            <oem-unattended>true</oem-unattended>
+            <oem-unattended-id>by-id-disk-name</oem-unattended-id>
+        </oemconfig>
+        ```
 

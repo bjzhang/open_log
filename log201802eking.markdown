@@ -110,6 +110,7 @@ GTD
         7.  明天直接用最新镜像给冬卯测试。
     2.  TODO:
         1.  向kiwi社区反馈问题。
+            1.  问问题：dracut pre-mount是如何保证只执行一次的。
         2.  能不能用kiwi hook解决？
             1.  editbootscript
             2.  config.sh
@@ -201,4 +202,13 @@ distribution, kiwi, dracut, debug
     1.  怎么解开initrd?  因为initrd和kernel做到了一起。而initramfs里面只有intel的microcode?
     ./kernel/x86/microcode:
     AuthenticAMD.bin  GenuineIntel.bin
+
+15:15 2018-02-07
+----------------
+GTD
+---
+1.  sudo:
+    1.  今天手动改sudo的配置文件（/etc/sudoers.d/xxx），造成sudo无法使用。幸亏另一个机器上有ssh到这个机器root的免密码。
+    2.  编辑sudoer文件一定要用："sudo visudo", "sudo visudo -f /etc/sudoers.d/sudo"方式！！！
+2.  今天要看论文，不想花更多时间在做镜像上。
 
