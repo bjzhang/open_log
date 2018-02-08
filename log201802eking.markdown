@@ -39,7 +39,8 @@ bigtable
 --------
 1.	2006的OSDI。是不是我每年该看下OSDI的论文。
 2.	mapreduce的输入输出使用bigtable。bigtable基于gfs。
-3.	chubby(使用paxos协议)是啥？
+3.	Chubby(使用Paxos协议)是啥？
+    1.  后文多次提到，需要看看。
 4.	Each row range is called a tablet, which is the unit of distribution and load balancing. 
 
 09:34 2018-02-06
@@ -211,4 +212,51 @@ GTD
     1.  今天手动改sudo的配置文件（/etc/sudoers.d/xxx），造成sudo无法使用。幸亏另一个机器上有ssh到这个机器root的免密码。
     2.  编辑sudoer文件一定要用："sudo visudo", "sudo visudo -f /etc/sudoers.d/sudo"方式！！！
 2.  今天要看论文，不想花更多时间在做镜像上。
+
+11:23 2018-02-08
+----------------
+GTD
+---
+1.  10:00-10:52 转正考试。
+2.  macbook 10:52-11:24
+    1.  macbook重启，网线未插入导致usb网卡inactive。
+3.  cow os x plist not work 11:24-11:55
+    1.  launchctl list看到exit status是512，开始觉得是没有daemon化，加了"&"，后来发现是arguments string不能有空格。
+    2.  更新plist:
+        ```
+        launchctl unload Library/LaunchAgents/info.chenyufei.cow.plist
+        launchctl load Library/LaunchAgents/info.chenyufei.cow.plist
+        launchctl list info.chenyufei.cow
+        ```
+    3.  文档：
+        1.  [Creating Launch Daemons and Agents](https://developer.apple.com/library/content/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html#//apple_ref/doc/uid/10000172i-SW7-BCIEDDBJ)
+        2.  [About Daemons and Services](https://developer.apple.com/library/content/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/Introduction.html)
+4.  bager io计划。
+    1.  今天最好把bigtable论文读一遍。
+        1.  13:00-13:08 15:02-15:46 该读Refinement了
+    2.  列出下周的checklist。
+5.  中软
+    1.  帮冬卯看yum无法使用的问题。13:08-13:27
+        1.  网络要通。
+        2.  如果直接使用baseurl要注释mirrorlist。
+        3.  阿里的源；<https://mirrors.aliyun.com/help/centos>, `curl -o /etc/yum.repos.d/CentOS-Base.repo http://mirrors.aliyun.com/repo/Centos-7.repo`
+    2.  kiwi
+        1.  和社区讨论解决系统安装后重新制作initrd的问题。-17:11
+            1.  之前只看到microcode是因为initrd在micro code的initramfs后面，为了便于调试需要在/etc/dracut.conf, /etc/dracut.conf.d/*, /usr/lib/dracut/dracut.conf.d/*中把
+                ```
+                early_microcode="yes"
+                ```
+                改为
+                ```
+                early_microcode="no"
+                ```
+                这样就可以直接看到gzip压缩的initrd。
+            2.  "/etc/dracut.conf.d/02-kiwi.conf"可以看到`omit_dracutmodules+=" kiwi-live kiwi-dump kiwi-repart kiwi-overlay " `，感觉是这个选项导致新作的initrd里面没有20-kiwi-repart-disk.sh。
+            3.  邮件已回复。最终讨论结果计入文档。
+6.  日记，心理学。14:40-15:02
+7.  cubietruck wifi.
+    1.  更新Linux。
+    2.  尝试usb wifi dangle。
+3.  hikey960
+    1.  今天最好再试试。确实没时间就还了。
 
