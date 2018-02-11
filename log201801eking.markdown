@@ -71,6 +71,7 @@ eking, GTD
     1.  "This works by using the code pattern that was used for the previous variants, but in userspace."
 
 13:53 2018-01-05
+----------------
 漏洞讨论
 --------
 1.  升级范围：600-700 node. 5000 vm.
@@ -301,6 +302,8 @@ MASQUERADE  all  --  anywhere             anywhere
 
 20:35 2018-01-14
 ----------------
+中软
+----
 1.  突然想起原来脚本里面配置TiDB所需的系统参数还没有配置。
     1.  未测试。
     2.  加入到root/etc/sysctl.d/99-tidb.conf
@@ -821,11 +824,18 @@ No devices found
 
 10:40 2018-01-18
 ----------------
-资源：
-```
-10.72.22.49 10.72.84.158 E15-27U-28U Printfzj*158
-10.72.22.58 10.72.84.159 E16-27U-28U Password@_
-```
+resources, 资源
+---------------
+1.	张冬卯服务器
+	```
+	10.72.22.49 10.72.84.158 E15-27U-28U Printfzj*158
+	10.72.22.58 10.72.84.159 E16-27U-28U Password@_
+	```
+2.	ntp server
+	1.	10.70.140.20(时间不准)
+	2.	推荐用这个：ntp.0.uoc.polex.io
+3.	iso:
+	1.	http://10.70.69.22/ISO/Linux/
 
 12:46 2018-01-18
 ----------------

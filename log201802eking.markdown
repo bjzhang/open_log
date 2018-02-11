@@ -255,8 +255,62 @@ GTD
             3.  邮件已回复。最终讨论结果计入文档。
 6.  日记，心理学。14:40-15:02
 7.  cubietruck wifi.
-    1.  更新Linux。
-    2.  尝试usb wifi dangle。
-3.  hikey960
-    1.  今天最好再试试。确实没时间就还了。
+    1.  DONE 更新Linux。
+    2.  NEXT: 尝试usb wifi dangle。
+8.  hikey960
+    1.  NEXT: 今天最好再试试。确实没时间就还了。
+
+11:09 2018-02-09
+----------------
+GTD
+---
+1.  中软项目
+    1.  在158部署环境。
+    2.  把项目相关代码单独出来。并给QA。
+2.  bagerIO
+    1.  看bigtable论文。14:28-
+    2.  TODO
+        1.  haystack
+        2.  compaction和snapshot很重要。
+7.  cubietruck wifi.
+    2.  NEXT: 尝试usb wifi dangle。
+8.  hikey960
+    1.  NEXT: 今天最好再试试。确实没时间就还了。
+
+14:10 2018-02-09
+----------------
+资源, web url, 链接
+-------------------
+1,  nfs test
+    1.  <https://stackoverflow.com/questions/21565865/filesystem-test-suites/25940371#25940371>
+    2.  <https://fedoraproject.org/wiki/Category:NFS_Test_Cases>
+    3.  nfs基本功能测试看起来用ltp nfs和xfstest就行了。
+
+09:21 2018-02-11
+----------------
+GTD
+---
+1.  中软OFFSET64
+    1.  技术分析：09:25-10:43 <http://aarch64.me/2018/02/Large-File-Support-In-Linux/>
+    2.  review振尧总的客户文档 13:45-13:55
+    3.  没发送：14:31-14:45
+        我理解业界所谓的32位系统都是默认软件支持lpae，"-D_FILE_OFFSET_BITS=64"等能力的32位系统。补充三个技术信息，
+        1.  原来在华为也遇到过类似的问题。解决办法是如果客户有大于4G的需求（比如要求nfs server提供大于4G空间的管理能力）都要求客户端要用上面"-D_FILE_OFFSET_BITS=64"编译。
+        2.  刚才又确认下代码，不管glibc和ltp（内核测试套）都要求32位环境必须可以正确支持"-D_FILE_OFFSET_BITS=64"。
+        3.  去年Linux内核已经开始要求新的32位移植必须默认就使用64bit off_t。
+2.  杂
+    1.  病假报备。10:48-11:09
+    2.  午饭。11:29-12:10
+    3.  午休 12:50-13:35
+    4.  下楼活动 13:35-13:45
+    5.  京东下单，周一白天送到。14:16-14:31 14:45-15:00
+    6.  晚饭。16:20-17:12
+2.  bagerIO
+    1.  看levelDB文档: index。15:55-16:20
+        1.  看设计: snapshots, slice.
+        2.  performance tune: include/leveldb/options.h
+    2.  整理周五的内容。
+4.  存储脚本独立项目。
+5.  回复kiwi邮件。15:27-15:40
+    1.  暂时的方案就是系统启动后自己加一个脚本运行dracut -f。并保证这个脚本只执行一次（可以通过检测一个空文件是否存在判断）
 
