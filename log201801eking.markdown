@@ -836,6 +836,10 @@ resources, 资源
 	2.	推荐用这个：ntp.0.uoc.polex.io
 3.	iso:
 	1.	http://10.70.69.22/ISO/Linux/
+4.	脚本
+	1.	appliance:
+		1.	[工作无关脚本](https://github.com/bjzhang/small_tools_collection/tree/master/appliance_helper)
+		2.	[中软相关相关脚本和README.md](http://git.polex.io/zhangjian/storage_applicance)
 
 12:46 2018-01-18
 ----------------
