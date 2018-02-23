@@ -300,3 +300,50 @@ golang
 1.	type File, type Reader
 	1.	开始不理解为什么os.Open打开的文件可以丢给Scanner，明明要求是Reader才可以。后来看了<https://medium.com/@matryer/golang-advent-calendar-day-seventeen-io-reader-in-depth-6f744bb4320b>才明白，原因是File实现了Read方法。
 
+09:12 2018-02-23
+================
+GTD
+---
+1.	今日总结
+	1.	看论文的时候看一部分整理一部分笔记感觉效果挺好的，后面继续坚持。
+2.	最近看bigtable和badgerIO的论文，分别出自OSDI和FAST，后面要关注这两个会议。
+	1.	TODO查会议时间。
+	2.	DONE 打印论文。
+3.	badgerIO
+	1.	重新过了下trello的任务。
+		1.	rocksdb的wiki内容很丰富，可以作为参考。
+		2.	<https://github.com/dgraph-io/badger>里面的四篇blog目前看了第一篇。
+	1.	看完levelDB文档 10:22-10:39
+		1.	levelDB文档只是简单过了下。后续对照badgerIO看。
+			1.	TODO: levelDB和huge tlb的关系。
+	2.	开始看fast16-papers-lu.pdf
+		1.	15:32-16:13 看完第二节。16:15-16:27 整理笔记
+			1.	论文提到使用keyvalue保存照片。文章从标题和公司看就是[冬卯推荐的论文](https://code.facebook.com/posts/685565858139515/needle-in-a-haystack-efficient-storage-of-billions-of-photos/)
+			2.	TODO: 文章比较了LSM和B tree。需要再看下B+ tree。
+			3.	FIXME: 文章提到把key和value分开对于crash后的一致性有调整，WiscKey怎么做的没看懂。
+			4.	Wisckey对于随机写小value并且做大范围查询的情况性能不如LevelDB。但是: "this workload does not reflect real-world use cases (which primarily use shorter range queries) and can be improved by log reorganization. "
+			5.	LSM tree对于插入多于查找的情况很有用（相比于B tree）。
+			6.	由于L0的数据可能重叠，查找时数据时需要查找所有L0的文件（其它层文件每层只需要查一个），所以当LevelDB发现L0层文件大于8时，会降低前台写入的速度，便于后台的compaction把部分数据从L0降到L1。
+			7.	TODO：论文提到了bloom filter，需要简单看下。
+		3.	16:56-17:27 看完第三节。17:27-17:43 整理笔记。
+			1.	Wisckey在range queries时通过对next，prev行为的分析预测用户行为并从value log预取value，这样可以充分利用ssd的随机读可以高并发的特点。
+			2.	减小读放大主要为了加快查找。
+			3.	因为只保存key和value的地址这样LSM tree比较小，可以更容易的cache在内存中。
+			4.	插入和删除：插入时先插入value再插入key到LSM tree。删除时只删除LSM tree的key。这样带来一个问题，垃圾回收的时候，怎么知道value log里面的value时无用的？
+				1.	解决办法是在vlog中保存(key size, value size, key, value)的tuple。这样只需要从vlog里面得到key再去LSM tree看有没有这个value，如果没有说明时已经删除的。
+			5.	value log很大，如何垃圾回收？
+				1.	新数据永远从head写入。Wisckey GC时从tail扫描，如果是有用的value，会写回head；没用的删除。TODO：问题上这样回不回有大量多于的写？
+			6.	Challenges后续还需要重点看。
+			7.	Implementation里面用的系统调用可以关注下。
+				1.	posix_fadvise()
+				2.	fallocate(): Wisckey会分配一个很大的value log（TODO具体看是多大），这样长时间都不会绕回。
+	3.	NEXT: 工作日志可以保存。
+4.	杂
+	1.	用python写自动插入图片的脚本。看看半个小时能不能写完。13:53
+		1.	13:53-14:34 原定功能写完了。想增加一个图片前面的文字，需要再看下正则表达式。
+		2.	14:34-14:54 markdown文件已上传。<http://aarch64.me/2018/02/how-to-transfer-file-through-putty/>
+		3.	14:54-15:13 整理脚本。
+5.	DQ6
+	1.	识别图中对话框中的文字。
+	2.	可以正确退出战斗。
+
