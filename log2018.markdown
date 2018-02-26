@@ -317,26 +317,7 @@ GTD
 		1.	levelDB文档只是简单过了下。后续对照badgerIO看。
 			1.	TODO: levelDB和huge tlb的关系。
 	2.	开始看fast16-papers-lu.pdf
-		1.	15:32-16:13 看完第二节。16:15-16:27 整理笔记
-			1.	论文提到使用keyvalue保存照片。文章从标题和公司看就是[冬卯推荐的论文](https://code.facebook.com/posts/685565858139515/needle-in-a-haystack-efficient-storage-of-billions-of-photos/)
-			2.	TODO: 文章比较了LSM和B tree。需要再看下B+ tree。
-			3.	FIXME: 文章提到把key和value分开对于crash后的一致性有调整，WiscKey怎么做的没看懂。
-			4.	Wisckey对于随机写小value并且做大范围查询的情况性能不如LevelDB。但是: "this workload does not reflect real-world use cases (which primarily use shorter range queries) and can be improved by log reorganization. "
-			5.	LSM tree对于插入多于查找的情况很有用（相比于B tree）。
-			6.	由于L0的数据可能重叠，查找时数据时需要查找所有L0的文件（其它层文件每层只需要查一个），所以当LevelDB发现L0层文件大于8时，会降低前台写入的速度，便于后台的compaction把部分数据从L0降到L1。
-			7.	TODO：论文提到了bloom filter，需要简单看下。
-		3.	16:56-17:27 看完第三节。17:27-17:43 整理笔记。
-			1.	Wisckey在range queries时通过对next，prev行为的分析预测用户行为并从value log预取value，这样可以充分利用ssd的随机读可以高并发的特点。
-			2.	减小读放大主要为了加快查找。
-			3.	因为只保存key和value的地址这样LSM tree比较小，可以更容易的cache在内存中。
-			4.	插入和删除：插入时先插入value再插入key到LSM tree。删除时只删除LSM tree的key。这样带来一个问题，垃圾回收的时候，怎么知道value log里面的value时无用的？
-				1.	解决办法是在vlog中保存(key size, value size, key, value)的tuple。这样只需要从vlog里面得到key再去LSM tree看有没有这个value，如果没有说明时已经删除的。
-			5.	value log很大，如何垃圾回收？
-				1.	新数据永远从head写入。Wisckey GC时从tail扫描，如果是有用的value，会写回head；没用的删除。TODO：问题上这样回不回有大量多于的写？
-			6.	Challenges后续还需要重点看。
-			7.	Implementation里面用的系统调用可以关注下。
-				1.	posix_fadvise()
-				2.	fallocate(): Wisckey会分配一个很大的value log（TODO具体看是多大），这样长时间都不会绕回。
+		1.	15:32-16:13 看完第二节。16:15-16:27 整理笔记. ref<bjzhang.github.io/_drafts/2018-02-26-WiscKey-key-value-store.md>
 	3.	NEXT: 工作日志可以保存。
 4.	杂
 	1.	用python写自动插入图片的脚本。看看半个小时能不能写完。13:53
@@ -382,13 +363,67 @@ GTD
 		4.	把技术日志保存在BadgerIO里面。14:54-16:01 16:13-
 			1.	DONE: readline from file
 			2.	DONE 从命令行读取文件。
-			3.	把文件缓存
+			3.	DONE: 把文件缓存
 				1.	16:01 已经可以匹配到key。
-			4.	转为byte写入badgerIO。
+			4.	DONE: 转为byte写入badgerIO。
 		5.	golang需要尽快系统学习，感觉现在仅仅是当c语言用。
 3.	DQ6
-	1.	识别战斗退出和全恢复什么也没发生的场景。
+	1.	DONE 识别战斗退出和全恢复什么也没发生的场景。
 	2.	积累博客素材。
 4.	NEXT
 	1.	看冬卯今天发的材料和视频<https://talks.golang.org/2012/concurrency.slide>
+
+09:21 2018-02-26
+================
+GTD
+---
+1.	杂
+	1.	10’ 发公众号。
+		1.	本来就是点几下鼠标点事情，转发朋友圈之前还是有些犹豫，觉得技术含量不高的感觉。
+	2.	计划 09:34-09:37
+	3.	做饭，吃饭，休息，明天早餐. 11:21-14:19
+	4.	记账。14:19-14:38
+	5.	睡觉 16:06-16:23
+	6.	感觉现在列的action item又有点多了。这样很难做完。有些信息收集要放到笔记里面，不要直接放到action item中。
+2.	NEXT: 通过bmc安装部署。截图便于后续opencv分析。
+	1.	尝试连接bmc
+		1.	配置ip后网络断了。14:39-14:49 16:23-16:39. ref"16:37 2018-02-26"
+		2.	网络不通 15:41-15:47
+3.	badgerIO
+	1.	golang:
+		1.	看冬卯今天发的材料和视频<https://talks.golang.org/2012/concurrency.slide> 09:38-10:03 听到21:45听困了。14:49-15:25 看完了。
+			1.	Concurrecny is not parallelism.
+			2.	有类似golang concurrency的特性的语言：Occam, Erlang...
+			3.	"Rough analogy: writing to a file by name (process, Erlang) vs. writing to a file descriptor (channel, Go)."
+			4.	go statement: run but not make the caller wait.
+			5.	channel: do not communicate with share memories, use channels instead.
+				1.	"func boring(msg string) <-chan string { // Returns receive-only channel of strings."
+			6.	buffer channel like mailbox in Erlang.
+	1.	fast16-papers-lu.pdf
+		1.	NEXT: 整理笔记。10:05-10:41 15:59-16:06
+			1.	ref <bjzhang.github.io/_drafts/2018-02-26-WiscKey-key-value-store.md>
+			2.	下午一看论文也是困，郁闷。
+		1.	NEXT: 和冬卯讨论
+	1.	NEXT: 有空的话看看如何在keyvalue数据库中保存信息。
+	1.	NEXT: 看看PingCap 唐刘的TiKV。
+4.	DQ6
+	1.	整理思路，写公众号素材。
+	2.	NEXT: 在game helper里面使用channel。
+5.  Nentropy ansible部署。<https://github.com/journeymidnight/nentropy>
+	1.	学习Nentropy如何使用。10'
+	1.	NEXT: 计划周二开始搞。
+6.	macbook air重装。
+7.	每天抽出时间看视频。
+8.	golang
+	1.	里面有syncthing, k8s等我听说过的项目，需要时可以参考。<http://herman.asia/open-source-go-projects-to-learn-from>
+	1.	[Google I/O 2013 - Advanced Go Concurrency Patterns](https://www.youtube.com/watch?v=QDDwwePbDtw)
+
+16:37 2018-02-26
+================
+software skill, windows, network, add ip address
+------------------------------------------------
+1.	<https://www.howtogeek.com/51741/how-to-quickly-add-multiple-ip-addresses-to-windows-servers/>
+	`netsh interface ipv4 add address “Local Area Connection” 192.168.1.2 255.255.255.0`
+2.	<https://superuser.com/questions/786345/why-do-i-get-error-the-filename-directory-name-or-volume-label-syntax-is-inco>
+	注意上面的interface名字需要是从`netsh interface show interface`得到的。
 
