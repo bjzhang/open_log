@@ -277,15 +277,6 @@ GTD
 8.  hikey960
     1.  NEXT: 今天最好再试试。确实没时间就还了。
 
-14:10 2018-02-09
-----------------
-资源, web url, 链接
--------------------
-1,  nfs test
-    1.  <https://stackoverflow.com/questions/21565865/filesystem-test-suites/25940371#25940371>
-    2.  <https://fedoraproject.org/wiki/Category:NFS_Test_Cases>
-    3.  nfs基本功能测试看起来用ltp nfs和xfstest就行了。
-
 09:21 2018-02-11
 ----------------
 GTD
