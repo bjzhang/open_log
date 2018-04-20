@@ -2951,14 +2951,157 @@ GTD
 				```
             1.  是否影响做migration?
 				1.	实际试下bcache，在不同虚拟机挂载，看看效果。
+                    1.  建立opensuse虚拟机挂载两个虚拟机磁盘实验。
+						```
+						[bamvor@ceph-bj-rabbit-10-72-84-158 zhangjian]$ sudo virsh vol-create-as zhangjian bcache-test-cache-device.raw --capacity 500G --allocation 0
+						Vol bcache-test-cache-device.raw created
+
+						[bamvor@ceph-bj-rabbit-10-72-84-158 zhangjian]$ sudo virsh vol-info --pool zhangjian bcache-test-cache-device.raw
+						Name:           bcache-test-cache-device.raw
+						Type:           file
+						Capacity:       500.00 GiB
+						Allocation:     0.00 B
+
+						[bamvor@ceph-bj-rabbit-10-72-84-158 zhangjian]$ sudo virsh vol-create-as zhangjian bcache-test-backing-device.raw --capacity 8T --allocation 0
+						Vol bcache-test-backing-device.raw created
+
+						[bamvor@ceph-bj-rabbit-10-72-84-158 zhangjian]$ sudo virsh vol-info --pool zhangjian bcache-test-backing-device.raw
+						Name:           bcache-test-backing-device.raw
+						Type:           file
+						Capacity:       8.00 TiB
+						Allocation:     0.00 B
+						```
+                        attach
+						```
+						sudo virsh attach-disk 04_opensuse42.3 $PWD/bcache-test-cache-device.raw vdb --current
+						sudo virsh attach-disk 04_opensuse42.3 $PWD/bcache-test-backing-device.raw vdc --current
+						```
+                    1.	感觉不应该建立虚拟机磁盘，应该是建立物理磁盘，然后attach到虚拟机。但是这样测试migration么？好像不行。所以用虚拟磁盘测试migration应该没问题。
+                    1.  安装bcache-tools，TODO：有没有capi?
+                        1.  `sudo zypper in bcache-tools`
+                    1.  format
+						```
+						vagrant@os17:~> sudo make-bcache -C /dev/vdb
+						UUID:                   c6fedb4f-88a4-4cbf-90a3-7ee57fa3813f
+						Set UUID:               8465db04-38f1-4858-a3d6-a93414e232ec
+						version:                0
+						nbuckets:               1024000
+						block_size:             1
+						bucket_size:            1024
+						nr_in_set:              1
+						nr_this_dev:            0
+						first_bucket:           1
+						vagrant@os17:~> sudo make-bcache -B /dev/vdc
+						UUID:                   5ad92b29-9f6f-4686-8bc1-7b24a615e01d
+						Set UUID:               d70a680f-9ae0-49e5-a6af-8a58ce44236c
+						version:                1
+						block_size:             1
+						data_offset:            16
+						```
+						不知道为什么backing device有个disk。但是caching device没有。
+						```
+						vagrant@os17:~> lsblk
+						NAME      MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+						...
+						vdb       254:16   0  500G  0 disk
+						vdc       254:32   0    8T  0 disk
+						└─bcache0 253:0    0    8T  0 disk
+						```
+                        这里要注意参数需要和具体设备一致：TODO
+						```
+						The block size should match the backing devices sector size which will usually be either 512 or 4k. The bucket size should match the erase block size of the caching device with the intent of reducing write amplification. For example, using a HDD with 4k sectors and an SSD with an erase block size of 2MB this command would look like
+
+					    # make-bcache --block 4k --bucket 2M -C /dev/sdy2
+						```
+                        ```
+						vagrant@os17:~> sudo bcache-super-show /dev/vdb
+						sb.magic                ok
+						sb.first_sector         8 [match]
+						sb.csum                 47F830613D1AAC15 [match]
+						sb.version              3 [cache device]
+
+						dev.label               (empty)
+						dev.uuid                c6fedb4f-88a4-4cbf-90a3-7ee57fa3813f
+						dev.sectors_per_block   1
+						dev.sectors_per_bucket  1024
+						dev.cache.first_sector  1024
+						dev.cache.cache_sectors 1048574976
+						dev.cache.total_sectors 1048576000
+						dev.cache.ordered       yes
+						dev.cache.discard       no
+						dev.cache.pos           0
+						dev.cache.replacement   0 [lru]
+
+						cset.uuid               8465db04-38f1-4858-a3d6-a93414e232ec
+						```
+					1.	attach
+						```
+						vagrant@os17:~> su -c 'echo 8465db04-38f1-4858-a3d6-a93414e232ec > /sys/block/bcache0/bcache/attach'
+						```
+                        attach之后，caching device有个和backing device大小一样的盘(type是disk不是part)。
+						```
+						os17:/sys/block/bcache0/bcache # lsblk
+						NAME      MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+						...
+						vdb       254:16   0  500G  0 disk
+						└─bcache0 253:0    0    8T  0 disk
+						vdc       254:32   0    8T  0 disk
+						└─bcache0 253:0    0    8T  0 disk
+						```
+					1.	cache mode:
+						```
+						os17:/sys/block/bcache0/bcache # echo writeback > /sys/block/bcache0/bcache/cache_mode
+						os17:/sys/block/bcache0/bcache # cat cache_mode
+						writethrough [writeback] writearound none
+						```
+                    1.  关闭writeback后，state仍然是dirty。
+						```
+						os17:/sys/block/bcache0/bcache # echo 0 > writeback_percent
+						os17:/sys/block/bcache0/bcache # cat state
+						dirty
+						```
+                        过了不知多久，state变成clean了。
+                    1.  实际测试，backing device/dev/bcache0可以直接mount。
+                    1.  在另一个vm测试。同样的backing device，新的cache device。
+                        1.  正常来说udev应该可以自动帮忙注册/dev/bcacheX，在新的虚拟机插入后，没有自动认出来，尝试手动注册：`echo /dev/sdc > /sys/fs/bcache/register`。
+							```
+							vagrant@os25:~> su -c 'echo /dev/vdc > /sys/fs/bcache/register'
+							Password:
+							bash: /sys/fs/bcache/register: No such file or directory
+							vagrant@os25:~> sudo modprobe bcache
+							vagrant@os25:~> lsmod |grep bcache
+							bcache                245760  0
+							vagrant@os25:~> su -c 'echo /dev/vdc > /sys/fs/bcache/register'
+							Password:
+							```
+                        1.  注册后，不论是直接mount还是加了cache mount，都可以。
+                        1.  detach cache, detach disk后再回到原本的虚拟机04看下。
+                            1.  内容是对的。同时发现vm04里面bcache编号变成了/dev/bcache1.
+                    1.  TODO
+                        1.  看如何flush数据。
+                        2.  测试换虚拟机和cache device后，是否可以使用。
+                        1.  bcache sys里面的信息是在kernel里面还是在bcache的设备里面？
+                            1.  因为发现backing device attach到另一个虚拟机，cachemode也是writeback。不知道是默认就是writeback还是因为在vm04修改的结果。
+                        1.  libvirt caching device.
+                        1.  部署ceph。测试rbd+本地cache。
+
 1.  杂
     1.  ceph社区现在已经不做ssd cache了。bluestore里面用了ssd cache。
 1.  TODO
     1.  bcache设备的管理，例如不会重名。
     1.  bcache flush是按时间还是按数据比例？
         1.  如果按数据比例有没有影响？
+            1.  也没有影响。只是按实际flush，可能能少丢一些数据。
     1.  cache机制的错误处理。
     1.  bcache performance tuning。
+    1.  冬卯：
+        1.  不用lvm的原因：
+            1.  lvm vg重名。bamvor：解决办法：libvirt用uuid做vg的名字。
+            2.  bcache可能性能好一些。ceph社区说的。
+                1.  bluestore: nvme, ssd, hdd.
+                    TODO需要看了bluestore再向冬卯请假。
+        1.  bcache: transaction, b tree, 空闲空间管理。
+        1.  怎么把rbd给kernel?
 
 10:09 2018-04-18
 ================
@@ -2975,4 +3118,66 @@ GTD
         1.  17:30-17:45 测试bcache是否可以live migration。
         1.  bcache和rbd的配合。
         2.  libvirt storage接口。
+
+09:23 2018-04-19
+================
+GTD
+---
+1.  09:23-09:25 计划
+    1.  DONE 30' 教育的思考。
+    2.  DONE 总结家军调试过程。
+    3.  一体机本地cache。
+    4.  DONE 80'+30' 健身
+    5.  1.5h 午饭，午睡
+    6.  DONE OPTION
+        1.  2h 跑步
+2.  生活
+    1.  09:36-09:58 教育
+    1.  18:00-18:17 热饭
+    1.  18:20-18:32 吃饭。
+    1.  18:36-18:55 刷碗。
+3.  技术
+    1.  10:02-10:16 libvirt升级问题。
+    1.  -11:02 linux 4.17 merge window 2 quick notes.
+    1.  11:31-11:58 17:14-18:00 19:20-20:03 一体机本地cache see"11:06 2018-04-17"
+    1.  TODO
+        1.  augtools: 'Defaults env_keep += "http_proxy https_proxy"'
+            ref<https://gist.github.com/anuaimi/4074714>
+4.  总结
+    1.  今天的状态比昨天好一些。到了晚上8点，并不觉得累。只是脖子疼了。
+
+10:03 2018-04-19
+================
+tech, virtualization, libvirt, qemu
+-----------------------------------
+原始问题是p2v，需要支持uefi。运维同学升级libvirt和qemu后，出错。搜索相关出错信息，可以找到下面bug。
+[Bug 1450317 - "cpu-baseline" command doesn't deal with "cmt" fea-ture](https://bugzilla.redhat.com/show_bug.cgi?id=1450317)
+但是升级后仍然有问题，根据下面bug升级后解决。
+[Bug 1525337 - virt-manager shouldn't copy host cpu capabilities directly with setting 'copy host CPU definition'](https://bugzilla.redhat.com/show_bug.cgi?id=1525337)
+之所以会出问题，应该是用了intel比较新的cpu，新cpu的特性在vm中没有完全支持。不升级libvirt情况下，libvirt和qemu都不认识新的cpu，实际是当成相对旧的cpu使用的。在执行live migration时要求源和目的cpu feature完全一致。
+cpu型号：2683和2650. "新的型号多了一个 monitor & ida"
+```
+编辑 /usr/share/libvirt/cpu_map.xml, 去掉新版的qemu不支持的 cmt, mbm_total, mbm_local
+```
+
+10:32 2018-04-19
+================
+software skill, sync, google drive, icloud
+------------------------------------------
+因为app store上没法下载软件，注销再登陆设置icloud账户后解决。但是google drive无法同步macbook的文稿的内容。后来发现是icloud没有打开文稿同步的功能。看起来即使能看到要同步的Documents目录，如果icloud里面没有选择同步文稿，也不行。
+
+10:34 2018-04-20
+================
+1.  xxx
+    1.  infrastructure as code
+    2.  micro servers. service meshes.
+    3.  rethink enterprise architecture
+2.  俞军
+
+1.  lvm vg重名。
+2.  bcache可能性能好一些。ceph社区说的。
+    1.  bluestore: nvme, ssd, hdd.
+        TODO.
+3.  bcache: transaction, b tree, 空闲空间管理。
+4.  怎么把rbd给kernel?
 
