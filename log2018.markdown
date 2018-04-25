@@ -3202,8 +3202,8 @@ GTD
 ceph部署
 --------
 1.  看ceph文档<http://docs.ceph.com/docs/master/start/intro/>
-1.  "A Ceph Storage Cluster requires at least one Ceph Monitor, Ceph Manager, and Ceph OSD (Object Storage Daemon). The Ceph Metadata Server is also required when running Ceph Filesystem clients."
-1.  环境配置
+2.  "A Ceph Storage Cluster requires at least one Ceph Monitor, Ceph Manager, and Ceph OSD (Object Storage Daemon). The Ceph Metadata Server is also required when running Ceph Filesystem clients."
+3.  环境配置
     1.  修改ntp.conf: "server 10.70.140.20 iburst"
     1.  添加用户
         ```
@@ -3226,6 +3226,603 @@ ceph部署
         $ setenforce 0
         setenforce: SELinux is disabled
         ```
+4.  ceph deploy
+    1.  准备ceph要用的磁盘
+		1.	host
+			```
+			[bamvor@ceph-bj-rabbit-10-72-84-158 images]$ sudo virsh vol-create-as zhangjian ceph-bcache-01-ceph-disk.raw --capacity 10g
+			Vol ceph-bcache-01-ceph-disk.raw created
+
+			[bamvor@ceph-bj-rabbit-10-72-84-158 images]$ sudo virsh vol-create-as zhangjian ceph-bcache-02-ceph-disk.raw --capacity 10g
+			Vol ceph-bcache-02-ceph-disk.raw created
+
+			[bamvor@ceph-bj-rabbit-10-72-84-158 images]$ sudo virsh vol-create-as zhangjian ceph-bcache-03-ceph-disk.raw --capacity 10g
+			Vol ceph-bcache-03-ceph-disk.raw created
+
+			[bamvor@ceph-bj-rabbit-10-72-84-158 images]$ sudo virsh attach-disk ceph_bcache_dev_01 $PWD/zhangjian/ceph-bcache-01-ceph-disk.raw vdb --current
+			Disk attached successfully
+
+			[bamvor@ceph-bj-rabbit-10-72-84-158 images]$ sudo virsh attach-disk ceph_bcache_dev_02 $PWD/zhangjian/ceph-bcache-02-ceph-disk.raw vdb --current
+			Disk attached successfully
+
+			[bamvor@ceph-bj-rabbit-10-72-84-158 images]$ sudo virsh attach-disk ceph_bcache_dev_03 $PWD/zhangjian/ceph-bcache-03-ceph-disk.raw vdb --current
+			Disk attached successfully
+			```
+			2.	在guest能看到：
+				kernel message:
+				```
+				<7>[325150.687883] pci 0000:00:06.0: [1af4:1001] type 00 class 0x010000
+				<7>[325150.688055] pci 0000:00:06.0: reg 0x10: [io  0x0000-0x003f]
+				<7>[325150.688115] pci 0000:00:06.0: reg 0x14: [mem 0x00000000-0x00000fff]
+				<6>[325150.689562] pci 0000:00:06.0: BAR 1: assigned [mem 0xc0000000-0xc0000fff]
+				<6>[325150.689807] pci 0000:00:06.0: BAR 0: assigned [io  0x1000-0x103f]
+				<6>[325150.690214] virtio-pci 0000:00:06.0: enabling device (0000 -> 0003)
+				<6>[325150.710395] virtio-pci 0000:00:06.0: virtio_pci: leaving for legacy driver
+				<7>[325150.718101] virtio-pci 0000:00:06.0: irq 24 for MSI/MSI-X
+				<7>[325150.718126] virtio-pci 0000:00:06.0: irq 25 for MSI/MSI-X
+				```
+				```
+				# lspci -v -s 00:06.0
+				00:06.0 SCSI storage controller: Red Hat, Inc Virtio block device
+						Subsystem: Red Hat, Inc Device 0002
+						Physical Slot: 6
+						Flags: bus master, fast devsel, latency 0, IRQ 10
+						I/O ports at 1000 [size=64]
+						Memory at c0000000 (32-bit, non-prefetchable) [size=4K]
+						Capabilities: [40] MSI-X: Enable+ Count=2 Masked-
+						Kernel driver in use: virtio-pci
+						Kernel modules: virtio_pci
+				```
+	2.	建立initial cluster
+        ```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ ceph-deploy new ceph-deploy-01
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy new ceph-deploy-01
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  func                          : <function new at 0xc71500>
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0xcda2d8>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  ssh_copykey                   : True
+		[ceph_deploy.cli][INFO  ]  mon                           : ['ceph-deploy-01']
+		[ceph_deploy.cli][INFO  ]  public_network                : None
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  cluster_network               : None
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.cli][INFO  ]  fsid                          : None
+		[ceph_deploy.new][DEBUG ] Creating new cluster named ceph
+		[ceph_deploy.new][INFO  ] making sure passwordless SSH succeeds
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph-deploy-01][DEBUG ] find the location of an executable
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/sbin/ip link show
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/sbin/ip addr show
+		[ceph-deploy-01][DEBUG ] IP addresses found: [u'192.168.122.15']
+		[ceph_deploy.new][DEBUG ] Resolving host ceph-deploy-01
+		[ceph_deploy.new][DEBUG ] Monitor ceph-deploy-01 at 192.168.122.15
+		[ceph_deploy.new][DEBUG ] Monitor initial members are ['ceph-deploy-01']
+		[ceph_deploy.new][DEBUG ] Monitor addrs are ['192.168.122.15']
+		[ceph_deploy.new][DEBUG ] Creating a random mon key...
+		[ceph_deploy.new][DEBUG ] Writing monitor keyring to ceph.mon.keyring...
+		[ceph_deploy.new][DEBUG ] Writing initial config to ceph.conf...
+		```
+    3.  修改软件源
+		```
+		# cd /etc/yum.repos.d
+		# rm -f CentOS-CR.repo CentOS-Debuginfo.repo CentOS-fasttrack.repo CentOS-Media.repo CentOS-Sources.repo CentOS-Vault.repo
+		# mv CentOS-Base.repo CentOS-Base.repo.bak
+		# curl -o CentOS-Base.repo http://mirrors.haihangyun.com/configs/centos/centos-7.repo
+		  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+										 Dload  Upload   Total   Spent    Left  Speed
+		100  2259  100  2259    0     0   351k      0 --:--:-- --:--:-- --:--:--  367k
+		# mv epel.repo epel.repo.bak
+		# mv epel-testing.repo epel-testing.repo.bak
+		# curl -o epel.repo http://mirrors.haihangyun.com/configs/epel/epel-7.repo
+		# curl -o epel-testing.repo http://mirrors.haihangyun.com/configs/epel/epel-testing-7.repo
+		```
+	4.	跳过:"ceph-deploy install ceph-deploy-01 ceph-deploy-02 ceph-deploy-03"
+    5.  Deploy the initial monitor(s) and gather the keys(TODO：里面的操作要看懂）
+		```
+		$ ceph-deploy mon create-initial
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy mon create-initial
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  subcommand                    : create-initial
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0x152cf38>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  func                          : <function mon at 0x151f5f0>
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.cli][INFO  ]  keyrings                      : None
+		[ceph_deploy.mon][DEBUG ] Deploying mon, cluster ceph hosts ceph-deploy-01
+		[ceph_deploy.mon][DEBUG ] detecting platform for host ceph-deploy-01 ...
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph-deploy-01][DEBUG ] find the location of an executable
+		[ceph_deploy.mon][INFO  ] distro info: CentOS Linux 7.4.1708 Core
+		[ceph-deploy-01][DEBUG ] determining if provided host has same hostname in remote
+		[ceph-deploy-01][DEBUG ] get remote short hostname
+		[ceph-deploy-01][DEBUG ] deploying mon to ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] get remote short hostname
+		[ceph-deploy-01][DEBUG ] remote hostname: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph-deploy-01][DEBUG ] create the mon path if it does not exist
+		[ceph-deploy-01][DEBUG ] checking for done path: /var/lib/ceph/mon/ceph-ceph-deploy-01/done
+		[ceph-deploy-01][DEBUG ] done path does not exist: /var/lib/ceph/mon/ceph-ceph-deploy-01/done
+		[ceph-deploy-01][INFO  ] creating keyring file: /var/lib/ceph/tmp/ceph-ceph-deploy-01.mon.keyring
+		[ceph-deploy-01][DEBUG ] create the monitor keyring file
+		[ceph-deploy-01][INFO  ] Running command: sudo ceph-mon --cluster ceph --mkfs -i ceph-deploy-01 --keyring /var/lib/ceph/tmp/ceph-ceph-deploy-01.mon.keyring --setuser 167 --setgroup 167
+		[ceph-deploy-01][INFO  ] unlinking keyring file /var/lib/ceph/tmp/ceph-ceph-deploy-01.mon.keyring
+		[ceph-deploy-01][DEBUG ] create a done file to avoid re-doing the mon deployment
+		[ceph-deploy-01][DEBUG ] create the init path if it does not exist
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph.target
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph-mon@ceph-deploy-01
+		[ceph-deploy-01][WARNIN] Created symlink from /etc/systemd/system/ceph-mon.target.wants/ceph-mon@ceph-deploy-01.service to /usr/lib/systemd/system/ceph-mon@.service.
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl start ceph-mon@ceph-deploy-01
+		[ceph-deploy-01][INFO  ] Running command: sudo ceph --cluster=ceph --admin-daemon /var/run/ceph/ceph-mon.ceph-deploy-01.asok mon_status
+		[ceph-deploy-01][DEBUG ] ********************************************************************************
+		[ceph-deploy-01][DEBUG ] status for monitor: mon.ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] {
+		[ceph-deploy-01][DEBUG ]   "feature_map": {
+		[ceph-deploy-01][DEBUG ]     "mon": {
+		[ceph-deploy-01][DEBUG ]       "group": {
+		[ceph-deploy-01][DEBUG ]         "features": "0x1ffddff8eea4fffb",
+		[ceph-deploy-01][DEBUG ]         "num": 1,
+		[ceph-deploy-01][DEBUG ]         "release": "luminous"
+		[ceph-deploy-01][DEBUG ]       }
+		[ceph-deploy-01][DEBUG ]     }
+		[ceph-deploy-01][DEBUG ]   },
+		[ceph-deploy-01][DEBUG ]   "features": {
+		[ceph-deploy-01][DEBUG ]     "quorum_con": "2305244844532236283",
+		[ceph-deploy-01][DEBUG ]     "quorum_mon": [
+		[ceph-deploy-01][DEBUG ]       "kraken",
+		[ceph-deploy-01][DEBUG ]       "luminous"
+		[ceph-deploy-01][DEBUG ]     ],
+		[ceph-deploy-01][DEBUG ]     "required_con": "153140804152475648",
+		[ceph-deploy-01][DEBUG ]     "required_mon": [
+		[ceph-deploy-01][DEBUG ]       "kraken",
+		[ceph-deploy-01][DEBUG ]       "luminous"
+		[ceph-deploy-01][DEBUG ]     ]
+		[ceph-deploy-01][DEBUG ]   },
+		[ceph-deploy-01][DEBUG ]   "monmap": {
+		[ceph-deploy-01][DEBUG ]     "created": "2018-04-24 08:49:53.419278",
+		[ceph-deploy-01][DEBUG ]     "epoch": 1,
+		[ceph-deploy-01][DEBUG ]     "features": {
+		[ceph-deploy-01][DEBUG ]       "optional": [],
+		[ceph-deploy-01][DEBUG ]       "persistent": [
+		[ceph-deploy-01][DEBUG ]         "kraken",
+		[ceph-deploy-01][DEBUG ]         "luminous"
+		[ceph-deploy-01][DEBUG ]       ]
+		[ceph-deploy-01][DEBUG ]     },
+		[ceph-deploy-01][DEBUG ]     "fsid": "04a6d69b-5519-4832-97f4-06eecbad3aa8",
+		[ceph-deploy-01][DEBUG ]     "modified": "2018-04-24 08:49:53.419278",
+		[ceph-deploy-01][DEBUG ]     "mons": [
+		[ceph-deploy-01][DEBUG ]       {
+		[ceph-deploy-01][DEBUG ]         "addr": "192.168.122.15:6789/0",
+		[ceph-deploy-01][DEBUG ]         "name": "ceph-deploy-01",
+		[ceph-deploy-01][DEBUG ]         "public_addr": "192.168.122.15:6789/0",
+		[ceph-deploy-01][DEBUG ]         "rank": 0
+		[ceph-deploy-01][DEBUG ]       }
+		[ceph-deploy-01][DEBUG ]     ]
+		[ceph-deploy-01][DEBUG ]   },
+		[ceph-deploy-01][DEBUG ]   "name": "ceph-deploy-01",
+		[ceph-deploy-01][DEBUG ]   "outside_quorum": [],
+		[ceph-deploy-01][DEBUG ]   "quorum": [
+		[ceph-deploy-01][DEBUG ]     0
+		[ceph-deploy-01][DEBUG ]   ],
+		[ceph-deploy-01][DEBUG ]   "rank": 0,
+		[ceph-deploy-01][DEBUG ]   "state": "leader",
+		[ceph-deploy-01][DEBUG ]   "sync_provider": []
+		[ceph-deploy-01][DEBUG ] }
+		[ceph-deploy-01][DEBUG ] ********************************************************************************
+		[ceph-deploy-01][INFO  ] monitor: mon.ceph-deploy-01 is running
+		[ceph-deploy-01][INFO  ] Running command: sudo ceph --cluster=ceph --admin-daemon /var/run/ceph/ceph-mon.ceph-deploy-01.asok mon_status
+		[ceph_deploy.mon][INFO  ] processing monitor mon.ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph-deploy-01][DEBUG ] find the location of an executable
+		[ceph-deploy-01][INFO  ] Running command: sudo ceph --cluster=ceph --admin-daemon /var/run/ceph/ceph-mon.ceph-deploy-01.asok mon_status
+		[ceph_deploy.mon][INFO  ] mon.ceph-deploy-01 monitor has reached quorum!
+		[ceph_deploy.mon][INFO  ] all initial monitors are running and have formed quorum
+		[ceph_deploy.mon][INFO  ] Running gatherkeys...
+		[ceph_deploy.gatherkeys][INFO  ] Storing keys in temp directory /tmp/tmpJ6wv6J
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph-deploy-01][DEBUG ] get remote short hostname
+		[ceph-deploy-01][DEBUG ] fetch remote file
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --admin-daemon=/var/run/ceph/ceph-mon.ceph-deploy-01.asok mon_status
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get client.admin
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get-or-create client.admin osd allow * mds allow * mon allow * mgr allow *
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get client.bootstrap-mds
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get-or-create client.bootstrap-mds mon allow profile bootstrap-mds
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get client.bootstrap-mgr
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get-or-create client.bootstrap-mgr mon allow profile bootstrap-mgr
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get client.bootstrap-osd
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get-or-create client.bootstrap-osd mon allow profile bootstrap-osd
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get client.bootstrap-rgw
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/bin/ceph --connect-timeout=25 --cluster=ceph --name mon. --keyring=/var/lib/ceph/mon/ceph-ceph-deploy-01/keyring auth get-or-create client.bootstrap-rgw mon allow profile bootstrap-rgw
+		[ceph_deploy.gatherkeys][INFO  ] Storing ceph.client.admin.keyring
+		[ceph_deploy.gatherkeys][INFO  ] Storing ceph.bootstrap-mds.keyring
+		[ceph_deploy.gatherkeys][INFO  ] Storing ceph.bootstrap-mgr.keyring
+		[ceph_deploy.gatherkeys][INFO  ] keyring 'ceph.mon.keyring' already exists
+		[ceph_deploy.gatherkeys][INFO  ] Storing ceph.bootstrap-osd.keyring
+		[ceph_deploy.gatherkeys][INFO  ] Storing ceph.bootstrap-rgw.keyring
+		[ceph_deploy.gatherkeys][INFO  ] Destroy temp directory /tmp/tmpJ6wv6J
+		```
+    6.  Use ceph-deploy to copy the configuration file and admin key to your admin node and your Ceph Nodes so that you can use the ceph CLI without having to specify the monitor address and ceph.client.admin.keyring each time you execute a command.
+		```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ ceph-deploy admin ceph-deploy-02 ceph-deploy-03
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy admin ceph-deploy-02 ceph-deploy-03
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0x1561b90>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  client                        : ['ceph-deploy-02', 'ceph-deploy-03']
+		[ceph_deploy.cli][INFO  ]  func                          : <function admin at 0x7f81f22088c0>
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.admin][DEBUG ] Pushing admin keys and conf to ceph-deploy-02
+		[ceph-deploy-02][DEBUG ] connection detected need for sudo
+		[ceph-deploy-02][DEBUG ] connected to host: ceph-deploy-02
+		[ceph-deploy-02][DEBUG ] detect platform information from remote host
+		[ceph-deploy-02][DEBUG ] detect machine type
+		[ceph-deploy-02][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph_deploy.admin][DEBUG ] Pushing admin keys and conf to ceph-deploy-03
+		[ceph-deploy-03][DEBUG ] connection detected need for sudo
+		[ceph-deploy-03][DEBUG ] connected to host: ceph-deploy-03
+		[ceph-deploy-03][DEBUG ] detect platform information from remote host
+		[ceph-deploy-03][DEBUG ] detect machine type
+		[ceph-deploy-03][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		```
+	7.	Deploy a manager daemon. (Required only for luminous+ builds)，我用的是12.2，就是luminous版本。
+		```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ ceph-deploy mgr create ceph-deploy-01
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy mgr create ceph-deploy-01
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  mgr                           : [('ceph-deploy-01', 'ceph-deploy-01')]
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  subcommand                    : create
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0x196e7e8>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  func                          : <function mgr at 0x18f97d0>
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.mgr][DEBUG ] Deploying mgr, cluster ceph hosts ceph-deploy-01:ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph_deploy.mgr][INFO  ] Distro info: CentOS Linux 7.4.1708 Core
+		[ceph_deploy.mgr][DEBUG ] remote host will use systemd
+		[ceph_deploy.mgr][DEBUG ] deploying mgr bootstrap to ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph-deploy-01][WARNIN] mgr keyring does not exist yet, creating one
+		[ceph-deploy-01][DEBUG ] create a keyring file
+		[ceph-deploy-01][DEBUG ] create path if it doesn't exist
+		[ceph-deploy-01][INFO  ] Running command: sudo ceph --cluster ceph --name client.bootstrap-mgr --keyring /var/lib/ceph/bootstrap-mgr/ceph.keyring auth get-or-create mgr.ceph-deploy-01 mon allow profile mgr osd allow * mds allow * -o /var/lib/ceph/mgr/ceph-ceph-deploy-01/keyring
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph-mgr@ceph-deploy-01
+		[ceph-deploy-01][WARNIN] Created symlink from /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@ceph-deploy-01.service to /usr/lib/systemd/system/ceph-mgr@.service.
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl start ceph-mgr@ceph-deploy-01
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph.target
+		```
+	8.	add osds
+		没有data这个参数
+		```
+		ceph-deploy osd create --data /dev/vdb node1
+		```
+		```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ ceph-deploy osd create ceph-deploy-01:/dev/vda
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy osd create ceph-deploy-01:/dev/vda
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  block_db                      : None
+		[ceph_deploy.cli][INFO  ]  disk                          : [('ceph-deploy-01', '/dev/vda', None)]
+		[ceph_deploy.cli][INFO  ]  dmcrypt                       : False
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  bluestore                     : None
+		[ceph_deploy.cli][INFO  ]  block_wal                     : None
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  subcommand                    : create
+		[ceph_deploy.cli][INFO  ]  dmcrypt_key_dir               : /etc/ceph/dmcrypt-keys
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0x1e57fc8>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  fs_type                       : xfs
+		[ceph_deploy.cli][INFO  ]  filestore                     : None
+		[ceph_deploy.cli][INFO  ]  func                          : <function osd at 0x1e46e60>
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.cli][INFO  ]  zap_disk                      : False
+		[ceph_deploy.osd][DEBUG ] Preparing cluster ceph disks ceph-deploy-01:/dev/vda:
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph-deploy-01][DEBUG ] find the location of an executable
+		[ceph_deploy.osd][INFO  ] Distro info: CentOS Linux 7.4.1708 Core
+		[ceph_deploy.osd][DEBUG ] Deploying osd to ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph-deploy-01][WARNIN] osd keyring does not exist yet, creating one
+		[ceph-deploy-01][DEBUG ] create a keyring file
+		[ceph_deploy.osd][DEBUG ] Preparing host ceph-deploy-01 disk /dev/vda journal None activate True
+		[ceph-deploy-01][DEBUG ] find the location of an executable
+		[ceph-deploy-01][INFO  ] Running command: sudo /usr/sbin/ceph-disk -v prepare --cluster ceph --fs-type xfs -- /dev/vda
+		[ceph-deploy-01][WARNIN] /usr/lib/python2.7/site-packages/ceph_disk/main.py:5653: UserWarning:
+		[ceph-deploy-01][WARNIN] *******************************************************************************
+		[ceph-deploy-01][WARNIN] This tool is now deprecated in favor of ceph-volume.
+		[ceph-deploy-01][WARNIN] It is recommended to use ceph-volume for OSD deployments. For details see:
+		[ceph-deploy-01][WARNIN]
+		[ceph-deploy-01][WARNIN]     http://docs.ceph.com/docs/master/ceph-volume/#migrating
+		[ceph-deploy-01][WARNIN]
+		[ceph-deploy-01][WARNIN] *******************************************************************************
+		[ceph-deploy-01][WARNIN]
+		[ceph-deploy-01][WARNIN]   warnings.warn(DEPRECATION_WARNING)
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-osd --cluster=ceph --show-config-value=fsid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] set_type: Will colocate block with data on /dev/vda
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup bluestore_block_size
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup bluestore_block_db_size
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup bluestore_block_size
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup bluestore_block_wal_size
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup osd_mkfs_options_xfs
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup osd_fs_mkfs_options_xfs
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup osd_mount_options_xfs
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/ceph-conf --cluster=ceph --name=osd. --lookup osd_fs_mount_options_xfs
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] set_data_partition: Creating osd partition on /dev/vda
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] ptype_tobe_for_name: name = data
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] create_partition: Creating data partition num 1 size 100 on /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /sbin/sgdisk --new=1:0:+100M --change-name=1:ceph data --partition-guid=1:a2356d33-1b73-4eb8-b0d8-7445810b4fa4 --typecode=1:89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be --mbrtogpt -- /dev/vda
+		[ceph-deploy-01][DEBUG ] Creating new GPT entries.
+		[ceph-deploy-01][DEBUG ] The operation has completed successfully.
+		[ceph-deploy-01][WARNIN] update_partition: Calling partprobe on created device /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/flock -s /dev/vda /sbin/partprobe /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda1 uuid path is /sys/dev/block/252:1/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] ptype_tobe_for_name: name = block
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] create_partition: Creating block partition num 2 size 0 on /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /sbin/sgdisk --largest-new=2 --change-name=2:ceph block --partition-guid=2:093b0fcb-cf36-4a92-b113-139de7d48f69 --typecode=2:cafecafe-9b03-4f30-b4c6-b4b80ceff106 --mbrtogpt -- /dev/vda
+		[ceph-deploy-01][DEBUG ] The operation has completed successfully.
+		[ceph-deploy-01][WARNIN] update_partition: Calling partprobe on created device /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/flock -s /dev/vda /sbin/partprobe /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda2 uuid path is /sys/dev/block/252:2/dm/uuid
+		[ceph-deploy-01][WARNIN] prepare_device: Block is GPT partition /dev/disk/by-partuuid/093b0fcb-cf36-4a92-b113-139de7d48f69
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /sbin/sgdisk --typecode=2:cafecafe-9b03-4f30-b4c6-b4b80ceff106 -- /dev/vda
+		[ceph-deploy-01][DEBUG ] The operation has completed successfully.
+		[ceph-deploy-01][WARNIN] update_partition: Calling partprobe on prepared device /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/flock -s /dev/vda /sbin/partprobe /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] prepare_device: Block is GPT partition /dev/disk/by-partuuid/093b0fcb-cf36-4a92-b113-139de7d48f69
+		[ceph-deploy-01][WARNIN] populate_data_path_device: Creating xfs fs on /dev/vda1
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /sbin/mkfs -t xfs -f -i size=2048 -- /dev/vda1
+		[ceph-deploy-01][DEBUG ] meta-data=/dev/vda1              isize=2048   agcount=4, agsize=6400 blks
+		[ceph-deploy-01][DEBUG ]          =                       sectsz=512   attr=2, projid32bit=1
+		[ceph-deploy-01][DEBUG ]          =                       crc=1        finobt=0, sparse=0
+		[ceph-deploy-01][DEBUG ] data     =                       bsize=4096   blocks=25600, imaxpct=25
+		[ceph-deploy-01][DEBUG ]          =                       sunit=0      swidth=0 blks
+		[ceph-deploy-01][DEBUG ] naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
+		[ceph-deploy-01][DEBUG ] log      =internal log           bsize=4096   blocks=864, version=2
+		[ceph-deploy-01][DEBUG ]          =                       sectsz=512   sunit=0 blks, lazy-count=1
+		[ceph-deploy-01][DEBUG ] realtime =none                   extsz=4096   blocks=0, rtextents=0
+		[ceph-deploy-01][WARNIN] mount: Mounting /dev/vda1 on /var/lib/ceph/tmp/mnt.Hf_Qha with options noatime,inode64
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/mount -t xfs -o noatime,inode64 -- /dev/vda1 /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] populate_data_path: Preparing osd data dir /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon -R /var/lib/ceph/tmp/mnt.Hf_Qha/ceph_fsid.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/tmp/mnt.Hf_Qha/ceph_fsid.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon -R /var/lib/ceph/tmp/mnt.Hf_Qha/fsid.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/tmp/mnt.Hf_Qha/fsid.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon -R /var/lib/ceph/tmp/mnt.Hf_Qha/magic.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/tmp/mnt.Hf_Qha/magic.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon -R /var/lib/ceph/tmp/mnt.Hf_Qha/block_uuid.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/tmp/mnt.Hf_Qha/block_uuid.32367.tmp
+		[ceph-deploy-01][WARNIN] adjust_symlink: Creating symlink /var/lib/ceph/tmp/mnt.Hf_Qha/block -> /dev/disk/by-partuuid/093b0fcb-cf36-4a92-b113-139de7d48f69
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon -R /var/lib/ceph/tmp/mnt.Hf_Qha/type.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/tmp/mnt.Hf_Qha/type.32367.tmp
+		[ceph-deploy-01][WARNIN] command: Running command: /sbin/restorecon -R /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/chown -R ceph:ceph /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] unmount: Unmounting /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /bin/umount -- /var/lib/ceph/tmp/mnt.Hf_Qha
+		[ceph-deploy-01][WARNIN] get_dm_uuid: get_dm_uuid /dev/vda uuid path is /sys/dev/block/252:0/dm/uuid
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /sbin/sgdisk --typecode=1:4fbd7e29-9d25-41b8-afd0-062c0ceff05d -- /dev/vda
+		[ceph-deploy-01][DEBUG ] Warning: The kernel is still using the old partition table.
+		[ceph-deploy-01][DEBUG ] The new table will be used at the next reboot.
+		[ceph-deploy-01][DEBUG ] The operation has completed successfully.
+		[ceph-deploy-01][WARNIN] update_partition: Calling partprobe on prepared device /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] command: Running command: /usr/bin/flock -s /dev/vda /sbin/partprobe /dev/vda
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm settle --timeout=600
+		[ceph-deploy-01][WARNIN] command_check_call: Running command: /usr/bin/udevadm trigger --action=add --sysname-match vda1
+		[ceph-deploy-01][WARNIN] /usr/lib/python2.7/site-packages/ceph_disk/main.py:5685: UserWarning:
+		[ceph-deploy-01][WARNIN] *******************************************************************************
+		[ceph-deploy-01][WARNIN] This tool is now deprecated in favor of ceph-volume.
+		[ceph-deploy-01][WARNIN] It is recommended to use ceph-volume for OSD deployments. For details see:
+		[ceph-deploy-01][WARNIN]
+		[ceph-deploy-01][WARNIN]     http://docs.ceph.com/docs/master/ceph-volume/#migrating
+		[ceph-deploy-01][WARNIN]
+		[ceph-deploy-01][WARNIN] *******************************************************************************
+		[ceph-deploy-01][WARNIN]
+		[ceph-deploy-01][WARNIN]   warnings.warn(DEPRECATION_WARNING)
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph.target
+		[ceph-deploy-01][INFO  ] checking OSD status...
+		[ceph-deploy-01][DEBUG ] find the location of an executable
+		[ceph-deploy-01][INFO  ] Running command: sudo /bin/ceph --cluster=ceph osd stat --format=json
+		[ceph_deploy.osd][DEBUG ] Host ceph-deploy-01 is now ready for osd use.
+		```
+    9.  健康检查。
+        ```
+        [ceph-deploy@localhost ceph-bcache-dev-deploy]$ sudo ceph health
+        HEALTH_OK
+        ```
+        ```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ sudo ceph -s
+		  cluster:
+			id:     04a6d69b-5519-4832-97f4-06eecbad3aa8
+			health: HEALTH_OK
+
+		  services:
+			mon: 1 daemons, quorum ceph-deploy-01
+			mgr: ceph-deploy-01(active)
+			osd: 3 osds: 3 up, 3 in
+
+		  data:
+			pools:   0 pools, 0 pgs
+			objects: 0 objects, 0 bytes
+			usage:   3164 MB used, 27252 MB / 30416 MB avail
+			pgs:
+
+		```
+	10.  add mds
+		```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ ceph-deploy mds create ceph-deploy-01
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy mds create ceph-deploy-01
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  subcommand                    : create
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0xcac3b0>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  func                          : <function mds at 0xc8d5f0>
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  mds                           : [('ceph-deploy-01', 'ceph-deploy-01')]
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.mds][DEBUG ] Deploying mds, cluster ceph hosts ceph-deploy-01:ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] connection detected need for sudo
+		[ceph-deploy-01][DEBUG ] connected to host: ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] detect platform information from remote host
+		[ceph-deploy-01][DEBUG ] detect machine type
+		[ceph_deploy.mds][INFO  ] Distro info: CentOS Linux 7.4.1708 Core
+		[ceph_deploy.mds][DEBUG ] remote host will use systemd
+		[ceph_deploy.mds][DEBUG ] deploying mds bootstrap to ceph-deploy-01
+		[ceph-deploy-01][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph-deploy-01][WARNIN] mds keyring does not exist yet, creating one
+		[ceph-deploy-01][DEBUG ] create a keyring file
+		[ceph-deploy-01][DEBUG ] create path if it doesn't exist
+		[ceph-deploy-01][INFO  ] Running command: sudo ceph --cluster ceph --name client.bootstrap-mds --keyring /var/lib/ceph/bootstrap-mds/ceph.keyring auth get-or-create mds.ceph-deploy-01 osd allow rwx mds allow mon allow profile mds -o /var/lib/ceph/mds/ceph-ceph-deploy-01/keyring
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph-mds@ceph-deploy-01
+		[ceph-deploy-01][WARNIN] Created symlink from /etc/systemd/system/ceph-mds.target.wants/ceph-mds@ceph-deploy-01.service to /usr/lib/systemd/system/ceph-mds@.service.
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl start ceph-mds@ceph-deploy-01
+		[ceph-deploy-01][INFO  ] Running command: sudo systemctl enable ceph.target
+		```
+	11.	ADDING MONITORS
+		```
+		[ceph-deploy@localhost ceph-bcache-dev-deploy]$ ceph-deploy mon add ceph-deploy-02
+		[ceph_deploy.conf][DEBUG ] found configuration file at: /home/ceph-deploy/.cephdeploy.conf
+		[ceph_deploy.cli][INFO  ] Invoked (1.5.39): /usr/bin/ceph-deploy mon add ceph-deploy-02
+		[ceph_deploy.cli][INFO  ] ceph-deploy options:
+		[ceph_deploy.cli][INFO  ]  username                      : None
+		[ceph_deploy.cli][INFO  ]  verbose                       : False
+		[ceph_deploy.cli][INFO  ]  overwrite_conf                : False
+		[ceph_deploy.cli][INFO  ]  subcommand                    : add
+		[ceph_deploy.cli][INFO  ]  quiet                         : False
+		[ceph_deploy.cli][INFO  ]  cd_conf                       : <ceph_deploy.conf.cephdeploy.Conf instance at 0x1e64f38>
+		[ceph_deploy.cli][INFO  ]  cluster                       : ceph
+		[ceph_deploy.cli][INFO  ]  mon                           : ['ceph-deploy-02']
+		[ceph_deploy.cli][INFO  ]  func                          : <function mon at 0x1e575f0>
+		[ceph_deploy.cli][INFO  ]  address                       : None
+		[ceph_deploy.cli][INFO  ]  ceph_conf                     : None
+		[ceph_deploy.cli][INFO  ]  default_release               : False
+		[ceph_deploy.mon][INFO  ] ensuring configuration of new mon host: ceph-deploy-02
+		[ceph_deploy.admin][DEBUG ] Pushing admin keys and conf to ceph-deploy-02
+		[ceph-deploy-02][DEBUG ] connection detected need for sudo
+		[ceph-deploy-02][DEBUG ] connected to host: ceph-deploy-02
+		[ceph-deploy-02][DEBUG ] detect platform information from remote host
+		[ceph-deploy-02][DEBUG ] detect machine type
+		[ceph-deploy-02][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph_deploy.mon][DEBUG ] Adding mon to cluster ceph, host ceph-deploy-02
+		[ceph_deploy.mon][DEBUG ] using mon address by resolving host: 192.168.122.154
+		[ceph_deploy.mon][DEBUG ] detecting platform for host ceph-deploy-02 ...
+		[ceph-deploy-02][DEBUG ] connection detected need for sudo
+		[ceph-deploy-02][DEBUG ] connected to host: ceph-deploy-02
+		[ceph-deploy-02][DEBUG ] detect platform information from remote host
+		[ceph-deploy-02][DEBUG ] detect machine type
+		[ceph-deploy-02][DEBUG ] find the location of an executable
+		[ceph_deploy.mon][INFO  ] distro info: CentOS Linux 7.4.1708 Core
+		[ceph-deploy-02][DEBUG ] determining if provided host has same hostname in remote
+		[ceph-deploy-02][DEBUG ] get remote short hostname
+		[ceph-deploy-02][WARNIN] ********************************************************************************
+		[ceph-deploy-02][WARNIN] provided hostname must match remote hostname
+		[ceph-deploy-02][WARNIN] provided hostname: ceph-deploy-02
+		[ceph-deploy-02][WARNIN] remote hostname: localhost
+		[ceph-deploy-02][WARNIN] monitors may not reach quorum and create-keys will not complete
+		[ceph-deploy-02][WARNIN] ********************************************************************************
+		[ceph-deploy-02][DEBUG ] adding mon to ceph-deploy-02
+		[ceph-deploy-02][DEBUG ] get remote short hostname
+		[ceph-deploy-02][DEBUG ] write cluster configuration to /etc/ceph/{cluster}.conf
+		[ceph-deploy-02][DEBUG ] create the mon path if it does not exist
+		[ceph-deploy-02][DEBUG ] checking for done path: /var/lib/ceph/mon/ceph-localhost/done
+		[ceph-deploy-02][DEBUG ] done path does not exist: /var/lib/ceph/mon/ceph-localhost/done
+		[ceph-deploy-02][INFO  ] creating keyring file: /var/lib/ceph/tmp/ceph-localhost.mon.keyring
+		[ceph-deploy-02][DEBUG ] create the monitor keyring file
+		[ceph-deploy-02][INFO  ] Running command: sudo ceph --cluster ceph mon getmap -o /var/lib/ceph/tmp/ceph.localhost.monmap
+		[ceph-deploy-02][WARNIN] got monmap epoch 1
+		[ceph-deploy-02][INFO  ] Running command: sudo ceph-mon --cluster ceph --mkfs -i localhost --monmap /var/lib/ceph/tmp/ceph.localhost.monmap --keyring /var/lib/ceph/tmp/ceph-localhost.mon.keyring --setuser 167 --setgroup 167
+		[ceph-deploy-02][INFO  ] unlinking keyring file /var/lib/ceph/tmp/ceph-localhost.mon.keyring
+		[ceph-deploy-02][DEBUG ] create a done file to avoid re-doing the mon deployment
+		[ceph-deploy-02][DEBUG ] create the init path if it does not exist
+		[ceph-deploy-02][INFO  ] Running command: sudo systemctl enable ceph.target
+		[ceph-deploy-02][INFO  ] Running command: sudo systemctl enable ceph-mon@localhost
+		[ceph-deploy-02][WARNIN] Created symlink from /etc/systemd/system/ceph-mon.target.wants/ceph-mon@localhost.service to /usr/lib/systemd/system/ceph-mon@.service.
+		[ceph-deploy-02][INFO  ] Running command: sudo systemctl start ceph-mon@localhost
+		[ceph-deploy-02][INFO  ] Running command: sudo ceph --cluster=ceph --admin-daemon /var/run/ceph/ceph-mon.ceph-deploy-02.asok mon_status
+		[ceph-deploy-02][ERROR ] admin_socket: exception getting command descriptions: [Errno 2] No such file or directory
+		[ceph-deploy-02][WARNIN] ceph-deploy-02 is not defined in `mon initial members`
+		[ceph-deploy-02][WARNIN] monitor ceph-deploy-02 does not exist in monmap
+		[ceph-deploy-02][WARNIN] neither `public_addr` nor `public_network` keys are defined for monitors
+		[ceph-deploy-02][WARNIN] monitors may not be able to form quorum
+		[ceph-deploy-02][INFO  ] Running command: sudo ceph --cluster=ceph --admin-daemon /var/run/ceph/ceph-mon.ceph-deploy-02.asok mon_status
+		[ceph-deploy-02][ERROR ] admin_socket: exception getting command descriptions: [Errno 2] No such file or directory
+		[ceph-deploy-02][WARNIN] monitor: mon.ceph-deploy-02, might not be running yet
+		```
+		看起来就是ceph-mon@localhost service没有启动起来。
+
+1.	TODO
+	1.	systemctl ceph target是做什么的？
+	2.	http://docs.ceph.com/docs/master/ceph-volume/#migrating
+	3.	qorum是什么意思?
 
 18:21 2018-04-20
 ================
@@ -3270,7 +3867,96 @@ GTD
 
 18:48 2018-04-21
 ================
+电话
+----
 区块链。
 雪球。
 yan zheng.
+
+09:04 2018-04-24
+================
+GTD
+1.  技术
+    1.  09:07-10:02 10:27-11:08 公众号 CPU
+    2.  11:14-11:42 16:36-17:18 ceph部署。
+    3.  15:10-16:00 一体机例会。
+    4.  10' 公众号 CPU
+    5.  17:45-18:02 nentropy在Linux部署。
+1.  计划。
+    1.  1h CPU
+    1.  ceph
+    1.  rbd.
+    1.  健身时间？
+1.  生活
+    1.  10:11-10:20 日记，交流。
+    2.  12:05-13:06 外出吃饭。
+    3.  13:30-14:18 午睡。
+1.	TODO
+	1.	粗粮怎么做？
+1.  NEXT
+    1.  看原则。
+    1.  4月29日修车。
+
+15:10 2018-04-24
+================
+一体机
+------
+1.  进展
+    1.  重构做完了。
+    2.  报警前后端都做完了。
+    3.  后端在做快照。
+    4.  HA：家军。
+    5.  本地cache：张健。
+2.  客户：海航科技集团，10台机器。不给钱。给他们做个测试环境。
+
+17:59 2018-04-24
+================
+nentropy
+--------
+1.  在Linux上部署单节点。
+    `sudo yum install go git ansible`
+2.	ssh-keygen
+3.	ssh-copy-id nodeX
+4.  go版本需要大约1.9，否则会提示
+    ```
+    build/src/github.com/journeymidnight/nentropy/protos/layout.go:5:2: cannot find package "math/bits"
+    ```
+
+10:17 2018-04-25
+================
+GTD
+---
+1.  生活
+    1.  40' 朋友圈，转发。见有道笔记《杂记》。
+    2.  -14:46 公众号CPU。
+2.  10:17-10:35 计划
+    1.  nentropy 单机安装。
+        1.  如果成功，整理ansible学习基本点。
+    1.  装ceph
+        1.  昨天ceph的osd已经有了。加monitor遇到问题。
+    1.  一体机远程部署：重点是看还有哪些可以自动化的部分。
+    1.  健身：今天8点或者周四7点。
+    1.  内心最想做的事情
+        1.  身体状态：
+            1.  睡眠
+            1.  健身
+        2.  技术持续积累
+            1.  分布式系统：自己觉得分布式系统仍然是热点。分布式系统的基础设施已经完善了，后续应该是各种各样的基于基础设置的应用。今年还是认真学习分布式，学扎实。内核持续关注。
+3.  11:04-12:05 一体机远程部署
+    1.  下载镜像。
+    2.  安装Linux
+        1.  下午teamviewer断了。
+    3.  部署。
+4.  nentropy
+    1.  15:39-16:21 linux单机部署。
+        1.  数据写不下去，没有log没法看。
+    2.  18:02-18:22 重新部署，pg建立成功，但还是写不下去。
+
+11:19 2018-04-25
+================
+一体机部署
+----------
+1.  IPMI:
+    1.  192.168.0.51 IPMI 用户root  密码 superuser
+    2.  192.168.0.52, 53 IPMI 用户：root  密码：calvin
 
