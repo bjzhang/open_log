@@ -71,7 +71,7 @@ go get github.com/shadowsocks/go-shadowsocks2
 # go env -w GO111MODULE=on
 # go env -w  GOPROXY=https://goproxy.io,direct
 # Start shadowsocks, replace password and port
-~/go/bin/go-shadowsocks2  -s 'ss://AEAD_CHACHA20_POLY1305:your-password@:8488' -verbose
+SERVER_IP=bamvorca; SERVER_PORT=8489; ~/go/bin/go-shadowsocks2 -c ss://AEAD_CHACHA20_POLY1305:StartFrom2021_@$SERVER_IP:$SERVER_PORT -verbose -socks :1080 -u -udptun :8053=8.8.8.8:53,:8054=8.8.4.4:53 -tcptun :8053=8.8.8.8:53,:8054=8.8.4.4:53
 echo "Install cow"
 go get github.com/cyfdecyf/cow
 echo "Configuration cow"
